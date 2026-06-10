@@ -475,20 +475,46 @@ export const ProvidersLoginCommand = effectCmd({
     }
 
     if (provider === "snowflake-cortex") {
+      const method = yield* promptValue(
+        yield* Prompt.select({
+          message: "Authentication method",
+          options: [
+            { label: "PAT (Programmatic Access Token)", value: "pat" },
+            { label: "SSO (External Browser)", value: "sso" },
+          ],
+        }),
+      )
+
       const account = yield* promptValue(
         yield* Prompt.text({
           message: "Snowflake Account Identifier",
-          placeholder: "xy12345.us-east-1",
+          placeholder: "myorg-myaccount or xy12345.us-east-1",
           validate: (x) => (x && x.length > 0 ? undefined : "Required"),
         }),
       )
-      const pat = yield* promptValue(
-        yield* Prompt.password({
-          message: "Programmatic Access Token (PAT)",
-          validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-        }),
-      )
-      yield* Effect.orDie(authSvc.set(provider, { type: "api", key: pat, metadata: { account } }))
+
+      if (method === "pat") {
+        const pat = yield* promptValue(
+          yield* Prompt.password({
+            message: "Programmatic Access Token (PAT)",
+            validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+          }),
+        )
+        yield* Effect.orDie(authSvc.set(provider, { type: "api", key: pat, metadata: { account } }))
+      }
+
+      if (method === "sso") {
+        yield* Prompt.log.info("Opening browser for SSO login…")
+        const result = yield* Effect.tryPromise({
+          try: async () => {
+            const { performExternalBrowserAuth } = await import("@/provider/snowflake/externalbrowser")
+            return performExternalBrowserAuth(account)
+          },
+          catch: (err) => new CliError({ message: "SSO failed: " + errorMessage(err) }),
+        })
+        yield* Effect.orDie(authSvc.set(provider, { type: "snowflake-session", ...result }))
+      }
+
       yield* Prompt.outro("Done")
       return
     }

@@ -146,6 +146,7 @@ type CustomLoader = (provider: Info) => Effect.Effect<{
 
 type CustomDep = {
   auth: (id: string) => Effect.Effect<Auth.Info | undefined>
+  authSet: (id: string, info: Auth.Info) => Effect.Effect<void>
   config: () => Effect.Effect<ConfigV1.Info>
   env: () => Effect.Effect<Record<string, string | undefined>>
   get: (key: string) => Effect.Effect<string | undefined>
@@ -163,6 +164,59 @@ function selectBedrockMantleLanguageModel(sdk: BundledSDK, modelID: string) {
   if (modelID === "openai.gpt-oss-safeguard-20b" || modelID === "openai.gpt-oss-safeguard-120b")
     return sdk.chat?.(modelID) ?? sdk.languageModel(modelID)
   return sdk.responses?.(modelID) ?? sdk.languageModel(modelID)
+}
+
+// Applies Snowflake Cortex API quirks: max_tokens→max_completion_tokens rewrite,
+// 400 "conversation complete" normalization, and role:"" SSE fix.
+function makeCortexFetch(upstream: (url: RequestInfo | URL, init?: RequestInit) => Promise<Response>) {
+  return async (url: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    if (init?.body && typeof init.body === "string") {
+      try {
+        const body = JSON.parse(init.body)
+        if ("max_tokens" in body) {
+          body.max_completion_tokens = body.max_tokens
+          delete body.max_tokens
+          init = { ...init, body: JSON.stringify(body) }
+        }
+      } catch {}
+    }
+
+    const response = await upstream(url, init)
+
+    if (!response.ok && response.status === 400) {
+      try {
+        const errorData = (await response.clone().json()) as Record<string, unknown>
+        if (String(errorData.message || errorData.error || "").toLowerCase().includes("conversation complete")) {
+          return new Response(
+            JSON.stringify({ choices: [{ finish_reason: "stop", message: { content: "", role: "assistant" } }] }),
+            { status: 200, headers: new Headers({ "content-type": "application/json" }) },
+          )
+        }
+      } catch {}
+    }
+
+    if (response.body && response.headers.get("content-type")?.includes("text/event-stream")) {
+      const reader = response.body.getReader()
+      const encoder = new TextEncoder()
+      const decoder = new TextDecoder()
+      const stream = new ReadableStream({
+        async pull(ctrl) {
+          const { done, value } = await reader.read()
+          if (done) {
+            ctrl.close()
+            return
+          }
+          ctrl.enqueue(encoder.encode(decoder.decode(value, { stream: true }).replace(/"role"\s*:\s*""/g, '"role":"assistant"')))
+        },
+        cancel() {
+          reader.cancel()
+        },
+      })
+      return new Response(stream, { headers: response.headers, status: response.status })
+    }
+
+    return response
+  }
 }
 
 function custom(dep: CustomDep): Record<string, CustomLoader> {
@@ -850,12 +904,53 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const env = yield* dep.env()
       const auth = yield* dep.auth(input.id)
 
-      const account =
+      const ssoCredential = auth?.type === "snowflake-session" ? auth : undefined
+
+      const rawAccount =
         env["SNOWFLAKE_ACCOUNT"] ??
         (auth?.type === "api" ? auth.metadata?.account : undefined) ??
+        ssoCredential?.account ??
         input.options?.account
 
+      const account = rawAccount
+        ? rawAccount.trim().replace(/^https?:\/\//i, "").split("/")[0].replace(/\.snowflakecomputing\.com$/i, "")
+        : undefined
+
       const pat = env["SNOWFLAKE_CORTEX_PAT"] ?? (auth?.type === "api" ? auth.key : undefined) ?? input.options?.apiKey
+
+      const baseURL = `https://${account}.snowflakecomputing.com/api/v2/cortex/v1`
+
+      // SSO branch: use session token auth; bypasses the PAT guard below
+      if (ssoCredential && !env["SNOWFLAKE_CORTEX_PAT"] && account) {
+        const { createSsoFetch } = yield* Effect.promise(() => import("./snowflake/externalbrowser"))
+        return {
+          autoload: true,
+          options: {
+            baseURL,
+            apiKey: Auth.OAUTH_DUMMY_KEY,
+            fetch: makeCortexFetch(
+              createSsoFetch({
+                account,
+                session: ssoCredential,
+                onRenew: (s) => {
+                  void Effect.runPromise(
+                    dep.authSet(input.id, {
+                      type: "snowflake-session",
+                      account,
+                      session_token: s.session_token,
+                      session_expires: s.session_expires,
+                      master_token: ssoCredential.master_token,
+                      master_expires: ssoCredential.master_expires,
+                    }),
+                  ).catch((err) => {
+                    console.error("Failed to persist renewed Snowflake SSO token:", err)
+                  })
+                },
+              }),
+            ),
+          },
+        }
+      }
 
       if (!account || !pat) {
         const missing = [!account && "SNOWFLAKE_ACCOUNT", !pat && "SNOWFLAKE_CORTEX_PAT"].filter(Boolean).join(", ")
@@ -869,67 +964,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         }
       }
 
-      const baseURL = `https://${account}.snowflakecomputing.com/api/v2/cortex/v1`
-
       return {
         autoload: input.source === "config",
         options: {
           baseURL,
           apiKey: pat,
-          fetch: async (url: RequestInfo | URL, init?: RequestInit) => {
-            if (init?.body && typeof init.body === "string") {
-              try {
-                const body = JSON.parse(init.body)
-                if ("max_tokens" in body) {
-                  body.max_completion_tokens = body.max_tokens
-                  delete body.max_tokens
-                  init = { ...init, body: JSON.stringify(body) }
-                }
-              } catch {}
-            }
-
-            const response = await fetch(url, init)
-
-            // Cortex returns 400 "conversation complete" as a normal stop condition
-            if (!response.ok && response.status === 400) {
-              try {
-                const errorData = await response.clone().json()
-                const errorMessage = String(errorData.message || errorData.error || "")
-                if (errorMessage.toLowerCase().includes("conversation complete")) {
-                  return new Response(
-                    JSON.stringify({
-                      choices: [{ finish_reason: "stop", message: { content: "", role: "assistant" } }],
-                    }),
-                    { status: 200, headers: new Headers({ "content-type": "application/json" }) },
-                  )
-                }
-              } catch {}
-            }
-
-            // Cortex returns role:"" in streaming deltas; the AI SDK schema requires "assistant"
-            if (response.body && response.headers.get("content-type")?.includes("text/event-stream")) {
-              const reader = response.body.getReader()
-              const encoder = new TextEncoder()
-              const decoder = new TextDecoder()
-              const stream = new ReadableStream({
-                async pull(ctrl) {
-                  const { done, value } = await reader.read()
-                  if (done) {
-                    ctrl.close()
-                    return
-                  }
-                  const text = decoder.decode(value, { stream: true })
-                  ctrl.enqueue(encoder.encode(text.replace(/"role"\s*:\s*""/g, '"role":"assistant"')))
-                },
-                cancel() {
-                  reader.cancel()
-                },
-              })
-              return new Response(stream, { headers: response.headers, status: response.status })
-            }
-
-            return response
-          },
+          fetch: makeCortexFetch(fetch),
         },
       }
     }),
@@ -1302,6 +1342,7 @@ export const layer = Layer.effect(
         } = {}
         const dep = {
           auth: (id: string) => auth.get(id).pipe(Effect.orDie),
+          authSet: (id: string, info: Auth.Info) => auth.set(id, info).pipe(Effect.orDie),
           config: () => config.get(),
           env: () => env.all(),
           get: (key: string) => env.get(key),
@@ -1345,9 +1386,11 @@ export const layer = Layer.effect(
           const provider = database[providerID]
           if (!provider) continue
           const pluginAuth = yield* auth.get(providerID).pipe(Effect.orDie)
+          // SnowflakeSession is V1-only; V2 plugin models hook uses V2 Auth types only
+          const authForModels = pluginAuth?.type === "snowflake-session" ? undefined : pluginAuth
 
           provider.models = yield* Effect.promise(async () => {
-            const next = await models(toPublicInfo(provider), { auth: pluginAuth })
+            const next = await models(toPublicInfo(provider), { auth: authForModels })
             return Object.fromEntries(
               Object.entries(next).map(([id, model]) => [
                 id,

@@ -32,7 +32,16 @@ export class WellKnown extends Schema.Class<WellKnown>("WellKnownAuth")({
   token: Schema.String,
 }) {}
 
-export const Info = Schema.Union([Oauth, Api, WellKnown]).annotate({ discriminator: "type", identifier: "Auth" })
+export class SnowflakeSession extends Schema.Class<SnowflakeSession>("SnowflakeSessionAuth")({
+  type: Schema.Literal("snowflake-session"),
+  account: Schema.String,
+  session_token: Schema.String,
+  master_token: Schema.String,
+  session_expires: Schema.Number,
+  master_expires: Schema.Number,
+}) {}
+
+export const Info = Schema.Union([Oauth, Api, WellKnown, SnowflakeSession]).annotate({ discriminator: "type", identifier: "Auth" })
 export type Info = Schema.Schema.Type<typeof Info>
 
 export class AuthError extends Schema.TaggedErrorClass<AuthError>()("AuthError", {

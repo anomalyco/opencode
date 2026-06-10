@@ -5,6 +5,10 @@ import { SnowflakeCortexPlugin, cortexFetch } from "@opencode-ai/core/plugin/pro
 import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
 import { expectPluginRegistered, it, model, withEnv } from "./provider-helper"
 
+// Duplicated from packages/opencode/src/auth/index.ts — cross-package import is impractical in tests.
+// Must stay in sync with the OAUTH_DUMMY_KEY constant exported from that file.
+const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
+
 describe("SnowflakeCortexPlugin", () => {
   it.effect("is registered in ProviderPlugins before OpenAICompatiblePlugin", () =>
     Effect.sync(() => {
@@ -100,6 +104,45 @@ describe("SnowflakeCortexPlugin", () => {
       }),
     ),
   )
+
+  it.effect("creates SDK when options.apiKey is OAUTH_DUMMY_KEY and options.fetch is custom (SSO path)", () =>
+    withEnv({ SNOWFLAKE_CORTEX_PAT: undefined }, () =>
+      Effect.gen(function* () {
+        const plugin = yield* PluginV2.Service
+        yield* plugin.add(SnowflakeCortexPlugin)
+        const captured: { apiKey?: unknown; fetch?: unknown }[] = []
+        yield* plugin.add({
+          id: PluginV2.ID.make("sso-inspector"),
+          effect: Effect.succeed({
+            "aisdk.sdk": (evt) =>
+              Effect.sync(() => {
+                captured.push({ apiKey: evt.options.apiKey, fetch: evt.options.fetch })
+              }),
+          }),
+        })
+        const ssoFetch: FetchLike = async () => new Response("{}", { status: 200 })
+        const result = yield* plugin.trigger(
+          "aisdk.sdk",
+          {
+            model: model("snowflake-cortex", "claude-sonnet-4-6"),
+            package: "@ai-sdk/openai-compatible",
+            options: {
+              name: "snowflake-cortex",
+              baseURL: "https://test.snowflakecomputing.com/api/v2/cortex/v1",
+              apiKey: OAUTH_DUMMY_KEY,
+              fetch: ssoFetch,
+            },
+          },
+          {},
+        )
+        expect(result.sdk).toBeDefined()
+        // options.apiKey stays as OAUTH_DUMMY_KEY on the evt (plugin reads it but doesn't mutate it)
+        expect(captured[0]?.apiKey).toBe(OAUTH_DUMMY_KEY)
+        // options.fetch stays as the original ssoFetch (plugin wraps it internally for SDK creation)
+        expect(captured[0]?.fetch).toBe(ssoFetch)
+      }),
+    ),
+  )
 })
 
 type FetchLike = (url: string | URL | Request, init?: RequestInit) => Promise<Response>
@@ -189,5 +232,22 @@ describe("cortexFetch", () => {
     const text = await response.text()
     expect(text).toContain('"role":"assistant"')
     expect(text).not.toContain('"role":""')
+  })
+
+  bun_it("wraps custom SSO fetch and rewrites max_tokens (SSO path integration)", async () => {
+    const captured: RequestInit[] = []
+    const ssoFetch: FetchLike = async (_url, init) => {
+      captured.push(init ?? {})
+      return new Response("{}", { status: 200 })
+    }
+    // Simulate what the V2 plugin does: cortexFetch(ssoFetch)
+    const wrapped = cortexFetch(ssoFetch)
+    await wrapped("https://test.snowflakecomputing.com/api/v2/cortex/v1/chat/completions", {
+      method: "POST",
+      body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 512 }),
+    })
+    const body = JSON.parse(captured[0].body as string)
+    expect(body.max_completion_tokens).toBe(512)
+    expect(body.max_tokens).toBeUndefined()
   })
 })

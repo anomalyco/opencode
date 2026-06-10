@@ -1997,6 +1997,22 @@ The model catalog is provided automatically. A minimal `opencode.json` is all th
 }
 ```
 
+#### Alternative: SSO (External Browser)
+
+If your Snowflake account uses an external identity provider (e.g. Okta, Entra ID), you
+can authenticate with SSO instead of a PAT.
+
+1. Run `/connect` and select **Snowflake Cortex**.
+2. When prompted for the authentication method, select **SSO (External Browser)**.
+3. Enter your account identifier.
+4. Your browser will open automatically. Complete the IdP login.
+5. opencode stores a session token (valid ~1 hour) and master token (valid ~4 hours).
+   It renews the session token automatically. After ~4 hours, re-run `/connect` to log in again.
+
+> **Note**: SSO requires your Snowflake account to have an external IdP configured and your
+> user to have browser-based SSO access. Contact your Snowflake administrator if unsure.
+> PrivateLink accounts require network or VPN reachability to the account host.
+
 ---
 
 ### Together AI

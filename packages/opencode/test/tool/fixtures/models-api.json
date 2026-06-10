@@ -1,4 +1,39 @@
 {
+  "snowflake-cortex": {
+      "id": "snowflake-cortex",
+      "env": [],
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Snowflake Cortex",
+      "models": {
+        "claude-sonnet-4-6": {
+          "id": "claude-sonnet-4-6",
+          "name": "Claude Sonnet 4.6",
+          "attachment": true,
+          "reasoning": false,
+          "tool_call": true,
+          "temperature": true,
+          "release_date": "2025-01-01",
+          "last_updated": "2025-01-01",
+          "modalities": {
+            "input": [
+              "text"
+            ],
+            "output": [
+              "text"
+            ]
+          },
+          "open_weights": false,
+          "limit": {
+            "context": 200000,
+            "output": 8192
+          },
+          "cost": {
+            "input": 0,
+            "output": 0
+          }
+        }
+      }
+    },
   "302ai": {
     "id": "302ai",
     "env": ["302AI_API_KEY"],

@@ -1791,3 +1791,111 @@ it.effect("opencode loader keeps paid models when auth exists", () =>
     expect(keyedCount).toBeGreaterThan(0)
   }).pipe(provideMultiInstance),
 )
+
+// snowflake-cortex SSO fix tests
+
+it.effect("snowflake-cortex appears in provider list when SSO credential is stored", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const authPath = path.join(Global.Path.data, "auth.json")
+    const original = yield* Effect.promise(() => Filesystem.readText(authPath).catch(() => undefined))
+
+    yield* Effect.acquireRelease(
+      Effect.promise(() =>
+        Filesystem.write(
+          authPath,
+          JSON.stringify({
+            "snowflake-cortex": {
+              type: "snowflake-session",
+              account: "test-account",
+              session_token: "test-session-tok",
+              master_token: "test-master-tok",
+              session_expires: Date.now() + 3_600_000,
+              master_expires: Date.now() + 86_400_000,
+            },
+          }),
+        ),
+      ),
+      () =>
+        Effect.promise(async () => {
+          if (original !== undefined) await Filesystem.write(authPath, original)
+          else await unlink(authPath).catch(() => undefined)
+        }),
+    )
+
+    const providers = yield* Provider.use
+      .list()
+      .pipe(provideInstanceEffect(dir))
+      .pipe(Effect.provide(InstanceLayer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer))
+
+    const provider = providers[ProviderV2.ID.make("snowflake-cortex")]
+    expect(provider).toBeDefined()
+    expect(Object.keys(provider.models).length).toBeGreaterThan(0)
+  }).pipe(provideMultiInstance),
+)
+
+it.effect("snowflake-cortex appears in provider list when PAT credential is stored", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const authPath = path.join(Global.Path.data, "auth.json")
+    const original = yield* Effect.promise(() => Filesystem.readText(authPath).catch(() => undefined))
+
+    yield* Effect.acquireRelease(
+      Effect.promise(() =>
+        Filesystem.write(
+          authPath,
+          JSON.stringify({
+            "snowflake-cortex": {
+              type: "api",
+              key: "test-pat",
+              metadata: { account: "test-account" },
+            },
+          }),
+        ),
+      ),
+      () =>
+        Effect.promise(async () => {
+          if (original !== undefined) await Filesystem.write(authPath, original)
+          else await unlink(authPath).catch(() => undefined)
+        }),
+    )
+
+    const providers = yield* Provider.use
+      .list()
+      .pipe(provideInstanceEffect(dir))
+      .pipe(Effect.provide(InstanceLayer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer))
+
+    const provider = providers[ProviderV2.ID.make("snowflake-cortex")]
+    expect(provider).toBeDefined()
+    expect(Object.keys(provider.models).length).toBeGreaterThan(0)
+  }).pipe(provideMultiInstance),
+)
+
+it.effect("snowflake-cortex absent from provider list when no credential is stored", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const authPath = path.join(Global.Path.data, "auth.json")
+    const original = yield* Effect.promise(() => Filesystem.readText(authPath).catch(() => undefined))
+
+    // Ensure no snowflake-cortex credential exists
+    const authData = original ? (JSON.parse(original) as Record<string, unknown>) : {}
+    delete authData["snowflake-cortex"]
+
+    yield* Effect.acquireRelease(
+      Effect.promise(() => Filesystem.write(authPath, JSON.stringify(authData))),
+      () =>
+        Effect.promise(async () => {
+          if (original !== undefined) await Filesystem.write(authPath, original)
+          else await unlink(authPath).catch(() => undefined)
+        }),
+    )
+
+    const providers = yield* Provider.use
+      .list()
+      .pipe(provideInstanceEffect(dir))
+      .pipe(Effect.provide(InstanceLayer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer))
+
+    const provider = providers[ProviderV2.ID.make("snowflake-cortex")]
+    expect(provider).toBeUndefined()
+  }).pipe(provideMultiInstance),
+)

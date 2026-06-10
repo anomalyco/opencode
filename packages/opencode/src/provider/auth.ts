@@ -201,11 +201,26 @@ export const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> =
       if (!result || result.type !== "success") return yield* new OauthCallbackFailed({})
 
       if ("key" in result) {
-        yield* auth.set(input.providerID, {
-          type: "api",
-          key: result.key,
-          ...(result.metadata ? { metadata: result.metadata } : {}),
-        })
+        // Snowflake SSO via TUI /connect: the plugin callback returns {type:"success", key:session_token,
+        // metadata:{_auth_type:"snowflake-session", ...}} because ProviderAuthMethod.type is a closed
+        // "oauth"|"api" union. Detect the sentinel and persist as a snowflake-session credential so
+        // provider.ts + createSsoFetch work unchanged (same shape as CLI path).
+        if (result.metadata?.["_auth_type"] === "snowflake-session") {
+          yield* auth.set(input.providerID, {
+            type: "snowflake-session",
+            account: result.metadata["account"] ?? "",
+            session_token: result.key,
+            master_token: result.metadata["master_token"] ?? "",
+            session_expires: Number(result.metadata["session_expires"] ?? 0),
+            master_expires: Number(result.metadata["master_expires"] ?? 0),
+          })
+        } else {
+          yield* auth.set(input.providerID, {
+            type: "api",
+            key: result.key,
+            ...(result.metadata ? { metadata: result.metadata } : {}),
+          })
+        }
       }
 
       if ("refresh" in result) {
