@@ -46,6 +46,15 @@
  *           plus the same ` Did you mean: <s1, s2, …>?` suggestions clause. Contains
  *           "is not available for provider" + the model + provider names + suggestion names.
  *
+ *       SUGGESTIONS CLAUSE (cases B and C) — the ` Did you mean: …?` tail is CONDITIONAL on
+ *       `error.suggestions && error.suggestions.length`:
+ *         • Populated (length ≥ 1) → ` Did you mean: <s1, s2, …>?` where the names are
+ *           `suggestions.join(", ")` — a ", " separator that preserves the array order. A
+ *           SINGLE-element array therefore renders with NO comma ("Did you mean: anthropic?").
+ *         • EMPTY array ([]) OR OMITTED (undefined) → the FALSE branch: NO clause is appended;
+ *           the base message stands alone with no "Did you mean" text. Both falsey shapes are
+ *           exercised so the conditional's false arm is not an assertion vacuum.
+ *
  *       Discrimination is by the ModelNotFoundError TAG ("ProviderModelNotFoundError") plus
  *       Provider.list() membership on the impl side — NOT by message substrings. Tests
  *       assert only the user-facing message TEXT (the contract the user sees).
@@ -78,9 +87,12 @@
  *   - Case (B) vs (C) is decided by Provider.list() membership of the parsed providerID, NOT
  *     by inspecting the ModelNotFoundError fields or message text. The mock harness therefore
  *     EXCLUDES the case-(B) providerID from list() and INCLUDES the case-(C) providerID.
- *   - ModelNotFoundError raised for cases (B)/(C) must carry a NON-EMPTY `suggestions` array
- *     (real strings) so the ` Did you mean: …?` clause is exercised — an empty array is an
- *     assertion vacuum.
+ *   - ModelNotFoundError raised for cases (B)/(C) carries a `suggestions` array whose
+ *     CONTENT is varied per request by the mock so BOTH arms of the conditional clause are
+ *     covered: NON-EMPTY (multi- and single-element) exercises the rendered ` Did you mean:
+ *     …?` tail and its ", " join, while EMPTY ([]) and OMITTED (undefined) exercise the false
+ *     branch where no clause is appended. A uniformly non-empty fixture would leave the false
+ *     branch an assertion vacuum.
  *
  * @helpers Provider.parseModel, Provider.getModel, Provider.list, Provider.ModelNotFoundError
  * @see src/provider/provider.ts (getModel record lookup: provider.ts:1747-1768;
@@ -183,6 +195,22 @@ const knownModels: Record<string, { models: Record<string, Provider.Model> }> = 
 const providerSuggestions = ["anthropic", "openrouter"]
 const modelSuggestions = ["claude-sonnet-4", "claude-haiku-4"]
 
+// Sentinel suggestion fixtures keyed by a request identifier, so ONE mock can drive BOTH
+// the populated " Did you mean: …?" clause AND its FALSE branch without per-test rewiring.
+// The impl renders the clause only when `suggestions && suggestions.length`, so an empty
+// array AND an omitted (undefined) field must BOTH suppress it. A single-element array
+// pins the no-comma rendering ("Did you mean: anthropic?"). Keys absent here fall back to
+// the default NON-EMPTY suggestions above.
+//   - case B (provider not configured), keyed by the parsed providerID:
+const providerSuggestionsByID: Record<string, string[] | undefined> = {
+  "bogus-empty": [], //            false branch: empty array → no clause
+  "bogus-single": ["anthropic"], // single element → clause has no ", " separator
+}
+//   - case C (model missing in a known provider), keyed by the parsed modelID:
+const modelSuggestionsByID: Record<string, string[] | undefined> = {
+  "ghost-undefined": undefined, // false branch: omitted suggestions → no clause
+}
+
 // What resolver.list() reports as CONFIGURED. The impl discriminates UNAVAILABLE case B
 // (provider ABSENT here → "provider … is not configured") from case C (provider PRESENT
 // here but the model missing → "model … is not available for provider …") by list()
@@ -211,17 +239,25 @@ const providerMock = Layer.mock(Provider.Service)({
   getModel: (providerID, modelID) =>
     Effect.gen(function* () {
       const provider = knownModels[providerID]
-      // Case B source: provider not in the catalog → suggest known provider names.
-      if (!provider)
-        return yield* Effect.fail(
-          new Provider.ModelNotFoundError({ providerID, modelID, suggestions: providerSuggestions }),
-        )
+      // Case B source: provider not in the catalog → suggest known provider names. The
+      // suggestions VARY by providerID so a single mock exercises the populated clause,
+      // the empty-array false branch, and the single-element (no-comma) rendering.
+      if (!provider) {
+        const suggestions = Object.hasOwn(providerSuggestionsByID, providerID)
+          ? providerSuggestionsByID[providerID]
+          : providerSuggestions
+        return yield* Effect.fail(new Provider.ModelNotFoundError({ providerID, modelID, suggestions }))
+      }
       const info = provider.models[modelID]
-      // Case C source: provider known, model missing → suggest known model names.
-      if (!info)
-        return yield* Effect.fail(
-          new Provider.ModelNotFoundError({ providerID, modelID, suggestions: modelSuggestions }),
-        )
+      // Case C source: provider known, model missing → suggest known model names. The
+      // suggestions VARY by modelID so a single mock exercises the populated clause and
+      // the omitted-suggestions (undefined) false branch.
+      if (!info) {
+        const suggestions = Object.hasOwn(modelSuggestionsByID, modelID)
+          ? modelSuggestionsByID[modelID]
+          : modelSuggestions
+        return yield* Effect.fail(new Provider.ModelNotFoundError({ providerID, modelID, suggestions }))
+      }
       return info
     }),
 })
@@ -1182,6 +1218,10 @@ describe("tool.task model override", () => {
       expect(rendered).toContain("is not configured")
       expect(rendered).toContain("bogus")
       expect(rendered).toContain("Did you mean")
+      // Pin the exact join: a ", " separator preserving fixture order (not a bare list).
+      expect(rendered).toContain("Did you mean: anthropic, openrouter")
+      // Anti-vacuum guard: a fixture emptied by accident must not let the loop pass silently.
+      expect(providerSuggestions.length).toBeGreaterThan(0)
       for (const suggestion of providerSuggestions) expect(rendered).toContain(suggestion)
       expect(rendered).not.toContain("format")
       expect(prompted).toBe(false)
@@ -1226,8 +1266,137 @@ describe("tool.task model override", () => {
       expect(rendered).toContain("ghost-model")
       expect(rendered).toContain("anthropic")
       expect(rendered).toContain("Did you mean")
+      // Pin the exact join: a ", " separator preserving fixture order (not a bare list).
+      expect(rendered).toContain("Did you mean: claude-sonnet-4, claude-haiku-4")
+      // Anti-vacuum guard: a fixture emptied by accident must not let the loop pass silently.
+      expect(modelSuggestions.length).toBeGreaterThan(0)
       for (const suggestion of modelSuggestions) expect(rendered).toContain(suggestion)
       expect(rendered).not.toContain("format")
+      expect(prompted).toBe(false)
+    }),
+  )
+
+  // Case B, FALSE suggestions branch — `error.suggestions` is an EMPTY array, so the
+  // `error.suggestions && error.suggestions.length ? …` clause renders nothing. The
+  // "provider … is not configured" message must stand alone with NO " Did you mean: …?"
+  // tail. This pins the untested false arm of the conditional suffix.
+  withModel.instance("unavailable provider with empty suggestions omits the 'Did you mean' clause", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let prompted = false
+      const promptOps = stubOps({ onPrompt: () => (prompted = true) })
+
+      const params = {
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+        model: "bogus-empty/does-not-exist",
+      }
+
+      const exit = yield* def
+        .execute(params, {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
+      expect(rendered).toContain("is not configured")
+      expect(rendered).toContain("bogus-empty")
+      expect(rendered).not.toContain("Did you mean")
+      expect(rendered).not.toContain("format")
+      expect(prompted).toBe(false)
+    }),
+  )
+
+  // Case C, FALSE suggestions branch — `error.suggestions` is OMITTED (undefined), so the
+  // `error.suggestions && …` clause short-circuits and renders nothing. The "model … is not
+  // available for provider …" message must stand alone with NO " Did you mean: …?" tail.
+  withModel.instance("unavailable model with omitted suggestions omits the 'Did you mean' clause", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let prompted = false
+      const promptOps = stubOps({ onPrompt: () => (prompted = true) })
+
+      const params = {
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+        model: "anthropic/ghost-undefined",
+      }
+
+      const exit = yield* def
+        .execute(params, {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
+      expect(rendered).toContain("is not available for provider")
+      expect(rendered).toContain("ghost-undefined")
+      expect(rendered).toContain("anthropic")
+      expect(rendered).not.toContain("Did you mean")
+      expect(rendered).not.toContain("format")
+      expect(prompted).toBe(false)
+    }),
+  )
+
+  // Suggestions JOIN format, single element — a ONE-element suggestions array renders with
+  // NO ", " separator: "Did you mean: anthropic?" exactly. This complements the multi-element
+  // B/C tests (which pin the ", " separator) by pinning the degenerate single-suggestion case.
+  withModel.instance("single suggestion renders without a comma separator", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let prompted = false
+      const promptOps = stubOps({ onPrompt: () => (prompted = true) })
+
+      const params = {
+        description: "inspect bug",
+        prompt: "look into the cache key path",
+        subagent_type: "general",
+        model: "bogus-single/does-not-exist",
+      }
+
+      const exit = yield* def
+        .execute(params, {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        })
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
+      expect(rendered).toContain("is not configured")
+      // Exactly one suggestion → the clause ends right after the name, with no ", ".
+      expect(rendered).toContain("Did you mean: anthropic?")
+      expect(rendered).not.toContain("Did you mean: anthropic,")
       expect(prompted).toBe(false)
     }),
   )
@@ -1305,6 +1474,7 @@ describe("tool.task model override", () => {
 
       expect(Exit.isFailure(exit)).toBe(true)
       const rendered = Exit.isFailure(exit) ? Cause.pretty(exit.cause) : ""
+      expect(rendered).toContain('Invalid task model ""')
       expect(rendered).toContain("format")
       expect(rendered).not.toContain("unavailable")
       expect(prompted).toBe(false)
