@@ -3,7 +3,7 @@ import type { ScrollBoxRenderable } from "@opentui/core"
 import { useKeyboard } from "@opentui/solid"
 import "opentui-spinner/solid"
 import { Show, createMemo, indexArray } from "solid-js"
-import { SPINNER_FRAMES } from "../tui/component/spinner"
+import { SPINNER_FRAMES } from "@opencode-ai/tui/component/spinner"
 import { RunEntryContent, separatorRows } from "./scrollback.writer"
 import type { FooterSubagentDetail, FooterSubagentTab, RunDiffStyle } from "./types"
 import type { RunFooterTheme, RunTheme } from "./theme"
@@ -13,6 +13,10 @@ export const SUBAGENT_INSPECTOR_ROWS = 14
 function statusColor(theme: RunFooterTheme, status: FooterSubagentTab["status"]) {
   if (status === "completed") {
     return theme.highlight
+  }
+
+  if (status === "cancelled") {
+    return theme.muted
   }
 
   if (status === "error") {
@@ -25,6 +29,10 @@ function statusColor(theme: RunFooterTheme, status: FooterSubagentTab["status"])
 function statusIcon(status: FooterSubagentTab["status"]) {
   if (status === "completed") {
     return "●"
+  }
+
+  if (status === "cancelled") {
+    return "○"
   }
 
   if (status === "error") {

@@ -1,3 +1,4 @@
+import type { Argv } from "yargs"
 import { Auth } from "../../auth"
 import { cmd } from "./cmd"
 import { CliError, effectCmd, fail } from "../effect-cmd"
@@ -298,7 +299,9 @@ export const ProvidersListCommand = effectCmd({
 export const ProvidersLoginCommand = effectCmd({
   command: "login [url]",
   describe: "log in to a provider",
-  builder: (yargs) =>
+  // URL login skips instance bootstrap, which would load remote config with the stale token and crash before re-auth.
+  instance: (args) => !args.url,
+  builder: (yargs: Argv) =>
     yargs
       .positional("url", {
         describe: "opencode auth provider",
@@ -505,11 +508,16 @@ export const ProvidersLoginCommand = effectCmd({
 })
 
 export const ProvidersLogoutCommand = effectCmd({
-  command: "logout",
+  command: "logout [provider]",
   describe: "log out from a configured provider",
+  builder: (yargs) =>
+    yargs.positional("provider", {
+      describe: "provider id or name to log out from",
+      type: "string",
+    }),
   // Removes a global auth credential; no project instance needed.
   instance: false,
-  handler: Effect.fn("Cli.providers.logout")(function* (_args) {
+  handler: Effect.fn("Cli.providers.logout")(function* (args) {
     const authSvc = yield* Auth.Service
     const modelsDev = yield* ModelsDev.Service
 
@@ -521,14 +529,25 @@ export const ProvidersLogoutCommand = effectCmd({
       return
     }
     const database = yield* modelsDev.get()
-    const selected = yield* Prompt.select({
-      message: "Select provider",
-      options: credentials.map(([key, value]) => ({
-        label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
-        value: key,
-      })),
-    })
-    yield* Effect.orDie(authSvc.remove(yield* promptValue(selected)))
+    const options = credentials.map(([key, value]) => ({
+      label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
+      value: key,
+    }))
+    const provider = args.provider
+      ? options.find(
+          (option) =>
+            option.value === args.provider ||
+            database[option.value]?.name?.toLowerCase() === args.provider?.toLowerCase(),
+        )?.value
+      : yield* promptValue(
+          yield* Prompt.autocomplete({
+            message: "Select provider",
+            maxItems: 8,
+            options,
+          }),
+        )
+    if (!provider) return yield* fail(`Unknown configured provider "${args.provider}"`)
+    yield* Effect.orDie(authSvc.remove(provider))
     yield* Prompt.outro("Logout successful")
   }),
 })

@@ -3,6 +3,7 @@ import { DateTime, Effect, Layer, Schema } from "effect"
 import { asc, eq } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
+import { EventTable } from "@opencode-ai/core/event/sql"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
@@ -218,18 +219,42 @@ describe("SessionProjector", () => {
         callID: "shell-1",
         output: "/project",
       })
+      const compactionID = SessionMessage.ID.create()
       yield* events.publish(SessionEvent.Compaction.Started, {
         sessionID,
-        messageID: SessionMessage.ID.create(),
+        messageID: compactionID,
         timestamp: created,
         reason: "manual",
       })
-      yield* events.publish(SessionEvent.Compaction.Delta, { sessionID, timestamp: created, text: "partial" })
+      yield* events.publish(SessionEvent.Compaction.Delta, {
+        sessionID,
+        messageID: compactionID,
+        timestamp: created,
+        text: "partial",
+      })
+      expect(
+        yield* db
+          .select({ id: EventTable.id })
+          .from(EventTable)
+          .where(eq(EventTable.type, SessionEvent.Compaction.Delta.type))
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual([])
+      expect(
+        yield* db
+          .select({ id: SessionMessageTable.id })
+          .from(SessionMessageTable)
+          .where(eq(SessionMessageTable.type, "compaction"))
+          .all()
+          .pipe(Effect.orDie),
+      ).toEqual([])
       yield* events.publish(SessionEvent.Compaction.Ended, {
         sessionID,
+        messageID: compactionID,
         timestamp: DateTime.makeUnsafe(1),
+        reason: "manual",
         text: "summary",
-        include: "msg-1",
+        recent: "recent context",
       })
 
       const rows = yield* db
@@ -256,7 +281,7 @@ describe("SessionProjector", () => {
       })
       expect(messages.find((message) => message.type === "compaction")).toMatchObject({
         summary: "summary",
-        include: "msg-1",
+        recent: "recent context",
       })
       expect(
         yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie),

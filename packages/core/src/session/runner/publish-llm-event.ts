@@ -1,11 +1,4 @@
-import {
-  ToolOutput as LLMToolOutput,
-  type LLMEvent,
-  type ProviderMetadata,
-  type ToolOutput as LLMToolOutputType,
-  type ToolResultValue,
-  type Usage,
-} from "@opencode-ai/llm"
+import { ToolOutput, type LLMEvent, type ProviderMetadata, type ToolResultValue, type Usage } from "@opencode-ai/llm"
 import { DateTime, Effect } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
@@ -45,13 +38,13 @@ const message = (value: unknown) => {
   }
 }
 
-type ToolOutput =
-  | { readonly structured: Record<string, unknown>; readonly content: LLMToolOutputType["content"] }
+type SettledOutput =
+  | { readonly structured: Record<string, unknown>; readonly content: ToolOutput["content"] }
   | { readonly error: { readonly type: "unknown"; readonly message: string } }
 
-const settledOutput = (value: LLMToolOutputType | undefined, result: ToolResultValue): ToolOutput => {
+const settledOutput = (value: ToolOutput | undefined, result: ToolResultValue): SettledOutput => {
   if (result.type === "error") return { error: { type: "unknown", message: message(result.value) } }
-  const settled = value ?? LLMToolOutput.fromResultValue(result)
+  const settled = value ?? ToolOutput.fromResultValue(result)
   if (!settled) throw new Error(`Unsupported tool result: ${message(result)}`)
   return { structured: record(settled.structured), content: settled.content }
 }
@@ -165,7 +158,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
 
   const startToolInput = Effect.fnUntraced(function* (event: { readonly id: string; readonly name: string }) {
     if (tools.has(event.id)) return yield* Effect.die(`Duplicate tool input start: ${event.id}`)
-    const assistantMessageID = yield* currentAssistantMessageID()
+    const assistantMessageID = yield* startAssistant()
     tools.set(event.id, {
       assistantMessageID,
       name: event.name,
@@ -218,10 +211,17 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     }
   })
 
-  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (event: LLMEvent) {
+  const assistantMessageIDForTool = (callID: string) => {
+    const tool = tools.get(callID)
+    return tool ? Effect.succeed(tool.assistantMessageID) : Effect.die(`Unknown tool call: ${callID}`)
+  }
+
+  const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (
+    event: LLMEvent,
+    outputPaths: ReadonlyArray<string> = [],
+  ) {
     switch (event.type) {
       case "step-start":
-        yield* startAssistant()
         return
       case "text-start":
         yield* text.start(event.id)
@@ -347,7 +347,8 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
           assistantMessageID: tool.assistantMessageID,
           callID: event.id,
           ...result,
-          result: event.result,
+          outputPaths,
+          ...(provider.executed ? { result: event.result } : {}),
           provider,
         })
         return
@@ -377,7 +378,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         yield* events.publish(SessionEvent.Step.Ended, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
-          assistantMessageID: yield* currentAssistantMessageID(),
+          assistantMessageID: yield* startAssistant(),
           finish: event.reason,
           cost: 0,
           tokens: tokens(event.usage),
@@ -398,5 +399,13 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     }
   })
 
-  return { publish, flush, failUnsettledTools, hasProviderError: () => providerFailed, startAssistant }
+  return {
+    publish,
+    flush,
+    failUnsettledTools,
+    hasAssistantStarted: () => assistantMessageID !== undefined,
+    hasProviderError: () => providerFailed,
+    startAssistant,
+    assistantMessageID: assistantMessageIDForTool,
+  }
 }

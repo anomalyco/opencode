@@ -1,106 +1,130 @@
 export * as GrepTool from "./grep"
 
-import { Tool, ToolFailure, toolText } from "@opencode-ai/llm"
-import { Cause, Effect, Layer, Schema } from "effect"
+import { ToolFailure } from "@opencode-ai/llm"
+import { Effect, Layer, Schema } from "effect"
+import path from "path"
 import { FileSystem } from "../filesystem"
-import { LocationSearch } from "../location-search"
+import { FSUtil } from "../fs-util"
+import { Location } from "../location"
+import { PermissionV2 } from "../permission"
 import { Ripgrep } from "../ripgrep"
-import { ToolRegistry } from "./registry"
+import { RelativePath } from "../schema"
+import { Tool } from "./tool"
+import { Tools } from "./tools"
 
 export const name = "grep"
 
-export const Parameters = Schema.Struct({
-  pattern: LocationSearch.GrepInput.fields.pattern.annotate({
+export const Input = Schema.Struct({
+  pattern: FileSystem.GrepInput.fields.pattern.annotate({
     description: "Regex pattern to search for in file contents",
   }),
-  path: LocationSearch.GrepInput.fields.path.annotate({
-    description: "Relative file or directory to search. Defaults to the active Location.",
+  path: RelativePath.pipe(Schema.optional).annotate({
+    description: "Relative directory to search. Defaults to the active Location.",
   }),
-  reference: LocationSearch.GrepInput.fields.reference.annotate({
-    description: "Named project reference to search instead of the active Location",
-  }),
-  include: LocationSearch.GrepInput.fields.include.annotate({
+  include: FileSystem.GrepInput.fields.include.annotate({
     description: 'File glob to include in the search (for example, "*.js" or "*.{ts,tsx}")',
   }),
-  limit: LocationSearch.GrepInput.fields.limit.annotate({
-    description: `Maximum matches to return (default: ${LocationSearch.DEFAULT_RESULT_LIMIT})`,
+  limit: FileSystem.GrepInput.fields.limit.annotate({
+    description: "Maximum matches to return",
   }),
 })
 
-type Success = typeof LocationSearch.GrepResult.Encoded
+export const Output = Schema.Array(FileSystem.Match)
+type ModelOutput = typeof Output.Encoded
 
-/** Format raw Location search matches into the familiar concise model output. */
-export const toModelOutput = (output: Success) => {
-  const lines = output.items.length === 0 ? ["No files found"] : [`Found ${output.items.length} matches`]
+/** Format raw search matches into the familiar concise model output. */
+export const toModelOutput = (output: ModelOutput) => {
+  const lines = output.length === 0 ? ["No files found"] : [`Found ${output.length} matches`]
   let current = ""
-  for (const match of output.items) {
-    if (current !== match.resource) {
+  for (const match of output) {
+    if (current !== match.entry.path) {
       if (current) lines.push("")
-      current = match.resource
-      lines.push(`${match.resource}:`)
+      current = match.entry.path
+      lines.push(`${match.entry.path}:`)
     }
-    lines.push(`  Line ${match.line}: ${match.lines}${match.linePreviewTruncated ? "..." : ""}`)
+    lines.push(`  Line ${match.line}: ${match.text}`)
   }
-  if (output.truncated) {
-    lines.push(
-      "",
-      `(Results are truncated: showing first ${output.items.length} matches. Consider using a more specific path or pattern.)`,
-    )
-  }
-  if (output.partial) lines.push("", "(Some paths were inaccessible and skipped)")
   return lines.join("\n")
 }
 
-const definition = Tool.make({
-  description:
-    "Search file contents by regular expression within the active Location or a named project reference. Use a relative path to narrow the search, include to filter files by glob, and limit to bound the match count. Returns concise relative file resources, line numbers, and bounded line previews.",
-  parameters: Parameters,
-  success: LocationSearch.GrepResult,
-  toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
-})
-
-/**
- * Location-scoped grep leaf. FileSystem selects a canonical root for
- * permission metadata; LocationSearch owns containment and ripgrep execution.
- *
- * TODO: Revisit root-specific search permission resources if named-reference policy needs independent allow/deny rules.
- */
+/** Grep leaf that defaults its filesystem root to the active Location. */
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const registry = yield* ToolRegistry.Service
-    const filesystem = yield* FileSystem.Service
-    const search = yield* LocationSearch.Service
+    const tools = yield* Tools.Service
+    const fs = yield* FSUtil.Service
+    const ripgrep = yield* Ripgrep.Service
+    const location = yield* Location.Service
+    const permission = yield* PermissionV2.Service
 
-    yield* registry.contribute((editor) =>
-      editor.set(name, {
-        tool: definition,
-        execute: ({ parameters, assertPermission }) =>
-          Effect.gen(function* () {
-            const root = yield* filesystem.resolveRoot(parameters)
-            yield* assertPermission({
-              action: name,
-              resources: [parameters.pattern],
-              save: ["*"],
-              metadata: {
-                root: root.resource,
-                reference: parameters.reference,
-                path: parameters.path,
-                include: parameters.include,
-                limit: parameters.limit,
-              },
-            })
-            return yield* search.grep(parameters, root)
-          }).pipe(
-            Effect.catchCause((cause) => {
-              const error = Cause.squash(cause)
-              const message =
-                error instanceof Ripgrep.InvalidPatternError
-                  ? `Invalid grep pattern ${JSON.stringify(parameters.pattern)}: ${error.message}`
-                  : `Unable to grep for ${parameters.pattern}`
-              return Effect.fail(new ToolFailure({ message, error }))
-            }),
-          ),
-      }),
-    )
+    yield* tools
+      .register({
+        [name]: Tool.make({
+          description:
+            "Search file contents by regular expression within the active Location or an absolute managed tool-output file. Use a path to narrow the search, include to filter files by glob, and limit to bound the match count. Returns concise file resources, line numbers, and bounded line previews.",
+          input: Input,
+          output: Output,
+          toModelOutput: ({ output }) => [
+            {
+              type: "text",
+              text: toModelOutput(
+                output.map((match) => ({
+                  ...match,
+                  entry: { ...match.entry, path: path.resolve(location.directory, match.entry.path) },
+                })),
+              ),
+            },
+          ],
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              yield* permission.assert({
+                action: name,
+                resources: [input.pattern],
+                save: ["*"],
+                metadata: {
+                  root: ".",
+                  path: input.path,
+                  include: input.include,
+                  limit: input.limit,
+                },
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+              })
+              const target = path.resolve(location.directory, input.path ?? ".")
+              const info = yield* fs.stat(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
+              return yield* ripgrep
+                .grep({
+                  cwd: info?.type === "Directory" ? target : path.dirname(target),
+                  pattern: input.pattern,
+                  file: info?.type === "File" ? path.basename(target) : undefined,
+                  include: input.include,
+                  limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+                })
+                .pipe(
+                  Effect.map((result) =>
+                    result.map(
+                      (match) =>
+                        new FileSystem.Match({
+                          ...match,
+                          entry: new FileSystem.Entry({
+                            ...match.entry,
+                            path: RelativePath.make(
+                              path.relative(
+                                location.directory,
+                                path.resolve(
+                                  info?.type === "Directory" ? target : path.dirname(target),
+                                  match.entry.path,
+                                ),
+                              ),
+                            ),
+                          }),
+                        }),
+                    ),
+                  ),
+                )
+            }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to grep for ${input.pattern}` }))),
+        }),
+      })
+      .pipe(Effect.orDie)
   }),
 )

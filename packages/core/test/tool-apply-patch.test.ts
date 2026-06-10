@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
@@ -14,6 +14,7 @@ import { ApplyPatchTool } from "@opencode-ai/core/tool/apply-patch"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
+import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
 const sessionID = SessionV2.ID.make("ses_apply_patch_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
@@ -24,6 +25,7 @@ let editApproved = false
 let blockRemoveTarget: string | undefined
 let removeStarted: Deferred.Deferred<void> | undefined
 let releaseRemove: Deferred.Deferred<void> | undefined
+let afterEditApproval = (): Effect.Effect<void> => Effect.void
 
 const permission = Layer.succeed(
   PermissionV2.Service,
@@ -33,6 +35,7 @@ const permission = Layer.succeed(
         assertions.push(input)
         if (input.action === "edit") editApproved = true
       }).pipe(
+        Effect.andThen(input.action === "edit" ? Effect.suspend(afterEditApproval) : Effect.void),
         Effect.andThen(
           input.action === denyAction ? Effect.fail(new PermissionV2.DeniedError({ rules: [] })) : Effect.void,
         ),
@@ -54,6 +57,7 @@ const reset = () => {
   blockRemoveTarget = undefined
   removeStarted = undefined
   releaseRemove = undefined
+  afterEditApproval = () => Effect.void
 }
 
 const filesystem = Layer.effect(
@@ -84,22 +88,24 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
   )
-  const planning = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
-  const commits = FileMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(planning))
+  const resolution = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
+  const mutation = FileMutation.layer.pipe(Layer.provide(filesystem))
   const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
   const patch = ApplyPatchTool.layer.pipe(
     Layer.provide(registry),
-    Layer.provide(planning),
-    Layer.provide(commits),
+    Layer.provide(permission),
+    Layer.provide(resolution),
+    Layer.provide(mutation),
     Layer.provide(filesystem),
   )
   return Effect.gen(function* () {
     return yield* body(yield* ToolRegistry.Service)
-  }).pipe(Effect.provide(Layer.mergeAll(registry, planning, commits, patch)))
+  }).pipe(Effect.provide(Layer.mergeAll(registry, resolution, mutation, patch)))
 }
 
 const call = (patchText: string, id = "call-apply-patch") => ({
   sessionID,
+  ...toolIdentity,
   call: { type: "tool-call" as const, id, name: "apply_patch", input: { patchText } },
 })
 
@@ -126,8 +132,9 @@ describe("ApplyPatchTool", () => {
           Effect.andThen(
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
-                expect((yield* registry.definitions()).map((tool) => tool.name)).toEqual(["apply_patch"])
-                const settled = yield* registry.settle(
+                expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["apply_patch"])
+                const settled = yield* settleTool(
+                  registry,
                   call(
                     "*** Begin Patch\n*** Add File: nested/new.txt\n+created\n*** Update File: update.txt\n@@\n-before\n+after\n*** Delete File: remove.txt\n*** End Patch",
                   ),
@@ -143,7 +150,7 @@ describe("ApplyPatchTool", () => {
                     { type: "delete", resource: "remove.txt" },
                   ],
                 })
-                expect(assertions).toEqual([
+                expect(assertions).toMatchObject([
                   { sessionID, action: "edit", resources: ["nested/new.txt", "update.txt", "remove.txt"], save: ["*"] },
                 ])
                 expect(readsBeforeEditApproval).toBe(0)
@@ -172,7 +179,8 @@ describe("ApplyPatchTool", () => {
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
                 expect(
-                  yield* registry.execute(
+                  yield* executeTool(
+                    registry,
                     call(
                       "*** Begin Patch\n*** Add File: created.txt\n+created\n*** Update File: old.txt\n*** Move to: moved.txt\n@@\n-before\n+after\n*** End Patch",
                     ),
@@ -200,7 +208,8 @@ describe("ApplyPatchTool", () => {
             withTool(active.path, (registry) =>
               Effect.gen(function* () {
                 expect(
-                  yield* registry.execute(
+                  yield* executeTool(
+                    registry,
                     call(`*** Begin Patch\n*** Update File: ${target}\n@@\n-before\n+after\n*** End Patch`),
                   ),
                 ).toMatchObject({ type: "text" })
@@ -233,7 +242,8 @@ describe("ApplyPatchTool", () => {
             withTool(active.path, (registry) =>
               Effect.gen(function* () {
                 expect(
-                  yield* registry.execute(
+                  yield* executeTool(
+                    registry,
                     call(
                       `*** Begin Patch\n*** Update File: ${first}\n@@\n-before\n+after\n*** Update File: ${second}\n@@\n-before\n+after\n*** End Patch`,
                     ),
@@ -263,7 +273,8 @@ describe("ApplyPatchTool", () => {
         return withTool(tmp.path, (registry) =>
           Effect.gen(function* () {
             expect(
-              yield* registry.execute(
+              yield* executeTool(
+                registry,
                 call(
                   "*** Begin Patch\n*** Add File: created.txt\n+created\n*** Update File: missing.txt\n@@\n-before\n+after\n*** End Patch",
                 ),
@@ -288,7 +299,8 @@ describe("ApplyPatchTool", () => {
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
                 expect(
-                  yield* registry.execute(
+                  yield* executeTool(
+                    registry,
                     call("*** Begin Patch\n*** Add File: existing.txt\n+replacement\n*** End Patch"),
                   ),
                 ).toEqual({ type: "error", value: "Unable to apply patch at existing.txt" })
@@ -302,7 +314,30 @@ describe("ApplyPatchTool", () => {
     ),
   )
 
-  it.live("reports earlier sequential applications when a later commit fails", () =>
+  it.live("rejects an add target that appears during permission approval", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "appeared.txt")
+        afterEditApproval = () => Effect.promise(() => fs.writeFile(target, "winner\n")).pipe(Effect.orDie)
+        return withTool(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            expect(
+              yield* executeTool(
+                registry,
+                call("*** Begin Patch\n*** Add File: appeared.txt\n+replacement\n*** End Patch"),
+              ),
+            ).toEqual({ type: "error", value: "Unable to apply patch at appeared.txt" })
+            expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("winner\n")
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("preserves a later commit defect after earlier sequential applications", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => {
@@ -315,13 +350,13 @@ describe("ApplyPatchTool", () => {
             withTool(tmp.path, (registry) =>
               Effect.gen(function* () {
                 expect(
-                  yield* registry.execute(
-                    call("*** Begin Patch\n*** Delete File: first.txt\n*** Delete File: second.txt\n*** End Patch"),
+                  Exit.isFailure(
+                    yield* executeTool(
+                      registry,
+                      call("*** Begin Patch\n*** Delete File: first.txt\n*** Delete File: second.txt\n*** End Patch"),
+                    ).pipe(Effect.exit),
                   ),
-                ).toEqual({
-                  type: "error",
-                  value: "Patch partially applied before failing at second.txt. Applied: first.txt",
-                })
+                ).toBe(true)
                 expect(yield* exists(first)).toBe(false)
                 expect(yield* exists(second)).toBe(true)
               }),
@@ -347,11 +382,10 @@ describe("ApplyPatchTool", () => {
           yield* Effect.promise(() => Promise.all([fs.writeFile(first, "first"), fs.writeFile(second, "second")]))
           yield* withTool(tmp.path, (registry) =>
             Effect.gen(function* () {
-              const run = yield* registry
-                .execute(
-                  call("*** Begin Patch\n*** Delete File: first.txt\n*** Delete File: second.txt\n*** End Patch"),
-                )
-                .pipe(Effect.forkChild)
+              const run = yield* executeTool(
+                registry,
+                call("*** Begin Patch\n*** Delete File: first.txt\n*** Delete File: second.txt\n*** End Patch"),
+              ).pipe(Effect.forkChild)
               yield* Deferred.await(removeStarted!)
               const interrupt = yield* Fiber.interrupt(run).pipe(Effect.forkChild)
               yield* Deferred.succeed(releaseRemove!, undefined)

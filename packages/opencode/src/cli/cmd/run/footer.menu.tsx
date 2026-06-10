@@ -1,7 +1,9 @@
 /** @jsxImportSource @opentui/solid */
-import { TextAttributes } from "@opentui/core"
+import { TextAttributes, type ColorInput } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import { transparent, type RunFooterTheme } from "./theme"
+import * as Locale from "@/util/locale"
 
 export const FOOTER_MENU_ROWS = 8
 
@@ -125,7 +127,10 @@ export function RunFooterMenu(props: {
   paddingLeft?: number
   paddingRight?: number
   grouped?: boolean
+  background?: boolean
+  headerColor?: ColorInput
 }) {
+  const term = useTerminalDimensions()
   const limit = () => props.limit ?? FOOTER_MENU_ROWS
   const border = () => props.border ?? true
   const [groupOffset, setGroupOffset] = createSignal(0)
@@ -203,16 +208,36 @@ export function RunFooterMenu(props: {
 
     return " ".repeat(Math.max(1, descriptionColumn() - Bun.stringWidth(item.display)))
   }
+  const descriptionText = (item: RunFooterMenuItem) => {
+    if (!item.description) {
+      return
+    }
+
+    const footerWidth = item.footer ? Bun.stringWidth(item.footer) + 1 : 0
+    const available =
+      term().width -
+      (border() ? 1 : 0) -
+      (props.paddingLeft ?? 1) -
+      (props.paddingRight ?? 0) -
+      descriptionColumn() -
+      footerWidth -
+      4
+    return Locale.truncate(item.description, Math.max(12, available))
+  }
   return (
     <box
       id={props.id ?? "run-direct-footer-menu"}
       width="100%"
       height={props.rows()}
-      backgroundColor={transparent}
+      backgroundColor={props.background ? props.theme().shade : transparent}
       flexDirection="column"
     >
       {rows().length === 0 ? (
-        <box paddingRight={0} flexDirection="row" backgroundColor={transparent}>
+        <box
+          paddingRight={0}
+          flexDirection="row"
+          backgroundColor={props.background ? props.theme().shade : transparent}
+        >
           {border() ? (
             <text fg={props.theme().border} wrapMode="none">
               ┃
@@ -223,7 +248,7 @@ export function RunFooterMenu(props: {
             flexShrink={1}
             paddingLeft={props.paddingLeft ?? 1}
             paddingRight={props.paddingRight ?? 0}
-            backgroundColor={props.theme().surface}
+            backgroundColor={props.background ? props.theme().shade : transparent}
           >
             <text fg={props.theme().muted} wrapMode="none" truncate>
               {props.empty ?? "No matching items"}
@@ -239,7 +264,12 @@ export function RunFooterMenu(props: {
           if (row.type === "header") {
             return (
               <box paddingLeft={props.paddingLeft ?? 1} paddingRight={props.paddingRight ?? 1}>
-                <text fg={props.theme().highlight} attributes={TextAttributes.BOLD} wrapMode="none" truncate>
+                <text
+                  fg={props.headerColor ?? props.theme().highlight}
+                  attributes={TextAttributes.BOLD}
+                  wrapMode="none"
+                  truncate
+                >
                   {row.label}
                 </text>
               </box>
@@ -247,54 +277,71 @@ export function RunFooterMenu(props: {
           }
 
           const active = () => row.index === props.selected()
-          const inset = () => (active() ? 1 : 0)
+          const background = () =>
+            active()
+              ? props.background
+                ? props.theme().selected
+                : props.theme().shade
+              : props.background
+                ? props.theme().shade
+                : transparent
           return (
-            <box paddingRight={0} flexDirection="row" backgroundColor={transparent}>
+            <box paddingRight={0} flexDirection="row" backgroundColor={background()}>
               {border() ? (
-                <text fg={active() ? props.theme().highlight : props.theme().border} wrapMode="none">
-                  ┃
+                <text fg={props.theme().highlight} bg={background()} wrapMode="none">
+                  {active() ? "▌" : " "}
                 </text>
               ) : undefined}
               <box
                 flexGrow={1}
                 flexShrink={1}
-                paddingLeft={inset()}
-                paddingRight={inset()}
-                backgroundColor={props.theme().surface}
+                paddingLeft={props.paddingLeft ?? 1}
+                paddingRight={props.paddingRight ?? 0}
+                backgroundColor={background()}
               >
-                <box
-                  flexGrow={1}
-                  flexShrink={1}
-                  paddingLeft={Math.max(0, (props.paddingLeft ?? 1) - inset())}
-                  paddingRight={Math.max(0, (props.paddingRight ?? 0) - inset())}
-                  backgroundColor={active() ? props.theme().highlight : props.theme().surface}
-                >
-                  <box width="100%" flexDirection="row" justifyContent="space-between" gap={1}>
+                <box width="100%" flexDirection="row" justifyContent="space-between" gap={1}>
+                  <box flexDirection="row" gap={0} flexGrow={1} flexShrink={1}>
                     <text
-                      fg={active() ? props.theme().surface : props.theme().text}
+                      fg={active() ? props.theme().selectedText : props.theme().text}
+                      attributes={active() ? TextAttributes.BOLD : undefined}
                       wrapMode="none"
                       truncate
-                      flexGrow={1}
+                      flexShrink={0}
                     >
                       {row.item.display}
-                      {row.item.description ? (
-                        <span style={{ fg: active() ? props.theme().surface : props.theme().muted }}>
-                          {descriptionPad(row.item)}
-                          {row.item.description}
-                        </span>
-                      ) : undefined}
                     </text>
-                    {row.item.footer ? (
-                      <text
-                        fg={active() ? props.theme().surface : props.theme().muted}
-                        wrapMode="none"
-                        truncate
-                        flexShrink={0}
-                      >
-                        {row.item.footer}
-                      </text>
+                    {row.item.description ? (
+                      <>
+                        <text
+                          fg={active() ? props.theme().selectedText : props.theme().muted}
+                          wrapMode="none"
+                          flexShrink={0}
+                        >
+                          {descriptionPad(row.item)}
+                        </text>
+                        <text
+                          fg={active() ? props.theme().selectedText : props.theme().muted}
+                          wrapMode="none"
+                          truncate
+                          flexGrow={1}
+                          flexShrink={1}
+                        >
+                          {descriptionText(row.item)}
+                        </text>
+                      </>
                     ) : undefined}
                   </box>
+                  {row.item.footer ? (
+                    <text
+                      fg={active() ? props.theme().selectedText : props.theme().muted}
+                      attributes={active() ? TextAttributes.BOLD : undefined}
+                      wrapMode="none"
+                      truncate
+                      flexShrink={0}
+                    >
+                      {row.item.footer}
+                    </text>
+                  ) : undefined}
                 </box>
               </box>
             </box>

@@ -29,6 +29,7 @@ import {
   permissionShift,
   type PermissionOption,
 } from "./permission.shared"
+import { footerWidthPolicy } from "./footer.width"
 import { toolFiletype } from "./tool"
 import { transparent, type RunBlockTheme, type RunFooterTheme } from "./theme"
 import type { PermissionReply, RunDiffStyle } from "./types"
@@ -140,7 +141,7 @@ export function RunPermissionBody(props: {
   const [state, setState] = createSignal(createPermissionBodyState(props.request.id))
   const info = createMemo(() => permissionInfo(props.request))
   const ft = createMemo(() => toolFiletype(info().file))
-  const narrow = createMemo(() => dims().width < 80)
+  const narrow = createMemo(() => footerWidthPolicy(dims().width).dialog.narrow)
   const opts = createMemo(() => permissionOptions(state().stage))
   const busy = createMemo(() => state().submitting)
   const title = createMemo(() => {
@@ -257,7 +258,13 @@ export function RunPermissionBody(props: {
   })
 
   return (
-    <box id="run-direct-footer-permission-body" width="100%" height="100%" flexDirection="column">
+    <box
+      id="run-direct-footer-permission-body"
+      width="100%"
+      height="100%"
+      flexDirection="column"
+      backgroundColor={props.theme.surface}
+    >
       <box
         id="run-direct-footer-permission-head"
         flexDirection="column"

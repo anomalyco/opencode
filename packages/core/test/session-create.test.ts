@@ -337,14 +337,61 @@ describe("SessionV2.create", () => {
       expect(yield* unavailable(session.shell({ sessionID: created.id, command: "pwd" }))).toBe("shell")
       expect(yield* unavailable(session.skill({ sessionID: created.id, skill: "review" }))).toBe("skill")
       expect(yield* unavailable(session.switchAgent({ sessionID: created.id, agent: "build" }))).toBe("switchAgent")
+    }),
+  )
+
+  it.effect("switches the selected model through the durable Session event", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const created = yield* session.create({ location })
+      const model = ModelV2.Ref.make({
+        id: ModelV2.ID.make("sonnet"),
+        providerID: ProviderV2.ID.anthropic,
+        variant: ModelV2.VariantID.make("high"),
+      })
+
+      yield* session.switchModel({ sessionID: created.id, model })
+
+      expect(yield* session.get(created.id)).toMatchObject({ model })
       expect(
-        yield* unavailable(
-          session.switchModel({
-            sessionID: created.id,
+        Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(1), Stream.runCollect)),
+      ).toMatchObject([{ event: { type: "session.next.model.switched", data: { model } } }])
+    }),
+  )
+
+  it.effect("persists repeated switches as distinct durable Session events", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const created = yield* session.create({ location })
+      const model = ModelV2.Ref.make({ id: ModelV2.ID.make("sonnet"), providerID: ProviderV2.ID.anthropic })
+
+      yield* session.switchModel({ sessionID: created.id, model })
+      yield* session.switchModel({ sessionID: created.id, model })
+
+      const { db } = yield* Database.Service
+      expect(
+        yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, created.id)).all().pipe(Effect.orDie),
+      ).toHaveLength(3)
+      expect(yield* session.get(created.id)).toMatchObject({ model })
+    }),
+  )
+
+  it.effect("rejects a model switch for a missing Session", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const missing = SessionV2.ID.make("ses_missing_model_switch")
+
+      expect(
+        yield* session
+          .switchModel({
+            sessionID: missing,
             model: ModelV2.Ref.make({ id: ModelV2.ID.make("sonnet"), providerID: ProviderV2.ID.anthropic }),
-          }),
-        ),
-      ).toBe("switchModel")
+          })
+          .pipe(
+            Effect.flip,
+            Effect.map((error) => error._tag),
+          ),
+      ).toBe("Session.NotFoundError")
     }),
   )
 })

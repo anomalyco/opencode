@@ -7,8 +7,8 @@ import { Flag } from "./flag/flag"
 import { Global } from "./global"
 import { Location } from "./location"
 import { AbsolutePath } from "./schema"
-import { SystemContext } from "./system-context"
-import { SystemContextRegistry } from "./system-context-registry"
+import { SystemContext } from "./system-context/index"
+import { SystemContextRegistry } from "./system-context/registry"
 
 class File extends Schema.Class<File>("InstructionContext.File")({
   path: AbsolutePath,
@@ -70,7 +70,7 @@ export const layer = Layer.effectDiscard(
       return files.filter((file): file is File => file !== undefined)
     })
 
-    yield* registry.contribute({
+    yield* registry.register({
       key,
       load: observe().pipe(
         Effect.map((files) =>

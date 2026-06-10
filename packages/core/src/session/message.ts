@@ -1,9 +1,8 @@
 export * as SessionMessage from "./message"
 
 import { Schema } from "effect"
-import { ProviderMetadata } from "@opencode-ai/llm"
+import { ProviderMetadata, ToolContent } from "@opencode-ai/llm"
 import { ModelV2 } from "../model"
-import { ToolOutput } from "../tool-output"
 import { V2Schema } from "../v2-schema"
 import { SessionEvent } from "./event"
 import { Prompt } from "./prompt"
@@ -37,7 +36,6 @@ export class User extends Schema.Class<User>("Session.Message.User")({
   text: Prompt.fields.text,
   files: Prompt.fields.files,
   agents: Prompt.fields.agents,
-  references: Prompt.fields.references,
   type: Schema.Literal("user"),
   time: Schema.Struct({
     created: V2Schema.DateTimeUtcFromMillis,
@@ -77,24 +75,25 @@ export class ToolStatePending extends Schema.Class<ToolStatePending>("Session.Me
 export class ToolStateRunning extends Schema.Class<ToolStateRunning>("Session.Message.ToolState.Running")({
   status: Schema.Literal("running"),
   input: Schema.Record(Schema.String, Schema.Unknown),
-  structured: ToolOutput.Structured,
-  content: ToolOutput.Content.pipe(Schema.Array),
+  structured: Schema.Record(Schema.String, Schema.Any),
+  content: ToolContent.pipe(Schema.Array),
 }) {}
 
 export class ToolStateCompleted extends Schema.Class<ToolStateCompleted>("Session.Message.ToolState.Completed")({
   status: Schema.Literal("completed"),
   input: Schema.Record(Schema.String, Schema.Unknown),
   attachments: SessionEvent.FileAttachment.pipe(Schema.Array, Schema.optional),
-  content: ToolOutput.Content.pipe(Schema.Array),
-  structured: ToolOutput.Structured,
+  content: ToolContent.pipe(Schema.Array),
+  outputPaths: SessionEvent.Tool.Success.data.fields.outputPaths,
+  structured: Schema.Record(Schema.String, Schema.Any),
   result: SessionEvent.Tool.Success.data.fields.result,
 }) {}
 
 export class ToolStateError extends Schema.Class<ToolStateError>("Session.Message.ToolState.Error")({
   status: Schema.Literal("error"),
   input: Schema.Record(Schema.String, Schema.Unknown),
-  content: ToolOutput.Content.pipe(Schema.Array),
-  structured: ToolOutput.Structured,
+  content: ToolContent.pipe(Schema.Array),
+  structured: Schema.Record(Schema.String, Schema.Any),
   error: SessionEvent.UnknownError,
   result: SessionEvent.Tool.Failed.data.fields.result,
 }) {}
@@ -172,7 +171,7 @@ export class Compaction extends Schema.Class<Compaction>("Session.Message.Compac
   type: Schema.Literal("compaction"),
   reason: SessionEvent.Compaction.Started.data.fields.reason,
   summary: Schema.String,
-  include: Schema.String.pipe(Schema.optional),
+  recent: Schema.String,
   ...Base,
 }) {}
 

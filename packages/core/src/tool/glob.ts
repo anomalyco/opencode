@@ -1,90 +1,98 @@
 export * as GlobTool from "./glob"
 
-import { Tool, ToolFailure, toolText } from "@opencode-ai/llm"
-import { Cause, Effect, Layer, Schema } from "effect"
+import { ToolFailure } from "@opencode-ai/llm"
+import { Effect, Layer, Schema } from "effect"
+import path from "path"
 import { FileSystem } from "../filesystem"
-import { LocationSearch } from "../location-search"
-import { ToolRegistry } from "./registry"
+import { Location } from "../location"
+import { Ripgrep } from "../ripgrep"
+import { RelativePath } from "../schema"
+import { PermissionV2 } from "../permission"
+import { Tool } from "./tool"
+import { Tools } from "./tools"
 
 export const name = "glob"
 
-export const Parameters = Schema.Struct({
-  pattern: LocationSearch.FilesInput.fields.pattern.annotate({ description: "Glob pattern to match files against" }),
-  path: LocationSearch.FilesInput.fields.path.annotate({
+export const Input = Schema.Struct({
+  pattern: FileSystem.GlobInput.fields.pattern.annotate({ description: "Glob pattern to match files against" }),
+  path: RelativePath.pipe(Schema.optional).annotate({
     description: "Relative directory to search. Defaults to the active Location.",
   }),
-  reference: LocationSearch.FilesInput.fields.reference.annotate({
-    description: "Named project reference to search instead of the active Location",
-  }),
-  limit: LocationSearch.FilesInput.fields.limit.annotate({
-    description: `Maximum results to return (default: ${LocationSearch.DEFAULT_RESULT_LIMIT})`,
+  limit: FileSystem.GlobInput.fields.limit.annotate({
+    description: "Maximum results to return",
   }),
 })
 
-type ModelOutput = typeof LocationSearch.FilesResult.Encoded
+export const Output = Schema.Array(FileSystem.Entry)
+type ModelOutput = typeof Output.Encoded
 
-/** Format raw Location search results into the concise line-oriented output models expect. */
+/** Format raw search results into the concise line-oriented output models expect. */
 export const toModelOutput = (output: ModelOutput) => {
-  const lines = output.items.length === 0 ? ["No files found"] : output.items.map((item) => item.resource)
-  if (output.truncated) {
-    lines.push(
-      "",
-      `(Results are truncated: showing first ${output.items.length} results. Consider using a more specific path or pattern.)`,
-    )
-  }
-  if (output.partial) lines.push("", "(Results may be incomplete because some discovered files could not be read.)")
+  const lines = output.length === 0 ? ["No files found"] : output.map((item) => item.path)
   return lines.join("\n")
 }
 
-const definition = Tool.make({
-  description:
-    "Find files by glob pattern within the active Location or a named project reference. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
-  parameters: Parameters,
-  success: LocationSearch.FilesResult,
-  toModelOutput: ({ output }) => [toolText({ type: "text", text: toModelOutput(output) })],
-})
-
-/**
- * Location-scoped glob leaf. FileSystem selects a canonical root for
- * permission metadata; LocationSearch owns containment and traversal.
- *
- * TODO: Revisit root-specific search permission resources if named-reference policy needs independent allow/deny rules.
- */
+/** Glob leaf that defaults its filesystem root to the active Location. */
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
-    const registry = yield* ToolRegistry.Service
-    const filesystem = yield* FileSystem.Service
-    const search = yield* LocationSearch.Service
+    const tools = yield* Tools.Service
+    const ripgrep = yield* Ripgrep.Service
+    const location = yield* Location.Service
+    const permission = yield* PermissionV2.Service
 
-    yield* registry.contribute((editor) =>
-      editor.set(name, {
-        tool: definition,
-        execute: ({ parameters, assertPermission }) =>
-          Effect.gen(function* () {
-            const root = yield* filesystem.resolveRoot({ path: parameters.path, reference: parameters.reference })
-            yield* assertPermission({
-              action: name,
-              resources: [parameters.pattern],
-              save: ["*"],
-              metadata: {
-                root: root.resource,
-                reference: parameters.reference,
-                path: parameters.path,
-                limit: parameters.limit,
-              },
-            })
-            return yield* search.files(parameters, root)
-          }).pipe(
-            Effect.catchCause((cause) =>
-              Effect.fail(
-                new ToolFailure({
-                  message: `Unable to find files matching ${parameters.pattern}`,
-                  error: Cause.squash(cause),
-                }),
+    yield* tools
+      .register({
+        [name]: Tool.make({
+          description:
+            "Find files by glob pattern within the active Location. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
+          input: Input,
+          output: Output,
+          toModelOutput: ({ output }) => [
+            {
+              type: "text",
+              text: toModelOutput(
+                output.map((entry) => ({ ...entry, path: path.resolve(location.directory, entry.path) })),
               ),
+            },
+          ],
+          execute: (input, context) =>
+            Effect.gen(function* () {
+              yield* permission.assert({
+                action: name,
+                resources: [input.pattern],
+                save: ["*"],
+                metadata: {
+                  root: input.path ?? ".",
+                  path: input.path,
+                  limit: input.limit,
+                },
+                sessionID: context.sessionID,
+                agent: context.agent,
+                source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
+              })
+              const cwd = path.resolve(location.directory, input.path ?? ".")
+              return yield* ripgrep
+                .glob({
+                  cwd,
+                  pattern: input.pattern,
+                  limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+                })
+                .pipe(
+                  Effect.map((result) =>
+                    result.map(
+                      (entry) =>
+                        new FileSystem.Entry({
+                          ...entry,
+                          path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
+                        }),
+                    ),
+                  ),
+                )
+            }).pipe(
+              Effect.mapError(() => new ToolFailure({ message: `Unable to find files matching ${input.pattern}` })),
             ),
-          ),
-      }),
-    )
+        }),
+      })
+      .pipe(Effect.orDie)
   }),
 )

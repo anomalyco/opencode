@@ -4,6 +4,7 @@ import { and, desc, eq, sql } from "drizzle-orm"
 import { DateTime, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
+import { LayerNode } from "../effect/layer-node"
 import { SessionEvent } from "./event"
 import { SessionV1 } from "../v1/session"
 import { WorkspaceTable } from "../control-plane/workspace.sql"
@@ -168,23 +169,6 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
           return message.type === "assistant" ? message : undefined
         })
       },
-      getCurrentCompaction() {
-        return Effect.gen(function* () {
-          const row = yield* db
-            .select()
-            .from(SessionMessageTable)
-            .where(
-              and(eq(SessionMessageTable.session_id, event.data.sessionID), eq(SessionMessageTable.type, "compaction")),
-            )
-            .orderBy(desc(SessionMessageTable.seq))
-            .limit(1)
-            .get()
-            .pipe(Effect.orDie)
-          if (!row) return
-          const message = decodeRow(row)
-          return message.type === "compaction" ? message : undefined
-        })
-      },
       getCurrentShell(callID) {
         return Effect.gen(function* () {
           const rows = yield* db
@@ -200,7 +184,6 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
         })
       },
       updateAssistant: updateMessage,
-      updateCompaction: updateMessage,
       updateShell: updateMessage,
       appendMessage,
     }
@@ -347,14 +330,19 @@ export const layer = Layer.effectDiscard(
         if (next) yield* applyUsage(db, sessionID, next)
       }),
     )
-    yield* events.project(SessionEvent.AgentSwitched, (event) =>
-      db
+    yield* events.project(SessionEvent.AgentSwitched, (event) => {
+      if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
+      return db
         .update(SessionTable)
         .set({ agent: event.data.agent, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
         .where(eq(SessionTable.id, event.data.sessionID))
         .run()
-        .pipe(Effect.orDie, Effect.andThen(run(db, event))),
-    )
+        .pipe(
+          Effect.orDie,
+          Effect.andThen(run(db, event)),
+          Effect.andThen(SessionContextEpoch.requestReplacement(db, event.data.sessionID, event.seq)),
+        )
+    })
     yield* events.project(SessionEvent.ModelSwitched, (event) =>
       Effect.gen(function* () {
         yield* db
@@ -423,6 +411,7 @@ export const layer = Layer.effectDiscard(
         )
       }),
     )
+    yield* events.project(SessionEvent.InterruptRequested, () => Effect.void)
     yield* events.project(SessionEvent.ContextUpdated, (event) => {
       if (!event.replay || event.seq === undefined) return run(db, event)
       return run(db, event).pipe(
@@ -446,15 +435,17 @@ export const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
     // yield* events.project(SessionEvent.Retried, (event) => run(db, event))
-    yield* events.project(SessionEvent.Compaction.Started, (event) => run(db, event))
-    yield* events.project(SessionEvent.Compaction.Delta, (event) => run(db, event))
     yield* events.project(SessionEvent.Compaction.Ended, (event) => {
-      if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
-      return run(db, event).pipe(
-        Effect.andThen(SessionContextEpoch.requestReplacement(db, event.data.sessionID, event.seq)),
-      )
+      if (event.version === 1) return Effect.void
+      const seq = event.seq
+      if (seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
+      return Effect.gen(function* () {
+        yield* run(db, event)
+        yield* SessionContextEpoch.requestReplacement(db, event.data.sessionID, seq)
+      })
     })
   }),
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer), Layer.provide(Database.defaultLayer))
+export const node = LayerNode.make(layer, [EventV2.node, Database.node])
