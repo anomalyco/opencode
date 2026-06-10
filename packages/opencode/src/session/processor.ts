@@ -238,12 +238,14 @@ export const layer = Layer.effect(
             time: { start: match.part.state.time.start, end: Date.now() },
           },
         })
-        if (
-          error instanceof PermissionV1.RejectedError ||
-          error instanceof PermissionV1.CorrectedError ||
-          error instanceof PermissionV1.DeniedError ||
-          error instanceof Question.RejectedError
-        ) {
+        // Only explicit user rejections block the loop (subject to
+        // experimental.continue_loop_on_deny). Static ruleset denies
+        // (PermissionV1.DeniedError) and rejections with feedback
+        // (PermissionV1.CorrectedError) intentionally do NOT block: the model
+        // should see the error output and adapt or act on the feedback.
+        // Note: error identity survives Effect.orDie here because runPromise
+        // rejects with the squashed cause, which is the original error object.
+        if (error instanceof PermissionV1.RejectedError || error instanceof Question.RejectedError) {
           ctx.blocked = ctx.shouldBreak
         }
         yield* settleToolCall(toolCallID)
@@ -525,19 +527,57 @@ export const layer = Layer.effect(
               Effect.provideService(Database.Service, database),
             )
             const recentParts = parts.slice(-DOOM_LOOP_THRESHOLD)
-
-            if (
-              recentParts.length !== DOOM_LOOP_THRESHOLD ||
-              !recentParts.every(
+            const sameMessageLoop =
+              recentParts.length === DOOM_LOOP_THRESHOLD &&
+              recentParts.every(
                 (part) =>
                   part.type === "tool" &&
                   part.tool === value.name &&
                   part.state.status !== "pending" &&
                   JSON.stringify(part.state.input) === JSON.stringify(input),
               )
-            ) {
-              return
-            }
+
+            // A denied or failed tool call ends the provider step, so the
+            // model's retry lands in a NEW assistant message and the
+            // per-message scan above never accumulates. Without this
+            // cross-message check, continue_loop_on_deny: true plus an
+            // auto-rejecting permission handler retries the same denied call
+            // forever. Only errored runs count here so routine successful
+            // repeats (e.g. periodic status checks) don't trip the guard.
+            const failedRetryLoop = sameMessageLoop
+              ? false
+              : yield* MessageV2.lastParts({
+                  sessionID: ctx.sessionID,
+                  // Bounded window: each retry message holds a handful of
+                  // parts (step-start, text, tool), so the trailing run of
+                  // identical denied calls sits well within this limit.
+                  limit: DOOM_LOOP_THRESHOLD * 8,
+                }).pipe(
+                  Effect.provideService(Database.Service, database),
+                  Effect.map((all) => {
+                    // Exclude the part of the tool call being evaluated; it
+                    // was just written as "running" by updateToolCall above.
+                    // Match on messageID + callID because provider tool call
+                    // IDs are only unique within a single response.
+                    const tools = all.filter(
+                      (part): part is SessionV1.ToolPart =>
+                        part.type === "tool" &&
+                        !(part.messageID === ctx.assistantMessage.id && part.callID === value.id),
+                    )
+                    const recent = tools.slice(-DOOM_LOOP_THRESHOLD)
+                    return (
+                      recent.length === DOOM_LOOP_THRESHOLD &&
+                      recent.every(
+                        (part) =>
+                          part.tool === value.name &&
+                          part.state.status === "error" &&
+                          JSON.stringify(part.state.input) === JSON.stringify(input),
+                      )
+                    )
+                  }),
+                )
+
+            if (!sameMessageLoop && !failedRetryLoop) return
 
             const agent = yield* agents.get(ctx.assistantMessage.agent)
             yield* permission.ask({
