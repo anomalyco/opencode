@@ -72,8 +72,6 @@ const wellKnownAuth = (url: string) =>
 function remoteConfigClient(input: {
   wellKnown: unknown
   remote?: unknown
-  // When set, the protected remote config endpoint responds with this HTML body and a 200, simulating
-  // an identity-aware proxy (e.g. Cloudflare Access) serving its login page to an expired session.
   remoteHtml?: string
   seen: { wellKnown?: string; remote?: string; authorization?: string }
 }) {
@@ -1649,19 +1647,18 @@ invalidRemoteWellKnown.it.instance("wellknown remote_config rejects non-object c
   }),
 )
 
-const accessHtmlWellKnown = wellKnown({
+const loginPageWellKnown = wellKnown({
   remoteConfig: { url: "https://config.example.com/opencode.json" },
-  remoteHtml: "<!DOCTYPE html><html><head><title>Sign in</title></head><body>Cloudflare Access</body></html>",
+  remoteHtml: "<!DOCTYPE html><html><head><title>Sign in</title></head><body>Login required</body></html>",
 })
 
-accessHtmlWellKnown.it.instance(
+loginPageWellKnown.it.instance(
   "wellknown remote_config surfaces an actionable auth error when the gateway returns an HTML login page",
   () =>
     Effect.gen(function* () {
       const exit = yield* Config.use.get().pipe(Effect.exit)
-      expect(accessHtmlWellKnown.seen.remote).toBe("https://config.example.com/opencode.json")
+      expect(loginPageWellKnown.seen.remote).toBe("https://config.example.com/opencode.json")
       expect(Exit.isFailure(exit)).toBe(true)
-      // A 200 + HTML login page must become our recognizable re-auth error, not a generic JSON decode failure.
       const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
       expect(NamedError.hasName(error, "ConfigRemoteAuthError")).toBe(true)
       expect((error as { data?: { url?: string } }).data?.url).toBe("https://example.com")

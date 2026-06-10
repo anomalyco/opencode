@@ -188,8 +188,6 @@ export const layer = Layer.effect(
       url: string,
       headers: Record<string, string> | undefined,
       schema: S,
-      // Login origin (the auth.json key) to suggest re-authenticating against when the request is
-      // intercepted by an identity-aware proxy. Distinct from `url`, which is the config endpoint.
       loginOrigin: string,
     ) {
       const response = yield* HttpClient.filterStatusOk(withTransientReadRetry(http))
@@ -202,10 +200,7 @@ export const layer = Layer.effect(
       const body = yield* response.text.pipe(
         Effect.catch((error) => Effect.die(new Error(`failed to read remote config from ${url}: ${String(error)}`))),
       )
-      // Identity-aware proxies (e.g. Cloudflare Access) answer an unauthenticated or expired request
-      // with their HTML login page and HTTP 200, which slips past filterStatusOk and would otherwise
-      // surface as a cryptic JSON decode error. Detect the login page (by content type, with an HTML
-      // body sniff as fallback) and raise an actionable re-auth error instead.
+      // An auth proxy can answer with an HTML login page at HTTP 200 (passes filterStatusOk); treat it as a re-auth error, not a decode failure.
       const contentType = (response.headers["content-type"] ?? "").toLowerCase()
       if (contentType.includes("html") || /^\s*<!doctype|^\s*<html/i.test(body)) {
         return yield* Effect.die(new RemoteAuthError({ url: loginOrigin, remote: url }))

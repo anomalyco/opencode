@@ -94,7 +94,7 @@ export function FormatError(input: unknown): string | undefined {
     return stringField(configFrontmatter, "message") ?? ""
   }
 
-  // ConfigRemoteAuthError: { url: string, remote: string } — remote config returned a login page
+  // ConfigRemoteAuthError: { url: string, remote: string }
   const remoteAuth = configData(input, "ConfigRemoteAuthError")
   if (remoteAuth) {
     const url = stringField(remoteAuth, "url")

@@ -299,9 +299,7 @@ export const ProvidersListCommand = effectCmd({
 export const ProvidersLoginCommand = effectCmd({
   command: "login [url]",
   describe: "log in to a provider",
-  // URL-based login mints a fresh credential and must not bootstrap an instance first: loading config
-  // fetches enterprise remote config with the (possibly expired) stored token, which would fail and
-  // block the very re-login meant to fix it. The interactive path still needs the instance for config.
+  // URL login skips instance bootstrap, which would load remote config with the stale token and crash before re-auth.
   instance: (args) => !args.url,
   builder: (yargs: Argv) =>
     yargs

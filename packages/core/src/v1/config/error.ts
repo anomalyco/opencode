@@ -33,10 +33,6 @@ export const DirectoryTypoError = NamedError.create("ConfigDirectoryTypoError", 
   suggestion: Schema.String,
 })
 
-// Raised when a remote config endpoint answers with an HTML login page instead of JSON. This
-// happens when an identity-aware proxy (e.g. Cloudflare Access) intercepts an unauthenticated or
-// expired request and serves its login interstitial with HTTP 200. `url` is the login origin to
-// re-authenticate against (`opencode auth login <url>`); `remote` is the config endpoint that failed.
 export const RemoteAuthError = NamedError.create("ConfigRemoteAuthError", {
   url: Schema.String,
   remote: Schema.String,
