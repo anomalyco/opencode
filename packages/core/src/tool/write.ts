@@ -82,7 +82,10 @@ export const layer = Layer.effectDiscard(
                   agent: context.agent,
                   source,
                 })
-                return yield* files.writeTextPreservingBom({ target, content: input.content })
+                const result = yield* files.writeTextPreservingBom({ target, content: input.content })
+                if (result.existed)
+                  return yield* Effect.fail(new ToolFailure({ message: `File already exists: ${target.resource}. Use edit to modify existing files.` }))
+                return result
               }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to write ${input.path}` }))),
           }),
           "edit",

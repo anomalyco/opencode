@@ -61,6 +61,11 @@ export const WriteTool = Tool.define(
             },
           })
 
+          const check = yield* fs.existsSafe(filepath)
+          if (check) {
+            const current = yield* Bom.readFile(fs, filepath)
+            if (current.text !== contentOld) return { title: "", metadata: { diagnostics: {} as Record<string, any[]>, filepath, exists: true }, output: "File changed since read. Use the Read tool to refresh before editing." }
+          }
           yield* fs.writeWithDirs(filepath, Bom.join(contentNew, desiredBom))
           if (yield* format.file(filepath)) {
             yield* Bom.syncFile(fs, filepath, desiredBom)

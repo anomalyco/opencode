@@ -108,7 +108,9 @@ export const EditTool = Tool.define(
                     diff,
                   },
                 })
-                yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
+              const current = yield* Bom.readFile(afs, filePath)
+              if (current.text !== contentOld) throw new Error("File changed since read. Use the Read tool to refresh before editing.")
+              yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
                 if (yield* format.file(filePath)) {
                   contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
                 }
