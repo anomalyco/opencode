@@ -19,10 +19,11 @@ import type { ConsoleState } from "@opencode-ai/core/v1/config/console-state"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
 import { Context, Duration, Effect, Exit, Fiber, Layer, Option, Schema } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { containsPath, type InstanceContext } from "../project/instance-context"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { RemoteAuthError } from "@opencode-ai/core/v1/config/error"
 import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { ConfigAgent } from "./agent"
@@ -187,6 +188,9 @@ export const layer = Layer.effect(
       url: string,
       headers: Record<string, string> | undefined,
       schema: S,
+      // Login origin (the auth.json key) to suggest re-authenticating against when the request is
+      // intercepted by an identity-aware proxy. Distinct from `url`, which is the config endpoint.
+      loginOrigin: string,
     ) {
       const response = yield* HttpClient.filterStatusOk(withTransientReadRetry(http))
         .execute(
@@ -195,7 +199,18 @@ export const layer = Layer.effect(
         .pipe(
           Effect.catch((error) => Effect.die(new Error(`failed to fetch remote config from ${url}: ${String(error)}`))),
         )
-      return yield* HttpClientResponse.schemaBodyJson(schema)(response).pipe(
+      const body = yield* response.text.pipe(
+        Effect.catch((error) => Effect.die(new Error(`failed to read remote config from ${url}: ${String(error)}`))),
+      )
+      // Identity-aware proxies (e.g. Cloudflare Access) answer an unauthenticated or expired request
+      // with their HTML login page and HTTP 200, which slips past filterStatusOk and would otherwise
+      // surface as a cryptic JSON decode error. Detect the login page (by content type, with an HTML
+      // body sniff as fallback) and raise an actionable re-auth error instead.
+      const contentType = (response.headers["content-type"] ?? "").toLowerCase()
+      if (contentType.includes("html") || /^\s*<!doctype|^\s*<html/i.test(body)) {
+        return yield* Effect.die(new RemoteAuthError({ url: loginOrigin, remote: url }))
+      }
+      return yield* Schema.decodeEffect(Schema.fromJsonString(schema))(body).pipe(
         Effect.catch((error) => Effect.die(new Error(`failed to decode remote config from ${url}: ${String(error)}`))),
       )
     })
@@ -348,7 +363,7 @@ export const layer = Layer.effect(
             authEnv[value.key] = value.token
             const wellknownURL = `${url}/.well-known/opencode`
             yield* Effect.logDebug("fetching remote config", { url: wellknownURL })
-            const wellknown = yield* fetchRemoteJson(wellknownURL, undefined, ConfigV1.WellKnown)
+            const wellknown = yield* fetchRemoteJson(wellknownURL, undefined, ConfigV1.WellKnown, url)
             const remote = yield* Effect.promise(() =>
               substituteWellKnownRemoteConfig({
                 value: wellknown.remote_config,
@@ -360,7 +375,7 @@ export const layer = Layer.effect(
             const fetchedConfig = remote
               ? yield* Effect.gen(function* () {
                   yield* Effect.logDebug("fetching remote config", { url: remote.url })
-                  const data = yield* fetchRemoteJson(remote.url, remote.headers, Schema.Json)
+                  const data = yield* fetchRemoteJson(remote.url, remote.headers, Schema.Json, url)
                   if (isRecord(data) && isRecord(data.config)) return data.config
                   if (isRecord(data)) return data
                   return yield* Effect.die(

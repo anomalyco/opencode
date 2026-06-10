@@ -1,6 +1,7 @@
 import { test, expect, describe, afterEach, beforeEach, spyOn } from "bun:test"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import { Effect, Exit, Layer, Option } from "effect"
+import { Cause, Effect, Exit, Layer, Option } from "effect"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
 import { Config } from "@/config/config"
@@ -71,6 +72,9 @@ const wellKnownAuth = (url: string) =>
 function remoteConfigClient(input: {
   wellKnown: unknown
   remote?: unknown
+  // When set, the protected remote config endpoint responds with this HTML body and a 200, simulating
+  // an identity-aware proxy (e.g. Cloudflare Access) serving its login page to an expired session.
+  remoteHtml?: string
   seen: { wellKnown?: string; remote?: string; authorization?: string }
 }) {
   return HttpClient.make((request) => {
@@ -78,9 +82,17 @@ function remoteConfigClient(input: {
       input.seen.wellKnown = request.url
       return Effect.succeed(json(request, input.wellKnown))
     }
-    if (input.remote !== undefined && request.url.includes("config.example.com")) {
+    if (request.url.includes("config.example.com") && (input.remote !== undefined || input.remoteHtml !== undefined)) {
       input.seen.remote = request.url
       input.seen.authorization = request.headers.authorization
+      if (input.remoteHtml !== undefined) {
+        return Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            new Response(input.remoteHtml, { status: 200, headers: { "content-type": "text/html; charset=utf-8" } }),
+          ),
+        )
+      }
       return Effect.succeed(json(request, input.remote))
     }
     return Effect.succeed(json(request, {}, 404))
@@ -214,6 +226,7 @@ const wellKnown = (input: {
   config?: unknown
   remoteConfig?: { url: string; headers?: Record<string, string> }
   remote?: unknown
+  remoteHtml?: string
   wellKnown?: unknown
 }) => {
   const seen: { wellKnown?: string; remote?: string; authorization?: string } = {}
@@ -224,6 +237,7 @@ const wellKnown = (input: {
       ...(input.remoteConfig !== undefined ? { remote_config: input.remoteConfig } : {}),
     },
     remote: input.remote,
+    remoteHtml: input.remoteHtml,
   })
   return {
     seen,
@@ -1613,6 +1627,25 @@ invalidRemoteWellKnown.it.instance("wellknown remote_config rejects non-object c
     expect(invalidRemoteWellKnown.seen.remote).toBe("https://config.example.com/opencode.json")
     expect(Exit.isFailure(exit)).toBe(true)
   }),
+)
+
+const accessHtmlWellKnown = wellKnown({
+  remoteConfig: { url: "https://config.example.com/opencode.json" },
+  remoteHtml: "<!DOCTYPE html><html><head><title>Sign in</title></head><body>Cloudflare Access</body></html>",
+})
+
+accessHtmlWellKnown.it.instance(
+  "wellknown remote_config surfaces an actionable auth error when the gateway returns an HTML login page",
+  () =>
+    Effect.gen(function* () {
+      const exit = yield* Config.use.get().pipe(Effect.exit)
+      expect(accessHtmlWellKnown.seen.remote).toBe("https://config.example.com/opencode.json")
+      expect(Exit.isFailure(exit)).toBe(true)
+      // A 200 + HTML login page must become our recognizable re-auth error, not a generic JSON decode failure.
+      const error = Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined
+      expect(NamedError.hasName(error, "ConfigRemoteAuthError")).toBe(true)
+      expect((error as { data?: { url?: string } }).data?.url).toBe("https://example.com")
+    }),
 )
 
 describe("resolvePluginSpec", () => {
