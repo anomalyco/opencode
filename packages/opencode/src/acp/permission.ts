@@ -1,4 +1,4 @@
-import type { AgentSideConnection, PermissionOption, RequestPermissionResponse } from "@agentclientprotocol/sdk"
+import type { AgentSideConnection, PermissionOption, RequestPermissionResponse, ToolCallContent } from "@agentclientprotocol/sdk"
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
 import { exists, readText } from "@/util/filesystem"
@@ -61,6 +61,7 @@ export class Handler {
           rawInput: permission.metadata,
           kind: toToolKind(permission.permission),
           locations: toLocations(permission.permission, permission.metadata),
+          content: editDiffContent(permission.permission, permission.metadata),
         },
         options: permissionOptions,
       })
@@ -109,6 +110,15 @@ export class Handler {
       content: next,
     })
   }
+}
+
+function editDiffContent(permission: string, metadata: ToolInput): ToolCallContent[] | undefined {
+  if (permission !== "edit") return undefined
+  const path = stringValue(metadata.filepath)
+  const oldText = stringValue(metadata.oldString)
+  const newText = stringValue(metadata.newString)
+  if (!path || oldText === undefined || newText === undefined) return undefined
+  return [{ type: "diff", path, oldText, newText }]
 }
 
 function selectedReply(result: RequestPermissionResponse): Reply {

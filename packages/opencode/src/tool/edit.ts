@@ -106,6 +106,8 @@ export const EditTool = Tool.define(
                   metadata: {
                     filepath: filePath,
                     diff,
+                    oldString: contentOld,
+                    newString: contentNew,
                   },
                 })
                 yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
@@ -149,6 +151,8 @@ export const EditTool = Tool.define(
                 metadata: {
                   filepath: filePath,
                   diff,
+                  oldString: contentOld,
+                  newString: contentNew,
                 },
               })
 
