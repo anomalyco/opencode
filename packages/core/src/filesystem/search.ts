@@ -225,15 +225,17 @@ export const fffLayer = Layer.effect(
               score: found.value.scores[index]?.total ?? 0,
             }))
           })()
-          return items.sort((a, b) => b.score - a.score || a.path.length - b.path.length).map((item) => {
-            const relative = item.path.replaceAll("\\", "/").replace(/\/$/, "")
-            const absolute = path.resolve(location.directory, relative)
-            return new FileSystem.Entry({
-              path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
-              type: item.type,
-              mime: item.type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
+          return items
+            .sort((a, b) => b.score - a.score || a.path.length - b.path.length)
+            .map((item) => {
+              const relative = item.path.replaceAll("\\", "/").replace(/\/$/, "")
+              const absolute = path.resolve(location.directory, relative)
+              return new FileSystem.Entry({
+                path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
+                type: item.type,
+                mime: item.type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
+              })
             })
-          })
         }),
     })
   }),
