@@ -70,7 +70,9 @@ describe("Config", () => {
     Effect.sync(() => {
       expect(ConfigMigrateV1.isV1({ snapshot: false })).toBe(true)
       expect(ConfigMigrateV1.isV1({ snapshot: false, agents: {} })).toBe(true)
+      expect(ConfigMigrateV1.isV1({ reference: {} })).toBe(true)
       expect(ConfigMigrateV1.isV1({ shell: "/bin/zsh", model: "anthropic/claude" })).toBe(false)
+      expect(ConfigMigrateV1.isV1({ references: {} })).toBe(false)
     }),
   )
 
@@ -425,6 +427,42 @@ describe("Config", () => {
               "opencode-helicone-session",
               { package: "@my-org/audit-plugin", options: { endpoint: "https://audit.example.com" } },
             ])
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
+  it.live("migrates the deprecated reference key into references", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({
+                reference: {
+                  local: { path: "../library" },
+                  sdk: { repository: "github.com/example/sdk", branch: "main" },
+                  shorthand: "github.com/example/docs",
+                },
+              }),
+            ),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+
+            expect(documents).toHaveLength(1)
+            expect(documents[0]?.info.references).toEqual({
+              local: { path: "../library" },
+              sdk: { repository: "github.com/example/sdk", branch: "main" },
+              shorthand: "github.com/example/docs",
+            })
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),
       ),
