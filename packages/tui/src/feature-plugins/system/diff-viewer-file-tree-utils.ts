@@ -3,6 +3,8 @@
 // Each leaf remembers what has been,
 // And waits where careful light aligns.
 
+import { compareFileTreeNodesFromUI } from "@opencode-ai/ui/file-tree-sorting"
+
 export type FileTreeItem = {
   readonly file: string
   readonly status?: "added" | "deleted" | "modified"
@@ -111,12 +113,8 @@ function collapsedFileTreeDirectoryChain(tree: FileTree, id: number): FileTreeNo
 }
 
 export function compareFileTreeNodes(tree: FileTree, left: number, right: number) {
-  const leftNode = tree.nodes[left]!
-  const rightNode = tree.nodes[right]!
-  if (leftNode.kind !== rightNode.kind) return leftNode.kind === "directory" ? -1 : 1
-  if (leftNode.name < rightNode.name) return -1
-  if (leftNode.name > rightNode.name) return 1
-  return left - right
+  const treeForSort = { nodes: tree.nodes.map((node) => ({ kind: node.kind, name: node.name })) }
+  return compareFileTreeNodesFromUI(treeForSort, left, right)
 }
 
 export function moveFileTreeSelection(rows: readonly FileTreeRow[], selected: number | undefined, offset: number) {

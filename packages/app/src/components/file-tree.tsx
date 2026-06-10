@@ -1,5 +1,6 @@
 import { useFile } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
+import { compareFileTreeNodes } from "@/utils/file-tree-sorting"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
@@ -373,12 +374,8 @@ export default function FileTree(props: {
       seen.add(item)
     }
 
-    out.sort((a, b) => {
-      if (a.type !== b.type) {
-        return a.type === "directory" ? -1 : 1
-      }
-      return a.name.localeCompare(b.name)
-    })
+    const treeForSort = { nodes: out.map((node) => ({ kind: node.type, name: node.name })) }
+    out.sort((a, b) => compareFileTreeNodes(treeForSort, out.indexOf(a), out.indexOf(b)))
 
     return out
   })
