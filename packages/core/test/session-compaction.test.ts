@@ -7,7 +7,7 @@ test("compaction describes tool media without embedding base64", () => {
     { type: "text", text: "Image read successfully" },
     {
       type: "file",
-      source: { type: "data", data: base64 },
+      uri: `data:image/png;base64,${base64}`,
       mime: "image/png",
       name: "pixel.png",
     },

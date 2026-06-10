@@ -17,13 +17,13 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
   target?: string,
   options?: Options,
 ) {
-  if (!target) return
+  if (!target) return false
 
-  if (options?.bypass) return
+  if (options?.bypass) return false
 
   const ins = yield* InstanceState.context
   const full = process.platform === "win32" ? FSUtil.normalizePath(target) : target
-  if (containsPath(full, ins)) return
+  if (containsPath(full, ins)) return false
 
   const kind = options?.kind ?? "file"
   const dir = kind === "directory" ? full : path.dirname(full)
@@ -41,6 +41,7 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
       parentDir: dir,
     },
   })
+  return true
 })
 
 export async function assertExternalDirectory(ctx: Tool.Context, target?: string, options?: Options) {

@@ -48,11 +48,11 @@ const rangeLabels: Record<UsageRange, string> = {
   "1M": "1 Month",
   "2M": "2 Months",
 }
-const statsHomeTitle = "OpenCode Stats"
-const statsHomeDescription = "OpenCode usage, market share, token cost, and session cost stats."
-const statsHomeFallbackUrl = "https://opencode.ai/stats/"
-const statsUnfurlPath = "banner.png"
-const statsUnfurlAlt = "OpenCode Stats wordmark on a dark patterned background"
+const statsHomeTitle = "OpenCode Data"
+const statsHomeDescription = "OpenCode usage data, market share, token cost, and session cost."
+const statsHomeFallbackUrl = "https://opencode.ai/data/"
+const statsUnfurlPath = "banner.jpg"
+const statsUnfurlAlt = "OpenCode Data wordmark on a dark patterned background"
 const usageColors = [
   "#ed6aff",
   "#a684ff",
@@ -146,7 +146,7 @@ export default function StatsHome() {
       <Meta property="og:description" content={statsHomeDescription} />
       <Meta property="og:url" content={statsHomeUrl} />
       <Meta property="og:image" content={statsUnfurlUrl} />
-      <Meta property="og:image:type" content="image/png" />
+      <Meta property="og:image:type" content="image/jpeg" />
       <Meta property="og:image:width" content="1200" />
       <Meta property="og:image:height" content="630" />
       <Meta property="og:image:alt" content={statsUnfurlAlt} />
@@ -184,8 +184,8 @@ export default function StatsHome() {
 
 function getStatsHomeUrl(base: string, requestUrl: string) {
   const url = new URL(base, requestUrl)
-  if (url.hostname === "stats.opencode.ai") return "https://opencode.ai/stats/"
-  if (url.hostname === "stats.dev.opencode.ai") return "https://dev.opencode.ai/stats/"
+  if (url.hostname === "stats.opencode.ai") return "https://opencode.ai/data/"
+  if (url.hostname === "stats.dev.opencode.ai") return "https://dev.opencode.ai/data/"
   return url.toString()
 }
 
@@ -265,7 +265,7 @@ function Hero(props: { updatedAt: string | null }) {
       </p>
       <div data-slot="hero-canvas">
         <div data-slot="hero-pattern" aria-hidden="true" />
-        <h1>Model Stats</h1>
+        <h1>Model Data</h1>
         <p data-slot="hero-copy">
           See which models are winning real usage, how the mix <br data-slot="hero-copy-break" />
           shifts over time, and where momentum is moving each week.
@@ -291,7 +291,7 @@ function StatsLoading() {
     <>
       <Hero updatedAt={null} />
       <ChartSection title="Usage">
-        <EmptyState title="Loading stats" description="Reading model aggregates from model_stat." />
+        <EmptyState title="Loading data" description="Reading model aggregates from model_stat." />
       </ChartSection>
     </>
   )
@@ -356,7 +356,7 @@ function formatUpdatedAtParts(value: string, timeZone: string) {
       timeZone,
     }).format(date),
     time: new Intl.DateTimeFormat("en", {
-      hour: "numeric",
+      hour: "2-digit",
       minute: "2-digit",
       timeZone,
       timeZoneName: "short",
