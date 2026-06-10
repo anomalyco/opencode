@@ -8,6 +8,7 @@ import { AbsolutePath, withStatics } from "./schema"
 import { FSUtil } from "./fs-util"
 import { Database } from "./database/database"
 import { Git } from "./git"
+import { LayerNode } from "./effect/layer-node"
 import { Hash } from "./util/hash"
 import { ProjectDirectoryTable } from "./project/sql"
 
@@ -159,3 +160,4 @@ export const defaultLayer = layer.pipe(
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Git.defaultLayer),
 )
+export const node = LayerNode.make(layer, [Database.node, FSUtil.node, Git.node])

@@ -12482,6 +12482,9 @@
             "$ref": "#/components/schemas/EventProjectUpdated"
           },
           {
+            "$ref": "#/components/schemas/EventVcsBranchUpdated"
+          },
+          {
             "$ref": "#/components/schemas/EventQuestionAsked"
           },
           {
@@ -12498,9 +12501,6 @@
           },
           {
             "$ref": "#/components/schemas/EventSessionCompacted"
-          },
-          {
-            "$ref": "#/components/schemas/EventVcsBranchUpdated"
           },
           {
             "$ref": "#/components/schemas/EventWorktreeReady"
@@ -17113,6 +17113,30 @@
                   },
                   "type": {
                     "type": "string",
+                    "enum": ["vcs.branch.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "branch": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
                     "enum": ["question.asked"]
                   },
                   "properties": {
@@ -17285,30 +17309,6 @@
                       }
                     },
                     "required": ["sessionID"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["vcs.branch.updated"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "branch": {
-                        "type": "string"
-                      }
-                    },
                     "additionalProperties": false
                   }
                 },
@@ -17627,44 +17627,6 @@
         },
         "additionalProperties": false,
         "description": "Server configuration for opencode serve and web commands"
-      },
-      "ReferenceConfigEntry": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "object",
-            "properties": {
-              "repository": {
-                "type": "string",
-                "description": "Git repository URL, host/path reference, or GitHub owner/repo shorthand"
-              },
-              "branch": {
-                "type": "string"
-              }
-            },
-            "required": ["repository"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Absolute path, ~/ path, or workspace-relative path to a local reference directory"
-              }
-            },
-            "required": ["path"],
-            "additionalProperties": false
-          }
-        ]
-      },
-      "ReferenceConfig": {
-        "type": "object",
-        "additionalProperties": {
-          "$ref": "#/components/schemas/ReferenceConfigEntry"
-        }
       },
       "PermissionActionConfig": {
         "type": "string",
@@ -18256,8 +18218,37 @@
             },
             "additionalProperties": false
           },
+          "references": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/components/schemas/ConfigV2ReferenceGit"
+                },
+                {
+                  "$ref": "#/components/schemas/ConfigV2ReferenceLocal"
+                }
+              ]
+            }
+          },
           "reference": {
-            "$ref": "#/components/schemas/ReferenceConfig"
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/components/schemas/ConfigV2ReferenceGit"
+                },
+                {
+                  "$ref": "#/components/schemas/ConfigV2ReferenceLocal"
+                }
+              ]
+            }
           },
           "watcher": {
             "type": "object",
@@ -23918,6 +23909,41 @@
         "required": ["type", "id", "syncEvent"],
         "additionalProperties": false
       },
+      "ConfigV2ReferenceGit": {
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "required": ["repository"],
+        "additionalProperties": false
+      },
+      "ConfigV2ReferenceLocal": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      },
       "PolicyEffect": {
         "type": "string",
         "enum": ["allow", "deny"]
@@ -25071,9 +25097,6 @@
           "path": {
             "type": "string"
           },
-          "uri": {
-            "type": "string"
-          },
           "type": {
             "type": "string",
             "enum": ["file", "directory"]
@@ -25082,7 +25105,7 @@
             "type": "string"
           }
         },
-        "required": ["path", "uri", "type", "mime"],
+        "required": ["path", "type", "mime"],
         "additionalProperties": false
       },
       "CommandV2Info": {
@@ -25193,6 +25216,12 @@
           },
           "path": {
             "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
           }
         },
         "required": ["type", "path"],
@@ -25210,6 +25239,12 @@
           },
           "branch": {
             "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
           }
         },
         "required": ["type", "repository"],
@@ -25223,6 +25258,12 @@
           },
           "path": {
             "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
           },
           "source": {
             "anyOf": [
@@ -28341,6 +28382,30 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventVcsBranchUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["vcs.branch.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "branch": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventQuestionAsked": {
         "type": "object",
         "properties": {
@@ -28522,30 +28587,6 @@
               }
             },
             "required": ["sessionID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventVcsBranchUpdated": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["vcs.branch.updated"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "branch": {
-                "type": "string"
-              }
-            },
             "additionalProperties": false
           }
         },
