@@ -13,6 +13,8 @@ interface MockClientState {
   listToolsCalls: number
   listPromptsCalls: number
   listResourcesCalls: number
+  getPromptTimeout?: number
+  readResourceTimeout?: number
   requestCalls: number
   listToolsShouldFail: boolean
   listToolsError: string
@@ -204,6 +206,16 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       const page = this._state?.resourcePages[params === undefined ? "initial" : (params.cursor ?? "")]
       if (page) return page
       return { resources: this._state?.resources ?? [] }
+    }
+
+    async getPrompt(_params: unknown, options?: { timeout?: number }) {
+      if (this._state) this._state.getPromptTimeout = options?.timeout
+      return { messages: [] }
+    }
+
+    async readResource(params: { uri: string }, options?: { timeout?: number }) {
+      if (this._state) this._state.readResourceTimeout = options?.timeout
+      return { contents: [{ uri: params.uri, text: "test" }] }
     }
 
     async close() {
@@ -756,6 +768,29 @@ it.instance(
       },
     },
   },
+)
+
+it.instance(
+  "uses per-server timeouts for prompt and resource requests",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "timeout-server"
+        const serverState = getOrCreateClientState("timeout-server")
+
+        yield* mcp.add("timeout-server", {
+          type: "local",
+          command: ["echo", "test"],
+          timeout: 2500,
+        })
+        yield* mcp.getPrompt("timeout-server", "test")
+        yield* mcp.readResource("timeout-server", "test://resource")
+
+        expect(serverState.getPromptTimeout).toBe(2500)
+        expect(serverState.readResourceTimeout).toBe(2500)
+      }),
+    ),
+  { config: { mcp: {}, experimental: { mcp_timeout: 5000 } } },
 )
 
 it.instance(
