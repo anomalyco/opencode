@@ -309,7 +309,9 @@ export const TaskTool = Tool.define(
             const result = yield* Effect.raceFirst(
               background.wait({ id: nextSession.id }).pipe(Effect.map((waited) => waited.info)),
               background.waitForPromotion(nextSession.id),
+              Effect.sleep(Duration.minutes(3)).pipe(Effect.map(() => undefined)),
             )
+            if (result === undefined) return yield* Effect.fail(new Error("Subagent task timed out after 3 minutes"))
             if (result?.metadata?.background === true) return backgroundResult()
             if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
             if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))

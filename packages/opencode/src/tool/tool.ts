@@ -142,7 +142,15 @@ function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadat
               ...(truncated.truncated && { outputPath: truncated.outputPath }),
             },
           }
-        }).pipe(Effect.orDie, Effect.withSpan("Tool.execute", { attributes: attrs }))
+        }).pipe(
+          Effect.orDie,
+          Effect.catchDefect((defect) => {
+            if (!(defect instanceof Error)) return Effect.die(defect)
+            const errResult = { title: "error", output: `Tool failed: ${defect.message}`, metadata: {} } as never
+            return Effect.succeed(errResult)
+          }),
+          Effect.withSpan("Tool.execute", { attributes: attrs }),
+        )
       }
       return toolInfo
     })
