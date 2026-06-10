@@ -49,7 +49,7 @@
     "@typescript/native-preview": "catalog:",
     "@valibot/to-json-schema": "1.6.0",
     "electron": "42.3.3",
-    "electron-builder": "26.15.0",
+    "electron-builder": "26.15.2",
     "electron-vite": "^5",
     "solid-js": "catalog:",
     "sury": "11.0.0-alpha.4",
