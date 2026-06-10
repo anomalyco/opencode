@@ -525,7 +525,7 @@ export function make(input: {
       }
 
       const known = snapshot.availableCommands.find((item) => item.name === command.name)
-      if (known) {
+      if (known && command.name !== "compact" && command.name !== "summarize") {
         const response = yield* request(
           () =>
             input.sdk.session.command(
@@ -546,7 +546,7 @@ export function make(input: {
         return promptResponse(response.info, params.messageId)
       }
 
-      if (command.name === "compact") {
+      if (command.name === "compact" || command.name === "summarize") {
         yield* request(
           () =>
             input.sdk.session.summarize(

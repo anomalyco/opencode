@@ -182,7 +182,11 @@ describe("ACP service sessions", () => {
       command: {
         list: () =>
           Promise.resolve({
-            data: [{ name: "init", description: "Initialize", source: "command", template: "init", hints: [] }],
+            data: [
+              { name: "init", description: "Initialize", source: "command", template: "init", hints: [] },
+              { name: "compact", description: "compress session history to preserve key information", source: "command", template: "", hints: [] },
+              { name: "summarize", description: "generate a concise summary of the session", source: "command", template: "", hints: [] },
+            ],
           }),
       },
       session: {
@@ -293,6 +297,28 @@ describe("ACP service sessions", () => {
     expect(JSON.stringify(updates[0])).toContain("available_commands_update")
     expect(JSON.stringify(updates[0])).toContain("review-skill")
     expect(mcpAdds).toEqual(["tools"])
+  })
+
+  it("includes compact and summarize in available commands", async () => {
+    const { service, updates } = makeService()
+    const result = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    await new Promise((resolve) => setTimeout(resolve, 5))
+
+    expect(result.sessionId).toBe("ses_new")
+    expect(updates).toHaveLength(1)
+    expect((updates[0].update as any).sessionUpdate).toBe("available_commands_update")
+    
+    const availableCommands = (updates[0].update as any).availableCommands
+    expect(Array.isArray(availableCommands)).toBe(true)
+    
+    const compactCmd = availableCommands.find((c: any) => c.name === "compact")
+    const summarizeCmd = availableCommands.find((c: any) => c.name === "summarize")
+    
+    expect(compactCmd).toBeDefined()
+    expect(compactCmd.description).toContain("compress")
+    expect(summarizeCmd).toBeDefined()
+    expect(summarizeCmd.description).toContain("summary")
   })
 
   it("loads a session and restores model variant and mode from messages", async () => {
@@ -1087,6 +1113,26 @@ describe("ACP service sessions", () => {
 
     await Effect.runPromise(
       service.prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "/compact" }] }),
+    )
+
+    expect(prompts).toEqual([])
+    expect(commands).toEqual([])
+    expect(summarizes).toEqual([
+      {
+        sessionID: session.sessionId,
+        directory: "/workspace",
+        providerID,
+        modelID,
+      },
+    ])
+  })
+
+  it("summarize slash command calls summarize path", async () => {
+    const { service, prompts, commands, summarizes } = makeService()
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    await Effect.runPromise(
+      service.prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "/summarize" }] }),
     )
 
     expect(prompts).toEqual([])
