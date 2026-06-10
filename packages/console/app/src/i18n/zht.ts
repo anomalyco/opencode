@@ -12,6 +12,7 @@ export const dict = {
   "nav.zen": "Zen",
   "nav.login": "登入",
   "nav.free": "下載",
+  "nav.go": "Go",
   "nav.home": "首頁",
   "nav.openMenu": "開啟選單",
   "nav.getStartedFree": "免費開始使用",
@@ -793,4 +794,5 @@ export const dict = {
   "bench.detail.table.duration": "耗時",
   "bench.detail.run.title": "執行 {{n}}",
   "bench.detail.rawJson": "原始 JSON",
-} satisfies Dict
+  "common.contactUs": "聯絡我們",
+}
