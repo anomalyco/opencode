@@ -1,129 +1,239 @@
 <p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
+  <img src="assets/readme/opencode-trade-banner.svg" alt="OPENCODE-TRADE banner">
 </p>
-<p align="center">The open source AI coding agent.</p>
+<p align="center">Trading-focused OpenCode fork for MT5 execution, memory handoff, and safety-gated strategy iteration.</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+  <img alt="Community" src="https://img.shields.io/badge/community-manual%20review-5865F2?style=flat-square&logo=discord&logoColor=white" />
+  <img alt="Distribution" src="https://img.shields.io/badge/distribution-source%20fork-CB3837?style=flat-square&logo=npm&logoColor=white" />
+  <a href="https://github.com/TakeshiSawaguchi/opencode-trade/actions/workflows/test.yml?query=branch%3Adev"><img alt="Test" src="https://img.shields.io/github/actions/workflow/status/TakeshiSawaguchi/opencode-trade/test.yml?branch=dev&style=flat-square&label=test" /></a>
+  <a href="https://github.com/TakeshiSawaguchi/opencode-trade/actions/workflows/typecheck.yml?query=branch%3Adev"><img alt="Typecheck" src="https://img.shields.io/github/actions/workflow/status/TakeshiSawaguchi/opencode-trade/typecheck.yml?branch=dev&style=flat-square&label=typecheck" /></a>
+  <a href="https://github.com/TakeshiSawaguchi/opencode-trade/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/TakeshiSawaguchi/opencode-trade?style=flat-square" /></a>
+  <img alt="MT5" src="https://img.shields.io/badge/MT5-XAUUSD%20%2F%20SP500-0f0f0f?style=flat-square" />
 </p>
 
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh.md">简体中文</a> |
-  <a href="README.zht.md">繁體中文</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.it.md">Italiano</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.bs.md">Bosanski</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.no.md">Norsk</a> |
-  <a href="README.br.md">Português (Brasil)</a> |
-  <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a> |
-  <a href="README.uk.md">Українська</a> |
-  <a href="README.bn.md">বাংলা</a> |
-  <a href="README.gr.md">Ελληνικά</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
-</p>
+# opencode-trade
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+`opencode-trade` is a trading-focused derivative project built on top of the OpenCode codebase. It combines the OpenCode runtime and workspace with MQL5 execution code, research documents, backtest planning, and operating rules for iterative strategy development.
 
----
+This repository is not the upstream product README for OpenCode. It documents the purpose and workflow of this project-specific fork.
 
-### Installation
+## What this repository is
+
+This repository combines two layers:
+
+- the upstream OpenCode monorepo under `packages/`, `sdks/`, `github/`, and related application infrastructure
+- project-specific trading assets under `src/`, `backtest/`, and the root strategy and operations documents
+
+The project goal is to run a modular EA stack with strict risk controls, repeatable backtests, and a research-to-implementation workflow that keeps human approval in the loop.
+
+## Project goals
+
+- run a stable MQL5 trading system with explicit drawdown limits
+- keep strategy logic modular so individual signals can be added, tested, disabled, or replaced
+- separate research, implementation, review, and backtest responsibilities
+- prepare ONNX-based model candidates without letting unverified models bypass validation gates
+
+## System overview
+
+The current trading design centers on:
+
+- `src/Expert_Main.mq5`
+  - main EA entrypoint
+- `src/Include/TradeLogic.mqh`
+  - breakout, pullback, and ML signal classes
+- `src/Include/RiskManagement.mqh`
+  - position sizing, drawdown checks, and order execution wrapper
+- `src/Include/DataFeed.mqh`
+  - market data export and local data bridge utilities
+- `src/Scripts/data_collector.py`
+  - Dukascopy historical data collection helper
+- `backtest/test_scenarios.json`
+  - scenario definitions used by the backtest flow
+
+The design documents currently describe:
+
+- XAUUSD breakout as the most concrete validation path
+- SP500 pullback as a separate strategy track
+- ONNX as a candidate filter or future model input path, not something to enable without validation
+
+## Repository structure
+
+- `src/`
+  - MQL5 EA source and Python data tooling
+- `backtest/`
+  - backtest scenario inputs and future result artifacts
+- `AGENTS.md`
+  - agent roles, task handoff model, and project-wide operating rules
+- `SOUL.md`
+  - project philosophy, hard constraints, and architectural decisions
+- `ARCHITECTURE.md`
+  - MQL5 architecture and three-node data flow
+- `DEVELOPMENT.md`
+  - environment setup and example execution workflow
+- `AUDIT_AND_STRATEGY.md`
+  - audit notes and strategic decisions
+- `FINAL_IMPLEMENTATION_PLAN.md`
+  - phased implementation and validation plan
+- `packages/`
+  - upstream OpenCode application and library packages retained in this fork
+
+## Operating model
+
+The current docs assume a three-node workflow:
+
+- `wag-air`
+  - orchestration, review coordination, and document updates
+- `wag-x870e`
+  - historical data collection and Python-side processing
+- `wag-dell`
+  - MT5 execution environment and backtest runs
+
+This separation matters because the repo does not assume that research, implementation, and MT5 execution all happen on the same machine.
+
+## Workflow overview
+
+The normal loop is:
+
+1. define or refine a trading hypothesis
+2. research comparable implementations and failure modes
+3. implement or adjust MQL5 logic in `src/`
+4. review risk logic and execution behavior
+5. run backtests and compare results against documented gates
+6. either promote, revise, or reject the change
+
+The project intentionally avoids a fully autonomous loop where AI research or generated code can self-promote into live deployment without human review.
+
+## Setup and execution entry points
+
+For the OpenCode workspace itself:
 
 ```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
-
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
+bun install
+bun run dev
 ```
 
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
+For project-specific setup, start with:
 
-### Desktop App (BETA)
+- [DEVELOPMENT.md](./DEVELOPMENT.md)
+- [ARCHITECTURE.md](./ARCHITECTURE.md)
 
-OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
+Important practical details already documented there include:
 
-| Platform              | Download                           |
-| --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm`, or `.AppImage`     |
+- local clone and workspace layout
+- trading data directory creation on the Ubuntu node
+- MT5 expert install location on the Windows node
+- Python bridge and data collection setup
 
-```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
-```
+## Key documents
 
-#### Installation Directory
+- [AGENTS.md](./AGENTS.md): agent responsibilities and sprint flow
+- [SOUL.md](./SOUL.md): philosophy, drawdown rules, and hard-task boundaries
+- [ARCHITECTURE.md](./ARCHITECTURE.md): MQL5 structure and node topology
+- [DEVELOPMENT.md](./DEVELOPMENT.md): setup and operational workflow
+- [EA_TRADING_PLAN.md](./EA_TRADING_PLAN.md): canonical trading plan, gates, and implementation order
+- [SENTINEL_BREAKOUT_IMPLEMENTATION_PLAN.md](./SENTINEL_BREAKOUT_IMPLEMENTATION_PLAN.md): Sentinel-specific design and phase plan
+- [AUDIT_AND_STRATEGY.md](./AUDIT_AND_STRATEGY.md): audit findings and technology choices
+- [FINAL_IMPLEMENTATION_PLAN.md](./FINAL_IMPLEMENTATION_PLAN.md): superseded planning history kept for reference
 
-The install script respects the following priority order for the installation path:
+## Constraints and disclaimers
 
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
+- This repository is a project-specific fork, not the canonical upstream OpenCode repository documentation.
+- Trading strategy ideas in this repository should be treated as research and engineering artifacts, not as proof of production-grade profitability.
+- ONNX integration is a controlled candidate path and must not bypass the validation process described in the project documents.
+- Risk management rules take precedence over signal generation.
 
-```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
-```
+## Project-specific extensions in this fork
 
-### Agents
+This repository also contains fork-specific extensions beyond the base trading README shape. The two main themes are durable project memory handoff and MT5/EA safety validation.
 
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
+### Trade Memory Service
 
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
+The memory system lives outside core OpenCode and keeps the upstream session engine untouched.
 
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
+- canonical external SQLite memory database: `memory.sqlite3`
+- read-only sync from `opencode.db` into a searchable conversation index
+- exact FTS search over prior user messages and assistant final text
+- curated memory notes with `memory_type`, `status`, `importance`, `scope`, and source links
+- pinning for notes that must always be included in handoff
+- secret redaction before storing searchable memory content
+- sync bookkeeping through `sync_run`, stale reconciliation, and source signature checks
+- optional semantic-search surface, currently disabled unless separately configured
 
-Learn more about [agents](https://opencode.ai/docs/agents).
+Implementation files:
 
-### Documentation
+- `.opencode/trade-memory-core/schema.ts`
+- `.opencode/trade-memory-core/sync.ts`
+- `.opencode/trade-memory-core/search.ts`
+- `.opencode/trade-memory-core/notes.ts`
+- `.opencode/mcp/service.ts`
+- `.opencode/mcp/trade-memory-server.ts`
 
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
+### Memory Handoff Bridge
 
-### Contributing
+This fork adds a thin plugin bridge so model switches do not silently drop critical project state.
 
-If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
+- watches `session.next.model.switched`
+- records pending handoff state per session and model
+- can autostart the local memory service when enabled
+- injects a bounded handoff block into `experimental.chat.system.transform`
+- reuses the same handoff path during `experimental.session.compacting`
+- tracks freshness and warns when memory may be stale or unavailable
+- clears pending handoff state only after a matching acknowledgement
 
-### Building on OpenCode
+Implementation files:
 
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
+- `.opencode/plugins/trade-handoff-bridge.ts`
+- `MEMORY_HANDOFF_ARCHITECTURE.md`
 
----
+### Built-in Trade Memory Tools and MCP Surface
 
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+The repository exposes the memory system in two ways: plugin tools for local OpenCode workflows and MCP/HTTP endpoints for external clients.
+
+Plugin tools include:
+
+- `sync_trade_memory`
+- `search_trade_conversations`
+- `open_trade_conversation_source`
+- `store_trade_memory_note`
+- `update_trade_memory_note_status`
+- `search_trade_memory_notes`
+- `render_trade_oracle_note`
+
+The MCP/HTTP service additionally exposes health, handoff, pin, and note-management operations such as:
+
+- `trade_memory_health`
+- `trade_memory_sync`
+- `trade_memory_get_handoff_context`
+- `trade_memory_model_switched`
+- `trade_memory_pin_note`
+- `trade_memory_list_pins`
+
+### MT5 / EA Safety Validation Toolkit
+
+This fork also contains a trading-oriented validation stack for MT5 Expert Advisor safety work. It is designed to keep strategy logic, execution checks, and audit evidence separate.
+
+- `BrokerSymbolProfile.mqh` for broker and symbol metadata capture plus fail-close validation
+- `TradeExecutor.mqh` for execution preflight:
+  - price normalization
+  - stop and freeze distance validation
+  - spread guard
+  - margin guard
+  - filling mode resolution
+  - skip-reason logging
+- `RiskManagement.mqh` as the safety-first risk boundary
+- `Expert_Main.mq5` as orchestration only
+- MT5 parser gate in `src/Scripts/analyze_mt5_report.py`
+- regression coverage in `src/Scripts/tests/test_analyze_mt5_report.py`
+- backtest gate scenarios in `backtest/gate_config.json`
+- operational runbooks and audit plans in:
+  - `EA_TRADING_PLAN.md`
+  - `SENTINEL_BREAKOUT_IMPLEMENTATION_PLAN.md`
+  - `REMOTE_MT5_COMPILE_SMOKE_RUNBOOK.md`
+  - `STRICT_REMEDIATION_PLAN.md`
+
+Current design intent:
+
+- validate execution hygiene before new strategy rollout
+- treat parser-based pass/fail evidence as a first-class artifact
+- keep strategy modules from sending orders directly
+- separate remote compile and smoke procedures from strategy design

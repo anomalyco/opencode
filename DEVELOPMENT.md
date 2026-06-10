@@ -1,85 +1,132 @@
 # Development Workflow
 
-## 環境構築
+## Positioning
 
-### [Node 1] wag-air (Mac)
+- This document is the operational entry point for working in `opencode-trade`.
+- The canonical trading plan is [EA_TRADING_PLAN.md](./EA_TRADING_PLAN.md).
+- Sentinel-specific work is defined in [SENTINEL_BREAKOUT_IMPLEMENTATION_PLAN.md](./SENTINEL_BREAKOUT_IMPLEMENTATION_PLAN.md).
+- Remote MT5 compile and smoke procedures live in [REMOTE_MT5_COMPILE_SMOKE_RUNBOOK.md](./REMOTE_MT5_COMPILE_SMOKE_RUNBOOK.md).
+
+When documents conflict, prefer:
+
+1. `EA_TRADING_PLAN.md`
+2. `SENTINEL_BREAKOUT_IMPLEMENTATION_PLAN.md`
+3. `STRICT_REMEDIATION_PLAN.md`
+4. this file
+
+## Repository Setup
+
+Primary fork:
+
 ```bash
-git clone https://codeberg.org/wag/opencode-trade.git
+git clone https://github.com/TakeshiSawaguchi/opencode-trade.git
 cd opencode-trade
-mkdir -p /Users/wag/ea/opencode-trade/{src,backtest,logs}
 ```
 
-### [Node 2] wag-x870e (Ubuntu)
+Optional upstream remote for comparison only:
+
 ```bash
-# Tailscale SSH で接続
-ssh wag-x870e "mkdir -p /srv/trading-data/{XAUUSD,SP500,JPYUSD,EURUSD}"
-
-# Python environment
-python3.10 -m venv /srv/trading-env
-source /srv/trading-env/bin/activate
-pip install pandas numpy requests yfinance onnxruntime
-
-# Dukascopy data downloader
-git clone https://github.com/wag/dukaspy.git
-# or use custom data_collector_SYMBOL.py (below)
+git remote add upstream https://github.com/anomalyco/opencode.git
+git remote -v
 ```
 
-### [Node 3] wag-dell (Windows11)
-```cmd
-# MT5 Expert Install path
-C:\Program Files\Alpari Limited\MetaTrader 5\MQL5\Experts\opencode-trade\
+Do not assume Codeberg paths or remote names from older notes. Use the actual remote configuration of the current checkout.
 
-# Python bridge for ONNX inference
-cd C:\dev\opencode-trade-bridge
-py -3.10 -m venv venv
-pip install onnxruntime redis
+## Node Layout
+
+### `wag-air` (Mac)
+
+- orchestration, documentation, branch work
+- parser and unit-test execution
+- artifact review and promotion decisions
+
+### `wag-x870e` (Ubuntu)
+
+- historical data collection
+- Python-side preprocessing
+- research support and non-MT5 batch work
+
+### `wag-dell` (Windows / MT5)
+
+- MetaTrader 5 compile and tester execution
+- full EA bundle deployment
+- fresh tester logs and reports
+
+This project does not assume research, implementation, and MT5 execution happen on one host.
+
+## Local Preflight
+
+Before changing EA logic or parser contracts:
+
+```bash
+git status --short
 ```
 
----
+Parser regression check:
 
-## タスク実行フロー
-
-### 例: XAUUSD 用 BreakoutSignal 実装
-
-1. **Hermes が指示書作成** (日本語)
-
-```
-【タスク】 XAUUSD Breakout Signal 実装
-■ 要件
-  - アジア時間(0-8h UTC) の高値安値を記録
-  - 8h以降のブレイクアウトで順張りエントリー
-  - 参考: MQL5 CodeBase "4-hour breakout EA"
-
-■ 出力
-  - Include/SignalBreakout_XAUUSD.mqh
-  - ユニットテスト: backtesting/test_breakout_xauusd.mq5
-
-■ 期限: 6/10 23:59 UTC
+```bash
+cd src/Scripts/tests
+python -m unittest -v test_analyze_mt5_report.py
 ```
 
-2. **Opencode-Agent が実装**
-   - Opencode → qwen3-coder で MQL5 コード生成
-   - → git commit `[TASK] SignalBreakout | XAUUSD | Asia session HLR`
-   - → push to feature/breakout-xauusd
+OpenCode workspace commands remain available when you need the upstream runtime:
 
-3. **Research-Agent が参考資料検索** (並行)
-   - Hermes → "QuantConnect で XAUUSD breakout の事例検索"
-   - → ページ抽出、Sharpe/Drawdown 記録
-   - → RESEARCH_LOG.md 更新
+```bash
+bun install
+bun run dev
+```
 
-4. **Review-Agent が承認**
-   - GLM-5 → Division by zero, Array bounds check
-   - → OK なら「APPROVED」コメント
+## Working Loop
 
-5. **バックテスト実行** (wag-dell)
-   - MT5 Strategy Tester で 2023-2024 日次実行
-   - → backtesting/results/breakout_xauusd_20240101.json
-   - → Sharpe, Drawdown, Win% を SPRINT.md に記録
+1. Read `EA_TRADING_PLAN.md` and confirm the active phase.
+2. Check whether the task touches `RiskManagement`, parser/gates, or Sentinel boundaries.
+3. Update only the files required for that phase.
+4. Run local parser tests when changing gate or report logic.
+5. Deploy the full EA bundle to `wag-dell` when MT5-side behavior changes.
+6. Run compile, smoke, and parser gate checks.
+7. Record pass, hold, or reject evidence under `backtest/results/`.
 
----
+The project rule is still `Safety Gate first. Strategy second. ML last.` Live trading remains `NO-GO` until the critical gates in `EA_TRADING_PLAN.md` are complete.
 
-## 定期メンテナンス (毎日)
+## Full Bundle Deployment
 
-- **09:00 UTC**: Hermes が日中の新リサーチ結果をスキャン
-- **18:00 UTC**: Opencode 実装進捗を確認、ボトルネック排除
-- **22:00 UTC**: wag-dell MT5 バックテスト完了確認、ログ保存
+Single-file MT5 sync is not allowed when dependent includes changed.
+
+Deploy the full bundle:
+
+```text
+src/Expert_Main.mq5
+src/Include/BrokerSymbolProfile.mqh
+src/Include/TradeExecutor.mqh
+src/Include/RiskManagement.mqh
+src/Include/TradeLogic.mqh
+src/Include/DataFeed.mqh
+backtest/gate_config.json
+backtest/tester/*.ini
+```
+
+Use [REMOTE_MT5_COMPILE_SMOKE_RUNBOOK.md](./REMOTE_MT5_COMPILE_SMOKE_RUNBOOK.md) for the exact remote compile and smoke sequence.
+
+## Task Boundaries
+
+- Agent roles, handoff rules, and hard-task review expectations are defined in [AGENTS.md](./AGENTS.md).
+- Memory handoff architecture is documented in [MEMORY_HANDOFF_ARCHITECTURE.md](./MEMORY_HANDOFF_ARCHITECTURE.md).
+- This document does not redefine agent permissions or coding policy; it points to the operational path for this checkout.
+
+## Expected Artifacts
+
+Keep evidence in repository paths that other phases already consume:
+
+- `backtest/results/` for pass/fail JSON and captured gate output
+- `backtest/tester/` for tester config inputs
+- `src/Scripts/tests/` for parser regression tests
+
+When a candidate is rejected, keep the rejection evidence and reason instead of silently replacing it.
+
+## Common Entry Points
+
+- Trading plan and gates: [EA_TRADING_PLAN.md](./EA_TRADING_PLAN.md)
+- Sentinel design: [SENTINEL_BREAKOUT_IMPLEMENTATION_PLAN.md](./SENTINEL_BREAKOUT_IMPLEMENTATION_PLAN.md)
+- Strict remediation constraints: [STRICT_REMEDIATION_PLAN.md](./STRICT_REMEDIATION_PLAN.md)
+- Remote MT5 execution: [REMOTE_MT5_COMPILE_SMOKE_RUNBOOK.md](./REMOTE_MT5_COMPILE_SMOKE_RUNBOOK.md)
+- Architecture overview: [ARCHITECTURE.md](./ARCHITECTURE.md)
