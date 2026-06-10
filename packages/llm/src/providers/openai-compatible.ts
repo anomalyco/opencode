@@ -1,4 +1,4 @@
-import { ProviderID, type ModelID } from "../schema"
+import { ProviderID, type ModelID, type ProviderOptions } from "../schema"
 import * as OpenAICompatibleChat from "../protocols/openai-compatible-chat"
 import type { RouteDefaultsInput } from "../route/client"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options"
@@ -6,15 +6,27 @@ import { profiles, type OpenAICompatibleProfile } from "./openai-compatible-prof
 
 export const id = ProviderID.make("openai-compatible")
 
-type GenericModelOptions = RouteDefaultsInput &
+export interface OpenAICompatibleOptionsInput {
+  readonly [key: string]: unknown
+  readonly includeUsage?: boolean
+}
+
+export type OpenAICompatibleProviderOptionsInput = ProviderOptions & {
+  readonly openaiCompatible?: OpenAICompatibleOptionsInput
+  readonly "openai-compatible"?: OpenAICompatibleOptionsInput
+}
+
+type GenericModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly provider?: string
     readonly baseURL: string
+    readonly providerOptions?: OpenAICompatibleProviderOptionsInput
   }
 
-export type FamilyModelOptions = RouteDefaultsInput &
+export type FamilyModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
+    readonly providerOptions?: OpenAICompatibleProviderOptionsInput
   }
 
 export const routes = [OpenAICompatibleChat.route]

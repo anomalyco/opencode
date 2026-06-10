@@ -4,6 +4,7 @@ import { HttpClientRequest } from "effect/unstable/http"
 import { LLM, LLMError, Message, Model, ToolCallPart, Usage } from "../../src"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
+import * as OpenAICompatible from "../../src/providers/openai-compatible"
 import * as OpenAIChat from "../../src/protocols/openai-chat"
 import { ProviderShared } from "../../src/protocols/shared"
 import { Auth, LLMClient } from "../../src/route"
@@ -48,6 +49,41 @@ describe("OpenAI Chat route", () => {
         max_tokens: 20,
         temperature: 0,
       })
+    }),
+  )
+
+  it.effect("prepares OpenAI-compatible Chat payload with stream usage by default", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model: OpenAICompatible.configure({
+            provider: "databricks",
+            baseURL: "https://databricks.test/serving-endpoints",
+            apiKey: "test",
+          }).model("qwen3"),
+          prompt: "Say hello.",
+        }),
+      )
+
+      expect(prepared.body.stream_options).toEqual({ include_usage: true })
+    }),
+  )
+
+  it.effect("omits OpenAI-compatible stream usage when disabled", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model: OpenAICompatible.configure({
+            provider: "databricks",
+            baseURL: "https://databricks.test/serving-endpoints",
+            apiKey: "test",
+          }).model("qwen3"),
+          prompt: "Say hello.",
+          providerOptions: { databricks: { includeUsage: false } },
+        }),
+      )
+
+      expect(prepared.body).not.toHaveProperty("stream_options")
     }),
   )
 
