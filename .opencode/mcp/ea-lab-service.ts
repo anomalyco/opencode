@@ -61,6 +61,13 @@ export function createEaLabService(defaults: { dbPath?: string; riskGatePath: st
             overfit_risk?: OverfitRisk
           },
     ) {
+      const implementationSummary = input.implementation_summary?.trim() || "No implementation summary provided"
+      const testConditionsJSON =
+        "test_conditions_json" in input ? input.test_conditions_json : JSON.stringify(input.test_conditions ?? {})
+      const metricsJSON = "metrics_json" in input ? input.metrics_json : JSON.stringify(input.metrics ?? {})
+      const resultStatus = input.result_status ?? ExperimentStatuses[0]
+      const stage = input.stage ?? ExperimentStages[0]
+      const overfitRisk = input.overfit_risk ?? OverfitRisks[3]
       return withDb((db) =>
         storeExperiment(db, {
           title: input.title,
@@ -68,16 +75,12 @@ export function createEaLabService(defaults: { dbPath?: string; riskGatePath: st
           timeframe: input.timeframe,
           strategy: input.strategy,
           hypothesis: input.hypothesis,
-          implementation_summary:
-            "implementation_summary" in input
-              ? (input.implementation_summary?.trim() || "No implementation summary provided")
-              : input.implementation_summary,
-          test_conditions_json:
-            "test_conditions_json" in input ? input.test_conditions_json : JSON.stringify(input.test_conditions ?? {}),
-          metrics_json: "metrics_json" in input ? input.metrics_json : JSON.stringify(input.metrics ?? {}),
-          result_status: "result_status" in input ? input.result_status ?? ExperimentStatuses[0] : input.result_status,
-          stage: "stage" in input ? input.stage ?? ExperimentStages[0] : input.stage,
-          overfit_risk: "overfit_risk" in input ? input.overfit_risk ?? OverfitRisks[3] : input.overfit_risk,
+          implementation_summary: implementationSummary,
+          test_conditions_json: testConditionsJSON,
+          metrics_json: metricsJSON,
+          result_status: resultStatus,
+          stage,
+          overfit_risk: overfitRisk,
         }),
       )
     },
@@ -125,14 +128,15 @@ export function createEaLabService(defaults: { dbPath?: string; riskGatePath: st
             evidence_ids?: string[]
           },
     ) {
+      const triggerConditionsJSON =
+        "trigger_conditions_json" in input && input.trigger_conditions_json !== undefined
+          ? input.trigger_conditions_json
+          : JSON.stringify(("trigger_conditions" in input ? input.trigger_conditions : undefined) ?? {})
       return withDb((db) => {
         const stored = storeExperience(db, {
           type: input.type,
           situation: input.situation,
-          trigger_conditions_json:
-            "trigger_conditions_json" in input && input.trigger_conditions_json !== undefined
-              ? input.trigger_conditions_json
-              : JSON.stringify(input.trigger_conditions ?? {}),
+          trigger_conditions_json: triggerConditionsJSON,
           action_taken: input.action_taken,
           outcome: input.outcome,
           lesson: input.lesson,
@@ -170,11 +174,14 @@ export function createEaLabService(defaults: { dbPath?: string; riskGatePath: st
             spread_slippage_documented?: boolean
           },
     ) {
+      const targetType = ("targetType" in input ? input.targetType : undefined) ?? "promotion"
+      const targetID = ("targetID" in input ? input.targetID : undefined) ?? "unknown"
+      const requestedAction = ("requestedAction" in input ? input.requestedAction : undefined) ?? "promote"
       return checkRiskGates(await parseRiskGates(defaults.riskGatePath), {
-        targetType: "targetType" in input ? (input.targetType ?? "promotion") : input.targetType,
-        targetID: "targetID" in input ? (input.targetID ?? "unknown") : input.targetID,
+        targetType,
+        targetID,
         stage: input.stage,
-        requestedAction: "requestedAction" in input ? (input.requestedAction ?? "promote") : input.requestedAction,
+        requestedAction,
         metrics: input.metrics ?? {},
         hasOutOfSample: "hasOutOfSample" in input ? (input.hasOutOfSample ?? false) : (input.has_out_of_sample ?? false),
         hasSpreadSensitivity:
