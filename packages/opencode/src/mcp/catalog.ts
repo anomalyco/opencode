@@ -1,5 +1,3 @@
-export * as McpCatalog from "./catalog"
-
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import {
   CallToolResultSchema,
@@ -136,3 +134,5 @@ function isOutputSchemaValidationError(error: Error) {
     error.message,
   )
 }
+
+export * as McpCatalog from "./catalog"
