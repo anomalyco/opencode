@@ -1372,6 +1372,7 @@ export function Prompt(props: PromptProps) {
                   e.preventDefault()
                   return
                 }
+                keymap.clearPendingSequence()
               }}
               onSubmit={() => {
                 // IME: double-defer so the last composed character (e.g. Korean
