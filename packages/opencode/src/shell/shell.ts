@@ -187,8 +187,8 @@ export function args(file: string, command: string, cwd: string) {
       cwd,
     ]
   }
-  if (n === "cmd") return ["/c", command]
-  if (ps(file)) return ["-NoProfile", "-Command", command]
+  if (n === "cmd") return ["/d", "/c", `chcp 65001 >nul && ${command}`]
+  if (ps(file)) return ["-NoProfile", "-Command", `$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); ${command}`]
   return ["-c", command]
 }
 
