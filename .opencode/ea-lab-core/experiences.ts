@@ -75,11 +75,13 @@ export function attachExperienceEvidence(db: Database, experienceID: string, evi
 }
 
 export function searchSimilarExperiences(db: Database, input: SimilarExperienceInput) {
+  const query = buildFtsQuery(input)
+  if (!query) return { rows: [] }
   const rows = db
     .query<ExperienceRow, [string, number]>(
       "select experience.* from experience_fts join experience on experience_fts.rowid = experience.rowid where experience_fts match ? order by case experience.status when 'active' then 0 when 'draft' then 1 when 'stale' then 2 when 'contradicted' then 3 else 4 end, bm25(experience_fts), experience.updated_at desc limit ?",
     )
-    .all(buildFtsQuery(input), Math.max(1, Math.min(Math.floor(input.limit ?? 5), 20)))
+    .all(query, Math.max(1, Math.min(Math.floor(input.limit ?? 5), 20)))
   return {
     rows: rows.map((row) => ({
       ...row,

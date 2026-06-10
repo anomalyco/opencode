@@ -70,4 +70,17 @@ describe("ea-lab experiences", () => {
       db.close(false)
     }
   })
+
+  test("returns no similar experiences for unsearchable query", async () => {
+    await using tmp = await tmpdir()
+    const db = openEaLabDatabase(path.join(tmp.path, "ea-lab.sqlite3"), true)
+
+    try {
+      ensureEaLabSchema(db)
+      const result = searchSimilarExperiences(db, { query: "x", limit: 3 })
+      expect(result.rows).toEqual([])
+    } finally {
+      db.close(false)
+    }
+  })
 })
