@@ -465,6 +465,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       Effect.succeed({
         autoload: provider.source === "config",
         options: {
+          headerTimeout: 60_000,
           headers: {
             "HTTP-Referer": "https://opencode.ai/",
             "X-Title": "opencode",
