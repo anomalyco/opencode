@@ -1,14 +1,16 @@
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, eq, inArray, or } from "drizzle-orm"
 import { Effect, Layer } from "effect"
 import * as Context from "effect/Context"
 import { DatabaseError, DrizzleClient } from "../database"
 import { geoStat } from "../database/schema"
+import { RETIRED_STAT_MODELS, RETIRED_STAT_PROVIDERS } from "./model-normalization"
 import {
   chunks,
   collapseRows,
   inserted,
   rankRowsWithMarketShare,
   statPeriodKey,
+  statRowScope,
   synthesizeAllTierRows,
   toStatBaseRow,
   UPSERT_CHUNK_SIZE,
@@ -35,7 +37,10 @@ export type GeoStatMetric = {
 
 export declare namespace GeoStatRepo {
   export interface Service {
-    readonly listDaily: () => Effect.Effect<GeoStatMetric[], DatabaseError>
+    readonly listDaily: (opts?: {
+      readonly provider?: string
+      readonly model?: string
+    }) => Effect.Effect<GeoStatMetric[], DatabaseError>
     readonly listByPeriod: (opts: {
       readonly grain: string
       readonly periodKey: string
@@ -47,6 +52,7 @@ export declare namespace GeoStatRepo {
       readonly model?: string
     }) => Effect.Effect<GeoStatRow[], DatabaseError>
     readonly upsert: (rows: GeoStatRow[]) => Effect.Effect<void, DatabaseError>
+    readonly deleteRetiredDimensions: (rows: GeoStatRow[]) => Effect.Effect<void, DatabaseError>
   }
 }
 
@@ -56,7 +62,16 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
     Effect.gen(function* () {
       const db = yield* DrizzleClient
 
-      const listDaily = Effect.fn("GeoStatRepo.listDaily")(function* () {
+      const listDaily = Effect.fn("GeoStatRepo.listDaily")(function* (opts?: {
+        readonly provider?: string
+        readonly model?: string
+      }) {
+        const scope =
+          opts?.model && opts.provider
+            ? and(eq(geoStat.provider, opts.provider), eq(geoStat.model, opts.model))
+            : opts?.model
+              ? eq(geoStat.model, opts.model)
+              : and(eq(geoStat.provider, "all"), eq(geoStat.model, "all"))
         return yield* Effect.tryPromise({
           try: () =>
             db
@@ -71,15 +86,7 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
                 totalTokens: geoStat.total_tokens,
               })
               .from(geoStat)
-              .where(
-                and(
-                  eq(geoStat.grain, "day"),
-                  eq(geoStat.client, "all"),
-                  eq(geoStat.source, "all"),
-                  eq(geoStat.provider, "all"),
-                  eq(geoStat.model, "all"),
-                ),
-              )
+              .where(and(eq(geoStat.grain, "day"), eq(geoStat.client, "all"), eq(geoStat.source, "all"), scope))
               .orderBy(asc(geoStat.period_key)),
           catch: (cause) => DatabaseError.make({ cause }),
         })
@@ -163,7 +170,29 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
         )
       })
 
-      return GeoStatRepo.of({ listDaily, listByPeriod, upsert })
+      const deleteRetiredDimensions = Effect.fn("GeoStatRepo.deleteRetiredDimensions")(function* (rows: GeoStatRow[]) {
+        const scope = statRowScope(rows)
+        if (!scope) return
+
+        yield* Effect.tryPromise({
+          try: () =>
+            db
+              .delete(geoStat)
+              .where(
+                and(
+                  inArray(geoStat.grain, scope.grains),
+                  inArray(geoStat.period_key, scope.periodKeys),
+                  inArray(geoStat.dataset, scope.datasets),
+                  inArray(geoStat.client, scope.clients),
+                  inArray(geoStat.source, scope.sources),
+                  or(inArray(geoStat.provider, RETIRED_STAT_PROVIDERS), inArray(geoStat.model, RETIRED_STAT_MODELS)),
+                ),
+              ),
+          catch: (cause) => DatabaseError.make({ cause }),
+        })
+      })
+
+      return GeoStatRepo.of({ listDaily, listByPeriod, upsert, deleteRetiredDimensions })
     }),
   )
 }

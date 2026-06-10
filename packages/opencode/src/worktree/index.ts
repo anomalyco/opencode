@@ -1,40 +1,39 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { path } from "@opencode-ai/core/effect/layer-node-platform"
 import { Global } from "@opencode-ai/core/global"
 import { InstanceLayer } from "@/project/instance-layer"
 import { InstanceStore } from "@/project/instance-store"
 import { Project } from "@/project/project"
-import { Database } from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
-import { ProjectTable } from "../project/project.sql"
-import type { ProjectID } from "../project/schema"
-import * as Log from "@opencode-ai/core/util/log"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
+import type { ProjectV2 } from "@opencode-ai/core/project"
 import { Slug } from "@opencode-ai/core/util/slug"
 import { errorMessage } from "../util/error"
-import { BusEvent } from "@/bus/bus-event"
+import { EventV2 } from "@opencode-ai/core/event"
 import { GlobalBus } from "@/bus/global"
 import { Git } from "@/git"
 import { Effect, Layer, Path, Schema, Scope, Context } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { NodePath } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
 import { InstanceState } from "@/effect/instance-state"
 
-const log = Log.create({ service: "worktree" })
-
 export const Event = {
-  Ready: BusEvent.define(
-    "worktree.ready",
-    Schema.Struct({
+  Ready: EventV2.define({
+    type: "worktree.ready",
+    schema: {
       name: Schema.String,
       branch: Schema.optional(Schema.String),
-    }),
-  ),
-  Failed: BusEvent.define(
-    "worktree.failed",
-    Schema.Struct({
+    },
+  }),
+  Failed: EventV2.define({
+    type: "worktree.failed",
+    schema: {
       message: Schema.String,
-    }),
-  ),
+    },
+  }),
 }
 
 export const Info = Schema.Struct({
@@ -149,14 +148,21 @@ type GitResult = { code: number; text: string; stderr: string }
 export const layer: Layer.Layer<
   Service,
   never,
-  AppFileSystem.Service | Path.Path | AppProcess.Service | Git.Service | Project.Service | InstanceStore.Service
+  | FSUtil.Service
+  | Path.Path
+  | AppProcess.Service
+  | Git.Service
+  | Project.Service
+  | InstanceStore.Service
+  | Database.Service
 > = Layer.effect(
   Service,
   Effect.gen(function* () {
     const scope = yield* Scope.Scope
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const pathSvc = yield* Path.Path
     const appProcess = yield* AppProcess.Service
+    const { db } = yield* Database.Service
     const gitSvc = yield* Git.Service
     const project = yield* Project.Service
     const store = yield* InstanceStore.Service
@@ -247,7 +253,7 @@ export const layer: Layer.Layer<
       const populated = yield* git(["reset", "--hard"], { cwd: info.directory })
       if (populated.code !== 0) {
         const message = populated.stderr || populated.text || "Failed to populate worktree"
-        log.error("worktree checkout failed", { directory: info.directory, message })
+        yield* Effect.logError("worktree checkout failed", { directory: info.directory, message })
         GlobalBus.emit("event", {
           directory: info.directory,
           project: ctx.project.id,
@@ -260,9 +266,9 @@ export const layer: Layer.Layer<
       const booted = yield* store.load({ directory: info.directory }).pipe(
         Effect.as(true),
         Effect.catch((error) =>
-          Effect.sync(() => {
+          Effect.gen(function* () {
             const message = errorMessage(error)
-            log.error("worktree bootstrap failed", { directory: info.directory, message })
+            yield* Effect.logError("worktree bootstrap failed", { directory: info.directory, message })
             GlobalBus.emit("event", {
               directory: info.directory,
               project: ctx.project.id,
@@ -291,7 +297,7 @@ export const layer: Layer.Layer<
     const createFromInfo = Effect.fn("Worktree.createFromInfo")(function* (info: Info, startCommand?: string) {
       yield* setup(info)
       yield* boot(info, startCommand).pipe(
-        Effect.catchCause((cause) => Effect.sync(() => log.error("worktree bootstrap failed", { cause }))),
+        Effect.catchCause((cause) => Effect.logError("worktree bootstrap failed", { cause })),
         Effect.forkIn(scope),
       )
     })
@@ -377,10 +383,19 @@ export const layer: Layer.Layer<
 
     function cleanDirectory(target: string) {
       return Effect.tryPromise({
-        try: () =>
-          import("fs/promises").then((fsp) =>
-            fsp.rm(target, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }),
-          ),
+        try: async () => {
+          const fsp = await import("fs/promises")
+          const attempts = process.platform === "win32" ? 50 : 5
+          for (const attempt of Array.from({ length: attempts }, (_, i) => i)) {
+            try {
+              await fsp.rm(target, { recursive: true, force: true })
+              return
+            } catch (error) {
+              if (attempt === attempts - 1) throw error
+              await new Promise((resolve) => setTimeout(resolve, 100))
+            }
+          }
+        },
         catch: (error) =>
           new RemoveFailedError({ message: errorMessage(error) || "Failed to remove git worktree directory" }),
       })
@@ -393,6 +408,9 @@ export const layer: Layer.Layer<
       }
 
       const directory = yield* canonical(input.directory)
+
+      // Preserve the loaded path casing for the store cache; `directory` is lowercased on Windows.
+      if (directory !== (yield* canonical(ctx.worktree))) yield* store.disposeDirectory(input.directory)
 
       const list = yield* git(["worktree", "list", "--porcelain"], { cwd: ctx.worktree })
       if (list.code !== 0) {
@@ -411,6 +429,8 @@ export const layer: Layer.Layer<
         return true
       }
 
+      // Git may return the original casing when a caller supplied a normalized Windows path.
+      yield* store.disposeDirectory(entry.path)
       yield* stopFsmonitor(entry.path)
       const removed = yield* git(["worktree", "remove", "--force", entry.path], { cwd: ctx.worktree })
       if (removed.code !== 0) {
@@ -470,17 +490,20 @@ export const layer: Layer.Layer<
       if (!text) return true
       const result = yield* runStartCommand(directory, text)
       if (result.code === 0) return true
-      log.error("worktree start command failed", { kind, directory, message: result.stderr })
+      yield* Effect.logError("worktree start command failed", { kind, directory, message: result.stderr })
       return false
     })
 
     const runStartScripts = Effect.fnUntraced(function* (
       directory: string,
-      input: { projectID: ProjectID; extra?: string },
+      input: { projectID: ProjectV2.ID; extra?: string },
     ) {
-      const row = yield* Effect.sync(() =>
-        Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, input.projectID)).get()),
-      )
+      const row = yield* db
+        .select()
+        .from(ProjectTable)
+        .where(eq(ProjectTable.id, input.projectID))
+        .get()
+        .pipe(Effect.orDie)
       const project = row ? Project.fromRow(row) : undefined
       const startup = project?.commands?.start?.trim() ?? ""
       const ok = yield* runStartScript(directory, startup, "project")
@@ -596,7 +619,7 @@ export const layer: Layer.Layer<
       }
 
       yield* runStartScripts(worktreePath, { projectID: ctx.project.id }).pipe(
-        Effect.catchCause((cause) => Effect.sync(() => log.error("worktree start task failed", { cause }))),
+        Effect.catchCause((cause) => Effect.logError("worktree start task failed", { cause })),
         Effect.forkIn(scope),
       )
 
@@ -611,10 +634,21 @@ export const appLayer = layer.pipe(
   Layer.provide(Git.defaultLayer),
   Layer.provide(AppProcess.defaultLayer),
   Layer.provide(Project.defaultLayer),
-  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(FSUtil.defaultLayer),
   Layer.provide(NodePath.layer),
 )
 
 export const defaultLayer = appLayer.pipe(Layer.provide(InstanceLayer.layer))
+
+export const node = LayerNode.make(layer, [
+  FSUtil.node,
+  path,
+  AppProcess.node,
+  Git.node,
+  Project.node,
+  InstanceStore.node,
+  Database.node,
+])
 
 export * as Worktree from "."

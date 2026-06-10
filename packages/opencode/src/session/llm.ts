@@ -1,6 +1,9 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { llmClient } from "@opencode-ai/core/effect/layer-node-platform"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Provider } from "@/provider/provider"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
-import * as Log from "@opencode-ai/core/util/log"
 import { Context, Effect, Layer } from "effect"
 import * as Stream from "effect/Stream"
 import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
@@ -14,8 +17,8 @@ import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
 import { Plugin } from "@/plugin"
 import { Permission } from "@/permission"
-import { PermissionID } from "@/permission/schema"
-import { Bus } from "@/bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 import { Wildcard } from "@/util/wildcard"
 import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
@@ -27,16 +30,15 @@ import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
 
-const log = Log.create({ service: "llm" })
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
 export type StreamInput = {
-  user: MessageV2.User
+  user: SessionV1.User
   sessionID: string
   parentSessionID?: string
   model: Provider.Model
   agent: Agent.Info
-  permission?: Permission.Ruleset
+  permission?: PermissionV1.Ruleset
   system: string[]
   messages: ModelMessage[]
   small?: boolean
@@ -65,6 +67,7 @@ const live: Layer.Layer<
   | Provider.Service
   | Plugin.Service
   | Permission.Service
+  | EventV2Bridge.Service
   | LLMClientService
   | RuntimeFlags.Service
 > = Layer.effect(
@@ -75,21 +78,18 @@ const live: Layer.Layer<
     const provider = yield* Provider.Service
     const plugin = yield* Plugin.Service
     const perm = yield* Permission.Service
+    const events = yield* EventV2Bridge.Service
     const llmClient = yield* LLMClient.Service
     const flags = yield* RuntimeFlags.Service
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
-      const l = log
-        .clone()
-        .tag("providerID", input.model.providerID)
-        .tag("modelID", input.model.id)
-        .tag("session.id", input.sessionID)
-        .tag("small", (input.small ?? false).toString())
-        .tag("agent", input.agent.name)
-        .tag("mode", input.agent.mode)
-      l.info("stream", {
-        modelID: input.model.id,
+      yield* Effect.logInfo("stream", {
         providerID: input.model.providerID,
+        modelID: input.model.id,
+        "session.id": input.sessionID,
+        small: (input.small ?? false).toString(),
+        agent: input.agent.name,
+        mode: input.agent.mode,
       })
 
       const [language, cfg, item, info] = yield* Effect.all(
@@ -115,6 +115,7 @@ const live: Layer.Layer<
       // Wire up toolExecutor for DWS workflow models so that tool calls
       // from the workflow service are executed via opencode's tool system
       // and results sent back over the WebSocket.
+      const bridge = yield* EffectBridge.make()
       if (language instanceof GitLabWorkflowLanguageModel) {
         const workflowModel = language as GitLabWorkflowLanguageModel & {
           sessionID?: string
@@ -151,7 +152,6 @@ const live: Layer.Layer<
           return !match || match.action !== "ask"
         })
 
-        const bridge = yield* EffectBridge.make()
         const approvedToolsForSession = new Set<string>()
         workflowModel.approvalHandler = bridge.bind(async (approvalTools) => {
           const uniqueNames = [...new Set(approvalTools.map((t: { name: string }) => t.name))] as string[]
@@ -161,12 +161,18 @@ const live: Layer.Layer<
             return { approved: true }
           }
 
-          const id = PermissionID.ascending()
-          let unsub: (() => void) | undefined
+          const id = PermissionV1.ID.ascending()
+          let unsub: EventV2.Unsubscribe | undefined
           try {
-            unsub = Bus.subscribe(Permission.Event.Replied, (evt) => {
-              if (evt.properties.requestID === id) void evt.properties.reply
-            })
+            unsub = await bridge.promise(
+              events.listen((event) => {
+                if (event.type !== Permission.Event.Replied.type) return Effect.void
+                const data = event.data as EventV2.Data<typeof Permission.Event.Replied>
+                if (data.requestID !== id) return Effect.void
+                void data.reply
+                return Effect.void
+              }),
+            )
             const toolPatterns = approvalTools.map((t: { name: string; args: string }) => {
               try {
                 const parsed = JSON.parse(t.args) as Record<string, unknown>
@@ -194,7 +200,7 @@ const live: Layer.Layer<
           } catch {
             return { approved: false }
           } finally {
-            unsub?.()
+            if (unsub) await bridge.promise(unsub)
           }
         })
       }
@@ -235,53 +241,61 @@ const live: Layer.Layer<
           abort: input.abort,
         })
         if (native.type === "supported") {
-          yield* Effect.logInfo("llm runtime selected").pipe(
-            Effect.annotateLogs({
-              "llm.runtime": "native",
-              "llm.provider": input.model.providerID,
-              "llm.model": input.model.id,
-            }),
-          )
+          yield* Effect.logInfo("llm runtime selected", {
+            "llm.runtime": "native",
+            "llm.provider": input.model.providerID,
+            "llm.model": input.model.id,
+          })
           return {
             type: "native" as const,
             stream: native.stream,
           }
         }
-        yield* Effect.logInfo("llm runtime selected").pipe(
-          Effect.annotateLogs({
-            "llm.runtime": "ai-sdk",
-            "llm.provider": input.model.providerID,
-            "llm.model": input.model.id,
-            "llm.native_unsupported_reason": native.reason,
-          }),
-        )
-        l.info("native runtime unavailable; falling back to ai-sdk", { reason: native.reason })
-      }
-
-      yield* Effect.logInfo("llm runtime selected").pipe(
-        Effect.annotateLogs({
+        yield* Effect.logInfo("llm runtime selected", {
           "llm.runtime": "ai-sdk",
           "llm.provider": input.model.providerID,
           "llm.model": input.model.id,
-        }),
-      )
+          "llm.native_unsupported_reason": native.reason,
+        })
+        yield* Effect.logInfo("native runtime unavailable; falling back to ai-sdk", {
+          providerID: input.model.providerID,
+          modelID: input.model.id,
+          "session.id": input.sessionID,
+          small: (input.small ?? false).toString(),
+          agent: input.agent.name,
+          mode: input.agent.mode,
+          reason: native.reason,
+        })
+      }
+
+      yield* Effect.logInfo("llm runtime selected", {
+        "llm.runtime": "ai-sdk",
+        "llm.provider": input.model.providerID,
+        "llm.model": input.model.id,
+      })
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
       return {
         type: "ai-sdk" as const,
         result: streamText({
           onError(error) {
-            l.error("stream error", {
-              error,
-            })
+            bridge.fork(
+              Effect.logError("stream error", {
+                providerID: input.model.providerID,
+                modelID: input.model.id,
+                "session.id": input.sessionID,
+                small: (input.small ?? false).toString(),
+                agent: input.agent.name,
+                mode: input.agent.mode,
+                error,
+              }),
+            )
           },
+          // Copilot returns the authoritative billed amount only in provider-specific response fields.
+          includeRawChunks: input.model.providerID.includes("github-copilot"),
           async experimental_repairToolCall(failed) {
             const lower = failed.toolCall.toolName.toLowerCase()
             if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
-              l.info("repairing tool call", {
-                tool: failed.toolCall.toolName,
-                repaired: lower,
-              })
               return {
                 ...failed.toolCall,
                 toolName: lower,
@@ -370,7 +384,7 @@ const live: Layer.Layer<
   }),
 )
 
-export const layer = live.pipe(Layer.provide(Permission.defaultLayer))
+export const layer = live.pipe(Layer.provide(Permission.defaultLayer), Layer.provide(EventV2Bridge.defaultLayer))
 
 export const defaultLayer = Layer.suspend(() =>
   layer.pipe(
@@ -386,5 +400,16 @@ export const defaultLayer = Layer.suspend(() =>
 )
 
 export const hasToolCalls = LLMRequestPrep.hasToolCalls
+
+export const node = LayerNode.make(layer, [
+  Auth.node,
+  Config.node,
+  Provider.node,
+  Plugin.node,
+  Permission.node,
+  EventV2Bridge.node,
+  llmClient,
+  RuntimeFlags.node,
+])
 
 export * as LLM from "./llm"

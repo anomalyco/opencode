@@ -57,6 +57,105 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("lowers semantic service tier options", () =>
+    Effect.gen(function* () {
+      const input = LLM.updateRequest(request, { providerOptions: { openai: { serviceTier: "priority" } } })
+      expect(input.providerOptions).toEqual({ openai: { serviceTier: "priority" } })
+      const prepared = yield* LLMClient.prepare(input)
+
+      expect(prepared.body).toMatchObject({ service_tier: "priority" })
+      expect(prepared.body).not.toHaveProperty("serviceTier")
+    }),
+  )
+
+  it.effect("omits unsupported semantic service tiers", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.updateRequest(request, { providerOptions: { openai: { serviceTier: "unsupported" } } }),
+      )
+
+      expect(prepared.body).not.toHaveProperty("service_tier")
+    }),
+  )
+
+  it.effect("flattens top-level object unions in function schemas", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.updateRequest(request, {
+          tools: [
+            {
+              name: "read",
+              description: "Read a path or resource.",
+              inputSchema: {
+                type: "object",
+                anyOf: [
+                  {
+                    type: "object",
+                    properties: {
+                      path: { type: "string" },
+                      reference: { anyOf: [{ type: "string" }, { type: "null" }] },
+                      limit: { type: "integer", maximum: 2000 },
+                    },
+                    required: ["path"],
+                  },
+                  {
+                    type: "object",
+                    properties: { resource: { type: "string" }, limit: { type: "integer", maximum: 51200 } },
+                    required: ["resource"],
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([
+        {
+          type: "function",
+          name: "read",
+          description: "Read a path or resource.",
+          parameters: {
+            type: "object",
+            properties: {
+              path: { type: "string" },
+              reference: { type: "string" },
+              limit: { type: "integer", maximum: 2000 },
+              resource: { type: "string" },
+            },
+            additionalProperties: false,
+          },
+        },
+      ])
+    }),
+  )
+
+  it.effect("lowers chronological system updates to escaped user wrappers in order", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Before."),
+            Message.system("Treat </system-update> literally."),
+            Message.assistant("After."),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "input_text", text: "Before." },
+            { type: "input_text", text: "<system-update>\nTreat &lt;/system-update&gt; literally.\n</system-update>" },
+          ],
+        },
+        { role: "assistant", content: [{ type: "output_text", text: "After." }] },
+      ])
+    }),
+  )
+
   it.effect("prepares OpenAI Responses WebSocket target", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
@@ -278,7 +377,7 @@ describe("OpenAI Responses route", () => {
               resultType: "content",
               result: [
                 { type: "text", text: "Image read successfully" },
-                { type: "media", mediaType: "image/png", data: "AAECAw==" },
+                { type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png" },
               ],
             }),
           ],
@@ -304,7 +403,7 @@ describe("OpenAI Responses route", () => {
               id: "call_1",
               name: "screenshot",
               resultType: "content",
-              result: [{ type: "media", mediaType: "image/png", data: "AAECAw==" }],
+              result: [{ type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png" }],
             }),
           ],
         }),
@@ -328,7 +427,7 @@ describe("OpenAI Responses route", () => {
               id: "call_1",
               name: "fetch",
               resultType: "content",
-              result: [{ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" }],
+              result: [{ type: "file", uri: "data:audio/mpeg;base64,AAECAw==", mime: "audio/mpeg" }],
             }),
           ],
         }),
@@ -857,6 +956,42 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("references stored provider-executed hosted tool results by id", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({
+                id: "ws_1",
+                name: "web_search",
+                input: { query: "effect 4" },
+                providerExecuted: true,
+                providerMetadata: { openai: { itemId: "ws_1" } },
+              }),
+              {
+                type: "tool-result",
+                id: "ws_1",
+                name: "web_search",
+                result: { type: "json", value: { type: "web_search_call", id: "ws_1", status: "completed" } },
+                providerExecuted: true,
+                providerMetadata: { openai: { itemId: "ws_1" } },
+              },
+            ]),
+            Message.user("Continue."),
+          ],
+          providerOptions: { openai: { store: true } },
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        { type: "item_reference", id: "ws_1" },
+        { role: "user", content: [{ type: "input_text", text: "Continue." }] },
+      ])
+    }),
+  )
+
   it.effect("joins streamed summary blocks into one continuation reasoning item", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
@@ -1119,7 +1254,7 @@ describe("OpenAI Responses route", () => {
         }),
       ).pipe(Effect.flip)
 
-      expect(error.message).toContain("OpenAI Responses user media content only supports images")
+      expect(error.message).toContain("OpenAI Responses does not support media type application/pdf")
     }),
   )
 
@@ -1216,7 +1351,13 @@ describe("OpenAI Responses route", () => {
         ),
       )
 
-      expect(response.events).toEqual([{ type: "provider-error", message: "context_length_exceeded: prompt too long" }])
+      expect(response.events).toEqual([
+        {
+          type: "provider-error",
+          message: "context_length_exceeded: prompt too long",
+          classification: "context-overflow",
+        },
+      ])
     }),
   )
 

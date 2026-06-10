@@ -1,35 +1,43 @@
-// Top-level footer layout for direct interactive mode.
+// Footer layout
 //
-// Renders the footer region as a vertical stack:
-//   1. Spacer row (visual separation from scrollback)
-//   2. Composer frame with left-border accent -- swaps between prompt,
-//      permission, and question bodies via Switch/Match
-//   3. Meta row showing agent name and model label in the normal composer view
-//   4. Bottom border + status row (spinner, interrupt hint, duration, usage)
+// Renders the footer region as a compact vertical stack:
+//   1. Single-line composer or active footer body
+//   2. Optional autocomplete/menu panels below the composer
+//   3. A statusline-style footer row carrying state, hints, and model info
 //
 // All state comes from the parent RunFooter through SolidJS signals.
 // The view itself is stateless except for derived memos.
 /** @jsxImportSource @opentui/solid */
-import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
-import { Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
+import { useTerminalDimensions } from "@opentui/solid"
+import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import "opentui-spinner/solid"
-import { createColors, createFrames } from "../tui/ui/spinner"
+import { createColors, createFrames } from "@opencode-ai/tui/ui/spinner"
 import {
   RUN_SUBAGENT_PANEL_ROWS,
   RunCommandMenuBody,
   RunModelSelectBody,
+  RunQueuedPromptSelectBody,
+  RunSkillSelectBody,
   RunSubagentSelectBody,
   RunVariantSelectBody,
 } from "./footer.command"
 import { FOOTER_MENU_ROWS, RunFooterMenu } from "./footer.menu"
 import { RunFooterSubagentBody } from "./footer.subagent"
-import { RunPromptBody, createPromptState, hintFlags } from "./footer.prompt"
+import { RunPromptBody, createPromptState } from "./footer.prompt"
 import { RunPermissionBody } from "./footer.permission"
 import { RunQuestionBody } from "./footer.question"
-import { printableBinding, promptBindings, promptHit, promptInfo } from "./prompt.shared"
+import { footerWidthPolicy } from "./footer.width"
+import {
+  OPENCODE_BASE_MODE,
+  formatKeyBindings,
+  formatKeySequence,
+  useBindings,
+  useKeymapSelector,
+  type OpenTuiKeymap,
+} from "@opencode-ai/tui/keymap"
 import type {
-  FooterKeybinds,
   FooterPromptRoute,
+  FooterQueuedPrompt,
   FooterState,
   FooterSubagentState,
   FooterView,
@@ -43,8 +51,10 @@ import type {
   RunPrompt,
   RunProvider,
   RunResource,
+  RunTuiConfig,
 } from "./types"
-import { RUN_THEME_FALLBACK, type RunTheme } from "./theme"
+import type { RunTheme } from "./theme"
+import { modelInfo } from "./variant.shared"
 
 const EMPTY_BORDER = {
   topLeft: "",
@@ -73,9 +83,11 @@ type RunFooterViewProps = {
   state: () => FooterState
   view?: () => FooterView
   subagent?: () => FooterSubagentState
-  theme?: RunTheme
+  queuedPrompts?: () => FooterQueuedPrompt[]
+  theme: () => RunTheme
   diffStyle?: RunDiffStyle
-  keybinds: FooterKeybinds
+  tuiConfig: RunTuiConfig
+  backgroundSubagents: boolean
   history?: RunPrompt[]
   agent: string
   onSubmit: (input: RunPrompt) => boolean
@@ -84,6 +96,8 @@ type RunFooterViewProps = {
   onQuestionReject: (input: QuestionReject) => void | Promise<void>
   onCycle: () => void
   onInterrupt: () => boolean
+  onBackground?: () => void
+  onEditorOpen: (input: { value: string }) => Promise<string | undefined>
   onInputClear: () => void
   onExitRequest?: () => boolean
   onRequestExit?: (fn: (() => boolean) | undefined) => void
@@ -94,12 +108,15 @@ type RunFooterViewProps = {
   onLayout: (input: { route: FooterPromptRoute; autocomplete: boolean; subagentRows: number }) => void
   onStatus: (text: string) => void
   onSubagentSelect?: (sessionID: string | undefined) => void
+  onQueuedRemove: (messageID: string) => Promise<boolean>
 }
 
 export { TEXTAREA_MIN_ROWS, TEXTAREA_MAX_ROWS } from "./footer.prompt"
 
 export function RunFooterView(props: RunFooterViewProps) {
   const term = useTerminalDimensions()
+  const width = createMemo(() => term().width)
+  const responsive = createMemo(() => footerWidthPolicy(width()))
   const active = createMemo<FooterView>(() => props.view?.() ?? { type: "prompt" })
   const subagent = createMemo<FooterSubagentState>(() => {
     return (
@@ -113,18 +130,33 @@ export function RunFooterView(props: RunFooterViewProps) {
   })
   const [route, setRoute] = createSignal<FooterPromptRoute>({ type: "composer" })
   const [subagentMenuRows, setSubagentMenuRows] = createSignal(RUN_SUBAGENT_PANEL_ROWS)
+  const queuedPrompts = createMemo(() => props.queuedPrompts?.() ?? [])
+  const skills = createMemo(() => (props.commands() ?? []).filter((item) => item.source === "skill"))
   const prompt = createMemo(() => active().type === "prompt" && route().type === "composer")
   const selectingSubagent = createMemo(() => active().type === "prompt" && route().type === "subagent-menu")
+  const selectingQueued = createMemo(() => active().type === "prompt" && route().type === "queued-menu")
   const inspecting = createMemo(() => active().type === "prompt" && route().type === "subagent")
   const commanding = createMemo(() => active().type === "prompt" && route().type === "command")
+  const skilling = createMemo(() => active().type === "prompt" && route().type === "skill")
   const modeling = createMemo(() => active().type === "prompt" && route().type === "model")
   const varianting = createMemo(() => active().type === "prompt" && route().type === "variant")
-  const panel = createMemo(() => selectingSubagent() || commanding() || modeling() || varianting())
+  const panel = createMemo(
+    () =>
+      active().type === "permission" ||
+      active().type === "question" ||
+      selectingQueued() ||
+      selectingSubagent() ||
+      commanding() ||
+      skilling() ||
+      modeling() ||
+      varianting(),
+  )
   const selected = createMemo(() => {
     const current = route()
     return current.type === "subagent" ? current.sessionID : undefined
   })
   const tabs = createMemo(() => subagent().tabs)
+  const activeTabs = createMemo(() => tabs().filter((item) => item.status === "running"))
   const selectedTab = createMemo(() => tabs().find((item) => item.sessionID === selected()))
   const selectedIndex = createMemo(() => {
     const sessionID = selected()
@@ -134,33 +166,90 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     return tabs().findIndex((item) => item.sessionID === sessionID) + 1
   })
-  const subagentIndicator = createMemo(() => {
-    const count = tabs().length
-    if (count === 0) {
-      return
-    }
-
-    return {
-      count,
-      label: count === 1 ? "agent" : "agents",
-    }
+  const foregroundSubagents = createMemo(
+    () => props.backgroundSubagents && activeTabs().some((item) => !item.background),
+  )
+  const model = createMemo(() => {
+    const current = props.currentModel()
+    return current ? modelInfo(props.providers(), current) : { model: props.state().model, provider: undefined }
   })
   const detail = createMemo(() => {
     const current = route()
     return current.type === "subagent" ? subagent().details[current.sessionID] : undefined
   })
-  const command = createMemo(() => printableBinding(props.keybinds.commandList, props.keybinds.leader))
-  const interrupt = createMemo(() => printableBinding(props.keybinds.interrupt, props.keybinds.leader))
-  const commandKeys = createMemo(() => promptBindings(props.keybinds.commandList, props.keybinds.leader))
-  const hints = createMemo(() => hintFlags(term().width))
+  const command = useKeymapSelector(
+    (keymap: OpenTuiKeymap) =>
+      formatKeySequence(
+        keymap
+          .getCommandBindings({ visibility: "registered", commands: ["command.palette.show"] })
+          .get("command.palette.show")?.[0]?.sequence,
+        props.tuiConfig,
+      ) ?? "",
+  )
+  const subagentShortcut = useKeymapSelector(
+    (keymap: OpenTuiKeymap) =>
+      formatKeySequence(
+        keymap
+          .getCommandBindings({ visibility: "registered", commands: ["session.child.first"] })
+          .get("session.child.first")?.[0]?.sequence,
+        props.tuiConfig,
+      ) ?? "",
+  )
+  const queuedShortcut = useKeymapSelector(
+    (keymap: OpenTuiKeymap) =>
+      formatKeySequence(
+        keymap
+          .getCommandBindings({ visibility: "registered", commands: ["session.queued_prompts"] })
+          .get("session.queued_prompts")?.[0]?.sequence,
+        props.tuiConfig,
+      ) ?? "",
+  )
+  const backgroundShortcut = useKeymapSelector(
+    (keymap: OpenTuiKeymap) =>
+      formatKeySequence(
+        keymap
+          .getCommandBindings({ visibility: "registered", commands: ["session.background"] })
+          .get("session.background")?.[0]?.sequence,
+        props.tuiConfig,
+      ) ?? "",
+  )
+  const interrupt = useKeymapSelector(
+    (keymap: OpenTuiKeymap) =>
+      formatKeySequence(
+        keymap
+          .getCommandBindings({ visibility: "registered", commands: ["session.interrupt"] })
+          .get("session.interrupt")?.[0]?.sequence,
+        props.tuiConfig,
+      ) ?? "",
+  )
+  const variantCycle = useKeymapSelector(
+    (keymap: OpenTuiKeymap) =>
+      formatKeyBindings(
+        keymap.getCommandBindings({ visibility: "registered", commands: ["variant.cycle"] }).get("variant.cycle"),
+        props.tuiConfig,
+      ) ?? "",
+  )
+  const clearShortcut = useKeymapSelector(
+    (keymap: OpenTuiKeymap) =>
+      formatKeySequence(
+        keymap.getCommandBindings({ visibility: "registered", commands: ["prompt.clear"] }).get("prompt.clear")?.[0]
+          ?.sequence,
+        props.tuiConfig,
+      ) ?? "",
+  )
   const busy = createMemo(() => props.state().phase === "running")
   const armed = createMemo(() => props.state().interrupt > 0)
   const exiting = createMemo(() => props.state().exit > 0)
   const queue = createMemo(() => props.state().queue)
-  const duration = createMemo(() => props.state().duration)
   const usage = createMemo(() => props.state().usage)
-  const interruptKey = createMemo(() => interrupt() || "/exit")
-  const runTheme = createMemo(() => props.theme ?? RUN_THEME_FALLBACK)
+  const interruptLabel = createMemo(() => {
+    if (!interrupt()) {
+      return
+    }
+
+    return interrupt() === "escape" ? "esc" : interrupt()
+  })
+  const runTheme = createMemo(() => props.theme())
   const theme = createMemo(() => runTheme().footer)
   const block = createMemo(() => runTheme().block)
   const spin = createMemo(() => {
@@ -206,6 +295,15 @@ export function RunFooterView(props: RunFooterViewProps) {
     props.onSubagentSelect?.(undefined)
   }
 
+  const openSkillMenu = () => {
+    if (props.commands() && skills().length === 0) {
+      return
+    }
+
+    setRoute({ type: "skill" })
+    props.onSubagentSelect?.(undefined)
+  }
+
   const openVariant = () => {
     setRoute({ type: "variant" })
     props.onSubagentSelect?.(undefined)
@@ -217,6 +315,12 @@ export function RunFooterView(props: RunFooterViewProps) {
     }
 
     setRoute({ type: "subagent-menu" })
+    props.onSubagentSelect?.(undefined)
+  }
+
+  const openQueuedMenu = () => {
+    if (queuedPrompts().length === 0) return
+    setRoute({ type: "queued-menu" })
     props.onSubagentSelect?.(undefined)
   }
 
@@ -254,28 +358,134 @@ export function RunFooterView(props: RunFooterViewProps) {
     directory: props.directory,
     findFiles: props.findFiles,
     agents: props.agents,
-    subagents: () => tabs().length,
     resources: props.resources,
     commands: props.commands,
-    keybinds: props.keybinds,
+    tuiConfig: props.tuiConfig,
     state: props.state,
     view: promptView,
     prompt,
-    width: () => term().width,
+    width,
     theme,
     history: props.history,
     onSubmit: props.onSubmit,
     onCycle: props.onCycle,
     onInterrupt: props.onInterrupt,
+    onEditorOpen: props.onEditorOpen,
     onInputClear: props.onInputClear,
     onExitRequest: props.onExitRequest,
     onExit: props.onExit,
-    onSubagentMenu: openSubagentMenu,
+    onSkillMenu: openSkillMenu,
     onRows: props.onRows,
     onStatus: props.onStatus,
   })
   const shell = createMemo(() => prompt() && composer.shell())
   const menu = createMemo(() => prompt() && composer.visible())
+  const stateStatus = createMemo(() => props.state().status.trim())
+  const modeLabel = createMemo(() => {
+    if (exiting()) {
+      return "EXIT"
+    }
+
+    return shell() ? "SHELL" : "BUILD"
+  })
+  const modeColor = createMemo(() => {
+    if (exiting()) {
+      return theme().error
+    }
+
+    if (shell()) {
+      return theme().warning
+    }
+
+    return theme().highlight
+  })
+  const statusText = createMemo(() => {
+    if (exiting()) {
+      return `Press ${clearShortcut() || "ctrl+c"} again to exit`
+    }
+
+    if (busy()) {
+      return armed() ? "again to interrupt" : "interrupt"
+    }
+
+    if (stateStatus().length > 0) {
+      return stateStatus()
+    }
+
+    return shell() ? "Shell mode" : ""
+  })
+  const activityMeta = createMemo(() => {
+    if (!responsive().statusline.showActivityMeta || usage().length === 0) {
+      return ""
+    }
+
+    return usage()
+  })
+  const modelStatus = createMemo(() => {
+    const current = props.currentModel()
+    if (!prompt() || shell() || !current) {
+      return
+    }
+
+    return {
+      model: model().model,
+      variant: props.currentVariant(),
+      provider: undefined,
+      // Prefer without provider, but keep it on the shared width policy if we add it back.
+    }
+  })
+  const statusColor = createMemo(() => {
+    if (exiting()) {
+      return theme().error
+    }
+
+    if (armed()) {
+      return theme().highlight
+    }
+
+    if (busy() || stateStatus().length > 0) {
+      return theme().text
+    }
+
+    return theme().muted
+  })
+  const statuslineBackground = createMemo(() => theme().status)
+  const hasActivityMeta = createMemo(() => activityMeta().length > 0)
+  const hasModelStatus = createMemo(() => responsive().statusline.showModel && Boolean(modelStatus()))
+  const contextHints = createMemo(() => {
+    if (!prompt() || shell() || !responsive().statusline.showContextHints) {
+      return []
+    }
+
+    const items: Array<{ kind: string; key: string; label: string }> = []
+    if (foregroundSubagents() && backgroundShortcut()) {
+      items.push({ kind: "background", key: backgroundShortcut(), label: "background" })
+    }
+    if (queuedPrompts().length > 0 && queuedShortcut()) {
+      items.push({ kind: "queued", key: queuedShortcut(), label: `${queue()} queued` })
+    }
+    if (activeTabs().length > 0 && subagentShortcut()) {
+      items.push({ kind: "subagents", key: subagentShortcut(), label: "subagents" })
+    }
+
+    const limit = responsive().statusline.contextHintLimit
+    return limit === undefined ? items : items.slice(0, limit)
+  })
+  const hasContextHints = createMemo(() => contextHints().length > 0)
+  const commandHint = createMemo(() => {
+    if (!prompt() || !responsive().statusline.showCommandHint) {
+      return
+    }
+
+    if (shell()) {
+      return { key: "esc", label: "normal" }
+    }
+
+    if (command()) {
+      return { key: command(), label: "cmd" }
+    }
+  })
+  const sectionSeparator = () => <span style={{ fg: theme().muted }}>· </span>
 
   createEffect(() => {
     props.onRequestExit?.(composer.requestExit)
@@ -285,30 +495,71 @@ export function RunFooterView(props: RunFooterViewProps) {
     props.onRequestExit?.(undefined)
   })
 
-  useKeyboard((event) => {
-    if (event.defaultPrevented) {
-      return
-    }
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: active().type === "prompt" && route().type === "composer" && !composer.visible(),
+    commands: [
+      {
+        name: "command.palette.show",
+        title: "Open command palette",
+        category: "Prompt",
+        run: openCommand,
+      },
+      {
+        name: "variant.cycle",
+        title: "Cycle model variant",
+        category: "Model",
+        run: props.onCycle,
+      },
+    ],
+    bindings: [
+      ...props.tuiConfig.keybinds.get("command.palette.show"),
+      ...props.tuiConfig.keybinds.get("variant.cycle"),
+    ],
+  }))
 
-    if (active().type !== "prompt") {
-      return
-    }
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: active().type === "prompt" && route().type === "composer" && foregroundSubagents(),
+    priority: 1,
+    commands: [
+      {
+        name: "session.background",
+        title: "Background subagents",
+        category: "Session",
+        run: () => props.onBackground?.(),
+      },
+    ],
+    bindings: props.tuiConfig.keybinds.get("session.background"),
+  }))
 
-    if (route().type !== "composer") {
-      return
-    }
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: active().type === "prompt" && route().type === "composer" && tabs().length > 0,
+    commands: [
+      {
+        name: "session.child.first",
+        title: "View subagents",
+        category: "Session",
+        run: openSubagentMenu,
+      },
+    ],
+    bindings: props.tuiConfig.keybinds.get("session.child.first"),
+  }))
 
-    if (composer.visible()) {
-      return
-    }
-
-    if (!promptHit(commandKeys(), promptInfo(event))) {
-      return
-    }
-
-    event.preventDefault()
-    openCommand()
-  })
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: active().type === "prompt" && route().type === "composer" && queuedPrompts().length > 0,
+    commands: [
+      {
+        name: "session.queued_prompts",
+        title: "Manage queued prompts",
+        category: "Session",
+        run: openQueuedMenu,
+      },
+    ],
+    bindings: props.tuiConfig.keybinds.get("session.queued_prompts"),
+  }))
 
   createEffect(() => {
     const current = route()
@@ -336,6 +587,11 @@ export function RunFooterView(props: RunFooterViewProps) {
   })
 
   createEffect(() => {
+    if (route().type !== "queued-menu" || queuedPrompts().length > 0) return
+    closePanel()
+  })
+
+  createEffect(() => {
     if (active().type === "prompt") {
       return
     }
@@ -343,8 +599,10 @@ export function RunFooterView(props: RunFooterViewProps) {
     const current = route()
     if (
       current.type !== "command" &&
+      current.type !== "skill" &&
       current.type !== "model" &&
       current.type !== "variant" &&
+      current.type !== "queued-menu" &&
       current.type !== "subagent-menu"
     ) {
       return
@@ -372,360 +630,326 @@ export function RunFooterView(props: RunFooterViewProps) {
       gap={0}
       padding={0}
     >
-      <box id="run-direct-footer-top-spacer" width="100%" height={1} flexShrink={0} backgroundColor="transparent" />
+      <Show when={panel() || inspecting()}>
+        <box id="run-direct-footer-panel-spacer" width="100%" height={1} flexShrink={0} backgroundColor="transparent" />
+      </Show>
 
       <Show
         when={inspecting()}
         fallback={
           <box width="100%" flexDirection="column" gap={0}>
-            <box
-              id="run-direct-footer-composer-frame"
-              width="100%"
-              flexShrink={0}
-              border={panel() ? false : ["left"]}
-              borderColor={theme().highlight}
-              customBorderChars={{
-                ...EMPTY_BORDER,
-                vertical: "┃",
-                bottomLeft: "╹",
-              }}
-            >
-              <box
-                id="run-direct-footer-composer-area"
-                width="100%"
-                flexGrow={1}
-                paddingLeft={0}
-                paddingRight={0}
-                paddingTop={0}
-                flexDirection="column"
-                backgroundColor={panel() ? "transparent" : theme().surface}
-                gap={0}
-              >
-                <box id="run-direct-footer-body" width="100%" flexGrow={1} flexShrink={1} flexDirection="column">
-                  <Switch>
-                    <Match when={active().type === "prompt" && route().type === "composer"}>
-                      <RunPromptBody
-                        theme={theme}
-                        placeholder={composer.placeholder}
-                        bindings={composer.bindings}
-                        onSubmit={composer.onSubmit}
-                        onKeyDown={composer.onKeyDown}
-                        onContentChange={composer.onContentChange}
-                        bind={composer.bind}
-                      />
-                    </Match>
-                    <Match when={selectingSubagent()}>
-                      <RunSubagentSelectBody
-                        theme={theme}
-                        tabs={tabs}
-                        current={selected}
-                        onClose={closePanel}
-                        onSelect={openTab}
-                        onRows={setSubagentMenuRows}
-                      />
-                    </Match>
-                    <Match when={commanding()}>
-                      <RunCommandMenuBody
-                        theme={theme}
-                        commands={props.commands}
-                        subagents={tabs}
-                        variants={props.variants}
-                        keybinds={props.keybinds}
-                        onClose={closePanel}
-                        onModel={openModel}
-                        onSubagent={openSubagentMenu}
-                        onVariant={openVariant}
-                        onVariantCycle={() => {
-                          props.onCycle()
-                          closePanel()
-                        }}
-                        onCommand={(name) => {
-                          composer.submitText(`/${name}`)
-                          closePanel()
-                        }}
-                        onNew={() => {
-                          composer.submitText("/new")
-                          closePanel()
-                        }}
-                        onExit={props.onExit}
-                      />
-                    </Match>
-                    <Match when={modeling()}>
-                      <RunModelSelectBody
-                        theme={theme}
-                        providers={props.providers}
-                        current={props.currentModel}
-                        onClose={closePanel}
-                        onSelect={(model) => {
-                          props.onModelSelect(model)
-                          closePanel()
-                        }}
-                      />
-                    </Match>
-                    <Match when={varianting()}>
-                      <RunVariantSelectBody
-                        theme={theme}
-                        variants={props.variants}
-                        current={props.currentVariant}
-                        onClose={closePanel}
-                        onSelect={(variant) => {
-                          props.onVariantSelect(variant)
-                          closePanel()
-                        }}
-                      />
-                    </Match>
-                    <Match when={active().type === "permission"}>
-                      <RunPermissionBody
-                        request={permission()!.request}
-                        theme={theme()}
-                        block={block()}
-                        diffStyle={props.diffStyle}
-                        onReply={props.onPermissionReply}
-                      />
-                    </Match>
-                    <Match when={active().type === "question"}>
-                      <RunQuestionBody
-                        request={question()!.request}
-                        theme={theme()}
-                        onReply={props.onQuestionReply}
-                        onReject={props.onQuestionReject}
-                      />
-                    </Match>
-                  </Switch>
-                </box>
-
-                <Show when={!menu() && !panel()}>
-                  <box
-                    id="run-direct-footer-meta-row"
-                    width="100%"
-                    flexDirection="row"
-                    gap={1}
-                    paddingLeft={2}
-                    flexShrink={0}
-                    paddingTop={1}
-                  >
-                    <text id="run-direct-footer-agent" fg={theme().highlight} wrapMode="none" truncate flexShrink={0}>
-                      {shell() ? "Shell" : props.agent}
-                    </text>
-                    <Show when={!shell()}>
-                      <text
-                        id="run-direct-footer-model"
-                        fg={theme().text}
-                        wrapMode="none"
-                        truncate
-                        flexGrow={1}
-                        flexShrink={1}
-                      >
-                        {props.state().model}
-                      </text>
-                    </Show>
-                  </box>
-                </Show>
-              </box>
-            </box>
-
-            <Show when={!panel()}>
-              <Show
-                when={menu()}
-                fallback={
-                  <box
-                    id="run-direct-footer-line-6"
-                    width="100%"
-                    height={1}
-                    border={["left"]}
-                    borderColor={theme().highlight}
-                    backgroundColor="transparent"
-                    customBorderChars={{
-                      ...EMPTY_BORDER,
-                      vertical: "╹",
-                    }}
-                    flexShrink={0}
-                  >
-                    <box
-                      id="run-direct-footer-line-6-fill"
-                      width="100%"
-                      height={1}
-                      border={["bottom"]}
-                      borderColor={theme().surface}
-                      backgroundColor="transparent"
-                      customBorderChars={{
-                        ...EMPTY_BORDER,
-                        horizontal: "▀",
-                      }}
-                    />
-                  </box>
-                }
-              >
+            <For each={[promptView()]}>
+              {() => (
                 <box
-                  id="run-direct-footer-menu-transition"
+                  id="run-direct-footer-composer-frame"
                   width="100%"
-                  height={1}
-                  border={["left"]}
-                  borderColor={theme().highlight}
-                  backgroundColor="transparent"
-                  customBorderChars={{
-                    ...EMPTY_BORDER,
-                    vertical: "┃",
-                  }}
                   flexShrink={0}
+                  border={panel() || prompt() ? false : ["left"]}
+                  borderColor={panel() || prompt() ? undefined : theme().highlight}
+                  customBorderChars={
+                    panel() || prompt()
+                      ? undefined
+                      : {
+                          ...EMPTY_BORDER,
+                          vertical: "█",
+                        }
+                  }
                 >
                   <box
-                    id="run-direct-footer-menu-transition-fill"
+                    id="run-direct-footer-composer-area"
                     width="100%"
-                    height={1}
-                    backgroundColor={theme().surface}
-                  />
-                </box>
-              </Show>
-
-              <Show
-                when={menu()}
-                fallback={
-                  <box
-                    id="run-direct-footer-row"
-                    width="100%"
-                    height={1}
-                    flexDirection="row"
-                    justifyContent="space-between"
-                    gap={1}
-                    flexShrink={0}
+                    flexGrow={1}
+                    paddingLeft={0}
+                    paddingRight={0}
+                    paddingTop={0}
+                    flexDirection="column"
+                    backgroundColor={panel() || prompt() ? "transparent" : theme().surface}
+                    gap={0}
                   >
-                    <Show when={busy() || exiting() || duration().length > 0 || subagentIndicator()}>
-                      <box id="run-direct-footer-hint-left" flexDirection="row" gap={1} flexShrink={0} marginLeft={1}>
-                        <Show when={exiting()}>
-                          <text id="run-direct-footer-hint-exit" fg={theme().highlight} wrapMode="none" truncate>
-                            Press Ctrl-c again to exit
-                          </text>
-                        </Show>
-
-                        <Show when={busy() && !exiting()}>
-                          <box id="run-direct-footer-status-spinner" flexShrink={0}>
-                            <spinner color={spin().color} frames={spin().frames} interval={40} />
-                          </box>
-
-                          <text
-                            id="run-direct-footer-hint-interrupt"
-                            fg={armed() ? theme().highlight : theme().text}
-                            wrapMode="none"
-                            truncate
-                          >
-                            {interruptKey()}{" "}
-                            <span style={{ fg: armed() ? theme().highlight : theme().muted }}>
-                              {armed() ? "again to interrupt" : "interrupt"}
-                            </span>
-                          </text>
-                        </Show>
-
-                        <Show when={!busy() && !exiting() && duration().length > 0}>
-                          <box id="run-direct-footer-duration" flexDirection="row" gap={2} flexShrink={0}>
-                            <text id="run-direct-footer-duration-mark" fg={theme().muted} wrapMode="none" truncate>
-                              ▣
-                            </text>
-                            <box id="run-direct-footer-duration-tail" flexDirection="row" gap={1} flexShrink={0}>
-                              <text id="run-direct-footer-duration-dot" fg={theme().muted} wrapMode="none" truncate>
-                                ·
-                              </text>
-                              <text id="run-direct-footer-duration-value" fg={theme().muted} wrapMode="none" truncate>
-                                {duration()}
-                              </text>
-                            </box>
-                          </box>
-                        </Show>
-
-                        <Show when={subagentIndicator()}>
-                          {(info) => (
-                            <text id="run-direct-footer-subagents-label" fg={theme().text} wrapMode="none" truncate>
-                              <Show when={busy() || exiting() || duration().length > 0}>
-                                <span style={{ fg: theme().muted }}>· </span>
-                              </Show>
-                              {info().count} <span style={{ fg: theme().muted }}>{info().label}</span>
-                              <span style={{ fg: theme().muted }}> · </span>
-                              <span style={{ fg: theme().highlight }}>↓</span>
-                              <span style={{ fg: theme().muted }}> to view</span>
-                            </text>
-                          )}
-                        </Show>
-                      </box>
-                    </Show>
-
-                    <box id="run-direct-footer-spacer" flexGrow={1} flexShrink={1} backgroundColor="transparent" />
-
-                    <box
-                      id="run-direct-footer-hint-group"
-                      flexDirection="row"
-                      gap={2}
-                      flexShrink={0}
-                      justifyContent="flex-end"
-                    >
-                      <Show
-                        when={shell()}
-                        fallback={
-                          <>
-                            <Show when={queue() > 0}>
-                              <text id="run-direct-footer-queue" fg={theme().muted} wrapMode="none" truncate>
-                                {queue()} queued
-                              </text>
-                            </Show>
-                            <Show when={usage().length > 0}>
-                              <text id="run-direct-footer-usage" fg={theme().muted} wrapMode="none" truncate>
-                                {usage()}
-                              </text>
-                            </Show>
-                            <Show when={command().length > 0 && hints().command}>
-                              <text id="run-direct-footer-hint-command" fg={theme().text} wrapMode="none" truncate>
-                                {command()} <span style={{ fg: theme().muted }}>commands</span>
-                              </text>
-                            </Show>
-                          </>
-                        }
-                      >
-                        <text id="run-direct-footer-hint-shell" fg={theme().text} wrapMode="none" truncate>
-                          esc <span style={{ fg: theme().muted }}>exit shell mode</span>
-                        </text>
-                      </Show>
+                    <box id="run-direct-footer-body" width="100%" flexGrow={1} flexShrink={1} flexDirection="column">
+                      <Switch>
+                        <Match when={active().type === "prompt" && route().type === "composer"}>
+                          <RunPromptBody
+                            theme={theme}
+                            background={() => runTheme().background}
+                            placeholder={composer.placeholder}
+                            onSubmit={composer.onSubmit}
+                            onKeyDown={composer.onKeyDown}
+                            onContentChange={composer.onContentChange}
+                            bind={composer.bind}
+                          />
+                        </Match>
+                        <Match when={selectingSubagent()}>
+                          <RunSubagentSelectBody
+                            theme={theme}
+                            tabs={tabs}
+                            current={selected}
+                            onClose={closePanel}
+                            onSelect={openTab}
+                            onRows={setSubagentMenuRows}
+                          />
+                        </Match>
+                        <Match when={selectingQueued()}>
+                          <RunQueuedPromptSelectBody
+                            theme={theme}
+                            prompts={queuedPrompts}
+                            onClose={closePanel}
+                            onDelete={(item) => void props.onQueuedRemove(item.messageID)}
+                            onEdit={async (item) => {
+                              if (!(await props.onQueuedRemove(item.messageID))) return
+                              closePanel()
+                              queueMicrotask(() => composer.replacePrompt(item.prompt))
+                            }}
+                            onRows={setSubagentMenuRows}
+                          />
+                        </Match>
+                        <Match when={commanding()}>
+                          <RunCommandMenuBody
+                            theme={theme}
+                            commands={props.commands}
+                            subagents={tabs}
+                            queued={queuedPrompts}
+                            variants={props.variants}
+                            variantCycle={variantCycle()}
+                            onClose={closePanel}
+                            onModel={openModel}
+                            onEditor={() => {
+                              closePanel()
+                              void composer.openEditor()
+                            }}
+                            onSkill={openSkillMenu}
+                            onSubagent={openSubagentMenu}
+                            onQueued={openQueuedMenu}
+                            onVariant={openVariant}
+                            onVariantCycle={() => {
+                              props.onCycle()
+                              closePanel()
+                            }}
+                            onCommand={(name) => {
+                              composer.submitText(`/${name}`)
+                              closePanel()
+                            }}
+                            onNew={() => {
+                              composer.submitText("/new")
+                              closePanel()
+                            }}
+                            onExit={props.onExit}
+                          />
+                        </Match>
+                        <Match when={skilling()}>
+                          <RunSkillSelectBody
+                            theme={theme}
+                            commands={props.commands}
+                            onClose={closePanel}
+                            onSelect={(name) => {
+                              composer.replacePrompt({
+                                text: `/${name} `,
+                                parts: [],
+                                command: {
+                                  name,
+                                  arguments: "",
+                                },
+                              })
+                              closePanel()
+                            }}
+                          />
+                        </Match>
+                        <Match when={modeling()}>
+                          <RunModelSelectBody
+                            theme={theme}
+                            providers={props.providers}
+                            current={props.currentModel}
+                            onClose={closePanel}
+                            onSelect={(model) => {
+                              props.onModelSelect(model)
+                              closePanel()
+                            }}
+                          />
+                        </Match>
+                        <Match when={varianting()}>
+                          <RunVariantSelectBody
+                            theme={theme}
+                            variants={props.variants}
+                            current={props.currentVariant}
+                            onClose={closePanel}
+                            onSelect={(variant) => {
+                              props.onVariantSelect(variant)
+                              closePanel()
+                            }}
+                          />
+                        </Match>
+                        <Match when={active().type === "permission"}>
+                          <RunPermissionBody
+                            request={permission()!.request}
+                            theme={theme()}
+                            block={block()}
+                            diffStyle={props.diffStyle}
+                            onReply={props.onPermissionReply}
+                          />
+                        </Match>
+                        <Match when={active().type === "question"}>
+                          <RunQuestionBody
+                            request={question()!.request}
+                            theme={theme()}
+                            onReply={props.onQuestionReply}
+                            onReject={props.onQuestionReject}
+                          />
+                        </Match>
+                      </Switch>
                     </box>
                   </box>
-                }
-              >
-                <box id="run-direct-footer-complete-shell" width="100%" flexDirection="column" flexShrink={0}>
-                  <RunFooterMenu
-                    id="run-direct-footer-complete"
-                    theme={theme}
-                    items={composer.options}
-                    selected={composer.selected}
-                    offset={composer.offset}
-                    rows={composer.rows}
-                    limit={FOOTER_MENU_ROWS}
-                    paddingLeft={2}
-                  />
-                  <box
-                    id="run-direct-footer-complete-bottom"
-                    width="100%"
-                    height={1}
-                    border={["left"]}
-                    borderColor={theme().border}
-                    backgroundColor="transparent"
-                    customBorderChars={{
-                      ...EMPTY_BORDER,
-                      vertical: "╹",
-                    }}
-                    flexShrink={0}
-                  >
-                    <box
-                      id="run-direct-footer-complete-bottom-fill"
-                      width="100%"
-                      height={1}
-                      border={["bottom"]}
-                      borderColor={theme().surface}
-                      backgroundColor="transparent"
-                      customBorderChars={{
-                        ...EMPTY_BORDER,
-                        horizontal: "▀",
-                      }}
-                    />
-                  </box>
                 </box>
-              </Show>
+              )}
+            </For>
+
+            <Show when={!panel() && menu()}>
+              <RunFooterMenu
+                id="run-direct-footer-complete"
+                theme={theme}
+                items={composer.options}
+                selected={composer.selected}
+                offset={composer.offset}
+                rows={composer.rows}
+                limit={FOOTER_MENU_ROWS}
+                border={false}
+                paddingLeft={0}
+              />
+            </Show>
+
+            <Show when={!panel() && !menu()}>
+              <box
+                id="run-direct-footer-statusline"
+                width="100%"
+                height={1}
+                flexDirection="row"
+                gap={0}
+                flexShrink={0}
+                backgroundColor={statuslineBackground()}
+              >
+                <box
+                  id="run-direct-footer-statusline-mode"
+                  paddingLeft={1}
+                  paddingRight={1}
+                  backgroundColor={theme().statusAccent}
+                  flexShrink={0}
+                >
+                  <text wrapMode="none" truncate>
+                    <span style={{ fg: modeColor(), bold: true }}>{modeLabel()}</span>
+                  </text>
+                </box>
+
+                <box
+                  id="run-direct-footer-statusline-main"
+                  flexDirection="row"
+                  gap={1}
+                  flexGrow={1}
+                  flexShrink={1}
+                  minWidth={12}
+                  paddingLeft={1}
+                  paddingRight={1}
+                  backgroundColor="transparent"
+                >
+                  <Show when={busy() && !exiting()}>
+                    <box id="run-direct-footer-status-spinner" flexShrink={0}>
+                      <spinner color={spin().color} frames={spin().frames} interval={40} />
+                    </box>
+                  </Show>
+
+                  <text
+                    id="run-direct-footer-statusline-text"
+                    fg={statusColor()}
+                    wrapMode="none"
+                    truncate
+                    flexGrow={1}
+                    flexShrink={1}
+                  >
+                    <Show when={busy() && !exiting()} fallback={statusText()}>
+                      <Show when={interruptLabel()}>
+                        {(label) => <span style={{ fg: armed() ? statusColor() : theme().muted }}>{label()} </span>}
+                      </Show>
+                      {statusText()}
+                    </Show>
+                  </text>
+                </box>
+
+                <Show when={activityMeta().length > 0}>
+                  <box
+                    id="run-direct-footer-statusline-meta"
+                    paddingRight={1}
+                    backgroundColor="transparent"
+                    flexShrink={1}
+                  >
+                    <text fg={theme().muted} wrapMode="none" truncate>
+                      {activityMeta()}
+                    </text>
+                  </box>
+                </Show>
+
+                <Show when={responsive().statusline.showModel && modelStatus()}>
+                  {(info) => (
+                    <box
+                      id="run-direct-footer-statusline-model"
+                      paddingRight={1}
+                      backgroundColor="transparent"
+                      flexShrink={0}
+                    >
+                      <text fg={theme().text} wrapMode="none">
+                        {info().model}
+                        <Show when={info().provider}>
+                          {(provider) => <span style={{ fg: theme().muted }}> {provider()}</span>}
+                        </Show>
+                        <Show when={info().variant}>
+                          {(variant) => (
+                            <>
+                              <span style={{ fg: theme().warning, bold: true }}> {variant()}</span>
+                            </>
+                          )}
+                        </Show>
+                      </text>
+                    </box>
+                  )}
+                </Show>
+
+                <For each={contextHints()}>
+                  {(hint, index) => (
+                    <box
+                      id={`run-direct-footer-statusline-${hint.kind}`}
+                      paddingRight={1}
+                      backgroundColor="transparent"
+                      flexShrink={0}
+                      maxWidth={24}
+                    >
+                      <text fg={theme().text} wrapMode="none" truncate>
+                        <Show when={index() > 0 || ((hasActivityMeta() || hasModelStatus()) && index() === 0)}>
+                          {sectionSeparator()}
+                        </Show>
+                        <span style={{ fg: theme().text }}>{hint.key}</span>{" "}
+                        <span style={{ fg: theme().muted }}>{hint.label}</span>
+                      </text>
+                    </box>
+                  )}
+                </For>
+
+                <Show when={commandHint()}>
+                  {(hint) => (
+                    <box
+                      id="run-direct-footer-statusline-hint"
+                      paddingRight={1}
+                      backgroundColor="transparent"
+                      flexShrink={0}
+                      maxWidth={18}
+                    >
+                      <text fg={theme().text} wrapMode="none" truncate>
+                        <Show when={hasActivityMeta() || hasModelStatus() || hasContextHints()}>
+                          {sectionSeparator()}
+                        </Show>
+                        <span style={{ fg: theme().text }}>{hint().key}</span>{" "}
+                        <span style={{ fg: theme().muted }}>{hint().label}</span>
+                      </text>
+                    </box>
+                  )}
+                </Show>
+              </box>
             </Show>
           </box>
         }
@@ -749,7 +973,7 @@ export function RunFooterView(props: RunFooterViewProps) {
             index={selectedIndex}
             total={() => tabs().length}
             detail={detail}
-            width={() => term().width}
+            width={width}
             diffStyle={props.diffStyle}
             onCycle={cycleTab}
             onClose={closeTab}
