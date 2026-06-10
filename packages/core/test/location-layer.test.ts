@@ -1,10 +1,11 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Equal, Hash, Layer, Schema } from "effect"
 import { Tool } from "@opencode-ai/core/public"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { Location } from "@opencode-ai/core/location"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -18,8 +19,7 @@ import { Global } from "../src/global"
 import { ModelsDev } from "../src/models-dev"
 import { Npm } from "../src/npm"
 import { Project } from "../src/project"
-import { ProjectReference } from "../src/project-reference"
-import { LocationSearch } from "../src/location-search"
+import { Reference } from "../src/reference"
 import { ToolRegistry } from "../src/tool/registry"
 import { ApplicationTools } from "../src/tool/application-tools"
 
@@ -28,6 +28,7 @@ const it = testEffect(
   Layer.merge(
     applicationTools,
     LocationServiceMap.layer.pipe(
+      Layer.provide(applicationTools),
       Layer.provide(
         Layer.mergeAll(
           Project.defaultLayer,
@@ -44,6 +45,16 @@ const it = testEffect(
 )
 
 describe("LocationServiceMap", () => {
+  it.effect("compares equivalent location refs by value", () =>
+    Effect.sync(() => {
+      const directory = AbsolutePath.make("/project")
+      expect(Equal.equals(Location.Ref.make({ directory }), Location.Ref.make({ directory }))).toBe(true)
+      expect(Hash.hash(Location.Ref.make({ directory }))).toBe(
+        Hash.hash(Location.Ref.make({ directory, workspaceID: undefined })),
+      )
+    }),
+  )
+
   it.live("isolates location state while sharing location policy with catalog", () =>
     Effect.acquireRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
@@ -71,8 +82,7 @@ describe("LocationServiceMap", () => {
           const update = (directory: string) =>
             Effect.gen(function* () {
               yield* PluginBoot.Service.use((boot) => boot.wait())
-              yield* ProjectReference.Service
-              yield* LocationSearch.Service
+              yield* Reference.Service
               const catalog = yield* Catalog.Service
               const transform = yield* catalog.transform()
               yield* transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
@@ -80,7 +90,10 @@ describe("LocationServiceMap", () => {
                 providers: yield* catalog.provider.all(),
                 tools: yield* toolDefinitions(yield* ToolRegistry.Service),
               }
-            }).pipe(Effect.scoped, Effect.provide(LocationServiceMap.get({ directory: AbsolutePath.make(directory) })))
+            }).pipe(
+              Effect.scoped,
+              Effect.provide(LocationServiceMap.get(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+            )
 
           const blockedState = yield* update(blocked.path)
           expect(blockedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(false)

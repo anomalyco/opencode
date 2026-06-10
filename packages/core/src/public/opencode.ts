@@ -32,7 +32,8 @@ class SessionModelValidation extends Context.Service<
   }
 >()("@opencode/public/OpenCode/SessionModelValidation") {}
 
-const LocationServicesLayer = LocationServiceMap.layer
+const ApplicationToolsLayer = ApplicationTools.layer
+const LocationServicesLayer = LocationServiceMap.layer.pipe(Layer.provide(ApplicationToolsLayer))
 const SessionModelValidationLayer = Layer.effect(
   SessionModelValidation,
   Effect.gen(function* () {
@@ -78,8 +79,6 @@ const SessionsLayer = Layer.merge(
   ),
   SessionModelValidationLayer,
 ).pipe(Layer.provide(LocationServicesLayer))
-const ApplicationToolsLayer = ApplicationTools.layer
-
 // TODO: Accept explicit storage so tests and embeddings can select disposable or application-owned persistence.
 export const layer = Layer.effect(
   Service,

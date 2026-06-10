@@ -1,7 +1,7 @@
 export * as BashTool from "./bash"
 
 import path from "path"
-import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/llm"
 import { Duration, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { Config } from "../config"
@@ -119,7 +119,7 @@ export const layer = Layer.effectDiscard(
           description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. Timeout values are milliseconds (default: ${DEFAULT_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows.`,
           input: Input,
           output: Output,
-          toModelOutput: ({ output }) => [toolText({ type: "text", text: modelOutput(output) })],
+          toModelOutput: ({ output }) => [{ type: "text", text: modelOutput(output) }],
           execute: (input, context) =>
             Effect.gen(function* () {
               const source = {
