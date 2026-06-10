@@ -74,6 +74,7 @@ const getBase = (): Configuration => ({
   linux: {
     icon: `resources/icons`,
     category: "Development",
+    executableName: "opencode-desktop",
     target: ["AppImage", "deb", "rpm"],
   },
 })

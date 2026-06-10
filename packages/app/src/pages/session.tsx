@@ -38,6 +38,7 @@ import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
+import { usePlatform } from "@/context/platform"
 import { useSDK } from "@/context/sdk"
 import { useServerSDK } from "@/context/server-sdk"
 import { useSettings } from "@/context/settings"
@@ -51,6 +52,7 @@ import {
   createSizing,
   focusTerminalById,
   shouldFocusTerminalOnKeyDown,
+  shouldShowFileTree,
 } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
@@ -194,6 +196,7 @@ export default function Page() {
   const sdk = useSDK()
   const serverSDK = useServerSDK()
   const settings = useSettings()
+  const platform = usePlatform()
   const prompt = usePrompt()
   const comments = useComments()
   const terminal = useTerminal()
@@ -271,7 +274,16 @@ export default function Page() {
   const isV2NewSessionPage = () =>
     shouldUseV2NewSessionPage({ newLayoutDesigns: newSessionDesign(), sessionID: params.id })
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened() && !isV2NewSessionPage())
-  const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened() && !isV2NewSessionPage())
+  const desktopFileTreeOpen = createMemo(
+    () =>
+      isDesktop() &&
+      !isV2NewSessionPage() &&
+      shouldShowFileTree({
+        desktopV2: platform.platform === "desktop" && settings.general.newLayoutDesigns(),
+        showFileTree: settings.general.showFileTree(),
+        opened: layout.fileTree.opened(),
+      }),
+  )
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
   const sessionPanelWidth = createMemo(() => {
     if (!desktopSidePanelOpen()) return "100%"
