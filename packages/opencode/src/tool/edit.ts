@@ -680,6 +680,9 @@ export function trimDiff(diff: string): string {
 }
 
 export function replace(content: string, oldString: string, newString: string, replaceAll = false): string {
+  if (replaceAll && oldString.trim().length < 3) {
+    throw new Error("replaceAll with a string shorter than 3 characters is blocked. oldString must be at least 3 non-whitespace characters to prevent accidental mass replacement.")
+  }
   if (oldString === newString) {
     throw new Error("No changes to apply: oldString and newString are identical.")
   }

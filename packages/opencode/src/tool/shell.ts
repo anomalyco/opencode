@@ -489,6 +489,11 @@ export const ShellTool = Tool.define(
       const code: number | null = yield* Effect.scoped(
         Effect.gen(function* () {
           yield* Effect.addFinalizer(closeSink)
+          const cmdStr = input.command.trim()
+          if (/^rm\s+-rf\s+(\/|~[/\\]|[*?])/i.test(cmdStr))
+            return yield* Effect.fail(new Error("Destructive command blocked: rm -rf on root/home/glob. Use targeted paths instead."))
+          if (process.platform === "win32" && /^del\s+\/f\s+\/s/i.test(cmdStr))
+            return yield* Effect.fail(new Error("Destructive command blocked: del /f /s on Windows. Use targeted paths instead."))
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
           yield* Effect.forkScoped(

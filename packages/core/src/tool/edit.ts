@@ -169,6 +169,11 @@ export const layer = Layer.effectDiscard(
                       `Could not find oldString in the file. It must match exactly, including whitespace and indentation.\n\nFile preview (first 15 lines):\n${preview}`,
                   })
                 }
+                if (input.replaceAll === true && input.oldString.trim().length < 3) {
+                  return yield* new ToolFailure({
+                    message: `replaceAll with a string shorter than 3 characters is blocked. oldString must be at least 3 non-whitespace characters to prevent accidental mass replacement.`,
+                  })
+                }
                 if (replacements > 1 && input.replaceAll !== true) {
                   return yield* new ToolFailure({
                     message:
