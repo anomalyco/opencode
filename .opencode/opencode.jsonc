@@ -8,7 +8,7 @@
       "description": "Use for Effect v4 and effect-smol implementation details",
     },
     "opencode-local": {
-      "path": "~/.local/opencode",
+      "path": "~/.local/share/opencode",
       "description": "Contains opencode logs and data",
     },
   },
