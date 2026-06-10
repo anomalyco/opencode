@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   allExpandedFileTreeDirectories,
   buildFileTree,
+  compareFileTreeNodes,
   fileTreeFileSelection,
   flattenFileTree,
   moveFileTreeSelection,
@@ -57,6 +58,42 @@ describe("diff viewer file tree utilities", () => {
       "  file:alpha.ts",
       "  file:file.ts",
       "file:z-file.ts",
+    ])
+  })
+
+  test("sorts files with numbers numerically", () => {
+    const tree = buildFileTree([
+      { file: "lesson-10.ts" },
+      { file: "lesson-1.ts" },
+      { file: "lesson-11.ts" },
+      { file: "lesson-2.ts" },
+      { file: "lesson-3.ts" },
+    ])
+
+    const rows = flattenFileTree(tree)
+    expect(rows.map((row) => row.name)).toEqual([
+      "lesson-1.ts",
+      "lesson-2.ts",
+      "lesson-3.ts",
+      "lesson-10.ts",
+      "lesson-11.ts",
+    ])
+  })
+
+  test("sorts directories with numbers numerically", () => {
+    const tree = buildFileTree([
+      { file: "src/dir-10/file.ts" },
+      { file: "src/dir-1/file.ts" },
+      { file: "src/dir-11/file.ts" },
+      { file: "src/dir-2/file.ts" },
+    ])
+
+    const rows = flattenFileTree(tree)
+    expect(rows.map((row) => row.name)).toEqual([
+      "src/dir-1",
+      "src/dir-2",
+      "src/dir-10",
+      "src/dir-11",
     ])
   })
 
