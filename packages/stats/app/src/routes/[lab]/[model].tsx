@@ -41,7 +41,7 @@ const modelHeaderLinks: readonly HeaderLink[] = [
   { href: "#peers", label: "Peers" },
 ]
 const modelFooterLinks: readonly HeaderLink[] = [
-  { href: import.meta.env.BASE_URL, label: "Stats Home" },
+  { href: import.meta.env.BASE_URL, label: "Data Home" },
   { href: `${import.meta.env.BASE_URL}#top-models`, label: "Top Models" },
   { href: `${import.meta.env.BASE_URL}#leaderboard`, label: "Leaderboard" },
   { href: `${import.meta.env.BASE_URL}#session-cost`, label: "Session Cost" },
@@ -110,10 +110,10 @@ export default function StatsModel() {
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const modelName = createMemo(() => catalogEntry()?.name ?? stats()?.model ?? modelParam() ?? "Model")
   const labName = createMemo(() => formatCatalogLabName(catalogEntry()?.lab ?? stats()?.provider ?? labParam()))
-  const modelTitle = createMemo(() => `${modelName()} Stats`)
+  const modelTitle = createMemo(() => `${modelName()} Data`)
   const modelDescription = createMemo(() =>
     stats()
-      ? `${modelName()} usage, rank, token mix, cost, geo breakdown, and peer stats across OpenCode.`
+      ? `${modelName()} usage, rank, token mix, cost, geo breakdown, and peer data across OpenCode.`
       : `${modelName()} model facts, limits, and OpenCode usage availability.`,
   )
   const modelUrl = createMemo(() =>
@@ -183,15 +183,15 @@ function ModelLoading() {
         <div data-slot="model-hero-grid">
           <div data-slot="model-hero-copy">
             <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-              Stats
+              Data
             </a>
-            <h1>Model Stats</h1>
+            <h1>Model Data</h1>
             <p>Reading model aggregates from model_stat.</p>
           </div>
         </div>
       </section>
       <section data-section="model-panel">
-        <ModelEmptyState title="Loading model stats" description="Reading the model profile." />
+        <ModelEmptyState title="Loading model data" description="Reading the model profile." />
       </section>
     </>
   )
@@ -204,7 +204,7 @@ function ModelNotFound(props: { lab: string; model: string }) {
         <div data-slot="model-hero-grid">
           <div data-slot="model-hero-copy">
             <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-              Stats
+              Data
             </a>
             <h1>{props.model || "Model"}</h1>
             <p>No model facts or model_stat rows matched {props.lab ? `${props.lab}/${props.model}` : props.model}.</p>
@@ -225,7 +225,7 @@ function ModelHero(props: { data: StatsModelData | null; catalog: ModelCatalogEn
   return (
     <section id="overview" data-section="model-hero">
       <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-        Stats
+        Data
       </a>
       <div data-slot="model-hero-grid">
         <div data-slot="model-hero-copy">
@@ -279,7 +279,7 @@ function ModelCatalogCallout(props: { catalog: ModelCatalogEntry | null }) {
     <div data-component="model-rank-panel">
       <span>Model Profile</span>
       <strong>{props.catalog?.releaseDate ? formatCatalogDate(props.catalog.releaseDate) : "Listed"}</strong>
-      <p>No OpenCode usage in the current stats window.</p>
+      <p>No OpenCode usage in the current data window.</p>
     </div>
   )
 }
@@ -446,7 +446,7 @@ function ModelEfficiencySection(props: { data: StatsModelData | null }) {
       <Show
         when={props.data}
         fallback={
-          <ModelEmptyState title="No efficiency data" description="Cost and cache stats appear after usage lands." />
+          <ModelEmptyState title="No efficiency data" description="Efficiency data appears after usage lands." />
         }
       >
         {(data) => (

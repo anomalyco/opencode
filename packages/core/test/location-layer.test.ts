@@ -18,8 +18,7 @@ import { Global } from "../src/global"
 import { ModelsDev } from "../src/models-dev"
 import { Npm } from "../src/npm"
 import { Project } from "../src/project"
-import { ProjectReference } from "../src/project-reference"
-import { LocationSearch } from "../src/location-search"
+import { Reference } from "../src/reference"
 import { ToolRegistry } from "../src/tool/registry"
 import { ApplicationTools } from "../src/tool/application-tools"
 
@@ -28,6 +27,7 @@ const it = testEffect(
   Layer.merge(
     applicationTools,
     LocationServiceMap.layer.pipe(
+      Layer.provide(applicationTools),
       Layer.provide(
         Layer.mergeAll(
           Project.defaultLayer,
@@ -71,8 +71,7 @@ describe("LocationServiceMap", () => {
           const update = (directory: string) =>
             Effect.gen(function* () {
               yield* PluginBoot.Service.use((boot) => boot.wait())
-              yield* ProjectReference.Service
-              yield* LocationSearch.Service
+              yield* Reference.Service
               const catalog = yield* Catalog.Service
               const transform = yield* catalog.transform()
               yield* transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))

@@ -1,7 +1,6 @@
 import { EventV2 } from "@opencode-ai/core/event"
 import { Schema } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
-import * as Log from "@opencode-ai/core/util/log"
 import { Process } from "@/util/process"
 
 const SUPPORTED_IDES = [
@@ -11,8 +10,6 @@ const SUPPORTED_IDES = [
   { name: "Cursor" as const, cmd: "cursor" },
   { name: "VSCodium" as const, cmd: "codium" },
 ]
-
-const log = Log.create({ service: "ide" })
 
 export const Event = {
   Installed: EventV2.define({
@@ -52,12 +49,6 @@ export async function install(ide: (typeof SUPPORTED_IDES)[number]["name"]) {
   })
   const stdout = p.stdout.toString()
   const stderr = p.stderr.toString()
-
-  log.info("installed", {
-    ide,
-    stdout,
-    stderr,
-  })
 
   if (p.code !== 0) {
     throw new InstallFailedError({ stderr })

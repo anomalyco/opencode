@@ -17,13 +17,10 @@ import { TuiKeybind } from "@opencode-ai/tui/config/keybind"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import { Filesystem } from "@/util/filesystem"
-import * as Log from "@opencode-ai/core/util/log"
 import { ConfigVariable } from "@/config/variable"
 import { Npm } from "@opencode-ai/core/npm"
 import { FormatError, FormatUnknownError } from "@/cli/error"
 import { TuiConfig } from "@opencode-ai/tui/config"
-
-const log = Log.create({ service: "tui.config" })
 
 export const Info = TuiConfig.Info
 export type Info = TuiConfig.Info
@@ -69,17 +66,12 @@ function normalize(raw: Record<string, unknown>) {
   }
 }
 
-function dropUnknownKeybinds(input: Record<string, unknown>, configFilepath: string) {
+function dropUnknownKeybinds(input: Record<string, unknown>) {
   if (!isRecord(input.keybinds)) return input
 
   const invalid = TuiKeybind.unknownKeys(input.keybinds)
   if (!invalid.length) return input
 
-  log.warn("ignored unknown tui keybinds", {
-    path: configFilepath,
-    keybinds: invalid,
-    hint: "Remove these entries or rename them to keys from the tui.json schema.",
-  })
   return {
     ...input,
     keybinds: Object.fromEntries(Object.entries(input.keybinds).filter(([key]) => !invalid.includes(key))),
@@ -111,7 +103,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       if (!isRecord(data)) return {} as Info
       // Flatten a nested "tui" key so users who wrote `{ "tui": { ... } }` inside tui.json
       // (mirroring the old opencode.json shape) still get their settings applied.
-      const normalized = dropUnknownKeybinds(normalize(data), configFilepath)
+      const normalized = dropUnknownKeybinds(normalize(data))
       const parsed = ConfigParse.schema(Info, normalized, configFilepath)
       const validated = parsed.attention?.sounds
         ? {
@@ -127,15 +119,10 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       // catchCause (not tapErrorCause + orElseSucceed) because JSONC parsing and validation
       // can sync-throw — those become defects, which orElseSucceed wouldn't catch.
       Effect.catchCause((cause) =>
-        Effect.sync(() => {
-          const error = Cause.squash(cause)
-          const reason = FormatError(error) ?? FormatUnknownError(error)
-          log.warn("skipping invalid tui config", {
-            path: configFilepath,
-            reason,
-          })
-          return {} as Info
-        }),
+        Effect.logWarning("skipping invalid tui config", {
+          path: configFilepath,
+          reason: FormatError(Cause.squash(cause)) ?? FormatUnknownError(Cause.squash(cause)),
+        }).pipe(Effect.as({} as Info)),
       ),
     )
 
@@ -146,19 +133,14 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       // broken-config path degrades gracefully rather than crashing TUI startup.
       const text = yield* afs.readFileStringSafe(filepath).pipe(
         Effect.catchCause((cause) =>
-          Effect.sync(() => {
-            const error = Cause.squash(cause)
-            const reason = FormatError(error) ?? FormatUnknownError(error)
-            log.warn("failed to read tui config", {
-              path: filepath,
-              reason,
-            })
-            return undefined
-          }),
+          Effect.logWarning("failed to read tui config", {
+            path: filepath,
+            reason: FormatError(Cause.squash(cause)) ?? FormatUnknownError(Cause.squash(cause)),
+          }).pipe(Effect.as(undefined)),
         ),
       )
       if (!text) return {} as Info
-      log.info("loading tui config", { path: filepath })
+      yield* Effect.logInfo("loading tui config", { path: filepath })
       return yield* load(text, filepath)
     })
 
@@ -167,7 +149,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
       const data = yield* loadFile(file)
       if (Object.keys(data).length) {
         appliedOrder += 1
-        log.info("applying tui config", { path: file, order: appliedOrder })
+        yield* Effect.logInfo("applying tui config", { path: file, order: appliedOrder })
       }
       acc.result = mergeDeep(acc.result, data)
       if (!data.plugin?.length) return
@@ -205,7 +187,7 @@ const loadState = Effect.fn("TuiConfig.loadState")(function* (ctx: { directory: 
   if (Flag.OPENCODE_TUI_CONFIG) {
     const configFile = Flag.OPENCODE_TUI_CONFIG
     yield* mergeFile(acc, configFile)
-    log.debug("loaded custom tui config", { path: configFile })
+    yield* Effect.logDebug("loaded custom tui config", { path: configFile })
   }
 
   // 3. Project tui files, applied root-first so the closest file wins.

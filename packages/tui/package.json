@@ -1,12 +1,12 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/tui",
-  "version": "0.0.0",
+  "version": "1.17.0",
   "private": true,
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "test": "bun test --timeout 30000",
+    "test": "bun test --timeout 30000 --only-failures",
     "typecheck": "tsgo --noEmit"
   },
   "exports": {
@@ -15,6 +15,7 @@
     "./config": "./src/config/index.tsx",
     "./context/args": "./src/context/args.tsx",
     "./context/epilogue": "./src/context/epilogue.tsx",
+    "./context/exit": "./src/context/exit.tsx",
     "./context/kv": "./src/context/kv.tsx",
     "./context/project": "./src/context/project.tsx",
     "./context/runtime": "./src/context/runtime.tsx",
@@ -26,7 +27,6 @@
     "./attention": "./src/attention.ts",
     "./editor": "./src/editor.ts",
     "./editor-zed": "./src/editor-zed.ts",
-    "./context/aggregate-failures": "./src/context/aggregate-failures.ts",
     "./runtime": "./src/runtime.tsx",
     "./terminal-win32": "./src/terminal-win32.ts",
     "./config/keybind": "./src/config/keybind.ts",
