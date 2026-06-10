@@ -1,7 +1,7 @@
 export * as FileSystemSearch from "./search"
 
 import path from "path"
-import { Context, Effect, Fiber, Layer, Scope } from "effect"
+import { Context, Effect, Layer, Scope } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "../filesystem"
@@ -28,26 +28,22 @@ export const ripgrepLayer = Layer.effect(
     const state = {
       files: [] as string[],
       directories: [] as string[],
-      scan: undefined as Fiber.Fiber<void, never> | undefined,
     }
-    state.scan = yield* ripgrep.find({ cwd: location.directory, pattern: "*", limit: 100_000 }).pipe(
-      Effect.tap((result) =>
-        Effect.sync(() => {
-          state.files = result.map((item) => item.path)
-          state.directories = Array.from(
-            new Set(
-              state.files.flatMap((file) => {
-                const parts = file.split("/")
-                return parts.slice(0, -1).map((_, index) => parts.slice(0, index + 1).join("/") + path.sep)
-              }),
-            ),
-          )
-        }),
-      ),
-      Effect.orDie,
-      Effect.asVoid,
-      Effect.forkIn(scope),
-    )
+    const directories = new Set<string>()
+    yield* ripgrep
+      .find({
+        cwd: location.directory,
+        pattern: "*",
+        limit: location.vcs ? Number.MAX_SAFE_INTEGER : 100_000,
+        onEntry: (entry) =>
+          Effect.sync(() => {
+            state.files.push(entry.path)
+            const parts = entry.path.split("/")
+            parts.slice(0, -1).forEach((_, index) => directories.add(parts.slice(0, index + 1).join("/") + path.sep))
+            state.directories = Array.from(directories)
+          }),
+      })
+      .pipe(Effect.orDie, Effect.asVoid, Effect.forkIn(scope))
     return Service.of({
       glob: (input) =>
         Effect.gen(function* () {
@@ -104,7 +100,6 @@ export const ripgrepLayer = Layer.effect(
         }),
       find: (input) =>
         Effect.gen(function* () {
-          if (input.query) yield* Fiber.join(state.scan!)
           const items =
             input.type === "file"
               ? state.files
@@ -202,26 +197,40 @@ export const fffLayer = Layer.effect(
             if (input.type === "file") {
               const found = result.value.fileSearch(input.query.trim(), options)
               if (!found.ok) throw found.error
-              return found.value.items.map((item) => ({ path: item.relativePath, type: "file" as const }))
+              return found.value.items.map((item, index) => ({
+                path: item.relativePath,
+                type: "file" as const,
+                score: found.value.scores[index]?.total ?? 0,
+              }))
             }
             if (input.type === "directory") {
               const found = result.value.directorySearch(input.query.trim(), options)
               if (!found.ok) throw found.error
-              return found.value.items.map((item) => ({ path: item.relativePath, type: "directory" as const }))
+              return found.value.items.map((item, index) => ({
+                path: item.relativePath,
+                type: "directory" as const,
+                score: found.value.scores[index]?.total ?? 0,
+              }))
             }
             const found = result.value.mixedSearch(input.query.trim(), options)
             if (!found.ok) throw found.error
-            return found.value.items.map((item) => ({ path: item.item.relativePath, type: item.type }))
-          })()
-          return items.map((item) => {
-            const relative = item.path.replaceAll("\\", "/").replace(/\/$/, "")
-            const absolute = path.resolve(location.directory, relative)
-            return new FileSystem.Entry({
-              path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
+            return found.value.items.map((item, index) => ({
+              path: item.item.relativePath,
               type: item.type,
-              mime: item.type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
+              score: found.value.scores[index]?.total ?? 0,
+            }))
+          })()
+          return items
+            .sort((a, b) => b.score - a.score || a.path.length - b.path.length)
+            .map((item) => {
+              const relative = item.path.replaceAll("\\", "/").replace(/\/$/, "")
+              const absolute = path.resolve(location.directory, relative)
+              return new FileSystem.Entry({
+                path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
+                type: item.type,
+                mime: item.type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
+              })
             })
-          })
         }),
     })
   }),
