@@ -27,6 +27,52 @@ function emitTwice(events: ReturnType<typeof createEventSource>, payload: Event)
   events.emit(event)
 }
 
+test("sync v2 refreshes references after updates", async () => {
+  const events = createEventSource()
+  let requests = 0
+  const calls = createFetch((url) => {
+    if (url.pathname !== "/api/reference") return
+    requests++
+    return json({
+      location: { directory, project: { id: "proj_test", directory } },
+      data: requests === 1 ? [] : [{ name: "docs", path: "/docs", source: { type: "local", path: "/docs" } }],
+    })
+  })
+  let sync!: ReturnType<typeof useSyncV2>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useSyncV2()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+        <ProjectProvider>
+          <SyncProviderV2>
+            <Probe />
+          </SyncProviderV2>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await mounted
+    await wait(() => requests === 1)
+    events.emit(global({ id: "evt_reference_1", type: "reference.updated", properties: {} }))
+    await wait(() => sync.data.reference.length === 1)
+    expect(sync.data.reference[0]?.name).toBe("docs")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("sync v2 settles pending tools when a live failure arrives", async () => {
   const events = createEventSource()
   const calls = createFetch()

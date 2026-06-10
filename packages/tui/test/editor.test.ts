@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test"
-import { openEditor } from "../src/editor"
+import { normalizePromptContent, openEditor } from "../src/editor"
 
 const editor = process.env.EDITOR
 const visual = process.env.VISUAL
@@ -20,4 +20,13 @@ test("rejects when the external editor cannot start", async () => {
   }
 
   await expect(openEditor({ value: "original", renderer: renderer as never })).rejects.toThrow()
+})
+
+test("normalizes a single trailing editor newline for one-line prompts", () => {
+  expect(normalizePromptContent("hello\n")).toBe("hello")
+  expect(normalizePromptContent("hello\r\n")).toBe("hello")
+})
+
+test("preserves multiline prompts that end with a newline", () => {
+  expect(normalizePromptContent("hello\nworld\n")).toBe("hello\nworld\n")
 })

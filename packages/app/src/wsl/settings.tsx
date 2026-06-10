@@ -76,11 +76,7 @@ export function WslServerSettings(props: {
   }))
 
   const remove = (key: ServerConnection.Key) => {
-    if (!api) return
-    request.mutate(async () => {
-      await api.removeServer(key)
-      await props.controller.handleRemove(key)
-    })
+    request.mutate(() => props.controller.handleRemove(key))
   }
 
   return (

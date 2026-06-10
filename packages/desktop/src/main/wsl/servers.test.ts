@@ -6,6 +6,10 @@ import {
   pollWslHealth,
   wslServerIdsToStartOnInitialize,
 } from "./startup"
+import { createWslServersController, type WslServerConfig } from "./servers"
+
+let persistedServers: WslServerConfig[] = []
+let releaseOpencodeResolve: (() => void) | undefined
 
 test("starts every configured WSL server on initialization", () => {
   expect(
@@ -91,3 +95,73 @@ test("derives a required Windows restart from the post-install runtime probe", (
   expect(pendingRestartAfterWslInstall({ available: false, version: null, error: "WSL unavailable" })).toBe(true)
   expect(pendingRestartAfterWslInstall({ available: true, version: "WSL version: 2.6.1", error: null })).toBe(false)
 })
+
+test("ignores stale background OpenCode checks after removing a WSL server", async () => {
+  persistedServers = []
+  releaseOpencodeResolve = undefined
+  const controller = createWslServersController(
+    "1.16.2",
+    async () => ({
+      listener: {
+        stop: () => undefined,
+        onExit: () => undefined,
+      },
+      url: "http://127.0.0.1:4096",
+      username: "opencode",
+      password: "secret",
+    }),
+    testControllerOptions(),
+  )
+
+  await controller.addServer("Debian")
+  await waitFor(() => !!releaseOpencodeResolve)
+  await controller.removeServer("wsl:Debian")
+  releaseOpencodeResolve?.()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  expect(controller.getState().servers).toEqual([])
+  expect(controller.getState().opencodeChecks).toEqual({})
+})
+
+test("ignores stale startup OpenCode checks after removing a WSL server", async () => {
+  persistedServers = [{ id: "wsl:Debian", distro: "Debian" }]
+  releaseOpencodeResolve = undefined
+  const controller = createWslServersController(
+    "1.16.2",
+    async () => new Promise<never>(() => undefined),
+    testControllerOptions(),
+  )
+
+  await controller.initialize()
+  await waitFor(() => !!releaseOpencodeResolve)
+  await controller.removeServer("wsl:Debian")
+  releaseOpencodeResolve?.()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  expect(controller.getState().servers).toEqual([])
+  expect(controller.getState().opencodeChecks).toEqual({})
+})
+
+async function waitFor(check: () => boolean) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (check()) return
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  }
+  throw new Error("Timed out waiting for condition")
+}
+
+function testControllerOptions() {
+  return {
+    readServers: () => persistedServers,
+    writeServers: (servers: WslServerConfig[]) => {
+      persistedServers = servers
+    },
+    readCommandVersion: async () => "1.16.2",
+    resolveOpencode: async () => {
+      await new Promise<void>((resolve) => {
+        releaseOpencodeResolve = resolve
+      })
+      return "/home/me/.opencode/bin/opencode"
+    },
+  }
+}

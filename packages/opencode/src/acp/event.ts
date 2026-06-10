@@ -1,5 +1,4 @@
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
-import * as Log from "@opencode-ai/core/util/log"
 import type {
   Event,
   EventMessagePartDelta,
@@ -21,8 +20,6 @@ import {
   shellOutputSnapshot,
   completedToolUpdate,
 } from "./tool"
-
-const log = Log.create({ service: "acp-event" })
 
 type Connection = Pick<AgentSideConnection, "sessionUpdate"> &
   Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
@@ -59,9 +56,8 @@ export class Subscription {
   start() {
     if (this.started) return
     this.started = true
-    this.run().catch((error: unknown) => {
+    this.run().catch(() => {
       if (this.abort.signal.aborted) return
-      log.error("event subscription failed", { error })
     })
   }
 
@@ -125,9 +121,7 @@ export class Subscription {
       for await (const event of events.stream) {
         if (this.abort.signal.aborted) return
         if (!event.payload) continue
-        await this.handle(event.payload).catch((error: unknown) => {
-          log.error("failed to handle event", { error, type: event.payload?.type })
-        })
+        await this.handle(event.payload).catch(() => {})
       }
       if (!this.abort.signal.aborted) await new Promise((resolve) => setTimeout(resolve, 1000))
     }
@@ -214,10 +208,7 @@ export class Subscription {
         { throwOnError: true },
       )
       .then((response) => response.data)
-      .catch((error: unknown) => {
-        log.error("unexpected error when fetching message for delta metadata", { error, messageId, partId })
-        return undefined
-      })
+      .catch(() => undefined)
     if (!message) return
 
     const part = message.parts.find((item) => item.id === partId)
@@ -330,6 +321,7 @@ export class Subscription {
         ...pendingToolCall({
           toolCallId: part.callID,
           toolName: part.tool,
+          state: part.state,
         }),
       },
     })
