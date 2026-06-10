@@ -33,11 +33,15 @@ export const Plugin = {
                 path: AbsolutePath.make(
                   localPath(directory, global.home, typeof entry === "string" ? entry : entry.path),
                 ),
+                description: typeof entry === "string" ? undefined : entry.description,
+                hidden: typeof entry === "string" ? undefined : entry.hidden,
               })
             : new Reference.GitSource({
                 type: "git",
                 repository: typeof entry === "string" ? entry : entry.repository,
                 branch: typeof entry === "string" ? undefined : entry.branch,
+                description: typeof entry === "string" ? undefined : entry.description,
+                hidden: typeof entry === "string" ? undefined : entry.hidden,
               }),
         )
       }

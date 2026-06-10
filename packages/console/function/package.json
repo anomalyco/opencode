@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/console-function",
-  "version": "1.16.2",
+  "version": "1.17.0",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
   "type": "module",
@@ -17,7 +17,7 @@
     "@typescript/native-preview": "catalog:"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "3.0.64",
+    "@ai-sdk/anthropic": "3.0.82",
     "@ai-sdk/openai": "3.0.48",
     "@ai-sdk/openai-compatible": "2.0.37",
     "@opencode-ai/console-core": "workspace:*",

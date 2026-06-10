@@ -9,21 +9,19 @@ import { RepositoryCache } from "./repository-cache"
 import { AbsolutePath } from "./schema"
 import { State } from "./state"
 
-export class Info extends Schema.Class<Info>("Reference.Info")({
-  name: Schema.String,
-  path: AbsolutePath,
-  source: Schema.suspend(() => Source),
-}) {}
-
 export class LocalSource extends Schema.Class<LocalSource>("Reference.LocalSource")({
   type: Schema.Literal("local"),
   path: AbsolutePath,
+  description: Schema.String.pipe(Schema.optional),
+  hidden: Schema.Boolean.pipe(Schema.optional),
 }) {}
 
 export class GitSource extends Schema.Class<GitSource>("Reference.GitSource")({
   type: Schema.Literal("git"),
   repository: Schema.String,
   branch: Schema.String.pipe(Schema.optional),
+  description: Schema.String.pipe(Schema.optional),
+  hidden: Schema.Boolean.pipe(Schema.optional),
 }) {}
 
 export const Source = Schema.Union([LocalSource, GitSource]).pipe(Schema.toTaggedUnion("type"))
@@ -32,6 +30,14 @@ export type Source = typeof Source.Type
 export const Event = {
   Updated: EventV2.define({ type: "reference.updated", schema: {} }),
 }
+
+export class Info extends Schema.Class<Info>("Reference.Info")({
+  name: Schema.String,
+  path: AbsolutePath,
+  description: Schema.String.pipe(Schema.optional),
+  hidden: Schema.Boolean.pipe(Schema.optional),
+  source: Source,
+}) {}
 
 type Data = {
   sources: Map<string, Source>
@@ -71,7 +77,16 @@ export const layer = Layer.effect(
           const seen = new Map<string, string | undefined>()
           for (const [name, source] of editor.list()) {
             if (source.type === "local") {
-              materialized.set(name, new Info({ name, path: source.path, source }))
+              materialized.set(
+                name,
+                new Info({
+                  name,
+                  path: source.path,
+                  description: source.description,
+                  hidden: source.hidden,
+                  source,
+                }),
+              )
               continue
             }
             const repository = Repository.parse(source.repository)
@@ -86,7 +101,16 @@ export const layer = Layer.effect(
             const target = Repository.cachePath(global.repos, repository)
             if (seen.has(target) && seen.get(target) !== source.branch) continue
             seen.set(target, source.branch)
-            materialized.set(name, new Info({ name, path: AbsolutePath.make(target), source }))
+            materialized.set(
+              name,
+              new Info({
+                name,
+                path: AbsolutePath.make(target),
+                description: source.description,
+                hidden: source.hidden,
+                source,
+              }),
+            )
             yield* cache.ensure({ reference: repository, branch: source.branch, refresh: true }).pipe(
               Effect.catchCause((cause) =>
                 Effect.logWarning("failed to materialize reference", {
