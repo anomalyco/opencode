@@ -1,4 +1,4 @@
-https21_9071<palign="center">
+<palign="center">
   <a hef="https://opencode.ai">
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
