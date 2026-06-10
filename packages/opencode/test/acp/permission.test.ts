@@ -153,7 +153,7 @@ describe("acp permissions", () => {
         status: "pending",
         title: "bash",
         rawInput: { command: "printf hello" },
-        kind: "execute",
+        kind: "other",
         locations: [],
       },
       options: [
