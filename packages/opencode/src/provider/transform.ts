@@ -1223,6 +1223,13 @@ export function smallOptions(model: Provider.Model) {
     return { veniceParameters: { disableThinking: true } }
   }
 
+  if (model.providerID.startsWith("opencode")) {
+    return {
+      include: INCLUDE_ENCRYPTED_REASONING,
+      reasoningSummary: "auto",
+    }
+  }
+
   return small
 }
 
