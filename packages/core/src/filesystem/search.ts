@@ -202,18 +202,30 @@ export const fffLayer = Layer.effect(
             if (input.type === "file") {
               const found = result.value.fileSearch(input.query.trim(), options)
               if (!found.ok) throw found.error
-              return found.value.items.map((item) => ({ path: item.relativePath, type: "file" as const }))
+              return found.value.items.map((item, index) => ({
+                path: item.relativePath,
+                type: "file" as const,
+                score: found.value.scores[index]?.total ?? 0,
+              }))
             }
             if (input.type === "directory") {
               const found = result.value.directorySearch(input.query.trim(), options)
               if (!found.ok) throw found.error
-              return found.value.items.map((item) => ({ path: item.relativePath, type: "directory" as const }))
+              return found.value.items.map((item, index) => ({
+                path: item.relativePath,
+                type: "directory" as const,
+                score: found.value.scores[index]?.total ?? 0,
+              }))
             }
             const found = result.value.mixedSearch(input.query.trim(), options)
             if (!found.ok) throw found.error
-            return found.value.items.map((item) => ({ path: item.item.relativePath, type: item.type }))
+            return found.value.items.map((item, index) => ({
+              path: item.item.relativePath,
+              type: item.type,
+              score: found.value.scores[index]?.total ?? 0,
+            }))
           })()
-          return items.map((item) => {
+          return items.sort((a, b) => b.score - a.score || a.path.length - b.path.length).map((item) => {
             const relative = item.path.replaceAll("\\", "/").replace(/\/$/, "")
             const absolute = path.resolve(location.directory, relative)
             return new FileSystem.Entry({
