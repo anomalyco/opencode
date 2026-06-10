@@ -1,4 +1,5 @@
 import { expect, mock, beforeEach } from "bun:test"
+import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Exit } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 import { testEffect } from "../lib/effect"
@@ -394,7 +395,7 @@ it.instance(
           { name: "next_tool", description: "next", inputSchema: { type: "object", properties: {} } },
         ]
 
-        const handler = Array.from(serverState.notificationHandlers.values())[0]
+        const handler = serverState.notificationHandlers.get(ToolListChangedNotificationSchema)
         expect(handler).toBeDefined()
         yield* Effect.promise(() => handler?.())
 
