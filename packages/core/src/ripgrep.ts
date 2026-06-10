@@ -161,10 +161,10 @@ export const layer = Layer.effect(
           args: [
             "--no-config",
             "--files",
-            "--glob=!**/.git/**",
             ...(input.hidden ? ["--hidden"] : []),
             ...(input.follow ? ["--follow"] : []),
             `--glob=${input.pattern}`,
+            "--glob=!**/.git/**",
             ".",
           ],
           parse: (line) =>
@@ -195,10 +195,10 @@ export const layer = Layer.effect(
           args: [
             "--no-config",
             "--files",
-            "--glob=!**/.git/**",
             ...(input.hidden ? ["--hidden"] : []),
             ...(input.follow ? ["--follow"] : []),
-            `--glob=${input.pattern}`,
+            ...(input.pattern === "*" ? [] : [`--glob=${input.pattern}`]),
+            "--glob=!**/.git/**",
             ".",
           ],
           parse: (line) => {
@@ -226,9 +226,9 @@ export const layer = Layer.effect(
             "--no-config",
             "--json",
             "--hidden",
-            "--glob=!**/.git/**",
             "--no-messages",
             ...(input.include ? [`--glob=${input.include}`] : []),
+            "--glob=!**/.git/**",
             "--",
             input.pattern,
             input.file ?? ".",
