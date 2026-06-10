@@ -71,7 +71,7 @@ export namespace FSUtil {
           const m = (cp as string).match(/(\d+)/)
           if (!m || m[1] === "65001") return utf8
           const name = m[1] === "936" ? "gbk" : m[1] === "932" ? "shift-jis" : m[1] === "949" ? "euc-kr" : m[1] === "950" ? "big5" : null
-          if (name) return new TextDecoder(name).decode(buf)
+          if (name) return new TextDecoder(name as any).decode(buf)
         } catch {}
         return utf8
       })
