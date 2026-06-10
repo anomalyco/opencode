@@ -740,7 +740,7 @@ export const layer = Layer.effect(
 
     const withClient = Effect.fnUntraced(function* <A>(
       clientName: string,
-      fn: (client: MCPClient) => Promise<A>,
+      fn: (client: MCPClient, timeout?: number) => Promise<A>,
       label: string,
       meta?: Record<string, unknown>,
     ) {
@@ -750,8 +750,11 @@ export const layer = Layer.effect(
         yield* Effect.logWarning(`client not found for ${label}`, { clientName })
         return undefined
       }
+      const cfg = yield* cfgSvc.get()
+      const configured = cfg.mcp?.[clientName]
+      const staticTimeout = configured && isMcpConfigured(configured) ? configured.timeout : undefined
       return yield* Effect.tryPromise({
-        try: () => fn(client),
+        try: () => fn(client, s.config[clientName]?.timeout ?? staticTimeout ?? cfg.experimental?.mcp_timeout),
         catch: (error) => error,
       }).pipe(
         Effect.tapError((error) =>
@@ -770,15 +773,21 @@ export const layer = Layer.effect(
       name: string,
       args?: Record<string, string>,
     ) {
-      return yield* withClient(clientName, (client) => client.getPrompt({ name, arguments: args }), "getPrompt", {
-        promptName: name,
-      })
+      return yield* withClient(
+        clientName,
+        (client, timeout) => client.getPrompt({ name, arguments: args }, { timeout }),
+        "getPrompt",
+        { promptName: name },
+      )
     })
 
     const readResource = Effect.fn("MCP.readResource")(function* (clientName: string, resourceUri: string) {
-      return yield* withClient(clientName, (client) => client.readResource({ uri: resourceUri }), "readResource", {
-        resourceUri,
-      })
+      return yield* withClient(
+        clientName,
+        (client, timeout) => client.readResource({ uri: resourceUri }, { timeout }),
+        "readResource",
+        { resourceUri },
+      )
     })
 
     const getMcpConfig = Effect.fnUntraced(function* (mcpName: string) {
