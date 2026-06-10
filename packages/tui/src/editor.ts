@@ -23,10 +23,21 @@ export function normalizePromptContent(content: string) {
   return content
 }
 
-export async function openEditor(input: { value: string; renderer: CliRenderer; cwd?: string; stdin?: EditorStdio }) {
-  const editor = process.env.VISUAL || process.env.EDITOR
+export type EditorConfig = {
+  editor_path?: string
+  editor_temp_dir?: string
+}
+
+export async function openEditor(input: {
+  value: string
+  renderer: CliRenderer
+  cwd?: string
+  stdin?: EditorStdio
+  config?: EditorConfig
+}) {
+  const editor = input.config?.editor_path || process.env.VISUAL || process.env.EDITOR
   if (!editor) return
-  const file = path.join(os.tmpdir(), `${Date.now()}.md`)
+  const file = path.join(input.config?.editor_temp_dir ?? os.tmpdir(), `${Date.now()}.md`)
   await writeFile(file, input.value)
   input.renderer.suspend()
   input.renderer.currentRenderBuffer.clear()

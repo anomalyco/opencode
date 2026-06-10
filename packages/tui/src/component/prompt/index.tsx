@@ -437,6 +437,7 @@ export function Prompt(props: PromptProps) {
           const content = await openEditor({
             renderer,
             value,
+            config: tuiConfig.editor,
             cwd:
               (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
               project.instance.directory() ||

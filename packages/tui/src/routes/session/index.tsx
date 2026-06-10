@@ -982,6 +982,7 @@ export function Session() {
             await openEditor({
               renderer,
               value: transcript,
+              config: tuiConfig.editor,
               cwd:
                 (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
                 project.instance.directory() ||
@@ -998,6 +999,7 @@ export function Session() {
             const result = await openEditor({
               renderer,
               value: transcript,
+              config: tuiConfig.editor,
               cwd:
                 (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
                 project.instance.directory() ||

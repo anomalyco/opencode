@@ -50,6 +50,15 @@ export const Prompt = Schema.Struct({
   }),
 }).annotate({ description: "Prompt size settings" })
 
+export const EditorConfig = Schema.Struct({
+  editor_path: Schema.optional(Schema.String).annotate({
+    description: "Editor command (overrides VISUAL/EDITOR environment variables)",
+  }),
+  editor_temp_dir: Schema.optional(Schema.String).annotate({
+    description: "Temporary directory for editor temp files (default: OS tmp dir)",
+  }),
+}).annotate({ description: "Editor settings" })
+
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.String),
@@ -58,6 +67,7 @@ export const Info = Schema.Struct({
   plugin_enabled: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
   leader_timeout: Schema.optional(LeaderTimeout),
   attention: Schema.optional(Attention),
+  editor: Schema.optional(EditorConfig),
   prompt: Schema.optional(Prompt),
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
