@@ -572,11 +572,8 @@ export const layer = Layer.effect(
         }
         const timeout = requestTimeout(s, clientName, mcpConfig, defaultTimeout)
         for (const mcpTool of listed) {
-          result[McpCatalog.sanitize(clientName) + "_" + McpCatalog.sanitize(mcpTool.name)] = McpCatalog.convertTool(
-            mcpTool,
-            client,
-            timeout,
-          )
+          const key = McpCatalog.sanitize(clientName) + "_" + McpCatalog.sanitize(mcpTool.name)
+          result[key] = McpCatalog.convertTool(mcpTool, client, timeout)
         }
       }
       return result
@@ -604,33 +601,11 @@ export const layer = Layer.effect(
     }
 
     const prompts = Effect.fn("MCP.prompts")(function* () {
-      const s = yield* InstanceState.get(state)
-      return yield* collectFromConnected(
-        s,
-        (c, timeout) =>
-          c.getServerCapabilities()?.prompts
-            ? McpCatalog.paginate(
-                (cursor) => c.listPrompts(cursor === undefined ? undefined : { cursor }, { timeout }),
-                (result) => result.prompts,
-              )
-            : Promise.resolve([]),
-        "prompts",
-      )
+      return yield* collectFromConnected(yield* InstanceState.get(state), McpCatalog.prompts, "prompts")
     })
 
     const resources = Effect.fn("MCP.resources")(function* () {
-      const s = yield* InstanceState.get(state)
-      return yield* collectFromConnected(
-        s,
-        (c, timeout) =>
-          c.getServerCapabilities()?.resources
-            ? McpCatalog.paginate(
-                (cursor) => c.listResources(cursor === undefined ? undefined : { cursor }, { timeout }),
-                (result) => result.resources,
-              )
-            : Promise.resolve([]),
-        "resources",
-      )
+      return yield* collectFromConnected(yield* InstanceState.get(state), McpCatalog.resources, "resources")
     })
 
     const withClient = Effect.fnUntraced(function* <A>(

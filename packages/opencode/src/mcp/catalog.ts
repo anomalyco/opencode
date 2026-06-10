@@ -42,19 +42,18 @@ export function defs(client: Client, timeout?: number) {
 }
 
 export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: number): Tool {
-  const inputSchema = mcpTool.inputSchema
-  const schema: JSONSchema7 = {
-    ...(inputSchema as JSONSchema7),
+  const inputSchema: JSONSchema7 = {
+    ...(mcpTool.inputSchema as JSONSchema7),
     type: "object",
-    properties: (inputSchema.properties ?? {}) as JSONSchema7["properties"],
+    properties: (mcpTool.inputSchema.properties ?? {}) as JSONSchema7["properties"],
     additionalProperties: false,
   }
 
   return dynamicTool({
     description: mcpTool.description ?? "",
-    inputSchema: jsonSchema(schema),
-    execute: async (args: unknown, options) => {
-      return client.callTool(
+    inputSchema: jsonSchema(inputSchema),
+    execute: (args: unknown, options) =>
+      client.callTool(
         {
           name: mcpTool.name,
           arguments: (args || {}) as Record<string, unknown>,
@@ -65,8 +64,7 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
           signal: options.abortSignal,
           timeout,
         },
-      )
-    },
+      ),
   })
 }
 
@@ -87,18 +85,32 @@ export function fetch<T extends { name: string }>(
       }),
     ),
     Effect.map((items) => {
-      const out: Record<string, T & { client: string }> = {}
       const sanitizedClient = sanitize(clientName)
-      for (const item of items) {
-        out[sanitizedClient + ":" + sanitize(item.name)] = { ...item, client: clientName }
-      }
-      return out
+      return Object.fromEntries(
+        items.map((item) => [sanitizedClient + ":" + sanitize(item.name), { ...item, client: clientName }]),
+      )
     }),
     Effect.orElseSucceed(() => undefined),
   )
 }
 
 export const sanitize = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "_")
+
+export function prompts(client: Client, timeout?: number) {
+  if (!client.getServerCapabilities()?.prompts) return Promise.resolve([])
+  return paginate(
+    (cursor) => client.listPrompts(cursor === undefined ? undefined : { cursor }, { timeout }),
+    (result) => result.prompts,
+  )
+}
+
+export function resources(client: Client, timeout?: number) {
+  if (!client.getServerCapabilities()?.resources) return Promise.resolve([])
+  return paginate(
+    (cursor) => client.listResources(cursor === undefined ? undefined : { cursor }, { timeout }),
+    (result) => result.resources,
+  )
+}
 
 function listTools(client: Client, timeout: number) {
   return Effect.tryPromise({
