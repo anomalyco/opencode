@@ -3,6 +3,7 @@ import { UI } from "../ui"
 import * as prompts from "@clack/prompts"
 import { Installation } from "../../installation"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { formatProgress, type ProgressCallback } from "../../installation/progress"
 
 export const UpgradeCommand = {
   command: "upgrade [target]",
@@ -53,12 +54,19 @@ export const UpgradeCommand = {
 
     prompts.log.info(`From ${InstallationVersion} → ${target}`)
     const spinner = prompts.spinner()
-    spinner.start("Upgrading...")
-    const err = await Installation.upgrade(method, target).catch((err) => err)
+
+    const progressCallback: ProgressCallback = (progress) => {
+      if (spinner) {
+        const message = formatProgress(progress)
+        spinner.message(message)
+      }
+    }
+
+    spinner.start("Checking for updates...")
+    const err = await Installation.upgrade(method, target, progressCallback).catch((err) => err)
     if (err) {
       spinner.stop("Upgrade failed", 1)
       if (err instanceof Installation.UpgradeFailedError) {
-        // necessary because choco only allows install/upgrade in elevated terminals
         if (method === "choco" && err.stderr.includes("not running from an elevated command shell")) {
           prompts.log.error("Please run the terminal as Administrator and try again")
         } else {
