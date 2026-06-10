@@ -217,6 +217,7 @@ export function DialogSessionList() {
     <DialogSelect
       title="Sessions"
       options={options()}
+      skipFilter={true}
       current={currentSessionID()}
       onFilter={setSearch}
       onMove={() => {
