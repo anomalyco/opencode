@@ -57,12 +57,12 @@ export class LocationMiddleware extends HttpApiMiddleware.Service<
 function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
   const workspaceID = query.get("location[workspace]") || request.headers["x-opencode-workspace"]
-  return {
+  return Location.Ref.make({
     directory: AbsolutePath.make(
       query.get("location[directory]") || request.headers["x-opencode-directory"] || process.cwd(),
     ),
     workspaceID: workspaceID ? WorkspaceV2.ID.make(workspaceID) : undefined,
-  }
+  })
 }
 
 export const layer = Layer.effect(

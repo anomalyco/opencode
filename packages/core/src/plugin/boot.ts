@@ -98,6 +98,7 @@ export const layer = Layer.effect(
     const boot = Effect.gen(function* () {
       yield* add(EnvPlugin)
       yield* add(AccountPlugin)
+      yield* add(ConfigReferencePlugin.Plugin)
       yield* add(AgentPlugin.Plugin)
       yield* add(CommandPlugin.Plugin)
       yield* add(SkillPlugin.Plugin)
@@ -109,7 +110,6 @@ export const layer = Layer.effect(
       yield* add(ConfigAgentPlugin.Plugin)
       yield* add(ConfigCommandPlugin.Plugin)
       yield* add(ConfigSkillPlugin.Plugin)
-      yield* add(ConfigReferencePlugin.Plugin)
     }).pipe(Effect.withSpan("PluginBoot.boot"))
 
     yield* boot.pipe(
