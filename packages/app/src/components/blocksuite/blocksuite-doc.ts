@@ -256,7 +256,8 @@ export async function createPage(input: DocMountInput) {
     }
   }
 
-  const clamp = (height: number) => Math.min(650, Math.max(40, Math.ceil(height)))
+  // A sent doc message grows to its full content height (no max cap, no inner scroll).
+  const clamp = (height: number) => Math.max(40, Math.ceil(height))
 
   const content = (host: HTMLElement, root?: HTMLElement, preview?: HTMLElement) => {
     const base = host.getBoundingClientRect().top
@@ -302,7 +303,8 @@ export async function createPage(input: DocMountInput) {
       viewport.style.width = width > 0 ? `${width}px` : "100%"
       viewport.style.height = `${tall}px`
       viewport.style.minHeight = input.readonly ? "0" : `${tall}px`
-      viewport.style.overflowY = input.readonly ? "auto" : ""
+      // Readonly (a sent message): never scroll — grow to full content. Editing keeps default.
+      viewport.style.overflowY = input.readonly ? "visible" : ""
     }
     if (root instanceof HTMLElement) {
       root.style.maxWidth = "none"
@@ -328,6 +330,9 @@ export async function createPage(input: DocMountInput) {
       const ready = input.readonly ? undefined : await inlineReady(editor)
       applyTheme()
       fit(el)
+      // A sent message can finish laying out a frame after the first measure; re-fit once so its
+      // full height is captured (no clipping). Guarded so a detached node never collapses to min.
+      if (input.readonly) requestAnimationFrame(() => el.isConnected && fit(el))
       resize?.disconnect()
       resize = new ResizeObserver(() => fit(el))
       resize.observe(el)

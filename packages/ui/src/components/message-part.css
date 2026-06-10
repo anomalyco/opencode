@@ -155,6 +155,8 @@
     display: block;
     width: 100%;
     white-space: normal;
+    /* A sent doc message grows to its full content — never clip it to a fixed height. */
+    overflow: visible;
   }
 
   [data-slot="user-message-text"][data-raw="true"] {

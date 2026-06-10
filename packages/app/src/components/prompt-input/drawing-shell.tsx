@@ -4,6 +4,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useClientEnv } from "@/context/client-env"
 import { useLanguage } from "@/context/language"
+import { ACCEPTED_FILE_TYPES } from "./files"
 import { PromptDrawingColors } from "./drawing-colors"
 import { PromptDrawingPanel } from "./drawing-panel"
 import { PromptDocPanel } from "./doc-panel"
@@ -25,6 +26,7 @@ type ShellProps = {
 export const PromptDrawingShell: Component<ShellProps> = (props) => {
   const env = useClientEnv()
   const language = useLanguage()
+  let fileInputRef: HTMLInputElement | undefined
   const [copied, setCopied] = createSignal(false)
   const history = () => (props.variant === "doc" ? props.doc.history : props.drawing.history)
   const undo = () => (props.variant === "doc" ? props.doc.undo() : props.drawing.undo())
@@ -109,6 +111,34 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
               aria-label={language.t("prompt.action.drawRedo")}
             />
           </Tooltip>
+          <Show when={props.variant === "doc"}>
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={ACCEPTED_FILE_TYPES.join(",")}
+              hidden
+              tabindex={-1}
+              aria-hidden="true"
+              onChange={(e) => {
+                const list = e.currentTarget.files
+                if (list?.length) void props.doc.addFiles(Array.from(list))
+                e.currentTarget.value = ""
+              }}
+            />
+            <Tooltip placement="top" value={language.t("prompt.action.attachFile")}>
+              <IconButton
+                data-action="prompt-doc-attach"
+                type="button"
+                icon="plus"
+                variant="ghost"
+                class="size-7.5"
+                disabled={!props.doc.ready()}
+                onClick={() => fileInputRef?.click()}
+                aria-label={language.t("prompt.action.attachFile")}
+              />
+            </Tooltip>
+          </Show>
         </div>
         <Show when={props.variant === "draw"}>
           <PromptDrawingColors drawing={props.drawing} />

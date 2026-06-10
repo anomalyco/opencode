@@ -262,7 +262,10 @@
   }
 
   [data-component="codle-session"] [data-slot="user-message-body"] {
-    --paper-edge: polygon(1% 2%, 99% 2%, 99% 98%, 1% 98%);
+    /* Fixed-pixel inset (not %) so the torn-paper margin is constant regardless of message height —
+       it always stays within the bubble padding, so a long message is never clipped, and the text
+       clip stays aligned with the paper background (no overflow past the edge). */
+    --paper-edge: polygon(6px 4px, calc(100% - 6px) 4px, calc(100% - 6px) calc(100% - 4px), 6px calc(100% - 4px));
     position: relative;
     display: inline-block;
     max-width: min(78%, 58ch);
