@@ -96,7 +96,7 @@ export class Info extends Schema.Class<Info>("Config.Info")({
     description: "Additional paths or URLs supplying ambient instructions",
   }),
   references: ConfigReference.Info.pipe(Schema.optional).annotate({
-    description: "Named local directories or Git repositories available as external context",
+    description: "Named local directories, Git repositories, or SSH remote directories available as external context",
   }),
   plugins: ConfigPlugin.Plugins.pipe(Schema.optional).annotate({
     description: "Ordered external plugin packages to load",

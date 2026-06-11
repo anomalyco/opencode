@@ -15,7 +15,17 @@ export class Local extends Schema.Class<Local>("ConfigV2.Reference.Local")({
   hidden: Schema.Boolean.pipe(Schema.optional),
 }) {}
 
-export const Entry = Schema.Union([Schema.String, Git, Local])
+export class Ssh extends Schema.Class<Ssh>("ConfigV2.Reference.Ssh")({
+  host: Schema.String,
+  remotePath: Schema.String,
+  user: Schema.String.pipe(Schema.optional),
+  port: Schema.Number.pipe(Schema.optional),
+  identityFile: Schema.String.pipe(Schema.optional),
+  description: Schema.String.pipe(Schema.optional),
+  hidden: Schema.Boolean.pipe(Schema.optional),
+}) {}
+
+export const Entry = Schema.Union([Schema.String, Git, Local, Ssh])
 export type Entry = typeof Entry.Type
 
 export const Info = Schema.Record(Schema.String, Entry)

@@ -25,25 +25,44 @@ export const Plugin = {
       const directory = doc.path ? path.dirname(doc.path) : location.directory
       for (const [name, entry] of Object.entries(doc.info.references ?? {})) {
         if (!validAlias(name)) continue
-        entries.set(
-          name,
-          local(entry)
-            ? new Reference.LocalSource({
-                type: "local",
-                path: AbsolutePath.make(
-                  localPath(directory, global.home, typeof entry === "string" ? entry : entry.path),
-                ),
-                description: typeof entry === "string" ? undefined : entry.description,
-                hidden: typeof entry === "string" ? undefined : entry.hidden,
-              })
-            : new Reference.GitSource({
-                type: "git",
-                repository: typeof entry === "string" ? entry : entry.repository,
-                branch: typeof entry === "string" ? undefined : entry.branch,
-                description: typeof entry === "string" ? undefined : entry.description,
-                hidden: typeof entry === "string" ? undefined : entry.hidden,
-              }),
-        )
+        if (local(entry)) {
+          entries.set(
+            name,
+            new Reference.LocalSource({
+              type: "local",
+              path: AbsolutePath.make(
+                localPath(directory, global.home, typeof entry === "string" ? entry : entry.path),
+              ),
+              description: typeof entry === "string" ? undefined : entry.description,
+              hidden: typeof entry === "string" ? undefined : entry.hidden,
+            }),
+          )
+        } else if (ssh(entry)) {
+          entries.set(
+            name,
+            new Reference.SshSource({
+              type: "ssh",
+              host: entry.host,
+              remotePath: entry.remotePath,
+              user: entry.user,
+              port: entry.port,
+              identityFile: entry.identityFile,
+              description: entry.description,
+              hidden: entry.hidden,
+            }),
+          )
+        } else {
+          entries.set(
+            name,
+            new Reference.GitSource({
+              type: "git",
+              repository: typeof entry === "string" ? entry : entry.repository,
+              branch: typeof entry === "string" ? undefined : entry.branch,
+              description: typeof entry === "string" ? undefined : entry.description,
+              hidden: typeof entry === "string" ? undefined : entry.hidden,
+            }),
+          )
+        }
       }
     }
 
@@ -61,6 +80,10 @@ function local(entry: ConfigReference.Entry): entry is string | ConfigReference.
   return typeof entry === "string"
     ? entry.startsWith(".") || entry.startsWith("/") || entry.startsWith("~")
     : "path" in entry
+}
+
+function ssh(entry: ConfigReference.Entry): entry is ConfigReference.Ssh {
+  return typeof entry !== "string" && "host" in entry && "remotePath" in entry
 }
 
 function localPath(directory: string, home: string, value: string) {

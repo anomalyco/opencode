@@ -6,6 +6,7 @@ import { Global } from "./global"
 import { EventV2 } from "./event"
 import { Repository } from "./repository"
 import { RepositoryCache } from "./repository-cache"
+import { SshCache } from "./ssh-cache"
 import { AbsolutePath } from "./schema"
 import { State } from "./state"
 
@@ -24,7 +25,18 @@ export class GitSource extends Schema.Class<GitSource>("Reference.GitSource")({
   hidden: Schema.Boolean.pipe(Schema.optional),
 }) {}
 
-export const Source = Schema.Union([LocalSource, GitSource]).pipe(Schema.toTaggedUnion("type"))
+export class SshSource extends Schema.Class<SshSource>("Reference.SshSource")({
+  type: Schema.Literal("ssh"),
+  host: Schema.String,
+  remotePath: Schema.String,
+  user: Schema.String.pipe(Schema.optional),
+  port: Schema.Number.pipe(Schema.optional),
+  identityFile: Schema.String.pipe(Schema.optional),
+  description: Schema.String.pipe(Schema.optional),
+  hidden: Schema.Boolean.pipe(Schema.optional),
+}) {}
+
+export const Source = Schema.Union([LocalSource, GitSource, SshSource]).pipe(Schema.toTaggedUnion("type"))
 export type Source = typeof Source.Type
 
 export const Event = {
@@ -62,6 +74,7 @@ export const layer = Layer.effect(
     const global = yield* Global.Service
     const events = yield* EventV2.Service
     const cache = yield* RepositoryCache.Service
+    const sshCache = yield* SshCache.Service
     const scope = yield* Scope.Scope
     const materialized = new Map<string, Info>()
     const state = State.create<Data, Editor>({
@@ -89,6 +102,41 @@ export const layer = Layer.effect(
               )
               continue
             }
+
+            if (source.type === "ssh") {
+              if (!source.host || !source.remotePath) continue
+              const target = SshCache.computeCachePath(global.sshCache, source.host, source.remotePath, source.user)
+              materialized.set(
+                name,
+                new Info({
+                  name,
+                  path: AbsolutePath.make(target),
+                  description: source.description,
+                  hidden: source.hidden,
+                  source,
+                }),
+              )
+              yield* sshCache.ensure({
+                host: source.host,
+                remotePath: source.remotePath,
+                user: source.user,
+                port: source.port,
+                identityFile: source.identityFile,
+                refresh: true,
+              }).pipe(
+                Effect.catchCause((cause) =>
+                  Effect.logWarning("failed to materialize SSH reference", {
+                    name,
+                    host: source.host,
+                    remotePath: source.remotePath,
+                    cause,
+                  }),
+                ),
+                Effect.forkIn(scope),
+              )
+              continue
+            }
+
             const repository = Repository.parse(source.repository)
             if (!repository || !Repository.isRemote(repository)) continue
             if (source.branch) {
@@ -135,4 +183,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const locationLayer = layer
+export const locationLayer = layer.pipe(
+  Layer.provideMerge(SshCache.defaultLayer),
+)

@@ -22,6 +22,7 @@ const paths = {
   bin: path.join(cache, "bin"),
   log: path.join(data, "log"),
   repos: path.join(data, "repos"),
+  sshCache: path.join(data, "ssh-cache"),
   cache,
   config,
   state,
@@ -40,6 +41,7 @@ await Promise.all([
   fs.mkdir(Path.log, { recursive: true }),
   fs.mkdir(Path.bin, { recursive: true }),
   fs.mkdir(Path.repos, { recursive: true }),
+  fs.mkdir(Path.sshCache, { recursive: true }),
 ])
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Global") {}
@@ -54,6 +56,7 @@ export interface Interface {
   readonly bin: string
   readonly log: string
   readonly repos: string
+  readonly sshCache: string
 }
 
 export function make(input: Partial<Interface> = {}): Interface {
@@ -67,6 +70,7 @@ export function make(input: Partial<Interface> = {}): Interface {
     bin: Path.bin,
     log: Path.log,
     repos: Path.repos,
+    sshCache: Path.sshCache,
     ...input,
   }
 }

@@ -1,6 +1,6 @@
 ---
 title: References
-description: Add local directories and Git repositories as project references.
+description: Add local directories, Git repositories, and SSH remote directories as project references.
 ---
 
 References give OpenCode access to directories outside the current project. Use them to make documentation, shared libraries, examples, or another repository available while you work.
@@ -19,6 +19,11 @@ References are configured by alias in `opencode.json` or `opencode.jsonc`.
       "repository": "anomalyco/opencode-sdk-js",
       "branch": "main",
       "description": "Use for JavaScript SDK implementation details",
+    },
+    "deploy": {
+      "host": "app.example.com",
+      "remotePath": "/var/www/data",
+      "description": "Use for deployment configuration",
     },
   },
 }
@@ -91,6 +96,47 @@ Git references are refreshed asynchronously. A newly configured repository may t
 
 ---
 
+## SSH remote directories
+
+Use `host` and `remotePath` to reference a directory on a remote server via SSH. OpenCode syncs the remote directory to a local cache using `rsync` and makes it available as a reference directory.
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "deploy": {
+      "host": "app.example.com",
+      "remotePath": "/var/www/data",
+      "description": "Use for deployment configuration and logs",
+    },
+  },
+}
+```
+
+Optional fields let you customize the SSH connection:
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "build-server": {
+      "host": "build.internal",
+      "remotePath": "/opt/project",
+      "user": "deploy",
+      "port": 2222,
+      "identityFile": "~/.ssh/build_key",
+      "description": "Use for build artifacts and CI scripts",
+    },
+  },
+}
+```
+
+SSH references must use the object form. String shorthand is not supported.
+
+:::note
+SSH references are synced asynchronously. A newly configured server may take a moment to finish the initial sync. OpenCode expects `rsync` to be available on the system PATH. The remote host must accept SSH connections without interactive prompts — host keys are automatically accepted.
+:::
+
+---
+
 ## Describe usage
 
 Add `description` to explain when an agent should use a reference.
@@ -146,12 +192,17 @@ OpenCode automatically allows reference directories through its external-directo
 
 ## Configure fields
 
-| Field         | Local | Git | Description                                      |
-| ------------- | ----- | --- | ------------------------------------------------ |
-| `path`        | Yes   | No  | Local reference directory                        |
-| `repository`  | No    | Yes | Git URL, host/path, or GitHub `owner/repo` value |
-| `branch`      | No    | Yes | Optional Git branch or ref                       |
-| `description` | Yes   | Yes | Guidance describing when to use the reference    |
-| `hidden`      | Yes   | Yes | Hide the reference from TUI `@` autocomplete     |
+| Field          | Local | Git | SSH | Description                                      |
+| -------------- | ----- | --- | --- | ------------------------------------------------ |
+| `path`         | Yes   | No  | No  | Local reference directory                        |
+| `repository`   | No    | Yes | No  | Git URL, host/path, or GitHub `owner/repo` value |
+| `branch`       | No    | Yes | No  | Optional Git branch or ref                       |
+| `host`         | No    | No  | Yes | Remote SSH server hostname                       |
+| `remotePath`   | No    | No  | Yes | Remote directory path on the SSH server          |
+| `user`         | No    | No  | Yes | Optional SSH user (defaults to current user)     |
+| `port`         | No    | No  | Yes | Optional SSH port (defaults to 22)               |
+| `identityFile` | No    | No  | Yes | Optional SSH identity key file path              |
+| `description`  | Yes   | Yes | Yes | Guidance describing when to use the reference    |
+| `hidden`       | Yes   | Yes | Yes | Hide the reference from TUI `@` autocomplete     |
 
 Reference aliases cannot be empty or contain `/`, whitespace, backticks, or commas.

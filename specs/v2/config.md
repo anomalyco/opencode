@@ -68,18 +68,21 @@ Keep ambient instructions separate from skills. Instructions are automatically i
 }
 ```
 
-Keep named external context references as a v2 configuration capability, renamed to plural `references` because it is a collection keyed by alias. References declare local directories or Git repositories that can later be addressed as `@alias` or `@alias/path` when the v2 runtime implements this behavior.
+Keep named external context references as a v2 configuration capability, renamed to plural `references` because it is a collection keyed by alias. References declare local directories, Git repositories, or SSH remote directories that can later be addressed as `@alias` or `@alias/path` when the v2 runtime implements this behavior.
 
 ```jsonc
 {
   "references": {
     "design-system": { "path": "../ui-library" },
     "sdk": { "repository": "github.com/example/sdk", "branch": "main" },
+    "deploy": { "host": "app.example.com", "remotePath": "/var/www/data", "user": "deploy" },
   },
 }
 ```
 
-Retain the compact string entry form as well: values starting with `.`, `/`, or `~` represent local paths, and other strings represent Git repositories.
+SSH entries use `host` and `remotePath`, with optional `user`, `port`, and `identityFile`. The remote directory is synced to a local cache via `rsync`.
+
+Retain the compact string entry form as well: values starting with `.`, `/`, or `~` represent local paths, and other strings represent Git repositories. SSH references must use the object form.
 
 ## Group 4: Plugins
 

@@ -5,11 +5,16 @@ import { Global } from "@opencode-ai/core/global"
 import { Reference } from "@opencode-ai/core/reference"
 import { Repository } from "@opencode-ai/core/repository"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache"
+import { SshCache } from "@opencode-ai/core/ssh-cache"
 import { EventV2 } from "@opencode-ai/core/event"
 import { it } from "./lib/effect"
 
 const cache = Layer.mock(RepositoryCache.Service, {
   ensure: () => Effect.die("unexpected Git materialization"),
+})
+
+const sshCache = Layer.mock(SshCache.Service, {
+  ensure: () => Effect.die("unexpected SSH materialization"),
 })
 
 describe("Reference", () => {
@@ -36,6 +41,7 @@ describe("Reference", () => {
     }).pipe(
       Effect.provide(Reference.layer),
       Effect.provide(cache),
+      Effect.provide(sshCache),
       Effect.provide(EventV2.defaultLayer),
       Effect.provide(Global.defaultLayer),
     ),
@@ -60,6 +66,7 @@ describe("Reference", () => {
       Effect.scoped,
       Effect.provide(Reference.layer),
       Effect.provide(cache),
+      Effect.provide(sshCache),
       Effect.provide(EventV2.defaultLayer),
       Effect.provide(Global.defaultLayer),
     ),
@@ -89,6 +96,65 @@ describe("Reference", () => {
       Effect.scoped,
       Effect.provide(Reference.layer),
       Effect.provide(cache),
+      Effect.provide(sshCache),
+      Effect.provide(EventV2.defaultLayer),
+      Effect.provide(Global.defaultLayer),
+    ),
+  )
+
+  it.effect("derives SSH paths without exposing cache operations", () =>
+    Effect.gen(function* () {
+      const references = yield* Reference.Service
+      const update = yield* references.transform()
+      const source = new Reference.SshSource({
+        type: "ssh",
+        host: "example.com",
+        remotePath: "/var/www/data",
+        user: "deploy",
+        description: "Use for deployment data",
+      })
+      yield* update((editor) => editor.add("data", source))
+
+      const list = yield* references.list()
+      expect(list).toHaveLength(1)
+      const info = list[0]
+      expect(info.name).toBe("data")
+      expect(info.description).toBe("Use for deployment data")
+      expect(info.source).toEqual(source)
+      expect(info.path).toStartWith(Global.Path.sshCache)
+      expect(info.path).toMatch(/[0-9a-f]{16}$/)
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Reference.layer),
+      Effect.provide(cache),
+      Effect.provide(sshCache),
+      Effect.provide(EventV2.defaultLayer),
+      Effect.provide(Global.defaultLayer),
+    ),
+  )
+
+  it.effect("preserves SSH host and remotePath fields", () =>
+    Effect.gen(function* () {
+      const references = yield* Reference.Service
+      const update = yield* references.transform()
+      const source = new Reference.SshSource({
+        type: "ssh",
+        host: "build.internal",
+        remotePath: "/opt/project",
+        port: 2222,
+        identityFile: "~/.ssh/build_key",
+        hidden: true,
+      })
+      yield* update((editor) => editor.add("build", source))
+
+      const list = yield* references.list()
+      expect(list).toHaveLength(1)
+      expect(list[0].source).toEqual(source)
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Reference.layer),
+      Effect.provide(cache),
+      Effect.provide(sshCache),
       Effect.provide(EventV2.defaultLayer),
       Effect.provide(Global.defaultLayer),
     ),
