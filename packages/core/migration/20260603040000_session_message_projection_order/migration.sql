@@ -1,3 +1,4 @@
+DELETE FROM `session_message`;--> statement-breakpoint
 ALTER TABLE `session_message` ADD `seq` integer NOT NULL;--> statement-breakpoint
 DROP INDEX IF EXISTS `session_message_session_time_created_id_idx`;--> statement-breakpoint
 DROP INDEX IF EXISTS `session_message_session_type_time_created_id_idx`;--> statement-breakpoint

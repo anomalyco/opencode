@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { NodePath } from "@effect/platform-node"
 import { Cause, Duration, Effect, Layer, Option, Schedule, Context } from "effect"
 import path from "path"
@@ -6,11 +7,9 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { evaluate } from "@/permission/evaluate"
 import { Config } from "@/config/config"
 import { Identifier } from "../id/id"
-import * as Log from "@opencode-ai/core/util/log"
 import { ToolID } from "./schema"
 import { TRUNCATION_DIR } from "./truncation-dir"
 
-const log = Log.create({ service: "truncation" })
 const RETENTION = Duration.days(7)
 
 export const MAX_LINES = 2000
@@ -142,10 +141,7 @@ export const layer = Layer.effect(
     })
 
     yield* cleanup().pipe(
-      Effect.catchCause((cause) => {
-        log.error("truncation cleanup failed", { cause: Cause.pretty(cause) })
-        return Effect.void
-      }),
+      Effect.catchCause((cause) => Effect.logError("truncation cleanup failed", { cause: Cause.pretty(cause) })),
       Effect.repeat(Schedule.spaced(Duration.hours(1))),
       Effect.delay(Duration.minutes(1)),
       Effect.forkScoped,
@@ -156,5 +152,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(NodePath.layer))
+
+export const node = LayerNode.make(layer, [FSUtil.node])
 
 export * as Truncate from "./truncate"

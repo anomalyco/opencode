@@ -37,7 +37,6 @@ import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { Effect, Schema } from "effect"
-import * as EffectLogger from "@opencode-ai/core/effect/logger"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -159,6 +158,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
   const supportsMediaInToolResult = (attachment: { mime: string }) => {
     if (model.api.npm === "@ai-sdk/anthropic") return true
     if (model.api.npm === "@ai-sdk/openai") return true
+    if (model.api.npm === "@ai-sdk/amazon-bedrock/mantle") return true
     if (model.api.npm === "@ai-sdk/amazon-bedrock") return attachment.mime.startsWith("image/")
     if (model.api.npm === "@ai-sdk/xai") return attachment.mime.startsWith("image/")
     if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
@@ -430,7 +430,7 @@ export function toModelMessages(
   model: Provider.Model,
   options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
 ): Promise<ModelMessage[]> {
-  return Effect.runPromise(toModelMessagesEffect(input, model, options).pipe(Effect.provide(EffectLogger.layer)))
+  return Effect.runPromise(toModelMessagesEffect(input, model, options))
 }
 
 export const page = Effect.fn("MessageV2.page")(function* (input: {

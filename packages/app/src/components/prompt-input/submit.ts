@@ -2,9 +2,11 @@ import type { Message, Session } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { batch, type Accessor } from "solid-js"
 import type { FileSelection } from "@/context/file"
+import { useServer } from "@/context/server"
+import { useTabs } from "@/context/tabs"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
@@ -18,6 +20,7 @@ import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
+import { ScopedKey } from "@/utils/server-scope"
 
 type PendingPrompt = {
   abort: AbortController
@@ -212,6 +215,10 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const layout = useLayout()
   const language = useLanguage()
   const params = useParams()
+  const [search] = useSearchParams<{ draftId?: string }>()
+  const server = useServer()
+  const tabs = useTabs()
+  const pendingKey = (sessionID: string) => ScopedKey.from(sdk.scope, sessionID)
 
   const errorMessage = (err: unknown) => {
     if (err && typeof err === "object" && "data" in err) {
@@ -232,11 +239,12 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     input.onAbort?.()
 
-    const queued = pending.get(sessionID)
+    const key = pendingKey(sessionID)
+    const queued = pending.get(key)
     if (queued) {
       queued.abort.abort()
       queued.cleanup()
-      pending.delete(sessionID)
+      pending.delete(key)
       return Promise.resolve()
     }
     return sdk.client.session
@@ -341,7 +349,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
           })
           return
         }
-        WorktreeState.pending(createdWorktree.directory)
+        WorktreeState.pending(sdk.scope, createdWorktree.directory)
         sessionDirectory = createdWorktree.directory
       }
 
@@ -378,7 +386,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
         local.session.promote(sessionDirectory, session.id)
         layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
-        navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+        const draftID = search.draftId
+        if (draftID)
+          tabs.promoteDraft(draftID, {
+            server: server.key,
+            dirBase64: base64Encode(sessionDirectory),
+            sessionId: session.id,
+          })
+        else navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
       }
     }
     if (!session) {
@@ -500,7 +515,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     clearInput()
 
     const waitForWorktree = async () => {
-      const worktree = WorktreeState.get(sessionDirectory)
+      const worktree = WorktreeState.get(sdk.scope, sessionDirectory)
       if (!worktree || worktree.status !== "pending") return true
 
       if (sessionDirectory === projectDirectory) {
@@ -517,7 +532,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         restoreInput()
       }
 
-      pending.set(session.id, { abort: controller, cleanup })
+      pending.set(pendingKey(session.id), { abort: controller, cleanup })
 
       const abortWait = new Promise<Awaited<ReturnType<typeof WorktreeState.wait>>>((resolve) => {
         if (controller.signal.aborted) {
@@ -544,11 +559,13 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         }, timeoutMs)
       })
 
-      const result = await Promise.race([WorktreeState.wait(sessionDirectory), abortWait, timeout]).finally(() => {
-        if (timer.id === undefined) return
-        clearTimeout(timer.id)
-      })
-      pending.delete(session.id)
+      const result = await Promise.race([WorktreeState.wait(sdk.scope, sessionDirectory), abortWait, timeout]).finally(
+        () => {
+          if (timer.id === undefined) return
+          clearTimeout(timer.id)
+        },
+      )
+      pending.delete(pendingKey(session.id))
       if (controller.signal.aborted) return false
       if (result.status === "failed") throw new Error(result.message)
       return true
@@ -563,7 +580,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       optimisticBusy: sessionDirectory === projectDirectory,
       before: waitForWorktree,
     }).catch((err) => {
-      pending.delete(session.id)
+      pending.delete(pendingKey(session.id))
       if (sessionDirectory === projectDirectory) {
         sync.set("session_status", session.id, { type: "idle" })
       }

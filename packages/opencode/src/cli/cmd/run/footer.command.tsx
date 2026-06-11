@@ -14,6 +14,8 @@ type PanelEntry = RunFooterMenuItem & {
 
 type CommandEntry =
   | (PanelEntry & { action: "model" })
+  | (PanelEntry & { action: "editor" })
+  | (PanelEntry & { action: "skill" })
   | (PanelEntry & { action: "queued" })
   | (PanelEntry & { action: "subagent" })
   | (PanelEntry & { action: "variant.cycle" })
@@ -31,6 +33,10 @@ type ModelEntry = PanelEntry & {
 type VariantEntry = PanelEntry & {
   variant: string | undefined
   current: boolean
+}
+
+type SkillEntry = PanelEntry & {
+  name: string
 }
 
 type SubagentEntry = PanelEntry & {
@@ -105,6 +111,10 @@ function categoryRank(category: string) {
 function subagentStatusLabel(status: FooterSubagentTab["status"]) {
   if (status === "completed") {
     return "done"
+  }
+
+  if (status === "cancelled") {
+    return "cancelled"
   }
 
   if (status === "error") {
@@ -203,94 +213,129 @@ function PanelShell(props: {
   inputRef: (input: InputRenderable) => void
   onQuery: (query: string) => void
   children: JSX.Element
+  dark?: boolean
+  chrome?: "default" | "minimal"
 }) {
-  return (
-    <box id={props.id} width="100%" flexDirection="column" backgroundColor="transparent" flexShrink={0}>
+  const background = () => (props.dark ? props.theme().shade : props.theme().surface)
+  const minimal = () => props.chrome === "minimal"
+  const content = (
+    <>
+      <box height={1} flexShrink={0} backgroundColor={background()} />
       <box
-        width="100%"
-        flexDirection="column"
-        border={["left"]}
-        borderColor={props.theme().highlight}
-        backgroundColor="transparent"
-        customBorderChars={PANEL_BORDER}
-        flexShrink={0}
-      >
-        <box height={1} flexShrink={0} backgroundColor={props.theme().surface} />
-        <box
-          width="100%"
-          height={1}
-          paddingLeft={PANEL_PAD}
-          paddingRight={PANEL_PAD}
-          flexDirection="row"
-          gap={1}
-          flexShrink={0}
-          backgroundColor={props.theme().surface}
-        >
-          <text fg={props.theme().text} attributes={TextAttributes.BOLD} wrapMode="none" flexShrink={0}>
-            {props.title}
-          </text>
-          {props.countVisible !== false ? (
-            <text fg={props.theme().muted} wrapMode="none" flexShrink={0}>
-              {countLabel(props.count, props.total, props.query)}
-            </text>
-          ) : null}
-          <box flexGrow={1} flexShrink={1} backgroundColor="transparent" />
-          <text fg={props.theme().muted} wrapMode="none" truncate flexShrink={0}>
-            esc
-          </text>
-        </box>
-        <box height={1} flexShrink={0} backgroundColor={props.theme().surface} />
-        <box
-          width="100%"
-          height={1}
-          paddingLeft={PANEL_PAD}
-          paddingRight={PANEL_PAD}
-          flexShrink={0}
-          backgroundColor={props.theme().surface}
-        >
-          <input
-            width="100%"
-            focusedBackgroundColor={props.theme().surface}
-            focusedTextColor={props.theme().text}
-            placeholder={props.placeholder}
-            placeholderColor={props.theme().muted}
-            cursorColor={props.theme().highlight}
-            onInput={props.onQuery}
-            ref={(input) => {
-              props.inputRef(input)
-              input.traits = { status: "FILTER" }
-              queueMicrotask(() => {
-                if (!input.isDestroyed) {
-                  input.focus()
-                }
-              })
-            }}
-          />
-        </box>
-        <box height={1} flexShrink={0} backgroundColor={props.theme().surface} />
-        <box width="100%" flexDirection="column" flexShrink={0} backgroundColor={props.theme().surface}>
-          {props.children}
-        </box>
-      </box>
-      <box
-        id={`${props.id}-bottom`}
         width="100%"
         height={1}
-        border={["left"]}
-        borderColor={props.theme().highlight}
-        backgroundColor="transparent"
-        customBorderChars={PANEL_BOTTOM_BORDER}
+        paddingLeft={PANEL_PAD}
+        paddingRight={PANEL_PAD}
+        flexDirection="row"
+        gap={1}
         flexShrink={0}
+        backgroundColor={background()}
       >
-        <box
+        <text fg={props.theme().text} attributes={TextAttributes.BOLD} wrapMode="none" flexShrink={0}>
+          {props.title}
+        </text>
+        {props.countVisible !== false ? (
+          <text fg={props.theme().muted} wrapMode="none" flexShrink={0}>
+            {countLabel(props.count, props.total, props.query)}
+          </text>
+        ) : null}
+        <box flexGrow={1} flexShrink={1} backgroundColor="transparent" />
+        <text fg={props.theme().muted} wrapMode="none" truncate flexShrink={0}>
+          esc
+        </text>
+      </box>
+      <box height={1} flexShrink={0} backgroundColor={background()} />
+      <box
+        width="100%"
+        height={1}
+        paddingLeft={PANEL_PAD}
+        paddingRight={PANEL_PAD}
+        flexShrink={0}
+        backgroundColor={background()}
+      >
+        <input
           width="100%"
-          height={1}
-          border={["bottom"]}
-          borderColor={props.theme().surface}
-          backgroundColor="transparent"
-          customBorderChars={HALF_BLOCK_BORDER}
+          focusedBackgroundColor={background()}
+          focusedTextColor={props.theme().text}
+          placeholder={props.placeholder}
+          placeholderColor={props.theme().muted}
+          cursorColor={props.theme().highlight}
+          onInput={props.onQuery}
+          ref={(input) => {
+            props.inputRef(input)
+            input.traits = { status: "FILTER" }
+            queueMicrotask(() => {
+              if (!input.isDestroyed) {
+                input.focus()
+              }
+            })
+          }}
         />
       </box>
+      <box height={1} flexShrink={0} backgroundColor={background()} />
+      <box width="100%" flexDirection="column" flexShrink={0} backgroundColor={background()}>
+        {props.children}
+      </box>
+    </>
+  )
+  return (
+    <box id={props.id} width="100%" flexDirection="column" border={false} backgroundColor="transparent" flexShrink={0}>
+      {minimal() ? (
+        <box width="100%" flexDirection="column" border={false} backgroundColor="transparent" flexShrink={0}>
+          {content}
+        </box>
+      ) : (
+        <box
+          width="100%"
+          flexDirection="column"
+          border={["left"]}
+          borderColor={props.theme().highlight}
+          backgroundColor="transparent"
+          customBorderChars={PANEL_BORDER}
+          flexShrink={0}
+        >
+          {content}
+        </box>
+      )}
+      {minimal() ? (
+        <box
+          id={`${props.id}-bottom`}
+          width="100%"
+          height={1}
+          border={false}
+          backgroundColor="transparent"
+          flexShrink={0}
+        >
+          <box
+            width="100%"
+            height={1}
+            border={["bottom"]}
+            borderColor={background()}
+            backgroundColor="transparent"
+            customBorderChars={HALF_BLOCK_BORDER}
+          />
+        </box>
+      ) : (
+        <box
+          id={`${props.id}-bottom`}
+          width="100%"
+          height={1}
+          border={["left"]}
+          borderColor={props.theme().highlight}
+          backgroundColor="transparent"
+          customBorderChars={PANEL_BOTTOM_BORDER}
+          flexShrink={0}
+        >
+          <box
+            width="100%"
+            height={1}
+            border={["bottom"]}
+            borderColor={background()}
+            backgroundColor="transparent"
+            customBorderChars={HALF_BLOCK_BORDER}
+          />
+        </box>
+      )}
     </box>
   )
 }
@@ -304,6 +349,8 @@ export function RunCommandMenuBody(props: {
   variantCycle: string
   onClose: () => void
   onModel: () => void
+  onEditor: () => void
+  onSkill: () => void
   onSubagent: () => void
   onQueued: () => void
   onVariant: () => void
@@ -314,56 +361,30 @@ export function RunCommandMenuBody(props: {
 }) {
   let field: InputRenderable | undefined
   const [query, setQuery] = createSignal("")
+  const skills = createMemo(() => (props.commands() ?? []).filter((item) => item.source === "skill"))
+  const activeSubagentCount = createMemo(() => props.subagents().filter((item) => item.status === "running").length)
   const entries = createMemo<CommandEntry[]>(() => {
-    const builtins = ["new"]
-    return [
+    const builtins = ["editor", "new"]
+    const session: CommandEntry[] = [
       {
-        action: "model",
-        category: "Suggested",
-        display: "Switch model",
+        action: "editor",
+        category: "Session",
+        display: "Open editor",
+        footer: "/editor",
+        keywords: "editor compose draft external editor",
       },
-      ...(props.queued().length > 0
-        ? [
-            {
-              action: "queued" as const,
-              category: "Suggested",
-              display: "Manage queued prompts",
-              footer: `${props.queued().length} queued`,
-              keywords: props
-                .queued()
-                .map((item) => item.prompt.text)
-                .join(" "),
-            },
-          ]
-        : []),
       ...(props.subagents().length > 0
         ? [
             {
               action: "subagent" as const,
-              category: "Suggested",
+              category: "Session",
               display: "View subagents",
-              footer: `${props.subagents().length} active`,
+              footer:
+                activeSubagentCount() > 0 ? `${activeSubagentCount()} active` : `${props.subagents().length} recent`,
               keywords: props
                 .subagents()
                 .map((item) => `${item.label} ${item.description} ${item.title ?? ""}`)
                 .join(" "),
-            },
-          ]
-        : []),
-      {
-        action: "variant.cycle",
-        category: "Suggested",
-        display: "Variant cycle",
-        footer: props.variantCycle,
-        keywords: "variant cycle",
-      },
-      ...(props.variants().length > 0
-        ? [
-            {
-              action: "variant.list" as const,
-              category: "Suggested",
-              display: "Switch model variant",
-              keywords: `variant variants ${props.variants().join(" ")}`,
             },
           ]
         : []),
@@ -375,23 +396,82 @@ export function RunCommandMenuBody(props: {
         footer: "/new",
         keywords: "new session clear",
       },
-      ...(props.commands() ?? [])
-        .filter((item) => item.source !== "skill" && !builtins.includes(item.name))
-        .map(
-          (item) =>
-            ({
-              action: "slash",
-              category: item.source === "mcp" ? "MCP Commands" : "Project Commands",
-              name: item.name,
-              display: item.name,
-              footer: `/${item.name}`,
-              keywords:
-                item.source === "mcp"
-                  ? `/${item.name} ${item.name} mcp ${item.description ?? ""}`
-                  : `/${item.name} ${item.name} ${item.description ?? ""}`,
-            }) satisfies CommandEntry,
-        )
-        .sort((a, b) => categoryRank(a.category) - categoryRank(b.category) || a.display.localeCompare(b.display)),
+    ]
+    const prompt: CommandEntry[] =
+      props.commands() === undefined || skills().length > 0
+        ? [
+            {
+              action: "skill" as const,
+              category: "Prompt",
+              display: "Skills",
+              footer: "/skills",
+              keywords: `skill skills ${skills()
+                .map((item) => `${item.name} ${item.description ?? ""}`)
+                .join(" ")}`.trim(),
+            },
+          ]
+        : []
+    const agent: CommandEntry[] = [
+      {
+        action: "model",
+        category: "Agent",
+        display: "Switch model",
+      },
+      ...(props.queued().length > 0
+        ? [
+            {
+              action: "queued" as const,
+              category: "Agent",
+              display: "Manage queued prompts",
+              footer: `${props.queued().length} queued`,
+              keywords: props
+                .queued()
+                .map((item) => item.prompt.text)
+                .join(" "),
+            },
+          ]
+        : []),
+      {
+        action: "variant.cycle",
+        category: "Agent",
+        display: "Variant cycle",
+        footer: props.variantCycle,
+        keywords: "variant cycle",
+      },
+      ...(props.variants().length > 0
+        ? [
+            {
+              action: "variant.list" as const,
+              category: "Agent",
+              display: "Switch model variant",
+              keywords: `variant variants ${props.variants().join(" ")}`,
+            },
+          ]
+        : []),
+    ]
+    const commands = (props.commands() ?? [])
+      .filter((item) => item.source !== "skill" && !builtins.includes(item.name))
+      .map(
+        (item) =>
+          ({
+            action: "slash",
+            category: item.source === "mcp" ? "MCP Commands" : "Project Commands",
+            name: item.name,
+            display: item.name,
+            footer: `/${item.name}`,
+            keywords:
+              item.source === "mcp"
+                ? `/${item.name} ${item.name} mcp ${item.description ?? ""}`
+                : `/${item.name} ${item.name} ${item.description ?? ""}`,
+          }) satisfies CommandEntry,
+      )
+      .sort((a, b) => categoryRank(a.category) - categoryRank(b.category) || a.display.localeCompare(b.display))
+
+    return [
+      ...session,
+      ...prompt,
+      ...agent,
+      ...commands,
       { action: "exit", category: "System", display: "Exit", footer: "/exit", keywords: "/exit exit" },
     ]
   })
@@ -400,6 +480,16 @@ export function RunCommandMenuBody(props: {
   const pick = (item: CommandEntry) => {
     if (item.action === "model") {
       props.onModel()
+      return
+    }
+
+    if (item.action === "editor") {
+      props.onEditor()
+      return
+    }
+
+    if (item.action === "skill") {
+      props.onSkill()
       return
     }
 
@@ -471,6 +561,8 @@ export function RunCommandMenuBody(props: {
         field = input
       }}
       onQuery={setQuery}
+      dark
+      chrome="minimal"
     >
       <RunFooterMenu
         id="run-direct-footer-command-list"
@@ -485,6 +577,8 @@ export function RunCommandMenuBody(props: {
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
         grouped={!query().trim()}
+        background
+        headerColor={props.theme().muted}
       />
     </PanelShell>
   )
@@ -566,6 +660,8 @@ export function RunSubagentSelectBody(props: {
         field = input
       }}
       onQuery={setQuery}
+      dark
+      chrome="minimal"
     >
       <RunFooterMenu
         id="run-direct-footer-subagent-list"
@@ -575,11 +671,12 @@ export function RunSubagentSelectBody(props: {
         offset={menu.offset}
         rows={menu.rows}
         limit={SUBAGENT_LIST_ROWS}
-        empty="No active subagents"
+        empty="No subagents found"
         border={false}
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
         grouped={false}
+        background
       />
     </PanelShell>
   )
@@ -662,6 +759,8 @@ export function RunQueuedPromptSelectBody(props: {
         field = input
       }}
       onQuery={setQuery}
+      dark
+      chrome="minimal"
     >
       <RunFooterMenu
         id="run-direct-footer-queued-list"
@@ -676,6 +775,86 @@ export function RunQueuedPromptSelectBody(props: {
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
         grouped={false}
+        background
+      />
+    </PanelShell>
+  )
+}
+
+export function RunSkillSelectBody(props: {
+  theme: Accessor<RunFooterTheme>
+  commands: Accessor<RunCommand[] | undefined>
+  onClose: () => void
+  onSelect: (name: string) => void
+}) {
+  let field: InputRenderable | undefined
+  const [query, setQuery] = createSignal("")
+  const entries = createMemo<SkillEntry[]>(() =>
+    (props.commands() ?? [])
+      .filter((item) => item.source === "skill")
+      .map((item) => ({
+        category: "",
+        display: item.name,
+        description: item.description?.replace(/\s+/g, " ").trim() || undefined,
+        keywords: `skill ${item.name} ${item.description ?? ""}`,
+        name: item.name,
+      }))
+      .sort((a, b) => a.display.localeCompare(b.display)),
+  )
+  const items = createMemo<SkillEntry[]>(() => match(query(), entries()))
+  const menu = createFooterMenuState({ count: () => items().length, limit: PANEL_LIST_ROWS })
+  const select = () => {
+    const item = items()[menu.selected()]
+    if (!item) {
+      return
+    }
+
+    props.onSelect(item.name)
+  }
+
+  createEffect(() => {
+    query()
+    menu.reset()
+  })
+
+  useKeyboard((event) => {
+    if (event.defaultPrevented) {
+      return
+    }
+
+    handleKey({ event, menu, field: () => field, setQuery, select, close: props.onClose })
+  })
+
+  return (
+    <PanelShell
+      id="run-direct-footer-skill-panel"
+      title="Skills"
+      query={query()}
+      count={items().length}
+      total={entries().length}
+      placeholder="Search"
+      theme={props.theme}
+      inputRef={(input) => {
+        field = input
+      }}
+      onQuery={setQuery}
+      dark
+      chrome="minimal"
+    >
+      <RunFooterMenu
+        id="run-direct-footer-skill-list"
+        theme={props.theme}
+        items={items}
+        selected={menu.selected}
+        offset={menu.offset}
+        rows={() => PANEL_LIST_ROWS}
+        limit={PANEL_LIST_ROWS}
+        empty={props.commands() ? "No skills found" : "Skills loading"}
+        border={false}
+        paddingLeft={PANEL_PAD}
+        paddingRight={PANEL_PAD}
+        grouped={false}
+        background
       />
     </PanelShell>
   )
@@ -759,6 +938,8 @@ export function RunVariantSelectBody(props: {
         field = input
       }}
       onQuery={setQuery}
+      dark
+      chrome="minimal"
     >
       <RunFooterMenu
         id="run-direct-footer-variant-list"
@@ -773,6 +954,7 @@ export function RunVariantSelectBody(props: {
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
         grouped={false}
+        background
       />
     </PanelShell>
   )
@@ -879,6 +1061,8 @@ export function RunModelSelectBody(props: {
         field = input
       }}
       onQuery={setQuery}
+      dark
+      chrome="minimal"
     >
       <RunFooterMenu
         id="run-direct-footer-model-list"
@@ -893,6 +1077,8 @@ export function RunModelSelectBody(props: {
         paddingLeft={PANEL_PAD}
         paddingRight={PANEL_PAD}
         grouped={!query().trim()}
+        background
+        headerColor={props.theme().muted}
       />
     </PanelShell>
   )

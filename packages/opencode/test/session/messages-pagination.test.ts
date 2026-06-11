@@ -7,11 +7,9 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 
 import { NotFoundError } from "@/storage/storage"
-import * as Log from "@opencode-ai/core/util/log"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-
-void Log.init({ print: false })
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const it = testEffect(Layer.mergeAll(SessionNs.defaultLayer, Database.defaultLayer))
 
@@ -98,7 +96,7 @@ const addAssistant = Effect.fn("Test.addAssistant")(function* (
     role: "assistant",
     time: { created: Date.now() },
     parentID,
-    modelID: ProviderV2.ModelID.make("test"),
+    modelID: ModelV2.ID.make("test"),
     providerID: ProviderV2.ID.make("test"),
     mode: "",
     agent: "default",

@@ -2,14 +2,17 @@ export * as ProjectCopy from "./copy"
 
 import { and, eq, inArray } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
+import path from "path"
 import { AbsolutePath } from "../schema"
 import { FSUtil } from "../fs-util"
 import { Git } from "../git"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
+import { LayerNode } from "../effect/layer-node"
 import { Project } from "../project"
 import { ProjectDirectoryTable } from "./sql"
 import { makeStrategies } from "./copy-strategies"
+import { Slug } from "../util/slug"
 
 export const StrategyID = Schema.Literal("git_worktree")
 export type StrategyID = typeof StrategyID.Type
@@ -24,12 +27,15 @@ export const CreateInput = Schema.Struct({
   strategy: StrategyID,
   sourceDirectory: AbsolutePath,
   directory: AbsolutePath,
+  name: Schema.optional(Schema.String),
+  context: Schema.optional(Schema.String),
 }).annotate({ identifier: "ProjectCopy.CreateInput" })
 export type CreateInput = typeof CreateInput.Type
 
 export const RemoveInput = Schema.Struct({
   projectID: Project.ID,
   directory: AbsolutePath,
+  force: Schema.Boolean,
 }).annotate({ identifier: "ProjectCopy.RemoveInput" })
 export type RemoveInput = typeof RemoveInput.Type
 
@@ -78,7 +84,10 @@ export interface Strategy {
     sourceDirectory: AbsolutePath
     directory: AbsolutePath
   }) => Effect.Effect<Copy, Git.WorktreeError | DirectoryUnavailableError>
-  readonly remove: (directory: AbsolutePath) => Effect.Effect<void, Git.WorktreeError | DirectoryUnavailableError>
+  readonly remove: (input: {
+    directory: AbsolutePath
+    force: boolean
+  }) => Effect.Effect<void, Git.WorktreeError | DirectoryUnavailableError>
   readonly list: (directory: AbsolutePath) => Effect.Effect<Copy[], Git.WorktreeError | DirectoryUnavailableError>
   readonly detect: (directory: AbsolutePath) => Effect.Effect<boolean>
 }
@@ -183,10 +192,18 @@ export const layer = Layer.effect(
     })
 
     const create = Effect.fn("ProjectCopy.create")(function* (input: CreateInput) {
-      if (yield* fs.existsSafe(input.directory))
-        return yield* new DestinationExistsError({ directory: input.directory })
+      yield* fs.makeDirectory(input.directory, { recursive: true }).pipe(Effect.orDie)
+      const name = input.name ?? Slug.create()
+      let suffix = 1
+      let copyDirectory = AbsolutePath.make(path.join(input.directory, name))
+      while (yield* fs.existsSafe(copyDirectory)) {
+        suffix++
+        if (suffix > 10) return yield* new DestinationExistsError({ directory: copyDirectory })
+        copyDirectory = AbsolutePath.make(path.join(input.directory, `${name}-${suffix}`))
+      }
+
       const result = yield* strategy(input.strategy).create({
-        directory: input.directory,
+        directory: copyDirectory,
         sourceDirectory: yield* source(input.sourceDirectory, input.projectID),
       })
       yield* changed(input.projectID, yield* insert(input.projectID, result.directory, input.strategy))
@@ -197,7 +214,7 @@ export const layer = Layer.effect(
       const copyDirectory = yield* canonical(input.directory)
       const id = yield* detect({ directory: copyDirectory })
       if (!id) return yield* new StrategyNotFoundError({ directory: copyDirectory })
-      yield* strategy(id).remove(copyDirectory)
+      yield* strategy(id).remove({ directory: copyDirectory, force: input.force })
       yield* changed(input.projectID, yield* removeStored(input.projectID, copyDirectory))
     })
 
@@ -259,3 +276,4 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Git.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
 )
+export const node = LayerNode.make(layer, [FSUtil.node, Git.node, EventV2.node, Database.node])

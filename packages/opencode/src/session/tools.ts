@@ -17,11 +17,9 @@ import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import { SessionProcessor } from "./processor"
 import { PartID } from "./schema"
-import { Log } from "@opencode-ai/core/util/log"
 import { EffectBridge } from "@/effect/bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-
-const log = Log.create({ service: "session.tools" })
+import { ModelV2 } from "@opencode-ai/core/model"
 
 export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
@@ -32,7 +30,6 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   messages: SessionV1.WithParts[]
   promptOps: TaskPromptOps
 }) {
-  using _ = log.time("resolveTools")
   const tools: Record<string, AITool> = {}
   const run = yield* EffectBridge.make()
   const plugin = yield* Plugin.Service
@@ -75,7 +72,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   })
 
   for (const item of yield* registry.tools({
-    modelID: ProviderV2.ModelID.make(input.model.api.id),
+    modelID: ModelV2.ID.make(input.model.api.id),
     providerID: input.model.providerID,
     agent: input.agent,
   })) {

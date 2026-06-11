@@ -45,7 +45,7 @@ describe("PluginV2", () => {
     }),
   )
 
-  it.effect("serializes same-ID additions and leaves one removable contribution", () =>
+  it.effect("serializes same-ID additions and leaves one removable attachment", () =>
     Effect.gen(function* () {
       const values = state()
       const layerScope = yield* Scope.fork(yield* Scope.Scope)

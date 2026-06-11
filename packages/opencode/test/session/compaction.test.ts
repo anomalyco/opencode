@@ -12,7 +12,6 @@ import { Agent } from "../../src/agent/agent"
 import { LLM } from "../../src/session/llm"
 import { SessionCompaction } from "../../src/session/compaction"
 import { Token } from "@/util/token"
-import * as Log from "@opencode-ai/core/util/log"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
 import { provideTmpdirInstance, TestInstance } from "../fixture/fixture"
@@ -22,6 +21,7 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
 
 import type { Provider } from "@/provider/provider"
 import * as SessionProcessorModule from "../../src/session/processor"
@@ -33,8 +33,7 @@ import { TestConfig } from "../fixture/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LLMEvent, Usage } from "@opencode-ai/llm"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-
-void Log.init({ print: false })
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -47,7 +46,7 @@ const summary = Layer.succeed(
 
 const ref = {
   providerID: ProviderV2.ID.make("test"),
-  modelID: ProviderV2.ModelID.make("test-model"),
+  modelID: ModelV2.ID.make("test-model"),
 }
 
 const usage = (input: ConstructorParameters<typeof Usage>[0]) => new Usage(input)
@@ -614,6 +613,7 @@ describe("session.compaction.create", () => {
         })
 
         const v2 = yield* SessionV2.Service.use((svc) => svc.messages({ sessionID: info.id })).pipe(
+          Effect.provide(SessionExecution.noopLayer),
           Effect.provide(SessionV2.defaultLayer),
         )
         expect(v2.at(-1)).toMatchObject({

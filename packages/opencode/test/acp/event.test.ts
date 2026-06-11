@@ -531,6 +531,38 @@ describe("acp event routing", () => {
     expect(harness.updates[1]?.update).toMatchObject({ status: "in_progress", toolCallId: "call_1" })
   })
 
+  it("includes available input in the synthetic pending tool call", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_pending_input", cwd: "/workspace" }))
+
+    await harness.subscription.handle(
+      toolUpdated({
+        id: "part_call_read",
+        sessionID: "ses_pending_input",
+        messageID: "msg_call_read",
+        type: "tool",
+        callID: "call_read",
+        tool: "read",
+        state: {
+          status: "running",
+          input: { filePath: "/workspace/file.ts" },
+          title: "Read file.ts",
+          time: { start: Date.now() },
+        },
+      } satisfies ToolPart),
+    )
+
+    expect(harness.updates[0]?.update).toMatchObject({
+      sessionUpdate: "tool_call",
+      toolCallId: "call_read",
+      status: "pending",
+      title: "Read file.ts",
+      kind: "read",
+      rawInput: { filePath: "/workspace/file.ts" },
+      locations: [{ path: "/workspace/file.ts" }],
+    })
+  })
+
   it("does not emit duplicate synthetic pending after a replayed running tool", async () => {
     const harness = createHarness()
     await Effect.runPromise(harness.session.create({ id: "ses_replay", cwd: "/workspace" }))
