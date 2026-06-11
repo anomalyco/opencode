@@ -17,8 +17,7 @@ function Directory(props: { api: TuiPluginApi }) {
     const selected = destination?.destination()
     const directory = !selected || selected.type === "new" ? data.location.default().directory : selected.directory
     const out = abbreviateHome(directory, paths.home)
-    const branch =
-      directory === (props.api.state.path.directory || paths.cwd) ? props.api.state.vcs?.branch : undefined
+    const branch = directory === (props.api.state.path.directory || paths.cwd) ? props.api.state.vcs?.branch : undefined
     if (branch) return out + ":" + branch
     return out
   })

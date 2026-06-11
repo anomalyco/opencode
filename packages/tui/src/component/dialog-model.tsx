@@ -88,9 +88,7 @@ export function DialogModel(props: { providerID?: string }) {
       filter((option) => {
         if (!showSections) return true
         if (
-          favorites.some(
-            (item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID,
-          )
+          favorites.some((item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID)
         )
           return false
         if (

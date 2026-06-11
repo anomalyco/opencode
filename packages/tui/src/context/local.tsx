@@ -231,7 +231,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
-        const model = models().find((item) => item.enabled && providers().some((provider) => provider.id === item.providerID))
+        const model = models().find(
+          (item) => item.enabled && providers().some((provider) => provider.id === item.providerID),
+        )
         if (!model) return undefined
         return {
           providerID: model.providerID,

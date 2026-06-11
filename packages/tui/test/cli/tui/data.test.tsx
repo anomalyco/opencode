@@ -46,9 +46,7 @@ test("refreshes resources into reactive getters", async () => {
     if (url.pathname === "/api/agent")
       return json({
         location,
-        data: [
-          { id: "build", request: { headers: {}, body: {} }, mode: "primary", hidden: false, permissions: [] },
-        ],
+        data: [{ id: "build", request: { headers: {}, body: {} }, mode: "primary", hidden: false, permissions: [] }],
       })
     return undefined
   })
