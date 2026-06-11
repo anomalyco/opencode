@@ -823,6 +823,7 @@
       "name": "@opencode-ai/tui",
       "version": "0.0.0",
       "dependencies": {
+        "@opencode-ai/anr-core": "workspace:*",
         "@opencode-ai/core": "workspace:*",
         "@opencode-ai/plugin": "workspace:*",
         "@opencode-ai/sdk": "workspace:*",
