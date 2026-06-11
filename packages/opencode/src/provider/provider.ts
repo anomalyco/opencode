@@ -380,6 +380,34 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           // GovCloud stores e.g. us-gov.anthropic.claude-..., commercial stores us.anthropic.claude-...
           // Models without prefixes (amazon.nova-lite-v1:0) are used directly without modification.
           if (isANR) {
+            if (modelID.startsWith("arn:aws:bedrock:")) {
+              return sdk.languageModel(modelID)
+            }
+
+            const crossRegionPrefixes = ["global.", "us-gov.", "us.", "eu.", "jp.", "apac.", "au."]
+            if (crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))) {
+              return sdk.languageModel(modelID)
+            }
+
+            // Backward-compatibility fallback for API datasets that still store bare
+            // foundation IDs (for example anthropic.claude-opus-4-6-v1) instead of
+            // inference profile IDs. Prefer fixing data at source, but avoid hard-failing.
+            const requiresCrossRegionPrefix = modelID.includes("claude") || modelID.includes("nova-")
+            if (requiresCrossRegionPrefix) {
+              const normalizedPrefix = region.startsWith("us-gov")
+                ? "us-gov"
+                : region.startsWith("us-")
+                  ? "us"
+                  : region.startsWith("eu-")
+                    ? "eu"
+                    : region === "ap-northeast-1"
+                      ? "jp"
+                      : ["ap-southeast-2", "ap-southeast-4"].includes(region)
+                        ? "au"
+                        : "apac"
+              modelID = `${normalizedPrefix}.${modelID}`
+            }
+
             return sdk.languageModel(modelID)
           }
 

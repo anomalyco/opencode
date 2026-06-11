@@ -55,19 +55,28 @@ export interface AuditLoggerCredentials {
  * Initialize DynamoDB client for audit logging with optional credentials
  */
 export function initializeAuditLogger(config: ANRConfig, credentials?: AuditLoggerCredentials): void {
-  const client = new DynamoDBClient({
-    region: config.awsRegion,
-    ...(credentials && {
-      credentials: {
-        accessKeyId: credentials.accessKeyId,
-        secretAccessKey: credentials.secretAccessKey,
-        sessionToken: credentials.sessionToken,
-      },
-    }),
-  })
+  try {
+    const client = new DynamoDBClient({
+      region: config.awsRegion,
+      // Bun can trip on node-config-provider loadConfig in some mixed SDK graphs.
+      // Setting this explicitly avoids that runtime path.
+      accountIdEndpointMode: "disabled",
+      ...(credentials && {
+        credentials: {
+          accessKeyId: credentials.accessKeyId,
+          secretAccessKey: credentials.secretAccessKey,
+          sessionToken: credentials.sessionToken,
+        },
+      }),
+    })
 
-  dynamoClient = DynamoDBDocumentClient.from(client)
-  // Audit logger initialized (silent to avoid TUI pollution)
+    dynamoClient = DynamoDBDocumentClient.from(client)
+    // Audit logger initialized (silent to avoid TUI pollution)
+  } catch {
+    // Keep ANR startup resilient if SDK runtime wiring is incompatible.
+    dynamoClient = null
+    console.error("⚠️ Audit logger initialization failed; continuing without audit logging")
+  }
 }
 
 /**
