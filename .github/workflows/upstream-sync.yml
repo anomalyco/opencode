@@ -3,8 +3,9 @@ name: upstream-tag-sync
 on:
   workflow_dispatch:
   schedule:
-    # 毎日 00:00 UTC (= 09:00 JST) に upstream の最新リリース tag を確認する。
-    - cron: "0 0 * * *"
+    # JST 08:00 / 12:00 / 17:00 (= UTC 23:00 (前日) / 03:00 / 08:00) に upstream の次の tag を取り込む。
+    # 1 個ずつ sync する設計のため、追いつくのに複数日かかる。3 回 / 日で現実的な追従速度を確保する。
+    - cron: "0 23,3,8 * * *"
   repository_dispatch:
     types: [upstream_tag]
 
@@ -49,8 +50,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # 既に open の sync/upstream-v* PR があれば、たとえ同じ branch でも block する。
+          # 人間が conflict 解決したり review 中の PR を、次の cron が force-push で上書きする事故を防ぐ。
+          # 新しい tag を取り込みたい時は、既存 PR を merge / close してから次の run を待つ。
           PR="$(gh pr list -R ${{ github.repository }} --state open --base "${{ steps.plan.outputs.base }}" --json number,headRefName --jq '.[] | select(.headRefName | startswith("sync/upstream-v")) | .headRefName' | head -n 1)"
-          if [ -z "$PR" ] || [ "$PR" = "${{ steps.plan.outputs.branch }}" ]; then
+          if [ -z "$PR" ]; then
             echo "blocked=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -72,7 +76,7 @@ jobs:
             --description "Upstream sync PR has merge conflicts requiring manual resolution" \
             --color FBCA04 || true
 
-      - name: Create or update sync PR
+      - name: Create sync PR
         if: steps.plan.outputs.needed == 'true' && steps.gate.outputs.blocked != 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -93,7 +97,7 @@ jobs:
           fi
 
           {
-            echo "Automated intake PR for the latest upstream release tag."
+            echo "Automated intake PR for the next upstream release tag."
             echo
             echo "- Current dev upstream tag: \`${FROM_TAG}\`"
             echo "- Target upstream tag: \`${TARGET_TAG}\`"
@@ -114,13 +118,6 @@ jobs:
               echo "Conflicting files:"
               echo "$CONFLICT_FILES" | sed '/^$/d' | sed 's/^/- `/' | sed 's/$/`/'
             } >> /tmp/pr-body.md
-          fi
-
-          PR_NUMBER="$(gh pr list -R ${{ github.repository }} --state open --base "${BASE}" --head "${BRANCH}" --json number --jq '.[0].number // empty')"
-
-          if [ -n "$PR_NUMBER" ]; then
-            gh pr edit "$PR_NUMBER" -R ${{ github.repository }} --title "$TITLE" --body-file /tmp/pr-body.md
-            exit 0
           fi
 
           DRAFT_FLAG=""
