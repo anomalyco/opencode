@@ -709,10 +709,18 @@ const scenarios: Scenario[] = [
       "status",
     ),
   http.protected
-    .get("/api/fs/read", "v2.fs.read")
+    .get("/api/fs/read/*", "v2.fs.read")
     .seeded((ctx) => ctx.file("hello.txt", "hello\n"))
-    .at((ctx) => ({ path: "/api/fs/read?path=hello.txt", headers: ctx.headers() }))
-    .json(200, locationData(object)),
+    .at((ctx) => ({ path: "/api/fs/read/hello.txt", headers: ctx.headers() }))
+    .status(
+      200,
+      (_ctx, result) =>
+        Effect.sync(() => {
+          check(result.text === "hello\n", "v2 fs read should return the file body")
+          check(result.contentType.includes("text/plain"), "v2 fs read should return the file content type")
+        }),
+      "status",
+    ),
   http.protected.get("/api/fs/list", "v2.fs.list").json(200, locationData(array)),
   http.protected
     .get("/api/fs/find", "v2.fs.find")

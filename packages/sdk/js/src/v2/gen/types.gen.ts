@@ -4186,14 +4186,6 @@ export type PermissionSavedInfo = {
   resource: string
 }
 
-export type FileSystemContent = {
-  uri: string
-  name?: string
-  content: string
-  encoding: "utf8" | "base64"
-  mime: string
-}
-
 export type FileSystemEntry = {
   path: string
   type: "file" | "directory"
@@ -10554,14 +10546,13 @@ export type V2SessionPermissionReplyResponse =
 export type V2FsReadData = {
   body?: never
   path?: never
-  query: {
+  query?: {
     location?: {
       directory?: string
       workspace?: string
     }
-    path: string
   }
-  url: "/api/fs/read"
+  url: "/api/fs/read/*"
 }
 
 export type V2FsReadErrors = {
@@ -10581,10 +10572,7 @@ export type V2FsReadResponses = {
   /**
    * Success
    */
-  200: {
-    location: LocationInfo
-    data: FileSystemContent
-  }
+  200: Blob | File
 }
 
 export type V2FsReadResponse = V2FsReadResponses[keyof V2FsReadResponses]

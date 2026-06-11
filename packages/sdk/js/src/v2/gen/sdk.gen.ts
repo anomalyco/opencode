@@ -5964,31 +5964,20 @@ export class Fs extends HeyApiClient {
   /**
    * Read file
    *
-   * Read one file relative to the requested location.
+   * Serve one file relative to the requested location.
    */
   public read<ThrowOnError extends boolean = false>(
-    parameters: {
+    parameters?: {
       location?: {
         directory?: string
         workspace?: string
       }
-      path: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "location" },
-            { in: "query", key: "path" },
-          ],
-        },
-      ],
-    )
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
     return (options?.client ?? this.client).get<V2FsReadResponses, V2FsReadErrors, ThrowOnError>({
-      url: "/api/fs/read",
+      url: "/api/fs/read/*",
       ...options,
       ...params,
     })
