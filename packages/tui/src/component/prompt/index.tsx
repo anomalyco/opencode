@@ -299,6 +299,7 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
+    editingDraftIndex: number | null
   }>({
     placeholder: randomIndex(list().length),
     prompt: {
@@ -308,14 +309,21 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    editingDraftIndex: null,
   })
 
   const queuedDrafts = createMemo(() => {
-    return sync.data.queuedDrafts[props.sessionID ?? ""] ?? []
+    const sessionID = props.sessionID ?? ""
+    const list = sync.data.queuedDrafts[sessionID] ?? []
+    Log.Default.info(`[queuedDraftsMemo] sessionID="${sessionID}" list=${JSON.stringify(list.map(x => x.messageID))}`)
+    return list
   })
 
   function setQueuedDrafts(drafts: any[]) {
-    sync.setStore("queuedDrafts", props.sessionID ?? "", reconcile(drafts))
+    const sessionID = props.sessionID ?? ""
+    Log.Default.info(`[setQueuedDrafts] sessionID="${sessionID}" drafts=${JSON.stringify(drafts.map(x => x.messageID))}`)
+    sync.setStore("queuedDrafts", sessionID, reconcile(drafts))
+    Log.Default.info(`[setQueuedDrafts] after set: ${JSON.stringify((sync.data.queuedDrafts[sessionID] ?? []).map(x => x.messageID))}`)
   }
 
   const session = createMemo(() => props.sessionID ? sync.session.get(props.sessionID) : undefined)
@@ -929,6 +937,75 @@ export function Prompt(props: PromptProps) {
               return false
             }
 
+            if (input.plainText === "") {
+              if (queuedDrafts().length > 0) {
+                const editIndex = queuedDrafts().length - 1
+                const draft = queuedDrafts()[editIndex]
+                const newDrafts = queuedDrafts().slice(0, -1)
+                Log.Default.info(`[prompt.history.previous] Editing draft at index ${editIndex}. Remaining queue length: ${newDrafts.length}`)
+                setQueuedDrafts(newDrafts)
+                setStore("editingDraftIndex", editIndex)
+
+                const promptInfo = {
+                  input: draft.parts.filter((p: any) => p.type === "text" && !p.synthetic).map((p: any) => p.text).join("\n"),
+                  parts: draft.parts.filter((p: any) => p.type !== "text")
+                }
+                input.setText(promptInfo.input)
+                setStore("prompt", promptInfo)
+                restoreExtmarksFromParts(promptInfo.parts)
+                input.cursorOffset = promptInfo.input.length
+                return
+              }
+
+              const messages = sync.data.message[props.sessionID ?? ""] ?? []
+              const lastMsg = messages[messages.length - 1]
+
+              Log.Default.info(`[prompt.history.previous] Empty text. status=${status().type}, lastMsg=${lastMsg?.role} id=${lastMsg?.id}`)
+
+              if (status().type !== "idle" && lastMsg?.role === "user") {
+                const hasStarted = messages.some((m) => m.role === "assistant" && m.parentID >= lastMsg.id)
+                Log.Default.info(`[prompt.history.previous] hasStarted=${hasStarted}`)
+                if (!hasStarted) {
+                  const earlierRunning = messages.some(
+                    (m) => m.role === "user" && m.id < lastMsg.id && !messages.some((am) => am.role === "assistant" && am.parentID >= m.id)
+                  )
+                  Log.Default.info(`[prompt.history.previous] earlierRunning=${earlierRunning}`)
+                  void (async () => {
+                    if (!earlierRunning) {
+                      Log.Default.info(`[prompt.history.previous] aborting session`)
+                      await sdk.client.session.abort({ sessionID: props.sessionID! }).catch(() => {})
+                    }
+                    Log.Default.info(`[prompt.history.previous] reverting message ${lastMsg.id}`)
+                    await sdk.client.session
+                      .revert({
+                        sessionID: props.sessionID!,
+                        messageID: lastMsg.id,
+                      })
+                      .then(() => {
+                        Log.Default.info(`[prompt.history.previous] reverted successfully`)
+                        const parts = sync.data.part[lastMsg.id] ?? []
+                        const promptInfo = parts.reduce(
+                          (agg, part) => {
+                            if (part.type === "text" && !part.synthetic) agg.input += part.text
+                            if (part.type === "file") agg.parts.push(stripPromptPartIDs(part))
+                            return agg
+                          },
+                          { input: "", parts: [] as PromptInfo["parts"] },
+                        )
+                        input.setText(promptInfo.input)
+                        setStore("prompt", promptInfo)
+                        restoreExtmarksFromParts(promptInfo.parts)
+                        input.cursorOffset = promptInfo.input.length
+                      })
+                      .catch((err) => {
+                        Log.Default.error(`[prompt.history.previous] revert failed: ${err}`)
+                      })
+                  })()
+                  return
+                }
+              }
+            }
+
             const item = history.move(-1, input.plainText)
             if (!item) return false
             input.setText(item.input)
@@ -1145,10 +1222,11 @@ export function Prompt(props: PromptProps) {
       move.startSubmit()
       const followupMode = kv.get("followup", "haltingSteer")
       const isBusy = status().type !== "idle"
+      const isEditingDraft = store.editingDraftIndex !== null
 
       const isSteer = isBusy && followupMode === "haltingSteer"
 
-      if (isBusy && followupMode !== "queue" && queuedDrafts().length >= 1) {
+      if (!isEditingDraft && isBusy && followupMode !== "queue" && queuedDrafts().length >= 1) {
         toast.show({
           message: `Only one message can be queued in ${followupMode} mode`,
           variant: "warning",
@@ -1157,9 +1235,9 @@ export function Prompt(props: PromptProps) {
         return false
       }
 
-      if (isBusy && followupMode === "haltingSteer") {
+      if (!isEditingDraft && isBusy && followupMode === "haltingSteer") {
         void sdk.client.session.interrupt({ sessionID, type: "haltingSteer" })
-      } else if (isBusy && followupMode === "waitingSteer") {
+      } else if (!isEditingDraft && isBusy && followupMode === "waitingSteer") {
         void sdk.client.session.interrupt({ sessionID, type: "waitingSteer" })
       }
 
@@ -1185,7 +1263,17 @@ export function Prompt(props: PromptProps) {
         ],
       }
 
-      if (isBusy && followupMode === "queue") {
+      if (isEditingDraft) {
+        // Replace the draft at the original position in the queue
+        const editIndex = store.editingDraftIndex!
+        const current = queuedDrafts()
+        const updated = [...current]
+        updated.splice(editIndex, 0, payload)
+        Log.Default.info(`[submitInner] Replacing edited draft at index ${editIndex}`)
+        setQueuedDrafts(updated)
+        setStore("editingDraftIndex", null)
+      } else if (isBusy && followupMode === "queue") {
+        Log.Default.info(`[submitInner] Queueing payload with messageID: ${payload.messageID}`)
         setQueuedDrafts([...queuedDrafts(), payload])
         toast.show({
           message: "Queued",
@@ -1215,6 +1303,7 @@ export function Prompt(props: PromptProps) {
       parts: [],
     })
     setStore("extmarkToPartIndex", new Map())
+    setStore("editingDraftIndex", null)
     props.onSubmit?.()
 
     // temporary hack to make sure the message is sent
@@ -1487,6 +1576,7 @@ export function Prompt(props: PromptProps) {
               }}
               onCursorChange={() => setCursorVersion((value) => value + 1)}
               onKeyDown={async (e: KeyEvent & { preventDefault(): void }) => {
+                Log.Default.info(`[onKeyDown] key="${e.name}" ctrl=${e.ctrl} shift=${e.shift} cursorOffset=${input.cursorOffset} plainText="${input.plainText}" plainTextLength=${input.plainText.length}`)
                 if (props.disabled) {
                   e.preventDefault()
                   return
@@ -1549,95 +1639,6 @@ export function Prompt(props: PromptProps) {
                   }
                 }
                 if (!auto()?.visible) {
-                  if (
-                    (matchesKeybind("history_previous", e) && input.cursorOffset === 0) ||
-                    (matchesKeybind("history_next", e) && input.cursorOffset === input.plainText.length)
-                  ) {
-                    const direction = matchesKeybind("history_previous", e) ? -1 : 1
-                    Log.Default.info(`[UpArrow] direction=${direction}, input.plainText="${input.plainText}", cursorOffset=${input.cursorOffset}, queueLength=${queuedDrafts().length}`)
-                    if (direction === -1 && input.plainText === "") {
-                      if (queuedDrafts().length > 0) {
-                        e.preventDefault()
-                        const draft = queuedDrafts()[queuedDrafts().length - 1]
-                        const newDrafts = queuedDrafts().slice(0, -1)
-                        Log.Default.info(`[UpArrow] Popping draft. New queue length: ${newDrafts.length}`)
-                        setQueuedDrafts(newDrafts)
-
-                        const promptInfo = {
-                          input: draft.parts.filter((p: any) => p.type === "text" && !p.synthetic).map((p: any) => p.text).join("\n"),
-                          parts: draft.parts.filter((p: any) => p.type !== "text")
-                        }
-                        input.setText(promptInfo.input)
-                        setStore("prompt", promptInfo)
-                        restoreExtmarksFromParts(promptInfo.parts)
-                        input.cursorOffset = promptInfo.input.length
-                        return
-                      }
-
-                      const messages = sync.data.message[props.sessionID ?? ""] ?? []
-                      const lastMsg = messages[messages.length - 1]
-
-                      Log.Default.info(`[UpArrow Debug] direction=-1, empty text. status=${status().type}, lastMsg=${lastMsg?.role} id=${lastMsg?.id}`)
-
-                      if (status().type !== "idle" && lastMsg?.role === "user") {
-                        const hasStarted = messages.some((m) => m.role === "assistant" && m.parentID >= lastMsg.id)
-                        Log.Default.info(`[UpArrow Debug] hasStarted=${hasStarted}`)
-                        if (!hasStarted) {
-                          e.preventDefault()
-                          const earlierRunning = messages.some(
-                            (m) => m.role === "user" && m.id < lastMsg.id && !messages.some((am) => am.role === "assistant" && am.parentID >= m.id)
-                          )
-                          Log.Default.info(`[UpArrow Debug] earlierRunning=${earlierRunning}`)
-                          void (async () => {
-                            if (!earlierRunning) {
-                              Log.Default.info(`[UpArrow Debug] aborting session`)
-                              await sdk.client.session.abort({ sessionID: props.sessionID! }).catch(() => {})
-                            }
-                            Log.Default.info(`[UpArrow Debug] reverting message ${lastMsg.id}`)
-                            await sdk.client.session
-                              .revert({
-                                sessionID: props.sessionID!,
-                                messageID: lastMsg.id,
-                              })
-                              .then(() => {
-                                Log.Default.info(`[UpArrow Debug] reverted successfully`)
-                                const parts = sync.data.part[lastMsg.id] ?? []
-                                const promptInfo = parts.reduce(
-                                  (agg, part) => {
-                                    if (part.type === "text" && !part.synthetic) agg.input += part.text
-                                    if (part.type === "file") agg.parts.push(stripPromptPartIDs(part))
-                                    return agg
-                                  },
-                                  { input: "", parts: [] as PromptInfo["parts"] },
-                                )
-                                input.setText(promptInfo.input)
-                                setStore("prompt", promptInfo)
-                                restoreExtmarksFromParts(promptInfo.parts)
-                                input.cursorOffset = promptInfo.input.length
-                              })
-                              .catch((err) => {
-                                Log.Default.error(`[UpArrow Debug] revert failed: ${err}`)
-                              })
-                          })()
-                          return
-                        }
-                      }
-                    }
-
-                    const item = history.move(direction, input.plainText)
-
-                    if (item) {
-                      input.setText(item.input)
-                      setStore("prompt", item)
-                      setStore("mode", item.mode ?? "normal")
-                      restoreExtmarksFromParts(item.parts)
-                      e.preventDefault()
-                      if (direction === -1) input.cursorOffset = 0
-                      if (direction === 1) input.cursorOffset = input.plainText.length
-                    }
-                    return
-                  }
-
                   if (matchesKeybind("history_previous", e) && input.visualCursor.visualRow === 0) input.cursorOffset = 0
                   if (matchesKeybind("history_next", e) && input.visualCursor.visualRow === input.height - 1)
                     input.cursorOffset = input.plainText.length

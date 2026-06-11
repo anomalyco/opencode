@@ -34,7 +34,7 @@ export function SessionComposerRegion(props: {
     items: { id: string; text: string }[]
     sending?: string
     edit?: { id: string; prompt: FollowupDraft["prompt"]; context: FollowupDraft["context"] }
-    onQueue: (draft: FollowupDraft) => void
+    onQueue: (draft: FollowupDraft, editID?: string) => void
     onAbort: () => void
     onSend: (id: string) => void
     onEdit: (id: string) => void
@@ -182,6 +182,18 @@ export function SessionComposerRegion(props: {
           )}
         </Show>
 
+        <Show when={props.followup?.items.length}>
+          <div class="relative z-10">
+            <SessionFollowupDock
+              items={props.followup!.items}
+              sending={props.followup!.sending}
+              onSend={props.followup!.onSend}
+              onEdit={props.followup!.onEdit}
+              onCancel={props.followup!.onCancel}
+            />
+          </div>
+        </Show>
+
         <Show when={showComposer()}>
           <Show
             when={prompt.ready()}
@@ -252,15 +264,6 @@ export function SessionComposerRegion(props: {
                 "margin-top": `${-lift()}px`,
               }}
             >
-              <Show when={props.followup?.items.length}>
-                <SessionFollowupDock
-                  items={props.followup!.items}
-                  sending={props.followup!.sending}
-                  onSend={props.followup!.onSend}
-                  onEdit={props.followup!.onEdit}
-                  onCancel={props.followup!.onCancel}
-                />
-              </Show>
               <Show
                 when={child()}
                 fallback={

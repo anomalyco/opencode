@@ -1434,7 +1434,7 @@ export default function Page() {
     const mode = settings.general.followup()
     const isEditing = !!editID
     if (!isEditing && (mode === "haltingSteer" || mode === "waitingSteer") && queuedFollowups().length >= 1) return false
-    return busy(id) && !composer.blocked() && !isChildSession()
+    return (isEditing || busy(id)) && !composer.blocked() && !isChildSession()
   }
 
   const followupText = (item: FollowupDraft) => {

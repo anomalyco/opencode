@@ -926,6 +926,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (shouldReset) {
       closePopover()
       resetHistoryNavigation()
+      setStore("editID", null)
       if (prompt.dirty()) {
         mirror.input = true
         prompt.set(DEFAULT_PROMPT, 0)
@@ -1085,7 +1086,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         })
         props.onEditLoaded?.()
       },
-      { defer: true },
     ),
   )
 
@@ -1159,7 +1159,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     clearEditID: () => setStore("editID", null),
     newSessionWorktree: () => props.newSessionWorktree,
     onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
-    shouldQueue: () => props.shouldQueue?.(store.editID ?? undefined) ?? false,
+    shouldQueue: (editID) => props.shouldQueue?.(editID) ?? false,
     onQueue: props.onQueue,
     onAbort: props.onAbort,
     onSubmit: props.onSubmit,
