@@ -155,6 +155,34 @@ function StickyScrollFixture(props: { separated: boolean; scroll: (scroll: Scrol
   )
 }
 
+function FailedPendingToolFixture() {
+  return (
+    <InlineToolRow
+      icon="%"
+      complete={false}
+      pending="Preparing patch..."
+      failed={true}
+      failure="Patch failed"
+    >
+      Patch
+    </InlineToolRow>
+  )
+}
+
+function FailedCompleteToolFixture() {
+  return (
+    <InlineToolRow
+      icon="→"
+      complete={true}
+      pending="Reading file..."
+      failed={true}
+      failure="Read failed"
+    >
+      Read src/index.ts
+    </InlineToolRow>
+  )
+}
+
 async function renderFrame(component: () => JSX.Element, options: { width: number; height: number }) {
   testSetup = await testRender(component, options)
   await testSetup.renderOnce()
@@ -171,6 +199,18 @@ describe("TUI inline tool wrapping", () => {
   test("falls back for unknown tool names", () => {
     expect(toolDisplay("bash")).toBe("bash")
     expect(toolDisplay("plugin_tool")).toBe("generic")
+  })
+
+  test("replaces pending copy when a tool fails before completion", async () => {
+    const frame = await renderFrame(() => <FailedPendingToolFixture />, { width: 72, height: 3 })
+    expect(frame).toContain("Patch failed")
+    expect(frame).not.toContain("Preparing patch")
+  })
+
+  test("preserves useful completed copy when a tool fails", async () => {
+    const frame = await renderFrame(() => <FailedCompleteToolFixture />, { width: 72, height: 3 })
+    expect(frame).toContain("Read src/index.ts")
+    expect(frame).not.toContain("Read failed")
   })
 
   test("filters malformed nested tool wire data", () => {
