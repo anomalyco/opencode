@@ -650,6 +650,49 @@ const scenarios: Scenario[] = [
   http.protected.get("/api/agent", "v2.agent.list").json(200, locationData(array)),
   http.protected.get("/api/model", "v2.model.list").json(200, locationData(array)),
   http.protected.get("/api/provider", "v2.provider.list").json(200, locationData(array)),
+  http.protected.get("/api/connector", "v2.connector.list").json(200, locationData(array)),
+  http.protected
+    .get("/api/connector/{connectorID}", "v2.connector.get")
+    .at((ctx) => ({ path: route("/api/connector/{connectorID}", { connectorID: "missing" }), headers: ctx.headers() }))
+    .json(200, object),
+  http.protected
+    .post("/api/connector/{connectorID}/connect/key", "v2.connector.connect.key")
+    .at((ctx) => ({
+      path: route("/api/connector/{connectorID}/connect/key", { connectorID: "missing" }),
+      headers: ctx.headers(),
+      body: { methodID: "missing", key: "test", inputs: {} },
+    }))
+    .status(500, undefined, "status"),
+  http.protected
+    .post("/api/connector/{connectorID}/connect/oauth", "v2.connector.connect.oauth.begin")
+    .at((ctx) => ({
+      path: route("/api/connector/{connectorID}/connect/oauth", { connectorID: "missing" }),
+      headers: ctx.headers(),
+      body: { methodID: "missing", inputs: {} },
+    }))
+    .status(500, undefined, "status"),
+  http.protected
+    .get("/api/connector/oauth/{attemptID}", "v2.connector.connect.oauth.status")
+    .at((ctx) => ({
+      path: route("/api/connector/oauth/{attemptID}", { attemptID: "con_missing" }),
+      headers: ctx.headers(),
+    }))
+    .status(500, undefined, "status"),
+  http.protected
+    .post("/api/connector/oauth/{attemptID}/complete", "v2.connector.connect.oauth.complete")
+    .at((ctx) => ({
+      path: route("/api/connector/oauth/{attemptID}/complete", { attemptID: "con_missing" }),
+      headers: ctx.headers(),
+      body: {},
+    }))
+    .status(500, undefined, "status"),
+  http.protected
+    .delete("/api/connector/oauth/{attemptID}", "v2.connector.connect.oauth.cancel")
+    .at((ctx) => ({
+      path: route("/api/connector/oauth/{attemptID}", { attemptID: "con_missing" }),
+      headers: ctx.headers(),
+    }))
+    .status(204, undefined, "status"),
   http.protected.get("/api/command", "v2.command.list").json(200, locationData(array)),
   http.protected.get("/api/skill", "v2.skill.list").json(200, locationData(array)),
   http.protected

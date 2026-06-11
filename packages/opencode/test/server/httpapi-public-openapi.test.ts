@@ -115,6 +115,30 @@ describe("PublicApi OpenAPI v2 errors", () => {
     }
   })
 
+  test("documents connector discovery and connection routes", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const [method, path] of [
+      ["get", "/api/connector"],
+      ["get", "/api/connector/{connectorID}"],
+      ["post", "/api/connector/{connectorID}/connect/key"],
+      ["post", "/api/connector/{connectorID}/connect/oauth"],
+      ["get", "/api/connector/oauth/{attemptID}"],
+      ["post", "/api/connector/oauth/{attemptID}/complete"],
+      ["delete", "/api/connector/oauth/{attemptID}"],
+    ] as const) {
+      expect(spec.paths[path]?.[method], `${method.toUpperCase()} ${path}`).toBeDefined()
+    }
+
+    for (const path of [
+      "/api/connector/{connectorID}/connect/key",
+      "/api/connector/{connectorID}/connect/oauth",
+      "/api/connector/oauth/{attemptID}/complete",
+    ]) {
+      expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
+    }
+  })
+
   test("does not rewrite /api endpoint errors to legacy error components", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
     const refs = v2Operations(spec)
