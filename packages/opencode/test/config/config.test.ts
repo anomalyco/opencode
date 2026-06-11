@@ -395,6 +395,58 @@ it.effect("updates global config and omits empty shell key in jsonc", () =>
   ),
 )
 
+const staleProvider = {
+  provider: {
+    stale: { npm: "@ai-sdk/openai-compatible", name: "Stale", options: { baseURL: "http://192.168.1.89:11435/v1" } },
+  },
+}
+const freshProvider = {
+  provider: {
+    fresh: { npm: "@ai-sdk/openai-compatible", name: "Fresh", options: { baseURL: "http://192.168.1.218:11435/v1" } },
+  },
+}
+
+it.effect("updateGlobal merge keeps provider keys absent from the patch", () =>
+  withGlobalConfig({ config: staleProvider }, ({ dir }) =>
+    Effect.gen(function* () {
+      yield* Config.use.updateGlobal(freshProvider)
+
+      const writtenConfig = yield* FSUtil.use.readJson(path.join(dir, "opencode.json"))
+      expect((writtenConfig as { provider: object }).provider).toMatchObject({
+        stale: expect.anything(),
+        fresh: expect.anything(),
+      })
+    }),
+  ),
+)
+
+it.effect("updateGlobal with replace removes deleted provider keys in json", () =>
+  withGlobalConfig({ config: staleProvider }, ({ dir }) =>
+    Effect.gen(function* () {
+      yield* Config.use.updateGlobal(freshProvider, { replace: ["provider"] })
+
+      const writtenConfig = yield* FSUtil.use.readJson(path.join(dir, "opencode.json"))
+      expect((writtenConfig as { provider: object }).provider).not.toHaveProperty("stale")
+      expect((writtenConfig as { provider: object }).provider).toHaveProperty("fresh")
+    }),
+  ),
+)
+
+it.effect("updateGlobal with replace removes deleted provider keys in jsonc", () =>
+  withGlobalConfig({ config: { ...staleProvider, model: "test/model" }, name: "opencode.jsonc" }, ({ dir }) =>
+    Effect.gen(function* () {
+      yield* Config.use.updateGlobal(freshProvider, { replace: ["provider"] })
+
+      const file = path.join(dir, "opencode.jsonc")
+      const writtenConfig = yield* FSUtil.use.readFileString(file)
+      const parsed = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(writtenConfig, file), file)
+      expect(parsed.provider).not.toHaveProperty("stale")
+      expect(parsed.provider).toHaveProperty("fresh")
+      expect(parsed.model).toBe("test/model")
+    }),
+  ),
+)
+
 it.instance(
   "loads formatter boolean config",
   Effect.gen(function* () {

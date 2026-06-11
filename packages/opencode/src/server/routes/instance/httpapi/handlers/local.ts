@@ -98,12 +98,28 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
           online: boolean
           models: string[]
           configuredProviderID?: string
+          source: "mdns" | "localhost" | "lan" | "config"
         }
       >()
       for (const svc of discovered) {
         const norm = normalizeBaseURL(svc.baseURL)
-        const configuredProviderID = configuredByURL.get(norm)
-        const name = configuredNameByURL.get(norm) ?? svc.name
+        let configuredProviderID = configuredByURL.get(norm)
+        const discoveredID = providerIDFromName(canonicalServiceName(svc.name) || svc.name)
+        // mDNS identity is authoritative: when the config entry occupying this
+        // URL disagrees with the advertised identity AND the advertised
+        // identity exists in config under another (stale) URL, the config is
+        // wrong — don't let it relabel the live discovery, or a stale
+        // "m5 → <old IP>" entry makes the scan present the wrong machine as
+        // m5 and /connect re-writes the corruption.
+        if (
+          svc.source === "mdns" &&
+          configuredProviderID &&
+          configuredProviderID !== discoveredID &&
+          discoveredID in (config.provider ?? {})
+        ) {
+          configuredProviderID = undefined
+        }
+        const name = (configuredProviderID ? configuredNameByURL.get(norm) : undefined) ?? svc.name
         byURL.set(norm, {
           id: configuredProviderID ?? providerIDFromName(svc.name),
           name,
@@ -113,6 +129,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
           online: svc.online,
           models: [...svc.models],
           configuredProviderID,
+          source: svc.source,
         })
       }
 
@@ -145,6 +162,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
           online,
           models: models ?? [],
           configuredProviderID: entry.id,
+          source: "config",
         })
       }
 
@@ -159,6 +177,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
           online: boolean
           models: string[]
           configuredProviderID?: string
+          source: "mdns" | "localhost" | "lan" | "config"
         }
       >()
       for (const svc of byURL.values()) {
@@ -168,7 +187,15 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
         const previous = deduped.get(dedupeKey)
         const hasConfigured = Boolean(svc.configuredProviderID)
         const previousConfigured = Boolean(previous?.configuredProviderID)
-        if (!previous || (hasConfigured && !previousConfigured) || svc.models.length > previous.models.length) {
+        // Live mDNS discovery outranks a probe of a possibly-stale configured
+        // URL; among equals, prefer configured entries, then richer model lists.
+        const isMdns = svc.source === "mdns"
+        const prevMdns = previous?.source === "mdns"
+        if (
+          !previous ||
+          (isMdns && !prevMdns) ||
+          (isMdns === prevMdns && ((hasConfigured && !previousConfigured) || svc.models.length > previous.models.length))
+        ) {
           deduped.set(dedupeKey, {
             ...svc,
             id: svc.configuredProviderID ?? canonicalID,
@@ -177,7 +204,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
         }
       }
 
-      return [...deduped.values()].map((svc) => ({
+      return [...deduped.values()].map(({ source: _source, ...svc }) => ({
         ...svc,
         baseURL: svc.baseURL,
       }))
@@ -201,7 +228,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
         options: { baseURL, apiKey: "skein" },
         discoverModels: true,
       }
-      yield* configSvc.updateGlobal({ ...global, provider: providers })
+      yield* configSvc.updateGlobal({ ...global, provider: providers }, { replace: ["provider"] })
       return key
     })
 
@@ -210,7 +237,9 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       const global = yield* configSvc.getGlobal()
       const providers = { ...(global.provider ?? {}) }
       delete providers[providerID]
-      yield* configSvc.updateGlobal({ ...global, provider: providers })
+      // replace: mergeDeep alone cannot remove keys, which made disconnect a
+      // silent no-op for providers already on disk.
+      yield* configSvc.updateGlobal({ ...global, provider: providers }, { replace: ["provider"] })
       return providerID
     })
 

@@ -127,7 +127,10 @@ export interface Interface {
   readonly getGlobal: () => Effect.Effect<Info>
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
   readonly update: (config: Info) => Effect.Effect<void>
-  readonly updateGlobal: (config: Info) => Effect.Effect<{ info: Info; changed: boolean }>
+  readonly updateGlobal: (
+    config: Info,
+    options?: { replace?: readonly string[] },
+  ) => Effect.Effect<{ info: Info; changed: boolean }>
   readonly invalidate: () => Effect.Effect<void>
   readonly directories: () => Effect.Effect<string[]>
   readonly waitForDependencies: () => Effect.Effect<void>
@@ -159,6 +162,18 @@ function patchJsonc(input: string, patch: unknown, path: string[] = []): string 
   }
 
   return Object.entries(patch).reduce((result, [key, value]) => patchJsonc(result, value, [...path, key]), input)
+}
+
+// Wholesale value replacement at a jsonc path — unlike patchJsonc, which recurses
+// into records and therefore can only set keys, never remove them.
+function setJsonc(input: string, path: string[], value: unknown): string {
+  const edits = modify(input, path, value, {
+    formattingOptions: {
+      insertSpaces: true,
+      tabSize: 2,
+    },
+  })
+  return applyEdits(input, edits)
 }
 
 function writable(info: Info) {
@@ -628,22 +643,32 @@ export const layer = Layer.effect(
       yield* invalidateGlobal
     })
 
-    const updateGlobal = Effect.fn("Config.updateGlobal")(function* (config: Info) {
+    const updateGlobal = Effect.fn("Config.updateGlobal")(function* (
+      config: Info,
+      options?: { replace?: readonly string[] },
+    ) {
       const file = globalConfigFile()
       const before = (yield* readConfigFile(file)) ?? "{}"
       const patch = writableGlobal(config)
+      // Keys the caller owns wholesale. mergeDeep can only add/override keys, never
+      // remove them, so read-modify-write callers (provider sync, local
+      // connect/disconnect) pass the full map and have it replace the on-disk value.
+      const replaceKeys = (options?.replace ?? []).filter((key) => key in patch)
 
       let next: Info
       let changed: boolean
       if (!file.endsWith(".jsonc")) {
         const existing = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(before, file), file)
-        const merged = mergeDeep(writable(existing), patch)
+        const merged = mergeDeep(writable(existing), patch) as Record<string, unknown>
+        for (const key of replaceKeys) merged[key] = (patch as Record<string, unknown>)[key]
         const serialized = JSON.stringify(merged, null, 2)
         changed = serialized !== before
         if (changed) yield* fs.writeFileString(file, serialized).pipe(Effect.orDie)
-        next = merged
+        next = merged as Info
       } else {
-        const updated = patchJsonc(before, patch)
+        const mergePatch = Object.fromEntries(Object.entries(patch).filter(([key]) => !replaceKeys.includes(key)))
+        let updated = patchJsonc(before, mergePatch)
+        for (const key of replaceKeys) updated = setJsonc(updated, [key], (patch as Record<string, unknown>)[key])
         next = ConfigParse.schema(ConfigV1.Info, ConfigParse.jsonc(updated, file), file)
         changed = updated !== before
         if (changed) yield* fs.writeFileString(file, updated).pipe(Effect.orDie)

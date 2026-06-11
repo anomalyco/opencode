@@ -10,6 +10,10 @@ export interface LocalLlamaSwapService {
   host: string
   port: number
   baseURL: string
+  // How this service was found. mDNS carries the machine's own advertised
+  // identity (TXT host) and is authoritative; "lan" names come from reverse
+  // DNS, which routers frequently get wrong (stale DHCP lease names).
+  source: "mdns" | "localhost" | "lan"
 }
 
 // Always resolves — uses setTimeout so it works even when fetch/AbortController
@@ -69,8 +73,32 @@ export async function probeModelIDs(baseURL: string, timeoutMs = 2000): Promise<
 
 const LOCAL_PORTS = [11434, 11435, 8080, 8081]
 const LLAMA_SWAP_SERVICE_TYPES = ["llamaswap", "llama-swap"]
+const IPV4_RE = /^\d+\.\d+\.\d+\.\d+$/
 
-async function probeHost(host: string, port: number): Promise<LocalLlamaSwapService | null> {
+// Resolve a service's address from its OWN advertised A records, preferring one
+// on a subnet this machine is attached to. The packet source (referer) is only
+// a fallback: Bonjour sleep proxies and multi-homed responders can deliver
+// another machine's records from an unrelated source address, and using that
+// address binds the advertised name to the wrong host.
+function pickServiceHost(svc: {
+  addresses?: string[]
+  referer?: { address?: string }
+  host?: string
+}): string {
+  const advertised = (svc.addresses ?? []).filter((item) => IPV4_RE.test(item))
+  const prefixes = getLANInterfaces().prefixes
+  const onLAN = advertised.find((item) => prefixes.includes(item.split(".").slice(0, 3).join(".")))
+  if (onLAN) return onLAN
+  const referer = svc.referer?.address
+  if (referer && IPV4_RE.test(referer)) return referer
+  return advertised[0] ?? svc.host ?? ""
+}
+
+async function probeHost(
+  host: string,
+  port: number,
+  source: LocalLlamaSwapService["source"],
+): Promise<LocalLlamaSwapService | null> {
   const baseURL = `http://${host}:${port}/v1`
   return withTimeout(
     llamaSkeinClient(baseURL)
@@ -78,7 +106,7 @@ async function probeHost(host: string, port: number): Promise<LocalLlamaSwapServ
       .then((result) => {
         const response = result as ModelListResult
         if (response.error !== undefined || !response.data?.data) return null
-        return { name: host, host, port, baseURL } satisfies LocalLlamaSwapService
+        return { name: host, host, port, baseURL, source } satisfies LocalLlamaSwapService
       })
       .catch(() => null),
     1000,
@@ -90,7 +118,7 @@ async function probeLocalhost(): Promise<LocalLlamaSwapService[]> {
   const hostname = normalizeHostname(os.hostname())
   const results = await Promise.all(
     LOCAL_PORTS.map(async (port) => {
-      const svc = await probeHost("127.0.0.1", port)
+      const svc = await probeHost("127.0.0.1", port, "localhost")
       if (!svc) return null
       return { ...svc, name: hostname }
     }),
@@ -98,21 +126,24 @@ async function probeLocalhost(): Promise<LocalLlamaSwapService[]> {
   return results.filter((r): r is LocalLlamaSwapService => r !== null)
 }
 
-function getLANSubnets(): Array<{ prefix: string; ownIP: string }> {
-  const subnets: Array<{ prefix: string; ownIP: string }> = []
+function getLANInterfaces(): { prefixes: string[]; ownIPs: Set<string> } {
+  const prefixes = new Set<string>()
+  const ownIPs = new Set<string>()
   for (const ifaces of Object.values(os.networkInterfaces())) {
     for (const iface of ifaces ?? []) {
-      if (iface.family !== "IPv4" || iface.internal) continue
+      if (iface.family !== "IPv4") continue
+      ownIPs.add(iface.address)
+      if (iface.internal) continue
       const parts = iface.address.split(".")
       if (parts.length !== 4) continue
       const [a, b] = parts.map(Number)
       // Only private RFC-1918 ranges
       if (a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) {
-        subnets.push({ prefix: parts.slice(0, 3).join("."), ownIP: iface.address })
+        prefixes.add(parts.slice(0, 3).join("."))
       }
     }
   }
-  return subnets
+  return { prefixes: [...prefixes], ownIPs }
 }
 
 async function runWithConcurrency<T>(tasks: Array<() => Promise<T>>, limit: number): Promise<T[]> {
@@ -163,15 +194,18 @@ async function tcpConnects(host: string, port: number): Promise<boolean> {
 }
 
 async function probeLAN(): Promise<LocalLlamaSwapService[]> {
-  const subnets = getLANSubnets()
-  if (subnets.length === 0) return []
+  const { prefixes, ownIPs } = getLANInterfaces()
+  if (prefixes.length === 0) return []
 
-  // Phase 1: TCP-probe all candidates via net.Socket (reliable abort on unreachable hosts)
+  // Phase 1: TCP-probe all candidates via net.Socket (reliable abort on unreachable hosts).
+  // Skip every own IP, not one per subnet — a dual-homed machine (Wi-Fi +
+  // Ethernet on the same subnet) must not discover itself through its second
+  // interface and get named by reverse DNS.
   const candidates: Array<{ host: string; port: number }> = []
-  for (const { prefix, ownIP } of subnets) {
+  for (const prefix of prefixes) {
     for (let i = 1; i <= 254; i++) {
       const host = `${prefix}.${i}`
-      if (host === ownIP) continue
+      if (ownIPs.has(host)) continue
       for (const port of LAN_PORTS) {
         candidates.push({ host, port })
       }
@@ -187,7 +221,7 @@ async function probeLAN(): Promise<LocalLlamaSwapService[]> {
   const reachable = tcpResults.filter((r): r is { host: string; port: number } => r !== null)
 
   // Phase 2: HTTP-probe only the hosts that answered TCP
-  const httpResults = await Promise.all(reachable.map(({ host, port }) => probeHost(host, port)))
+  const httpResults = await Promise.all(reachable.map(({ host, port }) => probeHost(host, port, "lan")))
   const found = httpResults.filter((r): r is LocalLlamaSwapService => r !== null)
 
   // Resolve hostnames — only ~3-4 live hosts, so 500ms DNS is fine
@@ -206,15 +240,11 @@ export async function scanMDNSOnly(timeoutMs = 4000): Promise<LocalLlamaSwapServ
       const browsers = LLAMA_SWAP_SERVICE_TYPES.map((type) => bonjour!.find({ type, protocol: "tcp" }))
       for (const browser of browsers) {
         browser.on("up", (svc) => {
-          const refererAddress = /^\d+\.\d+\.\d+\.\d+$/.test(svc.referer?.address ?? "")
-            ? svc.referer?.address
-            : undefined
-          const advertisedAddress = svc.addresses?.find((item: string) => /^\d+\.\d+\.\d+\.\d+$/.test(item))
-          const host = refererAddress ?? advertisedAddress ?? svc.host ?? svc.addresses?.[0] ?? ""
+          const host = pickServiceHost(svc)
           if (!host) return
           const baseURL = `http://${host}:${svc.port}/v1`
           const name = normalizeHostname((svc.txt as Record<string, string> | undefined)?.host ?? svc.name)
-          found.push({ name, host, port: svc.port, baseURL })
+          found.push({ name, host, port: svc.port, baseURL, source: "mdns" })
         })
       }
       setTimeout(() => {
@@ -245,15 +275,11 @@ export async function scanLlamaSwap(
       for (const browser of browsers) {
         browser.on("up", (svc) => {
           if (closed) return
-          const refererAddress = /^\d+\.\d+\.\d+\.\d+$/.test(svc.referer?.address ?? "")
-            ? svc.referer?.address
-            : undefined
-          const advertisedAddress = svc.addresses?.find((item: string) => /^\d+\.\d+\.\d+\.\d+$/.test(item))
-          const host = refererAddress ?? advertisedAddress ?? svc.host ?? svc.addresses?.[0] ?? ""
+          const host = pickServiceHost(svc)
           if (!host) return
           const baseURL = `http://${host}:${svc.port}/v1`
           const name = normalizeHostname((svc.txt as Record<string, string> | undefined)?.host ?? svc.name)
-          raw.push({ name, host, port: svc.port, baseURL })
+          raw.push({ name, host, port: svc.port, baseURL, source: "mdns" })
         })
       }
       // Yield to I/O before closing: any "up" packets that arrived just as the
