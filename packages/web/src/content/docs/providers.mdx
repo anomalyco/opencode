@@ -1728,6 +1728,44 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### AnyAPI
+
+[AnyAPI](https://anyapi.ai) is a unified AI platform providing access to 400+ models from OpenAI, Anthropic, Google, Meta, DeepSeek and more through a single OpenAI-compatible API. Models are listed on [models.dev](https://models.dev) under the `anyapi` provider.
+
+1. Head over to the [AnyAPI Dashboard](https://dash.anyapi.ai), create an account, and generate an API key in [API Keys](https://dash.anyapi.ai/?page=api-keys).
+
+2. Run the `/connect` command and search for AnyAPI.
+
+```txt
+/connect
+```
+
+3. Enter your AnyAPI API key.
+
+```txt
+┌  API key
+│
+│
+└  enter
+```
+
+4. Run the `/models` command to select a model.
+
+```txt
+/models
+```
+
+AnyAPI models are dynamically fetched from the catalog. You can also set a specific model via config:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "anyapi/openai/gpt-4o"
+}
+```
+
+---
+
 ### LLM Gateway
 
 1. Head over to the [LLM Gateway dashboard](https://llmgateway.io/dashboard), click **Create API Key**, and copy the key.
