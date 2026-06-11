@@ -14,7 +14,7 @@ A. 既定構成ではありません。`securecode.json` を編集して別 prov
 
 ### Q. 会話履歴はどこに保存される？
 
-A. ローカルの SQLite データベース（`~/.local/share/securecode/` 配下）に保存されます。クラウド同期はしません。`securecode session list` で確認、`securecode db` でメンテ可能です。
+A. ローカルの SQLite データベース（`~/.local/share/securecode/` 配下）に保存されます。クラウド同期はしません。TUI 内のスラッシュコマンドや keybind でセッションの一覧・切替・削除ができます。
 
 ### Q. 監査ログは？
 
@@ -28,7 +28,7 @@ A. 使えません。LLM 推論は Acompany endpoint を呼ぶ必要があるた
 
 ### Q. MCP に対応している？
 
-A. 対応しています。`securecode mcp` サブコマンドで MCP サーバを登録できます。ただし MCP サーバが外部通信する場合は、サンドボックスでそのドメインを許可する必要があります。
+A. 対応しています。`securecode.json` の `mcp` セクションに MCP サーバを直接定義してください (詳細は `04-config.md`)。MCP サーバが外部通信する場合は、サンドボックスでそのドメインを許可する必要があります。
 
 ## 制約
 
@@ -48,7 +48,7 @@ A. 多重サンドボックスは原則非対応です。コンテナ内では�
 
 ### Q. アップデートはどうやる？
 
-A. `securecode upgrade` で最新リリースに更新します。`gh` 認証が必要です。詳しくは `03-commands.md`。
+A. 初回 install と同じスクリプトを再実行してください (`gh release download -R acompany-develop/securecode --pattern install -O - | bash`)。`gh` 認証が必要です。詳しくは `06-troubleshooting.md` の「最新版に更新したい」。
 
 ### Q. 設定をチームで共有したい
 

@@ -51,42 +51,16 @@ function normalize(text: string): string {
 // keep it in that order so the snapshot file reads as a table of contents.
 // `completion` is intentionally excluded — it's a yargs built-in that emits
 // top-level help on `--help` and exits 1; not a real opencode command.
-// `acp` / `upgrade` / `uninstall` / `web` / `github` / `pr` were removed in
-// securecode (see #71), so they fall through to top-level help if listed.
-const TOP_LEVEL = [
-  "mcp",
-  "attach",
-  "run",
-  "debug",
-  "providers", // aliased to `auth`
-  "agent",
-  "serve",
-  "models",
-  "stats",
-  "export",
-  "import",
-  "session",
-  "plugin",
-  "db",
-] as const
+// SecureCode keeps only `[project]` (TUI default, excluded per the banner
+// caveat above) and `run` registered (see #347, follow-up to #71). Other
+// upstream subcommands fall through to top-level help.
+const TOP_LEVEL = ["run"] as const
 
 // Subcommands worth pinning. Not exhaustive — the goal is one snapshot per
 // distinct argv shape, not every leaf. Add new entries when a subcommand
-// gains user-visible flags that we want to lock in.
-const SUBCOMMANDS = [
-  ["mcp", "list"],
-  ["mcp", "add"],
-  ["mcp", "auth"],
-  ["mcp", "logout"],
-  ["providers", "list"],
-  ["providers", "login"],
-  ["providers", "logout"],
-  ["agent", "create"],
-  ["agent", "list"],
-  ["session", "list"],
-  ["session", "delete"],
-  ["db", "path"],
-] as const
+// gains user-visible flags that we want to lock in. Currently empty because
+// `run` has no nested subcommands.
+const SUBCOMMANDS: ReadonlyArray<readonly string[]> = []
 
 // Fixed wrap width so a developer's terminal doesn't affect snapshots.
 // yargs honors COLUMNS; CI runners typically default to 80 which produces

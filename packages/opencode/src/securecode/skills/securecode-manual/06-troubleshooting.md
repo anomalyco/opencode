@@ -70,15 +70,21 @@ Acompany endpoint 側の一時的な不調か、ネットワーク経路の問�
 
 確認頻度を減らすために **Layer 1 を緩めると Layer 2 だけが頼り** になります。バランスを見て選んでください。
 
-## upgrade に失敗
+## 最新版に更新したい
 
-`securecode upgrade` は `gh` 経由で private リリースを取りに行きます。
+SecureCode は専用の upgrade サブコマンドを持ちません。初回インストールと同じ手順で再 install してください。
 
+```bash
+gh release download -R acompany-develop/securecode --pattern install -O - | bash
 ```
+
+このとき以下を確認:
+
+```bash
 gh auth status
 ```
 
-で認証を確認。失効していたら `gh auth login` し直し。`gh release list -R acompany-develop/securecode` で配布が見えるかも確認。
+で認証が生きていること。失効していたら `gh auth login` し直し。`gh release list -R acompany-develop/securecode` で配布が見えるかも確認。
 
 ## ログを取りたい
 

@@ -58,7 +58,15 @@ gh release download -R acompany-develop/securecode --pattern install -O - | bash
 
 ## アンインストール
 
-`securecode uninstall` サブコマンドが用意されています。配置されたバイナリと `~/.config/securecode/` を確認しながら削除します。
+SecureCode は専用の uninstall サブコマンドを持ちません。以下を手動で削除してください (rm ではなく `trash` 推奨)。
+
+```bash
+trash ~/.local/bin/securecode ~/.local/bin/securecode-bin
+trash ~/.config/securecode
+trash ~/.local/state/securecode
+```
+
+シェル設定 (`~/.zshrc` / `~/.bashrc` 等) に追加された `~/.local/bin` への PATH エントリも、不要なら削除してください。
 
 ## 関連
 
