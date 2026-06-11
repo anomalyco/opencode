@@ -10,6 +10,7 @@ import { useSDK } from "../context/sdk"
 import { useToast } from "../ui/toast"
 import { DialogAlert } from "../ui/dialog-alert"
 import { DialogWorkspaceFileChanges } from "./dialog-workspace-file-changes"
+import { useI18n } from "../i18n"
 
 type Adapter = ExperimentalWorkspaceAdapterListResponse[number]
 
@@ -53,6 +54,7 @@ async function loadWorkspaceAdapters(input: {
   sdk: ReturnType<typeof useSDK>
   sync: ReturnType<typeof useSync>
   toast: ReturnType<typeof useToast>
+  t: ReturnType<typeof useI18n>["t"]
 }) {
   const dir = input.sync.path.directory || input.sdk.directory
   try {
@@ -61,7 +63,7 @@ async function loadWorkspaceAdapters(input: {
     return response.data
   } catch (err) {
     input.toast.show({
-      title: "Failed to load workspace adapters",
+      title: input.t("workspace.failedLoadAdapters"),
       message: errorMessage(err),
       variant: "error",
     })
@@ -76,6 +78,7 @@ export async function openWorkspaceSelect(input: {
   project: ReturnType<typeof useProject>
   toast: ReturnType<typeof useToast>
   onSelect: (selection: WorkspaceSelection) => Promise<void> | void
+  t: ReturnType<typeof useI18n>["t"]
 }) {
   input.dialog.clear()
   await input.sdk.client.experimental.workspace.syncList().catch(() => undefined)
@@ -96,6 +99,7 @@ export async function warpWorkspaceSession(input: {
   sessionID: string
   copyChanges: boolean
   done?: () => void
+  t: ReturnType<typeof useI18n>["t"]
 }): Promise<boolean> {
   let result
   try {
@@ -106,7 +110,7 @@ export async function warpWorkspaceSession(input: {
     })
   } catch (err) {
     input.toast.show({
-      title: "Failed to warp session",
+      title: input.t("workspace.failedWarp"),
       message: errorMessage(err),
       variant: "error",
     })
@@ -116,14 +120,14 @@ export async function warpWorkspaceSession(input: {
     if (result?.error && "name" in result.error && result.error.name === "VcsApplyError") {
       await DialogAlert.show(
         input.dialog,
-        "Unable to Warp Session",
-        "Unable to apply file changes to this workspace. It has existing changes that conflict or is based off a different branch. Session has not been warped.",
+        input.t("workspace.unableToWarp"),
+        input.t("workspace.unableToApply"),
       )
       return false
     }
 
     input.toast.show({
-      title: "Failed to warp session",
+      title: input.t("workspace.failedWarp"),
       message: errorMessage(result?.error ?? "no response"),
       variant: "error",
     })
@@ -185,6 +189,7 @@ export function DialogWorkspaceSelect(props: {
   const sync = useSync()
   const sdk = useSDK()
   const toast = useToast()
+  const { t } = useI18n()
   const [adapters, setAdapters] = createSignal<Adapter[] | undefined>(props.adapters)
   const omittedWorkspaceID = createMemo(() => (route.data.type === "session" ? project.workspace.current() : undefined))
 
@@ -192,7 +197,7 @@ export function DialogWorkspaceSelect(props: {
     dialog.setSize("medium")
     void (async () => {
       if (adapters()) return
-      const res = await loadWorkspaceAdapters({ sdk, sync, toast })
+      const res = await loadWorkspaceAdapters({ sdk, sync, toast, t })
       if (!res) return
       setAdapters(res)
     })()
@@ -211,13 +216,13 @@ export function DialogWorkspaceSelect(props: {
         title: adapter.name,
         value: { type: "new" as const, workspaceType: adapter.type, workspaceName: adapter.name },
         description: adapter.description,
-        category: "New workspace",
+        category: t("workspace.new"),
       })),
       {
-        title: "None",
+        title: t("workspace.none"),
         value: { type: "none" as const },
-        description: "Use the local project",
-        category: "Choose workspace",
+        description: t("workspace.useLocal"),
+        category: t("workspace.choose"),
       },
       ...recent.map((workspace: Workspace) => ({
         title: workspace.name,
@@ -228,15 +233,15 @@ export function DialogWorkspaceSelect(props: {
           workspaceType: workspace.type,
           workspaceName: workspace.name,
         },
-        category: "Choose workspace",
+        category: t("workspace.choose"),
       })),
       ...(hasMore
         ? [
             {
-              title: "View all workspaces",
+              title: t("workspace.viewAll"),
               value: { type: "existing-list" as const },
-              description: "Choose from all workspaces",
-              category: "Choose workspace",
+              description: t("workspace.viewAllDesc"),
+              category: t("workspace.choose"),
             },
           ]
         : []),
@@ -246,7 +251,7 @@ export function DialogWorkspaceSelect(props: {
   if (!adapters()) return null
   return (
     <DialogSelect<WorkspaceSelectValue>
-      title="Warp"
+      title={t("workspace.title")}
       skipFilter={true}
       renderFilter={false}
       options={options()}
@@ -278,6 +283,7 @@ function DialogExistingWorkspaceSelect(props: {
   onSelect: (selection: WorkspaceSelection) => Promise<void> | void
 }) {
   const project = useProject()
+  const { t } = useI18n()
 
   const options = createMemo<DialogSelectOption<ExistingWorkspaceSelectValue>[]>(() =>
     project.workspace
@@ -293,7 +299,7 @@ function DialogExistingWorkspaceSelect(props: {
 
   return (
     <DialogSelect<ExistingWorkspaceSelectValue>
-      title="Existing Workspace"
+      title={t("workspace.existing")}
       options={options()}
       onSelect={(option) => {
         void props.onSelect({

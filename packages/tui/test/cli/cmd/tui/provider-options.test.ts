@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { normalizeCustomProviderID, providerOptions } from "../../../../src/component/dialog-provider"
+import { dict } from "../../../../src/i18n/en"
+
+const t = (key: string) => dict[key as keyof typeof dict] ?? key
 
 describe("providerOptions", () => {
   test("includes a synthetic Other option for custom providers", () => {
-    expect(providerOptions([{ id: "openai", name: "OpenAI" }]).at(-1)).toMatchObject({
+    expect(providerOptions([{ id: "openai", name: "OpenAI" }], t).at(-1)).toMatchObject({
       title: "Other",
       description: "Custom provider",
       category: "Providers",
@@ -11,7 +14,7 @@ describe("providerOptions", () => {
   })
 
   test("does not use Other as the generic provider category", () => {
-    expect(providerOptions([{ id: "mistral", name: "Mistral" }])[0]?.category).toBe("Providers")
+    expect(providerOptions([{ id: "mistral", name: "Mistral" }], t)[0]?.category).toBe("Providers")
   })
 
   test("keeps popular providers first and sorts the rest alphabetically", () => {
@@ -22,12 +25,12 @@ describe("providerOptions", () => {
         { id: "anthropic", name: "Anthropic" },
         { id: "mistral", name: "Mistral" },
         { id: "aws", name: "AWS Bedrock" },
-      ]).map((option) => option.value),
+      ], t).map((option) => option.value),
     ).toEqual(["openai", "anthropic", "aws", "mistral", "custom-z", "__opencode_custom_provider__"])
   })
 
   test("does not collide with a configured provider named other", () => {
-    const values = providerOptions([{ id: "other", name: "Other Provider" }]).map((option) => option.value)
+    const values = providerOptions([{ id: "other", name: "Other Provider" }], t).map((option) => option.value)
     expect(new Set(values).size).toBe(values.length)
   })
 

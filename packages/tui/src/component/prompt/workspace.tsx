@@ -4,6 +4,7 @@ import { useSDK } from "../../context/sdk"
 import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
 import { useToast } from "../../ui/toast"
+import { useI18n } from "../../i18n"
 import { errorMessage } from "../../util/error"
 import {
   confirmWorkspaceFileChanges,
@@ -19,6 +20,7 @@ export function usePromptWorkspace(sessionID?: string) {
   const project = useProject()
   const sync = useSync()
   const toast = useToast()
+  const { t } = useI18n()
   const [selection, setSelection] = createSignal<WorkspaceSelection>()
   const [creating, setCreating] = createSignal(false)
   const [creatingDots, setCreatingDots] = createSignal(3)
@@ -89,6 +91,7 @@ export function usePromptWorkspace(sessionID?: string) {
       workspaceID: workspace.id,
       sessionID,
       copyChanges,
+      t,
     })
     if (warped) showNotice(workspace.name)
   }
@@ -103,7 +106,7 @@ export function usePromptWorkspace(sessionID?: string) {
   }
 
   function open() {
-    void openWorkspaceSelect({ dialog, sdk, sync, project, toast, onSelect: warp })
+    void openWorkspaceSelect({ dialog, sdk, sync, project, toast, onSelect: warp, t })
   }
 
   createEffect(() => {

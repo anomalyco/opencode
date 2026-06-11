@@ -4,6 +4,7 @@ import { useTheme } from "../context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
 import { SplitBorder } from "./border"
 import { TextAttributes } from "@opentui/core"
+import { useI18n } from "../i18n"
 export type ToastOptions = {
   title?: string
   message: string
@@ -57,6 +58,8 @@ function init() {
 
   let timeoutHandle: NodeJS.Timeout | null = null
 
+  const { t } = useI18n()
+
   const toast = {
     show(options: ToastInput) {
       const toastOptions = { ...options, duration: options.duration ?? 5000 }
@@ -74,7 +77,7 @@ function init() {
         })
       toast.show({
         variant: "error",
-        message: "An unknown error has occurred",
+        message: t("toast.unknownError"),
       })
     },
     get currentToast(): ToastOptions | null {

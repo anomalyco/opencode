@@ -82,6 +82,7 @@ import * as TuiAudio from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
+import { I18nProvider, useI18n } from "./i18n"
 
 const appGlobalBindingCommands = [
   "session.list",
@@ -295,8 +296,9 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                           <ProjectProvider>
                                             <SyncProvider>
                                               <DataProvider>
-                                                <ThemeProvider mode={mode}>
-                                                  <LocalProvider>
+                                                  <ThemeProvider mode={mode}>
+                                                    <I18nProvider>
+                                                      <LocalProvider>
                                                     <PromptStashProvider>
                                                       <DialogProvider>
                                                         <FrecencyProvider>
@@ -313,8 +315,9 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                         </FrecencyProvider>
                                                       </DialogProvider>
                                                     </PromptStashProvider>
-                                                  </LocalProvider>
-                                                </ThemeProvider>
+                                                    </LocalProvider>
+                                                    </I18nProvider>
+                                                  </ThemeProvider>
                                               </DataProvider>
                                             </SyncProvider>
                                           </ProjectProvider>
@@ -369,6 +372,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
   const pluginRuntime = usePluginRuntime()
   const attention = createTuiAttention({ renderer, config: tuiConfig, kv })
   const clipboard = useClipboard()
+  const { t } = useI18n()
 
   const api = createTuiApi(
     createTuiApiAdapters({
@@ -424,7 +428,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
 
     await clipboard
       .write?.(text)
-      .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
+      .then(() => toast.show({ message: t("copiedToClipboard"), variant: "info" }))
       .catch(toast.error)
 
     renderer.clearSelection()
@@ -497,7 +501,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           if (result.data?.id) {
             route.navigate({ type: "session", sessionID: result.data.id })
           } else {
-            toast.show({ message: "Failed to fork session", variant: "error" })
+            toast.show({ message: t("session.forkFailed"), variant: "error" })
           }
         })
       } else {
@@ -587,7 +591,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           if (!workspace?.directory) return
           await clipboard
             .write?.(workspace.directory)
-            .then(() => toast.show({ message: "Copied worktree path", variant: "info" }))
+            .then(() => toast.show({ message: t("workspace.copyPath"), variant: "info" }))
             .catch(toast.error)
           dialog.clear()
         },
@@ -976,7 +980,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       route.navigate({ type: "home" })
       toast.show({
         variant: "info",
-        message: "The current session was deleted",
+        message: t("session.deleted"),
       })
     }
   })

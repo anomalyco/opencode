@@ -19,6 +19,7 @@ import { Locale } from "../util/locale"
 import { getScrollAcceleration } from "../util/scroll"
 import { useTuiConfig } from "../config"
 import { formatKeyBindings, useBindings, useKeymapSelector } from "../keymap"
+import { useI18n } from "../i18n"
 
 export interface DialogSelectProps<T> {
   title: string
@@ -83,6 +84,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const dialog = useDialog()
   const { theme } = useTheme()
   const tuiConfig = useTuiConfig()
+  const { t } = useI18n()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
 
   const [store, setStore] = createStore({
@@ -291,7 +293,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       commands: [
         {
           name: "dialog.select.prev",
-          title: "Previous item",
+          title: t("dialog.select.prevItem"),
           category: "Dialog",
           run() {
             setStore("input", "keyboard")
@@ -300,7 +302,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.next",
-          title: "Next item",
+          title: t("dialog.select.nextItem"),
           category: "Dialog",
           run() {
             setStore("input", "keyboard")
@@ -309,7 +311,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.page_up",
-          title: "Page up",
+          title: t("dialog.select.pageUp"),
           category: "Dialog",
           run() {
             setStore("input", "keyboard")
@@ -318,7 +320,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.page_down",
-          title: "Page down",
+          title: t("dialog.select.pageDown"),
           category: "Dialog",
           run() {
             setStore("input", "keyboard")
@@ -327,7 +329,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.home",
-          title: "First item",
+          title: t("dialog.select.firstItem"),
           category: "Dialog",
           run() {
             if (props.locked) return
@@ -337,7 +339,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.end",
-          title: "Last item",
+          title: t("dialog.select.lastItem"),
           category: "Dialog",
           run() {
             if (props.locked) return
@@ -347,7 +349,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         },
         {
           name: "dialog.select.submit",
-          title: "Select item",
+          title: t("dialog.select.selectItem"),
           category: "Dialog",
           run: submit,
         },
@@ -380,13 +382,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           ? [
               {
                 key: "tab",
-                desc: "Next dialog action",
+                desc: t("dialog.select.nextAction"),
                 group: "Dialog",
                 cmd: () => moveAction(1),
               },
               {
                 key: "shift+tab",
-                desc: "Previous dialog action",
+                desc: t("dialog.select.prevAction"),
                 group: "Dialog",
                 cmd: () => moveAction(-1),
               },
@@ -482,7 +484,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             </text>
           )}
           <text fg={theme.textMuted} onMouseUp={() => dialog.clear()}>
-            esc
+            {t("common.esc")}
           </text>
         </box>
         <Show when={props.renderFilter !== false}>
@@ -507,7 +509,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                   input.focus()
                 }, 1)
               }}
-              placeholder={props.placeholder ?? "Search"}
+              placeholder={props.placeholder ?? t("common.search")}
               placeholderColor={theme.textMuted}
             />
           </box>
@@ -518,7 +520,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
           when={grouped().length > 0}
           fallback={
             <box paddingLeft={4} paddingRight={4} paddingTop={1}>
-              <text fg={theme.textMuted}>No results found</text>
+              <text fg={theme.textMuted}>{t("common.noResults")}</text>
             </box>
           }
         >

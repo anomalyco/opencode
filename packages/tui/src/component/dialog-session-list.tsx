@@ -17,6 +17,7 @@ import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 import { useCommandShortcut } from "../keymap"
+import { useI18n } from "../i18n"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -27,6 +28,7 @@ export function DialogSessionList() {
   const sdk = useSDK()
   const local = useLocal()
   const toast = useToast()
+  const { t } = useI18n()
   const [toDelete, setToDelete] = createSignal<string>()
   const [search, setSearch] = createDebouncedSignal("", 150)
   const deleteHint = useCommandShortcut("session.delete")
@@ -57,7 +59,7 @@ export function DialogSessionList() {
           result = await sdk.client.experimental.workspace.create({ type: selection.workspaceType, branch: null })
         } catch (err) {
           toast.show({
-            title: "Failed to create workspace",
+            title: t("session.failedCreateWorkspace"),
             message: errorMessage(err),
             variant: "error",
           })
@@ -66,7 +68,7 @@ export function DialogSessionList() {
         const workspace = result?.data
         if (!workspace) {
           toast.show({
-            title: "Failed to create workspace",
+            title: t("session.failedCreateWorkspace"),
             message: errorMessage(result?.error ?? "no response"),
             variant: "error",
           })
@@ -87,6 +89,7 @@ export function DialogSessionList() {
         sessionID: session.id,
         copyChanges: false,
         done: list,
+        t,
       })
     }
     dialog.replace(() => (
@@ -101,7 +104,7 @@ export function DialogSessionList() {
           if (result.error) {
             toast.show({
               variant: "error",
-              title: "Failed to delete workspace",
+              title: t("session.failedDeleteWorkspace"),
               message: errorMessage(result.error),
             })
             return false
@@ -124,6 +127,7 @@ export function DialogSessionList() {
             onSelect: (selection) => {
               void warp(selection)
             },
+            t,
           })
           return false
         }}
@@ -148,7 +152,7 @@ export function DialogSessionList() {
   })
   const quickSwitchFooterHints = createMemo(() => {
     const hint = quickSwitchHint()
-    return hint && local.session.slots().length > 0 ? [{ title: "switch", label: hint }] : []
+    return hint && local.session.slots().length > 0 ? [{ title: t("session.switch"), label: hint }] : []
   })
 
   const options = createMemo(() => {
@@ -187,7 +191,7 @@ export function DialogSessionList() {
           ? () => <text fg={theme.accent}>{slot}</text>
           : undefined
       return {
-        title: isDeleting ? `Press ${deleteHint()} again to confirm` : x.title,
+        title: isDeleting ? t("session.pressToConfirm", { key: deleteHint() ?? "" }) : x.title,
         bg: isDeleting ? theme.error : undefined,
         value: x.id,
         category,
@@ -202,11 +206,11 @@ export function DialogSessionList() {
         const x = sessionMap.get(id)
         if (!x) return undefined
         const label = new Date(x.time.updated).toDateString()
-        return buildOption(id, label === today ? "Today" : label)
+        return buildOption(id, label === today ? t("session.today") : label)
       })
       .filter((x) => x !== undefined)
 
-    return [...pinned.map((id) => buildOption(id, "Pinned")).filter((x) => x !== undefined), ...remaining]
+    return [...pinned.map((id) => buildOption(id, t("session.pinned"))).filter((x) => x !== undefined), ...remaining]
   })
 
   onMount(() => {
@@ -215,7 +219,7 @@ export function DialogSessionList() {
 
   return (
     <DialogSelect
-      title="Sessions"
+      title={t("session.title")}
       options={options()}
       skipFilter={true}
       current={currentSessionID()}
@@ -233,14 +237,14 @@ export function DialogSessionList() {
       actions={[
         {
           command: "session.pin.toggle",
-          title: "pin/unpin",
+          title: t("session.pinUnpin"),
           onTrigger: (option: { value: string }) => {
             local.session.togglePin(option.value)
           },
         },
         {
           command: "session.delete",
-          title: "delete",
+          title: t("session.delete"),
           onTrigger: async (option) => {
             if (toDelete() === option.value) {
               const session = sessions().find((item) => item.id === option.value)
@@ -256,7 +260,7 @@ export function DialogSessionList() {
                   } else {
                     toast.show({
                       variant: "error",
-                      title: "Failed to delete session",
+                      title: t("session.failedDeleteSession"),
                       message: errorMessage(result.error),
                     })
                   }
@@ -269,7 +273,7 @@ export function DialogSessionList() {
                 } else {
                   toast.show({
                     variant: "error",
-                    title: "Failed to delete session",
+                    title: t("session.failedDeleteSession"),
                     message: errorMessage(err),
                   })
                 }
@@ -288,7 +292,7 @@ export function DialogSessionList() {
         },
         {
           command: "session.rename",
-          title: "rename",
+          title: t("session.rename"),
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)
           },
