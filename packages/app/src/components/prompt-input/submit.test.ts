@@ -61,6 +61,8 @@ beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
     useNavigate: () => () => undefined,
     useParams: () => params,
+    useLocation: () => ({}),
+    useSearchParams: () => [{}, () => undefined],
   }))
 
   mock.module("@opencode-ai/sdk/v2/client", () => ({
@@ -100,6 +102,16 @@ beforeAll(async () => {
       enableAutoAccept(sessionID: string, directory: string) {
         enabledAutoAccept.push({ sessionID, directory })
       },
+    }),
+  }))
+
+  mock.module("@/context/server", () => ({
+    useServer: () => ({ key: "server-key" }),
+  }))
+
+  mock.module("@/context/tabs", () => ({
+    useTabs: () => ({
+      promoteDraft: () => undefined,
     }),
   }))
 

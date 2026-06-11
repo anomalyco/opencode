@@ -2,13 +2,13 @@ import { useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
 import { useSync } from "../context/sync"
-import { createMemo, createResource, createSignal, onMount, type JSX } from "solid-js"
+import { createMemo, createResource, createSignal, onMount } from "solid-js"
+import path from "path"
 import { Locale } from "../util/locale"
 import { useProject } from "../context/project"
 import { useTheme } from "../context/theme"
 import { useSDK } from "../context/sdk"
 import { useLocal } from "../context/local"
-import { Flag } from "@opencode-ai/core/flag/flag"
 import { DialogSessionRename } from "./dialog-session-rename"
 import { createDebouncedSignal } from "../util/signal"
 import { useToast } from "../ui/toast"
@@ -16,7 +16,6 @@ import { openWorkspaceSelect, type WorkspaceSelection, warpWorkspaceSession } fr
 import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
-import { WorkspaceLabel } from "./workspace-label"
 import { useCommandShortcut } from "../keymap"
 
 export function DialogSessionList() {
@@ -170,24 +169,13 @@ export function DialogSessionList() {
     function buildOption(id: string, category: string) {
       const x = sessionMap.get(id)
       if (!x) return undefined
-      const workspace = x.workspaceID ? project.workspace.get(x.workspaceID) : undefined
-
-      let footer: JSX.Element | string = ""
-      if (Flag.OPENCODE_EXPERIMENTAL_WORKSPACES) {
-        if (x.workspaceID) {
-          footer = workspace ? (
-            <WorkspaceLabel
-              type={workspace.type}
-              name={workspace.name}
-              status={project.workspace.status(x.workspaceID) ?? "error"}
-            />
-          ) : (
-            <WorkspaceLabel type="unknown" name={x.workspaceID} status="error" />
-          )
-        }
-      } else {
-        footer = Locale.time(x.time.updated)
-      }
+      const directory = x.path
+        ? x.directory.endsWith(x.path)
+          ? x.directory.slice(0, -x.path.length).replace(/\/$/, "")
+          : undefined
+        : x.directory
+      const footer =
+        directory && directory !== project.data.project.mainDir ? Locale.truncate(path.basename(directory), 20) : ""
 
       const isDeleting = toDelete() === x.id
       const status = sync.data.session_status?.[x.id]

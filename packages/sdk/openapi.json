@@ -5400,64 +5400,6 @@
         ]
       }
     },
-    "/reference": {
-      "get": {
-        "tags": ["reference"],
-        "operationId": "reference.list",
-        "parameters": [
-          {
-            "name": "directory",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "workspace",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Resolved configured references",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ReferenceDescriptor"
-                  },
-                  "description": "Resolved configured references"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Bad request",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BadRequestError"
-                }
-              }
-            }
-          }
-        },
-        "description": "List configured references resolved in the current workspace.",
-        "summary": "List configured references",
-        "x-codeSamples": [
-          {
-            "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.reference.list({\n  ...\n})"
-          }
-        ]
-      }
-    },
     "/session": {
       "get": {
         "tags": ["session"],
@@ -10016,6 +9958,74 @@
         ]
       }
     },
+    "/api/location": {
+      "get": {
+        "tags": ["opencode HttpApi"],
+        "operationId": "v2.location.get",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Location.Info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Resolve the requested location or the server default location.",
+        "summary": "Get location",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.location.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/agent": {
       "get": {
         "tags": ["opencode HttpApi"],
@@ -10219,6 +10229,180 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.list({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "tags": ["sessions"],
+        "operationId": "v2.session.create",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SessionV2Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a session at the requested location.",
+        "summary": "Create session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "agent": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "providerID": {
+                        "type": "string"
+                      },
+                      "variant": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["id", "providerID"],
+                    "additionalProperties": false
+                  },
+                  "location": {
+                    "$ref": "#/components/schemas/LocationRef"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.create({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/session/{sessionID}": {
+      "get": {
+        "tags": ["sessions"],
+        "operationId": "v2.session.get",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SessionV2Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve a session by ID.",
+        "summary": "Get session",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.get({\n  ...\n})"
           }
         ]
       }
@@ -11000,6 +11184,902 @@
         ]
       }
     },
+    "/api/connector": {
+      "get": {
+        "tags": ["connectors"],
+        "operationId": "v2.connector.list",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/LocationInfo"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ConnectorInfo"
+                      }
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve available connectors and their authentication methods.",
+        "summary": "List connectors",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.connector.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/connector/{connectorID}": {
+      "get": {
+        "tags": ["connectors"],
+        "operationId": "v2.connector.get",
+        "parameters": [
+          {
+            "name": "connectorID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/LocationInfo"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ConnectorInfo"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve one connector and its authentication methods.",
+        "summary": "Get connector",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.connector.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/connector/{connectorID}/connect/key": {
+      "post": {
+        "tags": ["connectors"],
+        "operationId": "v2.connector.connect.key",
+        "parameters": [
+          {
+            "name": "connectorID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Run a key authentication method and store the resulting credential.",
+        "summary": "Connect with key",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "methodID": {
+                    "type": "string"
+                  },
+                  "key": {
+                    "type": "string"
+                  },
+                  "inputs": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": ["methodID", "key", "inputs"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.connector.connect.key({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/connector/{connectorID}/connect/oauth": {
+      "post": {
+        "tags": ["connectors"],
+        "operationId": "v2.connector.connect.oauth.begin",
+        "parameters": [
+          {
+            "name": "connectorID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/LocationInfo"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/ConnectorAttempt"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Start an OAuth attempt and return the authorization details.",
+        "summary": "Begin OAuth connection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "methodID": {
+                    "type": "string"
+                  },
+                  "inputs": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": ["methodID", "inputs"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.connector.connect.oauth.begin({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/connector/oauth/{attemptID}": {
+      "get": {
+        "tags": ["connectors"],
+        "operationId": "v2.connector.connect.oauth.status",
+        "parameters": [
+          {
+            "name": "attemptID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/LocationInfo"
+                    },
+                    "data": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": ["pending"]
+                            },
+                            "time": {
+                              "type": "object",
+                              "properties": {
+                                "created": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "expires": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["created", "expires"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["status", "time"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": ["complete"]
+                            },
+                            "time": {
+                              "type": "object",
+                              "properties": {
+                                "created": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "expires": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["created", "expires"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["status", "time"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": ["failed"]
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "time": {
+                              "type": "object",
+                              "properties": {
+                                "created": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "expires": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["created", "expires"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["status", "message", "time"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": ["expired"]
+                            },
+                            "time": {
+                              "type": "object",
+                              "properties": {
+                                "created": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "expires": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["created", "expires"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["status", "time"],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Poll the current status of an OAuth attempt.",
+        "summary": "Get OAuth attempt status",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.connector.connect.oauth.status({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["connectors"],
+        "operationId": "v2.connector.connect.oauth.cancel",
+        "parameters": [
+          {
+            "name": "attemptID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Cancel an OAuth attempt and release its resources.",
+        "summary": "Cancel OAuth connection",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.connector.connect.oauth.cancel({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/connector/oauth/{attemptID}/complete": {
+      "post": {
+        "tags": ["connectors"],
+        "operationId": "v2.connector.connect.oauth.complete",
+        "parameters": [
+          {
+            "name": "attemptID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Complete a code-based OAuth attempt and store the resulting credential.",
+        "summary": "Complete OAuth connection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.connector.connect.oauth.complete({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/permission/request": {
       "get": {
         "tags": ["permissions"],
@@ -11383,7 +12463,7 @@
         ]
       }
     },
-    "/api/fs/read": {
+    "/api/fs/read/*": {
       "get": {
         "tags": ["filesystem"],
         "operationId": "v2.fs.read",
@@ -11406,22 +12486,6 @@
             "required": false,
             "style": "deepObject",
             "explode": true
-          },
-          {
-            "name": "path",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          },
-          {
-            "name": "reference",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
           }
         ],
         "security": [],
@@ -11429,26 +12493,10 @@
           "200": {
             "description": "Success",
             "content": {
-              "application/json": {
+              "application/octet-stream": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "location": {
-                      "$ref": "#/components/schemas/LocationInfo"
-                    },
-                    "data": {
-                      "anyOf": [
-                        {
-                          "$ref": "#/components/schemas/FileSystemTextContent"
-                        },
-                        {
-                          "$ref": "#/components/schemas/FileSystemBinaryContent"
-                        }
-                      ]
-                    }
-                  },
-                  "required": ["location", "data"],
-                  "additionalProperties": false
+                  "type": "string",
+                  "format": "binary"
                 }
               }
             }
@@ -11474,7 +12522,7 @@
             }
           }
         },
-        "description": "Read one file relative to the requested location.",
+        "description": "Serve one file relative to the requested location.",
         "summary": "Read file",
         "x-codeSamples": [
           {
@@ -11510,14 +12558,6 @@
           },
           {
             "name": "path",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": false
-          },
-          {
-            "name": "reference",
             "in": "query",
             "schema": {
               "type": "string"
@@ -11577,6 +12617,112 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.fs.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/fs/find": {
+      "get": {
+        "tags": ["filesystem"],
+        "operationId": "v2.fs.find",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          },
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "type",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": ["file", "directory"]
+            },
+            "required": false
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/LocationInfo"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/FileSystemEntry"
+                      }
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Find recursively ranked filesystem entries relative to the requested location.",
+        "summary": "Find files",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.fs.find({\n  ...\n})"
           }
         ]
       }
@@ -11892,6 +13038,91 @@
         ]
       }
     },
+    "/api/session/{sessionID}/question": {
+      "get": {
+        "tags": ["session questions"],
+        "operationId": "v2.session.question.list",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/QuestionV2Request"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve pending question requests owned by a session.",
+        "summary": "List session question requests",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.question.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/session/{sessionID}/question/{requestID}/reply": {
       "post": {
         "tags": ["session questions"],
@@ -12062,6 +13293,87 @@
         ]
       }
     },
+    "/api/reference": {
+      "get": {
+        "tags": ["reference"],
+        "operationId": "v2.reference.list",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/LocationInfo"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ReferenceInfo"
+                      }
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List references available in the requested location.",
+        "summary": "List references",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.reference.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/pty/{ptyID}/connect": {
       "get": {
         "tags": ["pty"],
@@ -12155,6 +13467,15 @@
         "anyOf": [
           {
             "$ref": "#/components/schemas/EventModels-devRefreshed"
+          },
+          {
+            "$ref": "#/components/schemas/EventCredentialAdded"
+          },
+          {
+            "$ref": "#/components/schemas/EventCredentialRemoved"
+          },
+          {
+            "$ref": "#/components/schemas/EventCredentialSwitched"
           },
           {
             "$ref": "#/components/schemas/EventPluginAdded"
@@ -12295,19 +13616,16 @@
             "$ref": "#/components/schemas/EventFileEdited"
           },
           {
-            "$ref": "#/components/schemas/EventAccountAdded"
-          },
-          {
-            "$ref": "#/components/schemas/EventAccountRemoved"
-          },
-          {
-            "$ref": "#/components/schemas/EventAccountSwitched"
+            "$ref": "#/components/schemas/EventConnectorUpdated"
           },
           {
             "$ref": "#/components/schemas/EventPermissionV2Asked"
           },
           {
             "$ref": "#/components/schemas/EventPermissionV2Replied"
+          },
+          {
+            "$ref": "#/components/schemas/EventReferenceUpdated"
           },
           {
             "$ref": "#/components/schemas/EventFileWatcherUpdated"
@@ -12373,6 +13691,9 @@
             "$ref": "#/components/schemas/EventProjectUpdated"
           },
           {
+            "$ref": "#/components/schemas/EventVcsBranchUpdated"
+          },
+          {
             "$ref": "#/components/schemas/EventQuestionAsked"
           },
           {
@@ -12389,9 +13710,6 @@
           },
           {
             "$ref": "#/components/schemas/EventSessionCompacted"
-          },
-          {
-            "$ref": "#/components/schemas/EventVcsBranchUpdated"
           },
           {
             "$ref": "#/components/schemas/EventWorktreeReady"
@@ -13057,6 +14375,27 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "ContentFilterError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["ContentFilterError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
       "APIError": {
         "type": "object",
         "properties": {
@@ -13149,6 +14488,9 @@
               },
               {
                 "$ref": "#/components/schemas/ContextOverflowError"
+              },
+              {
+                "$ref": "#/components/schemas/ContentFilterError"
               },
               {
                 "$ref": "#/components/schemas/APIError"
@@ -14068,12 +15410,6 @@
             "items": {
               "$ref": "#/components/schemas/PromptAgentAttachment"
             }
-          },
-          "references": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PromptReferenceAttachment"
-            }
           }
         },
         "required": ["text"],
@@ -14296,6 +15632,87 @@
                   "properties": {
                     "type": "object",
                     "properties": {}
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["credential.added"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "credential": {
+                        "$ref": "#/components/schemas/CredentialInfo"
+                      }
+                    },
+                    "required": ["credential"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["credential.removed"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "credential": {
+                        "$ref": "#/components/schemas/CredentialInfo"
+                      }
+                    },
+                    "required": ["credential"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["credential.switched"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "connectorID": {
+                        "type": "string"
+                      },
+                      "from": {
+                        "type": "string"
+                      },
+                      "to": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["connectorID"],
+                    "additionalProperties": false
                   }
                 },
                 "required": ["id", "type", "properties"],
@@ -16007,6 +17424,9 @@
                             "$ref": "#/components/schemas/ContextOverflowError"
                           },
                           {
+                            "$ref": "#/components/schemas/ContentFilterError"
+                          },
+                          {
                             "$ref": "#/components/schemas/APIError"
                           }
                         ]
@@ -16102,73 +17522,11 @@
                   },
                   "type": {
                     "type": "string",
-                    "enum": ["account.added"]
+                    "enum": ["connector.updated"]
                   },
                   "properties": {
                     "type": "object",
-                    "properties": {
-                      "account": {
-                        "$ref": "#/components/schemas/AuthInfo"
-                      }
-                    },
-                    "required": ["account"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["account.removed"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "account": {
-                        "$ref": "#/components/schemas/AuthInfo"
-                      }
-                    },
-                    "required": ["account"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["account.switched"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "serviceID": {
-                        "type": "string"
-                      },
-                      "from": {
-                        "type": "string"
-                      },
-                      "to": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["serviceID"],
-                    "additionalProperties": false
+                    "properties": {}
                   }
                 },
                 "required": ["id", "type", "properties"],
@@ -16253,6 +17611,25 @@
                     },
                     "required": ["sessionID", "requestID", "reply"],
                     "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["reference.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {}
                   }
                 },
                 "required": ["id", "type", "properties"],
@@ -16991,6 +18368,30 @@
                   },
                   "type": {
                     "type": "string",
+                    "enum": ["vcs.branch.updated"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "branch": {
+                        "type": "string"
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
                     "enum": ["question.asked"]
                   },
                   "properties": {
@@ -17163,30 +18564,6 @@
                       }
                     },
                     "required": ["sessionID"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["vcs.branch.updated"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "branch": {
-                        "type": "string"
-                      }
-                    },
                     "additionalProperties": false
                   }
                 },
@@ -17506,44 +18883,6 @@
         "additionalProperties": false,
         "description": "Server configuration for opencode serve and web commands"
       },
-      "ReferenceConfigEntry": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "object",
-            "properties": {
-              "repository": {
-                "type": "string",
-                "description": "Git repository URL, host/path reference, or GitHub owner/repo shorthand"
-              },
-              "branch": {
-                "type": "string"
-              }
-            },
-            "required": ["repository"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Absolute path, ~/ path, or workspace-relative path to a local reference directory"
-              }
-            },
-            "required": ["path"],
-            "additionalProperties": false
-          }
-        ]
-      },
-      "ReferenceConfig": {
-        "type": "object",
-        "additionalProperties": {
-          "$ref": "#/components/schemas/ReferenceConfigEntry"
-        }
-      },
       "PermissionActionConfig": {
         "type": "string",
         "enum": ["ask", "allow", "deny"]
@@ -17812,7 +19151,7 @@
                       "properties": {
                         "field": {
                           "type": "string",
-                          "enum": ["reasoning_content", "reasoning_details"]
+                          "enum": ["reasoning", "reasoning_content", "reasoning_details"]
                         }
                       },
                       "required": ["field"],
@@ -17956,6 +19295,9 @@
               "type": "string"
             },
             "description": "Command and arguments to run the MCP server"
+          },
+          "cwd": {
+            "type": "string"
           },
           "environment": {
             "type": "object",
@@ -18134,8 +19476,37 @@
             },
             "additionalProperties": false
           },
+          "references": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/components/schemas/ConfigV2ReferenceGit"
+                },
+                {
+                  "$ref": "#/components/schemas/ConfigV2ReferenceLocal"
+                }
+              ]
+            }
+          },
           "reference": {
-            "$ref": "#/components/schemas/ReferenceConfig"
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/components/schemas/ConfigV2ReferenceGit"
+                },
+                {
+                  "$ref": "#/components/schemas/ConfigV2ReferenceLocal"
+                }
+              ]
+            }
           },
           "watcher": {
             "type": "object",
@@ -18590,7 +19961,7 @@
                     "properties": {
                       "field": {
                         "type": "string",
-                        "enum": ["reasoning_content", "reasoning_details"]
+                        "enum": ["reasoning", "reasoning_content", "reasoning_details"]
                       }
                     },
                     "required": ["field"],
@@ -20041,70 +21412,6 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
-      "ReferenceDescriptor": {
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string"
-              },
-              "kind": {
-                "type": "string",
-                "enum": ["local"]
-              },
-              "path": {
-                "type": "string"
-              }
-            },
-            "required": ["name", "kind", "path"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string"
-              },
-              "kind": {
-                "type": "string",
-                "enum": ["git"]
-              },
-              "repository": {
-                "type": "string"
-              },
-              "path": {
-                "type": "string"
-              },
-              "branch": {
-                "type": "string"
-              }
-            },
-            "required": ["name", "kind", "repository", "path"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "name": {
-                "type": "string"
-              },
-              "kind": {
-                "type": "string",
-                "enum": ["invalid"]
-              },
-              "repository": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              }
-            },
-            "required": ["name", "kind", "message"],
-            "additionalProperties": false
-          }
-        ]
-      },
       "NotFoundError": {
         "type": "object",
         "required": ["name", "data"],
@@ -20574,23 +21881,6 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
-      "ConflictError": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["ConflictError"]
-          },
-          "message": {
-            "type": "string"
-          },
-          "resource": {
-            "type": "string"
-          }
-        },
-        "required": ["_tag", "message"],
-        "additionalProperties": false
-      },
       "SessionNotFoundError": {
         "type": "object",
         "properties": {
@@ -20606,6 +21896,23 @@
           }
         },
         "required": ["_tag", "sessionID", "message"],
+        "additionalProperties": false
+      },
+      "ConflictError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ConflictError"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
         "additionalProperties": false
       },
       "ServiceUnavailableError": {
@@ -20841,6 +22148,85 @@
           }
         },
         "required": ["directory"],
+        "additionalProperties": false
+      },
+      "CredentialOAuth": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["oauth"]
+          },
+          "refresh": {
+            "type": "string"
+          },
+          "access": {
+            "type": "string"
+          },
+          "expires": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["type", "refresh", "access", "expires"],
+        "additionalProperties": false
+      },
+      "CredentialKey": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["key"]
+          },
+          "key": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["type", "key"],
+        "additionalProperties": false
+      },
+      "CredentialValue": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/CredentialOAuth"
+          },
+          {
+            "$ref": "#/components/schemas/CredentialKey"
+          }
+        ]
+      },
+      "CredentialInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "connectorID": {
+            "type": "string"
+          },
+          "methodID": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "$ref": "#/components/schemas/CredentialValue"
+          }
+        },
+        "required": ["id", "connectorID", "methodID", "label", "value"],
         "additionalProperties": false
       },
       "ModelV2Info": {
@@ -21498,41 +22884,6 @@
         "required": ["name"],
         "additionalProperties": false
       },
-      "PromptReferenceAttachment": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "kind": {
-            "type": "string",
-            "enum": ["local", "git", "invalid"]
-          },
-          "uri": {
-            "type": "string"
-          },
-          "repository": {
-            "type": "string"
-          },
-          "branch": {
-            "type": "string"
-          },
-          "target": {
-            "type": "string"
-          },
-          "targetUri": {
-            "type": "string"
-          },
-          "problem": {
-            "type": "string"
-          },
-          "source": {
-            "$ref": "#/components/schemas/PromptSource"
-          }
-        },
-        "required": ["name", "kind"],
-        "additionalProperties": false
-      },
       "SessionErrorUnknown": {
         "type": "object",
         "properties": {
@@ -21568,51 +22919,8 @@
             "type": "string",
             "enum": ["file"]
           },
-          "source": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["data"]
-                  },
-                  "data": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "data"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["url"]
-                  },
-                  "url": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "url"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": ["file"]
-                  },
-                  "uri": {
-                    "type": "string"
-                  }
-                },
-                "required": ["type", "uri"],
-                "additionalProperties": false
-              }
-            ]
+          "uri": {
+            "type": "string"
           },
           "mime": {
             "type": "string"
@@ -21621,7 +22929,7 @@
             "type": "string"
           }
         },
-        "required": ["type", "source", "mime"],
+        "required": ["type", "uri", "mime"],
         "additionalProperties": false
       },
       "SessionNextRetry_error": {
@@ -21653,76 +22961,6 @@
           }
         },
         "required": ["message", "isRetryable"],
-        "additionalProperties": false
-      },
-      "AuthOAuthCredential": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["oauth"]
-          },
-          "refresh": {
-            "type": "string"
-          },
-          "access": {
-            "type": "string"
-          },
-          "expires": {
-            "type": "integer",
-            "minimum": 0
-          }
-        },
-        "required": ["type", "refresh", "access", "expires"],
-        "additionalProperties": false
-      },
-      "AuthApiKeyCredential": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["api"]
-          },
-          "key": {
-            "type": "string"
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          }
-        },
-        "required": ["type", "key"],
-        "additionalProperties": false
-      },
-      "AuthCredential": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/AuthOAuthCredential"
-          },
-          {
-            "$ref": "#/components/schemas/AuthApiKeyCredential"
-          }
-        ]
-      },
-      "AuthInfo": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "serviceID": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "credential": {
-            "$ref": "#/components/schemas/AuthCredential"
-          }
-        },
-        "required": ["id", "serviceID", "description", "credential"],
         "additionalProperties": false
       },
       "PermissionV2Source": {
@@ -23938,6 +25176,41 @@
         "required": ["type", "id", "syncEvent"],
         "additionalProperties": false
       },
+      "ConfigV2ReferenceGit": {
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "required": ["repository"],
+        "additionalProperties": false
+      },
+      "ConfigV2ReferenceLocal": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      },
       "PolicyEffect": {
         "type": "string",
         "enum": ["allow", "deny"]
@@ -23962,7 +25235,18 @@
       "ProjectDirectories": {
         "type": "array",
         "items": {
-          "type": "string"
+          "type": "object",
+          "properties": {
+            "directory": {
+              "type": "string"
+            },
+            "type": {
+              "type": "string",
+              "enum": ["main", "root", "git_worktree"]
+            }
+          },
+          "required": ["directory", "type"],
+          "additionalProperties": false
         }
       },
       "ProjectCopyCopy": {
@@ -24337,12 +25621,6 @@
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/PromptAgentAttachment"
-            }
-          },
-          "references": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/PromptReferenceAttachment"
             }
           },
           "type": {
@@ -24910,13 +26188,13 @@
                 "properties": {
                   "via": {
                     "type": "string",
-                    "enum": ["account"]
+                    "enum": ["credential"]
                   },
-                  "service": {
+                  "credentialID": {
                     "type": "string"
                   }
                 },
-                "required": ["via", "service"],
+                "required": ["via", "credentialID"],
                 "additionalProperties": false
               },
               {
@@ -25002,6 +26280,244 @@
         "required": ["id", "name", "enabled", "env", "api", "request"],
         "additionalProperties": false
       },
+      "ConnectorWhen": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "op": {
+            "type": "string",
+            "enum": ["eq", "neq"]
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": ["key", "op", "value"],
+        "additionalProperties": false
+      },
+      "ConnectorTextPrompt": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["text"]
+          },
+          "key": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "placeholder": {
+            "type": "string"
+          },
+          "when": {
+            "$ref": "#/components/schemas/ConnectorWhen"
+          }
+        },
+        "required": ["type", "key", "message"],
+        "additionalProperties": false
+      },
+      "ConnectorSelectPrompt": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["select"]
+          },
+          "key": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                },
+                "hint": {
+                  "type": "string"
+                }
+              },
+              "required": ["label", "value"],
+              "additionalProperties": false
+            }
+          },
+          "when": {
+            "$ref": "#/components/schemas/ConnectorWhen"
+          }
+        },
+        "required": ["type", "key", "message", "options"],
+        "additionalProperties": false
+      },
+      "ConnectorOAuthMethod": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["oauth"]
+          },
+          "label": {
+            "type": "string"
+          },
+          "prompts": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ConnectorTextPrompt"
+                },
+                {
+                  "$ref": "#/components/schemas/ConnectorSelectPrompt"
+                }
+              ]
+            }
+          }
+        },
+        "required": ["id", "type", "label"],
+        "additionalProperties": false
+      },
+      "ConnectorKeyMethod": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["key"]
+          },
+          "label": {
+            "type": "string"
+          },
+          "prompts": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ConnectorTextPrompt"
+                },
+                {
+                  "$ref": "#/components/schemas/ConnectorSelectPrompt"
+                }
+              ]
+            }
+          }
+        },
+        "required": ["id", "type", "label"],
+        "additionalProperties": false
+      },
+      "ConnectorInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "methods": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ConnectorOAuthMethod"
+                },
+                {
+                  "$ref": "#/components/schemas/ConnectorKeyMethod"
+                }
+              ]
+            }
+          }
+        },
+        "required": ["id", "name", "methods"],
+        "additionalProperties": false
+      },
+      "ConnectorAttempt": {
+        "type": "object",
+        "properties": {
+          "attemptID": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["auto", "code"]
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "expires": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              }
+            },
+            "required": ["created", "expires"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["attemptID", "url", "instructions", "mode", "time"],
+        "additionalProperties": false
+      },
       "PermissionV2Request": {
         "type": "object",
         "properties": {
@@ -25057,51 +26573,10 @@
         "required": ["id", "projectID", "action", "resource"],
         "additionalProperties": false
       },
-      "FileSystemTextContent": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["text"]
-          },
-          "content": {
-            "type": "string"
-          },
-          "mime": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "content", "mime"],
-        "additionalProperties": false
-      },
-      "FileSystemBinaryContent": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["binary"]
-          },
-          "content": {
-            "type": "string"
-          },
-          "encoding": {
-            "type": "string",
-            "enum": ["base64"]
-          },
-          "mime": {
-            "type": "string"
-          }
-        },
-        "required": ["type", "content", "encoding", "mime"],
-        "additionalProperties": false
-      },
       "FileSystemEntry": {
         "type": "object",
         "properties": {
           "path": {
-            "type": "string"
-          },
-          "uri": {
             "type": "string"
           },
           "type": {
@@ -25112,7 +26587,7 @@
             "type": "string"
           }
         },
-        "required": ["path", "uri", "type", "mime"],
+        "required": ["path", "type", "mime"],
         "additionalProperties": false
       },
       "CommandV2Info": {
@@ -25214,6 +26689,78 @@
         "required": ["answers"],
         "additionalProperties": false
       },
+      "ReferenceLocalSource": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["local"]
+          },
+          "path": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "required": ["type", "path"],
+        "additionalProperties": false
+      },
+      "ReferenceGitSource": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["git"]
+          },
+          "repository": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "required": ["type", "repository"],
+        "additionalProperties": false
+      },
+      "ReferenceInfo": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReferenceLocalSource"
+              },
+              {
+                "$ref": "#/components/schemas/ReferenceGitSource"
+              }
+            ]
+          }
+        },
+        "required": ["name", "path", "source"],
+        "additionalProperties": false
+      },
       "EventModels-devRefreshed": {
         "type": "object",
         "properties": {
@@ -25228,6 +26775,87 @@
           "properties": {
             "type": "object",
             "properties": {}
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventCredentialAdded": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["credential.added"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "credential": {
+                "$ref": "#/components/schemas/CredentialInfo"
+              }
+            },
+            "required": ["credential"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventCredentialRemoved": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["credential.removed"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "credential": {
+                "$ref": "#/components/schemas/CredentialInfo"
+              }
+            },
+            "required": ["credential"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventCredentialSwitched": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["credential.switched"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "connectorID": {
+                "type": "string"
+              },
+              "from": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string"
+              }
+            },
+            "required": ["connectorID"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "type", "properties"],
@@ -27461,6 +29089,9 @@
                     "$ref": "#/components/schemas/ContextOverflowError"
                   },
                   {
+                    "$ref": "#/components/schemas/ContentFilterError"
+                  },
+                  {
                     "$ref": "#/components/schemas/APIError"
                   }
                 ]
@@ -27547,7 +29178,7 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
-      "EventAccountAdded": {
+      "EventConnectorUpdated": {
         "type": "object",
         "properties": {
           "id": {
@@ -27556,73 +29187,11 @@
           },
           "type": {
             "type": "string",
-            "enum": ["account.added"]
+            "enum": ["connector.updated"]
           },
           "properties": {
             "type": "object",
-            "properties": {
-              "account": {
-                "$ref": "#/components/schemas/AuthInfo"
-              }
-            },
-            "required": ["account"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventAccountRemoved": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["account.removed"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "account": {
-                "$ref": "#/components/schemas/AuthInfo"
-              }
-            },
-            "required": ["account"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventAccountSwitched": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["account.switched"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "serviceID": {
-                "type": "string"
-              },
-              "from": {
-                "type": "string"
-              },
-              "to": {
-                "type": "string"
-              }
-            },
-            "required": ["serviceID"],
-            "additionalProperties": false
+            "properties": {}
           }
         },
         "required": ["id", "type", "properties"],
@@ -27707,6 +29276,25 @@
             },
             "required": ["sessionID", "requestID", "reply"],
             "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventReferenceUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["reference.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
           }
         },
         "required": ["id", "type", "properties"],
@@ -28298,6 +29886,30 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
+      "EventVcsBranchUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["vcs.branch.updated"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "branch": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
       "EventQuestionAsked": {
         "type": "object",
         "properties": {
@@ -28479,30 +30091,6 @@
               }
             },
             "required": ["sessionID"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventVcsBranchUpdated": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["vcs.branch.updated"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "branch": {
-                "type": "string"
-              }
-            },
             "additionalProperties": false
           }
         },
@@ -28768,10 +30356,6 @@
       "description": "Experimental HttpApi provider routes."
     },
     {
-      "name": "reference",
-      "description": "Configured reference routes."
-    },
-    {
       "name": "session",
       "description": "Experimental HttpApi session routes."
     },
@@ -28786,6 +30370,10 @@
     {
       "name": "workspace",
       "description": "Experimental HttpApi workspace routes."
+    },
+    {
+      "name": "opencode HttpApi",
+      "description": "Experimental HttpApi surface for selected instance routes."
     },
     {
       "name": "opencode HttpApi",
@@ -28812,6 +30400,10 @@
       "description": "Experimental provider routes."
     },
     {
+      "name": "connectors",
+      "description": "Connector discovery and authentication routes."
+    },
+    {
       "name": "permissions",
       "description": "Experimental permission routes."
     },
@@ -28834,6 +30426,10 @@
     {
       "name": "session questions",
       "description": "Experimental session question routes."
+    },
+    {
+      "name": "reference",
+      "description": "Location-scoped project references."
     },
     {
       "name": "pty",

@@ -857,6 +857,93 @@ describe("ProviderTransform.schema - gemini nested array items", () => {
   })
 })
 
+describe("ProviderTransform.schema - gemini type arrays", () => {
+  // Mirrors @ai-sdk/google's convertJSONSchemaToOpenAPISchema: JSON Schema type
+  // arrays (e.g. `["number","string"]`, common in MCP tool schemas) become an
+  // `anyOf` of single-type schemas, with `null` lifted into `nullable`. Plain
+  // @ai-sdk/google rewrites these, but OpenAI-compatible transports such as
+  // GitHub Copilot (proxying to Gemini) forward them verbatim and the backend
+  // rejects the array form.
+  const geminiModel = {
+    providerID: "google",
+    api: {
+      id: "gemini-3-pro",
+    },
+  } as any
+
+  test("splits a multi-type array into anyOf and drops the type array", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        status: { type: ["number", "string"], description: "status filter" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.status.type).toBeUndefined()
+    expect(result.properties.status.anyOf).toEqual([{ type: "number" }, { type: "string" }])
+    expect(result.properties.status.nullable).toBeUndefined()
+    // Sibling keywords stay alongside the generated anyOf.
+    expect(result.properties.status.description).toBe("status filter")
+  })
+
+  test("lifts null into nullable for a nullable type array", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        maybe: { type: ["string", "null"], description: "nullable string" },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.maybe.type).toBeUndefined()
+    expect(result.properties.maybe.anyOf).toEqual([{ type: "string" }])
+    expect(result.properties.maybe.nullable).toBe(true)
+  })
+
+  test("collapses an all-null type array to type null", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        nothing: { type: ["null"] },
+      },
+    } as any
+
+    const result = ProviderTransform.schema(geminiModel, schema) as any
+
+    expect(result.properties.nothing.type).toBe("null")
+    expect(result.properties.nothing.anyOf).toBeUndefined()
+  })
+
+  test("rewrites type arrays for gemini served through github-copilot", () => {
+    const copilotGeminiModel = {
+      providerID: "github-copilot",
+      api: {
+        id: "gemini-3.5-flash",
+        npm: "@ai-sdk/github-copilot",
+      },
+    } as any
+
+    const schema = {
+      type: "object",
+      properties: {
+        hook_id: { type: "number", description: "ID of the webhook" },
+        status: { type: ["number", "string"], description: "Filter by response status code" },
+      },
+      required: ["hook_id"],
+      additionalProperties: false,
+    } as any
+
+    const result = ProviderTransform.schema(copilotGeminiModel, schema) as any
+
+    expect(result.properties.status.anyOf).toEqual([{ type: "number" }, { type: "string" }])
+    expect(result.properties.status.type).toBeUndefined()
+    expect(result.properties.hook_id.type).toBe("number")
+  })
+})
+
 describe("ProviderTransform.schema - gemini combiner nodes", () => {
   const geminiModel = {
     providerID: "google",
@@ -2483,6 +2570,12 @@ describe("ProviderTransform.message - cache control on gateway", () => {
   })
 })
 
+describe("ProviderTransform.temperature - Cohere North", () => {
+  test("defaults north-mini-code models to 1.0", () => {
+    expect(ProviderTransform.temperature({ id: "cohere/North-Mini-Code-1-0-latest" } as any)).toBe(1.0)
+  })
+})
+
 describe("ProviderTransform.variants", () => {
   const createMockModel = (overrides: Partial<any> = {}): any => ({
     id: "test/test-model",
@@ -2666,7 +2759,7 @@ describe("ProviderTransform.variants", () => {
   })
 
   describe("@openrouter/ai-sdk-provider", () => {
-    test("returns empty object for non-qualifying models", () => {
+    test("returns widely supported efforts for other reasoning models", () => {
       const model = createMockModel({
         id: "openrouter/test-model",
         providerID: "openrouter",
@@ -2677,7 +2770,8 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(result).toEqual({})
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
+      expect(result.medium).toEqual({ reasoning: { effort: "medium" } })
     })
 
     test("gpt models return OPENAI_EFFORTS with reasoning", () => {
@@ -2697,6 +2791,7 @@ describe("ProviderTransform.variants", () => {
     })
 
     for (const testCase of [
+      { id: "openai/o3-mini", efforts: ["none", "minimal", "low", "medium", "high", "xhigh"] },
       { id: "openai/gpt-5.4", efforts: ["none", "low", "medium", "high", "xhigh"] },
       { id: "openai/gpt-5-pro", efforts: ["high"] },
       { id: "openai/gpt-5.5-pro", efforts: ["medium", "high", "xhigh"] },
@@ -2722,7 +2817,7 @@ describe("ProviderTransform.variants", () => {
       })
     }
 
-    test("gemini-3 returns OPENAI_EFFORTS with reasoning", () => {
+    test("gemini-3 returns widely supported efforts with reasoning", () => {
       const model = createMockModel({
         id: "openrouter/gemini-3-5-pro",
         providerID: "openrouter",
@@ -2733,7 +2828,7 @@ describe("ProviderTransform.variants", () => {
         },
       })
       const result = ProviderTransform.variants(model)
-      expect(Object.keys(result)).toEqual(["none", "minimal", "low", "medium", "high", "xhigh"])
+      expect(Object.keys(result)).toEqual(["low", "medium", "high"])
     })
 
     test("grok-4 returns empty object", () => {
@@ -3207,6 +3302,23 @@ describe("ProviderTransform.variants", () => {
       expect(result.low).toEqual({ reasoningEffort: "low" })
       expect(result.high).toEqual({ reasoningEffort: "high" })
     })
+
+    test("north-mini-code-1-0 returns only none and high", () => {
+      const model = createMockModel({
+        id: "cohere/north-mini-code-1-0",
+        providerID: "cohere",
+        api: {
+          id: "North-Mini-Code-1-0-latest",
+          url: "https://api.cohere.com/compatibility/v1",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      const result = ProviderTransform.variants(model)
+      expect(result).toEqual({
+        none: { reasoningEffort: "none" },
+        high: { reasoningEffort: "high" },
+      })
+    })
   })
 
   describe("@ai-sdk/azure", () => {
@@ -3458,6 +3570,12 @@ describe("ProviderTransform.variants", () => {
       {
         name: "opus 4.8",
         apiIds: ["claude-opus-4-8", "claude-opus-4.8"],
+        efforts: ["low", "medium", "high", "xhigh", "max"],
+        expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+      },
+      {
+        name: "fable 5",
+        apiIds: ["claude-fable-5"],
         efforts: ["low", "medium", "high", "xhigh", "max"],
         expectedHigh: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
       },
@@ -3983,6 +4101,23 @@ describe("ProviderTransform.smallOptions - gpt-5 chat/search", () => {
       expect(ProviderTransform.smallOptions(createModel(testCase.id))).toEqual(testCase.options)
     })
   }
+})
+
+test("ProviderTransform.smallOptions disables OpenRouter reasoning when the weakest effort is low", () => {
+  expect(
+    ProviderTransform.smallOptions({
+      providerID: "openrouter",
+      api: {
+        id: "anthropic/claude-sonnet-4.6",
+        npm: "@openrouter/ai-sdk-provider",
+      },
+      variants: {
+        low: { reasoning: { effort: "low" } },
+        medium: { reasoning: { effort: "medium" } },
+        high: { reasoning: { effort: "high" } },
+      },
+    } as any),
+  ).toEqual({ reasoning: { effort: "none" } })
 })
 
 describe("ProviderTransform.smallOptions - google thinking controls", () => {

@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import path from "path"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Global } from "@opencode-ai/core/global"
@@ -167,5 +168,7 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(EffectFlock.defaultLayer), Layer.provide(FSUtil.defaultLayer))
+
+export const node = LayerNode.make(layer, [FSUtil.node, EffectFlock.node])
 
 export * as McpAuth from "./auth"

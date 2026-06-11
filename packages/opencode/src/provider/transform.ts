@@ -478,6 +478,7 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
 
 export function temperature(model: Provider.Model) {
   const id = model.id.toLowerCase()
+  if (id.includes("north-mini-code")) return 1.0
   if (id.includes("qwen")) return 0.55
   if (id.includes("claude")) return undefined
   if (id.includes("gemini")) return 1.0
@@ -605,7 +606,7 @@ function anthropicOpus47OrLater(apiId: string) {
 }
 
 function anthropicAdaptiveEfforts(apiId: string): string[] | null {
-  if (anthropicOpus47OrLater(apiId)) {
+  if (anthropicOpus47OrLater(apiId) || apiId.includes("fable-5")) {
     return ["low", "medium", "high", "xhigh", "max"]
   }
   if (
@@ -616,6 +617,10 @@ function anthropicAdaptiveEfforts(apiId: string): string[] | null {
     return ["low", "medium", "high", "max"]
   }
   return null
+}
+
+function anthropicOmitsThinking(apiId: string) {
+  return anthropicOpus47OrLater(apiId) || apiId.includes("fable-5")
 }
 
 function googleThinkingLevelEfforts(apiId: string) {
@@ -670,7 +675,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       thinking: { thinking: { type: "adaptive" } },
     }
   }
-  const adaptiveOpus = anthropicOpus47OrLater(model.api.id)
+  const adaptiveThinkingOmitted = anthropicOmitsThinking(model.api.id)
   const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
   if (
     id.includes("deepseek-chat") ||
@@ -703,12 +708,11 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 
   switch (model.api.npm) {
     case "@openrouter/ai-sdk-provider":
-      if (!id.includes("gpt") && !id.includes("gemini-3") && !id.includes("claude")) return {}
       return Object.fromEntries(
-        (id.includes("gpt") ? openaiCompatibleReasoningEfforts(id) : OPENAI_EFFORTS).map((effort) => [
-          effort,
-          { reasoning: { effort } },
-        ]),
+        (model.api.id.startsWith("openai/") || id.includes("gpt")
+          ? openaiCompatibleReasoningEfforts(model.api.id)
+          : WIDELY_SUPPORTED_EFFORTS
+        ).map((effort) => [effort, { reasoning: { effort } }]),
       )
 
     case "ai-gateway-provider": {
@@ -734,10 +738,10 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
               {
                 thinking: {
                   type: "adaptive",
-                  // Opus 4.7+ flips the API default for `display` to "omitted", which
+                  // Newer adaptive-only models default `display` to "omitted", which
                   // returns empty thinking blocks. Force "summarized" so summaries
                   // survive (4.6/Sonnet 4.6 already default to "summarized").
-                  ...(adaptiveOpus ? { display: "summarized" } : {}),
+                  ...(adaptiveThinkingOmitted ? { display: "summarized" } : {}),
                 },
                 effort,
               },
@@ -827,6 +831,9 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     case "venice-ai-sdk-provider":
     // https://docs.venice.ai/overview/guides/reasoning-models#reasoning-effort
     case "@ai-sdk/openai-compatible":
+      if (model.api.id.toLowerCase().includes("north-mini-code")) {
+        return Object.fromEntries(["none", "high"].map((effort) => [effort, { reasoningEffort: effort }]))
+      }
       const efforts = [...WIDELY_SUPPORTED_EFFORTS]
       if (model.api.id.toLowerCase().includes("deepseek-v4")) {
         efforts.push("max")
@@ -881,7 +888,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
             {
               thinking: {
                 type: "adaptive",
-                ...(adaptiveOpus ? { display: "summarized" } : {}),
+                ...(adaptiveThinkingOmitted ? { display: "summarized" } : {}),
               },
               effort,
             },
@@ -918,7 +925,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
               reasoningConfig: {
                 type: "adaptive",
                 maxReasoningEffort: effort,
-                ...(adaptiveOpus ? { display: "summarized" } : {}),
+                ...(adaptiveThinkingOmitted ? { display: "summarized" } : {}),
               },
             },
           ]),
@@ -1008,7 +1015,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
               adaptiveEfforts.map((effort) => [
                 effort,
                 {
-                  thinking: { type: "adaptive", ...(adaptiveOpus ? { display: "summarized" } : {}) },
+                  thinking: { type: "adaptive", ...(adaptiveThinkingOmitted ? { display: "summarized" } : {}) },
                   output_config: { effort },
                 },
               ]),
@@ -1106,6 +1113,7 @@ export function options(input: {
   }
 
   const modelId = input.model.api.id.toLowerCase()
+
   // MiniMax's Anthropic interface defaults thinking off, unlike Chat Completions.
   if (modelId.includes("minimax-m3") && input.model.api.npm === "@ai-sdk/anthropic") {
     result["thinking"] = { type: "adaptive" }
@@ -1202,6 +1210,9 @@ export function smallOptions(model: Provider.Model) {
     return mergeDeep(base, small)
   }
   if (model.providerID === "openrouter" || model.providerID === "llmgateway") {
+    if (model.providerID === "openrouter" && small.reasoning?.effort === "low") {
+      return { reasoning: { effort: "none" } }
+    }
     if (Object.keys(small).length === 0 && model.api.id.includes("google")) {
       return { reasoning: { enabled: false } }
     }
@@ -1361,6 +1372,24 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
           result[key] = sanitizeGemini(value)
         } else {
           result[key] = value
+        }
+      }
+
+      // Gemini requires a single `type`, not a JSON Schema type array such as
+      // `["number","string"]` (emitted by some MCP servers). Plain `@ai-sdk/google`
+      // rewrites these into an `anyOf` of single-type schemas, but OpenAI-compatible
+      // transports (e.g. GitHub Copilot proxying to Gemini) forward them verbatim
+      // and the backend rejects the array form. Mirror the SDK: split non-null
+      // types into `anyOf`, and lift `null` into `nullable`.
+      if (Array.isArray(result.type)) {
+        const hasNull = result.type.includes("null")
+        const nonNull = result.type.filter((entry: unknown) => entry !== "null")
+        if (nonNull.length === 0) {
+          result.type = "null"
+        } else {
+          delete result.type
+          result.anyOf = nonNull.map((entry: unknown) => ({ type: entry }))
+          if (hasNull) result.nullable = true
         }
       }
 

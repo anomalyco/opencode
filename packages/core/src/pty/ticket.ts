@@ -4,6 +4,7 @@ import { WorkspaceV2 } from "../workspace"
 import { PositiveInt } from "../schema"
 import { PtyID } from "./schema"
 import { Cache, Context, Duration, Effect, Layer, Schema } from "effect"
+import { LayerNode } from "../effect/layer-node"
 
 const DEFAULT_TTL = Duration.seconds(60)
 const CAPACITY = 10_000
@@ -56,3 +57,4 @@ export const make = (ttl: Duration.Input = DEFAULT_TTL) =>
 export const layer = Layer.effect(Service, make())
 
 export const defaultLayer = layer
+export const node = LayerNode.make(layer, [])

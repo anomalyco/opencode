@@ -9,6 +9,7 @@ import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServ
 import { layerWebSocketConstructorGlobal } from "effect/unstable/socket/Socket"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
@@ -66,7 +67,7 @@ const it = testEffect(
     workspaceLayer,
     Database.defaultLayer,
     httpApiLayer,
-  ),
+  ).pipe(Layer.provide(Ripgrep.defaultLayer)),
 )
 
 function pathFor(path: string, params: Record<string, string>) {
