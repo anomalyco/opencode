@@ -132,7 +132,7 @@ export async function warpWorkspaceSession(input: {
 
   input.project.workspace.set(input.workspaceID)
 
-  await input.sync.bootstrap({ fatal: false }).catch(() => undefined)
+  await input.sync.bootstrap()
 
   const dir = input.project.instance.directory() || input.sync.path.directory
   if (dir) {

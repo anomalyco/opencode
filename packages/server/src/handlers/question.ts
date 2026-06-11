@@ -30,6 +30,13 @@ export const QuestionHandler = HttpApiBuilder.group(Api, "server.question", (han
         }),
       )
       .handle(
+        "session.question.list",
+        Effect.fn(function* (ctx) {
+          const requests = yield* (yield* QuestionV2.Service).list()
+          return { data: requests.filter((request) => request.sessionID === ctx.params.sessionID) }
+        }),
+      )
+      .handle(
         "session.question.reply",
         Effect.fn(function* (ctx) {
           yield* withOwnedQuestion(ctx.params.sessionID, ctx.params.requestID, (question) =>
