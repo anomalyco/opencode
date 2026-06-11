@@ -5,6 +5,23 @@ import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import open from "open"
 import { networkInterfaces } from "os"
+import { execFileSync } from "child_process"
+import { platform } from "process"
+
+function canOpenBrowser(): boolean {
+  const os = platform
+  if (os === "darwin" || os === "win32") return true
+  // The `open` npm package tries these openers on Linux/WSL in order
+  for (const bin of ["xdg-open", "wslview", "gio"]) {
+    try {
+      execFileSync("which", [bin], { stdio: "ignore" })
+      return true
+    } catch {
+      continue
+    }
+  }
+  return false
+}
 
 function getNetworkIPs() {
   const nets = networkInterfaces()
@@ -72,11 +89,19 @@ export const WebCommand = effectCmd({
       }
 
       // Open localhost in browser
-      open(localhostUrl).catch(() => {})
+      if (canOpenBrowser()) {
+        open(localhostUrl).catch(() => {})
+      } else {
+        UI.println(UI.Style.TEXT_DIM + "  Open in browser:   ", UI.Style.TEXT_NORMAL, localhostUrl)
+      }
     } else {
       const displayUrl = server.url.toString()
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, displayUrl)
-      open(displayUrl).catch(() => {})
+      if (canOpenBrowser()) {
+        open(displayUrl).catch(() => {})
+      } else {
+        UI.println(UI.Style.TEXT_DIM + "  Open in browser:   ", UI.Style.TEXT_NORMAL, displayUrl)
+      }
     }
 
     yield* Effect.never
