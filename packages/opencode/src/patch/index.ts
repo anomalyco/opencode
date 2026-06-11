@@ -480,7 +480,16 @@ function seekSequence(lines: string[], pattern: string[], startIndex: number, eo
     (a, b) => normalizeUnicode(a.trim()) === normalizeUnicode(b.trim()),
     eof,
   )
-  return normalized
+  if (normalized !== -1) return normalized
+
+  // Pass 5: NFC canonical equivalence (e.g. decomposed NFD on disk vs precomposed NFC from the model)
+  return tryMatch(
+    lines,
+    pattern,
+    startIndex,
+    (a, b) => a.normalize("NFC").trim() === b.normalize("NFC").trim(),
+    eof,
+  )
 }
 
 function generateUnifiedDiff(oldContent: string, newContent: string): string {

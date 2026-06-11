@@ -380,4 +380,24 @@ PATCH`
       }),
     )
   })
+
+  describe("deriveNewContentsFromChunks", () => {
+    test("matches canonically-equivalent Unicode lines (NFD on disk, NFC in patch)", () => {
+      // A file can store decomposed Unicode (NFD) while models emit precomposed (NFC).
+      // The two are canonically equivalent and render identically, so apply_patch must still match.
+      const original = "Район: Астана\n".normalize("NFD")
+      const result = Patch.deriveNewContentsFromChunks(
+        "city.md",
+        [
+          {
+            old_lines: ["Район: Астана".normalize("NFC")],
+            new_lines: ["Район: Алматы"],
+            is_end_of_file: false,
+          },
+        ],
+        original,
+      )
+      expect(result.content).toBe("Район: Алматы\n")
+    })
+  })
 })
