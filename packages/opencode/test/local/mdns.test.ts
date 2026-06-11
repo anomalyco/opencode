@@ -21,7 +21,7 @@ describe("probeModelIDs", () => {
       return new Response("not found", { status: 404 })
     })
 
-    await expect(probeModelIDs(`${baseURL}/v1`)).resolves.toEqual([])
+    await expect(probeModelIDs(`${baseURL}/v1`)).resolves.toEqual({ ids: [], defaultModel: null })
   })
 
   test("returns null when the provider probe fails", async () => {

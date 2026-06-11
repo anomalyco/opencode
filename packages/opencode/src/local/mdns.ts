@@ -52,18 +52,26 @@ function llamaSkeinClient(baseURL: string) {
 }
 
 type ModelListResult = {
-  data?: { data?: Array<{ id?: string }> }
+  data?: { data?: Array<{ id?: string; default?: boolean }> }
   error?: unknown
 }
 
-export async function probeModelIDs(baseURL: string, timeoutMs = 2000): Promise<string[] | null> {
+export type ModelProbeResult = {
+  ids: string[]
+  defaultModel: string | null
+}
+
+export async function probeModelIDs(baseURL: string, timeoutMs = 2000): Promise<ModelProbeResult | null> {
   return withTimeout(
     llamaSkeinClient(baseURL)
       .listModels()
       .then((result) => {
         const response = result as ModelListResult
         if (response.error !== undefined || !response.data?.data) return null
-        return response.data.data.map((m) => m.id).filter((id): id is string => Boolean(id))
+        const models = response.data.data
+        const ids = models.map((m) => m.id).filter((id): id is string => Boolean(id))
+        const defaultEntry = models.find((m) => m.default)
+        return { ids, defaultModel: defaultEntry?.id ?? null }
       })
       .catch(() => null),
     timeoutMs,
@@ -263,7 +271,7 @@ export async function scanMDNSOnly(timeoutMs = 4000): Promise<LocalLlamaSwapServ
 
 export async function scanLlamaSwap(
   timeoutMs = 4000,
-): Promise<Array<LocalLlamaSwapService & { models: string[]; online: boolean }>> {
+): Promise<Array<LocalLlamaSwapService & { models: string[]; defaultModel: string | null; online: boolean }>> {
   const raw: LocalLlamaSwapService[] = []
 
   const mdnsScan = new Promise<void>((resolve) => {
@@ -325,8 +333,8 @@ export async function scanLlamaSwap(
 
   return Promise.all(
     raw.map(async (svc) => {
-      const models = await probeModelIDs(svc.baseURL, 750)
-      return { ...svc, models: models ?? [], online: models !== null }
+      const probe = await probeModelIDs(svc.baseURL, 750)
+      return { ...svc, models: probe?.ids ?? [], defaultModel: probe?.defaultModel ?? null, online: probe !== null }
     }),
   )
 }

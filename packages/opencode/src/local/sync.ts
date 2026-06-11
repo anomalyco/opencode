@@ -129,7 +129,7 @@ const syncLocalProviders = Effect.gen(function* () {
         options: { baseURL: svc.baseURL, apiKey: "skein" },
         discoverModels: true,
       }
-      log.info("added provider", { slug, baseURL: svc.baseURL, source: svc.source })
+      log.info("added provider", { slug, baseURL: svc.baseURL, source: svc.source, defaultModel: svc.defaultModel })
       changed = true
       continue
     }
@@ -140,7 +140,7 @@ const syncLocalProviders = Effect.gen(function* () {
       const existing = providers[slug] as ProviderEntry
       const oldURL = existing.options?.baseURL ?? ""
       providers[slug] = { ...(existing as object), options: { ...(existing.options ?? {}), baseURL: svc.baseURL } }
-      log.info("updated provider baseURL", { slug, old: oldURL, new: svc.baseURL })
+      log.info("updated provider baseURL", { slug, old: oldURL, new: svc.baseURL, defaultModel: svc.defaultModel })
       changed = true
     } else {
       providers[slug] = {
@@ -149,7 +149,7 @@ const syncLocalProviders = Effect.gen(function* () {
         options: { baseURL: svc.baseURL, apiKey: "skein" },
         discoverModels: true,
       }
-      log.info("added provider", { slug, baseURL: svc.baseURL, source: svc.source })
+      log.info("added provider", { slug, baseURL: svc.baseURL, source: svc.source, defaultModel: svc.defaultModel })
       changed = true
     }
 
