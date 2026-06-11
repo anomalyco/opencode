@@ -12,7 +12,6 @@ import { readJson, writeJsonAtomic } from "../util/persistence"
 import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
-import { useData } from "./data"
 
 export type LocalTheme = {
   secondary: RGBA
@@ -52,17 +51,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
     const sync = useSync()
-    const data = useData()
     const sdk = useSDK()
     const toast = useToast()
     const theme = useTheme().theme
     const route = useRoute()
     const paths = useTuiPaths()
-    const providers = createMemo(() => data.location.provider.list() ?? [])
-    const models = createMemo(() => data.location.model.list() ?? [])
 
     function isModelValid(model: { providerID: string; modelID: string }) {
-      return models().some((item) => item.providerID === model.providerID && item.id === model.modelID && item.enabled)
+      const provider = sync.data.provider.find((item) => item.id === model.providerID)
+      return !!provider?.models[model.modelID]
     }
 
     function getFirstValidModel(...modelFns: (() => { providerID: string; modelID: string } | undefined)[]) {
@@ -74,18 +71,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     }
 
     function createAgent() {
-      const all = createMemo(() =>
-        (data.location.agent.list() ?? []).map((agent) => ({
-          ...agent,
-          name: agent.id,
-          native: false,
-          model: agent.model
-            ? { providerID: agent.model.providerID, modelID: agent.model.id, variant: agent.model.variant }
-            : undefined,
-        })),
-      )
-      const agents = createMemo(() => all().filter((agent) => agent.mode !== "subagent" && !agent.hidden))
-      const visibleAgents = createMemo(() => all().filter((agent) => !agent.hidden))
+      const agents = createMemo(() => sync.data.agent.filter((agent) => agent.mode !== "subagent" && !agent.hidden))
+      const visibleAgents = createMemo(() => sync.data.agent.filter((agent) => !agent.hidden))
       const [agentStore, setAgentStore] = createStore({
         current: undefined as string | undefined,
       })
@@ -231,13 +218,15 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
 
-        const model = models().find(
-          (item) => item.enabled && providers().some((provider) => provider.id === item.providerID),
-        )
+        const provider = sync.data.provider[0]
+        if (!provider) return undefined
+        const defaultModel = sync.data.provider_default[provider.id]
+        const firstModel = Object.values(provider.models)[0]
+        const model = defaultModel ?? firstModel?.id
         if (!model) return undefined
         return {
-          providerID: model.providerID,
-          modelID: model.id,
+          providerID: provider.id,
+          modelID: model,
         }
       })
 
@@ -272,12 +261,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               reasoning: false,
             }
           }
-          const provider = providers().find((item) => item.id === value.providerID)
-          const info = models().find((item) => item.providerID === value.providerID && item.id === value.modelID)
+          const provider = sync.data.provider.find((item) => item.id === value.providerID)
+          const info = provider?.models[value.modelID]
           return {
             provider: provider?.name ?? value.providerID,
             model: info?.name ?? value.modelID,
-            reasoning: false,
+            reasoning: info?.capabilities?.reasoning ?? false,
           }
         }),
         cycle(direction: 1 | -1) {
@@ -383,8 +372,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           list() {
             const m = currentModel()
             if (!m) return []
-            const info = models().find((item) => item.providerID === m.providerID && item.id === m.modelID)
-            return info?.variants.map((variant) => variant.id) ?? []
+            const provider = sync.data.provider.find((item) => item.id === m.providerID)
+            const info = provider?.models[m.modelID]
+            if (!info?.variants) return []
+            return Object.keys(info.variants)
           },
           set(value: string | undefined) {
             const m = currentModel()
