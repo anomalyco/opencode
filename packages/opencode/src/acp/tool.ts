@@ -284,10 +284,9 @@ function locationFrom(...values: unknown[]): ToolCallLocation[] {
 }
 
 function diffContent(input: ToolInput): ToolCallContent[] {
+  const oldText = stringValue(input.oldString)
   const newText = stringValue(input.newString) ?? stringValue(input.content)
-  if (newText === undefined) return []
-
-  const oldText = stringValue(input.oldString) ?? null
+  if (oldText === undefined || newText === undefined) return []
 
   return [
     {
