@@ -284,7 +284,12 @@ download_with_progress() {
     # Hide cursor
     printf "\033[?25l" >&4
 
-    trap "trap - RETURN; rm -f \"$tracefile\"; printf '\033[?25h' >&4; exec 4>&-" RETURN
+    _oc_restore_cursor() {
+        printf '\033[?25h' >&4 2>/dev/null || true
+        exec 4>&- 2>/dev/null || true
+    }
+    trap 'rm -f "$tracefile"; _oc_restore_cursor' RETURN
+    trap '_oc_restore_cursor; rm -f "$tracefile"; exit 130' INT
 
     (
         curl --trace-ascii "$tracefile" -s -L -o "$output" "$url"
