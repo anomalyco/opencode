@@ -96,7 +96,7 @@ bun test test/tool/ea-lab-service.test.ts
 bun typecheck
 ```
 
-PR #2 では targeted tests と local typecheck は通過済みです。GitHub Actions は fork 側で Blacksmith runner が割り当たらないため、標準 GitHub runner に切り替えて実行しています。
+PR #2 では targeted tests と local typecheck は通過済みです。PR 上の `test` workflow は Phase 1 の変更範囲に合わせ、EA Lab targeted tests と MT5 parser fixture tests のみを必須確認にします。full unit / e2e は push to `dev` または `workflow_dispatch` 側で実行します。
 
 ## CI Runner Policy
 
@@ -104,10 +104,11 @@ Blacksmith 4 vCPU runners は、利用可能な環境では高速で効率的な
 
 そのため現在の PR では以下を使います。
 
-- Linux: `ubuntu-latest`
-- Windows: `windows-latest`
+- PR targeted tests: `ubuntu-latest`
+- full Linux unit / e2e on push or manual run: `ubuntu-latest`
+- full Windows unit / e2e on push or manual run: `windows-latest`
 
-Blacksmith runner が GitHub / Blacksmith 側で有効化され、PR job が queue 停止しないことを確認できた場合にのみ、`blacksmith-4vcpu-*` へ戻します。
+Blacksmith runner が GitHub / Blacksmith 側で有効化され、PR job が queue 停止しないことを確認できた場合にのみ、`blacksmith-4vcpu-*` へ戻します。性能が高くても、runner 割当が確認できない状態では採用しません。
 
 ## Next Phases
 
