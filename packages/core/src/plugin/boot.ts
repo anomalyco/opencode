@@ -1,7 +1,8 @@
 export * as PluginBoot from "./boot"
 
 import { Context, Deferred, Effect, Layer } from "effect"
-import { Auth } from "../auth"
+import { Credential } from "../credential"
+import { Connector } from "../connector"
 import { AgentV2 } from "../agent"
 import { Catalog } from "../catalog"
 import { CommandV2 } from "../command"
@@ -17,7 +18,6 @@ import { Location } from "../location"
 import { ModelsDev } from "../models-dev"
 import { Npm } from "../npm"
 import { PluginV2 } from "../plugin"
-import { AccountPlugin } from "./account"
 import { AgentPlugin } from "./agent"
 import { CommandPlugin } from "./command"
 import { SkillPlugin } from "./skill"
@@ -33,7 +33,8 @@ type Plugin = {
   effect: PluginV2.Effect<
     | Catalog.Service
     | CommandV2.Service
-    | Auth.Service
+    | Credential.Service
+    | Connector.Service
     | AgentV2.Service
     | Npm.Service
     | EventV2.Service
@@ -60,7 +61,8 @@ export const layer = Layer.effect(
     const catalog = yield* Catalog.Service
     const commands = yield* CommandV2.Service
     const plugin = yield* PluginV2.Service
-    const accounts = yield* Auth.Service
+    const credentials = yield* Credential.Service
+    const connectors = yield* Connector.Service
     const agents = yield* AgentV2.Service
     const config = yield* Config.Service
     const location = yield* Location.Service
@@ -79,7 +81,8 @@ export const layer = Layer.effect(
         effect: input.effect.pipe(
           Effect.provideService(Catalog.Service, catalog),
           Effect.provideService(CommandV2.Service, commands),
-          Effect.provideService(Auth.Service, accounts),
+          Effect.provideService(Credential.Service, credentials),
+          Effect.provideService(Connector.Service, connectors),
           Effect.provideService(AgentV2.Service, agents),
           Effect.provideService(Config.Service, config),
           Effect.provideService(Location.Service, location),
@@ -97,7 +100,6 @@ export const layer = Layer.effect(
 
     const boot = Effect.gen(function* () {
       yield* add(EnvPlugin)
-      yield* add(AccountPlugin)
       yield* add(AgentPlugin.Plugin)
       yield* add(CommandPlugin.Plugin)
       yield* add(SkillPlugin.Plugin)
@@ -125,6 +127,7 @@ export const layer = Layer.effect(
 )
 
 export const locationLayer = layer.pipe(
+  Layer.provideMerge(Connector.locationLayer),
   Layer.provideMerge(Catalog.locationLayer),
   Layer.provideMerge(CommandV2.locationLayer),
   Layer.provideMerge(Config.locationLayer),

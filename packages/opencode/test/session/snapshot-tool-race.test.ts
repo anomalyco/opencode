@@ -11,55 +11,26 @@
  * before tools run by hooking into start-step, but the AI SDK executes
  * tools internally during multi-step processing before emitting events.
  */
-import {BackgroundJob} from '@/background/job'
-import {Config} from '@/config/config'
-import {RuntimeFlags} from '@/effect/runtime-flags'
-import {EventV2Bridge} from '@/event-v2-bridge'
-import {LSP} from '@/lsp/lsp'
-import {Provider as ProviderSvc} from '@/provider/provider'
-import {Session} from '@/session/session'
-import {ToolRegistry} from '@/tool/registry'
-import {Truncate} from '@/tool/truncate'
-// Same layer setup as prompt-effect.test.ts
-import {NodeFileSystem} from '@effect/platform-node'
-import {CrossSpawnSpawner} from '@opencode-ai/core/cross-spawn-spawner'
-import {Database} from '@opencode-ai/core/database/database'
-import {FSUtil} from '@opencode-ai/core/fs-util'
-import {Ripgrep} from '@opencode-ai/core/ripgrep'
-import {SessionV1} from '@opencode-ai/core/v1/session'
-import {expect} from 'bun:test'
-import {Effect, Layer} from 'effect'
-import {FetchHttpClient} from 'effect/unstable/http'
-import fs from 'fs/promises'
-import path from 'path'
+import { expect } from "bun:test"
+import { Effect, Layer } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import fs from "fs/promises"
+import path from "path"
+import { Session } from "@/session/session"
+import { SessionPrompt } from "../../src/session/prompt"
+import { SessionSummary } from "../../src/session/summary"
+import { MessageV2 } from "../../src/session/message-v2"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { Database } from "@opencode-ai/core/database/database"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { provideTmpdirServer } from "../fixture/fixture"
+import { testEffect } from "../lib/effect"
+import { TestLLMServer } from "../lib/llm-server"
 
-import {Agent as AgentSvc} from '../../src/agent/agent'
-import {Command} from '../../src/command'
-import {Env} from '../../src/env'
-import {Format} from '../../src/format'
-import {Git} from '../../src/git'
-import {Image} from '../../src/image/image'
-import {MCP} from '../../src/mcp'
-import {Permission} from '../../src/permission'
-import {Plugin} from '../../src/plugin'
-import {Question} from '../../src/question'
-import {SessionCompaction} from '../../src/session/compaction'
-import {Instruction} from '../../src/session/instruction'
-import {LLM} from '../../src/session/llm'
-import {MessageV2} from '../../src/session/message-v2'
-import {SessionProcessor} from '../../src/session/processor'
-import {SessionPrompt} from '../../src/session/prompt'
-import {SessionRevert} from '../../src/session/revert'
-import {SessionRunState} from '../../src/session/run-state'
-import {SessionStatus} from '../../src/session/status'
-import {SessionSummary} from '../../src/session/summary'
-import {SystemPrompt} from '../../src/session/system'
-import {Todo} from '../../src/session/todo'
-import {Skill} from '../../src/skill'
-import {Snapshot} from '../../src/snapshot'
-import {provideTmpdirServer} from '../fixture/fixture'
-import {testEffect} from '../lib/effect'
-import {TestLLMServer} from '../lib/llm-server'
+import { LSP } from "@/lsp/lsp"
+import { MCP } from "../../src/mcp"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const mcp = Layer.succeed(
     MCP.Service,
@@ -104,82 +75,24 @@ const lsp = Layer.succeed(
     }),
 )
 
-const status =
-    SessionStatus.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer))
-const run = SessionRunState.layer.pipe(Layer.provide(status))
-const infra =
-    Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
-
-function makeHttp() {
-  const deps = Layer
-                   .mergeAll(
-                       Session.defaultLayer,
-                       Snapshot.defaultLayer,
-                       LLM.defaultLayer,
-                       Env.defaultLayer,
-                       AgentSvc.defaultLayer,
-                       Command.defaultLayer,
-                       Permission.defaultLayer,
-                       Plugin.defaultLayer,
-                       Config.defaultLayer,
-                       ProviderSvc.defaultLayer,
-                       lsp,
-                       mcp,
-                       FSUtil.defaultLayer,
-                       BackgroundJob.defaultLayer,
-                       status,
-                       Database.defaultLayer,
-                       EventV2Bridge.defaultLayer,
-                       )
-                   .pipe(Layer.provideMerge(infra))
-  const question = Question.layer.pipe(Layer.provideMerge(deps))
-  const todo = Todo.layer.pipe(Layer.provideMerge(deps))
-  const registry = ToolRegistry.layer.pipe(
-      Layer.provide(Skill.defaultLayer),
-      Layer.provide(FetchHttpClient.layer),
-      Layer.provide(CrossSpawnSpawner.defaultLayer),
-      Layer.provide(Git.defaultLayer),
-      Layer.provide(Ripgrep.defaultLayer),
-      Layer.provide(Format.defaultLayer),
-      Layer.provide(RuntimeFlags.layer({experimentalEventSystem: true})),
-      Layer.provideMerge(todo),
-      Layer.provideMerge(question),
-      Layer.provideMerge(deps),
-  )
-  const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
-  const proc = SessionProcessor.layer.pipe(
-      Layer.provide(SessionSummary.defaultLayer),
-      Layer.provideMerge(run),
-      Layer.provide(Image.defaultLayer),
-      Layer.provide(RuntimeFlags.layer({experimentalEventSystem: true})),
-      Layer.provideMerge(deps),
-  )
-  const compact = SessionCompaction.layer.pipe(
-      Layer.provide(RuntimeFlags.layer({experimentalEventSystem: true})),
-      Layer.provideMerge(proc),
-      Layer.provideMerge(deps),
-  )
-  return Layer.mergeAll(
-      TestLLMServer.layer,
-      SessionSummary.defaultLayer,
-      SessionPrompt.layer.pipe(
-          Layer.provide(SessionRevert.defaultLayer),
-          Layer.provide(Image.defaultLayer),
-          Layer.provide(SessionSummary.defaultLayer),
-          Layer.provideMerge(run),
-          Layer.provideMerge(compact),
-          Layer.provideMerge(proc),
-          Layer.provideMerge(registry),
-          Layer.provideMerge(trunc),
-          Layer.provide(Instruction.defaultLayer),
-          Layer.provide(SystemPrompt.defaultLayer),
-          Layer.provide(RuntimeFlags.layer({experimentalEventSystem: true})),
-          Layer.provideMerge(deps),
-          ),
-  )
-}
-
-const it = testEffect(makeHttp())
+const root = LayerNode.group([
+  SessionPrompt.node,
+  Session.node,
+  SessionProjector.node,
+  SessionSummary.node,
+  Database.node,
+  CrossSpawnSpawner.node,
+  LayerNode.make(TestLLMServer.layer, []),
+])
+const it = testEffect(
+  LayerNode.buildLayer(root, {
+    replacements: [
+      LayerNode.replace(MCP.node, mcp),
+      LayerNode.replace(LSP.node, lsp),
+      LayerNode.replace(RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true })),
+    ],
+  }),
+)
 
 const providerCfg = (url: string) => ({
   provider: {
