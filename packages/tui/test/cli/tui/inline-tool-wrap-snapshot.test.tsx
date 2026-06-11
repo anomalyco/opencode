@@ -14,7 +14,6 @@ import {
   parseQuestions,
   parseTodos,
   toolDisplay,
-  toolFailureLabel,
 } from "../../../src/routes/session"
 
 let testSetup: Awaited<ReturnType<typeof testRender>> | undefined
@@ -170,6 +169,20 @@ function FailedPendingToolFixture() {
   )
 }
 
+function FailedCompleteToolFixture() {
+  return (
+    <InlineToolRow
+      icon="→"
+      complete={true}
+      pending="Reading file..."
+      failed={true}
+      failure="Read failed"
+    >
+      Read src/index.ts
+    </InlineToolRow>
+  )
+}
+
 async function renderFrame(component: () => JSX.Element, options: { width: number; height: number }) {
   testSetup = await testRender(component, options)
   await testSetup.renderOnce()
@@ -188,20 +201,16 @@ describe("TUI inline tool wrapping", () => {
     expect(toolDisplay("plugin_tool")).toBe("generic")
   })
 
-  test("formats failure labels for built-in and plugin tools", () => {
-    expect(toolFailureLabel("apply_patch")).toBe("Patch failed")
-    expect(toolFailureLabel("bash")).toBe("Command failed")
-    expect(toolFailureLabel("webfetch")).toBe("Web fetch failed")
-    expect(toolFailureLabel("websearch")).toBe("Web search failed")
-    expect(toolFailureLabel("todowrite")).toBe("Todo update failed")
-    expect(toolFailureLabel("edit")).toBe("Edit failed")
-    expect(toolFailureLabel("plugin_tool")).toBe("Plugin Tool failed")
-  })
-
   test("replaces pending copy when a tool fails before completion", async () => {
     const frame = await renderFrame(() => <FailedPendingToolFixture />, { width: 72, height: 3 })
     expect(frame).toContain("Patch failed")
     expect(frame).not.toContain("Preparing patch")
+  })
+
+  test("preserves useful completed copy when a tool fails", async () => {
+    const frame = await renderFrame(() => <FailedCompleteToolFixture />, { width: 72, height: 3 })
+    expect(frame).toContain("Read src/index.ts")
+    expect(frame).not.toContain("Read failed")
   })
 
   test("filters malformed nested tool wire data", () => {
