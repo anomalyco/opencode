@@ -193,17 +193,7 @@ export const MEDIA_MIMES = [...IMAGE_MIMES, ...VIDEO_MIMES] as const
 export const MAX_MEDIA_ENCODED_BYTES = 8 * 1024 * 1024
 export const MAX_MEDIA_DECODED_BYTES = 6 * 1024 * 1024
 
-const isBase64 = (value: string) => {
-  if (!value || value.length % 4 !== 0) return false
-  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0
-  const end = value.length - padding
-  for (let i = 0; i < end; i++) {
-    const c = value.charCodeAt(i)
-    if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57) || c === 43 || c === 47) continue
-    return false
-  }
-  return true
-}
+const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
 
 export interface ValidatedMedia {
   readonly mime: string
@@ -212,26 +202,18 @@ export interface ValidatedMedia {
   readonly bytes: Uint8Array
 }
 
-export interface MediaLimits {
-  readonly maxDecodedBytes?: number
-  readonly maxEncodedBytes?: number
-}
-
 export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function* (
   route: string,
   part: MediaPart,
   supportedMimes: ReadonlySet<string>,
-  limits?: MediaLimits,
 ) {
-  const maxDecoded = limits?.maxDecodedBytes ?? MAX_MEDIA_DECODED_BYTES
-  const maxEncoded = limits?.maxEncodedBytes ?? MAX_MEDIA_ENCODED_BYTES
   const mime = part.mediaType.toLowerCase()
   if (!supportedMimes.has(mime)) return yield* invalidRequest(`${route} does not support media type ${part.mediaType}`)
 
   let base64: string
   if (typeof part.data !== "string") {
-    if (part.data.byteLength > maxDecoded)
-      return yield* invalidRequest(`${route} media exceeds the ${maxDecoded} byte decoded limit`)
+    if (part.data.byteLength > MAX_MEDIA_DECODED_BYTES)
+      return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_DECODED_BYTES} byte decoded limit`)
     base64 = Buffer.from(part.data).toString("base64")
   } else if (part.data.startsWith("data:")) {
     const match = /^data:([^;,]+);base64,([A-Za-z0-9+/]*={0,2})$/s.exec(part.data)
@@ -243,23 +225,19 @@ export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function*
     base64 = part.data
   }
 
-  if (Buffer.byteLength(base64, "utf8") > maxEncoded)
-    return yield* invalidRequest(`${route} media exceeds the ${maxEncoded} byte encoded limit`)
-  if (!isBase64(base64))
+  if (Buffer.byteLength(base64, "utf8") > MAX_MEDIA_ENCODED_BYTES)
+    return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_ENCODED_BYTES} byte encoded limit`)
+  if (!base64 || base64.length % 4 !== 0 || !base64Pattern.test(base64))
     return yield* invalidRequest(`${route} media must contain valid base64`)
   const bytes = Buffer.from(base64, "base64")
-  if (bytes.byteLength > maxDecoded)
-    return yield* invalidRequest(`${route} media exceeds the ${maxDecoded} byte decoded limit`)
+  if (bytes.byteLength > MAX_MEDIA_DECODED_BYTES)
+    return yield* invalidRequest(`${route} media exceeds the ${MAX_MEDIA_DECODED_BYTES} byte decoded limit`)
   if (bytes.toString("base64") !== base64) return yield* invalidRequest(`${route} media must contain canonical base64`)
   return { mime, base64, dataUrl: `data:${mime};base64,${base64}`, bytes } satisfies ValidatedMedia
 })
 
-export const validateToolFile = (
-  route: string,
-  part: ToolFileContent,
-  supportedMimes: ReadonlySet<string>,
-  limits?: MediaLimits,
-) => validateMedia(route, { type: "media", mediaType: part.mime, data: part.uri, filename: part.name }, supportedMimes, limits)
+export const validateToolFile = (route: string, part: ToolFileContent, supportedMimes: ReadonlySet<string>) =>
+  validateMedia(route, { type: "media", mediaType: part.mime, data: part.uri, filename: part.name }, supportedMimes)
 
 export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
 
