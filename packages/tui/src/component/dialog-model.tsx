@@ -1,17 +1,17 @@
 import { createMemo, createSignal } from "solid-js"
 import { useLocal } from "../context/local"
-import { useSync } from "../context/sync"
-import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
+import { map, pipe, filter, sortBy, take } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
 import { createDialogProviderOptions, DialogProvider } from "./dialog-provider"
 import { DialogVariant } from "./dialog-variant"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
+import { useData } from "../context/data"
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
-  const sync = useSync()
+  const data = useData()
   const dialog = useDialog()
   const [query, setQuery] = createSignal("")
 
@@ -29,19 +29,21 @@ export function DialogModel(props: { providerID?: string }) {
     function toOptions(items: typeof favorites, category: string) {
       if (!showSections) return []
       return items.flatMap((item) => {
-        const provider = sync.data.provider.find((x) => x.id === item.providerID)
+        const provider = data.location.provider.list()?.find((provider) => provider.id === item.providerID)
         if (!provider) return []
-        const model = provider.models[item.modelID]
+        const model = data.location.model
+          .list()
+          ?.find((model) => model.providerID === item.providerID && model.id === item.modelID)
         if (!model) return []
         return [
           {
             key: item,
             value: { providerID: provider.id, modelID: model.id },
-            title: model.name ?? item.modelID,
+            title: model.name,
             description: provider.name,
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
-            footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer: model.cost[0]?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
             onSelect: () => {
               onSelect(provider.id, model.id)
             },
@@ -59,42 +61,43 @@ export function DialogModel(props: { providerID?: string }) {
     )
 
     const providerOptions = pipe(
-      sync.data.provider,
+      data.location.model.list() ?? [],
+      filter((model) => model.status !== "deprecated"),
+      filter((model) => (props.providerID ? model.providerID === props.providerID : true)),
       sortBy(
-        (provider) => provider.id !== "opencode",
-        (provider) => provider.name,
+        (model) => model.providerID !== "opencode",
+        (model) => data.location.provider.list()?.find((provider) => provider.id === model.providerID)?.name ?? "",
+        [(model) => model.time.released, "desc"],
       ),
-      flatMap((provider) =>
-        pipe(
-          provider.models,
-          entries(),
-          filter(([_, info]) => info.status !== "deprecated"),
-          filter(([_, info]) => (props.providerID ? info.providerID === props.providerID : true)),
-          map(([model, info]) => ({
-            value: { providerID: provider.id, modelID: model },
-            title: info.name ?? model,
-            releaseDate: info.release_date,
-            description: favorites.some((item) => item.providerID === provider.id && item.modelID === model)
-              ? "(Favorite)"
-              : undefined,
-            category: connected() ? provider.name : undefined,
-            disabled: provider.id === "opencode" && model.includes("-nano"),
-            footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
-            onSelect() {
-              onSelect(provider.id, model)
-            },
-          })),
-          filter((x) => {
-            if (!showSections) return true
-            if (favorites.some((item) => item.providerID === x.value.providerID && item.modelID === x.value.modelID))
-              return false
-            if (recents.some((item) => item.providerID === x.value.providerID && item.modelID === x.value.modelID))
-              return false
-            return true
-          }),
-          (options) => sortModelOptions(options, props.providerID !== undefined),
-        ),
-      ),
+      map((model) => ({
+        value: { providerID: model.providerID, modelID: model.id },
+        title: model.name,
+        releaseDate: model.time.released,
+        description: favorites.some((item) => item.providerID === model.providerID && item.modelID === model.id)
+          ? "(Favorite)"
+          : undefined,
+        category: connected()
+          ? data.location.provider.list()?.find((provider) => provider.id === model.providerID)?.name
+          : undefined,
+        disabled: !model.enabled || (model.providerID === "opencode" && model.id.includes("-nano")),
+        footer: model.cost[0]?.input === 0 && model.providerID === "opencode" ? "Free" : undefined,
+        onSelect() {
+          onSelect(model.providerID, model.id)
+        },
+      })),
+      filter((option) => {
+        if (!showSections) return true
+        if (
+          favorites.some((item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID)
+        )
+          return false
+        if (
+          recents.some((item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID)
+        )
+          return false
+        return true
+      }),
+      (options) => sortModelOptions(options, props.providerID !== undefined),
     )
 
     const popularProviders = !connected()
@@ -119,7 +122,7 @@ export function DialogModel(props: { providerID?: string }) {
   })
 
   const provider = createMemo(() =>
-    props.providerID ? sync.data.provider.find((x) => x.id === props.providerID) : null,
+    props.providerID ? data.location.provider.list()?.find((item) => item.id === props.providerID) : null,
   )
 
   const title = createMemo(() => {
@@ -172,7 +175,7 @@ export function DialogModel(props: { providerID?: string }) {
   )
 }
 
-export function sortModelOptions<T extends { footer?: string; releaseDate: string; title: string }>(
+export function sortModelOptions<T extends { footer?: string; releaseDate: string | number; title: string }>(
   options: T[],
   newestFirst: boolean,
 ) {
