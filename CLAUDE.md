@@ -2,6 +2,7 @@
 - 並列に実行できる調査や検証は、可能な限り並列化すること。
 - この repo のデフォルトブランチは `dev`。
 - PR を触る前に `.opencode/skills/gh-pr-compliance/SKILL.md` を読むこと。
+- **PR を作成する前に、`packages/opencode/src/securecode/skills/securecode-manual/*.md` を読み返してマニュアル更新の要否を入念に確認すること**。このマニュアルは built-in skill としてバイナリに焼き込まれており、AI がユーザーに「セキュアコードの使い方」を案内するときの一次資料になる。インストール手順 / コマンド / 設定ファイル / サンドボックス挙動 / トラブル対応 / FAQ などに影響する変更を入れたのに該当章を放置すると、リリース後も AI が古い情報で答え続ける事故になる。最低限、変更されたコンセプトに関連する章 (`00-overview.md` / `01-installation.md` / `02-quickstart.md` / `03-commands.md` / `04-config.md` / `05-sandbox.md` / `06-troubleshooting.md` / `07-faq.md`) を grep して整合性を確認し、PR 説明文に「manual updated: <章名>」または「manual: no change needed (reason: <理由>)」を明記すること。
 - **`gh` CLI を実行する際は必ず `-R acompany-develop/securecode` を明示すること**。本リポは upstream remote (`anomalyco/opencode`) も持っているため、リポを明示しないと issue / PR / label 操作が upstream 側に作成される事故が発生する (過去複数回発生)。`gh issue create` / `gh pr create` / `gh pr view` / `gh pr edit` / `gh pr checks` / `gh label list` / `gh api` 等、すべての gh コマンドで例外なく `-R acompany-develop/securecode` を付けること。
 - **Issue / PR を新規に作成する前に、必ず upstream (`anomalyco/opencode`) 側で同じテーマの issue / PR が既に存在しないか確認すること**。upstream で既に議論・実装が進んでいる場合、securecode 側で独自に作ると無駄になったり、後で upstream sync 時に衝突する。確認は `gh issue list -R anomalyco/opencode --search "<keyword>"` / `gh pr list -R anomalyco/opencode --search "<keyword>" --state all` で行う。upstream に該当があれば、まずユーザーへ「upstream にこういう issue/PR がある」と報告し、securecode 側で別途作るか / upstream の動向を待つか判断を仰ぐこと。
 - SecureCode benchmark を扱うときは、まず `benchmarks/securecode/README.md` を読むこと。
