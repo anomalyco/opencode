@@ -33,3 +33,7 @@ logs/
 *.bun-build
 tsconfig.tsbuildinfo
 .env
+
+# Sbomtest
+src_modules/
+.horsebox/
