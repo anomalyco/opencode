@@ -191,6 +191,46 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           yield* fs.writeFileString(target, text ? `${text}\n` : "").pipe(Effect.orDie)
         })
 
+        // Reuse the hashes for the git storage between the original repo and snapshot
+        // on huge repos like chromium checkout the git add --all rebuilding the
+        // hashes can take minutes. By doing this we eliminating this at all
+        const seed = Effect.fnUntraced(function* () {
+          if (state.vcs !== "git") return
+
+          const commonDir = yield* git(["rev-parse", "--path-format=absolute", "--git-common-dir"], {
+            cwd: state.worktree,
+          })
+
+          if (commonDir.code !== 0) return
+          const source = commonDir.text.trim()
+          if (!source || !(yield* exists(source))) return
+
+          // Share the source object database (and the source's own alternates,
+          // skipping any that no longer exist) so seeded blobs resolve.
+          const sourceObjects = path.join(source, "objects")
+          const chained = (yield* read(path.join(sourceObjects, "info", "alternates")))
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+          const alternates: string[] = []
+          for (const candidate of [sourceObjects, ...chained]) {
+            if (yield* exists(candidate)) alternates.push(candidate)
+          }
+          if (!alternates.length) return
+
+          yield* fs.ensureDir(path.join(state.gitdir, "objects", "info")).pipe(Effect.orDie)
+          yield* fs
+            .writeFileString(path.join(state.gitdir, "objects", "info", "alternates"), alternates.join("\n") + "\n")
+            .pipe(Effect.orDie)
+
+          // Seed the index from the source repo so already-hashed entries are reused.
+          // Best-effort: a missing/incompatible index just falls back to a full add.
+          const sourceIndex = path.join(source, "index")
+          if (yield* exists(sourceIndex)) {
+            yield* fs.copyFile(sourceIndex, path.join(state.gitdir, "index")).pipe(Effect.catch(() => Effect.void))
+          }
+        })
+
         const add = Effect.fnUntraced(function* () {
           yield* sync()
           const [diff, other] = yield* Effect.all(
@@ -288,6 +328,12 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
                 yield* git(["--git-dir", state.gitdir, "config", "core.longpaths", "true"])
                 yield* git(["--git-dir", state.gitdir, "config", "core.symlinks", "true"])
                 yield* git(["--git-dir", state.gitdir, "config", "core.fsmonitor", "false"])
+                // Tuning for very large worktrees so the first add stays bounded.
+                yield* git(["--git-dir", state.gitdir, "config", "feature.manyFiles", "true"])
+                yield* git(["--git-dir", state.gitdir, "config", "index.version", "4"])
+                yield* git(["--git-dir", state.gitdir, "config", "index.threads", "true"])
+                yield* git(["--git-dir", state.gitdir, "config", "core.untrackedCache", "true"])
+                yield* seed()
                 yield* Effect.logInfo("initialized")
               }
               yield* add()
