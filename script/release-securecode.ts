@@ -78,20 +78,20 @@ for (const dir of await fs.readdir(dist, { withFileTypes: true })) {
   await fs.copyFile(supervisorSrc, supervisorBin)
   await fs.chmod(supervisorBin, 0o755)
 
-  // 3) darwin バイナリは Apple 純正 codesign で ad-hoc 再署名する。bun が
-  // 出力する linker-signed 署名は macho.zig の sig_size バグで truncated に
-  // なり、Apple Silicon の AMFI が起動時に SIGKILL する。`codesign --force
-  // --sign -` で正しい ad-hoc 署名に上書きすると整合性が回復する。Linux 側
-  // は AMFI 強制が無いので署名不要。
-  // この処理は macOS runner 上でのみ動作する (workflow 側で release job を
-  // macos-14 に固定)。Refs:
-  //   - oven-sh/bun#29120
-  //   - https://bun.com/docs/guides/runtime/codesign-macos-executable
-  //   - acompany-develop/securecode#294
-  if (dir.name.includes("darwin")) {
-    await $`codesign --force --sign - ${innerBin}`
-    await $`codesign --force --sign - ${supervisorBin}`
-  }
+  // 3) darwin バイナリへの追加 codesign は行わない。bun build --compile が
+  // 出す linker-signed 署名 (`flags=0x20002(adhoc,linker-signed)`) をそのまま
+  // 残すことが必要。`codesign --force --sign -` で再署名すると linker-signed
+  // フラグが剥がれ (`flags=0x2(adhoc)` になる)、macOS の trustd が osascript
+  // の親プロセスを「unknown adhoc binary」として厳格判定するようになる。
+  // 結果として StandardAdditions.osax の load が skip され、AppleScript から
+  // `the clipboard` が消失し、TUI の Ctrl+V image paste が silent failure
+  // する。Refs: acompany-develop/securecode#335.
+  //
+  // 当初 (bun 1.3.12 〜 1.3.13) は `oven-sh/bun#29120` (macho.zig の sig_size
+  // truncation バグ) のため再署名が必須だったが、`oven-sh/bun#29272` (MERGED
+  // 2026-04-13) で fix され、bun 1.3.14+ で linker-signed のままで Apple
+  // Silicon AMFI を通過するようになった。root の `package.json` で
+  // `packageManager: "bun@1.3.14"` 以上に固定されている限り、再署名は不要。
 
   await fs.copyFile(path.join(root, "LICENSE"), path.join(tmp, "LICENSE"))
   if (await exists(thirdPartyLicensesSrc)) {
