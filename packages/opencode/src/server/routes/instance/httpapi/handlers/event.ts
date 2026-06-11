@@ -2,11 +2,12 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { GlobalBus } from "@/bus/global"
 import { EventV2 } from "@opencode-ai/core/event"
-import { Effect, Queue } from "effect"
+import { Cause, Effect, Queue } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
+import { SUBSCRIBER_BACKLOG_CAPACITY } from "./backlog"
 import { EventApi } from "../groups/event"
 
 function eventData(data: unknown): Sse.Event {
@@ -28,15 +29,22 @@ function eventResponse(events: EventV2.Interface) {
     const workspaceID = yield* InstanceState.workspaceID
     // Listener registration is eager, so events published after this point cannot
     // be lost while the HTTP body fiber is starting or emitting server.connected.
-    const queue = yield* Queue.unbounded<EventV2.Payload>()
-    const unsubscribe = yield* events.listen((event) => Effect.sync(() => Queue.offerUnsafe(queue, event)))
+    const queue = yield* Queue.bounded<EventV2.Payload, Cause.Done>(SUBSCRIBER_BACKLOG_CAPACITY)
+    const unsubscribe = yield* events.listen((event) =>
+      Effect.sync(() => {
+        // Filter before buffering so other instances' events never occupy
+        // this subscriber's backlog.
+        if (event.location?.directory !== instance.directory) return
+        if (event.location.workspaceID !== undefined && event.location.workspaceID !== workspaceID) return
+        if (Queue.offerUnsafe(queue, event)) return
+        // The consumer stopped draining (e.g. a half-closed socket that will
+        // never signal an abort): end the stream so the connection tears down
+        // and the client resyncs, instead of buffering without bound.
+        Queue.endUnsafe(queue)
+      }),
+    )
     yield* Effect.addFinalizer(() => unsubscribe)
     const stream = Stream.fromQueue(queue).pipe(
-      Stream.filter(
-        (event) =>
-          event.location?.directory === instance.directory &&
-          (event.location.workspaceID === undefined || event.location.workspaceID === workspaceID),
-      ),
       Stream.map((event) => ({ id: event.id, type: event.type, properties: event.data })),
     )
     const disposed = Stream.callback<{ id: string; type: string; properties: unknown }>((queue) => {
