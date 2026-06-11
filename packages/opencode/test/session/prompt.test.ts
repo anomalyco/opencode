@@ -2278,3 +2278,67 @@ noLLMServer.instance(
     }),
   30_000,
 )
+
+// Permission deny / reject loop semantics — auto-reject helper mimics a plugin
+// using the v1 SDK that rejects every permission ask as soon as it is published.
+const autoRejectAsks = Effect.fn("test.autoRejectAsks")(function* (message?: string) {
+  const events = yield* EventV2Bridge.Service
+  const permission = yield* Permission.Service
+  const off = yield* events.listen((event) =>
+    Effect.gen(function* () {
+      if (event.type !== "permission.asked") return
+      const data = event.data as { id: string; sessionID: string }
+      yield* permission
+        .reply({
+          requestID: data.id as any,
+          reply: "reject",
+          message,
+        })
+        .pipe(Effect.ignore)
+    }),
+  )
+  yield* Effect.addFinalizer(() => off)
+})
+
+unix(
+  "rejected permission with feedback blocks loop by default",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        // A reject sent WITH a message produces PermissionV1.CorrectedError.
+        // Without CorrectedError in the blocked check, the model receives the
+        // feedback as a tool error and retries the same call in a tight loop.
+        const { llm, dir } = yield* useServerConfig((url) => ({
+          ...providerCfg(url),
+          experimental: { continue_loop_on_deny: false },
+        }))
+        yield* autoRejectAsks("Permission expired and was rejected.")
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({
+          title: "CorrectedStop",
+          permission: [{ permission: "bash", pattern: "*", action: "ask" }],
+        })
+        yield* prompt.prompt({
+          sessionID: session.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: "run a command" }],
+        })
+        const call = { command: "rm -rf /tmp/corrected-stop", workdir: dir, description: "Remove dir" }
+        for (let i = 0; i < 6; i++) yield* llm.tool("bash", call)
+        yield* llm.text("should never be requested")
+
+        const result = yield* prompt.loop({ sessionID: session.id })
+        expect(result.info.role).toBe("assistant")
+        // Only 1 LLM call: the first reject with feedback must end the turn.
+        expect(yield* llm.calls).toBe(1)
+
+        const msgs = yield* MessageV2.filterCompactedEffect(session.id)
+        const tool = msgs.flatMap((m) => m.parts).find((p): p is SessionV1.ToolPart => p.type === "tool")
+        expect(tool?.state.status).toBe("error")
+        if (tool?.state.status === "error") expect(tool.state.error).toContain("Permission expired and was rejected.")
+      }),
+    ),
+  15_000,
+)
