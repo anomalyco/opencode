@@ -20,13 +20,16 @@ export async function exchangeTokenForAWSCredentials(idToken: string, config: AN
 
   const region = config.awsRegion || "us-east-2"
   const govcloud = region.startsWith("us-gov-")
-  const client = new CognitoIdentityClient({
+  // Bun can trip on node-config-provider loadConfig in some mixed AWS SDK graphs.
+  // Casting to any lets us set accountIdEndpointMode without a type error since
+  // CognitoIdentityClientConfig doesn't declare the field even though the SDK
+  // reads it at runtime.
+  const clientConfig: any = {
     region,
-    // Bun can trip on node-config-provider loadConfig in some mixed SDK graphs.
-    // Setting this explicitly avoids that runtime path.
     accountIdEndpointMode: "disabled",
     ...(govcloud && { useFipsEndpoint: true }),
-  })
+  }
+  const client = new CognitoIdentityClient(clientConfig)
 
   try {
     // Step 1: Get identity ID using the ID token
