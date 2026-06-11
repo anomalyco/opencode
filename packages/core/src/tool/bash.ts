@@ -50,6 +50,55 @@ type Output = typeof Output.Type
 
 const defaultShell = () => (process.platform === "win32" ? (process.env.COMSPEC ?? "cmd.exe") : "/bin/sh")
 
+const POWERSHELL_SHELLS = new Set(["powershell", "powershell.exe", "pwsh", "pwsh.exe"])
+
+const isPowerShell = (shell: string) => {
+  const name = path.basename(shell.trim().replace(/^["']|["']$/g, "")).toLowerCase()
+  return POWERSHELL_SHELLS.has(name)
+}
+
+function encodePowerShellCommand(command: string) {
+  return Buffer.from(command, "utf16le").toString("base64")
+}
+
+function withPowerShellUtf8Preamble(command: string) {
+  return `
+[Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false);
+[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false);
+$OutputEncoding = [Console]::OutputEncoding;
+${command}
+`
+}
+
+function makeShellCommand(command: string, shell: string, cwd: string) {
+  if (process.platform === "win32" && isPowerShell(shell)) {
+    return ChildProcess.make(
+      shell,
+      [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-EncodedCommand",
+        encodePowerShellCommand(withPowerShellUtf8Preamble(command)),
+      ],
+      {
+        cwd,
+        stdin: "ignore",
+        detached: false,
+        forceKillAfter: Duration.seconds(3),
+      },
+    )
+  }
+
+  return ChildProcess.make(command, [], {
+    cwd,
+    shell,
+    stdin: "ignore",
+    detached: process.platform !== "win32",
+    forceKillAfter: Duration.seconds(3),
+  })
+}
+
 const compactOutput = (stdout: string, stderr: string) => {
   const output = stdout && stderr ? `${stdout}\n\nstderr:\n${stderr}` : stderr ? `stderr:\n${stderr}` : stdout
   return output || "(no output)"
@@ -156,13 +205,7 @@ export const layer = Layer.effectDiscard(
               const shell =
                 Object.assign({}, ...entries.flatMap((entry) => (entry.type === "document" ? [entry.info] : [])))
                   .shell ?? defaultShell()
-              const command = ChildProcess.make(input.command, [], {
-                cwd: target.canonical,
-                shell,
-                stdin: "ignore",
-                detached: process.platform !== "win32",
-                forceKillAfter: Duration.seconds(3),
-              })
+              const command = makeShellCommand(input.command, shell, target.canonical)
               const timeout = input.timeout ?? DEFAULT_TIMEOUT_MS
               const result = yield* appProcess
                 .run(command, {
