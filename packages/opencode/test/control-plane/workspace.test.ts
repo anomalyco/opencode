@@ -8,7 +8,6 @@ import { Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { FetchHttpClient, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { eq } from "drizzle-orm"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import * as Log from "@opencode-ai/core/util/log"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -34,8 +33,7 @@ import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
-
-void Log.init({ print: false })
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 
 const originalEnv = {
   OPENCODE_AUTH_CONTENT: process.env.OPENCODE_AUTH_CONTENT,
@@ -57,6 +55,7 @@ const workspaceLayer = (experimentalWorkspaces: boolean) =>
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(FSUtil.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces })),
+    Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer))),
   )
 

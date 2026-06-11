@@ -7,6 +7,7 @@ import { handlePtyInput } from "@opencode-ai/core/pty/input"
 import { PtyID } from "@opencode-ai/core/pty/schema"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Shell } from "@/shell/shell"
 import { EffectBridge } from "@/effect/bridge"
@@ -41,13 +42,15 @@ export const ptyHandlers = HttpApiBuilder.group(InstanceHttpApi, "pty", (handler
     const cors = yield* CorsConfig
     const locations = yield* LocationServiceMap
     const unregister = registerDisposer((directory) =>
-      Effect.runPromise(locations.invalidate({ directory: AbsolutePath.make(directory) })),
+      Effect.runPromise(locations.invalidate(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
     )
     yield* Effect.addFinalizer(() => Effect.sync(unregister))
 
     const pty = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
       return yield* effect.pipe(
-        Effect.provide(locations.get({ directory: AbsolutePath.make((yield* InstanceState.context).directory) })),
+        Effect.provide(
+          locations.get(Location.Ref.make({ directory: AbsolutePath.make((yield* InstanceState.context).directory) })),
+        ),
       )
     })
 
@@ -158,13 +161,15 @@ export const ptyConnectHandlers = HttpApiBuilder.group(PtyConnectApi, "pty-conne
     const cors = yield* CorsConfig
     const locations = yield* LocationServiceMap
     const unregister = registerDisposer((directory) =>
-      Effect.runPromise(locations.invalidate({ directory: AbsolutePath.make(directory) })),
+      Effect.runPromise(locations.invalidate(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
     )
     yield* Effect.addFinalizer(() => Effect.sync(unregister))
 
     const pty = Effect.fnUntraced(function* <A, E, R>(effect: Effect.Effect<A, E, R>) {
       return yield* effect.pipe(
-        Effect.provide(locations.get({ directory: AbsolutePath.make((yield* InstanceState.context).directory) })),
+        Effect.provide(
+          locations.get(Location.Ref.make({ directory: AbsolutePath.make((yield* InstanceState.context).directory) })),
+        ),
       )
     })
 

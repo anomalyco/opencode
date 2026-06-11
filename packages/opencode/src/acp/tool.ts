@@ -118,14 +118,18 @@ export function completedToolContent(toolName: string, state: CompletedToolState
   return content
 }
 
-export function pendingToolCall(input: { readonly toolCallId: string; readonly toolName: string }): ToolCall {
+export function pendingToolCall(input: {
+  readonly toolCallId: string
+  readonly toolName: string
+  readonly state: { readonly input: ToolInput; readonly title?: string }
+}): ToolCall {
   return {
     toolCallId: input.toolCallId,
-    title: input.toolName,
+    title: input.state.title || input.toolName,
     kind: toToolKind(input.toolName),
     status: "pending",
-    locations: [],
-    rawInput: {},
+    locations: toLocations(input.toolName, input.state.input),
+    rawInput: input.state.input,
   }
 }
 

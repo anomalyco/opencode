@@ -3,7 +3,6 @@ import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { PtyID } from "@opencode-ai/core/pty/schema"
 import { Server } from "../../src/server/server"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
-import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir, tmpdirScoped } from "../fixture/fixture"
 import { Config, Effect, Layer, Queue, Schema } from "effect"
@@ -12,8 +11,6 @@ import * as Socket from "effect/unstable/socket/Socket"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { Pty } from "@opencode-ai/core/pty"
 import { testEffect } from "../lib/effect"
-
-void Log.init({ print: false })
 
 const testPty = process.platform === "win32" ? test.skip : test
 

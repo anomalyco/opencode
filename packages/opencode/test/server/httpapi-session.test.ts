@@ -9,6 +9,7 @@ import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServ
 import { layerWebSocketConstructorGlobal } from "effect/unstable/socket/Socket"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
@@ -29,15 +30,12 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
-import * as Log from "@opencode-ai/core/util/log"
 import { eq } from "drizzle-orm"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, provideInstanceEffect, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { TestLLMServer } from "../lib/llm-server"
 import { testProviderConfig } from "../lib/test-provider"
 import { testEffect } from "../lib/effect"
-
-void Log.init({ print: false })
 
 const originalWorkspaces = Flag.OPENCODE_EXPERIMENTAL_WORKSPACES
 const workspaceLayer = Workspace.defaultLayer.pipe(
@@ -69,7 +67,7 @@ const it = testEffect(
     workspaceLayer,
     Database.defaultLayer,
     httpApiLayer,
-  ),
+  ).pipe(Layer.provide(Ripgrep.defaultLayer)),
 )
 
 function pathFor(path: string, params: Record<string, string>) {
@@ -643,16 +641,16 @@ describe("session HttpApi", () => {
         expect(compact.status).toBe(503)
         expect(yield* responseJson(compact)).toEqual({
           _tag: "ServiceUnavailableError",
-          message: "V2 session compact is not available yet",
-          service: "v2.session.compact",
+          message: "Session compact is not available yet",
+          service: "session.compact",
         })
 
         const wait = yield* request(`/api/session/${session.id}/wait`, { method: "POST", headers })
         expect(wait.status).toBe(503)
         expect(yield* responseJson(wait)).toEqual({
           _tag: "ServiceUnavailableError",
-          message: "V2 session wait is not available yet",
-          service: "v2.session.wait",
+          message: "Session wait is not available yet",
+          service: "session.wait",
         })
       }),
     { git: true, config: { formatter: false, lsp: false } },

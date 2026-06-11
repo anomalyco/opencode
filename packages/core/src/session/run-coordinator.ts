@@ -2,6 +2,7 @@ export * as SessionRunCoordinator from "./run-coordinator"
 
 import { Cause, Context, Deferred, Effect, Exit, Fiber, FiberSet, Layer, Scope } from "effect"
 import { SessionRunner } from "./runner"
+import { logFailure } from "./logging"
 import { SessionSchema } from "./schema"
 
 export type Mode = "run" | "wake"
@@ -275,11 +276,7 @@ export const layer = Layer.effect(
     Effect.flatMap((runner) =>
       make<SessionSchema.ID, void, SessionRunner.RunError>({
         drain: (sessionID, mode) => runner.run({ sessionID, force: mode === "run" }),
-        onFailure: (sessionID, cause) =>
-          Effect.logError("Failed to drain Session").pipe(
-            Effect.annotateLogs("sessionID", sessionID),
-            Effect.annotateLogs("cause", cause),
-          ),
+        onFailure: (sessionID, cause) => logFailure("Failed to drain Session", sessionID, cause),
       }),
     ),
     Effect.map(Service.of),

@@ -8,6 +8,7 @@ import { AbsolutePath, withStatics } from "./schema"
 import { FSUtil } from "./fs-util"
 import { Database } from "./database/database"
 import { Git } from "./git"
+import { LayerNode } from "./effect/layer-node"
 import { Hash } from "./util/hash"
 import { ProjectDirectoryTable } from "./project/sql"
 
@@ -36,7 +37,12 @@ export const DirectoriesInput = Schema.Struct({
 }).annotate({ identifier: "Project.DirectoriesInput" })
 export type DirectoriesInput = typeof DirectoriesInput.Type
 
-export const Directories = Schema.Array(AbsolutePath).annotate({ identifier: "Project.Directories" })
+export const Directories = Schema.Array(
+  Schema.Struct({
+    directory: AbsolutePath,
+    type: Schema.Literals(["main", "root", "git_worktree"]),
+  }),
+).annotate({ identifier: "Project.Directories" })
 export type Directories = typeof Directories.Type
 
 export interface Interface {
@@ -73,13 +79,13 @@ export const layer = Layer.effect(
 
     const directories = Effect.fn("Project.directories")(function* (input: DirectoriesInput) {
       const rows = yield* db
-        .select({ directory: ProjectDirectoryTable.directory })
+        .select({ directory: ProjectDirectoryTable.directory, type: ProjectDirectoryTable.type })
         .from(ProjectDirectoryTable)
         .where(eq(ProjectDirectoryTable.project_id, input.projectID))
         .orderBy(desc(ProjectDirectoryTable.time_created), asc(ProjectDirectoryTable.directory))
         .all()
         .pipe(Effect.orDie)
-      return rows.map((row) => AbsolutePath.make(row.directory))
+      return rows.map((row) => ({ directory: AbsolutePath.make(row.directory), type: row.type }))
     })
 
     const cached = Effect.fnUntraced(function* (dir: string) {
@@ -154,3 +160,4 @@ export const defaultLayer = layer.pipe(
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Git.defaultLayer),
 )
+export const node = LayerNode.make(layer, [Database.node, FSUtil.node, Git.node])

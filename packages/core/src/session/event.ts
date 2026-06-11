@@ -1,9 +1,8 @@
 import { Schema } from "effect"
-import { ProviderMetadata } from "@opencode-ai/llm"
+import { ProviderMetadata, ToolContent } from "@opencode-ai/llm"
 import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
 import { NonNegativeInt } from "../schema"
-import { ToolOutput } from "../tool-output"
 import { V2Schema } from "../v2-schema"
 import { FileAttachment, Prompt } from "./prompt"
 import { SessionSchema } from "./schema"
@@ -360,8 +359,8 @@ export namespace Tool {
     ...options,
     schema: {
       ...ToolBase,
-      structured: ToolOutput.Structured,
-      content: Schema.Array(ToolOutput.Content),
+      structured: Schema.Record(Schema.String, Schema.Any),
+      content: Schema.Array(ToolContent),
     },
   })
   export type Progress = typeof Progress.Type
@@ -371,8 +370,8 @@ export namespace Tool {
     ...options,
     schema: {
       ...ToolBase,
-      structured: ToolOutput.Structured,
-      content: Schema.Array(ToolOutput.Content),
+      structured: Schema.Record(Schema.String, Schema.Any),
+      content: Schema.Array(ToolContent),
       outputPaths: Schema.Array(Schema.String).pipe(Schema.optional),
       result: Schema.Unknown.pipe(Schema.optional),
       provider: Schema.Struct({

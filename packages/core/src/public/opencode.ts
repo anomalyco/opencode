@@ -17,7 +17,7 @@ import { Tool } from "./tool"
 
 export interface Interface {
   readonly sessions: Session.Interface
-  readonly tools: Tool.Service
+  readonly tools: Tool.Interface
 }
 
 /** Intentional public native API for Effect applications embedding OpenCode. */
@@ -32,7 +32,8 @@ class SessionModelValidation extends Context.Service<
   }
 >()("@opencode/public/OpenCode/SessionModelValidation") {}
 
-const LocationServicesLayer = LocationServiceMap.layer
+const ApplicationToolsLayer = ApplicationTools.layer
+const LocationServicesLayer = LocationServiceMap.layer.pipe(Layer.provide(ApplicationToolsLayer))
 const SessionModelValidationLayer = Layer.effect(
   SessionModelValidation,
   Effect.gen(function* () {
@@ -78,8 +79,6 @@ const SessionsLayer = Layer.merge(
   ),
   SessionModelValidationLayer,
 ).pipe(Layer.provide(LocationServicesLayer))
-const ApplicationToolsLayer = ApplicationTools.layer
-
 // TODO: Accept explicit storage so tests and embeddings can select disposable or application-owned persistence.
 export const layer = Layer.effect(
   Service,
@@ -88,7 +87,7 @@ export const layer = Layer.effect(
     const tools = yield* ApplicationTools.Service
     const validation = yield* SessionModelValidation
     return Service.of({
-      tools: { attach: tools.attach },
+      tools: { register: tools.register },
       sessions: {
         create: (input) =>
           sessions.create({
