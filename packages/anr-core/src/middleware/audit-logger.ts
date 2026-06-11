@@ -65,6 +65,9 @@ export function initializeAuditLogger(config: ANRConfig, credentials?: AuditLogg
       accountIdEndpointMode: "disabled",
       authSchemePreference: [],
       maxAttempts: 3,
+      retryMode: "standard",
+      defaultsMode: "standard",
+      useDualstackEndpoint: false,
       requestChecksumCalculation: "WHEN_REQUIRED",
       responseChecksumValidation: "WHEN_REQUIRED",
       ...(credentials && {

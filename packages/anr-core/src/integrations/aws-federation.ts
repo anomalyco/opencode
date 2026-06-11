@@ -24,11 +24,18 @@ export async function exchangeTokenForAWSCredentials(idToken: string, config: AN
   // loadConfig() to appear as a Symbol instead of a function for options like
   // accountIdEndpointMode and authSchemePreference. Supplying these explicitly
   // prevents the SDK from calling loadConfig() for those paths at all.
+  // Bun resolves some AWS SDK packages to their CJS build on certain platforms,
+  // where lazily-loaded config options (loadConfig calls) fail because the
+  // node-config-provider re-export lands as a Symbol. Supplying all known lazy
+  // options explicitly prevents every loadConfig call path from being hit.
   const clientConfig: any = {
     region,
     accountIdEndpointMode: "disabled",
     authSchemePreference: [],
     maxAttempts: 3,
+    retryMode: "standard",
+    defaultsMode: "standard",
+    useDualstackEndpoint: false,
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
     ...(govcloud && { useFipsEndpoint: true }),
