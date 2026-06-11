@@ -812,6 +812,7 @@ describe("session.compaction.prune", () => {
       }),
     ),
   )
+
 })
 
 describe("session.compaction.process", () => {

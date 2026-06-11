@@ -61,6 +61,91 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
+function isDeepSeekModel(model: Provider.Model) {
+  return [model.id, model.api.id, model.providerID].some((value) => value.toLowerCase().includes("deepseek"))
+}
+
+function isAssistantToolCallMessage(msg: ModelMessage) {
+  return (
+    msg.role === "assistant" && Array.isArray(msg.content) && msg.content.some((part) => part.type === "tool-call")
+  )
+}
+
+function deepSeekToolTurnIndexes(msgs: ModelMessage[]) {
+  const turns = new Set<number>()
+  let start = 0
+
+  for (let end = 0; end <= msgs.length; end++) {
+    if (end < msgs.length && msgs[end].role !== "user") continue
+
+    let hasTools = false
+    for (let index = start; index < end; index++) {
+      const msg = msgs[index]
+      if (msg.role === "tool" || isAssistantToolCallMessage(msg)) {
+        hasTools = true
+        break
+      }
+    }
+
+    if (hasTools) {
+      for (let index = start; index < end; index++) {
+        if (msgs[index].role === "assistant") turns.add(index)
+      }
+    }
+
+    start = end
+  }
+
+  return turns
+}
+
+function transformDeepSeekReasoning(msgs: ModelMessage[], field: string) {
+  const toolTurns = deepSeekToolTurnIndexes(msgs)
+
+  return msgs.map((msg, index) => {
+    if (msg.role !== "assistant") return msg
+    if (typeof msg.content === "string") {
+      if (!toolTurns.has(index)) return msg
+      return {
+        ...msg,
+        providerOptions: {
+          ...msg.providerOptions,
+          openaiCompatible: {
+            ...msg.providerOptions?.openaiCompatible,
+            [field]: "",
+          },
+        },
+      }
+    }
+    if (!Array.isArray(msg.content)) return msg
+
+    const reasoningText = msg.content
+      .filter((part): part is Extract<(typeof msg.content)[number], { type: "reasoning" }> => part.type === "reasoning")
+      .map((part) => part.text)
+      .join("")
+    const content = msg.content.filter((part) => part.type !== "reasoning")
+
+    if (!toolTurns.has(index)) {
+      return {
+        ...msg,
+        content,
+      }
+    }
+
+    return {
+      ...msg,
+      content,
+      providerOptions: {
+        ...msg.providerOptions,
+        openaiCompatible: {
+          ...msg.providerOptions?.openaiCompatible,
+          [field]: reasoningText,
+        },
+      },
+    }
+  })
+}
+
 // TODO: fix this stupid inefficient dogshit function
 function normalizeMessages(
   msgs: ModelMessage[],
@@ -265,30 +350,15 @@ function normalizeMessages(
     return result
   }
 
-  // Deepseek requires all assistant messages to have reasoning on them
-  if (model.api.id.toLowerCase().includes("deepseek")) {
-    msgs = msgs.map((msg) => {
-      if (msg.role !== "assistant") return msg
-      if (Array.isArray(msg.content)) {
-        if (msg.content.some((part) => part.type === "reasoning")) return msg
-        return { ...msg, content: [...msg.content, { type: "reasoning", text: "" }] }
-      }
-      return {
-        ...msg,
-        content: [
-          ...(msg.content ? [{ type: "text" as const, text: msg.content }] : []),
-          { type: "reasoning" as const, text: "" },
-        ],
-      }
-    })
-  }
-
   if (
     typeof model.capabilities.interleaved === "object" &&
     model.capabilities.interleaved.field &&
     model.api.npm !== "@openrouter/ai-sdk-provider"
   ) {
     const field = model.capabilities.interleaved.field
+    if (isDeepSeekModel(model)) {
+      return transformDeepSeekReasoning(msgs, field)
+    }
     return msgs.map((msg) => {
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
         const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
@@ -430,6 +500,7 @@ function mapProviderOptions(
 export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
+  const deepSeek = isDeepSeekModel(model)
   if (
     (model.providerID === "anthropic" ||
       model.providerID === "google-vertex-anthropic" ||
@@ -439,7 +510,8 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
       model.id.includes("claude") ||
       model.api.npm === "@ai-sdk/anthropic" ||
       model.api.npm === "@ai-sdk/alibaba") &&
-    model.api.npm !== "@ai-sdk/gateway"
+    model.api.npm !== "@ai-sdk/gateway" &&
+    !deepSeek
   ) {
     msgs = applyCaching(msgs, model)
   }

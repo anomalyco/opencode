@@ -175,6 +175,12 @@ export function combine(values: ReadonlyArray<SystemContext>): SystemContext {
   return context(sources)
 }
 
+/** Returns a context without the specified source keys. */
+export function omit(value: SystemContext, keys: ReadonlyArray<Key>): SystemContext {
+  const hidden = new Set(keys)
+  return context(value[ContextTypeId].filter((source) => !hidden.has(source.key)))
+}
+
 const observe = (value: SystemContext) =>
   Effect.forEach(
     value[ContextTypeId],

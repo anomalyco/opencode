@@ -166,10 +166,16 @@ export const layer = Layer.effect(
       )
 
     const sameModel = Schema.toEquivalence(Schema.UndefinedOr(ModelV2.Ref))
-    const loadSystemContext = (agent: AgentV2.Selection) =>
+    const isDeepSeekModel = (id: string) => id.toLowerCase().includes("deepseek")
+    const loadSystemContext = (agent: AgentV2.Selection, modelID: string) =>
       Effect.all([systemContext.load(), skillGuidance.load(agent), referenceGuidance.load()], {
         concurrency: "unbounded",
-      }).pipe(Effect.map(SystemContext.combine))
+      }).pipe(
+        Effect.map(SystemContext.combine),
+        Effect.map((context) =>
+          isDeepSeekModel(modelID) ? SystemContext.omit(context, [SystemContext.Key.make("core/date")]) : context,
+        ),
+      )
 
     const runTurnAttempt = Effect.fn("SessionRunner.runTurn")(function* (
       sessionID: SessionSchema.ID,
@@ -181,9 +187,10 @@ export const layer = Layer.effect(
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
         return yield* Effect.interrupt
       const agent = yield* agents.select(session.agent)
+      const model = yield* models.resolve(session)
       const initialized = yield* SessionContextEpoch.initialize(
         db,
-        loadSystemContext(agent),
+        loadSystemContext(agent, model.id),
         session.id,
         session.location,
         agent.id,
@@ -203,7 +210,7 @@ export const layer = Layer.effect(
         (yield* SessionContextEpoch.prepare(
           db,
           events,
-          loadSystemContext(agent),
+          loadSystemContext(agent, model.id),
           session.id,
           session.location,
           agent.id,
@@ -211,7 +218,6 @@ export const layer = Layer.effect(
       const current = yield* getSession(sessionID)
       if ((yield* agents.select(current.agent)).id !== agent.id || !sameModel(current.model, session.model))
         return yield* Effect.die(rebuildPreparedTurn())
-      const model = yield* models.resolve(session)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && step >= agent.info.steps

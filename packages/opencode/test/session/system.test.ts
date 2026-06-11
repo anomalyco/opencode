@@ -41,6 +41,38 @@ const build: Agent.Info = {
   options: {},
 }
 
+const model = (id: string, providerID = "test", npm = "@ai-sdk/openai-compatible") =>
+  ({
+    id: `${providerID}/${id}`,
+    providerID,
+    api: {
+      id,
+      url: "https://api.example.com",
+      npm,
+    },
+    name: id,
+    capabilities: {
+      temperature: true,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    cost: {
+      input: 0,
+      output: 0,
+      cache: { read: 0, write: 0 },
+    },
+    limit: {
+      context: 128_000,
+      output: 8_192,
+    },
+    options: {},
+    headers: {},
+  }) as any
+
 const it = testEffect(
   SystemPrompt.layer.pipe(
     Layer.provide(LocationServiceMap.layer),
@@ -81,6 +113,18 @@ describe("session.system", () => {
       expect(middle).toBeGreaterThan(alpha)
       expect(zeta).toBeGreaterThan(middle)
       expect(output).not.toContain("manual-skill")
+    }),
+  )
+
+  it.instance(
+    "omits the dynamic date line for DeepSeek environments",
+    Effect.gen(function* () {
+      const prompt = yield* SystemPrompt.Service
+      const output = yield* prompt.environment(model("deepseek-chat", "deepseek"))
+
+      expect(output.join("\n")).not.toContain("Today's date:")
+      expect(output.join("\n")).toContain("Working directory:")
+      expect(output.join("\n")).toContain(`Platform: ${process.platform}`)
     }),
   )
 })

@@ -286,6 +286,21 @@ describe("SystemContext", () => {
     }),
   )
 
+  it.effect("omits selected sources without reordering the remainder", () =>
+    Effect.gen(function* () {
+      const context = SystemContext.omit(
+        SystemContext.combine([
+          stringContext({ key: "core/date", value: "date" }),
+          stringContext({ key: "core/location", value: "location" }),
+          stringContext({ key: "core/skills", value: "skills" }),
+        ]),
+        [key("core/location")],
+      )
+
+      expect((yield* SystemContext.initialize(context)).baseline).toBe("date\n\nskills")
+    }),
+  )
+
   it.effect("requires namespaced source keys", () =>
     Effect.sync(() => {
       const decodeKey = Schema.decodeUnknownSync(SystemContext.Key)
