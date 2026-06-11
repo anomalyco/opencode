@@ -24,13 +24,13 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import { useProject } from "./project"
 import { useEvent } from "./event"
 import { useSDK } from "./sdk"
-import { useTuiEnvironment } from "../runtime"
+import { useTuiStartup } from "./runtime"
 import { createSimpleContext } from "./helper"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
 import { batch, onMount } from "solid-js"
 import path from "path"
-import { aggregateFailures } from "./aggregate-failures"
+import { useKV } from "./kv"
 
 const emptyConsoleState: ConsoleState = {
   consoleManagedProviders: [],
@@ -50,19 +50,15 @@ function search<T>(items: T[], target: string, key: (item: T) => string) {
   return { found: false, index: left }
 }
 
-export type SyncDependencies = {
-  kv: { get(key: string, defaultValue: boolean): boolean }
-  logger: { error(message: string, extra?: Record<string, unknown>): void }
-}
-
 export const {
   context: SyncContext,
   use: useSync,
   provider: SyncProvider,
 } = createSimpleContext({
   name: "Sync",
-  init: (dependencies: SyncDependencies) => {
-    const environment = useTuiEnvironment()
+  init: () => {
+    const startup = useTuiStartup()
+    const kv = useKV()
     const [store, setStore] = createStore<{
       status: "loading" | "partial" | "complete"
       provider: Provider[]
@@ -136,7 +132,6 @@ export const {
     const event = useEvent()
     const project = useProject()
     const sdk = useSDK()
-    const kv = dependencies.kv
 
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
@@ -445,23 +440,14 @@ export const {
         .catch(() => emptyConsoleState)
       const agentsPromise = sdk.client.app.agents({ workspace }, { throwOnError: true })
       const configPromise = sdk.client.config.get({ workspace }, { throwOnError: true })
-      const blockingRequests: { name: string; promise: Promise<unknown> }[] = [
-        { name: "config.providers", promise: providersPromise },
-        { name: "provider.list", promise: providerListPromise },
-        { name: "app.agents", promise: agentsPromise },
-        { name: "config.get", promise: configPromise },
-        { name: "project.sync", promise: projectPromise },
-        ...(args.continue ? [{ name: "session.list", promise: sessionListPromise }] : []),
-      ]
-
-      await Promise.allSettled(blockingRequests.map((r) => r.promise))
-        .then((settled) => {
-          // Surface every failed endpoint in one labeled message instead of
-          // letting the first rejection drown its siblings as unhandled
-          // rejections.
-          const failure = aggregateFailures(blockingRequests.map((r, i) => ({ name: r.name, result: settled[i] })))
-          if (failure) throw failure
-        })
+      await Promise.all([
+        providersPromise,
+        providerListPromise,
+        agentsPromise,
+        configPromise,
+        projectPromise,
+        ...(args.continue ? [sessionListPromise] : []),
+      ])
         .then(async () => {
           const providersResponse = providersPromise.then((x) => x.data!)
           const providerListResponse = providerListPromise.then((x) => x.data!)
@@ -520,13 +506,13 @@ export const {
           })
         })
         .catch(async (e) => {
-          dependencies.logger.error("tui bootstrap failed", {
+          console.error("tui bootstrap failed", {
             error: e instanceof Error ? e.message : String(e),
             name: e instanceof Error ? e.name : undefined,
             stack: e instanceof Error ? e.stack : undefined,
           })
           if (fatal) {
-            await exit(e)
+            exit(e)
           } else {
             throw e
           }
@@ -544,7 +530,7 @@ export const {
         return store.status
       },
       get ready() {
-        if (environment.skipInitialLoading) return true
+        if (startup.skipInitialLoading) return true
         return store.status !== "loading"
       },
       get path() {

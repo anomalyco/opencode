@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import path from "path"
-import { useTuiEnvironment } from "../../runtime"
+import { useTuiPaths } from "../../context/runtime"
 import { errorMessage } from "../../util/error"
 import { useDialog } from "../../ui/dialog"
 import { useSDK } from "../../context/sdk"
@@ -20,7 +20,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   const sync = useSync()
   const toast = useToast()
   const homeDestination = useHomeSessionDestination()
-  const environment = useTuiEnvironment()
+  const paths = useTuiPaths()
   const [creating, setCreating] = createSignal(false)
   const [creatingDots, setCreatingDots] = createSignal(3)
   const [progress, setProgress] = createSignal<string>()
@@ -35,7 +35,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
         {
           projectID,
           strategy: "git_worktree",
-          directory: path.join(environment.paths.worktree, projectID.slice(0, 6)),
+          directory: path.join(paths.worktree, projectID.slice(0, 6)),
           context,
         },
         { throwOnError: true },

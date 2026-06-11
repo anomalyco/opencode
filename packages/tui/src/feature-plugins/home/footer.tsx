@@ -1,23 +1,23 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, Match, Show, Switch } from "solid-js"
-import { abbreviateHome, useTuiEnvironment } from "../../runtime"
+import { abbreviateHome } from "../../runtime"
+import { useTuiPaths } from "../../context/runtime"
 import { useHomeSessionDestination } from "../../routes/home/session-destination"
+import { useData } from "../../context/data"
 
 const id = "internal:home-footer"
 
 function Directory(props: { api: TuiPluginApi }) {
   const theme = () => props.api.theme.current
   const destination = useHomeSessionDestination()
-  const environment = useTuiEnvironment()
+  const data = useData()
+  const paths = useTuiPaths()
   const dir = createMemo(() => {
     const selected = destination?.destination()
-    if (!selected || selected.type === "new") return
-    const out = abbreviateHome(selected.directory, environment.paths.home)
-    const branch =
-      selected.directory === (props.api.state.path.directory || environment.cwd)
-        ? props.api.state.vcs?.branch
-        : undefined
+    const directory = !selected || selected.type === "new" ? data.location.default().directory : selected.directory
+    const out = abbreviateHome(directory, paths.home)
+    const branch = directory === (props.api.state.path.directory || paths.cwd) ? props.api.state.vcs?.branch : undefined
     if (branch) return out + ":" + branch
     return out
   })

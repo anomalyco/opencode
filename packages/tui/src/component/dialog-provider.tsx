@@ -14,7 +14,7 @@ import { useToast } from "../ui/toast"
 import { isConsoleManagedProvider } from "../util/provider-origin"
 import { useConnected } from "./use-connected"
 import { useBindings } from "../keymap"
-import { useTuiPlatform } from "../platform"
+import { useClipboard } from "../context/clipboard"
 
 const PROVIDER_PRIORITY: Record<string, number> = {
   opencode: 0,
@@ -48,7 +48,11 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
   return [
     ...pipe(
       list,
-      sortBy((x) => PROVIDER_PRIORITY[x.id] ?? 99),
+      sortBy(
+        (x) => PROVIDER_PRIORITY[x.id] ?? 99,
+        (x) => x.name.toLowerCase(),
+        (x) => x.id,
+      ),
       map((provider) => ({
         type: "provider" as const,
         title: provider.name,
@@ -238,7 +242,7 @@ function AutoMethod(props: AutoMethodProps) {
   const dialog = useDialog()
   const sync = useSync()
   const toast = useToast()
-  const platform = useTuiPlatform()
+  const clipboard = useClipboard()
 
   useBindings(() => ({
     bindings: [
@@ -249,8 +253,8 @@ function AutoMethod(props: AutoMethodProps) {
         cmd: () => {
           const code =
             props.authorization.instructions.match(/[A-Z0-9]{4}-[A-Z0-9]{4,5}/)?.[0] ?? props.authorization.url
-          platform.clipboard
-            ?.write?.(code)
+          clipboard
+            .write?.(code)
             .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
             .catch(toast.error)
         },

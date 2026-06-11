@@ -3,7 +3,7 @@ import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import type { AgentPart, FilePart, TextPart } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "../context/helper"
-import { useTuiEnvironment } from "../runtime"
+import { useTuiPaths } from "../context/runtime"
 import { appendText, readText, writeText } from "../util/persistence"
 
 export type PromptInfo = {
@@ -49,8 +49,8 @@ export function isDuplicateEntry(previous: PromptInfo | undefined, next: PromptI
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
   init: () => {
-    const environment = useTuiEnvironment()
-    const historyPath = path.join(environment.paths.state, "prompt-history.jsonl")
+    const paths = useTuiPaths()
+    const historyPath = path.join(paths.state, "prompt-history.jsonl")
     onMount(async () => {
       const lines = parsePromptHistory(await readText(historyPath).catch(() => ""))
       setStore("history", lines)

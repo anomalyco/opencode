@@ -13,7 +13,7 @@ import { OpencodeKeymapProvider } from "../../../src/keymap"
 import diffViewerPlugin from "../../../src/feature-plugins/system/diff-viewer"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
-import { TestTuiEnvironmentProvider } from "../../fixture/tui-environment"
+import { TestTuiContexts } from "../../fixture/tui-environment"
 
 test("closing the diff viewer returns to the route it opened from", async () => {
   const viewer = await renderDiffViewer([])
@@ -152,7 +152,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20) {
     commands.get("diff.open")?.run?.({} as never)
 
     return (
-      <TestTuiEnvironmentProvider>
+      <TestTuiContexts>
         <OpencodeKeymapProvider keymap={keymap}>
           <TuiConfigProvider config={config}>
             <KVProvider>
@@ -162,7 +162,7 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20) {
             </KVProvider>
           </TuiConfigProvider>
         </OpencodeKeymapProvider>
-      </TestTuiEnvironmentProvider>
+      </TestTuiContexts>
     )
   }
 

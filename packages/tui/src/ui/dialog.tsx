@@ -4,9 +4,9 @@ import { useTheme } from "../context/theme"
 import { MouseButton, Renderable, RGBA } from "@opentui/core"
 import { createStore } from "solid-js/store"
 import { useToast } from "./toast"
-import { useTuiEnvironment } from "../runtime"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { useBindings, useOpencodeModeStack } from "../keymap"
-import { useOptionalTuiPlatform } from "../platform"
+import { useClipboard } from "../context/clipboard"
 
 export function Dialog(
   props: ParentProps<{
@@ -180,13 +180,12 @@ export function DialogProvider(props: ParentProps) {
   const value = init()
   const renderer = useRenderer()
   const toast = useToast()
-  const environment = useTuiEnvironment()
-  const platform = useOptionalTuiPlatform()
+  const clipboard = useClipboard()
 
   function copySelection() {
     const text = renderer.getSelection()?.getSelectedText()
-    if (!text || !platform?.clipboard?.write) return false
-    void platform.clipboard.write(text).then(
+    if (!text || !clipboard.write) return false
+    void clipboard.write(text).then(
       () => toast.show({ message: "Copied to clipboard", variant: "info" }),
       (error) => toast.error(error),
     )
@@ -201,14 +200,14 @@ export function DialogProvider(props: ParentProps) {
         position="absolute"
         zIndex={3000}
         onMouseDown={(evt: { button: number; preventDefault(): void; stopPropagation(): void }) => {
-          if (environment.capabilities.copyOnSelect) return
+          if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
           if (evt.button !== MouseButton.RIGHT) return
 
           if (!copySelection()) return
           evt.preventDefault()
           evt.stopPropagation()
         }}
-        onMouseUp={environment.capabilities.copyOnSelect ? copySelection : undefined}
+        onMouseUp={!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT ? copySelection : undefined}
       >
         <Show when={value.stack.length}>
           <Dialog onClose={() => value.clear()} size={value.size}>

@@ -37,8 +37,6 @@ import { disposeApps } from "./backend"
 import { runtime } from "./runtime"
 import { type Scenario } from "./types"
 
-void (await import("@opencode-ai/core/util/log")).init({ print: false })
-
 function cursor(input: Record<string, unknown>) {
   return Buffer.from(JSON.stringify(input)).toString("base64url")
 }
@@ -648,9 +646,53 @@ const scenarios: Scenario[] = [
     object(body)
     check(body.healthy === true, "v2 server should report healthy")
   }),
+  http.protected.get("/api/location", "v2.location.get").json(200, object),
   http.protected.get("/api/agent", "v2.agent.list").json(200, locationData(array)),
   http.protected.get("/api/model", "v2.model.list").json(200, locationData(array)),
   http.protected.get("/api/provider", "v2.provider.list").json(200, locationData(array)),
+  http.protected.get("/api/connector", "v2.connector.list").json(200, locationData(array)),
+  http.protected
+    .get("/api/connector/{connectorID}", "v2.connector.get")
+    .at((ctx) => ({ path: route("/api/connector/{connectorID}", { connectorID: "missing" }), headers: ctx.headers() }))
+    .json(200, object),
+  http.protected
+    .post("/api/connector/{connectorID}/connect/key", "v2.connector.connect.key")
+    .at((ctx) => ({
+      path: route("/api/connector/{connectorID}/connect/key", { connectorID: "missing" }),
+      headers: ctx.headers(),
+      body: { methodID: "missing", key: "test", inputs: {} },
+    }))
+    .status(500, undefined, "status"),
+  http.protected
+    .post("/api/connector/{connectorID}/connect/oauth", "v2.connector.connect.oauth.begin")
+    .at((ctx) => ({
+      path: route("/api/connector/{connectorID}/connect/oauth", { connectorID: "missing" }),
+      headers: ctx.headers(),
+      body: { methodID: "missing", inputs: {} },
+    }))
+    .status(500, undefined, "status"),
+  http.protected
+    .get("/api/connector/oauth/{attemptID}", "v2.connector.connect.oauth.status")
+    .at((ctx) => ({
+      path: route("/api/connector/oauth/{attemptID}", { attemptID: "con_missing" }),
+      headers: ctx.headers(),
+    }))
+    .status(500, undefined, "status"),
+  http.protected
+    .post("/api/connector/oauth/{attemptID}/complete", "v2.connector.connect.oauth.complete")
+    .at((ctx) => ({
+      path: route("/api/connector/oauth/{attemptID}/complete", { attemptID: "con_missing" }),
+      headers: ctx.headers(),
+      body: {},
+    }))
+    .status(500, undefined, "status"),
+  http.protected
+    .delete("/api/connector/oauth/{attemptID}", "v2.connector.connect.oauth.cancel")
+    .at((ctx) => ({
+      path: route("/api/connector/oauth/{attemptID}", { attemptID: "con_missing" }),
+      headers: ctx.headers(),
+    }))
+    .status(204, undefined, "status"),
   http.protected.get("/api/command", "v2.command.list").json(200, locationData(array)),
   http.protected.get("/api/skill", "v2.skill.list").json(200, locationData(array)),
   http.protected
@@ -672,7 +714,12 @@ const scenarios: Scenario[] = [
     .at((ctx) => ({ path: "/api/fs/read?path=hello.txt", headers: ctx.headers() }))
     .json(200, locationData(object)),
   http.protected.get("/api/fs/list", "v2.fs.list").json(200, locationData(array)),
-  http.protected.get("/reference", "reference.list").json(200, array),
+  http.protected
+    .get("/api/fs/find", "v2.fs.find")
+    .seeded((ctx) => ctx.file("hello.txt", "hello\n"))
+    .at((ctx) => ({ path: "/api/fs/find?query=hello&type=file", headers: ctx.headers() }))
+    .json(200, locationData(array)),
+  http.protected.get("/api/reference", "v2.reference.list").json(200, object),
   http.protected
     .get("/api/provider/{providerID}", "v2.provider.get")
     .at((ctx) => ({ path: route("/api/provider/{providerID}", { providerID: "missing" }), headers: ctx.headers() }))
@@ -692,6 +739,14 @@ const scenarios: Scenario[] = [
     .seeded((ctx) => ctx.session({ title: "Permission list owner" }))
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/permission", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, data(array)),
+  http.protected
+    .get("/api/session/{sessionID}/question", "v2.session.question.list")
+    .seeded((ctx) => ctx.session({ title: "Question list owner" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/question", { sessionID: ctx.state.id }),
       headers: ctx.headers(),
     }))
     .json(200, data(array)),
@@ -804,6 +859,22 @@ const scenarios: Scenario[] = [
       headers: ctx.headers(),
     }))
     .status(400, undefined, "none"),
+  http.protected
+    .post("/api/session", "v2.session.create")
+    .at((ctx) => ({
+      path: "/api/session",
+      headers: { ...ctx.headers(), "content-type": "application/json" },
+      body: {},
+    }))
+    .json(200, data(object)),
+  http.protected
+    .get("/api/session/{sessionID}", "v2.session.get")
+    .seeded((ctx) => ctx.session({ title: "Session get" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, data(object)),
   http.protected
     .get("/api/session/{sessionID}/context", "v2.session.context")
     .at((ctx) => ({

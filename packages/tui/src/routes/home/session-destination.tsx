@@ -7,8 +7,7 @@ import {
   type ParentProps,
   type Setter,
 } from "solid-js"
-import { useSync } from "../../context/sync"
-import { useTuiEnvironment } from "../../runtime"
+import { useData } from "../../context/data"
 
 export type HomeSessionDestination = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new" }
 
@@ -21,11 +20,10 @@ type Context = {
 const HomeSessionDestinationContext = createContext<Context>()
 
 export function HomeSessionDestinationProvider(props: ParentProps) {
-  const sync = useSync()
-  const environment = useTuiEnvironment()
+  const data = useData()
   const [selected, setDestination] = createSignal<HomeSessionDestination>()
   const destination = createMemo<HomeSessionDestination>(
-    () => selected() ?? { type: "directory", directory: sync.path.directory || environment.cwd, subdirectory: false },
+    () => selected() ?? { type: "directory", directory: data.location.default().directory, subdirectory: false },
   )
   return (
     <HomeSessionDestinationContext.Provider

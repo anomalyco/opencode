@@ -9,8 +9,9 @@ import { useEditorContext } from "../../context/editor"
 import { useProject } from "../../context/project"
 import { useSDK } from "../../context/sdk"
 import { useSync } from "../../context/sync"
+import { useData } from "../../context/data"
 import { getScrollAcceleration } from "../../util/scroll"
-import { useTuiEnvironment } from "../../runtime"
+import { useTuiPaths } from "../../context/runtime"
 import { useTuiConfig } from "../../config"
 import { useTheme, selectedForeground } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
@@ -19,7 +20,6 @@ import { Locale } from "../../util/locale"
 import type { PromptInfo } from "../../prompt/history"
 import { useFrecency } from "../../prompt/frecency"
 import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keymap"
-import type { ReferenceDescriptor } from "@opencode-ai/sdk/v2"
 import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
 
 function removeLineRange(input: string) {
@@ -85,6 +85,7 @@ export function Autocomplete(props: {
   const editor = useEditorContext()
   const sdk = useSDK()
   const sync = useSync()
+  const data = useData()
   const project = useProject()
   const slashes = useCommandSlashes()
   const modeStack = useOpencodeModeStack()
@@ -92,7 +93,7 @@ export function Autocomplete(props: {
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
   const tuiConfig = useTuiConfig()
-  const environment = useTuiEnvironment()
+  const paths = useTuiPaths()
   const [store, setStore] = createStore({
     index: 0,
     selected: 0,
@@ -236,7 +237,7 @@ export function Autocomplete(props: {
   }
 
   function createFilePart(item: string, lineRange?: { startLine: number; endLine?: number }) {
-    const baseDir = (sync.path.directory || environment.cwd).replace(/\/+$/, "")
+    const baseDir = (sync.path.directory || paths.cwd).replace(/\/+$/, "")
     const fullPath = path.isAbsolute(item) ? item : path.join(baseDir, item)
     const urlObj = pathToFileURL(fullPath)
     const filename =
@@ -272,41 +273,18 @@ export function Autocomplete(props: {
     }
   }
 
-  function referencePromptText(reference: ReferenceDescriptor) {
-    const problem = reference.kind === "invalid" ? reference.message : undefined
-    return [
-      `Referenced configured reference @${reference.name}.`,
-      ...(reference.kind === "local" ? ["Kind: local directory"] : []),
-      ...(reference.kind === "git" ? ["Kind: git repository"] : []),
-      ...(reference.kind === "invalid" && reference.repository ? [`Repository: ${reference.repository}`] : []),
-      ...(reference.kind === "git" ? [`Repository: ${reference.repository}`] : []),
-      ...(reference.kind === "git" && reference.branch ? [`Branch/ref: ${reference.branch}`] : []),
-      ...(reference.kind === "invalid" ? [] : [`Reference root: ${reference.path}`]),
-      ...(problem
-        ? [`Problem: ${problem}`]
-        : ["Inspect the configured reference with Read, Glob, and Grep when useful."]),
-    ].join("\n")
-  }
-
-  const [references] = createResource(
-    () => project.workspace.current(),
-    async (workspace) => {
-      const result = await sdk.client.reference.list({ workspace })
-      return result.data ?? []
-    },
-    { initialValue: [] },
-  )
+  const references = createMemo(() => data.location.reference.list() ?? [])
 
   const referenceMatch = createMemo(() => {
     if (!store.visible || store.visible === "/") return
     const { baseQuery } = extractLineRange(search())
     const slash = baseQuery.indexOf("/")
     const alias = slash === -1 ? baseQuery : baseQuery.slice(0, slash)
-    return references().find((item) => item.name === alias)
+    return references().find((item) => !item.hidden && item.name === alias)
   })
 
   function normalizeMentionPath(filePath: string) {
-    const baseDir = sync.path.directory || environment.cwd
+    const baseDir = sync.path.directory || paths.cwd
     const absolute = path.resolve(filePath)
     const relative = path.relative(baseDir, absolute)
 
@@ -336,7 +314,6 @@ export function Autocomplete(props: {
     async (query) => {
       if (!store.visible || store.visible === "/") return []
       if (referenceMatch()) return []
-
       const { lineRange, baseQuery } = extractLineRange(query ?? "")
 
       // Get files from SDK
@@ -413,16 +390,15 @@ export function Autocomplete(props: {
   })
 
   const agents = createMemo(() => {
-    const agents = sync.data.agent
-    return agents
+    return (data.location.agent.list() ?? [])
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
       .map(
         (agent): AutocompleteOption => ({
-          display: "@" + agent.name,
+          display: "@" + agent.id,
           onSelect: () => {
-            insertPart(agent.name, {
+            insertPart(agent.id, {
               type: "agent",
-              name: agent.name,
+              name: agent.id,
               source: {
                 start: 0,
                 end: 0,
@@ -435,12 +411,13 @@ export function Autocomplete(props: {
   })
 
   const referenceAliases = createMemo(() =>
-    references().map(
-      (reference): AutocompleteOption => ({
-        display: "@" + reference.name,
-        description: reference.kind === "invalid" ? reference.message : " dir",
-        onSelect: () => {
-          if (reference.kind !== "invalid") {
+    references()
+      .filter((reference) => !reference.hidden)
+      .map(
+        (reference): AutocompleteOption => ({
+          display: "@" + reference.name,
+          description: ` ${reference.source.type === "git" ? reference.source.repository : reference.source.path}`,
+          onSelect: () => {
             insertPart(reference.name, {
               type: "file",
               mime: "application/x-directory",
@@ -452,16 +429,9 @@ export function Autocomplete(props: {
                 path: reference.name,
               },
             })
-            return
-          }
-          insertPart(reference.name, {
-            type: "text",
-            text: referencePromptText(reference),
-            synthetic: true,
-          })
-        },
-      }),
-    ),
+          },
+        }),
+      ),
   )
 
   const commands = createMemo((): AutocompleteOption[] => {
@@ -501,8 +471,6 @@ export function Autocomplete(props: {
     const commandsValue = commands()
     const searchValue = search()
 
-    // @<alias>/... — narrow to the matched reference, files come from fff
-    // already ranked so there is no re-ranking here.
     if (store.visible === "@" && referenceMatchValue) {
       return referenceAliasesValue.filter((item) => item.display === `@${referenceMatchValue.name}`)
     }
@@ -593,7 +561,7 @@ export function Autocomplete(props: {
     const endCursor = input.logicalCursor
 
     input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
-    input.insertText("@" + path)
+    input.insertText("@" + path + "/")
 
     setStore("selected", 0)
   }

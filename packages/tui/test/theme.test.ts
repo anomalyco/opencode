@@ -1,6 +1,10 @@
 import { expect, test } from "bun:test"
+import { mkdir, writeFile } from "node:fs/promises"
+import path from "node:path"
 import type { TerminalColors } from "@opentui/core"
 import { DEFAULT_THEMES, addTheme, allThemes, hasTheme, resolveTheme, terminalMode } from "../src/theme"
+import { discoverThemes } from "../src/context/theme"
+import { tmpdir } from "./fixture/fixture"
 
 test("addTheme writes into module theme store", () => {
   const name = `plugin-theme-${Date.now()}`
@@ -62,4 +66,16 @@ test("terminalMode derives mode from refreshed background", () => {
 
 test("terminalMode does not derive mode from ANSI slot zero", () => {
   expect(terminalMode(terminalColors(null, ["#000000"]))).toBeUndefined()
+})
+
+test("custom theme precedence follows directory order", async () => {
+  await using tmp = await tmpdir()
+  const global = path.join(tmp.path, "global")
+  const project = path.join(tmp.path, "project")
+  await mkdir(path.join(global, "themes"), { recursive: true })
+  await mkdir(path.join(project, "themes"), { recursive: true })
+  await writeFile(path.join(global, "themes", "custom.json"), JSON.stringify({ source: "global" }))
+  await writeFile(path.join(project, "themes", "custom.json"), JSON.stringify({ source: "project" }))
+
+  await expect(discoverThemes([global, project])).resolves.toEqual({ custom: { source: "project" } })
 })

@@ -1,7 +1,7 @@
 import { createStore, reconcile } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import type { PromptInfo } from "../prompt/history"
-import { useTuiEnvironment } from "../runtime"
+import { useTuiStartup } from "./runtime"
 
 export type HomeRoute = {
   type: "home"
@@ -25,9 +25,9 @@ export type Route = HomeRoute | SessionRoute | PluginRoute
 export const { use: useRoute, provider: RouteProvider } = createSimpleContext({
   name: "Route",
   init: (props: { initialRoute?: Route }) => {
-    const environment = useTuiEnvironment()
+    const startup = useTuiStartup()
     const [store, setStore] = createStore<Route>(
-      props.initialRoute ?? initialRoute(environment.initialRoute) ?? { type: "home" },
+      props.initialRoute ?? initialRoute(startup.initialRoute) ?? { type: "home" },
     )
 
     return {
