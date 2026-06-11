@@ -1721,6 +1721,14 @@ NOTE: At any point in time through this workflow you should feel free to ask the
           if (
             lastFinished &&
             lastFinished.summary !== true &&
+            !msgs.some(
+              (msg) =>
+                msg.info.role === "assistant" &&
+                msg.info.summary === true &&
+                msg.info.finish &&
+                !msg.info.error &&
+                msg.info.id > lastFinished.id,
+            ) &&
             (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
           ) {
             yield* compaction.create({ sessionID, agent: lastUser.agent, model: lastUser.model, auto: true })

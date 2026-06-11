@@ -386,7 +386,10 @@ const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: strin
   return msg
 })
 
-const seed = Effect.fn("test.seed")(function* (sessionID: SessionID, opts?: { finish?: string }) {
+const seed = Effect.fn("test.seed")(function* (
+  sessionID: SessionID,
+  opts?: { finish?: string; text?: string; tokens?: MessageV2.Assistant["tokens"] },
+) {
   const session = yield* Session.Service
   const msg = yield* user(sessionID, "hello")
   const assistant: MessageV2.Assistant = {
@@ -398,7 +401,7 @@ const seed = Effect.fn("test.seed")(function* (sessionID: SessionID, opts?: { fi
     agent: "build",
     cost: 0,
     path: { cwd: "/tmp", root: "/tmp" },
-    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    tokens: opts?.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     modelID: ref.modelID,
     providerID: ref.providerID,
     time: { created: Date.now() },
@@ -410,7 +413,7 @@ const seed = Effect.fn("test.seed")(function* (sessionID: SessionID, opts?: { fi
     messageID: assistant.id,
     sessionID,
     type: "text",
-    text: "hi there",
+    text: opts?.text ?? "hi there",
   })
   return { user: msg, assistant }
 })
@@ -706,6 +709,42 @@ it.instance(
       }
     }),
   { git: true },
+)
+
+it.instance(
+  "does not immediately compact retained tail after auto-compaction",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig((url) => ({
+        ...providerCfg(url),
+        compaction: { preserve_recent_tokens: 1_000 },
+      }))
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({ title: "Auto compact tail" })
+
+      yield* seed(session.id, { finish: "stop", text: "first reply" })
+      yield* seed(session.id, {
+        finish: "tool-calls",
+        text: "retained tail reply",
+        tokens: { input: 95_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+      yield* llm.text("summary")
+      yield* llm.text("done")
+
+      const result = yield* prompt.loop({ sessionID: session.id })
+      const messages = yield* sessions.messages({ sessionID: session.id })
+      const compactions = messages.flatMap((message) => message.parts).filter((part) => part.type === "compaction")
+      const continues = messages
+        .flatMap((message) => message.parts)
+        .filter((part) => part.type === "text" && part.metadata?.compaction_continue === true)
+
+      expect(compactions).toHaveLength(1)
+      expect(continues).toHaveLength(1)
+      expect(result.parts.some((part) => part.type === "text" && part.text === "done")).toBe(true)
+    }),
+  { git: true },
+  15_000,
 )
 
 it.instance(
