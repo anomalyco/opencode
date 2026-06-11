@@ -9,7 +9,18 @@ import {
   type Renderable,
 } from "@opentui/core"
 import type { CommandContext } from "@opentui/keymap"
-import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createResource,
+  onMount,
+  createSignal,
+  onCleanup,
+  on,
+  Show,
+  Switch,
+  Match,
+} from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -33,6 +44,7 @@ import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
+import { references } from "./skill"
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -227,6 +239,20 @@ export function Prompt(props: PromptProps) {
   const fileStyleId = syntax().getStyleId("extmark.file")!
   const agentStyleId = syntax().getStyleId("extmark.agent")!
   const pasteStyleId = syntax().getStyleId("extmark.paste")!
+  const skillStyleId = syntax().getStyleId("extmark.skill")!
+  const [skills] = createResource(async () => {
+    const result = await sdk.client.app.skills()
+    return result.data ?? []
+  })
+
+  async function skillNames() {
+    const loaded = skills()
+    if (loaded) return new Set(loaded.map((skill) => skill.name))
+    const result = await sdk.client.app.skills().catch(() => undefined)
+    if (!result || result.error || !result.data) return new Set<string>()
+    return new Set(result.data.map((skill) => skill.name))
+  }
+
   let promptPartTypeId = 0
   const event = useEvent()
 
@@ -669,6 +695,21 @@ export function Prompt(props: PromptProps) {
         end = part.source.end
         virtualText = part.source.value
         styleId = agentStyleId
+      } else if (part.type === "skill") {
+        if (part.source) {
+          start = part.source.start
+          end = part.source.end
+          virtualText = part.source.value
+        } else {
+          const name = "$" + part.name
+          const idx = input.plainText.indexOf(name)
+          if (idx !== -1) {
+            start = Bun.stringWidth(input.plainText.slice(0, idx))
+            end = start + Bun.stringWidth(name)
+            virtualText = name
+          }
+        }
+        styleId = skillStyleId
       } else if (part.type === "text" && part.source?.text) {
         start = part.source.text.start
         end = part.source.text.end
@@ -711,6 +752,9 @@ export function Prompt(props: PromptProps) {
               } else if (part.type === "file" && part.source?.text) {
                 part.source.text.start = extmark.start
                 part.source.text.end = extmark.end
+              } else if (part.type === "skill" && part.source) {
+                part.source.start = extmark.start
+                part.source.end = extmark.end
               } else if (part.type === "text" && part.source?.text) {
                 part.source.text.start = extmark.start
                 part.source.text.end = extmark.end
@@ -1027,7 +1071,7 @@ export function Prompt(props: PromptProps) {
       }),
     )
 
-    // Filter out text parts (pasted content) since they're now expanded inline
+    // Filter out text parts (pasted content) since they've been expanded inline above.
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
 
     // Capture mode before it gets reset
@@ -1085,6 +1129,31 @@ export function Prompt(props: PromptProps) {
       })
     } else {
       move.startSubmit()
+      
+      // Ensure every $skillname reference has a structured SkillPartInput
+      const refNames = new Set(references(inputText).map((ref) => ref.name))
+      if (refNames.size > 0) {
+        const validSkillNames = await skillNames()
+        const existingNames = new Set(
+          nonTextParts.filter((p): p is { type: "skill"; name: string } => p.type === "skill" && "name" in p).map((p) => p.name),
+        )
+        for (const name of refNames) {
+          if (existingNames.has(name)) continue
+          if (!validSkillNames.has(name)) continue
+          nonTextParts.push({ type: "skill", name })
+          existingNames.add(name)
+        }
+      }
+
+      // Deduplicate skill parts to avoid duplicate SKILL pills and injections
+      const seenSendingSkillNames = new Set<string>()
+      const sendingParts = nonTextParts.filter((p) => {
+        if (p.type !== "skill") return true
+        if (seenSendingSkillNames.has(p.name)) return false
+        seenSendingSkillNames.add(p.name)
+        return true
+      })
+
       sdk.client.session
         .prompt({
           sessionID,
@@ -1098,7 +1167,7 @@ export function Prompt(props: PromptProps) {
               type: "text",
               text: inputText,
             },
-            ...nonTextParts,
+            ...sendingParts,
           ],
         })
         .catch(() => {})
@@ -1158,6 +1227,7 @@ export function Prompt(props: PromptProps) {
               end: extmarkEnd,
               value: virtualText,
             },
+            kind: "paste",
           },
         })
         draft.extmarkToPartIndex.set(extmarkId, partIndex)
@@ -1197,7 +1267,43 @@ export function Prompt(props: PromptProps) {
       return
     }
 
+    const pasteStartOffset = input.visualCursor.offset
     input.insertText(normalizedText)
+
+    const validSkillNames = await skillNames()
+    const seenSkillNames = new Set<string>()
+    const skillRefs = references(normalizedText).filter((r) => {
+      if (!validSkillNames.has(r.name)) return false
+      if (seenSkillNames.has(r.name)) return false
+      seenSkillNames.add(r.name)
+      return true
+    })
+    for (const ref of skillRefs) {
+      const extmarkStart = pasteStartOffset + ref.start
+      const extmarkEnd = pasteStartOffset + ref.end
+      const extmarkId = input.extmarks.create({
+        start: extmarkStart,
+        end: extmarkEnd,
+        virtual: true,
+        styleId: skillStyleId,
+        typeId: promptPartTypeId,
+      })
+      setStore(
+        produce((draft) => {
+          const partIndex = draft.prompt.parts.length
+          draft.prompt.parts.push({
+            type: "skill",
+            name: ref.name,
+            source: {
+              start: extmarkStart,
+              end: extmarkEnd,
+              value: ref.value,
+            },
+          })
+          draft.extmarkToPartIndex.set(extmarkId, partIndex)
+        }),
+      )
+    }
 
     setTimeout(() => {
       if (!input || input.isDestroyed) return
@@ -1681,6 +1787,8 @@ export function Prompt(props: PromptProps) {
         value={store.prompt.input}
         fileStyleId={fileStyleId}
         agentStyleId={agentStyleId}
+        skillStyleId={skillStyleId}
+        skills={skills}
         promptPartTypeId={() => promptPartTypeId}
       />
     </>

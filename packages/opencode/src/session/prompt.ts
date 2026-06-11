@@ -48,6 +48,7 @@ import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { Skill } from "@/skill"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
@@ -121,6 +122,7 @@ export const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
+    const skill = yield* Skill.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
@@ -972,6 +974,21 @@ export const layer = Layer.effect(
           ]
         }
 
+        if (part.type === "skill") {
+          const resolved = yield* skill.get(part.name).pipe(Effect.orDie)
+          if (!resolved) return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
+          return [
+            { ...part, messageID: info.id, sessionID: input.sessionID },
+            {
+              messageID: info.id,
+              sessionID: input.sessionID,
+              type: "text" as const,
+              synthetic: true,
+              text: `## Skill: ${resolved.name}\n\n${resolved.content.trim()}`,
+            },
+          ]
+        }
+
         return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
       })
 
@@ -1561,6 +1578,7 @@ export const defaultLayer = Layer.suspend(() =>
         Database.defaultLayer,
         SystemPrompt.defaultLayer,
         LLM.defaultLayer,
+        Skill.defaultLayer,
         CrossSpawnSpawner.defaultLayer,
         RuntimeFlags.defaultLayer,
         EventV2Bridge.defaultLayer,
@@ -1591,6 +1609,7 @@ export const PromptInput = Schema.Struct({
       SessionV1.TextPartInput,
       SessionV1.FilePartInput,
       SessionV1.AgentPartInput,
+      SessionV1.SkillPartInput,
       SessionV1.SubtaskPartInput,
     ]).annotate({ discriminator: "type" }),
   ),
@@ -1689,6 +1708,7 @@ export const node = LayerNode.make(layer, [
   ToolRegistry.node,
   Truncate.node,
   Image.node,
+  Skill.node,
   CrossSpawnSpawner.node,
   Instruction.node,
   SessionRunState.node,

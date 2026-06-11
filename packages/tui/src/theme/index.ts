@@ -620,6 +620,13 @@ function getSyntaxRules(theme: Theme) {
       },
     },
     {
+      scope: ["extmark.skill"],
+      style: {
+        foreground: theme.primary,
+        bold: true,
+      },
+    },
+    {
       scope: ["comment"],
       style: {
         foreground: theme.syntaxComment,

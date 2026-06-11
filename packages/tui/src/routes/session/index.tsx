@@ -629,6 +629,7 @@ export function Session() {
                 if (!part.synthetic) agg.input += part.text
               }
               if (part.type === "file") agg.parts.push(part)
+              if (part.type === "skill") agg.parts.push(part)
               return agg
             },
             { input: "", parts: [] as PromptInfo["parts"] },
@@ -1379,6 +1380,7 @@ function UserMessage(props: {
     return texts.join("\n\n")
   })
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
+  const skills = createMemo(() => props.parts.flatMap((x) => (x.type === "skill" ? [x] : [])))
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
   const queued = createMemo(() => props.pending && props.message.id > props.pending)
@@ -1413,7 +1415,7 @@ function UserMessage(props: {
             flexShrink={0}
           >
             <text fg={theme.text}>{text()}</text>
-            <Show when={files().length}>
+            <Show when={files().length || skills().length}>
               <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
                 <For each={files()}>
                   {(file) => {
@@ -1429,6 +1431,14 @@ function UserMessage(props: {
                       </text>
                     )
                   }}
+                </For>
+                <For each={skills()}>
+                  {(skill) => (
+                    <text fg={theme.text}>
+                      <span style={{ bg: theme.primary, fg: theme.background }}> SKILL </span>
+                      <span style={{ bg: theme.backgroundElement, fg: theme.textMuted }}> {skill.name} </span>
+                    </text>
+                  )}
                 </For>
               </box>
             </Show>

@@ -183,6 +183,20 @@ export const AgentPart = Schema.Struct({
 }).annotate({ identifier: "AgentPart" })
 export type AgentPart = Types.DeepMutable<Schema.Schema.Type<typeof AgentPart>>
 
+export const SkillPart = Schema.Struct({
+  ...partBase,
+  type: Schema.Literal("skill"),
+  name: Schema.String,
+  source: Schema.optional(
+    Schema.Struct({
+      value: Schema.String,
+      start: NonNegativeInt,
+      end: NonNegativeInt,
+    }),
+  ),
+}).annotate({ identifier: "SkillPart" })
+export type SkillPart = Types.DeepMutable<Schema.Schema.Type<typeof SkillPart>>
+
 export const CompactionPart = Schema.Struct({
   ...partBase,
   type: Schema.Literal("compaction"),
@@ -364,6 +378,7 @@ export const Part = Schema.Union([
   SnapshotPart,
   PatchPart,
   AgentPart,
+  SkillPart,
   RetryPart,
   CompactionPart,
 ]).annotate({ discriminator: "type", identifier: "Part" })
@@ -378,6 +393,7 @@ export type Part =
   | SnapshotPart
   | PatchPart
   | AgentPart
+  | SkillPart
   | RetryPart
   | CompactionPart
 
@@ -431,6 +447,20 @@ export const AgentPartInput = Schema.Struct({
   ),
 }).annotate({ identifier: "AgentPartInput" })
 export type AgentPartInput = Types.DeepMutable<Schema.Schema.Type<typeof AgentPartInput>>
+
+export const SkillPartInput = Schema.Struct({
+  id: Schema.optional(PartID),
+  type: Schema.Literal("skill"),
+  name: Schema.String,
+  source: Schema.optional(
+    Schema.Struct({
+      value: Schema.String,
+      start: NonNegativeInt,
+      end: NonNegativeInt,
+    }),
+  ),
+}).annotate({ identifier: "SkillPartInput" })
+export type SkillPartInput = Types.DeepMutable<Schema.Schema.Type<typeof SkillPartInput>>
 
 export const SubtaskPartInput = Schema.Struct({
   id: Schema.optional(PartID),
