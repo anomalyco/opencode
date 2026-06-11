@@ -160,7 +160,7 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
           port,
           baseURL: entry.baseURL,
           online,
-          models: models ?? [],
+          models: models?.ids ?? [],
           configuredProviderID: entry.id,
           source: "config",
         })
