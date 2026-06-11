@@ -1,48 +1,46 @@
-import { Connector } from "@opencode-ai/core/connector"
+import { Integration } from "@opencode-ai/core/integration"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { InvalidRequestError } from "../errors"
 import { response } from "../groups/location"
 
-const authorize = <A, R>(effect: Effect.Effect<A, Connector.AuthorizationError, R>) =>
+const authorize = <A, R>(effect: Effect.Effect<A, Integration.AuthorizationError, R>) =>
   effect.pipe(
     Effect.mapError(
       () =>
         new InvalidRequestError({
           message: "Authentication failed",
-          kind: "connector_authorization",
+          kind: "integration_authorization",
         }),
     ),
   )
 
-export const ConnectorHandler = HttpApiBuilder.group(Api, "server.connector", (handlers) =>
+export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration", (handlers) =>
   Effect.gen(function* () {
     return handlers
       .handle(
-        "connector.list",
+        "integration.list",
         Effect.fn(function* () {
-          const service = yield* Connector.Service
+          const service = yield* Integration.Service
           return yield* response(service.list())
         }),
       )
       .handle(
-        "connector.get",
+        "integration.get",
         Effect.fn(function* (ctx) {
-          const service = yield* Connector.Service
-          return yield* response(service.get(ctx.params.connectorID))
+          const service = yield* Integration.Service
+          return yield* response(service.get(ctx.params.integrationID))
         }),
       )
       .handle(
-        "connector.connect.key",
+        "integration.connect.key",
         Effect.fn(function* (ctx) {
-          const service = yield* Connector.Service
+          const service = yield* Integration.Service
           yield* authorize(
             service.connect.key({
-              connectorID: ctx.params.connectorID,
-              methodID: ctx.payload.methodID,
+              integrationID: ctx.params.integrationID,
               key: ctx.payload.key,
-              inputs: ctx.payload.inputs,
               label: ctx.payload.label,
             }),
           )
@@ -50,13 +48,13 @@ export const ConnectorHandler = HttpApiBuilder.group(Api, "server.connector", (h
         }),
       )
       .handle(
-        "connector.connect.oauth.begin",
+        "integration.connect.oauth.begin",
         Effect.fn(function* (ctx) {
-          const service = yield* Connector.Service
+          const service = yield* Integration.Service
           return yield* response(
             authorize(
               service.connect.oauth.begin({
-                connectorID: ctx.params.connectorID,
+                integrationID: ctx.params.integrationID,
                 methodID: ctx.payload.methodID,
                 inputs: ctx.payload.inputs,
                 label: ctx.payload.label,
@@ -66,25 +64,28 @@ export const ConnectorHandler = HttpApiBuilder.group(Api, "server.connector", (h
         }),
       )
       .handle(
-        "connector.connect.oauth.status",
+        "integration.connect.oauth.status",
         Effect.fn(function* (ctx) {
-          const service = yield* Connector.Service
+          const service = yield* Integration.Service
           return yield* response(service.connect.oauth.status(ctx.params.attemptID))
         }),
       )
       .handle(
-        "connector.connect.oauth.complete",
+        "integration.connect.oauth.complete",
         Effect.fn(function* (ctx) {
-          const service = yield* Connector.Service
+          const service = yield* Integration.Service
           yield* service.connect.oauth.complete({ attemptID: ctx.params.attemptID, code: ctx.payload.code }).pipe(
             Effect.mapError(
               (error) =>
                 new InvalidRequestError({
                   message:
-                    error._tag === "Connector.CodeRequired"
+                    error._tag === "Integration.CodeRequired"
                       ? "Authorization code is required"
                       : "Authentication failed",
-                  kind: error._tag === "Connector.CodeRequired" ? "connector_code_required" : "connector_authorization",
+                  kind:
+                    error._tag === "Integration.CodeRequired"
+                      ? "integration_code_required"
+                      : "integration_authorization",
                 }),
             ),
           )
@@ -92,9 +93,9 @@ export const ConnectorHandler = HttpApiBuilder.group(Api, "server.connector", (h
         }),
       )
       .handle(
-        "connector.connect.oauth.cancel",
+        "integration.connect.oauth.cancel",
         Effect.fn(function* (ctx) {
-          const service = yield* Connector.Service
+          const service = yield* Integration.Service
           yield* service.connect.oauth.cancel(ctx.params.attemptID)
           return HttpApiSchema.NoContent.make()
         }),

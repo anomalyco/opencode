@@ -11,7 +11,7 @@ import { EventV2 } from "./event"
 import { Policy } from "./policy"
 import { State } from "./state"
 import { Credential } from "./credential"
-import { ConnectorSchema } from "./connector/schema"
+import { IntegrationSchema } from "./integration/schema"
 
 export type ProviderRecord = {
   provider: ProviderV2.Info
@@ -99,8 +99,8 @@ export const layer = Layer.effect(
     const credentials = yield* Credential.Service
     const scope = yield* Scope.Scope
 
-    const project = (provider: ProviderV2.Info, active: Map<ConnectorSchema.ID, Credential.Info>) => {
-      const credential = active.get(ConnectorSchema.ID.make(provider.id))
+    const project = (provider: ProviderV2.Info, active: Map<IntegrationSchema.ID, Credential.Info>) => {
+      const credential = active.get(IntegrationSchema.ID.make(provider.id))
       if (!credential) return provider
       const body = { ...provider.request.body }
       if (credential.value.type === "key") {

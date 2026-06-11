@@ -115,25 +115,25 @@ describe("PublicApi OpenAPI v2 errors", () => {
     }
   })
 
-  test("documents connector discovery and connection routes", () => {
+  test("documents integration discovery and connection routes", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
     for (const [method, path] of [
-      ["get", "/api/connector"],
-      ["get", "/api/connector/{connectorID}"],
-      ["post", "/api/connector/{connectorID}/connect/key"],
-      ["post", "/api/connector/{connectorID}/connect/oauth"],
-      ["get", "/api/connector/oauth/{attemptID}"],
-      ["post", "/api/connector/oauth/{attemptID}/complete"],
-      ["delete", "/api/connector/oauth/{attemptID}"],
+      ["get", "/api/integration"],
+      ["get", "/api/integration/{integrationID}"],
+      ["post", "/api/integration/{integrationID}/connect/key"],
+      ["post", "/api/integration/{integrationID}/connect/oauth"],
+      ["get", "/api/integration/oauth/{attemptID}"],
+      ["post", "/api/integration/oauth/{attemptID}/complete"],
+      ["delete", "/api/integration/oauth/{attemptID}"],
     ] as const) {
       expect(spec.paths[path]?.[method], `${method.toUpperCase()} ${path}`).toBeDefined()
     }
 
     for (const path of [
-      "/api/connector/{connectorID}/connect/key",
-      "/api/connector/{connectorID}/connect/oauth",
-      "/api/connector/oauth/{attemptID}/complete",
+      "/api/integration/{integrationID}/connect/key",
+      "/api/integration/{integrationID}/connect/oauth",
+      "/api/integration/oauth/{attemptID}/complete",
     ]) {
       expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
     }

@@ -1,6 +1,6 @@
 import { createServer } from "node:http"
 import { Deferred, Effect } from "effect"
-import { Connector } from "../../connector"
+import { Integration } from "../../integration"
 import { Credential } from "../../credential"
 import { InstallationVersion } from "../../installation/version"
 
@@ -28,9 +28,9 @@ type Claims = {
 }
 
 export const browser = {
-  connectorID: Connector.ID.make("openai"),
-  method: new Connector.OAuthMethod({
-    id: Connector.MethodID.make("chatgpt-browser"),
+  integrationID: Integration.ID.make("openai"),
+  method: new Integration.OAuthMethod({
+    id: Integration.MethodID.make("chatgpt-browser"),
     type: "oauth",
     label: "ChatGPT Pro/Plus (browser)",
   }),
@@ -82,12 +82,12 @@ export const browser = {
       }
     }),
   refresh: (value) => refresh(value),
-} satisfies Connector.OAuthImplementation
+} satisfies Integration.OAuthImplementation
 
 export const headless = {
-  connectorID: Connector.ID.make("openai"),
-  method: new Connector.OAuthMethod({
-    id: Connector.MethodID.make("chatgpt-headless"),
+  integrationID: Integration.ID.make("openai"),
+  method: new Integration.OAuthMethod({
+    id: Integration.MethodID.make("chatgpt-headless"),
     type: "oauth",
     label: "ChatGPT Pro/Plus (headless)",
   }),
@@ -139,7 +139,7 @@ export const headless = {
       }
     }),
   refresh: (value) => refresh(value),
-} satisfies Connector.OAuthImplementation
+} satisfies Integration.OAuthImplementation
 
 function headers(contentType: string) {
   return { "Content-Type": contentType, "User-Agent": `opencode/${InstallationVersion}` }

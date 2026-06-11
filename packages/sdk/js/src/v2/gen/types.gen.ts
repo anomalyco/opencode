@@ -55,7 +55,7 @@ export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventFileEdited
-  | EventConnectorUpdated
+  | EventIntegrationUpdated
   | EventPermissionV2Asked
   | EventPermissionV2Replied
   | EventReferenceUpdated
@@ -757,7 +757,7 @@ export type GlobalEvent = {
         id: string
         type: "credential.switched"
         properties: {
-          connectorID: string
+          integrationID: string
           from?: string
           to?: string
         }
@@ -1284,7 +1284,7 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "connector.updated"
+        type: "integration.updated"
         properties: {
           [key: string]: unknown
         }
@@ -2877,7 +2877,7 @@ export type CredentialValue = CredentialOAuth | CredentialKey
 
 export type CredentialInfo = {
   id: string
-  connectorID: string
+  integrationID: string
   methodID: string
   label: string
   value: CredentialValue
@@ -4119,21 +4119,21 @@ export type ProviderV2Info = {
   }
 }
 
-export type ConnectorWhen = {
+export type IntegrationWhen = {
   key: string
   op: "eq" | "neq"
   value: string
 }
 
-export type ConnectorTextPrompt = {
+export type IntegrationTextPrompt = {
   type: "text"
   key: string
   message: string
   placeholder?: string
-  when?: ConnectorWhen
+  when?: IntegrationWhen
 }
 
-export type ConnectorSelectPrompt = {
+export type IntegrationSelectPrompt = {
   type: "select"
   key: string
   message: string
@@ -4142,30 +4142,47 @@ export type ConnectorSelectPrompt = {
     value: string
     hint?: string
   }>
-  when?: ConnectorWhen
+  when?: IntegrationWhen
 }
 
-export type ConnectorOAuthMethod = {
+export type IntegrationOAuthMethod = {
   id: string
   type: "oauth"
   label: string
-  prompts?: Array<ConnectorTextPrompt | ConnectorSelectPrompt>
+  prompts?: Array<IntegrationTextPrompt | IntegrationSelectPrompt>
 }
 
-export type ConnectorKeyMethod = {
-  id: string
+export type IntegrationKeyMethod = {
   type: "key"
-  label: string
-  prompts?: Array<ConnectorTextPrompt | ConnectorSelectPrompt>
+  label?: string
 }
 
-export type ConnectorInfo = {
+export type IntegrationEnvMethod = {
+  type: "env"
+  names: Array<string>
+}
+
+export type IntegrationCredentialConnection = {
+  type: "credential"
+  id: string
+  label: string
+  active: boolean
+}
+
+export type IntegrationEnvConnection = {
+  type: "env"
+  name: string
+  active: boolean
+}
+
+export type IntegrationInfo = {
   id: string
   name: string
-  methods: Array<ConnectorOAuthMethod | ConnectorKeyMethod>
+  methods: Array<IntegrationOAuthMethod | IntegrationKeyMethod | IntegrationEnvMethod>
+  connections: Array<IntegrationCredentialConnection | IntegrationEnvConnection>
 }
 
-export type ConnectorAttempt = {
+export type IntegrationAttempt = {
   attemptID: string
   url: string
   instructions: string
@@ -4290,7 +4307,7 @@ export type EventCredentialSwitched = {
   id: string
   type: "credential.switched"
   properties: {
-    connectorID: string
+    integrationID: string
     from?: string
     to?: string
   }
@@ -4958,9 +4975,9 @@ export type EventFileEdited = {
   }
 }
 
-export type EventConnectorUpdated = {
+export type EventIntegrationUpdated = {
   id: string
-  type: "connector.updated"
+  type: "integration.updated"
   properties: {
     [key: string]: unknown
   }
@@ -10061,7 +10078,7 @@ export type V2ProviderGetResponses = {
 
 export type V2ProviderGetResponse = V2ProviderGetResponses[keyof V2ProviderGetResponses]
 
-export type V2ConnectorListData = {
+export type V2IntegrationListData = {
   body?: never
   path?: never
   query?: {
@@ -10070,10 +10087,10 @@ export type V2ConnectorListData = {
       workspace?: string
     }
   }
-  url: "/api/connector"
+  url: "/api/integration"
 }
 
-export type V2ConnectorListErrors = {
+export type V2IntegrationListErrors = {
   /**
    * InvalidRequestError
    */
@@ -10084,24 +10101,24 @@ export type V2ConnectorListErrors = {
   401: UnauthorizedError
 }
 
-export type V2ConnectorListError = V2ConnectorListErrors[keyof V2ConnectorListErrors]
+export type V2IntegrationListError = V2IntegrationListErrors[keyof V2IntegrationListErrors]
 
-export type V2ConnectorListResponses = {
+export type V2IntegrationListResponses = {
   /**
    * Success
    */
   200: {
     location: LocationInfo
-    data: Array<ConnectorInfo>
+    data: Array<IntegrationInfo>
   }
 }
 
-export type V2ConnectorListResponse = V2ConnectorListResponses[keyof V2ConnectorListResponses]
+export type V2IntegrationListResponse = V2IntegrationListResponses[keyof V2IntegrationListResponses]
 
-export type V2ConnectorGetData = {
+export type V2IntegrationGetData = {
   body?: never
   path: {
-    connectorID: string
+    integrationID: string
   }
   query?: {
     location?: {
@@ -10109,10 +10126,10 @@ export type V2ConnectorGetData = {
       workspace?: string
     }
   }
-  url: "/api/connector/{connectorID}"
+  url: "/api/integration/{integrationID}"
 }
 
-export type V2ConnectorGetErrors = {
+export type V2IntegrationGetErrors = {
   /**
    * InvalidRequestError
    */
@@ -10123,31 +10140,27 @@ export type V2ConnectorGetErrors = {
   401: UnauthorizedError
 }
 
-export type V2ConnectorGetError = V2ConnectorGetErrors[keyof V2ConnectorGetErrors]
+export type V2IntegrationGetError = V2IntegrationGetErrors[keyof V2IntegrationGetErrors]
 
-export type V2ConnectorGetResponses = {
+export type V2IntegrationGetResponses = {
   /**
    * Success
    */
   200: {
     location: LocationInfo
-    data: ConnectorInfo
+    data: IntegrationInfo
   }
 }
 
-export type V2ConnectorGetResponse = V2ConnectorGetResponses[keyof V2ConnectorGetResponses]
+export type V2IntegrationGetResponse = V2IntegrationGetResponses[keyof V2IntegrationGetResponses]
 
-export type V2ConnectorConnectKeyData = {
+export type V2IntegrationConnectKeyData = {
   body: {
-    methodID: string
     key: string
-    inputs: {
-      [key: string]: string
-    }
     label?: string
   }
   path: {
-    connectorID: string
+    integrationID: string
   }
   query?: {
     location?: {
@@ -10155,10 +10168,10 @@ export type V2ConnectorConnectKeyData = {
       workspace?: string
     }
   }
-  url: "/api/connector/{connectorID}/connect/key"
+  url: "/api/integration/{integrationID}/connect/key"
 }
 
-export type V2ConnectorConnectKeyErrors = {
+export type V2IntegrationConnectKeyErrors = {
   /**
    * InvalidRequestError
    */
@@ -10169,18 +10182,18 @@ export type V2ConnectorConnectKeyErrors = {
   401: UnauthorizedError
 }
 
-export type V2ConnectorConnectKeyError = V2ConnectorConnectKeyErrors[keyof V2ConnectorConnectKeyErrors]
+export type V2IntegrationConnectKeyError = V2IntegrationConnectKeyErrors[keyof V2IntegrationConnectKeyErrors]
 
-export type V2ConnectorConnectKeyResponses = {
+export type V2IntegrationConnectKeyResponses = {
   /**
    * <No Content>
    */
   204: void
 }
 
-export type V2ConnectorConnectKeyResponse = V2ConnectorConnectKeyResponses[keyof V2ConnectorConnectKeyResponses]
+export type V2IntegrationConnectKeyResponse = V2IntegrationConnectKeyResponses[keyof V2IntegrationConnectKeyResponses]
 
-export type V2ConnectorConnectOauthBeginData = {
+export type V2IntegrationConnectOauthBeginData = {
   body: {
     methodID: string
     inputs: {
@@ -10189,7 +10202,7 @@ export type V2ConnectorConnectOauthBeginData = {
     label?: string
   }
   path: {
-    connectorID: string
+    integrationID: string
   }
   query?: {
     location?: {
@@ -10197,10 +10210,10 @@ export type V2ConnectorConnectOauthBeginData = {
       workspace?: string
     }
   }
-  url: "/api/connector/{connectorID}/connect/oauth"
+  url: "/api/integration/{integrationID}/connect/oauth"
 }
 
-export type V2ConnectorConnectOauthBeginErrors = {
+export type V2IntegrationConnectOauthBeginErrors = {
   /**
    * InvalidRequestError
    */
@@ -10211,23 +10224,23 @@ export type V2ConnectorConnectOauthBeginErrors = {
   401: UnauthorizedError
 }
 
-export type V2ConnectorConnectOauthBeginError =
-  V2ConnectorConnectOauthBeginErrors[keyof V2ConnectorConnectOauthBeginErrors]
+export type V2IntegrationConnectOauthBeginError =
+  V2IntegrationConnectOauthBeginErrors[keyof V2IntegrationConnectOauthBeginErrors]
 
-export type V2ConnectorConnectOauthBeginResponses = {
+export type V2IntegrationConnectOauthBeginResponses = {
   /**
    * Success
    */
   200: {
     location: LocationInfo
-    data: ConnectorAttempt
+    data: IntegrationAttempt
   }
 }
 
-export type V2ConnectorConnectOauthBeginResponse =
-  V2ConnectorConnectOauthBeginResponses[keyof V2ConnectorConnectOauthBeginResponses]
+export type V2IntegrationConnectOauthBeginResponse =
+  V2IntegrationConnectOauthBeginResponses[keyof V2IntegrationConnectOauthBeginResponses]
 
-export type V2ConnectorConnectOauthCancelData = {
+export type V2IntegrationConnectOauthCancelData = {
   body?: never
   path: {
     attemptID: string
@@ -10238,10 +10251,10 @@ export type V2ConnectorConnectOauthCancelData = {
       workspace?: string
     }
   }
-  url: "/api/connector/oauth/{attemptID}"
+  url: "/api/integration/oauth/{attemptID}"
 }
 
-export type V2ConnectorConnectOauthCancelErrors = {
+export type V2IntegrationConnectOauthCancelErrors = {
   /**
    * InvalidRequestError
    */
@@ -10252,20 +10265,20 @@ export type V2ConnectorConnectOauthCancelErrors = {
   401: UnauthorizedError
 }
 
-export type V2ConnectorConnectOauthCancelError =
-  V2ConnectorConnectOauthCancelErrors[keyof V2ConnectorConnectOauthCancelErrors]
+export type V2IntegrationConnectOauthCancelError =
+  V2IntegrationConnectOauthCancelErrors[keyof V2IntegrationConnectOauthCancelErrors]
 
-export type V2ConnectorConnectOauthCancelResponses = {
+export type V2IntegrationConnectOauthCancelResponses = {
   /**
    * <No Content>
    */
   204: void
 }
 
-export type V2ConnectorConnectOauthCancelResponse =
-  V2ConnectorConnectOauthCancelResponses[keyof V2ConnectorConnectOauthCancelResponses]
+export type V2IntegrationConnectOauthCancelResponse =
+  V2IntegrationConnectOauthCancelResponses[keyof V2IntegrationConnectOauthCancelResponses]
 
-export type V2ConnectorConnectOauthStatusData = {
+export type V2IntegrationConnectOauthStatusData = {
   body?: never
   path: {
     attemptID: string
@@ -10276,10 +10289,10 @@ export type V2ConnectorConnectOauthStatusData = {
       workspace?: string
     }
   }
-  url: "/api/connector/oauth/{attemptID}"
+  url: "/api/integration/oauth/{attemptID}"
 }
 
-export type V2ConnectorConnectOauthStatusErrors = {
+export type V2IntegrationConnectOauthStatusErrors = {
   /**
    * InvalidRequestError
    */
@@ -10290,10 +10303,10 @@ export type V2ConnectorConnectOauthStatusErrors = {
   401: UnauthorizedError
 }
 
-export type V2ConnectorConnectOauthStatusError =
-  V2ConnectorConnectOauthStatusErrors[keyof V2ConnectorConnectOauthStatusErrors]
+export type V2IntegrationConnectOauthStatusError =
+  V2IntegrationConnectOauthStatusErrors[keyof V2IntegrationConnectOauthStatusErrors]
 
-export type V2ConnectorConnectOauthStatusResponses = {
+export type V2IntegrationConnectOauthStatusResponses = {
   /**
    * Success
    */
@@ -10332,10 +10345,10 @@ export type V2ConnectorConnectOauthStatusResponses = {
   }
 }
 
-export type V2ConnectorConnectOauthStatusResponse =
-  V2ConnectorConnectOauthStatusResponses[keyof V2ConnectorConnectOauthStatusResponses]
+export type V2IntegrationConnectOauthStatusResponse =
+  V2IntegrationConnectOauthStatusResponses[keyof V2IntegrationConnectOauthStatusResponses]
 
-export type V2ConnectorConnectOauthCompleteData = {
+export type V2IntegrationConnectOauthCompleteData = {
   body: {
     code?: string
   }
@@ -10348,10 +10361,10 @@ export type V2ConnectorConnectOauthCompleteData = {
       workspace?: string
     }
   }
-  url: "/api/connector/oauth/{attemptID}/complete"
+  url: "/api/integration/oauth/{attemptID}/complete"
 }
 
-export type V2ConnectorConnectOauthCompleteErrors = {
+export type V2IntegrationConnectOauthCompleteErrors = {
   /**
    * InvalidRequestError
    */
@@ -10362,18 +10375,18 @@ export type V2ConnectorConnectOauthCompleteErrors = {
   401: UnauthorizedError
 }
 
-export type V2ConnectorConnectOauthCompleteError =
-  V2ConnectorConnectOauthCompleteErrors[keyof V2ConnectorConnectOauthCompleteErrors]
+export type V2IntegrationConnectOauthCompleteError =
+  V2IntegrationConnectOauthCompleteErrors[keyof V2IntegrationConnectOauthCompleteErrors]
 
-export type V2ConnectorConnectOauthCompleteResponses = {
+export type V2IntegrationConnectOauthCompleteResponses = {
   /**
    * <No Content>
    */
   204: void
 }
 
-export type V2ConnectorConnectOauthCompleteResponse =
-  V2ConnectorConnectOauthCompleteResponses[keyof V2ConnectorConnectOauthCompleteResponses]
+export type V2IntegrationConnectOauthCompleteResponse =
+  V2IntegrationConnectOauthCompleteResponses[keyof V2IntegrationConnectOauthCompleteResponses]
 
 export type V2PermissionRequestListData = {
   body?: never

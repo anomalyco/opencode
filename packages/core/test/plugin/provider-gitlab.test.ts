@@ -1,7 +1,7 @@
 import { describe, expect, mock } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Credential } from "@opencode-ai/core/credential"
-import { Connector } from "@opencode-ai/core/connector"
+import { Integration } from "@opencode-ai/core/integration"
 import { Database } from "@opencode-ai/core/database/database"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -174,8 +174,8 @@ describe("GitLabPlugin", () => {
           const credentials = yield* Credential.Service
           const catalog = yield* Catalog.Service
           yield* credentials.create({
-            connectorID: Connector.ID.make("gitlab"),
-            methodID: Connector.MethodID.make("api-key"),
+            integrationID: Integration.ID.make("gitlab"),
+            methodID: Integration.MethodID.make("api-key"),
             value: new Credential.Key({ type: "key", key: "account-token" }),
           })
           yield* plugin.add(GitLabPlugin)
@@ -208,8 +208,8 @@ describe("GitLabPlugin", () => {
           const credentials = yield* Credential.Service
           const catalog = yield* Catalog.Service
           yield* credentials.create({
-            connectorID: Connector.ID.make("gitlab"),
-            methodID: Connector.MethodID.make("oauth"),
+            integrationID: Integration.ID.make("gitlab"),
+            methodID: Integration.MethodID.make("oauth"),
             value: new Credential.OAuth({
               type: "oauth",
               refresh: "refresh-token",

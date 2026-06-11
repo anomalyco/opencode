@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Credential } from "@opencode-ai/core/credential"
-import { Connector } from "@opencode-ai/core/connector"
+import { Integration } from "@opencode-ai/core/integration"
 import { Database } from "@opencode-ai/core/database/database"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Location } from "@opencode-ai/core/location"
@@ -137,8 +137,8 @@ describe("CloudflareWorkersAIPlugin", () => {
           const credentials = yield* Credential.Service
           const catalog = yield* Catalog.Service
           yield* credentials.create({
-            connectorID: Connector.ID.make("cloudflare-workers-ai"),
-            methodID: Connector.MethodID.make("api-key"),
+            integrationID: Integration.ID.make("cloudflare-workers-ai"),
+            methodID: Integration.MethodID.make("api-key"),
             value: new Credential.Key({
               type: "key",
               key: "account-key",

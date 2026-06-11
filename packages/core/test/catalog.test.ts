@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Layer, Option } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { Connector } from "@opencode-ai/core/connector"
+import { Integration } from "@opencode-ai/core/integration"
 import { Credential } from "@opencode-ai/core/credential"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
@@ -28,18 +28,18 @@ const it = testEffect(
 
 describe("CatalogV2", () => {
   it.effect("projects active credentials without rebuilding catalog state", () => {
-    const connectorID = Connector.ID.make("test")
-    const methodID = Connector.MethodID.make("api-key")
+    const integrationID = Integration.ID.make("test")
+    const methodID = Integration.MethodID.make("api-key")
     const first = new Credential.Info({
       id: Credential.ID.create(),
-      connectorID,
+      integrationID,
       methodID,
       label: "First",
       value: new Credential.Key({ type: "key", key: "first", metadata: { tenant: "one" } }),
     })
     const second = new Credential.Info({
       id: Credential.ID.create(),
-      connectorID,
+      integrationID,
       methodID,
       label: "Second",
       value: new Credential.Key({ type: "key", key: "second", metadata: { tenant: "two" } }),
@@ -50,7 +50,7 @@ describe("CatalogV2", () => {
       Layer.provideMerge(EventV2.defaultLayer),
       Layer.provideMerge(locationLayer),
       Layer.provideMerge(
-        Layer.mock(Credential.Service)({ activeAll: () => Effect.succeed(new Map([[connectorID, active]])) }),
+        Layer.mock(Credential.Service)({ activeAll: () => Effect.succeed(new Map([[integrationID, active]])) }),
       ),
     )
 

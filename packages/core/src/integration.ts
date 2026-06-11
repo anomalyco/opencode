@@ -1,23 +1,23 @@
-export * as Connector from "./connector"
+export * as Integration from "./integration"
 
 import { Cause, Clock, Context, Duration, Effect, Exit, Layer, Schedule, Schema, Scope, SynchronizedRef } from "effect"
 import { castDraft, enableMapSet, type Draft } from "immer"
 import { Credential } from "./credential"
-import { ConnectorSchema } from "./connector/schema"
+import { IntegrationSchema } from "./integration/schema"
 import { withStatics } from "./schema"
 import { State } from "./state"
 import { Identifier } from "./util/identifier"
 import { KeyedMutex } from "./effect/keyed-mutex"
 import { EventV2 } from "./event"
 
-export const ID = ConnectorSchema.ID
-export type ID = ConnectorSchema.ID
+export const ID = IntegrationSchema.ID
+export type ID = IntegrationSchema.ID
 
-export const MethodID = ConnectorSchema.MethodID
-export type MethodID = ConnectorSchema.MethodID
+export const MethodID = IntegrationSchema.MethodID
+export type MethodID = IntegrationSchema.MethodID
 
 export const AttemptID = Schema.String.pipe(
-  Schema.brand("Connector.AttemptID"),
+  Schema.brand("Integration.AttemptID"),
   withStatics((schema) => ({ create: () => schema.make("con_" + Identifier.ascending()) })),
 )
 export type AttemptID = typeof AttemptID.Type
@@ -26,10 +26,10 @@ export const When = Schema.Struct({
   key: Schema.String,
   op: Schema.Literals(["eq", "neq"]),
   value: Schema.String,
-}).annotate({ identifier: "Connector.When" })
+}).annotate({ identifier: "Integration.When" })
 export type When = typeof When.Type
 
-export class TextPrompt extends Schema.Class<TextPrompt>("Connector.TextPrompt")({
+export class TextPrompt extends Schema.Class<TextPrompt>("Integration.TextPrompt")({
   type: Schema.Literal("text"),
   key: Schema.String,
   message: Schema.String,
@@ -37,7 +37,7 @@ export class TextPrompt extends Schema.Class<TextPrompt>("Connector.TextPrompt")
   when: Schema.optional(When),
 }) {}
 
-export class SelectPrompt extends Schema.Class<SelectPrompt>("Connector.SelectPrompt")({
+export class SelectPrompt extends Schema.Class<SelectPrompt>("Integration.SelectPrompt")({
   type: Schema.Literal("select"),
   key: Schema.String,
   message: Schema.String,
@@ -54,27 +54,47 @@ export class SelectPrompt extends Schema.Class<SelectPrompt>("Connector.SelectPr
 export const Prompt = Schema.Union([TextPrompt, SelectPrompt]).pipe(Schema.toTaggedUnion("type"))
 export type Prompt = typeof Prompt.Type
 
-export class OAuthMethod extends Schema.Class<OAuthMethod>("Connector.OAuthMethod")({
+export class OAuthMethod extends Schema.Class<OAuthMethod>("Integration.OAuthMethod")({
   id: MethodID,
   type: Schema.Literal("oauth"),
   label: Schema.String,
   prompts: Schema.optional(Schema.Array(Prompt)),
 }) {}
 
-export class KeyMethod extends Schema.Class<KeyMethod>("Connector.KeyMethod")({
-  id: MethodID,
+export class KeyMethod extends Schema.Class<KeyMethod>("Integration.KeyMethod")({
   type: Schema.Literal("key"),
-  label: Schema.String,
-  prompts: Schema.optional(Schema.Array(Prompt)),
+  label: Schema.optional(Schema.String),
 }) {}
 
-export const Method = Schema.Union([OAuthMethod, KeyMethod]).pipe(Schema.toTaggedUnion("type"))
+export class EnvMethod extends Schema.Class<EnvMethod>("Integration.EnvMethod")({
+  type: Schema.Literal("env"),
+  names: Schema.Array(Schema.String),
+}) {}
+
+export const Method = Schema.Union([OAuthMethod, KeyMethod, EnvMethod]).pipe(Schema.toTaggedUnion("type"))
 export type Method = typeof Method.Type
 
-export class Info extends Schema.Class<Info>("Connector.Info")({
+export class CredentialConnection extends Schema.Class<CredentialConnection>("Integration.CredentialConnection")({
+  type: Schema.Literal("credential"),
+  id: Credential.ID,
+  label: Schema.String,
+  active: Schema.Boolean,
+}) {}
+
+export class EnvConnection extends Schema.Class<EnvConnection>("Integration.EnvConnection")({
+  type: Schema.Literal("env"),
+  name: Schema.String,
+  active: Schema.Boolean,
+}) {}
+
+export const Connection = Schema.Union([CredentialConnection, EnvConnection]).pipe(Schema.toTaggedUnion("type"))
+export type Connection = typeof Connection.Type
+
+export class Info extends Schema.Class<Info>("Integration.Info")({
   id: ID,
   name: Schema.String,
   methods: Schema.Array(Method),
+  connections: Schema.Array(Connection),
 }) {}
 
 export type Inputs = Readonly<{ [key: string]: string }>
@@ -94,29 +114,29 @@ export type OAuthAuthorization = {
 )
 
 export interface OAuthImplementation {
-  readonly connectorID: ID
+  readonly integrationID: ID
   readonly method: OAuthMethod
   readonly authorize: (inputs: Inputs) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
   readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
 }
 
 export interface KeyImplementation {
-  readonly connectorID: ID
+  readonly integrationID: ID
   readonly method: KeyMethod
-  readonly authorize: (key: string, inputs: Inputs) => Effect.Effect<Credential.Key, unknown>
 }
 
-export type Implementation = OAuthImplementation | KeyImplementation
-
-function isKeyImplementation(implementation: Implementation): implementation is KeyImplementation {
-  return implementation.method.type === "key"
+export interface EnvImplementation {
+  readonly integrationID: ID
+  readonly method: EnvMethod
 }
+
+export type Implementation = OAuthImplementation | KeyImplementation | EnvImplementation
 
 function isOAuthImplementation(implementation: Implementation): implementation is OAuthImplementation {
   return implementation.method.type === "oauth"
 }
 
-export class Attempt extends Schema.Class<Attempt>("Connector.Attempt")({
+export class Attempt extends Schema.Class<Attempt>("Integration.Attempt")({
   attemptID: AttemptID,
   url: Schema.String,
   instructions: Schema.String,
@@ -140,11 +160,11 @@ export const AttemptStatus = Schema.Union([
 ]).pipe(Schema.toTaggedUnion("status"))
 export type AttemptStatus = typeof AttemptStatus.Type
 
-export class CodeRequiredError extends Schema.TaggedErrorClass<CodeRequiredError>()("Connector.CodeRequired", {
+export class CodeRequiredError extends Schema.TaggedErrorClass<CodeRequiredError>()("Integration.CodeRequired", {
   attemptID: AttemptID,
 }) {}
 
-export class AuthorizationError extends Schema.TaggedErrorClass<AuthorizationError>()("Connector.Authorization", {
+export class AuthorizationError extends Schema.TaggedErrorClass<AuthorizationError>()("Integration.Authorization", {
   cause: Schema.Defect,
 }) {}
 
@@ -152,61 +172,64 @@ export type Error = CodeRequiredError | AuthorizationError
 
 export const Event = {
   Updated: EventV2.define({
-    type: "connector.updated",
+    type: "integration.updated",
     schema: {},
   }),
 }
 
+export type Ref = {
+  id: ID
+  name: string
+}
+
 type Entry = {
-  connector: Info
-  implementations: Map<MethodID, Implementation>
+  ref: Ref
+  methods: Method[]
+  implementations: Map<MethodID, OAuthImplementation>
 }
 
 type Data = {
-  connectors: Map<ID, Entry>
+  integrations: Map<ID, Entry>
 }
 
 export type Editor = {
-  list: () => readonly Info[]
-  get: (id: ID) => Info | undefined
-  update: (id: ID, update: (connector: Draft<Omit<Info, "methods">>) => void) => void
+  list: () => readonly Ref[]
+  get: (id: ID) => Ref | undefined
+  update: (id: ID, update: (integration: Draft<Ref>) => void) => void
   remove: (id: ID) => void
   method: {
+    list: (integrationID: ID) => readonly Method[]
     update: (implementation: Implementation) => void
-    remove: (connectorID: ID, methodID: MethodID) => void
+    remove: (integrationID: ID, method: Method) => void
   }
 }
 
 export interface Interface {
-  /** Registers a scoped transform over the connector registry. */
+  /** Registers a scoped transform over the integration registry. */
   readonly transform: State.Interface<Data, Editor>["transform"]
-  /** Registers and immediately applies a scoped connector registry update. */
+  /** Registers and immediately applies a scoped integration registry update. */
   readonly update: State.Interface<Data, Editor>["update"]
-  /** Returns one connector with its serializable login methods. */
+  /** Returns one integration with its methods and current connections. */
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
-  /** Returns all connectors with their serializable login methods. */
+  /** Returns all integrations with their methods and current connections. */
   readonly list: () => Effect.Effect<Info[]>
   /** Refreshes an OAuth credential with its originating method. */
   readonly refresh: (credentialID: Credential.ID) => Effect.Effect<void, AuthorizationError>
   readonly connect: {
     /** Runs a key method and stores the resulting credential. */
     readonly key: (input: {
-      /** Connector receiving the credential. */
-      readonly connectorID: ID
-      /** Key method selected by the caller. */
-      readonly methodID: MethodID
+      /** Integration receiving the credential. */
+      readonly integrationID: ID
       /** Secret entered by the user. */
       readonly key: string
-      /** Answers to the method's optional prompts. */
-      readonly inputs: Inputs
       /** User-facing label for the stored credential. */
       readonly label?: string
     }) => Effect.Effect<void, AuthorizationError>
     readonly oauth: {
       /** Starts a stateful OAuth attempt. */
       readonly begin: (input: {
-        /** Connector being authenticated. */
-        readonly connectorID: ID
+        /** Integration being authenticated. */
+        readonly integrationID: ID
         /** OAuth method selected by the caller. */
         readonly methodID: MethodID
         /** Answers to the method's optional prompts. */
@@ -229,7 +252,7 @@ export interface Interface {
   }
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Connector") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Integration") {}
 
 enableMapSet()
 
@@ -242,7 +265,7 @@ type PendingAttempt = {
   status: "pending"
   completing: boolean
   authorization: OAuthAuthorization
-  connectorID: ID
+  integrationID: ID
   methodID: MethodID
   label?: string
   scope: Scope.Closeable
@@ -265,46 +288,86 @@ export const locationLayer = Layer.effect(
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
     const refreshLocks = KeyedMutex.makeUnsafe<Credential.ID>()
     const state = State.create<Data, Editor>({
-      initial: () => ({ connectors: new Map<ID, Entry>() }),
+      initial: () => ({ integrations: new Map<ID, Entry>() }),
       editor: (draft) => ({
-        list: () => Array.from(draft.connectors.values(), (entry) => entry.connector) as Info[],
-        get: (id) => draft.connectors.get(id)?.connector as Info | undefined,
+        list: () => Array.from(draft.integrations.values(), (entry) => entry.ref) as Ref[],
+        get: (id) => draft.integrations.get(id)?.ref as Ref | undefined,
         update: (id, update) => {
           const current =
-            draft.connectors.get(id) ??
-            castDraft({ connector: new Info({ id, name: id, methods: [] }), implementations: new Map() })
-          if (!draft.connectors.has(id)) draft.connectors.set(id, current)
-          update(current.connector)
-          current.connector.id = id
+            draft.integrations.get(id) ??
+            castDraft({ ref: { id, name: id } as Ref, methods: [], implementations: new Map() })
+          if (!draft.integrations.has(id)) draft.integrations.set(id, current)
+          update(current.ref)
+          current.ref.id = id
         },
-        remove: (id) => draft.connectors.delete(id),
+        remove: (id) => draft.integrations.delete(id),
         method: {
+          list: (integrationID) =>
+            (draft.integrations.get(integrationID)?.methods as Method[] | undefined) ?? [],
           update: (implementation) => {
             const current =
-              draft.connectors.get(implementation.connectorID) ??
+              draft.integrations.get(implementation.integrationID) ??
               castDraft({
-                connector: new Info({ id: implementation.connectorID, name: implementation.connectorID, methods: [] }),
-                implementations: new Map<MethodID, Implementation>(),
+                ref: {
+                  id: implementation.integrationID,
+                  name: implementation.integrationID,
+                } as Ref,
+                methods: [],
+                implementations: new Map<MethodID, OAuthImplementation>(),
               })
-            if (!draft.connectors.has(implementation.connectorID)) {
-              draft.connectors.set(implementation.connectorID, current)
+            if (!draft.integrations.has(implementation.integrationID)) {
+              draft.integrations.set(implementation.integrationID, current)
             }
-            const index = current.connector.methods.findIndex((method) => method.id === implementation.method.id)
-            if (index === -1) current.connector.methods.push(castDraft(implementation.method))
-            else current.connector.methods[index] = castDraft(implementation.method)
-            current.implementations.set(implementation.method.id, castDraft(implementation))
+            const index = current.methods.findIndex((method) => {
+              if (method.type !== implementation.method.type) return false
+              if (method.type !== "oauth" || implementation.method.type !== "oauth") return true
+              return method.id === implementation.method.id
+            })
+            if (index === -1) current.methods.push(castDraft(implementation.method))
+            else current.methods[index] = castDraft(implementation.method)
+            if (isOAuthImplementation(implementation)) {
+              current.implementations.set(implementation.method.id, castDraft(implementation))
+            }
           },
-          remove: (connectorID, methodID) => {
-            const current = draft.connectors.get(connectorID)
+          remove: (integrationID, method) => {
+            const current = draft.integrations.get(integrationID)
             if (!current) return
-            const index = current.connector.methods.findIndex((method) => method.id === methodID)
-            if (index !== -1) current.connector.methods.splice(index, 1)
-            current.implementations.delete(methodID)
+            const index = current.methods.findIndex((candidate) => {
+              if (candidate.type !== method.type) return false
+              if (candidate.type !== "oauth" || method.type !== "oauth") return true
+              return candidate.id === method.id
+            })
+            if (index !== -1) current.methods.splice(index, 1)
+            if (method.type === "oauth") current.implementations.delete(method.id)
           },
         },
       }),
       finalize: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
     })
+
+    const connections = (
+      entry: Entry,
+      credentialRows: Credential.Info[],
+      activeID: Credential.ID | undefined,
+    ): Connection[] => {
+      const saved = credentialRows.map(
+        (row) =>
+          new CredentialConnection({ type: "credential", id: row.id, label: row.label, active: row.id === activeID }),
+      )
+      const detected = entry.methods
+        .filter((method) => method.type === "env")
+        .flatMap((method) => method.names.filter((name) => process.env[name]))
+        .map((name, index) => new EnvConnection({ type: "env", name, active: !activeID && index === 0 }))
+      return [...saved, ...detected]
+    }
+
+    const project = (entry: Entry, credentialRows: Credential.Info[], activeID?: Credential.ID) =>
+      new Info({
+        id: entry.ref.id,
+        name: entry.ref.name,
+        methods: entry.methods,
+        connections: connections(entry, credentialRows, activeID),
+      })
 
     const authorize = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       effect.pipe(Effect.mapError((cause) => new AuthorizationError({ cause })))
@@ -330,7 +393,7 @@ export const locationLayer = Layer.effect(
       if (!result) return
       if (Exit.isSuccess(exit)) {
         yield* credentials.create({
-          connectorID: result.connectorID,
+          integrationID: result.integrationID,
           methodID: result.methodID,
           label: result.label,
           value: exit.value,
@@ -362,15 +425,25 @@ export const locationLayer = Layer.effect(
     return Service.of({
       transform: state.transform,
       update: state.update,
-      get: Effect.fn("Connector.get")(function* (id) {
-        return state.get().connectors.get(id)?.connector
+      get: Effect.fn("Integration.get")(function* (id) {
+        const entry = state.get().integrations.get(id)
+        if (!entry) return undefined
+        const rows = yield* credentials.forIntegration(id)
+        const active = yield* credentials.active(id)
+        return project(entry, rows, active?.id)
       }),
-      list: Effect.fn("Connector.list")(function* () {
-        return Array.from(state.get().connectors.values(), (record) => record.connector).toSorted((a, b) =>
-          a.name.localeCompare(b.name),
-        )
+      list: Effect.fn("Integration.list")(function* () {
+        const rows = yield* credentials.all()
+        const active = yield* credentials.activeAll()
+        return Array.from(state.get().integrations.values(), (entry) =>
+          project(
+            entry,
+            rows.filter((row) => row.integrationID === entry.ref.id),
+            active.get(entry.ref.id)?.id,
+          ),
+        ).toSorted((a, b) => a.name.localeCompare(b.name))
       }),
-      refresh: Effect.fn("Connector.refresh")(function* (credentialID) {
+      refresh: Effect.fn("Integration.refresh")(function* (credentialID) {
         yield* refreshLocks.withLock(credentialID)(
           Effect.gen(function* () {
             const credential = yield* credentials.get(credentialID)
@@ -379,11 +452,11 @@ export const locationLayer = Layer.effect(
             }
             const implementation = state
               .get()
-              .connectors.get(credential.connectorID)
+              .integrations.get(credential.integrationID)
               ?.implementations.get(credential.methodID)
-            if (!implementation || !isOAuthImplementation(implementation) || !implementation.refresh) {
+            if (!implementation?.refresh) {
               return yield* Effect.die(
-                `OAuth refresh method not found: ${credential.connectorID}/${credential.methodID}`,
+                `OAuth refresh method not found: ${credential.integrationID}/${credential.methodID}`,
               )
             }
             const value = yield* authorize(implementation.refresh(credential.value))
@@ -392,24 +465,24 @@ export const locationLayer = Layer.effect(
         )
       }),
       connect: {
-        key: Effect.fn("Connector.connect.key")(function* (input) {
-          const method = state.get().connectors.get(input.connectorID)?.implementations.get(input.methodID)
-          if (!method || !isKeyImplementation(method)) {
-            return yield* Effect.die(`Key method not found: ${input.connectorID}/${input.methodID}`)
-          }
-          const value = yield* authorize(method.authorize(input.key, input.inputs))
+        key: Effect.fn("Integration.connect.key")(function* (input) {
+          const method = state
+            .get()
+            .integrations.get(input.integrationID)
+            ?.methods.some((method) => method.type === "key")
+          if (!method) return yield* Effect.die(`Key method not found: ${input.integrationID}`)
           yield* credentials.create({
-            connectorID: input.connectorID,
-            methodID: input.methodID,
+            integrationID: input.integrationID,
+            methodID: MethodID.make("api-key"),
             label: input.label,
-            value,
+            value: new Credential.Key({ type: "key", key: input.key }),
           })
         }),
         oauth: {
-          begin: Effect.fn("Connector.connect.oauth.begin")(function* (input) {
-            const method = state.get().connectors.get(input.connectorID)?.implementations.get(input.methodID)
-            if (!method || !isOAuthImplementation(method)) {
-              return yield* Effect.die(`OAuth method not found: ${input.connectorID}/${input.methodID}`)
+          begin: Effect.fn("Integration.connect.oauth.begin")(function* (input) {
+            const method = state.get().integrations.get(input.integrationID)?.implementations.get(input.methodID)
+            if (!method) {
+              return yield* Effect.die(`OAuth method not found: ${input.integrationID}/${input.methodID}`)
             }
             const attemptScope = yield* Scope.fork(scope)
             const authorization = yield* authorize(method.authorize(input.inputs)).pipe(
@@ -424,7 +497,7 @@ export const locationLayer = Layer.effect(
                 status: "pending",
                 completing: authorization.mode === "auto",
                 authorization,
-                connectorID: input.connectorID,
+                integrationID: input.integrationID,
                 methodID: input.methodID,
                 label: input.label,
                 scope: attemptScope,
@@ -446,7 +519,7 @@ export const locationLayer = Layer.effect(
               time,
             })
           }),
-          status: Effect.fn("Connector.connect.oauth.status")(function* (attemptID) {
+          status: Effect.fn("Integration.connect.oauth.status")(function* (attemptID) {
             const attempt = (yield* SynchronizedRef.get(attempts)).get(attemptID)
             if (!attempt) return yield* Effect.die(`OAuth attempt not found: ${attemptID}`)
             if (attempt.status === "failed") {
@@ -454,7 +527,7 @@ export const locationLayer = Layer.effect(
             }
             return { status: attempt.status, time: attempt.time }
           }),
-          complete: Effect.fn("Connector.connect.oauth.complete")(function* (input) {
+          complete: Effect.fn("Integration.connect.oauth.complete")(function* (input) {
             const attempt = yield* SynchronizedRef.modify(attempts, (current) => {
               const match = current.get(input.attemptID)
               if (!match || match.status !== "pending" || match.completing) return [match, current]
@@ -475,7 +548,7 @@ export const locationLayer = Layer.effect(
             yield* settle(input.attemptID, exit)
             if (Exit.isFailure(exit)) return yield* exit
           }),
-          cancel: Effect.fn("Connector.connect.oauth.cancel")(function* (attemptID) {
+          cancel: Effect.fn("Integration.connect.oauth.cancel")(function* (attemptID) {
             const attempt = yield* SynchronizedRef.modify(attempts, (current) => {
               const match = current.get(attemptID)
               if (!match || match.status !== "pending") return [undefined, current]

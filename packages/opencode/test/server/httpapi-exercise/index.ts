@@ -650,46 +650,46 @@ const scenarios: Scenario[] = [
   http.protected.get("/api/agent", "v2.agent.list").json(200, locationData(array)),
   http.protected.get("/api/model", "v2.model.list").json(200, locationData(array)),
   http.protected.get("/api/provider", "v2.provider.list").json(200, locationData(array)),
-  http.protected.get("/api/connector", "v2.connector.list").json(200, locationData(array)),
+  http.protected.get("/api/integration", "v2.integration.list").json(200, locationData(array)),
   http.protected
-    .get("/api/connector/{connectorID}", "v2.connector.get")
-    .at((ctx) => ({ path: route("/api/connector/{connectorID}", { connectorID: "missing" }), headers: ctx.headers() }))
+    .get("/api/integration/{integrationID}", "v2.integration.get")
+    .at((ctx) => ({ path: route("/api/integration/{integrationID}", { integrationID: "missing" }), headers: ctx.headers() }))
     .json(200, object),
   http.protected
-    .post("/api/connector/{connectorID}/connect/key", "v2.connector.connect.key")
+    .post("/api/integration/{integrationID}/connect/key", "v2.integration.connect.key")
     .at((ctx) => ({
-      path: route("/api/connector/{connectorID}/connect/key", { connectorID: "missing" }),
+      path: route("/api/integration/{integrationID}/connect/key", { integrationID: "missing" }),
       headers: ctx.headers(),
-      body: { methodID: "missing", key: "test", inputs: {} },
+      body: { key: "test" },
     }))
     .status(500, undefined, "status"),
   http.protected
-    .post("/api/connector/{connectorID}/connect/oauth", "v2.connector.connect.oauth.begin")
+    .post("/api/integration/{integrationID}/connect/oauth", "v2.integration.connect.oauth.begin")
     .at((ctx) => ({
-      path: route("/api/connector/{connectorID}/connect/oauth", { connectorID: "missing" }),
+      path: route("/api/integration/{integrationID}/connect/oauth", { integrationID: "missing" }),
       headers: ctx.headers(),
       body: { methodID: "missing", inputs: {} },
     }))
     .status(500, undefined, "status"),
   http.protected
-    .get("/api/connector/oauth/{attemptID}", "v2.connector.connect.oauth.status")
+    .get("/api/integration/oauth/{attemptID}", "v2.integration.connect.oauth.status")
     .at((ctx) => ({
-      path: route("/api/connector/oauth/{attemptID}", { attemptID: "con_missing" }),
+      path: route("/api/integration/oauth/{attemptID}", { attemptID: "con_missing" }),
       headers: ctx.headers(),
     }))
     .status(500, undefined, "status"),
   http.protected
-    .post("/api/connector/oauth/{attemptID}/complete", "v2.connector.connect.oauth.complete")
+    .post("/api/integration/oauth/{attemptID}/complete", "v2.integration.connect.oauth.complete")
     .at((ctx) => ({
-      path: route("/api/connector/oauth/{attemptID}/complete", { attemptID: "con_missing" }),
+      path: route("/api/integration/oauth/{attemptID}/complete", { attemptID: "con_missing" }),
       headers: ctx.headers(),
       body: {},
     }))
     .status(500, undefined, "status"),
   http.protected
-    .delete("/api/connector/oauth/{attemptID}", "v2.connector.connect.oauth.cancel")
+    .delete("/api/integration/oauth/{attemptID}", "v2.integration.connect.oauth.cancel")
     .at((ctx) => ({
-      path: route("/api/connector/oauth/{attemptID}", { attemptID: "con_missing" }),
+      path: route("/api/integration/oauth/{attemptID}", { attemptID: "con_missing" }),
       headers: ctx.headers(),
     }))
     .status(204, undefined, "status"),

@@ -265,20 +265,6 @@ import type {
   V2AgentListResponses,
   V2CommandListErrors,
   V2CommandListResponses,
-  V2ConnectorConnectKeyErrors,
-  V2ConnectorConnectKeyResponses,
-  V2ConnectorConnectOauthBeginErrors,
-  V2ConnectorConnectOauthBeginResponses,
-  V2ConnectorConnectOauthCancelErrors,
-  V2ConnectorConnectOauthCancelResponses,
-  V2ConnectorConnectOauthCompleteErrors,
-  V2ConnectorConnectOauthCompleteResponses,
-  V2ConnectorConnectOauthStatusErrors,
-  V2ConnectorConnectOauthStatusResponses,
-  V2ConnectorGetErrors,
-  V2ConnectorGetResponses,
-  V2ConnectorListErrors,
-  V2ConnectorListResponses,
   V2EventSubscribeErrors,
   V2EventSubscribeResponses,
   V2FsFindErrors,
@@ -289,6 +275,20 @@ import type {
   V2FsReadResponses,
   V2HealthGetErrors,
   V2HealthGetResponses,
+  V2IntegrationConnectKeyErrors,
+  V2IntegrationConnectKeyResponses,
+  V2IntegrationConnectOauthBeginErrors,
+  V2IntegrationConnectOauthBeginResponses,
+  V2IntegrationConnectOauthCancelErrors,
+  V2IntegrationConnectOauthCancelResponses,
+  V2IntegrationConnectOauthCompleteErrors,
+  V2IntegrationConnectOauthCompleteResponses,
+  V2IntegrationConnectOauthStatusErrors,
+  V2IntegrationConnectOauthStatusResponses,
+  V2IntegrationGetErrors,
+  V2IntegrationGetResponses,
+  V2IntegrationListErrors,
+  V2IntegrationListResponses,
   V2LocationGetErrors,
   V2LocationGetResponses,
   V2ModelListErrors,
@@ -5589,7 +5589,7 @@ export class Oauth2 extends HeyApiClient {
    */
   public begin<ThrowOnError extends boolean = false>(
     parameters: {
-      connectorID: string
+      integrationID: string
       location?: {
         directory?: string
         workspace?: string
@@ -5607,7 +5607,7 @@ export class Oauth2 extends HeyApiClient {
       [
         {
           args: [
-            { in: "path", key: "connectorID" },
+            { in: "path", key: "integrationID" },
             { in: "query", key: "location" },
             { in: "body", key: "methodID" },
             { in: "body", key: "inputs" },
@@ -5617,11 +5617,11 @@ export class Oauth2 extends HeyApiClient {
       ],
     )
     return (options?.client ?? this.client).post<
-      V2ConnectorConnectOauthBeginResponses,
-      V2ConnectorConnectOauthBeginErrors,
+      V2IntegrationConnectOauthBeginResponses,
+      V2IntegrationConnectOauthBeginErrors,
       ThrowOnError
     >({
-      url: "/api/connector/{connectorID}/connect/oauth",
+      url: "/api/integration/{integrationID}/connect/oauth",
       ...options,
       ...params,
       headers: {
@@ -5659,11 +5659,11 @@ export class Oauth2 extends HeyApiClient {
       ],
     )
     return (options?.client ?? this.client).delete<
-      V2ConnectorConnectOauthCancelResponses,
-      V2ConnectorConnectOauthCancelErrors,
+      V2IntegrationConnectOauthCancelResponses,
+      V2IntegrationConnectOauthCancelErrors,
       ThrowOnError
     >({
-      url: "/api/connector/oauth/{attemptID}",
+      url: "/api/integration/oauth/{attemptID}",
       ...options,
       ...params,
     })
@@ -5696,11 +5696,11 @@ export class Oauth2 extends HeyApiClient {
       ],
     )
     return (options?.client ?? this.client).get<
-      V2ConnectorConnectOauthStatusResponses,
-      V2ConnectorConnectOauthStatusErrors,
+      V2IntegrationConnectOauthStatusResponses,
+      V2IntegrationConnectOauthStatusErrors,
       ThrowOnError
     >({
-      url: "/api/connector/oauth/{attemptID}",
+      url: "/api/integration/oauth/{attemptID}",
       ...options,
       ...params,
     })
@@ -5735,11 +5735,11 @@ export class Oauth2 extends HeyApiClient {
       ],
     )
     return (options?.client ?? this.client).post<
-      V2ConnectorConnectOauthCompleteResponses,
-      V2ConnectorConnectOauthCompleteErrors,
+      V2IntegrationConnectOauthCompleteResponses,
+      V2IntegrationConnectOauthCompleteErrors,
       ThrowOnError
     >({
-      url: "/api/connector/oauth/{attemptID}/complete",
+      url: "/api/integration/oauth/{attemptID}/complete",
       ...options,
       ...params,
       headers: {
@@ -5759,16 +5759,12 @@ export class Connect extends HeyApiClient {
    */
   public key<ThrowOnError extends boolean = false>(
     parameters: {
-      connectorID: string
+      integrationID: string
       location?: {
         directory?: string
         workspace?: string
       }
-      methodID?: string
       key?: string
-      inputs?: {
-        [key: string]: string
-      }
       label?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -5778,22 +5774,20 @@ export class Connect extends HeyApiClient {
       [
         {
           args: [
-            { in: "path", key: "connectorID" },
+            { in: "path", key: "integrationID" },
             { in: "query", key: "location" },
-            { in: "body", key: "methodID" },
             { in: "body", key: "key" },
-            { in: "body", key: "inputs" },
             { in: "body", key: "label" },
           ],
         },
       ],
     )
     return (options?.client ?? this.client).post<
-      V2ConnectorConnectKeyResponses,
-      V2ConnectorConnectKeyErrors,
+      V2IntegrationConnectKeyResponses,
+      V2IntegrationConnectKeyErrors,
       ThrowOnError
     >({
-      url: "/api/connector/{connectorID}/connect/key",
+      url: "/api/integration/{integrationID}/connect/key",
       ...options,
       ...params,
       headers: {
@@ -5810,11 +5804,11 @@ export class Connect extends HeyApiClient {
   }
 }
 
-export class Connector extends HeyApiClient {
+export class Integration extends HeyApiClient {
   /**
-   * List connectors
+   * List integrations
    *
-   * Retrieve available connectors and their authentication methods.
+   * Retrieve available integrations and their authentication methods.
    */
   public list<ThrowOnError extends boolean = false>(
     parameters?: {
@@ -5826,21 +5820,21 @@ export class Connector extends HeyApiClient {
     options?: Options<never, ThrowOnError>,
   ) {
     const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
-    return (options?.client ?? this.client).get<V2ConnectorListResponses, V2ConnectorListErrors, ThrowOnError>({
-      url: "/api/connector",
+    return (options?.client ?? this.client).get<V2IntegrationListResponses, V2IntegrationListErrors, ThrowOnError>({
+      url: "/api/integration",
       ...options,
       ...params,
     })
   }
 
   /**
-   * Get connector
+   * Get integration
    *
-   * Retrieve one connector and its authentication methods.
+   * Retrieve one integration and its authentication methods.
    */
   public get<ThrowOnError extends boolean = false>(
     parameters: {
-      connectorID: string
+      integrationID: string
       location?: {
         directory?: string
         workspace?: string
@@ -5853,14 +5847,14 @@ export class Connector extends HeyApiClient {
       [
         {
           args: [
-            { in: "path", key: "connectorID" },
+            { in: "path", key: "integrationID" },
             { in: "query", key: "location" },
           ],
         },
       ],
     )
-    return (options?.client ?? this.client).get<V2ConnectorGetResponses, V2ConnectorGetErrors, ThrowOnError>({
-      url: "/api/connector/{connectorID}",
+    return (options?.client ?? this.client).get<V2IntegrationGetResponses, V2IntegrationGetErrors, ThrowOnError>({
+      url: "/api/integration/{integrationID}",
       ...options,
       ...params,
     })
@@ -6216,9 +6210,9 @@ export class V2 extends HeyApiClient {
     return (this._provider ??= new Provider2({ client: this.client }))
   }
 
-  private _connector?: Connector
-  get connector(): Connector {
-    return (this._connector ??= new Connector({ client: this.client }))
+  private _integration?: Integration
+  get integration(): Integration {
+    return (this._integration ??= new Integration({ client: this.client }))
   }
 
   private _permission?: Permission3
