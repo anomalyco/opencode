@@ -1948,7 +1948,7 @@ Don't have a Snowflake account? [Sign up for a free trial](https://signup.snowfl
 
 opencode's core workflow for coding, editing files, and running commands relies on tool calling. Only the Claude and OpenAI families within Snowflake Cortex support this. The provider is limited to those families to support the core workflow.
 
-1. Generate a [Programmatic Access Token (PAT)](https://docs.snowflake.com/en/user-guide/programmatic-access-tokens) in your Snowflake account.
+1. Generate a bearer token for Snowflake Cortex (for example: [OAuth token](https://docs.snowflake.com/en/developer-guide/snowflake-rest-api/authentication) or [Programmatic Access Token (PAT)](https://docs.snowflake.com/en/user-guide/programmatic-access-tokens)).
 
 2. Run the `/connect` command and search for **Snowflake Cortex**.
 
@@ -1956,7 +1956,7 @@ opencode's core workflow for coding, editing files, and running commands relies 
    /connect
    ```
 
-3. Enter your [account identifier](https://docs.snowflake.com/en/user-guide/admin-account-identifier) when prompted (e.g. `myorg-myaccount` or `xy12345.us-east-1`).
+3. Enter your [account identifier](https://docs.snowflake.com/en/user-guide/admin-account-identifier) when prompted (required), for example `myorg-myaccount` or `xy12345.us-east-1`.
 
    ```txt
    ┌ Snowflake Account Identifier
@@ -1965,16 +1965,28 @@ opencode's core workflow for coding, editing files, and running commands relies 
    └ enter
    ```
 
-4. Enter your **PAT**.
+4. Choose your login method:
+
+   - **Login with Snowflake (External Browser)** *(recommended)*: opens your browser, signs in with your IdP/SSO, and stores the OAuth bearer token automatically.
+   - **Paste bearer token manually**: paste an OAuth token, JWT, or PAT.
 
    ```txt
-   ┌ Programmatic Access Token (PAT)
+   ┌ Login with Snowflake (External Browser)
    │
    │
    └ enter
    ```
 
-5. Run the `/models` command to select a model.
+5. Enter your [account identifier](https://docs.snowflake.com/en/user-guide/admin-account-identifier) and optional role scope.
+
+   ```txt
+   ┌ Snowflake Account Identifier
+   │
+   │
+   └ enter
+   ```
+
+6. Run the `/models` command to select a model.
 
    ```txt
    /models
@@ -1984,8 +1996,10 @@ Alternatively, set environment variables before starting opencode:
 
 ```bash
 export SNOWFLAKE_ACCOUNT=myorg-myaccount
-export SNOWFLAKE_CORTEX_PAT=your-pat
+export SNOWFLAKE_CORTEX_TOKEN=your-token
 ```
+
+`SNOWFLAKE_CORTEX_PAT` is still supported for backward compatibility.
 
 The model catalog is provided automatically. A minimal `opencode.json` is all that's needed:
 
