@@ -4,6 +4,7 @@ import { Config } from "@/config/config"
 import * as InstanceState from "@/effect/instance-state"
 import { Plugin } from "@/plugin"
 import { Shell } from "@/shell/shell"
+import { ShellEnv } from "@/shell/env"
 import { Pty } from "@opencode-ai/core/pty"
 import { Effect } from "effect"
 
@@ -13,7 +14,7 @@ export const prepareCreate = Effect.fn("PtyPreparation.prepareCreate")(function*
   const command = input.command || Shell.preferred((yield* config.get()).shell)
   const args = Shell.login(command) ? [...(input.args ?? []), "-l"] : [...(input.args ?? [])]
   const cwd = input.cwd || (yield* InstanceState.context).directory
-  const shell = yield* plugin.trigger("shell.env", { cwd }, { env: {} })
+  const shell = yield* plugin.trigger("shell.env", { cwd }, { env: ShellEnv.defaultNonInteractiveEnv() })
   const env = {
     ...process.env,
     ...input.env,

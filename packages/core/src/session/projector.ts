@@ -14,6 +14,7 @@ import { SessionInput } from "./input"
 import { WorkspaceV2 } from "../workspace"
 import { SessionContextEpoch } from "./context-epoch"
 import { MessageTable, PartTable, SessionMessageTable, SessionTable } from "./sql"
+import { SessionDirectory } from "./directory"
 import type { DeepMutable } from "../schema"
 
 type DatabaseService = Database.Interface["db"]
@@ -247,7 +248,7 @@ export const layer = Layer.effectDiscard(
         yield* db
           .update(SessionTable)
           .set({
-            directory: event.data.location.directory,
+            directory: SessionDirectory.normalizeSessionDirectory(event.data.location.directory),
             path: event.data.subdirectory,
             workspace_id: event.data.location.workspaceID ? WorkspaceV2.ID.make(event.data.location.workspaceID) : null,
             time_updated: DateTime.toEpochMillis(event.data.timestamp),

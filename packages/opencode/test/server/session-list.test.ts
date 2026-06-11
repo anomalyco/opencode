@@ -98,6 +98,32 @@ describe("session.list", () => {
     { git: true },
   )
 
+  it.instance(
+    "matches Windows directories across separator styles",
+    () =>
+      Effect.gen(function* () {
+        const created = yield* withSession({ title: "windows-directory" })
+        const storedDirectory = String.raw`C:\Users\demo\project`
+        const requestedDirectory = "C:/Users/demo/project"
+
+        yield* Database.Service.use((database) =>
+          database.db
+            .update(SessionTable)
+            .set({ directory: storedDirectory, path: null })
+            .where(eq(SessionTable.id, created.id))
+            .run()
+            .pipe(Effect.orDie),
+        )
+
+        const ids = (yield* SessionNs.Service.use((session) => session.list({ directory: requestedDirectory }))).map(
+          (session) => session.id,
+        )
+
+        expect(ids).toContain(created.id)
+      }),
+    { git: true },
+  )
+
   itWorkspaces.instance(
     "filters by directory when experimental workspaces are enabled",
     () =>

@@ -7,6 +7,8 @@ describe("util.error", () => {
     const error = new MessageError.AuthError({ providerID: "anthropic", message: "boom" })
 
     expect(error).toBeInstanceOf(NamedError)
+    expect(error.message).toBe("boom")
+    expect(error.toString()).toBe("ProviderAuthError: boom")
     expect(error.toObject()).toEqual({ name: "ProviderAuthError", data: { providerID: "anthropic", message: "boom" } })
   })
 

@@ -83,8 +83,18 @@ function selectedV2WorkspaceID(
   return workspaceID.value
 }
 
+export function normalizeDirectory(dir: string): string {
+  if (process.platform !== "win32") return dir
+  if (dir.length >= 2 && dir[1] === ":" && dir.includes("/")) return dir.replaceAll("/", "\\")
+  return dir
+}
+
 function defaultDirectory(request: HttpServerRequest.HttpServerRequest, url: URL): string {
-  return url.searchParams.get("directory") || request.headers["x-opencode-directory"] || process.cwd()
+  const fromQuery = url.searchParams.get("directory")
+  if (fromQuery) return normalizeDirectory(fromQuery)
+  const fromHeader = request.headers["x-opencode-directory"]
+  if (fromHeader) return normalizeDirectory(decodeURIComponent(fromHeader))
+  return process.cwd()
 }
 
 function shouldStayOnControlPlane(request: HttpServerRequest.HttpServerRequest, url: URL): boolean {

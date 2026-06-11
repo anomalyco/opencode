@@ -1,9 +1,21 @@
 import { execFile } from "node:child_process"
 import { access, readFile, readdir } from "node:fs/promises"
 import { dirname, extname, join } from "node:path"
-import util from "node:util"
+import { hiddenExecFileOptions } from "./child-process"
 
-const execFilePromise = util.promisify(execFile)
+const execFilePromise = (file: string, args: readonly string[]) =>
+  new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+    execFile(file, args, hiddenExecFileOptions(), (error, stdout, stderr) => {
+      if (error) {
+        reject(error)
+        return
+      }
+      resolve({
+        stdout: stdout.toString(),
+        stderr: stderr.toString(),
+      })
+    })
+  })
 
 const exists = (path: string) =>
   access(path)

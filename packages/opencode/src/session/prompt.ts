@@ -36,6 +36,7 @@ import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
 import { Shell } from "@/shell/shell"
+import { ShellEnv } from "@/shell/env"
 import { ShellID } from "@/tool/shell/id"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Truncate } from "@/tool/truncate"
@@ -514,7 +515,8 @@ export const layer = Layer.effect(
 
           const cfg = yield* config.get()
           const sh = Shell.preferred(cfg.shell)
-          const args = Shell.args(sh, input.command, cwd)
+          const command = ShellEnv.stripIncompatibleEnvPrefix(input.command, sh)
+          const args = Shell.args(sh, command, cwd)
           let output = ""
           let aborted = false
 
@@ -555,7 +557,7 @@ export const layer = Layer.effect(
               const shellEnv = yield* plugin.trigger(
                 "shell.env",
                 { cwd, sessionID: input.sessionID, callID: part.callID },
-                { env: {} },
+                { env: ShellEnv.defaultNonInteractiveEnv() },
               )
               const cmd = ChildProcess.make(sh, args, {
                 cwd,

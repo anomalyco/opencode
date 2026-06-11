@@ -14,6 +14,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
+import { SessionDirectory } from "@opencode-ai/core/session/directory"
 
 import { NotFoundError } from "@/storage/storage"
 import { eq } from "drizzle-orm"
@@ -50,6 +51,9 @@ const runtime = makeRuntime(Database.Service, Database.defaultLayer)
 
 const parentTitlePrefix = "New session - "
 const childTitlePrefix = "Child session - "
+
+const { normalizeSessionDirectory, directoryMatches } = SessionDirectory
+export { normalizeSessionDirectory }
 
 export function isDefaultTitle(title: string) {
   return new RegExp(
@@ -556,7 +560,7 @@ export const layer: Layer.Layer<
         slug: Slug.create(),
         version: InstallationVersion,
         projectID: ctx.project.id,
-        directory: input.directory,
+        directory: normalizeSessionDirectory(input.directory),
         path: input.path,
         workspaceID: input.workspaceID,
         parentID: input.parentID,
@@ -596,7 +600,7 @@ export const layer: Layer.Layer<
 
     const listGlobal = Effect.fn("Session.listGlobal")(function* (input?: GlobalListInput) {
       const conditions: SQL[] = []
-      if (input?.directory) conditions.push(eq(SessionTable.directory, input.directory))
+      if (input?.directory) conditions.push(directoryMatches(input.directory))
       if (input?.roots) conditions.push(isNull(SessionTable.parent_id))
       if (input?.start) conditions.push(gte(SessionTable.time_updated, input.start))
       if (input?.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
@@ -1010,13 +1014,13 @@ function listByProject(
 
       conditions.push(
         input.directory
-          ? or(...conds, and(isNull(SessionTable.path), eq(SessionTable.directory, input.directory))!)!
+          ? or(...conds, and(isNull(SessionTable.path), directoryMatches(input.directory))!)!
           : or(...conds)!,
       )
     }
   } else if (input.scope !== "project") {
     if (input.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+      conditions.push(directoryMatches(input.directory))
     }
   }
   if (input.roots) {
@@ -1056,7 +1060,7 @@ export function* listGlobal(input?: {
   const conditions: SQL[] = []
 
   if (input?.directory) {
-    conditions.push(eq(SessionTable.directory, input.directory))
+    conditions.push(directoryMatches(input.directory))
   }
   if (input?.roots) {
     conditions.push(isNull(SessionTable.parent_id))

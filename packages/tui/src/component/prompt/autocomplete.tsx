@@ -237,7 +237,7 @@ export function Autocomplete(props: {
   }
 
   function createFilePart(item: string, lineRange?: { startLine: number; endLine?: number }) {
-    const baseDir = (sync.path.directory || paths.cwd).replace(/\/+$/, "")
+    const baseDir = (sync.path.directory || paths.cwd).replace(/[\\/]+$/, "")
     const fullPath = path.isAbsolute(item) ? item : path.join(baseDir, item)
     const urlObj = pathToFileURL(fullPath)
     const filename =

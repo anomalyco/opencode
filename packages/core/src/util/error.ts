@@ -40,7 +40,11 @@ export abstract class NamedError extends Error {
         public readonly data: Data,
         options?: ErrorOptions,
       ) {
-        super(name, options)
+        const message =
+          typeof data === "object" && data !== null && "message" in data && typeof data.message === "string"
+            ? data.message
+            : ""
+        super(message, options)
         this.name = name
       }
 

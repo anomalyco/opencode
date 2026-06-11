@@ -3,10 +3,15 @@ import { Deferred, Effect, Layer } from "effect"
 import { Project } from "@/project/project"
 import { Session as SessionNs } from "@/session/session"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Database } from "@opencode-ai/core/database/database"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { eq } from "drizzle-orm"
 import { provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(SessionNs.defaultLayer, Project.defaultLayer, CrossSpawnSpawner.defaultLayer))
+const it = testEffect(
+  Layer.mergeAll(SessionNs.defaultLayer, Project.defaultLayer, CrossSpawnSpawner.defaultLayer, Database.defaultLayer),
+)
 
 const withSession = (input?: Parameters<SessionNs.Interface["create"]>[0]) =>
   Effect.acquireRelease(SessionNs.use.create(input), (created) =>
@@ -98,6 +103,31 @@ describe("session.listGlobal", () => {
 
         expect(ids).toContain(first.id)
         expect(ids).not.toContain(second.id)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "matches Windows directories across separator styles",
+    () =>
+      Effect.gen(function* () {
+        const created = yield* withSession({ title: "windows-global-directory" })
+        const storedDirectory = String.raw`C:\Users\demo\project`
+        const requestedDirectory = "C:/Users/demo/project"
+
+        yield* Database.Service.use((database) =>
+          database.db
+            .update(SessionTable)
+            .set({ directory: storedDirectory, path: null })
+            .where(eq(SessionTable.id, created.id))
+            .run()
+            .pipe(Effect.orDie),
+        )
+
+        const sessions = yield* SessionNs.Service.use((session) => session.listGlobal({ directory: requestedDirectory }))
+        const ids = sessions.map((session) => session.id)
+
+        expect(ids).toContain(created.id)
       }),
     { git: true },
   )

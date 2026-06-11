@@ -13,6 +13,7 @@ import { fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Shell } from "@/shell/shell"
+import { ShellEnv } from "@/shell/env"
 import { ShellID } from "./shell/id"
 
 import * as Truncate from "./truncate"
@@ -423,7 +424,7 @@ export const ShellTool = Tool.define(
       const extra = yield* plugin.trigger(
         "shell.env",
         { cwd, sessionID: ctx.sessionID, callID: ctx.callID },
-        { env: {} },
+        { env: ShellEnv.defaultNonInteractiveEnv() },
       )
       return {
         ...process.env,
@@ -639,12 +640,12 @@ export const ShellTool = Tool.define(
                 }),
               )
 
-              return yield* run(
-                {
-                  shell,
-                  command: params.command,
-                  cwd,
-                  env: yield* shellEnv(ctx, cwd),
+               return yield* run(
+                 {
+                   shell,
+                   command: ShellEnv.stripIncompatibleEnvPrefix(params.command, shell),
+                   cwd,
+                   env: yield* shellEnv(ctx, cwd),
                   timeout,
                   description: params.description,
                 },

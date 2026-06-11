@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process"
+import { hiddenExecFile } from "./child-process"
 import { stat } from "node:fs/promises"
 import { basename } from "node:path"
 import { app, BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
@@ -172,7 +172,7 @@ export function registerIpcHandlers(deps: Deps) {
     await new Promise<void>((resolve, reject) => {
       const [cmd, args] =
         process.platform === "darwin" ? (["open", ["-a", app, path]] as const) : ([app, [path]] as const)
-      execFile(cmd, args, (err) => (err ? reject(err) : resolve()))
+      hiddenExecFile(cmd, args, {}, (err) => (err ? reject(err) : resolve()))
     })
   })
 
