@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Marked } from "marked"
-import { fileLink, findFileLinks, initialMarkdownMathSeen } from "./markdown"
+import { fileLink, findFileLinks, initialMarkdownMathSeen, shouldShowMarkdownMathBottomCopy } from "./markdown"
 import { protectMathExpressions, renderMathExpressions } from "../context/marked"
 
 describe("markdown fileLink", () => {
@@ -87,6 +87,11 @@ describe("markdown math", () => {
     expect(initialMarkdownMathSeen({ stage: "full" })).toBe(true)
     expect(initialMarkdownMathSeen({ stage: "lite", math: "defer" })).toBe(false)
     expect(initialMarkdownMathSeen({ math: "full" })).toBe(true)
+  })
+
+  test("adds bottom copy affordance only for tall display math", () => {
+    expect(shouldShowMarkdownMathBottomCopy(159)).toBe(false)
+    expect(shouldShowMarkdownMathBottomCopy(160)).toBe(true)
   })
 
   test("protects display math from markdown block parsing", () => {

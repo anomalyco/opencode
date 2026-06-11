@@ -279,7 +279,17 @@ function createIcon(path: string, slot: string) {
 type CopyButtonPosition = "top" | "bottom"
 
 const copyButtonPositions: CopyButtonPosition[] = ["top", "bottom"]
-const mathCopyButtonPositions: CopyButtonPosition[] = ["top"]
+const mathCopyButtonTopPositions: CopyButtonPosition[] = ["top"]
+const mathBottomCopyMinHeight = 160
+
+export function shouldShowMarkdownMathBottomCopy(height: number): boolean {
+  return height >= mathBottomCopyMinHeight
+}
+
+function mathCopyButtonPositions(wrapper: HTMLElement): CopyButtonPosition[] {
+  const height = Math.max(wrapper.scrollHeight, wrapper.offsetHeight, wrapper.getBoundingClientRect().height)
+  return shouldShowMarkdownMathBottomCopy(height) ? copyButtonPositions : mathCopyButtonTopPositions
+}
 
 function createCopyButton(labels: CopyLabels, position: CopyButtonPosition) {
   const button = document.createElement("button")
@@ -372,7 +382,7 @@ function ensureMathWrapper(block: HTMLElement, labels: CopyLabels) {
       block.parentElement?.replaceChild(next, block)
       next.appendChild(block)
     }
-    ensureCopyButtons(existing, labels, mathCopyButtonPositions)
+    ensureCopyButtons(existing, labels, mathCopyButtonPositions(existing))
     return
   }
 
@@ -387,7 +397,7 @@ function ensureMathWrapper(block: HTMLElement, labels: CopyLabels) {
   parent.replaceChild(wrapper, block)
   wrapper.appendChild(viewport)
   viewport.appendChild(block)
-  ensureCopyButtons(wrapper, labels, mathCopyButtonPositions)
+  ensureCopyButtons(wrapper, labels, mathCopyButtonPositions(wrapper))
 }
 
 function markCodeLinks(root: HTMLDivElement) {
