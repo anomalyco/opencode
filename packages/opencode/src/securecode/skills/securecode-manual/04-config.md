@@ -66,11 +66,11 @@ TUI の表示まわり。`setup/tui.json.example` がそのままテンプレ。
 
 ## 設定の優先順位
 
-opencode 上流側の挙動を継承しています。同じキーが複数の場所で定義された場合、概ね次の優先で merge されます（強い方が上）。
+同じキーが複数の場所で定義された場合、概ね次の優先で merge されます（強い方が上）。
 
 1. CLI フラグ (`--model` 等)
 2. 環境変数 (`SECURECODE_*`)
-3. プロジェクト直下の `opencode.json` / `securecode.json`（あれば）
+3. プロジェクト直下の `securecode.json`（あれば）
 4. `~/.config/securecode/securecode.json`
 5. ビルトイン既定値
 

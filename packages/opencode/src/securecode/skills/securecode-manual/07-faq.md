@@ -26,17 +26,9 @@ A. AI の利用ログ（誰がいつどのコードベースで AI を使った�
 
 A. 使えません。LLM 推論は Acompany endpoint を呼ぶ必要があるためネットワーク必須です。
 
-### Q. どのモデルが使える？
-
-A. 既定は `Qwen3.6-35B-A3B-FP8`。他にも GPT-OSS、Qwen3.5、Qwen3-Coder-Next 等のオープンウェイト LLM が利用可能です。利用可能モデルは `securecode models` で確認できます。
-
 ### Q. MCP に対応している？
 
 A. 対応しています。`securecode mcp` サブコマンドで MCP サーバを登録できます。ただし MCP サーバが外部通信する場合は、サンドボックスでそのドメインを許可する必要があります。
-
-### Q. plugin を追加できる？
-
-A. opencode の plugin 機構をそのまま利用できます。`packages/opencode/src/plugin/` 配下に server-side plugin、`tui-plugins/` 配下に TUI plugin を置く形です。社内独自 plugin の作り方は `docs/03-hooks.md` を参照してください。
 
 ## 制約
 
@@ -46,7 +38,7 @@ A. 機密ソースコードを扱う前提のため、AI の出力先や tool �
 
 ### Q. Windows ネイティブ環境では動く？
 
-A. バイナリは配布されますが、サンドボックス機構は WSL2 推奨です。Windows ネイティブで起動する場合の保護レベルは限定的になります。
+A. Windows ネイティブバイナリは配布していません。WSL2 上で Linux 版を使ってください。
 
 ### Q. Docker コンテナ内で動かしたい
 

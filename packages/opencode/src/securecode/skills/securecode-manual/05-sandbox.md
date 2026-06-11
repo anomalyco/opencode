@@ -1,14 +1,14 @@
 # 05. サンドボックスと権限
 
-セキュアコード は opencode に **2 層の防御** を足しています。これが セキュアコード の核心です。
+セキュアコードは **2 層の防御** で AI エージェントを包んでいます。これがセキュアコードの核心です。
 
 ## 全体像
 
-外側から内側へ入れ子になっています: **Layer 2 (Sandbox: OS の檻) → Layer 1 (Permission: アプリ内) → AI エージェント本体 (opencode)**。
+外側から内側へ入れ子になっています: **Layer 2 (Sandbox: OS の檻) → Layer 1 (Permission: アプリ内) → AI エージェント本体**。
 
 - **Layer 2: Sandbox**: OS 機能でプロセスを隔離し、許可ドメイン以外への通信を遮断 (macOS Seatbelt / Linux bubblewrap)
 - **Layer 1: Permission**: アプリ内で危険な tool 実行を確認 / 拒否
-- **AI エージェント本体 (opencode)**: 実際に LLM が動く中心。Layer 1 をすり抜けても Layer 2 が止めるので、AI が暴走してもデータは外に出ない設計
+- **AI エージェント本体**: 実際に LLM が動く中心。Layer 1 をすり抜けても Layer 2 が止めるので、AI が暴走してもデータは外に出ない設計
 
 ユーザーが叩く `securecode` コマンドは **supervisor (門番)** で、本体 `securecode-bin` をサンドボックスに閉じ込めて起動します。
 
@@ -30,7 +30,8 @@ OS の機能でプロセスを隔離します。
 |---|---|
 | macOS | Seatbelt (`sandbox-exec`) |
 | Linux | bubblewrap |
-| Windows | （現時点では未提供 / Linux on WSL 推奨） |
+
+Windows ネイティブは配布対象外です。WSL2 上で Linux 版を使ってください。
 
 主な制約:
 

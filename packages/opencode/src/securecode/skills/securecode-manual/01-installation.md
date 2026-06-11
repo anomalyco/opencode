@@ -8,7 +8,8 @@
 |---|---|---|
 | macOS | Apple Silicon (arm64), Intel (x64) | x64 は AVX2 対応 CPU 向け / `x64-baseline` 版もあり |
 | Linux | x64, arm64 | glibc / musl (Alpine 等) / baseline (古い CPU) 別ビルドあり |
-| Windows | x64, arm64 | x64-baseline あり |
+
+Windows ネイティブバイナリは配布していません。Windows 環境では WSL2 上で Linux 版を使ってください。
 
 `install` スクリプトが自動で OS / CPU / Rosetta / AVX2 / libc を判定して、適切なアーカイブを選びます。
 
@@ -41,7 +42,7 @@ gh release download -R acompany-develop/securecode --pattern install -O - | bash
 ```
 ~/.local/bin/
   securecode        # 門番 (supervisor)。ユーザーが叩く入口
-  securecode-bin    # 本体 (opencode)。サンドボックス内で起動される
+  securecode-bin    # 本体。サンドボックス内で起動される
 
 ~/.config/securecode/
   securecode.json   # Acompany Qwen エンドポイント・モデル設定
