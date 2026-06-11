@@ -72,6 +72,7 @@ import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
+import { createVoiceInput } from "./prompt-input/voice"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { useQueries } from "@tanstack/solid-query"
 import { useQueryOptions } from "@/context/server-sync"
@@ -1010,6 +1011,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return true
   }
 
+  const voice = createVoiceInput({
+    language: () => language.locale(),
+    onText: (text) => {
+      addPart({ type: "text", content: text, start: 0, end: 0 })
+      restoreFocus()
+    },
+  })
+
+  const voiceTip = () => {
+    if (voice.error()) return language.t(voice.error() as Parameters<typeof language.t>[0])
+    if (voice.status() === "recording") return language.t("prompt.voice.stop")
+    if (voice.status() === "transcribing") return language.t("prompt.voice.transcribing")
+    return language.t("prompt.voice.start")
+  }
+
   const addToHistory = (prompt: Prompt, mode: "normal" | "shell") => {
     const currentHistory = mode === "shell" ? shellHistory : history
     const setCurrentHistory = mode === "shell" ? setShellHistory : setHistory
@@ -1639,7 +1655,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onMouseDown={(e) => {
                 const target = e.target
                 if (!(target instanceof HTMLElement)) return
-                if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"]')) {
+                if (
+                  target.closest(
+                    '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-voice"]',
+                  )
+                ) {
                   return
                 }
                 editorRef?.focus()
@@ -1733,7 +1753,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               <div class="pointer-events-none absolute bottom-2 left-2">
                 <div
                   aria-hidden={store.mode !== "normal"}
-                  class="pointer-events-auto"
+                  class="pointer-events-auto flex items-center gap-1"
                   style={{
                     "pointer-events": buttonsSpring() > 0.5 ? "auto" : "none",
                   }}
@@ -1757,6 +1777,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <Icon name="plus" class="size-4.5" />
                     </Button>
                   </TooltipKeybind>
+                  <Tooltip placement="top" value={voiceTip()}>
+                    <Button
+                      data-action="prompt-voice"
+                      type="button"
+                      variant="ghost"
+                      class={`size-8 p-0 ${voice.status() === "recording" ? "text-red-500" : ""}`}
+                      style={buttons()}
+                      onClick={() => void voice.start()}
+                      disabled={store.mode !== "normal" || voice.status() === "transcribing"}
+                      tabIndex={store.mode === "normal" ? undefined : -1}
+                      aria-label={voiceTip()}
+                    >
+                      <Icon name={voice.status() === "recording" ? "stop" : "speech-bubble"} class="size-4.5" />
+                    </Button>
+                  </Tooltip>
                 </div>
               </div>
             </div>

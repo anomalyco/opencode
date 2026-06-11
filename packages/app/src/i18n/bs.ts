@@ -276,6 +276,11 @@ export const dict = {
   "prompt.context.removeFile": "Ukloni datoteku iz konteksta",
   "prompt.action.attachFile": "Priloži datoteku",
   "prompt.attachment.remove": "Ukloni prilog",
+  "prompt.voice.start": "Dictate with local Whisper",
+  "prompt.voice.stop": "Stop dictation",
+  "prompt.voice.transcribing": "Transcribing locally...",
+  "prompt.voice.unsupported": "Voice input is not available in this browser.",
+  "prompt.voice.error": "Voice input failed.",
   "prompt.action.send": "Pošalji",
   "prompt.action.stop": "Zaustavi",
 

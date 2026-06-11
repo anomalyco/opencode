@@ -275,6 +275,11 @@ export const dict = {
   "prompt.context.removeFile": "เอาไฟล์ออกจากบริบท",
   "prompt.action.attachFile": "แนบไฟล์",
   "prompt.attachment.remove": "เอาไฟล์แนบออก",
+  "prompt.voice.start": "Dictate with local Whisper",
+  "prompt.voice.stop": "Stop dictation",
+  "prompt.voice.transcribing": "Transcribing locally...",
+  "prompt.voice.unsupported": "Voice input is not available in this browser.",
+  "prompt.voice.error": "Voice input failed.",
   "prompt.action.send": "ส่ง",
   "prompt.action.stop": "หยุด",
 

@@ -282,6 +282,11 @@ export const dict = {
   "prompt.context.removeFile": "Видалити файл з контексту",
   "prompt.action.attachFile": "Додати файли",
   "prompt.attachment.remove": "Видалити вкладення",
+  "prompt.voice.start": "Dictate with local Whisper",
+  "prompt.voice.stop": "Stop dictation",
+  "prompt.voice.transcribing": "Transcribing locally...",
+  "prompt.voice.unsupported": "Voice input is not available in this browser.",
+  "prompt.voice.error": "Voice input failed.",
   "prompt.action.send": "Надіслати",
   "prompt.action.stop": "Зупинити",
 

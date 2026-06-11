@@ -280,6 +280,11 @@ export const dict = {
   "prompt.context.removeFile": "Dosyayı bağlamdan çıkar",
   "prompt.action.attachFile": "Dosya ekle",
   "prompt.attachment.remove": "Eki kaldır",
+  "prompt.voice.start": "Dictate with local Whisper",
+  "prompt.voice.stop": "Stop dictation",
+  "prompt.voice.transcribing": "Transcribing locally...",
+  "prompt.voice.unsupported": "Voice input is not available in this browser.",
+  "prompt.voice.error": "Voice input failed.",
   "prompt.action.send": "Gönder",
   "prompt.action.stop": "Durdur",
 

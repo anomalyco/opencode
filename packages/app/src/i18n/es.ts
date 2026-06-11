@@ -275,6 +275,11 @@ export const dict = {
   "prompt.context.removeFile": "Eliminar archivo del contexto",
   "prompt.action.attachFile": "Adjuntar archivo",
   "prompt.attachment.remove": "Eliminar adjunto",
+  "prompt.voice.start": "Dictate with local Whisper",
+  "prompt.voice.stop": "Stop dictation",
+  "prompt.voice.transcribing": "Transcribing locally...",
+  "prompt.voice.unsupported": "Voice input is not available in this browser.",
+  "prompt.voice.error": "Voice input failed.",
   "prompt.action.send": "Enviar",
   "prompt.action.stop": "Detener",
 
