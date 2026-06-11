@@ -64,6 +64,7 @@ export function initializeAuditLogger(config: ANRConfig, credentials?: AuditLogg
       region: config.awsRegion,
       accountIdEndpointMode: "disabled",
       authSchemePreference: [],
+      maxAttempts: 3,
       requestChecksumCalculation: "WHEN_REQUIRED",
       responseChecksumValidation: "WHEN_REQUIRED",
       ...(credentials && {

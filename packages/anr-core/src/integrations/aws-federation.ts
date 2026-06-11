@@ -28,6 +28,7 @@ export async function exchangeTokenForAWSCredentials(idToken: string, config: AN
     region,
     accountIdEndpointMode: "disabled",
     authSchemePreference: [],
+    maxAttempts: 3,
     requestChecksumCalculation: "WHEN_REQUIRED",
     responseChecksumValidation: "WHEN_REQUIRED",
     ...(govcloud && { useFipsEndpoint: true }),
