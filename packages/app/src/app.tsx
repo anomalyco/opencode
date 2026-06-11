@@ -7,7 +7,7 @@ import { MarkedProvider } from "@opencode-ai/ui/context/marked"
 import { File } from "@opencode-ai/ui/file"
 import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
-import { ThemeProvider } from "@opencode-ai/ui/theme/context"
+import { ThemeProvider, useTheme } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Navigate, Route, Router, useParams, useSearchParams } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
@@ -39,6 +39,7 @@ import { LayoutProvider } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
+import { usePlatform } from "@/context/platform"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SettingsProvider, useSettings } from "@/context/settings"
@@ -50,6 +51,7 @@ import DirectoryLayout, { DirectoryDataProvider } from "@/pages/directory-layout
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
+import { fetchDesktopThemes } from "./utils/desktop-themes"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
@@ -227,6 +229,29 @@ function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
   )
 }
 
+function DesktopThemeLoader() {
+  const server = useServer()
+  const platform = usePlatform()
+  const theme = useTheme()
+
+  createEffect(() => {
+    const current = server.current
+    if (!current) return
+    let cancelled = false
+    void fetchDesktopThemes({ server: current.http, fetch: platform.fetch })
+      .then((themes) => {
+        if (cancelled) return
+        for (const item of themes) theme.registerTheme(item)
+      })
+      .catch(() => {})
+    onCleanup(() => {
+      cancelled = true
+    })
+  })
+
+  return null
+}
+
 export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
   return (
     <MetaProvider>
@@ -391,6 +416,7 @@ export function AppInterface(props: {
       canonicalLocalServer={props.canonicalLocalServer}
       servers={props.servers}
     >
+      <DesktopThemeLoader />
       <GlobalProvider>
         <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
           <Dynamic

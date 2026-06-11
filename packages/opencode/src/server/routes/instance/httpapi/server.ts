@@ -100,6 +100,7 @@ import { corsVaryFix } from "./middleware/cors-vary"
 import { errorLayer } from "./middleware/error"
 import { fenceLayer } from "./middleware/fence"
 import { schemaErrorLayer } from "./middleware/schema-error"
+import { desktopThemeDirectories, discoverDesktopThemes } from "@/theme/desktop"
 
 export const context = Context.makeUnsafe<unknown>(new Map())
 
@@ -175,6 +176,14 @@ const docRoute = HttpRouter.use((router) => router.add("GET", "/doc", () => Effe
   Layer.provide(authOnlyRouterLayer),
 )
 
+const desktopThemeRoute = HttpRouter.use((router) =>
+  router.add("GET", "/theme/desktop", () =>
+    Effect.promise(() => discoverDesktopThemes(desktopThemeDirectories())).pipe(
+      Effect.map((themes) => HttpServerResponse.jsonUnsafe({ themes })),
+    ),
+  ),
+).pipe(Layer.provide(authOnlyRouterLayer))
+
 const uiRoute = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
@@ -203,6 +212,7 @@ export function createRoutes(
     instanceRoutes,
     serverRoutes,
     docRoute,
+    desktopThemeRoute,
     uiRoute,
   ).pipe(
     Layer.provide([
