@@ -236,7 +236,9 @@ export const layer = Layer.effect(
 
         all: Effect.fn("CatalogV2.provider.all")(function* () {
           const credentials = yield* active()
-          return Array.fromIterable(state.get().providers.values()).map((record) => project(record.provider, credentials))
+          return Array.fromIterable(state.get().providers.values()).map((record) =>
+            project(record.provider, credentials),
+          )
         }),
 
         available: Effect.fn("CatalogV2.provider.available")(function* () {

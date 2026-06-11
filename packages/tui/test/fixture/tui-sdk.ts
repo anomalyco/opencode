@@ -60,7 +60,11 @@ export function createFetch(override?: FetchHandler) {
     if (url.pathname === "/experimental/console") return json({ consoleManagedProviders: [], switchableOrgCount: 0 })
     if (url.pathname === "/path") return json({ home: "", state: "", config: "", worktree, directory })
     if (url.pathname === "/api/location") return json({ directory, project: { id: "proj_test", directory: worktree } })
-    if (["/api/agent", "/api/model", "/api/provider", "/api/connector", "/api/command", "/api/skill"].includes(url.pathname))
+    if (
+      ["/api/agent", "/api/model", "/api/provider", "/api/connector", "/api/command", "/api/skill"].includes(
+        url.pathname,
+      )
+    )
       return json({
         location: { directory, project: { id: "proj_test", directory: worktree } },
         data: [],

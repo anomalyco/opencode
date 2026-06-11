@@ -76,17 +76,18 @@ export const ConnectorHandler = HttpApiBuilder.group(Api, "server.connector", (h
         "connector.connect.oauth.complete",
         Effect.fn(function* (ctx) {
           const service = yield* Connector.Service
-          yield* service.connect.oauth
-            .complete({ attemptID: ctx.params.attemptID, code: ctx.payload.code })
-            .pipe(
-              Effect.mapError(
-                (error) =>
-                  new InvalidRequestError({
-                    message: error._tag === "Connector.CodeRequired" ? "Authorization code is required" : "Authentication failed",
-                    kind: error._tag === "Connector.CodeRequired" ? "connector_code_required" : "connector_authorization",
-                  }),
-              ),
-            )
+          yield* service.connect.oauth.complete({ attemptID: ctx.params.attemptID, code: ctx.payload.code }).pipe(
+            Effect.mapError(
+              (error) =>
+                new InvalidRequestError({
+                  message:
+                    error._tag === "Connector.CodeRequired"
+                      ? "Authorization code is required"
+                      : "Authentication failed",
+                  kind: error._tag === "Connector.CodeRequired" ? "connector_code_required" : "connector_authorization",
+                }),
+            ),
+          )
           return HttpApiSchema.NoContent.make()
         }),
       )

@@ -17,7 +17,9 @@ export default {
           \`time_updated\` integer NOT NULL
         );
       `)
-      yield* tx.run(`CREATE UNIQUE INDEX \`credential_connector_active_idx\` ON \`credential\` (\`connector_id\`) WHERE "credential"."active" = 1;`)
+      yield* tx.run(
+        `CREATE UNIQUE INDEX \`credential_connector_active_idx\` ON \`credential\` (\`connector_id\`) WHERE "credential"."active" = 1;`,
+      )
     })
   },
 } satisfies DatabaseMigration.Migration

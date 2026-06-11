@@ -118,7 +118,11 @@ export const legacyImportLayer = Layer.effectDiscard(
       const id = ID.create()
       const connector = ConnectorSchema.ID.make(connectorID.replace(/\/+$/, ""))
       const methodID = ConnectorSchema.MethodID.make(
-        credential.type === "api" ? "api-key" : connector === ConnectorSchema.ID.make("openai") ? "chatgpt-browser" : "oauth",
+        credential.type === "api"
+          ? "api-key"
+          : connector === ConnectorSchema.ID.make("openai")
+            ? "chatgpt-browser"
+            : "oauth",
       )
       const next: Value =
         credential.type === "api"
@@ -206,9 +210,12 @@ export const layer = Layer.effect(
         return row ? info(row) : undefined
       }),
       all: Effect.fn("Credential.all")(function* () {
-        return (yield* db.select().from(CredentialTable).orderBy(asc(CredentialTable.time_created)).all().pipe(Effect.orDie)).map(
-          info,
-        )
+        return (yield* db
+          .select()
+          .from(CredentialTable)
+          .orderBy(asc(CredentialTable.time_created))
+          .all()
+          .pipe(Effect.orDie)).map(info)
       }),
       active: Effect.fn("Credential.active")(function* (connectorID) {
         const row = yield* db
@@ -220,19 +227,22 @@ export const layer = Layer.effect(
         return row ? info(row) : undefined
       }),
       activeAll: Effect.fn("Credential.activeAll")(function* () {
-        const rows = yield* db.select().from(CredentialTable).where(eq(CredentialTable.active, true)).all().pipe(Effect.orDie)
+        const rows = yield* db
+          .select()
+          .from(CredentialTable)
+          .where(eq(CredentialTable.active, true))
+          .all()
+          .pipe(Effect.orDie)
         return new Map(rows.map((row) => [row.connector_id, info(row)]))
       }),
       forConnector: Effect.fn("Credential.forConnector")(function* (connectorID) {
-        return (
-          yield* db
-            .select()
-            .from(CredentialTable)
-            .where(eq(CredentialTable.connector_id, connectorID))
-            .orderBy(asc(CredentialTable.time_created))
-            .all()
-            .pipe(Effect.orDie)
-        ).map(info)
+        return (yield* db
+          .select()
+          .from(CredentialTable)
+          .where(eq(CredentialTable.connector_id, connectorID))
+          .orderBy(asc(CredentialTable.time_created))
+          .all()
+          .pipe(Effect.orDie)).map(info)
       }),
       create: Effect.fn("Credential.create")(function* (input) {
         const credential = new Info({
@@ -298,7 +308,11 @@ export const layer = Layer.effect(
                 .orderBy(asc(CredentialTable.time_created))
                 .get()
               if (replacement) {
-                yield* tx.update(CredentialTable).set({ active: true }).where(eq(CredentialTable.id, replacement.id)).run()
+                yield* tx
+                  .update(CredentialTable)
+                  .set({ active: true })
+                  .where(eq(CredentialTable.id, replacement.id))
+                  .run()
               }
               return {
                 credential: info(row),
