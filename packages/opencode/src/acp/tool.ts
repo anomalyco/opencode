@@ -111,7 +111,11 @@ export function completedToolContent(toolName: string, state: CompletedToolState
   ]
 
   if (toToolKind(toolName) === "edit") {
-    content.push(...diffContent(state.input))
+    const inputForDiff =
+      toolName.toLowerCase() === "write" && state.metadata && typeof state.metadata === "object"
+        ? { ...state.input, ...(state.metadata as Record<string, unknown>) }
+        : state.input
+    content.push(...diffContent(inputForDiff))
   }
 
   content.push(...imageContents(state.attachments ?? []))
@@ -280,9 +284,10 @@ function locationFrom(...values: unknown[]): ToolCallLocation[] {
 }
 
 function diffContent(input: ToolInput): ToolCallContent[] {
-  const oldText = stringValue(input.oldString)
   const newText = stringValue(input.newString) ?? stringValue(input.content)
-  if (oldText === undefined || newText === undefined) return []
+  if (newText === undefined) return []
+
+  const oldText = stringValue(input.oldString) ?? null
 
   return [
     {
