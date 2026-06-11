@@ -25,6 +25,7 @@ import { Location } from "@opencode-ai/core/location"
 import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
 import { SystemContext } from "@opencode-ai/core/system-context"
 import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
+import { ReferenceGuidance } from "@opencode-ai/core/reference/guidance"
 import { describe, expect } from "bun:test"
 import { eq } from "drizzle-orm"
 import { Effect, Layer } from "effect"
@@ -70,6 +71,7 @@ const models = SessionRunnerModel.layerWith(() => Effect.succeed(model))
 const systemContext = SystemContextRegistry.layer
 const location = Location.layer({ directory: AbsolutePath.make("/project") }).pipe(Layer.provide(Project.defaultLayer))
 const skillGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
+const referenceGuidance = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
 const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
 const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(database),
@@ -82,6 +84,7 @@ const runner = SessionRunnerLLM.defaultLayer.pipe(
   Layer.provide(location),
   Layer.provide(agents),
   Layer.provide(skillGuidance),
+  Layer.provide(referenceGuidance),
   Layer.provide(config),
 )
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))

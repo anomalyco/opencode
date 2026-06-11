@@ -2,8 +2,15 @@
   "$schema": "https://opencode.ai/config.json",
   "provider": {},
   "permission": {},
-  "reference": {
-    "effect": "github.com/Effect-TS/effect-smol",
+  "references": {
+    "effect": {
+      "repository": "github.com/Effect-TS/effect-smol",
+      "description": "Use for Effect v4 and effect-smol implementation details",
+    },
+    "opencode-local": {
+      "path": "~/.local/share/opencode",
+      "description": "Contains opencode logs and data",
+    },
   },
   "mcp": {},
   "tools": {
