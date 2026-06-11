@@ -436,6 +436,93 @@ const boot = Effect.fn("test.boot")(function* (input?: { title?: string }) {
 
 // Loop semantics
 
+// Simulates the Web client messageID ordering bug: a client-provided
+// user message ID that sorts lexicographically AFTER the server-generated
+// assistant ID, even though the user message was created first.
+// Under the old condition (lastUser.id < lastAssistant.id), the loop
+// would fail to exit, creating a duplicate assistant response.
+// The fix uses lastAssistant.parentID === lastUser.id instead.
+const seedWithHighUserID = Effect.fn("test.seedWithHighUserID")(function* (
+  sessionID: SessionID,
+  opts?: { finish?: string },
+) {
+  const session = yield* Session.Service
+  // Craft IDs that reproduce the bug condition: user ID > assistant ID
+  // Server-generated assistant ID (normal timestamp-based hex)
+  const assistantID = MessageID.ascending()
+  // Client-provided user ID with a higher hex prefix that sorts AFTER
+  // the assistant ID. Extract the hex portion and increment it.
+  const userHexPrefix = assistantID.slice(4, 16)
+  const incremented = (BigInt("0x" + userHexPrefix) + BigInt(1))
+    .toString(16)
+    .padStart(12, "0")
+  const highUserID = MessageID.ascending(
+    `msg_${incremented}${assistantID.slice(16)}`,
+  )
+  const userMsg = yield* session.updateMessage({
+    id: highUserID,
+    role: "user",
+    sessionID,
+    agent: "build",
+    model: ref,
+    time: { created: Date.now() },
+  })
+  yield* session.updatePart({
+    id: PartID.ascending(),
+    messageID: userMsg.id,
+    sessionID,
+    type: "text",
+    text: "hello",
+  })
+  const assistant: SessionV1.Assistant = {
+    id: assistantID,
+    role: "assistant",
+    parentID: userMsg.id,
+    sessionID,
+    mode: "build",
+    agent: "build",
+    cost: 0,
+    path: { cwd: "/tmp", root: "/tmp" },
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    modelID: ref.modelID,
+    providerID: ref.providerID,
+    time: { created: Date.now() },
+    ...(opts?.finish ? { finish: opts.finish } : {}),
+  }
+  yield* session.updateMessage(assistant)
+  yield* session.updatePart({
+    id: PartID.ascending(),
+    messageID: assistant.id,
+    sessionID,
+    type: "text",
+    text: "hi there",
+  })
+  return { user: userMsg, assistant }
+})
+
+noLLMServer.instance(
+  "loop exits when client user ID sorts after assistant ID with stop finish",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "ClientIDTest" })
+      const seeded = yield* seedWithHighUserID(chat.id, { finish: "stop" })
+
+      // Verify the ordering condition that triggers the bug:
+      // user ID sorts AFTER assistant ID lexicographically
+      expect(seeded.user.id > seeded.assistant.id).toBe(true)
+
+      // The loop should exit immediately because
+      // lastAssistant.parentID === lastUser.id (the fix)
+      // rather than relying on lastUser.id < lastAssistant.id (the old bug)
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      expect(result.info.role).toBe("assistant")
+      if (result.info.role === "assistant") expect(result.info.finish).toBe("stop")
+    }),
+  { config: cfg },
+)
+
 noLLMServer.instance(
   "loop exits immediately when last assistant has stop finish",
   () =>
