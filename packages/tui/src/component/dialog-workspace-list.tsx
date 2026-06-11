@@ -82,7 +82,7 @@ export function DialogWorkspaceList() {
       route.navigate({ type: "home" })
     }
     await project.workspace.sync()
-    await sync.bootstrap()
+    await sync.bootstrap({ fatal: false }).catch(() => undefined)
     setRemoving(undefined)
   }
 
