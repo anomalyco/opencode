@@ -12,7 +12,7 @@ import {
   untrack,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useLocation, useMatch, useNavigate, useParams } from "@solidjs/router"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
@@ -20,6 +20,8 @@ import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 
 import { getProjectAvatarVariant, LayoutRoute, useLayout, type LocalProject } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -35,6 +37,7 @@ import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
+import { rememberTabBeforeHome, resolveTabBeforeHome, isHomePath } from "@/components/titlebar-home-tab"
 import { useGlobal } from "@/context/global"
 import { decode64 } from "@/utils/base64"
 import { ServerConnection, useServer } from "@/context/server"
@@ -226,6 +229,86 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
     void win.toggleMaximize().catch(() => undefined)
   }
 
+  const serverSync = useServerSync()
+  const tabs = useTabs()
+
+  const matchV2Tab = (route: LayoutRoute) => {
+    if (route.type === "home") return
+    if (route.type === "draft") {
+      return tabs.store.find((item) => item.type === "draft" && item.draftID === route.draftID)
+    }
+    if (route.type === "session") {
+      const main = tabs.store.find(
+        (item) => item.type === "session" && item.server === route.server && item.sessionId === route.sessionId,
+      )
+      if (main) return main
+      const sync = serverSync.createDirSyncContext(route.dir)
+      const session = sync.session.get(route.sessionId)
+      if (session?.parentID) {
+        const parent = tabs.store.find(
+          (item) => item.type === "session" && item.server === route.server && item.sessionId === session.parentID,
+        )
+        if (parent) return parent
+      }
+    }
+  }
+
+  const v2TabForLocation = () => {
+    const tab = matchV2Tab(layout.route())
+    if (tab) return tab
+    const href = `${location.pathname}${location.search}`
+    return tabs.store.find((item) => tabHref(item) === href)
+  }
+
+  const navigateV2Tab = (tab: Tab, remember = true) => {
+    if (remember) rememberTabBeforeHome(tab)
+    const href = tabHref(tab)
+    if (tab.server === server.key) {
+      navigate(href)
+      return
+    }
+    void startTransition(() => {
+      server.setActive(tab.server)
+      navigate(href)
+    })
+  }
+
+  createEffect(() => {
+    if (!useV2Titlebar()) return
+    if (isHomePath(location.pathname)) return
+    location.pathname
+    location.search
+    layout.route()
+    tabs.store
+    const tab = v2TabForLocation()
+    if (tab) rememberTabBeforeHome(tab)
+  })
+
+  const toggleHome = () => {
+    if (isHomePath(location.pathname)) {
+      const tab = resolveTabBeforeHome(tabs.store)
+      if (tab) navigateV2Tab(tab, false)
+      return
+    }
+    const tab = v2TabForLocation()
+    if (tab) rememberTabBeforeHome(tab)
+    navigate("/")
+  }
+
+  command.register("titlebar-home", () => {
+    if (!useV2Titlebar()) return []
+    return [
+      {
+        id: "home.toggle",
+        title: language.t("home.title"),
+        category: language.t("command.category.view"),
+        keybind: "mod+b",
+        hidden: true,
+        onSelect: toggleHome,
+      },
+    ]
+  })
+
   return (
     <header
       classList={{
@@ -251,7 +334,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
           {(_) => {
             const serverSync = useServerSync()
             const navigate = useNavigate()
-            const homeMatch = useMatch(() => "/")
+            const onHome = () => isHomePath(location.pathname)
             const layout = useLayout()
 
             const newSessionHref = () => {
@@ -263,43 +346,11 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               return `/${base64Encode(project.worktree)}/session`
             }
 
-            const tabs = useTabs()
             const tabsStore = tabs.store
             const tabsStoreActions = tabs
-            const navigateTab = (tab: Tab) => {
-              const href = tabHref(tab)
-              if (tab.server === server.key) {
-                navigate(href)
-                return
-              }
-              void startTransition(() => {
-                server.setActive(tab.server)
-                navigate(href)
-              })
-            }
+            const navigateTab = (tab: Tab) => navigateV2Tab(tab)
 
-            const matchRoute = (route: LayoutRoute) => {
-              if (route.type === "home") return
-              if (route.type === "draft") {
-                return tabsStore.find((item) => item.type === "draft" && item.draftID === route.draftID)
-              }
-              if (route.type === "session") {
-                const main = tabsStore.find(
-                  (item) =>
-                    item.type === "session" && item.server === route.server && item.sessionId === route.sessionId,
-                )
-                if (main) return main
-                const sync = serverSync.createDirSyncContext(route.dir)
-                const session = sync.session.get(route.sessionId)
-                if (session?.parentID) {
-                  const parentID = session.parentID
-                  const parent = tabsStore.find(
-                    (item) => item.type === "session" && item.server === route.server && item.sessionId === parentID,
-                  )
-                  if (parent) return parent
-                }
-              }
-            }
+            const matchRoute = (route: LayoutRoute) => matchV2Tab(route)
 
             const currentTab = () => matchRoute(layout.route())
 
@@ -425,15 +476,28 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} variant="v2" />
                 </Show>
-                <IconButtonV2
-                  variant="ghost-muted"
-                  size="large"
-                  as="a"
-                  href="/"
-                  class="!w-9 shrink-0"
-                  icon={<IconV2 name="grid-plus" />}
-                  state={!!homeMatch() ? "pressed" : undefined}
-                />
+                <TooltipV2
+                  placement="bottom"
+                  value={
+                    <>
+                      {language.t("home.title")}
+                      <KeybindV2 keys={command.keybindParts("home.toggle")} variant="neutral" />
+                    </>
+                  }
+                  class="shrink-0"
+                >
+                  <IconButtonV2
+                    type="button"
+                    variant="ghost-muted"
+                    size="large"
+                    class="!w-9 shrink-0"
+                    icon={<IconV2 name="grid-plus" />}
+                    state={onHome() ? "pressed" : undefined}
+                    onClick={toggleHome}
+                    aria-label={language.t("home.title")}
+                    aria-pressed={onHome()}
+                  />
+                </TooltipV2>
 
                 <div
                   class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
