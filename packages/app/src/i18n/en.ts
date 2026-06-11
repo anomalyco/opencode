@@ -295,6 +295,8 @@ export const dict = {
   "prompt.action.queue": "Add to queue",
   "prompt.action.expandView": "View larger",
   "prompt.action.collapseView": "Collapse",
+  "prompt.action.docAutoExpand": "Auto-expand",
+  "prompt.action.docAutoExpandHint": "When on, the input grows automatically as you type",
 
   "prompt.toast.pasteUnsupported.title": "Unsupported attachment",
   "prompt.toast.pasteUnsupported.description": "Only images, PDFs, or text files can be attached here.",

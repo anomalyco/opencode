@@ -1,6 +1,6 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { createEffect, on, Component, Show, onCleanup, onMount, createMemo, createSignal } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Binary } from "@opencode-ai/util/binary"
@@ -89,7 +89,7 @@ interface PromptInputProps {
   class?: string
   ref?: (el: HTMLDivElement) => void
   expanded?: boolean
-  onComposerExpand?: () => void
+  onComposerExpand?: (opts?: { initialScale?: number }) => void
   onComposerCollapse?: () => void
   composerShell?: {
     size: number
@@ -146,6 +146,8 @@ const canvasMode = (mode: PromptMode) => mode === "draw" || mode === "doc"
 const DOC_MIN = 150
 const DOC_HEIGHT = 300
 const DOC_RATIO = 0.8
+// 자동 확대: 입력창 포커스 시 기존 '확대(전체 너비 expanded)'로 자동 진입할지 여부. localStorage 영속.
+const AUTO_EXPAND_KEY = "prompt.doc.autoExpand"
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
@@ -170,6 +172,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
+  let rootRef: HTMLDivElement | undefined
   let pending: Promise<string | undefined> | undefined
 
   const mirror = { input: false }
@@ -332,6 +335,54 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     applyingHistory: false,
   })
   const [height, setHeight] = createSignal(DOC_HEIGHT)
+  // 자동 확대: 입력창 포커스 시 전체 너비 expanded 로 자동 진입(기본 ON, localStorage 영속).
+  const [autoExpand, setAutoExpand] = createSignal(
+    (() => {
+      try {
+        return localStorage.getItem(AUTO_EXPAND_KEY) !== "0"
+      } catch {
+        return true
+      }
+    })(),
+  )
+  const [focusWithin, setFocusWithin] = createSignal(false)
+  // 마운트 시 에디터가 자동 포커스되어도 곧바로 확대되지 않도록, 실제 사용자 상호작용 이후에만 자동 확대.
+  const [interacted, setInteracted] = createSignal(false)
+  const toggleAutoExpand = () => {
+    const next = !autoExpand()
+    setAutoExpand(next)
+    try {
+      localStorage.setItem(AUTO_EXPAND_KEY, next ? "1" : "0")
+    } catch {}
+    // 토글만으로는 현재 확대/축소 상태를 바꾸지 않는다 — 끄면 그 상태 그대로 둔 채 자동 동작만 멈춘다.
+  }
+  // 자동 확대 ON 이면 포커스 상태를 expanded 에 반영. OFF면 무조건 축소(collapse) 모드로 강제한다.
+  createEffect(() => {
+    if (!props.onComposerExpand || !props.onComposerCollapse) return
+    if (!autoExpand()) {
+      if (props.expanded) props.onComposerCollapse()
+      return
+    }
+    if (focusWithin() && interacted() && !props.expanded) props.onComposerExpand({ initialScale: 2 })
+    else if (!focusWithin() && props.expanded) props.onComposerCollapse()
+  })
+  onMount(() => {
+    const el = rootRef
+    if (!el) return
+    // 에디터 본문(prompt-doc) 클릭/타이핑만 '상호작용'으로 친다 — 리사이즈 핸들·액션바 버튼은
+    // 제외해, 마운트 자동 포커스 상태에서 작은 입력창 높이 조절(핸들 드래그)이 확대를 유발하지 않게.
+    const mark = (e: Event) => {
+      const t = e.target
+      if (t instanceof Element && t.closest('[data-component="prompt-doc"]')) setInteracted(true)
+    }
+    // doc 패널이 pointerdown 전파를 막으므로 캡처 단계로 듣는다.
+    el.addEventListener("pointerdown", mark, true)
+    el.addEventListener("keydown", mark, true)
+    onCleanup(() => {
+      el.removeEventListener("pointerdown", mark, true)
+      el.removeEventListener("keydown", mark, true)
+    })
+  })
 
   const seed = (info: Session) => {
     const [, setStore] = globalSync.child(sdk.directory)
@@ -2009,6 +2060,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   return (
     <div
+      ref={(el) => (rootRef = el)}
       classList={{
         "relative flex w-full flex-col gap-0": true,
         "h-[300px] max-h-[512px]": store.mode === "draw" && !props.expanded,
@@ -2025,6 +2077,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             }
           : undefined
       }
+      on:focusin={() => setFocusWithin(true)}
+      on:focusout={() => {
+        // 다음 틱에 실제 활성 요소가 컴포저 밖이면 focus 해제(에디터 내부 이동 시 깜빡임 방지).
+        setTimeout(() => {
+          if (rootRef && !rootRef.contains(document.activeElement)) setFocusWithin(false)
+        }, 0)
+      }}
     >
       <Show when={store.mode === "doc" && !props.expanded}>
         <div
@@ -2185,6 +2244,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   onExit={exitDoc}
                   modes={modeButtons()}
                   expand={composerExpand()}
+                  autoExpand={{ enabled: autoExpand(), onToggle: toggleAutoExpand }}
                 />
               </Show>
             }

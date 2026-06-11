@@ -26,6 +26,10 @@ type ShellProps = {
     onExpand: () => void
     onCollapse: () => void
   }
+  autoExpand?: {
+    enabled: boolean
+    onToggle: () => void
+  }
 }
 
 export const PromptDrawingShell: Component<ShellProps> = (props) => {
@@ -149,7 +153,7 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
               />
             </Tooltip>
           </Show>
-          <Show when={props.expand}>
+          <Show when={props.expand && !env.productionLayout()}>
             <Tooltip placement="top" value={expandLabel()}>
               <IconButton
                 data-action={props.expand!.expanded ? "composer-collapse" : "composer-expand"}
@@ -163,6 +167,29 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
                   props.expand!.expanded ? props.expand!.onCollapse() : props.expand!.onExpand()
                 }
               />
+            </Tooltip>
+          </Show>
+          <Show when={props.autoExpand}>
+            <span class="mx-1 h-4 w-px shrink-0 bg-border-weaker-base" />
+            <Tooltip placement="top" value={language.t("prompt.action.docAutoExpandHint")}>
+              <button
+                type="button"
+                data-action="prompt-doc-auto-expand"
+                role="switch"
+                aria-checked={props.autoExpand!.enabled}
+                aria-label={language.t("prompt.action.docAutoExpand")}
+                class="oc-auto-toggle"
+                // 토글은 메타 컨트롤이라 포커스를 가져가면 안 된다. 클릭 시 포커스가 옮겨지면
+                // focusWithin 이 켜져 자동 확대 효과가 발동(확대됐다가 곧 축소)하므로 mousedown 의
+                // 기본 포커스 이동을 막는다. (키보드 Tab 포커스는 영향 없음)
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => props.autoExpand!.onToggle()}
+              >
+                <span class="oc-auto-track" classList={{ "is-on": props.autoExpand!.enabled }}>
+                  <span class="oc-auto-thumb" />
+                </span>
+                <span class="oc-auto-label">{language.t("prompt.action.docAutoExpand")}</span>
+              </button>
             </Tooltip>
           </Show>
         </div>

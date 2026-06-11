@@ -21,7 +21,16 @@ export function SessionComposerShell(
     const el = dialog
     if (!el) return
     if (props.expanded) {
-      if (!el.open) el.show()
+      if (!el.open) {
+        // dialog 의 focusing steps 가 show() 시 내부 에디터(블록수트 contenteditable)에서 포커스를
+        // 빼앗아 dialog/body 로 옮긴다. 그러면 컴포저가 blur 로 인식해 곧바로 다시 접히므로,
+        // show() 직후 원래 포커스 요소로 복원한다.
+        const prev = document.activeElement
+        el.show()
+        if (prev instanceof HTMLElement && prev !== document.activeElement && el.contains(prev)) {
+          prev.focus({ preventScroll: true })
+        }
+      }
       return
     }
     if (el.open) el.close()

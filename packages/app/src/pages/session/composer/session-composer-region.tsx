@@ -117,6 +117,9 @@ export function SessionComposerRegion(props: {
     anchorBottom: 0,
     shellWidth: undefined as number | undefined,
     shellRight: undefined as number | undefined,
+    // 확대/축소 애니메이션 시작값(접힌 상태 크기). expand() 시점에 측정해 보관한다.
+    fromWidth: 0,
+    fromHeight: 0,
   })
   let timer: number | undefined
   let frame: number | undefined
@@ -162,6 +165,20 @@ export function SessionComposerRegion(props: {
   const lift = createMemo(() => (rolled() ? 18 : 36 * value()))
   const full = createMemo(() => Math.max(78, store.height))
 
+  // 확대/축소 애니메이션(300ms). dialog 의 relative↔fixed / auto↔px 전환은 CSS transition 으로
+  // 보간되지 않으므로, 스프링으로 0→1 진행도를 만들어 width/height 를 JS 로 직접 보간한다.
+  // 진행 중에는 계속 fixed 로 띄워 두고(floating), 완전히 접혔을 때만 in-flow 로 되돌린다.
+  const expandSpring = useSpring(() => (store.expanded ? 1 : 0), { visualDuration: 0.3, bounce: 0 })
+  const expandValue = createMemo(() => Math.max(0, Math.min(1, expandSpring())))
+  const floating = createMemo(() => store.expanded || expandValue() > 0.001)
+  const targetWidth = () => {
+    const right = store.shellRight ?? (typeof window === "undefined" ? store.anchorLeft + shellMin : window.innerWidth)
+    return Math.max(shellMin, right - store.anchorLeft)
+  }
+  const targetHeight = () => store.shellHeight ?? shellMin
+  const animWidth = createMemo(() => store.fromWidth + (targetWidth() - store.fromWidth) * expandValue())
+  const animHeight = createMemo(() => store.fromHeight + (targetHeight() - store.fromHeight) * expandValue())
+
   createEffect(() => {
     const el = store.body
     if (!el) return
@@ -194,12 +211,20 @@ export function SessionComposerRegion(props: {
     })
   }
 
-  const expand = () => {
+  const expand = (opts?: { initialScale?: number }) => {
+    // 질문/권한 요청 독은 확대 레이아웃이 없다 — 이때는 확대하지 않고 접힌 상태로 보여준다.
+    if (props.state.blocked()) return
     const box = measure()
     const right = layoutRight(shell)
+    // 기억된 확대 높이가 있으면 재사용. 없으면(최초) 현재 높이 × initialScale 에서 시작 —
+    // 자동 확대는 2배로 더 크게 열림(수동 확대는 scale 미지정 = 1배).
+    const initial = box.height * (opts?.initialScale ?? 1)
     setStore({
       expanded: true,
-      shellHeight: clampShell(box.height, box.bottom),
+      // 애니메이션 시작값 = 접힌 상태의 실제 크기. 여기서부터 확대 목표 크기로 보간한다.
+      fromWidth: box.width,
+      fromHeight: box.height,
+      shellHeight: clampShell(store.shellHeight ?? initial, box.bottom),
       anchorLeft: box.left,
       anchorBottom: box.bottom,
       shellRight: right,
@@ -208,13 +233,18 @@ export function SessionComposerRegion(props: {
   }
 
   const collapse = () => {
+    // shellHeight 는 확대 높이로 기억하기 위해 유지(리셋하지 않음). 접힌 동안엔 높이로 쓰이지 않는다.
     setStore({
       expanded: false,
-      shellHeight: undefined,
       shellRight: undefined,
       shellWidth: undefined,
     })
   }
+
+  // 질문/권한 요청이 뜨면(확대 레이아웃이 없으므로) 확대 상태를 접어 접힌 위치에서 보여준다.
+  createEffect(() => {
+    if (props.state.blocked() && store.expanded) collapse()
+  })
 
   const resize = (height: number) => {
     setStore("shellHeight", clampShell(height, store.anchorBottom))
@@ -278,7 +308,7 @@ export function SessionComposerRegion(props: {
       data-expanded={store.expanded ? "true" : "false"}
       class="shrink-0 w-full pb-4 flex flex-col justify-center items-center pointer-events-none"
     >
-      <Show when={store.expanded}>
+      <Show when={floating()}>
         <div
           data-component="session-composer-spacer"
           class="w-full px-3 pointer-events-none"
@@ -287,19 +317,19 @@ export function SessionComposerRegion(props: {
           }}
           aria-hidden="true"
           style={{
-            height: `${store.shellHeight ?? shellMin}px`,
+            height: `${animHeight()}px`,
           }}
         />
       </Show>
 
       <SessionComposerShell
-        expanded={store.expanded}
+        expanded={floating()}
         centered={props.centered}
         anchorLeft={store.anchorLeft}
         anchorBottom={store.anchorBottom}
-        shellWidth={store.shellWidth}
-        shellRight={store.shellRight}
-        shellHeight={store.shellHeight}
+        shellWidth={animWidth()}
+        shellRight={undefined}
+        shellHeight={animHeight()}
         shellMin={shellMin}
         shellRef={(el) => {
           shell = el
@@ -307,7 +337,7 @@ export function SessionComposerRegion(props: {
       >
           <div
             classList={{
-              "relative flex min-h-0 flex-1 flex-col": store.expanded,
+              "relative flex min-h-0 flex-1 flex-col": floating(),
             }}
           >
             <Show when={props.state.questionRequest()} keyed>
@@ -336,7 +366,7 @@ export function SessionComposerRegion(props: {
             <Show when={!props.state.blocked()}>
               <div
                 classList={{
-                  "flex min-h-0 flex-1 flex-col": store.expanded,
+                  "flex min-h-0 flex-1 flex-col": floating(),
                 }}
               >
               <Show
@@ -366,10 +396,10 @@ export function SessionComposerRegion(props: {
                     classList={{
                       "overflow-hidden": true,
                       "pointer-events-none": value() < 0.98,
-                      "shrink-0": store.expanded,
+                      "shrink-0": floating(),
                     }}
                     style={
-                      store.expanded
+                      floating()
                         ? undefined
                         : {
                             "max-height": `${full() * value()}px`,
@@ -391,10 +421,10 @@ export function SessionComposerRegion(props: {
                   {(revert) => (
                     <div
                       classList={{
-                        "shrink-0": store.expanded,
+                        "shrink-0": floating(),
                       }}
                       style={
-                        store.expanded
+                        floating()
                           ? undefined
                           : {
                               "margin-top": `${-36 * value()}px`,
@@ -412,11 +442,11 @@ export function SessionComposerRegion(props: {
                 </Show>
                 <div
                   classList={{
-                    relative: !store.expanded,
-                    "flex min-h-0 flex-1 flex-col": store.expanded,
+                    relative: !floating(),
+                    "flex min-h-0 flex-1 flex-col": floating(),
                   }}
                   style={
-                    store.expanded
+                    floating()
                       ? undefined
                       : {
                           "margin-top": `${-lift()}px`,
@@ -436,11 +466,11 @@ export function SessionComposerRegion(props: {
                       input = el
                       props.inputRef(el)
                     }}
-                    expanded={store.expanded}
+                    expanded={floating()}
                     onComposerExpand={expand}
                     onComposerCollapse={collapse}
                     composerShell={
-                      store.expanded
+                      floating()
                         ? {
                             size: store.shellHeight ?? shellMin,
                             min: shellMin,

@@ -276,6 +276,8 @@ export const dict = {
   "prompt.action.queue": "대기열에 추가",
   "prompt.action.expandView": "크게 보기",
   "prompt.action.collapseView": "작게 보기",
+  "prompt.action.docAutoExpand": "자동 확대",
+  "prompt.action.docAutoExpandHint": "켜면 입력창을 클릭할 때 자동으로 커져요",
   "prompt.toast.pasteUnsupported.title": "지원되지 않는 첨부 파일",
   "prompt.toast.pasteUnsupported.description": "이미지, PDF 또는 텍스트 파일만 첨부할 수 있습니다.",
   "prompt.toast.drawEmpty.title": "보낼 내용 없음",

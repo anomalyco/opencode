@@ -42,7 +42,10 @@
   }
 
   :root[data-theme="jitda"] {
-    --app-canvas-grid-size: 24px;
+    /* 두 값(가로·세로) 모두 지정해야 두 linear-gradient(가로줄·세로줄)가 24px 간격으로 각각
+       반복되어 바둑판 격자가 된다. 단일값(24px=24px auto)이면 가로줄이 맨 위 1줄만 그려져
+       세로 줄무늬만 보인다. 디자인 oc-canvas-grid 의 background-size: 24px 24px 와 정합. */
+    --app-canvas-grid-size: 24px 24px;
     --app-canvas-grid-image:
       linear-gradient(color-mix(in srgb, var(--text-strong) 4%, transparent) 1px, transparent 1px),
       linear-gradient(90deg, color-mix(in srgb, var(--text-strong) 4%, transparent) 1px, transparent 1px);
@@ -271,9 +274,8 @@
     max-width: min(78%, 58ch);
     margin: 4px 6px 3px 0;
     overflow: visible;
-    filter:
-      drop-shadow(3px 5px 4px rgba(45, 35, 20, 0.1))
-      drop-shadow(2px 3px 2px rgba(45, 35, 20, 0.05));
+    /* 그림자 거의 없이 — 배경과 구분되는 정도의 아주 옅은 단일 그림자만 */
+    filter: drop-shadow(0 1px 1.5px rgba(45, 35, 20, 0.07));
     transition: filter 160ms ease;
   }
 
@@ -335,9 +337,7 @@
   }
 
   [data-component="codle-session"] [data-component="user-message"]:hover [data-slot="user-message-body"] {
-    filter:
-      drop-shadow(3px 5px 4px rgba(45, 35, 20, 0.11))
-      drop-shadow(2px 3px 2px rgba(45, 35, 20, 0.06));
+    filter: drop-shadow(0 1px 2px rgba(45, 35, 20, 0.09));
   }
 
   [data-component="codle-session"] [data-component="user-message"]:hover [data-slot="user-message-body"]::after {
@@ -349,15 +349,11 @@
   }
 
   :root[data-color-scheme="dark"] [data-component="codle-session"] [data-slot="user-message-body"] {
-    filter:
-      drop-shadow(2px 4px 3px rgba(0, 0, 0, 0.14))
-      drop-shadow(2px 3px 2px rgba(0, 0, 0, 0.08));
+    filter: drop-shadow(0 1px 1.5px rgba(0, 0, 0, 0.22));
   }
 
   :root[data-color-scheme="dark"] [data-component="codle-session"] [data-component="user-message"]:hover [data-slot="user-message-body"] {
-    filter:
-      drop-shadow(3px 5px 4px rgba(0, 0, 0, 0.17))
-      drop-shadow(2px 3px 2px rgba(0, 0, 0, 0.09));
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.28));
   }
 
   :root[data-color-scheme="dark"] [data-component="codle-session"] [data-slot="user-message-body"]::before {
@@ -384,20 +380,30 @@
     background: transparent;
   }
 
+  /* C-3 composer 카드 (.oc-composer 어휘) — 라운드 10px + 소프트 그림자, 포커스 시 ink 테두리 + helmet 소프트 링 */
   [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="shell"],
   [data-component="codle-session"] [data-dock-surface="shell"] {
     background: var(--input-base);
-    border: 1px solid var(--border-strong-base);
-    border-radius: var(--radius-xs);
-    box-shadow: none;
+    /* 디자인 oc-composer 의 카드 보더 = c-hairline-strong(#cdc9c0). border-strong-base(#B8B4A6)는
+       너무 진해서, 더 근접한 border-base(#D9D5C9)로. 액션바 구분선(border-weaker-base)보다는 진해
+       디자인의 강약 관계 유지. */
+    border: 1px solid var(--border-base);
+    border-radius: var(--radius-lg);
+    box-shadow:
+      0 6px 22px rgba(15, 15, 20, 0.06),
+      0 1px 2px rgba(15, 15, 20, 0.04);
     overflow: hidden;
+    transition:
+      border-color var(--dur-fast) var(--ease-standard),
+      box-shadow var(--dur-fast) var(--ease-standard);
   }
 
   [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="shell"]:focus-within,
   [data-component="codle-session"] [data-dock-surface="shell"]:focus-within {
     border-color: var(--text-strong);
-    box-shadow: 0 0 0 2px var(--focus-ring-color);
+    box-shadow: 0 0 0 3px rgba(255, 206, 43, 0.3);
   }
+
 
   [data-component="session-prompt-dock"] dialog[data-component="session-composer-shell"]:not([open]) {
     display: block;
@@ -456,13 +462,16 @@
   [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="shell"] [data-component="prompt-draw-shell"],
   [data-component="codle-session"] [data-dock-surface="shell"] [data-component="prompt-doc-shell"],
   [data-component="codle-session"] [data-dock-surface="shell"] [data-component="prompt-draw-shell"] {
-    border-radius: var(--radius-xs);
+    border-radius: var(--radius-lg);
     overflow: hidden;
   }
 
+  /* 자식(문서 입력 영역·액션바)은 각지게 두고, 부모 셸의 overflow:hidden + radius 로
+     바깥 모서리만 깎는다(.oc-composer 방식). 자식까지 inherit 하면 액션바 위·문서 영역 아래
+     모서리가 둥글어져 둘이 만나는 지점에 노치가 생긴다. */
   [data-component="prompt-doc-shell"] > div,
   [data-component="prompt-draw-shell"] > div {
-    border-radius: inherit;
+    border-radius: 0;
     overflow: hidden;
   }
 
@@ -553,31 +562,59 @@
     }
   }
 
-  /* Draw undo/redo — Excalidraw ToolButton: strong icon when enabled, color-disabled when empty. */
+  /* 액션바 고스트 아이콘 버튼 (실행취소·다시실행·파일 첨부 +·확대/축소) — C-3 .oc-icon-btn 어휘 */
   [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-undo"],
-  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-redo"] {
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-redo"],
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-doc-attach"],
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="composer-expand"],
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="composer-collapse"] {
     border: none;
     background-color: transparent;
     box-shadow: none;
+    border-radius: var(--radius-md);
+    transition:
+      background-color var(--dur-fast) var(--ease-standard),
+      color var(--dur-fast) var(--ease-standard),
+      transform var(--dur-instant) var(--ease-standard);
   }
 
   [data-component="prompt-draw-actions"] [data-action="prompt-draw-undo"]:not(:disabled) [data-slot="icon-svg"],
-  [data-component="prompt-draw-actions"] [data-action="prompt-draw-redo"]:not(:disabled) [data-slot="icon-svg"] {
-    color: var(--icon-strong-base);
+  [data-component="prompt-draw-actions"] [data-action="prompt-draw-redo"]:not(:disabled) [data-slot="icon-svg"],
+  [data-component="prompt-draw-actions"] [data-action="prompt-doc-attach"]:not(:disabled) [data-slot="icon-svg"],
+  [data-component="prompt-draw-actions"] [data-action="composer-expand"]:not(:disabled) [data-slot="icon-svg"],
+  [data-component="prompt-draw-actions"] [data-action="composer-collapse"]:not(:disabled) [data-slot="icon-svg"] {
+    color: var(--icon-base);
+    transition: color var(--dur-fast) var(--ease-standard);
   }
 
   [data-component="prompt-draw-actions"] [data-action="prompt-draw-undo"]:not(:disabled):hover,
-  [data-component="prompt-draw-actions"] [data-action="prompt-draw-redo"]:not(:disabled):hover {
-    background-color: var(--surface-base-hover);
+  [data-component="prompt-draw-actions"] [data-action="prompt-draw-redo"]:not(:disabled):hover,
+  [data-component="prompt-draw-actions"] [data-action="prompt-doc-attach"]:not(:disabled):hover,
+  [data-component="prompt-draw-actions"] [data-action="composer-expand"]:not(:disabled):hover,
+  [data-component="prompt-draw-actions"] [data-action="composer-collapse"]:not(:disabled):hover {
+    background-color: var(--surface-base);
+  }
+
+  [data-component="prompt-draw-actions"] [data-action="prompt-draw-undo"]:not(:disabled):hover [data-slot="icon-svg"],
+  [data-component="prompt-draw-actions"] [data-action="prompt-draw-redo"]:not(:disabled):hover [data-slot="icon-svg"],
+  [data-component="prompt-draw-actions"] [data-action="prompt-doc-attach"]:not(:disabled):hover [data-slot="icon-svg"],
+  [data-component="prompt-draw-actions"] [data-action="composer-expand"]:not(:disabled):hover [data-slot="icon-svg"],
+  [data-component="prompt-draw-actions"] [data-action="composer-collapse"]:not(:disabled):hover [data-slot="icon-svg"] {
+    color: var(--icon-strong-base);
   }
 
   [data-component="prompt-draw-actions"] [data-action="prompt-draw-undo"]:not(:disabled):active,
-  [data-component="prompt-draw-actions"] [data-action="prompt-draw-redo"]:not(:disabled):active {
+  [data-component="prompt-draw-actions"] [data-action="prompt-draw-redo"]:not(:disabled):active,
+  [data-component="prompt-draw-actions"] [data-action="prompt-doc-attach"]:not(:disabled):active,
+  [data-component="prompt-draw-actions"] [data-action="composer-expand"]:not(:disabled):active,
+  [data-component="prompt-draw-actions"] [data-action="composer-collapse"]:not(:disabled):active {
     background-color: var(--surface-base-active);
+    transform: scale(0.92);
   }
 
   [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-undo"]:disabled,
-  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-redo"]:disabled {
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-redo"]:disabled,
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-doc-attach"]:disabled {
     opacity: 1;
     background-color: transparent;
     border: none;
@@ -587,90 +624,59 @@
   }
 
   [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-undo"]:disabled:hover,
-  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-redo"]:disabled:hover {
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-redo"]:disabled:hover,
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-doc-attach"]:disabled:hover {
     background-color: transparent;
   }
 
   [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-undo"]:disabled [data-slot="icon-svg"],
-  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-redo"]:disabled [data-slot="icon-svg"] {
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-draw-redo"]:disabled [data-slot="icon-svg"],
+  [data-component="prompt-draw-actions"] [data-component="icon-button"][data-action="prompt-doc-attach"]:disabled [data-slot="icon-svg"] {
     color: var(--icon-weak-disabled);
   }
 
-  [data-component="codle-session"] [data-action="prompt-attach"],
-  [data-component="codle-session"] [data-action="prompt-submit"] {
+  [data-component="codle-session"] [data-action="prompt-attach"] {
     width: 30px;
     height: 30px;
     padding: 0;
     box-sizing: border-box;
-  }
-
-  [data-component="codle-session"] [data-action="prompt-attach"] {
     border-radius: var(--app-pill);
   }
 
+  /* 전송 버튼 — C-3 .oc-send-btn 어휘: ink 단색 + hover 톤 점프/elevation */
   [data-component="codle-session"] [data-action="prompt-submit"] {
-    position: relative;
-    overflow: hidden;
-    border: 2px solid #ffce2b;
-    border-radius: var(--radius-sm);
-    background: #14130f;
-    color: #ffce2b;
-    box-shadow: none;
-  }
-
-  [data-component="codle-session"] [data-action="prompt-submit"]::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(115deg, transparent 35%, rgba(255, 206, 43, 0.55) 50%, transparent 65%);
-    background-size: 220% 100%;
-    background-repeat: no-repeat;
-    background-position: 130% 0;
-    animation: jt-btn-shine 2.4s ease-in-out infinite;
-    pointer-events: none;
-  }
-
-  @keyframes jt-btn-shine {
-    0% {
-      background-position: 130% 0;
-    }
-
-    55% {
-      background-position: -30% 0;
-    }
-
-    100% {
-      background-position: -30% 0;
-    }
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    box-sizing: border-box;
+    border: none;
+    border-radius: 8px;
+    background: var(--icon-strong-base);
+    box-shadow: var(--shadow-xs);
+    transition:
+      background-color var(--dur-fast) var(--ease-standard),
+      box-shadow var(--dur-fast) var(--ease-standard),
+      transform var(--dur-instant) var(--ease-standard);
   }
 
   [data-component="codle-session"] [data-action="prompt-submit"]:hover:not(:disabled) {
-    background: #000;
-    color: #ffce2b;
+    background: var(--icon-strong-hover);
+    box-shadow: var(--shadow-md);
+  }
+
+  [data-component="codle-session"] [data-action="prompt-submit"]:active:not(:disabled) {
+    transform: scale(0.92);
   }
 
   [data-component="codle-session"] [data-action="prompt-submit"]:disabled {
-    background: color-mix(in srgb, #14130f 62%, var(--background-base) 38%);
-    border-color: color-mix(in srgb, #ffce2b 42%, transparent);
-    color: color-mix(in srgb, #ffce2b 42%, transparent);
+    background: var(--icon-strong-disabled);
     opacity: 1;
     box-shadow: none;
   }
 
-  [data-component="codle-session"] [data-action="prompt-submit"]:disabled::after {
-    animation: none;
-    opacity: 0;
-  }
-
   [data-component="codle-session"] [data-action="prompt-submit"] [data-component="icon"],
   [data-component="codle-session"] [data-action="prompt-submit"] [data-slot="icon-svg"] {
-    position: relative;
-    z-index: 1;
-    color: #ffce2b;
-  }
-
-  [data-component="codle-session"] [data-action="prompt-submit"]:disabled [data-slot="icon-svg"] {
-    color: color-mix(in srgb, #ffce2b 42%, transparent);
+    color: var(--icon-invert-base);
   }
 
   [data-component="codle-session"] [data-action="prompt-attach"] {
@@ -976,16 +982,6 @@
       opacity: 0.55;
       transform: none;
     }
-
-    [data-component="codle-session"] [data-action="prompt-submit"] {
-      box-shadow: 0 0 12px 2px rgba(255, 206, 43, 0.35);
-    }
-
-    [data-component="codle-session"] [data-action="prompt-submit"]::after {
-      animation: none;
-      background-position: 50% 0;
-      opacity: 0.35;
-    }
   }
 
   @media (prefers-color-scheme: dark) {
@@ -996,15 +992,17 @@
     [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="shell"],
     [data-component="codle-session"] [data-dock-surface="shell"] {
       background: var(--input-base);
-      border-color: var(--border-strong-base);
-      border-radius: var(--radius-xs);
-      box-shadow: none;
+      border-color: var(--border-base);
+      border-radius: var(--radius-lg);
+      box-shadow:
+        0 6px 22px rgba(0, 0, 0, 0.32),
+        0 1px 2px rgba(0, 0, 0, 0.2);
     }
 
     [data-component="session-prompt-dock"][data-variant="codle"] [data-dock-surface="shell"]:focus-within,
     [data-component="codle-session"] [data-dock-surface="shell"]:focus-within {
       border-color: var(--text-strong);
-      box-shadow: 0 0 0 2px var(--focus-ring-color);
+      box-shadow: 0 0 0 3px rgba(255, 206, 43, 0.3);
     }
 
     [data-component="codle-session"] [data-component="codle-scroll-bottom"] {
@@ -1117,4 +1115,151 @@
   [data-component="codle-session"] .text-text-weaker {
     color: var(--text-weaker);
   }
+}
+
+/* C-3 composer 액션바 — paper 톤 배경(도구 영역과 doc 입력면 구분).
+   bg 유틸리티(--color-*는 빌드 시 리터럴로 고정)를 이기기 위해 레이어 밖에 둔다. */
+[data-component="session-prompt-dock"][data-variant="codle"] [data-component="prompt-draw-actions"],
+[data-component="codle-session"] [data-component="prompt-draw-actions"] {
+  background-color: var(--background-base);
+}
+
+/* 전송 버튼 32px — size-7.5 유틸리티(30px) 오버라이드 (C-3 .oc-send-btn) */
+[data-component="codle-session"] [data-action="prompt-submit"] {
+  width: 32px;
+  height: 32px;
+}
+
+/* C-3 composer 상단 리사이즈 핸들 — 디자인(.oc-resize-handle)은 카드 위로 떠 있지 않고 카드
+   상단 안쪽에 위치. 기본은 -top-2.5(=−10px)로 카드 위에 떠 있어, top:0 으로 카드 상단에 맞춘다.
+   -top-2.5 유틸리티를 이기기 위해 레이어 밖. composer 스타일과 동일하게 codle-session 스코프. */
+[data-component="codle-session"] [data-component="prompt-doc-resize-handle"],
+[data-component="codle-session"] [data-component="prompt-composer-resize-handle"] {
+  top: 0;
+}
+
+/* C-3 composer 리사이즈 핸들 (.oc-resize-handle 어휘) — hover/드래그 시 grab 바가 진해지며 넓어짐.
+   유틸리티 클래스(w-18·bg-border-weaker-base 등)를 이기기 위해 레이어 밖에 둔다. */
+[data-component="prompt-doc-resize-handle"] > div,
+[data-component="prompt-composer-resize-handle"] > div {
+  width: 72px;
+  height: 2px;
+  border-radius: var(--radius-pill);
+  background-color: var(--border-strong-base);
+  transition:
+    background-color var(--dur-fast) var(--ease-standard),
+    width var(--dur-fast) var(--ease-standard);
+}
+
+[data-component="prompt-doc-resize-handle"]:hover > div,
+[data-component="prompt-composer-resize-handle"]:hover > div {
+  background-color: var(--icon-base);
+  width: 88px;
+}
+
+[data-component="prompt-doc-resize-handle"]:active > div,
+[data-component="prompt-composer-resize-handle"]:active > div {
+  background-color: var(--text-strong);
+  width: 96px;
+}
+
+/* C-3 '자동 확대' 토글 (.oc-auto-toggle) — 켜면 입력창 포커스 시 자동으로 커짐.
+   디자인 어휘를 앱 토큰으로 매핑(다크 모드에서 track/thumb 대비 유지). */
+.oc-auto-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 4px;
+  height: 30px;
+  transition: transform var(--dur-instant) var(--ease-standard);
+}
+
+.oc-auto-toggle:active {
+  transform: scale(0.97);
+}
+
+.oc-auto-toggle:focus-visible {
+  outline: var(--focus-ring-width) solid var(--focus-ring-color);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+.oc-auto-track {
+  position: relative;
+  width: 28px;
+  height: 16px;
+  border-radius: var(--radius-pill);
+  flex-shrink: 0;
+  background: var(--border-strong-base);
+  transition: background-color var(--dur-fast) var(--ease-standard);
+}
+
+.oc-auto-track.is-on {
+  background: var(--icon-strong-base);
+}
+
+.oc-auto-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--surface-raised-stronger-non-alpha);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.22);
+  transition: left var(--dur-fast) var(--ease-standard);
+}
+
+.oc-auto-track.is-on .oc-auto-thumb {
+  left: 14px;
+}
+
+.oc-auto-label {
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  color: var(--text-weak);
+  transition: color var(--dur-fast) var(--ease-standard);
+}
+
+.oc-auto-toggle[aria-checked="true"] .oc-auto-label {
+  color: var(--text-base);
+}
+
+/* C-3 좌(채팅)·우(미리보기) 섹션을 창 가장자리까지 꽉 채움 — 디자인의 OpenCodeShell 처럼
+   바깥 여백·섹션 간격·떠 있는 카드(radius/그림자) 제거. 섹션 사이는 단일 디바이더(좌 프레임 우측 테두리)만.
+   Tailwind 유틸리티(p-3·gap-3)를 이기기 위해 레이어 밖에 둔다. jitda 테마에만 적용. */
+:root[data-theme="jitda"] [data-component="codle-session"] {
+  padding: 0;
+}
+
+:root[data-theme="jitda"] [data-component="codle-session"] > div:has(> [data-component="codle-session-column"]) {
+  gap: 0;
+}
+
+:root[data-theme="jitda"] [data-component="codle-session-frame"] {
+  border-width: 0 1px 0 0;
+  border-radius: 0;
+  box-shadow: none;
+  /* 디자인(oc-canvas-grid)처럼 채팅 타임라인이 격자 배경을 갖도록 — 흰 프레임 배경을 투명으로 만들어
+     아래 codle-session 의 24px 격자(paper + 잉크 라인)가 비치게 한다. composer 는 자체 카드 배경 유지. */
+  background: transparent;
+}
+
+:root[data-theme="jitda"] [data-component="codle-side-panel"] {
+  border-width: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+/* 좌·우(채팅↔미리보기) 섹션 리사이즈 핸들에만 적용 — 파일트리 등 다른 가로 핸들엔 영향 없음.
+   gap 을 없앴으므로 손잡이를 디바이더(좌 프레임 우측 경계) 위에 오도록 offset 0(부모 인라인 7px 덮음).
+   디바이더로 옮기면 좌 프레임·우 사이드패널이 핸들을 덮으므로 z-index 로 띄운다(컬럼이 스태킹 컨텍스트를
+   안 만들어 row 컨텍스트에서 사이드패널 위). 확장 시엔 이 핸들 자체가 렌더 안 되므로 컴포저 위로 안 옴. */
+:root[data-theme="jitda"] [data-component="resize-handle"][data-direction="horizontal"].session-panel-resize {
+  --resize-gap-offset: 0px;
+  z-index: 30;
 }
