@@ -109,6 +109,9 @@ const cli = yargs(args)
     ) {
       if (err) throw err
       cli.showHelp(show)
+      // yargs passes the usage error in `msg`; surface it so an invalid flag
+      // isn't indistinguishable from plain `--help`.
+      if (msg) UI.error(msg)
     }
     if (err) throw err
     process.exit(1)
