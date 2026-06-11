@@ -19,7 +19,9 @@ import { QuestionV2 } from "../../question"
 import { SystemContext } from "../../system-context/index"
 import { SystemContextRegistry } from "../../system-context/registry"
 import { SkillGuidance } from "../../skill/guidance"
+import { ReferenceGuidance } from "../../reference/guidance"
 import { ToolRegistry } from "../../tool/registry"
+import { ToolOutputStore } from "../../tool-output-store"
 import { SessionContextEpoch } from "../context-epoch"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
@@ -63,7 +65,7 @@ import { toLLMMessages } from "./to-llm-message"
  *   - [x] Authorize and execute recorded local calls through a core-owned registry hook.
  *   - [x] Persist typed success, failure, and provider-executed tool outcomes.
  *   - [x] Start each recorded local call eagerly and await all settlements before continuation.
- *   - [ ] Add scoped runtime context, progress updates, output truncation, attachment normalization,
+ *   - [ ] Add scoped runtime context, progress updates, attachment normalization,
  *     plugins, and cancellation settlement.
  *   - [x] Reload projected history and start the next explicit provider turn after local tool results.
  *   - [x] Continue for durable user steering accepted during an active provider turn.
@@ -97,6 +99,7 @@ export const layer = Layer.effect(
     const location = yield* Location.Service
     const systemContext = yield* SystemContextRegistry.Service
     const skillGuidance = yield* SkillGuidance.Service
+    const referenceGuidance = yield* ReferenceGuidance.Service
     const config = yield* Config.Service
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
@@ -131,7 +134,7 @@ export const layer = Layer.effect(
       }
     })
 
-    const awaitToolFibers = (fibers: FiberSet.FiberSet<void, never>) =>
+    const awaitToolFibers = (fibers: FiberSet.FiberSet<void, ToolOutputStore.Error>) =>
       Effect.raceFirst(FiberSet.join(fibers), FiberSet.awaitEmpty(fibers))
 
     // Match V1: dismissing a question halts the loop instead of becoming model-facing tool output.
@@ -165,9 +168,9 @@ export const layer = Layer.effect(
 
     const sameModel = Schema.toEquivalence(Schema.UndefinedOr(ModelV2.Ref))
     const loadSystemContext = (agent: AgentV2.Selection) =>
-      Effect.all([systemContext.load(), skillGuidance.load(agent)], { concurrency: "unbounded" }).pipe(
-        Effect.map(SystemContext.combine),
-      )
+      Effect.all([systemContext.load(), skillGuidance.load(agent), referenceGuidance.load()], {
+        concurrency: "unbounded",
+      }).pipe(Effect.map(SystemContext.combine))
 
     const runTurnAttempt = Effect.fn("SessionRunner.runTurn")(function* (
       sessionID: SessionSchema.ID,
@@ -185,7 +188,7 @@ export const layer = Layer.effect(
         session.location,
         agent.id,
       ).pipe(retryAgentMismatch(promotion))
-      const toolFibers = yield* FiberSet.make<void, never>()
+      const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
       let needsContinuation = false
       if (promotion) {
         const cutoff = yield* SessionInput.latestSeq(db, session.id)
@@ -211,14 +214,16 @@ export const layer = Layer.effect(
       const model = yield* models.resolve(session)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
+      const toolMaterialization = yield* tools.materialize(agent.info?.permissions)
+      const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
       const request = LLM.request({
         model,
-        providerOptions: { openai: { promptCacheKey: session.id } },
+        providerOptions: { openai: { promptCacheKey } },
         system: [agent.info?.system, system.baseline]
           .filter((part): part is string => part !== undefined && part.length > 0)
           .map(SystemPart.make),
         messages: toLLMMessages(context, model),
-        tools: yield* tools.definitions(),
+        tools: toolMaterialization.definitions,
       })
       if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
         return yield* Effect.die(rebuildPreparedTurn())
@@ -250,16 +255,16 @@ export const layer = Layer.effect(
             yield* publish(event)
             if (event.type !== "tool-call" || event.providerExecuted) return
             needsContinuation = true
+            const assistantMessageID = yield* publisher.assistantMessageID(event.id)
             yield* Effect.uninterruptibleMask((restore) =>
-              restore(tools.settle({ sessionID: session.id, agent: agent.id, call: event })).pipe(
-                Effect.catchCause((cause) => {
-                  if (isQuestionRejected(cause) || Cause.hasInterrupts(cause)) return Effect.failCause(cause)
-                  return Effect.succeed({
-                    result: { type: "error" as const, value: String(Cause.squash(cause)) },
-                    output: undefined,
-                    outputPaths: [],
-                  })
+              restore(
+                toolMaterialization.settle({
+                  sessionID: session.id,
+                  agent: agent.id,
+                  assistantMessageID,
+                  call: event,
                 }),
+              ).pipe(
                 Effect.flatMap((settlement) =>
                   publish(
                     LLMEvent.toolResult({
@@ -317,12 +322,17 @@ export const layer = Layer.effect(
             yield* FiberSet.clear(toolFibers)
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
           }
+          if (settled._tag === "Failure" && !Cause.hasInterrupts(settled.cause)) {
+            const failure = Cause.squash(settled.cause)
+            const message = failure instanceof Error ? failure.message : String(failure)
+            yield* withPublication(publisher.failUnsettledTools(`Tool execution failed: ${message}`))
+          }
           if (publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
           if (stream._tag === "Success" && !publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
-          const attempt = stream._tag === "Failure" ? stream : settled
-          if (attempt._tag === "Failure") return yield* Effect.failCause(attempt.cause)
+          if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
+          if (settled._tag === "Failure") return yield* Effect.failCause(settled.cause)
           return !publisher.hasProviderError() && needsContinuation
         }),
       )

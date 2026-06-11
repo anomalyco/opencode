@@ -30,11 +30,11 @@ describe("public native OpenCode API", () => {
       expect(Session.ID.create()).toStartWith("ses_")
       expect(Session.MessageID.create()).toStartWith("msg_")
       expect(yield* opencode.sessions.list()).toBeArray()
-      yield* opencode.tools.attach({
+      yield* opencode.tools.register({
         public_tool: Tool.make({
           description: "Public tool",
-          parameters: Schema.Struct({}),
-          success: Schema.Struct({ ok: Schema.Boolean }),
+          input: Schema.Struct({}),
+          output: Schema.Struct({ ok: Schema.Boolean }),
           execute: () => Effect.succeed({ ok: true }),
         }),
       })

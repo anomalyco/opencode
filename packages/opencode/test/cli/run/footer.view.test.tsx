@@ -5,13 +5,14 @@ import { testRender, useRenderer } from "@opentui/solid"
 import { createSignal } from "solid-js"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import type { QuestionRequest } from "@opencode-ai/sdk/v2"
-import { OpencodeKeymapProvider, registerOpencodeKeymap } from "@/cli/cmd/tui/keymap"
+import { OpencodeKeymapProvider, registerOpencodeKeymap } from "@opencode-ai/tui/keymap"
 import {
   RUN_COMMAND_PANEL_ROWS,
   RUN_SUBAGENT_PANEL_ROWS,
   RunCommandMenuBody,
   RunModelSelectBody,
   RunQueuedPromptSelectBody,
+  RunSkillSelectBody,
   RunSubagentSelectBody,
   RunVariantSelectBody,
 } from "@/cli/cmd/run/footer.command"
@@ -155,13 +156,23 @@ async function renderFooter(
     tuiConfig?: RunTuiConfig
     commands?: RunCommand[]
     theme?: () => RunTheme
+    providers?: RunProvider[]
+    currentModel?: RunInput["model"]
+    currentVariant?: string
+    subagents?: FooterSubagentState
+    backgroundSubagents?: boolean
+    width?: number
+    height?: number
+    state?: Partial<FooterState>
     onCycle?: () => void
     onSubmit?: (prompt: RunPrompt) => boolean
   } = {},
 ) {
   const [view] = createSignal<FooterView>({ type: "prompt" })
-  const [subagents] = createSignal<FooterSubagentState>({ tabs: [], details: {}, permissions: [], questions: [] })
-  const state = footerState()
+  const [subagents] = createSignal<FooterSubagentState>(
+    input.subagents ?? { tabs: [], details: {}, permissions: [], questions: [] },
+  )
+  const state = footerState(input.state)
   const config = input.tuiConfig ?? tuiConfig
   let offKeymap: (() => void) | undefined
 
@@ -178,16 +189,16 @@ async function renderFooter(
           agents={() => []}
           resources={() => []}
           commands={() => input.commands ?? []}
-          providers={() => undefined}
-          currentModel={() => undefined}
+          providers={() => input.providers}
+          currentModel={() => input.currentModel}
           variants={() => []}
-          currentVariant={() => undefined}
+          currentVariant={() => input.currentVariant}
           state={state}
           view={view}
           subagent={subagents}
           theme={input.theme ?? (() => RUN_THEME_FALLBACK)}
           tuiConfig={config}
-          backgroundSubagents={true}
+          backgroundSubagents={input.backgroundSubagents ?? true}
           agent="opencode"
           onSubmit={input.onSubmit ?? (() => true)}
           onPermissionReply={() => {}}
@@ -195,6 +206,7 @@ async function renderFooter(
           onQuestionReject={() => {}}
           onCycle={input.onCycle ?? (() => {})}
           onInterrupt={() => false}
+          onEditorOpen={async () => undefined}
           onInputClear={() => {}}
           onExit={() => {}}
           onModelSelect={() => {}}
@@ -210,11 +222,11 @@ async function renderFooter(
 
   const app = await testRender(
     () => (
-      <box width={100} height={8}>
+      <box width={input.width ?? 100} height={input.height ?? 8}>
         <Harness />
       </box>
     ),
-    { width: 100, height: 8, kittyKeyboard: true },
+    { width: input.width ?? 100, height: input.height ?? 8, kittyKeyboard: true },
   )
 
   return {
@@ -229,7 +241,14 @@ async function renderFooter(
   }
 }
 
-test("direct footer updates composer background when theme changes", async () => {
+function expectPaletteList(list: BoxRenderable, selectedIndex: number) {
+  expect(list.backgroundColor.toInts()).toEqual((RUN_THEME_FALLBACK.footer.shade as RGBA).toInts())
+  expect((list.getChildren()[selectedIndex] as BoxRenderable).backgroundColor.toInts()).toEqual(
+    (RUN_THEME_FALLBACK.footer.selected as RGBA).toInts(),
+  )
+}
+
+test("direct footer composer area does not adopt footer surface", async () => {
   const surface = RGBA.fromHex("#123456")
   const [theme, setTheme] = createSignal(RUN_THEME_FALLBACK)
   const app = await renderFooter({ theme })
@@ -248,7 +267,7 @@ test("direct footer updates composer background when theme changes", async () =>
     })
     await app.renderOnce()
 
-    expect(area.backgroundColor.toInts()).toEqual(surface.toInts())
+    expect(area.backgroundColor.toInts()).not.toEqual(surface.toInts())
   } finally {
     app.cleanup()
   }
@@ -319,6 +338,8 @@ test("direct command panel renders grouped command palette", async () => {
           variantCycle="ctrl+t"
           onClose={() => {}}
           onModel={() => {}}
+          onEditor={() => {}}
+          onSkill={() => {}}
           onSubagent={() => {}}
           onQueued={() => {}}
           onVariant={() => {}}
@@ -341,22 +362,101 @@ test("direct command panel renders grouped command palette", async () => {
 
     expect(frame).toContain("Commands")
     expect(frame).toContain("Search")
-    expect(frame).toContain("Suggested")
-    expect(frame).toContain("Switch model")
-    expect(frame).toContain("Variant cycle")
-    expect(frame).toContain("ctrl+t")
-    expect(frame).toContain("Switch model variant")
     expect(frame).toContain("Session")
-    expect(frame).toContain("New session")
-    expect(frame).toContain("/new")
-    expect(frame).toContain("Project Commands")
-    expect(frame).toContain("review")
-    expect(frame).toContain("/review")
+    expect(frame).toContain("Agent")
+    expect(frame).toContain("Prompt")
+    expect(frame).toContain("Open editor")
+    expect(frame).toContain("/editor")
+    expect(frame).toContain("Switch model")
+    expect(frame).toContain("Skills")
+    expect(frame).toContain("/skills")
+    expect(frame.match(/\bAgent\b/g)?.length).toBe(1)
+    expect(frame).not.toContain("┌")
+    expect(frame).not.toContain("┃")
     expect(frame).not.toContain("/internal")
     expect(frame).not.toContain("Choose model for future turns")
     expect(frame).not.toContain("Cycle reasoning effort for future turns")
     expect(frame).not.toContain("Review code")
     expect(frame).not.toContain("Commands 8")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("direct skill panel renders searchable skill list", async () => {
+  const [commands] = createSignal<RunCommand[] | undefined>([
+    command({ name: "review", description: "Review code" }),
+    command({ name: "internal", description: "Skill command", source: "skill" }),
+    command({ name: "formatter", description: "Apply formatter fixes", source: "skill" }),
+  ])
+
+  const app = await testRender(
+    () => (
+      <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
+        <RunSkillSelectBody
+          theme={() => RUN_THEME_FALLBACK.footer}
+          commands={commands}
+          onClose={() => {}}
+          onSelect={() => {}}
+        />
+      </box>
+    ),
+    {
+      width: 100,
+      height: RUN_COMMAND_PANEL_ROWS,
+    },
+  )
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("Skills")
+    expect(frame).toContain("Search")
+    expect(frame).toContain("internal")
+    expect(frame).not.toContain("/internal")
+    expect(frame).toContain("formatter")
+    expect(frame).toContain("Apply formatter fixes")
+    expect(frame).not.toContain("review")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("direct skill panel truncates long descriptions from the end", async () => {
+  const [commands] = createSignal<RunCommand[] | undefined>([
+    command({
+      name: "terminal-control",
+      description:
+        "Control and test terminal applications, REPLs, interactive CLIs, shell processes, OpenTUI applications, or other terminal-backed workflows.",
+      source: "skill",
+    }),
+  ])
+
+  const app = await testRender(
+    () => (
+      <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
+        <RunSkillSelectBody
+          theme={() => RUN_THEME_FALLBACK.footer}
+          commands={commands}
+          onClose={() => {}}
+          onSelect={() => {}}
+        />
+      </box>
+    ),
+    {
+      width: 100,
+      height: RUN_COMMAND_PANEL_ROWS,
+    },
+  )
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("terminal-control")
+    expect(frame).toContain("Control and test terminal applications")
+    expect(frame).not.toMatch(/application(?:…|\.\.\.)ocess/)
   } finally {
     app.renderer.destroy()
   }
@@ -379,6 +479,8 @@ test("direct command panel shows subagent entry when available", async () => {
           variantCycle="ctrl+t"
           onClose={() => {}}
           onModel={() => {}}
+          onEditor={() => {}}
+          onSkill={() => {}}
           onSubagent={() => {}}
           onQueued={() => {}}
           onVariant={() => {}}
@@ -401,6 +503,54 @@ test("direct command panel shows subagent entry when available", async () => {
 
     expect(frame).toContain("View subagents")
     expect(frame).toContain("1 active")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("direct command panel keeps completed subagents available", async () => {
+  const [commands] = createSignal<RunCommand[] | undefined>([])
+  const [subagents] = createSignal([
+    subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow", status: "completed" }),
+  ])
+  const [variants] = createSignal<string[]>([])
+
+  const app = await testRender(
+    () => (
+      <box width={100} height={RUN_COMMAND_PANEL_ROWS}>
+        <RunCommandMenuBody
+          theme={() => RUN_THEME_FALLBACK.footer}
+          commands={commands}
+          subagents={subagents}
+          queued={() => []}
+          variants={variants}
+          variantCycle="ctrl+t"
+          onClose={() => {}}
+          onModel={() => {}}
+          onEditor={() => {}}
+          onSkill={() => {}}
+          onSubagent={() => {}}
+          onQueued={() => {}}
+          onVariant={() => {}}
+          onVariantCycle={() => {}}
+          onCommand={() => {}}
+          onNew={() => {}}
+          onExit={() => {}}
+        />
+      </box>
+    ),
+    {
+      width: 100,
+      height: RUN_COMMAND_PANEL_ROWS,
+    },
+  )
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("View subagents")
+    expect(frame).toContain("1 recent")
   } finally {
     app.renderer.destroy()
   }
@@ -438,11 +588,15 @@ test("direct subagent panel renders active subagents", async () => {
   try {
     await app.renderOnce()
     const frame = app.captureCharFrame()
+    const list = app.renderer.root.findDescendantById("run-direct-footer-subagent-list") as BoxRenderable
 
     expect(frame).toContain("Select subagent")
     expect(frame).toContain("Inspect auth flow")
     expect(frame).toContain("Write migration plan")
     expect(frame).toContain("done")
+    expect(frame).not.toContain("┌")
+    expect(frame).not.toContain("┃")
+    expectPaletteList(list, 0)
     expect(rows).toBe(8)
   } finally {
     app.renderer.destroy()
@@ -471,25 +625,41 @@ test("direct queued prompt panel renders pending prompt actions", async () => {
 
   try {
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("Queued prompts")
-    expect(app.captureCharFrame()).toContain("fix the auth test")
-    expect(app.captureCharFrame()).toContain("queued")
+    const frame = app.captureCharFrame()
+    const list = app.renderer.root.findDescendantById("run-direct-footer-queued-list") as BoxRenderable
+
+    expect(frame).toContain("Queued prompts")
+    expect(frame).toContain("fix the auth test")
+    expect(frame).toContain("queued")
+    expect(frame).not.toContain("┌")
+    expect(frame).not.toContain("┃")
+    expectPaletteList(list, 0)
   } finally {
     app.renderer.destroy()
   }
 })
 
-// OpenTUI currently segfaults when the full footer view suite creates several
-// keymap-backed test renderers in one process. Re-enable after the runtime fix.
-test.skip("direct footer opens command panel through keymap binding", async () => {
+// OpenTUI currently crashes Bun in the full `test/cli/run` directory run here.
+// Re-enable after the upstream OpenTUI fix lands in this repo.
+test.skip("direct footer recreates the frame across command panel transitions", async () => {
   const app = await renderFooter()
 
   try {
     await app.renderOnce()
-    app.mockInput.pressKey("p", { ctrl: true })
-    await app.renderOnce()
 
-    expect(app.captureCharFrame()).toContain("Commands")
+    for (let index = 0; index < 3; index++) {
+      const composerFrame = app.renderer.root.findDescendantById("run-direct-footer-composer-frame") as BoxRenderable
+      app.mockInput.pressKey("p", { ctrl: true })
+      await app.renderOnce()
+
+      expect(app.captureCharFrame()).toContain("Commands")
+      expect(app.renderer.root.findDescendantById("run-direct-footer-composer-frame")).not.toBe(composerFrame)
+      app.mockInput.pressKey("c", { ctrl: true })
+      await app.renderOnce()
+      expect(app.captureCharFrame()).not.toContain("Commands")
+      expect(app.captureCharFrame()).not.toContain("┃")
+      expect(app.captureCharFrame()).not.toContain("█")
+    }
   } finally {
     app.cleanup()
   }
@@ -596,6 +766,104 @@ test("direct footer submits slash autocomplete selections without dispatching sh
   }
 })
 
+test("direct footer slash autocomplete keeps a real skills command", async () => {
+  const submits: RunPrompt[] = []
+  const app = await renderFooter({
+    commands: [
+      command({ name: "skills", description: "Run the real skills command" }),
+      command({ name: "formatter", description: "Apply formatter fixes", source: "skill" }),
+    ],
+    onSubmit(prompt) {
+      submits.push(prompt)
+      return true
+    },
+  })
+
+  try {
+    await app.renderOnce()
+    "/skills".split("").forEach((key) => app.mockInput.pressKey(key))
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+
+    expect(submits).toEqual([{ text: "/skills ", parts: [], command: { name: "skills", arguments: "" } }])
+    expect(app.captureCharFrame()).not.toContain("Apply formatter fixes")
+  } finally {
+    app.cleanup()
+  }
+})
+
+// OpenTUI currently segfaults Bun while tearing down this composer-to-skill-panel transition.
+// Re-enable after the upstream renderer teardown fix lands.
+test.skip("direct footer skill picker inserts an editable bound skill command", async () => {
+  const submits: RunPrompt[] = []
+  const app = await renderFooter({
+    commands: [command({ name: "new", description: "Skill named new", source: "skill" })],
+    onSubmit(prompt) {
+      submits.push(prompt)
+      return true
+    },
+  })
+
+  try {
+    await app.renderOnce()
+    "/skills".split("").forEach((key) => app.mockInput.pressKey(key))
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+
+    expect(app.captureCharFrame()).toContain("Skill named new")
+
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+
+    expect(submits).toEqual([])
+    expect(app.captureCharFrame()).toContain("/new")
+
+    "task".split("").forEach((key) => app.mockInput.pressKey(key))
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+
+    expect(submits).toEqual([{ text: "/new task", parts: [], command: { name: "new", arguments: "task" } }])
+  } finally {
+    app.cleanup()
+  }
+})
+
+// OpenTUI currently segfaults Bun while tearing down this skill-panel close transition.
+// Re-enable after the upstream renderer teardown fix lands.
+test.skip("direct footer clears the synthetic skills draft when the panel closes", async () => {
+  const submits: RunPrompt[] = []
+  const app = await renderFooter({
+    commands: [command({ name: "formatter", description: "Apply formatter fixes", source: "skill" })],
+    onSubmit(prompt) {
+      submits.push(prompt)
+      return true
+    },
+  })
+
+  try {
+    await app.renderOnce()
+    "/skills".split("").forEach((key) => app.mockInput.pressKey(key))
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+
+    expect(app.captureCharFrame()).toContain("Apply formatter fixes")
+
+    app.mockInput.pressKey("c", { ctrl: true })
+    await app.renderOnce()
+    app.mockInput.pressEnter()
+    await app.renderOnce()
+
+    expect(submits).toEqual([])
+    expect(app.captureCharFrame()).not.toContain("/skills")
+  } finally {
+    app.cleanup()
+  }
+})
+
 test("direct footer shows editable prompts and additional queued work while running", async () => {
   const [state] = createSignal<FooterState>({
     phase: "running",
@@ -630,7 +898,10 @@ test("direct footer shows editable prompts and additional queued work while runn
           resources={() => []}
           commands={() => []}
           providers={() => undefined}
-          currentModel={() => undefined}
+          currentModel={() => ({
+            providerID: "opencode",
+            modelID: "a-model-name-long-enough-to-force-responsive-truncation",
+          })}
           variants={() => []}
           currentVariant={() => undefined}
           state={state}
@@ -649,6 +920,7 @@ test("direct footer shows editable prompts and additional queued work while runn
           onQuestionReject={() => {}}
           onCycle={() => {}}
           onInterrupt={() => false}
+          onEditorOpen={async () => undefined}
           onInputClear={() => {}}
           onExit={() => {}}
           onModelSelect={() => {}}
@@ -676,15 +948,143 @@ test("direct footer shows editable prompts and additional queued work while runn
 
   try {
     await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("interrupt • 1 agent ctrl+x down • ctrl+b background • 1 queued ctrl+x q")
-    expect(app.captureCharFrame()).toContain("2 queued")
-    expect(app.captureCharFrame()).not.toContain("to view")
-    expect(app.captureCharFrame()).not.toContain("edit/remove")
+    const frame = app.captureCharFrame()
+    const transparent = RGBA.fromValues(0, 0, 0, 0).toInts()
+    const tinted = (RUN_THEME_FALLBACK.footer.status as RGBA).toInts()
+    const accent = (RUN_THEME_FALLBACK.footer.statusAccent as RGBA).toInts()
+    const statusline = app.renderer.root.findDescendantById("run-direct-footer-statusline") as BoxRenderable
+    const mode = app.renderer.root.findDescendantById("run-direct-footer-statusline-mode") as BoxRenderable
+    const main = app.renderer.root.findDescendantById("run-direct-footer-statusline-main") as BoxRenderable
+    const spinner = app.renderer.root.findDescendantById("run-direct-footer-status-spinner")
+    const model = app.renderer.root.findDescendantById("run-direct-footer-statusline-model") as BoxRenderable
+    const queued = app.renderer.root.findDescendantById("run-direct-footer-statusline-queued") as BoxRenderable
+    const hint = app.renderer.root.findDescendantById("run-direct-footer-statusline-hint") as BoxRenderable
+
+    expect(spinner).toBeDefined()
+    expect(frame).toContain("a-model-name-long-enough-to-force-responsive-truncation")
+    expect(frame).toContain("3 queued")
+    expect(frame).toContain("ctrl+b background")
+    expect(frame).toContain("ctrl+x q 3 queued")
+    expect(frame).toContain("ctrl+x down subagents")
+    expect(frame).toContain("ctrl+p cmd")
+    expect(frame).toContain("a-model-name-long-enough-to-force-responsive-truncation")
+    expect(frame).toContain("subagents · ctrl+p cmd")
+    expect(frame).not.toContain("1 agent")
+    expect(statusline.backgroundColor.toInts()).toEqual(tinted)
+    expect(mode.backgroundColor.toInts()).toEqual(accent)
+    expect(main.backgroundColor.toInts()).toEqual(transparent)
+    expect(model.backgroundColor.toInts()).toEqual(transparent)
+    expect(queued.backgroundColor.toInts()).toEqual(transparent)
+    expect(hint.backgroundColor.toInts()).toEqual(transparent)
   } finally {
     app.renderer.currentFocusedRenderable?.blur()
     app.renderer.currentFocusedEditor?.blur()
     offKeymap?.()
     app.renderer.destroy()
+  }
+})
+
+test("direct footer separates a lone context hint from model and command hint", async () => {
+  const app = await renderFooter({
+    providers: [provider()],
+    currentModel: { providerID: "opencode", modelID: "gpt-5" },
+    currentVariant: "xhigh",
+    subagents: {
+      tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" })],
+      details: {},
+      permissions: [],
+      questions: [],
+    },
+    backgroundSubagents: false,
+    width: 160,
+  })
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("GPT-5")
+    expect(frame).toContain("xhigh · ctrl+x down subagents · ctrl+p cmd")
+    expect(frame).not.toContain("ctrl+b background")
+    expect(frame).not.toContain("queued")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer hides the subagent hint when only completed subagents remain", async () => {
+  const app = await renderFooter({
+    providers: [provider()],
+    currentModel: { providerID: "opencode", modelID: "gpt-5" },
+    currentVariant: "xhigh",
+    subagents: {
+      tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow", status: "completed" })],
+      details: {},
+      permissions: [],
+      questions: [],
+    },
+    backgroundSubagents: false,
+    width: 160,
+  })
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("GPT-5")
+    expect(frame).toContain("xhigh · ctrl+p cmd")
+    expect(frame).not.toContain("ctrl+x down subagents")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer omits interrupt key hint when interrupt is unbound", async () => {
+  const app = await renderFooter({
+    tuiConfig: createTuiResolvedConfig({ keybinds: { session_interrupt: "none", input_clear: "ctrl+l" } }),
+    state: { phase: "running" },
+  })
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("interrupt")
+    expect(frame).not.toContain("ctrl+l")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer shows full usage metadata when room is available", async () => {
+  const app = await renderFooter({
+    state: { usage: "159.6K (16%) · $4.23" },
+  })
+
+  try {
+    await app.renderOnce()
+    const frame = app.captureCharFrame()
+
+    expect(frame).toContain("159.6K (16%) · $4.23")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("direct footer mode label keeps left padding without a status pill", async () => {
+  const app = await renderFooter()
+
+  try {
+    await app.renderOnce()
+    const statusline = app
+      .captureCharFrame()
+      .split("\n")
+      .find((line) => line.includes("BUILD") && line.includes("cmd"))
+
+    expect(statusline).toBeDefined()
+    expect(statusline?.startsWith(" BUILD ")).toBe(true)
+  } finally {
+    app.cleanup()
   }
 })
 
@@ -876,6 +1276,7 @@ test("direct model panel renders current model selector", async () => {
   try {
     await app.renderOnce()
     const frame = app.captureCharFrame()
+    const list = app.renderer.root.findDescendantById("run-direct-footer-model-list") as BoxRenderable
 
     expect(frame).toContain("Select model")
     expect(frame).toContain("Search")
@@ -884,7 +1285,10 @@ test("direct model panel renders current model selector", async () => {
     expect(frame).toContain("current")
     expect(frame).toContain("GPT Free")
     expect(frame).toContain("Free")
+    expect(frame).not.toContain("┌")
+    expect(frame).not.toContain("┃")
     expect(frame).not.toContain("Old Model")
+    expectPaletteList(list, 2)
   } finally {
     app.renderer.destroy()
   }
@@ -915,12 +1319,16 @@ test("direct variant panel renders current variant selector", async () => {
   try {
     await app.renderOnce()
     const frame = app.captureCharFrame()
+    const list = app.renderer.root.findDescendantById("run-direct-footer-variant-list") as BoxRenderable
 
     expect(frame).toContain("Select variant")
     expect(frame).toContain("Default")
     expect(frame).toContain("high")
     expect(frame).toContain("minimal")
     expect(frame).toContain("current")
+    expect(frame).not.toContain("┌")
+    expect(frame).not.toContain("┃")
+    expectPaletteList(list, 1)
   } finally {
     app.renderer.destroy()
   }

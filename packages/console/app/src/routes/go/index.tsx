@@ -65,7 +65,7 @@ function LimitsGraph(props: { href: string }) {
     { id: "glm-5.1", name: "GLM-5.1", req: 880, d: "100ms" },
     { id: "qwen3.7-max", name: "Qwen3.7 Max", req: 950, d: "110ms" },
     { id: "kimi-k2.6", name: "Kimi K2.6", req: 1150, d: "150ms" },
-    { id: "minimax-m3", name: "MiniMax M3", req: 1400, d: "200ms" },
+    { id: "minimax-m3", name: "MiniMax M3", req: 3200, d: "200ms" },
     { id: "mimo-v2.5-pro", name: "MiMo-V2.5-Pro", req: 3250, d: "210ms" },
     { id: "qwen3.6-plus", name: "Qwen3.6 Plus", req: 3300, d: "220ms" },
     { id: "minimax-m2.7", name: "MiniMax M2.7", req: 3400, d: "230ms" },
