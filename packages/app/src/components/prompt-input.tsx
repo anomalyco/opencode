@@ -346,6 +346,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })(),
   )
   const [focusWithin, setFocusWithin] = createSignal(false)
+  // 컴포저 내부에서 시작된 클릭(포커스 못 받는 버튼/컨트롤 포함)으로 포커스가 body 로 빠지는 걸
+  // '이탈'로 오인해 축소→재확장 깜빡이는 걸 막기 위한 플래그.
+  let pointerDownInside = false
   // 마운트 시 에디터가 자동 포커스되어도 곧바로 확대되지 않도록, 실제 사용자 상호작용 이후에만 자동 확대.
   const [interacted, setInteracted] = createSignal(false)
   const toggleAutoExpand = () => {
@@ -375,12 +378,27 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const t = e.target
       if (t instanceof Element && t.closest('[data-component="prompt-doc"]')) setInteracted(true)
     }
+    // 컴포저 내부에서 시작된 클릭인지 기록. 포커스 못 받는 컨트롤을 눌러 포커스가 body 로 빠져도
+    // 이 플래그가 있으면 focusout 에서 '이탈'로 보지 않는다. 키 입력(Tab 이동 등)이 시작되면 해제해
+    // 실제 포커스 위치 기준으로 판단하게 한다.
+    const trackPointer = (e: PointerEvent) => {
+      const t = e.target
+      pointerDownInside = t instanceof Node && el.contains(t)
+    }
+    const clearPointer = () => {
+      pointerDownInside = false
+    }
     // doc 패널이 pointerdown 전파를 막으므로 캡처 단계로 듣는다.
     el.addEventListener("pointerdown", mark, true)
     el.addEventListener("keydown", mark, true)
+    // 컴포저 밖 클릭도 잡아야 하므로 window 캡처로 듣는다.
+    window.addEventListener("pointerdown", trackPointer, true)
+    el.addEventListener("keydown", clearPointer, true)
     onCleanup(() => {
       el.removeEventListener("pointerdown", mark, true)
       el.removeEventListener("keydown", mark, true)
+      window.removeEventListener("pointerdown", trackPointer, true)
+      el.removeEventListener("keydown", clearPointer, true)
     })
   })
 
@@ -2081,7 +2099,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       on:focusout={() => {
         // 다음 틱에 실제 활성 요소가 컴포저 밖이면 focus 해제(에디터 내부 이동 시 깜빡임 방지).
         setTimeout(() => {
-          if (rootRef && !rootRef.contains(document.activeElement)) setFocusWithin(false)
+          if (!rootRef) return
+          if (rootRef.contains(document.activeElement)) return
+          // 컴포저 안의 포커스 못 받는 버튼/컨트롤을 눌러 포커스가 body 로 빠진 경우는 이탈이 아니다.
+          if (pointerDownInside) return
+          setFocusWithin(false)
         }, 0)
       }}
     >
