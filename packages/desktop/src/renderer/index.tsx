@@ -15,14 +15,15 @@ import {
   useWslServers,
 } from "@opencode-ai/app"
 import type { UpdaterState } from "@opencode-ai/app/updater"
-import * as Sentry from "@sentry/solid"
+import { init } from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { MemoryRouter } from "@solidjs/router"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
-import { initializationData, initializationReady } from "./initialization"
+import { initializationData } from "./initialization"
+import { createOpenPath } from "./open-path"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
 import { availableStartupServer, readyWslConnections } from "./wsl/connections"
 import "./styles.css"
@@ -35,7 +36,7 @@ if (import.meta.env.DEV && !(root instanceof HTMLElement)) {
 }
 
 if (import.meta.env.VITE_SENTRY_DSN) {
-  Sentry.init({
+  init({
     dsn: import.meta.env.VITE_SENTRY_DSN,
     environment: import.meta.env.VITE_SENTRY_ENVIRONMENT ?? import.meta.env.MODE,
     release: import.meta.env.VITE_SENTRY_RELEASE ?? `desktop@${pkg.version}`,
@@ -99,7 +100,7 @@ const createPlatform = (): Platform => {
         return
     }
 
-    return window.api.runDesktopMenuAction(action)
+    void window.api.runDesktopMenuAction(action)
   }
 
   const storage = (() => {
@@ -130,6 +131,7 @@ const createPlatform = (): Platform => {
   })()
 
   const wslServersApi = os === "windows" ? window.api.wslServers : undefined
+  const openPath = createOpenPath(window.api, os)
 
   return {
     platform: "desktop",
@@ -170,13 +172,7 @@ const createPlatform = (): Platform => {
     openLink(url: string) {
       window.api.openLink(url)
     },
-    async openPath(path: string, app?: string) {
-      if (os === "windows") {
-        const resolvedApp = app ? await window.api.resolveAppPath(app).catch(() => null) : null
-        return window.api.openPath(path, resolvedApp ?? undefined)
-      }
-      return window.api.openPath(path, app)
-    },
+    openPath,
 
     back() {
       window.history.back()
@@ -281,9 +277,9 @@ render(() => {
     const current = await platform.storage?.("opencode.global.dat").getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
     const raw = current ?? legacy
-    if (!raw) return
+    if (!raw) return undefined
     const locale = raw.match(/"locale"\s*:\s*"([^"]+)"/)?.[1]
-    if (!locale) return
+    if (!locale) return undefined
     const next = normalizeLocale(locale)
     if (next !== "en") await loadLocaleDict(next)
     return next satisfies Locale
@@ -298,11 +294,11 @@ render(() => {
   const [locale] = createResource(loadLocale)
 
   function handleClick(e: MouseEvent) {
-    const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
-    if (link?.href) {
-      e.preventDefault()
-      platform.openLink(link.href)
-    }
+    if (!(e.target instanceof Element)) return
+    const link = e.target.closest("a.external-link")
+    if (!(link instanceof HTMLAnchorElement)) return
+    e.preventDefault()
+    platform.openLink(link.href)
   }
 
   function Inner() {

@@ -1,14 +1,21 @@
-import { execFile } from "node:child_process"
 import { access, readFile, readdir } from "node:fs/promises"
 import { dirname, extname, join } from "node:path"
-import util from "node:util"
-
-const execFilePromise = util.promisify(execFile)
+import { createAppPathCache, forgetAppPath, getAppPath, rememberAppPath } from "../app-path-cache"
+import { execFileHidden } from "./child-process"
 
 const exists = (path: string) =>
   access(path)
     .then(() => true)
     .catch(() => false)
+
+const windowsAppPathCache = createAppPathCache()
+
+const searchKey = (value: string) =>
+  value
+    .split("")
+    .filter((value: string) => /[a-z0-9]/i.test(value))
+    .map((value: string) => value.toLowerCase())
+    .join("")
 
 export function checkAppExists(appName: string) {
   if (process.platform === "win32") return true
@@ -31,15 +38,27 @@ async function checkMacosApp(appName: string) {
     if (await exists(location)) return true
   }
 
-  return execFilePromise("which", [appName])
+  return execFileHidden("which", [appName])
     .then(() => true)
     .catch(() => false)
 }
 
 async function resolveWindowsAppPath(appName: string): Promise<string | null> {
+  const cacheKey = appName.toLowerCase()
+  const cached = getAppPath(windowsAppPathCache, cacheKey)
+  if (cached) {
+    if (await exists(cached)) return cached
+    forgetAppPath(windowsAppPathCache, cacheKey)
+  }
+
+  // Cache only positive resolutions; missing apps may be installed while Desktop stays open.
+  const remember = (path: string) => {
+    return rememberAppPath(windowsAppPathCache, cacheKey, path)
+  }
+
   let output: string
   try {
-    output = await execFilePromise("where", [appName]).then((r) => r.stdout.toString())
+    output = await execFileHidden("where", [appName]).then((r) => r.stdout.toString())
   } catch {
     return null
   }
@@ -51,11 +70,19 @@ async function resolveWindowsAppPath(appName: string): Promise<string | null> {
 
   const hasExt = (path: string, ext: string) => extname(path).toLowerCase() === `.${ext}`
 
-  const exe = paths.find((path) => hasExt(path, "exe"))
-  if (exe) return exe
+  const executables = paths.filter((path) => hasExt(path, "exe") || hasExt(path, "com"))
+  if (executables[0] && (await exists(executables[0]))) return remember(executables[0])
+
+  const executable = (
+    await Promise.all(executables.slice(1).map(async (path) => ((await exists(path)) ? path : null)))
+  ).find((path) => path !== null)
+  if (executable) return remember(executable)
 
   const resolveCmd = async (path: string) => {
-    const content = await readFile(path, "utf8")
+    const content = await readFile(path, "utf8").catch(() => "")
+    if (!content) return null
+
+    // Windows package managers often expose .cmd shims; launch the target executable instead of the shim.
     for (const token of content.split('"').map((value: string) => value.trim())) {
       const lower = token.toLowerCase()
       if (!lower.includes(".exe")) continue
@@ -85,29 +112,25 @@ async function resolveWindowsAppPath(appName: string): Promise<string | null> {
   for (const path of paths) {
     if (hasExt(path, "cmd") || hasExt(path, "bat")) {
       const resolved = await resolveCmd(path)
-      if (resolved) return resolved
+      if (resolved) return remember(resolved)
     }
 
     if (!extname(path)) {
       const cmd = `${path}.cmd`
       if (await exists(cmd)) {
         const resolved = await resolveCmd(cmd)
-        if (resolved) return resolved
+        if (resolved) return remember(resolved)
       }
 
       const bat = `${path}.bat`
       if (await exists(bat)) {
         const resolved = await resolveCmd(bat)
-        if (resolved) return resolved
+        if (resolved) return remember(resolved)
       }
     }
   }
 
-  const key = appName
-    .split("")
-    .filter((value: string) => /[a-z0-9]/i.test(value))
-    .map((value: string) => value.toLowerCase())
-    .join("")
+  const key = searchKey(appName)
 
   if (key) {
     for (const path of paths) {
@@ -118,12 +141,8 @@ async function resolveWindowsAppPath(appName: string): Promise<string | null> {
             const candidate = join(dir, entry)
             if (!hasExt(candidate, "exe")) continue
             const stem = entry.replace(/\.exe$/i, "")
-            const name = stem
-              .split("")
-              .filter((value: string) => /[a-z0-9]/i.test(value))
-              .map((value: string) => value.toLowerCase())
-              .join("")
-            if (name.includes(key) || key.includes(name)) return candidate
+            const name = searchKey(stem)
+            if (name.includes(key) || key.includes(name)) return remember(candidate)
           }
         } catch {
           continue
@@ -132,5 +151,5 @@ async function resolveWindowsAppPath(appName: string): Promise<string | null> {
     }
   }
 
-  return paths[0] ?? null
+  return null
 }
