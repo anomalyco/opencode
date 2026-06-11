@@ -290,7 +290,6 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
-    queuedDrafts: any[]
   }>({
     placeholder: randomIndex(list().length),
     prompt: {
@@ -300,8 +299,16 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
-    queuedDrafts: [],
   })
+
+  const queuedDrafts = createMemo(() => {
+    return sync.data.queuedDrafts[props.sessionID ?? ""] ?? []
+  })
+
+  function setQueuedDrafts(drafts: any[]) {
+    sync.setStore("queuedDrafts", props.sessionID ?? "", drafts)
+  }
+
   const session = createMemo(() => props.sessionID ? sync.session.get(props.sessionID) : undefined)
   const children = createMemo(() => {
     const s = session()
@@ -318,9 +325,9 @@ export function Prompt(props: PromptProps) {
   })
 
   createEffect(() => {
-    if (status().type === "idle" && !hasPendingRequests() && store.queuedDrafts.length > 0) {
-      const draft = store.queuedDrafts[0]
-      setStore("queuedDrafts", store.queuedDrafts.slice(1))
+    if (status().type === "idle" && !hasPendingRequests() && queuedDrafts().length > 0) {
+      const draft = queuedDrafts()[0]
+      setQueuedDrafts(queuedDrafts().slice(1))
       const { followupMode, ...payload } = draft
       sdk.client.session.prompt(payload).catch((err) => {
         Log.Default.error(`[Queue Debug] prompt failed: ${err}`)
@@ -1125,7 +1132,7 @@ export function Prompt(props: PromptProps) {
 
       const isSteer = isBusy && followupMode === "haltingSteer"
 
-      if (isBusy && followupMode !== "queue" && store.queuedDrafts.length >= 1) {
+      if (isBusy && followupMode !== "queue" && queuedDrafts().length >= 1) {
         toast.show({
           message: `Only one message can be queued in ${followupMode} mode`,
           variant: "warning",
@@ -1163,7 +1170,7 @@ export function Prompt(props: PromptProps) {
       }
 
       if (isBusy && followupMode === "queue") {
-        setStore("queuedDrafts", [...store.queuedDrafts, payload])
+        setQueuedDrafts([...queuedDrafts(), payload])
         toast.show({
           message: "Queued",
           variant: "info",
@@ -1429,9 +1436,9 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
             width="100%"
           >
-            <Show when={store.queuedDrafts.length > 0}>
+            <Show when={queuedDrafts().length > 0}>
               <box flexDirection="column" paddingBottom={1} gap={1}>
-                <For each={store.queuedDrafts}>
+                <For each={queuedDrafts()}>
                   {(draft, i) => {
                     const text = draft.parts.filter((p: any) => p.type === "text" && !p.synthetic).map((p: any) => p.text).join("\n")
                     const preview = text.length > 60 ? text.slice(0, 60).replace(/\n/g, " ") + "..." : text.replace(/\n/g, " ")
@@ -1533,10 +1540,10 @@ export function Prompt(props: PromptProps) {
                     const direction = matchesKeybind("history_previous", e) ? -1 : 1
 
                     if (direction === -1 && input.plainText === "") {
-                      if (store.queuedDrafts.length > 0) {
+                      if (queuedDrafts().length > 0) {
                         e.preventDefault()
-                        const draft = store.queuedDrafts[store.queuedDrafts.length - 1]
-                        setStore("queuedDrafts", store.queuedDrafts.slice(0, -1))
+                        const draft = queuedDrafts()[queuedDrafts().length - 1]
+                        setQueuedDrafts(queuedDrafts().slice(0, -1))
 
                         const promptInfo = {
                           input: draft.parts.filter((p: any) => p.type === "text" && !p.synthetic).map((p: any) => p.text).join("\n"),
@@ -1559,9 +1566,16 @@ export function Prompt(props: PromptProps) {
                         Log.Default.info(`[UpArrow Debug] hasStarted=${hasStarted}`)
                         if (!hasStarted) {
                           e.preventDefault()
-                          Log.Default.info(`[UpArrow Debug] aborting session and reverting message ${lastMsg.id}`)
+                          const earlierRunning = messages.some(
+                            (m) => m.role === "user" && m.id < lastMsg.id && !messages.some((am) => am.role === "assistant" && am.parentID >= m.id)
+                          )
+                          Log.Default.info(`[UpArrow Debug] earlierRunning=${earlierRunning}`)
                           void (async () => {
-                            await sdk.client.session.abort({ sessionID: props.sessionID! }).catch(() => {})
+                            if (!earlierRunning) {
+                              Log.Default.info(`[UpArrow Debug] aborting session`)
+                              await sdk.client.session.abort({ sessionID: props.sessionID! }).catch(() => {})
+                            }
+                            Log.Default.info(`[UpArrow Debug] reverting message ${lastMsg.id}`)
                             await sdk.client.session
                               .revert({
                                 sessionID: props.sessionID!,

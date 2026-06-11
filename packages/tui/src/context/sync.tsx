@@ -100,6 +100,9 @@ export const {
       }
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
+      queuedDrafts: {
+        [sessionID: string]: any[]
+      }
     }>({
       provider_next: {
         all: [],
@@ -127,6 +130,7 @@ export const {
       mcp_resource: {},
       formatter: [],
       vcs: undefined,
+      queuedDrafts: {},
     })
 
     const event = useEvent()
