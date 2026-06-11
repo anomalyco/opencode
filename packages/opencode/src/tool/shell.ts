@@ -300,7 +300,7 @@ function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv
   if (process.platform === "win32" && Shell.ps(shell)) {
     return ChildProcess.make(shell, ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", `$OutputEncoding = [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false); ${command}`], {
       cwd,
-      env,
+      env: { ...env, PYTHONIOENCODING: "utf-8" },
       stdin: "ignore",
       detached: false,
     })
@@ -309,7 +309,7 @@ function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv
   if (process.platform === "win32" && Shell.name(shell) === "cmd") {
     return ChildProcess.make(shell, ["/d", "/c", `chcp 65001 >nul && ${command}`], {
       cwd,
-      env,
+      env: { ...env, PYTHONIOENCODING: "utf-8" },
       stdin: "ignore",
       detached: false,
     })
