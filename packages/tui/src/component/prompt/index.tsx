@@ -29,7 +29,7 @@ import { editorSelectionKey, useEditorContext, type EditorSelection } from "../.
 import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
 import { promptOffsetWidth } from "../../prompt/display"
-import { createStore, produce, unwrap } from "solid-js/store"
+import { createStore, produce, unwrap, reconcile } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
 import { expandPastedTextPlaceholders, expandTrackedPastedText, stripPromptPartIDs, assign } from "../../prompt/part"
@@ -52,10 +52,19 @@ import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "../../context/args"
+import fs from "fs"
 const Log = {
   Default: {
-    info: (..._args: any[]) => {},
-    error: (..._args: any[]) => {},
+    info: (...args: any[]) => {
+      try {
+        fs.appendFileSync("/tmp/opencode-tui.log", args.map(x => typeof x === "object" ? JSON.stringify(x) : String(x)).join(" ") + "\n")
+      } catch {}
+    },
+    error: (...args: any[]) => {
+      try {
+        fs.appendFileSync("/tmp/opencode-tui.log", "[ERROR] " + args.map(x => typeof x === "object" ? JSON.stringify(x) : String(x)).join(" ") + "\n")
+      } catch {}
+    },
   },
 }
 import { ascending } from "@opencode-ai/core/id/id"
@@ -306,7 +315,7 @@ export function Prompt(props: PromptProps) {
   })
 
   function setQueuedDrafts(drafts: any[]) {
-    sync.setStore("queuedDrafts", props.sessionID ?? "", drafts)
+    sync.setStore("queuedDrafts", props.sessionID ?? "", reconcile(drafts))
   }
 
   const session = createMemo(() => props.sessionID ? sync.session.get(props.sessionID) : undefined)
@@ -324,14 +333,21 @@ export function Prompt(props: PromptProps) {
     return permissions.length > 0 || questions.length > 0
   })
 
+  const [sendingPrompt, setSendingPrompt] = createSignal(false)
+
   createEffect(() => {
-    if (status().type === "idle" && !hasPendingRequests() && queuedDrafts().length > 0) {
+    if (status().type === "idle" && !hasPendingRequests() && !sendingPrompt() && queuedDrafts().length > 0) {
       const draft = queuedDrafts()[0]
+      setSendingPrompt(true)
       setQueuedDrafts(queuedDrafts().slice(1))
       const { followupMode, ...payload } = draft
-      sdk.client.session.prompt(payload).catch((err) => {
-        Log.Default.error(`[Queue Debug] prompt failed: ${err}`)
-      })
+      sdk.client.session.prompt(payload)
+        .catch((err) => {
+          Log.Default.error(`[Queue Debug] prompt failed: ${err}`)
+        })
+        .finally(() => {
+          setSendingPrompt(false)
+        })
     }
   })
 
@@ -1538,12 +1554,14 @@ export function Prompt(props: PromptProps) {
                     (matchesKeybind("history_next", e) && input.cursorOffset === input.plainText.length)
                   ) {
                     const direction = matchesKeybind("history_previous", e) ? -1 : 1
-
+                    Log.Default.info(`[UpArrow] direction=${direction}, input.plainText="${input.plainText}", cursorOffset=${input.cursorOffset}, queueLength=${queuedDrafts().length}`)
                     if (direction === -1 && input.plainText === "") {
                       if (queuedDrafts().length > 0) {
                         e.preventDefault()
                         const draft = queuedDrafts()[queuedDrafts().length - 1]
-                        setQueuedDrafts(queuedDrafts().slice(0, -1))
+                        const newDrafts = queuedDrafts().slice(0, -1)
+                        Log.Default.info(`[UpArrow] Popping draft. New queue length: ${newDrafts.length}`)
+                        setQueuedDrafts(newDrafts)
 
                         const promptInfo = {
                           input: draft.parts.filter((p: any) => p.type === "text" && !p.synthetic).map((p: any) => p.text).join("\n"),
