@@ -1653,6 +1653,13 @@ export const layer = Layer.effect(
         })
 
         if (baseURL !== undefined) options["baseURL"] = baseURL
+        // Support comma-separated API keys for round-robin
+        const apiKeys: string[] = (
+          typeof options["apiKey"] === "string" ? options["apiKey"].split(",").map((s: string) => s.trim()).filter(Boolean) : []
+        )
+        const hasMultipleKeys = apiKeys.length > 1
+        const effectiveKey = hasMultipleKeys ? apiKeys[0] : (options["apiKey"] as string | undefined)
+        if (hasMultipleKeys) options["apiKey"] = effectiveKey
         if (options["apiKey"] === undefined && provider.key) options["apiKey"] = provider.key
         if (model.headers)
           options["headers"] = {
@@ -1676,9 +1683,21 @@ export const layer = Layer.effect(
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
 
+        // Round-robin counter for multiple API keys
+        let rrIdx = 0
+
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
           const opts = init ?? {}
+
+          // Rotate API key on every HTTP request (round-robin)
+          if (hasMultipleKeys) {
+            const key = apiKeys[rrIdx % apiKeys.length]
+            rrIdx = (rrIdx + 1) | 0
+            const masked = key.length > 12 ? key.slice(0, 8) + "..." + key.slice(-4) : key
+            log.debug("round-robin api key", { key: masked, index: (rrIdx - 1) % apiKeys.length })
+            opts.headers = { ...(init?.headers as Record<string, string> | undefined), authorization: `Bearer ${key}` }
+          }
           const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
           const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout
           const headerTimeoutCtl = typeof headerTimeoutMs === "number" ? timeoutController(headerTimeoutMs) : undefined
