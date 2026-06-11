@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "sbomtest-review": {
+      "source": "jadsongmatos/sbomtest",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "5f42bf3f9f386c2b16641957b36c7f4bcdb2b5d368d3c020599b34c861c5f6b0"
+    }
+  }
+}
