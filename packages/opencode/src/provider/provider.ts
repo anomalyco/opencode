@@ -590,6 +590,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       }),
     anyapi: () =>
       Effect.succeed({
+        autoload: false,
         options: {
           headers: {
             "HTTP-Referer": "https://opencode.ai/",
