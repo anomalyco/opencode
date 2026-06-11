@@ -1106,7 +1106,7 @@ export function Prompt(props: PromptProps) {
         )
         .catch((error) => {
           toast.show({
-            title: "Sending prompt failed",
+            title: "Failed to send prompt",
             message: errorMessage(error),
             variant: "error",
           })
