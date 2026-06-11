@@ -514,7 +514,7 @@ export async function SnowflakeCortexAuthPlugin(_input: PluginInput): Promise<Ho
         },
         {
           type: "api",
-          label: "Paste bearer token manually",
+          label: "Paste PAT or bearer token manually",
           prompts: prompts.filter((item) => item.key === "account"),
         },
       ],
