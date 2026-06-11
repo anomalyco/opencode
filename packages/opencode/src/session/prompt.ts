@@ -1491,7 +1491,13 @@ export const layer = Layer.effect(
               prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
             },
           ]
-        : [...templateParts, ...(input.parts ?? [])]
+        : cmd.source === "skill"
+          ? [
+              { type: "text" as const, text: `/${input.command}` },
+              ...templateParts.map((p) => (p.type === "text" ? { ...p, synthetic: true } : p)),
+              ...(input.parts ?? []),
+            ]
+          : [...templateParts, ...(input.parts ?? [])]
 
       const userAgent = isSubtask ? (input.agent ?? (yield* agents.defaultInfo()).name) : agent.name
       const userModel = isSubtask
