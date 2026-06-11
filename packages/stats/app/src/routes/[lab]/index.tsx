@@ -74,9 +74,7 @@ export default function StatsLab() {
     () =>
       `Explore ${labName()} models used in OpenCode, with recent token usage, context windows, release dates, and model-specific data.`,
   )
-  const labUrl = createMemo(() =>
-    new URL(lab()?.id ?? labParam(), statsCanonicalBaseUrl).toString(),
-  )
+  const labUrl = createMemo(() => new URL(lab()?.id ?? labParam(), statsCanonicalBaseUrl).toString())
   const updateThemePreference = (preference: ThemePreference) => {
     applyThemePreference(preference)
     setThemePreference(preference)
