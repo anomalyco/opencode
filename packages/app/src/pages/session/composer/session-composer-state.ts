@@ -9,21 +9,13 @@ import { usePermission } from "@/context/permission"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { composerDriver, composerEnabled, composerEvent } from "@/testing/session-composer"
-import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
+import { sessionPermissionRequest, sessionQuestionRequest, sessionQuestionRequests } from "./session-request-tree"
 import { working as sessionWorking } from "../session-working"
 import { markQuestionProfileUi } from "./session-question-profile"
-import { permissionRequestNotFound } from "./session-question-dock-helpers"
+import { permissionRequestNotFound, questionInvalidation } from "./session-question-dock-helpers"
+import { todoState } from "./session-composer-state-helpers"
 
-export const todoState = (input: {
-  count: number
-  done: boolean
-  live: boolean
-}): "hide" | "clear" | "open" | "close" => {
-  if (input.count === 0) return "hide"
-  if (!input.live) return "clear"
-  if (!input.done) return "open"
-  return "close"
-}
+export { todoState }
 
 const idle = { type: "idle" as const }
 
@@ -35,9 +27,48 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
   const language = useLanguage()
   const permission = usePermission()
 
+  const isSkippedQuestion = (request: QuestionRequest): boolean => {
+    return questionInvalidation(request, sync.data.message[request.sessionID] ?? []) !== undefined
+  }
+
   const questionRequest = createMemo((): QuestionRequest | undefined => {
-    return sessionQuestionRequest(sync.data.session, sync.data.question, params.id)
+    return sessionQuestionRequest(
+      sync.data.session,
+      sync.data.question,
+      params.id,
+      (request) => !isSkippedQuestion(request),
+    )
   })
+
+  const skippedQuestionRequests = createMemo((): QuestionRequest[] => {
+    return sessionQuestionRequests(sync.data.session, sync.data.question, params.id, isSkippedQuestion)
+  })
+
+  const clearSkippedQuestions = () => {
+    const bySession = new Map<string, Set<string>>()
+    for (const request of skippedQuestionRequests()) {
+      const ids = bySession.get(request.sessionID)
+      if (ids) {
+        ids.add(request.id)
+        continue
+      }
+      bySession.set(request.sessionID, new Set([request.id]))
+    }
+
+    for (const [sessionID, ids] of bySession) {
+      sync.set(
+        "question",
+        sessionID,
+        produce((draft = []) => {
+          for (let index = draft.length - 1; index >= 0; index--) {
+            const item = draft[index]
+            if (item && ids.has(item.id)) draft.splice(index, 1)
+          }
+          return draft
+        }),
+      )
+    }
+  }
 
   createEffect(() => {
     const request = questionRequest()
@@ -268,6 +299,8 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
   return {
     blocked,
     questionRequest,
+    skippedQuestionRequests,
+    clearSkippedQuestions,
     permissionRequest,
     permissionResponding,
     decide,

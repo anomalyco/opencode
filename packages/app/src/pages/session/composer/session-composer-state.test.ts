@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { PermissionRequest, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
-import { todoState } from "./session-composer-state"
-import { sessionPermissionRequest, sessionQuestionRequest } from "./session-request-tree"
+import { todoState } from "./session-composer-state-helpers"
+import { sessionPermissionRequest, sessionQuestionRequest, sessionQuestionRequests } from "./session-request-tree"
 
 const session = (input: { id: string; parentID?: string }) =>
   ({
@@ -102,6 +102,30 @@ describe("sessionQuestionRequest", () => {
     }
 
     expect(sessionQuestionRequest(sessions, questions, "root")?.id).toBe("q-grand")
+  })
+
+  test("skips filtered questions and returns the next tree question", () => {
+    const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
+    const questions = {
+      root: [question("q-stale", "root")],
+      child: [question("q-active", "child")],
+    }
+
+    expect(sessionQuestionRequest(sessions, questions, "root", (item) => item.id !== "q-stale")?.id).toBe("q-active")
+  })
+
+  test("returns all tree questions in traversal order", () => {
+    const sessions = [session({ id: "root" }), session({ id: "child", parentID: "root" })]
+    const questions = {
+      root: [question("q-root-1", "root"), question("q-root-2", "root")],
+      child: [question("q-child", "child")],
+    }
+
+    expect(sessionQuestionRequests(sessions, questions, "root").map((item) => item.id)).toEqual([
+      "q-root-1",
+      "q-root-2",
+      "q-child",
+    ])
   })
 })
 

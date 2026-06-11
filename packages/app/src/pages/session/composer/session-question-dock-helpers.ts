@@ -1,4 +1,5 @@
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
+import type { Message } from "@opencode-ai/sdk/v2/client"
 import type { ImageAttachmentPart } from "@/context/prompt"
 
 export type QuestionImage = ImageAttachmentPart
@@ -61,6 +62,28 @@ export function questionReply(
       }
     }),
   ])
+}
+
+export type QuestionInvalidation =
+  | { type: "source-error"; messageID: string }
+  | { type: "superseded"; messageID: string }
+
+export function questionInvalidation(
+  request: QuestionRequest,
+  messages: readonly Message[],
+): QuestionInvalidation | undefined {
+  const messageID = request.tool?.messageID
+  if (!messageID) return undefined
+
+  const index = messages.findIndex((message) => message.id === messageID)
+  if (index === -1) return undefined
+
+  const source = messages[index]
+  if (source?.role === "assistant" && source.error) return { type: "source-error", messageID }
+
+  const newer = messages[index + 1]
+  if (!newer) return undefined
+  return { type: "superseded", messageID: newer.id }
 }
 
 export function questionRequestNotFound(error: unknown, requestID: string) {

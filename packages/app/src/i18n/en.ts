@@ -659,6 +659,12 @@ export const dict = {
   "session.todo.expand": "Expand",
   "session.todo.progress": "{{done}} of {{total}} todos completed",
   "session.question.progress": "{{current}} of {{total}} questions",
+  "session.question.skipped.button": "{{count}} skipped question(s)",
+  "session.question.skipped.title": "Skipped questions",
+  "session.question.skipped.description":
+    "These question prompts were superseded by newer session messages and are no longer active.",
+  "session.question.skipped.options": "Options: {{options}}",
+  "session.question.skipped.clear": "Clear skipped questions",
   "session.read": "Read mode",
   "session.followupDock.summary.one": "{{count}} queued message",
   "session.followupDock.summary.other": "{{count}} queued messages",

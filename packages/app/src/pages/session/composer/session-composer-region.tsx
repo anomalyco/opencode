@@ -1,5 +1,7 @@
 import { Show, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Button } from "@opencode-ai/ui/button"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { PromptInput } from "@/components/prompt-input"
 import { useLanguage } from "@/context/language"
@@ -8,6 +10,7 @@ import { getSessionHandoff, setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { SessionPermissionDock } from "@/pages/session/composer/session-permission-dock"
 import { SessionQuestionDock } from "@/pages/session/composer/session-question-dock"
+import { SessionSkippedQuestionsDialog } from "@/pages/session/composer/session-skipped-questions-dialog"
 import { SessionFollowupDock } from "@/pages/session/composer/session-followup-dock"
 import { SessionRevertDock } from "@/pages/session/composer/session-revert-dock"
 import type { SessionComposerState } from "@/pages/session/composer/session-composer-state"
@@ -46,6 +49,7 @@ export function SessionComposerRegion(props: {
 }) {
   const prompt = usePrompt()
   const language = useLanguage()
+  const dialog = useDialog()
   const route = useSessionKey()
 
   const handoffPrompt = createMemo(() => getSessionHandoff(route.sessionKey())?.prompt)
@@ -113,6 +117,16 @@ export function SessionComposerRegion(props: {
   const rolled = createMemo(() => (props.revert?.items.length ? props.revert : undefined))
   const lift = createMemo(() => (rolled() ? 18 : 36 * value()))
   const full = createMemo(() => Math.max(78, store.height))
+  const skippedQuestionCount = createMemo(() => props.state.skippedQuestionRequests().length)
+
+  const openSkippedQuestions = () => {
+    dialog.show(() => (
+      <SessionSkippedQuestionsDialog
+        requests={props.state.skippedQuestionRequests}
+        onClear={props.state.clearSkippedQuestions}
+      />
+    ))
+  }
 
   createEffect(() => {
     const request = props.state.questionRequest()
@@ -264,6 +278,13 @@ export function SessionComposerRegion(props: {
                   onSend={props.followup!.onSend}
                   onEdit={props.followup!.onEdit}
                 />
+              </Show>
+              <Show when={skippedQuestionCount() > 0}>
+                <div class="mb-2 flex justify-end">
+                  <Button variant="ghost" size="small" onClick={openSkippedQuestions}>
+                    {language.t("session.question.skipped.button", { count: skippedQuestionCount() })}
+                  </Button>
+                </div>
               </Show>
               <PromptInput
                 ref={props.inputRef}

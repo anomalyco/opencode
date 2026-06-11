@@ -1,7 +1,9 @@
 import { beforeAll, describe, expect, test } from "bun:test"
+import type { Message, QuestionRequest } from "@opencode-ai/sdk/v2/client"
 
 let questionAnswered: typeof import("./session-question-dock-helpers").questionAnswered
 let questionAttachments: typeof import("./session-question-dock-helpers").questionAttachments
+let questionInvalidation: typeof import("./session-question-dock-helpers").questionInvalidation
 let questionReply: typeof import("./session-question-dock-helpers").questionReply
 let questionRequestNotFound: typeof import("./session-question-dock-helpers").questionRequestNotFound
 let permissionRequestNotFound: typeof import("./session-question-dock-helpers").permissionRequestNotFound
@@ -10,10 +12,28 @@ beforeAll(async () => {
   const mod = await import("./session-question-dock-helpers")
   questionAnswered = mod.questionAnswered
   questionAttachments = mod.questionAttachments
+  questionInvalidation = mod.questionInvalidation
   questionReply = mod.questionReply
   questionRequestNotFound = mod.questionRequestNotFound
   permissionRequestNotFound = mod.permissionRequestNotFound
 })
+
+const request = (messageID?: string) =>
+  ({
+    id: "que_1",
+    sessionID: "ses_1",
+    tool: messageID ? { messageID } : undefined,
+    questions: [],
+  }) as QuestionRequest
+
+const message = (input: { id: string; role?: "assistant" | "user"; error?: boolean }) =>
+  ({
+    id: input.id,
+    sessionID: "ses_1",
+    role: input.role ?? "assistant",
+    time: { created: 1 },
+    error: input.error ? { message: "boom" } : undefined,
+  }) as Message
 
 describe("session question dock helpers", () => {
   test("marks custom answers with images as answered even after editing closes", () => {
@@ -136,5 +156,24 @@ describe("session question dock helpers", () => {
 
     expect(permissionRequestNotFound(error, "per_1")).toBe(true)
     expect(permissionRequestNotFound(error, "per_2")).toBe(false)
+  })
+
+  test("does not invalidate a question without a source message", () => {
+    expect(questionInvalidation(request(), [message({ id: "msg_1" })])).toBeUndefined()
+    expect(questionInvalidation(request("msg_missing"), [message({ id: "msg_1" })])).toBeUndefined()
+  })
+
+  test("invalidates a question when a later message supersedes its source", () => {
+    expect(questionInvalidation(request("msg_z"), [message({ id: "msg_z" }), message({ id: "msg_a" })])).toEqual({
+      type: "superseded",
+      messageID: "msg_a",
+    })
+  })
+
+  test("invalidates a question when the source assistant message has an error", () => {
+    expect(questionInvalidation(request("msg_1"), [message({ id: "msg_1", error: true })])).toEqual({
+      type: "source-error",
+      messageID: "msg_1",
+    })
   })
 })
