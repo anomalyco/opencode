@@ -1,6 +1,6 @@
 [data-component="doc-submit-overlay"] {
   --ds-helmet: #ffce2b;
-  --ds-backdrop: rgba(13, 13, 17, 0.96);
+  --ds-backdrop: rgba(13, 13, 17, 0.64);
   --ds-disc: rgba(13, 13, 17, 0.94);
   --ds-mint: #22b487;
   --ds-safety: #ff6b1f;
