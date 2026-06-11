@@ -18,9 +18,11 @@ import { HealthHandler } from "./handlers/health"
 import { QuestionHandler } from "./handlers/question"
 import { ReferenceHandler } from "./handlers/reference"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
+import { LocationHandler } from "./handlers/location"
 
 export const handlers = Layer.mergeAll(
   HealthHandler,
+  LocationHandler,
   AgentHandler,
   SessionHandler,
   MessageHandler,
