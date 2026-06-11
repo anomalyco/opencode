@@ -258,15 +258,49 @@ async function sync(cfg: Cfg) {
   await cmd(["git", "fetch", cfg.origin, cfg.base, cfg.upstream.mirror])
   const dir = await text(["mktemp", "-d"])
 
+  let conflict = false
+  let files: string[] = []
+
   try {
     await must(["git", "worktree", "add", "-B", item.head, dir, `${cfg.origin}/${cfg.base}`])
-    await must(["git", "merge", "--no-ff", item.tag, "-m", `Merge tag '${item.tag}' into ${item.head}`], dir)
+
+    const merge = await cmd(
+      ["git", "merge", "--no-ff", "--no-edit", item.tag, "-m", `Merge tag '${item.tag}' into ${item.head}`],
+      dir,
+    )
+
+    if (merge.code !== 0) {
+      const status = await text(["git", "status", "--porcelain"], dir)
+      files = status
+        .split("\n")
+        .filter((line) => /^(UU|AA|DD|AU|UA|DU|UD) /.test(line))
+        .map((line) => line.slice(3))
+
+      if (files.length === 0) {
+        throw new Error(merge.err || `git merge failed without conflicts: ${item.tag}`)
+      }
+
+      conflict = true
+      const body = [
+        `Merge tag '${item.tag}' into ${item.head} (CONFLICT - manual resolution required)`,
+        "",
+        "Conflict files:",
+        ...files.map((f) => `- ${f}`),
+      ].join("\n")
+      await must(["git", "add", "-A"], dir)
+      await must(["git", "commit", "-m", body], dir)
+    }
+
     await must(["git", "push", cfg.origin, `HEAD:${item.head}`, "--force-with-lease"], dir)
   } finally {
     await cmd(["git", "worktree", "remove", "--force", dir])
   }
 
   out("created", true)
+  out("conflict", conflict)
+  console.log("conflict_files<<EOF")
+  for (const f of files) console.log(f)
+  console.log("EOF")
 }
 
 async function main() {

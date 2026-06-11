@@ -3,7 +3,8 @@ name: upstream-tag-sync
 on:
   workflow_dispatch:
   schedule:
-    - cron: "*/15 * * * *"
+    # 毎日 00:00 UTC (= 09:00 JST) に upstream の最新リリース tag を確認する。
+    - cron: "0 0 * * *"
   repository_dispatch:
     types: [upstream_tag]
 
@@ -26,12 +27,10 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
-      - name: Setup git committer
-        id: committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+      - name: Configure git user
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Guard local git config
         run: bun script/upstream.ts guard
@@ -48,9 +47,9 @@ jobs:
         id: gate
         if: steps.plan.outputs.needed == 'true'
         env:
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          PR="$(gh pr list --state open --base "${{ steps.plan.outputs.base }}" --json number,headRefName --jq '.[] | select(.headRefName | startswith("sync/upstream-v")) | .headRefName' | head -n 1)"
+          PR="$(gh pr list -R ${{ github.repository }} --state open --base "${{ steps.plan.outputs.base }}" --json number,headRefName --jq '.[] | select(.headRefName | startswith("sync/upstream-v")) | .headRefName' | head -n 1)"
           if [ -z "$PR" ] || [ "$PR" = "${{ steps.plan.outputs.branch }}" ]; then
             echo "blocked=false" >> "$GITHUB_OUTPUT"
             exit 0
@@ -63,38 +62,82 @@ jobs:
         if: steps.plan.outputs.needed == 'true' && steps.gate.outputs.blocked != 'true'
         run: bun script/upstream.ts sync >> "$GITHUB_OUTPUT"
 
+      - name: Ensure conflict label
+        if: steps.sync.outputs.conflict == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh label create needs-manual-resolution \
+            -R ${{ github.repository }} \
+            --description "Upstream sync PR has merge conflicts requiring manual resolution" \
+            --color FBCA04 || true
+
       - name: Create or update sync PR
         if: steps.plan.outputs.needed == 'true' && steps.gate.outputs.blocked != 'true'
         env:
-          GH_TOKEN: ${{ steps.committer.outputs.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CONFLICT: ${{ steps.sync.outputs.conflict }}
+          CONFLICT_FILES: ${{ steps.sync.outputs.conflict_files }}
+          FROM_TAG: ${{ steps.plan.outputs.from_tag }}
+          TARGET_TAG: ${{ steps.plan.outputs.tag }}
+          SHA: ${{ steps.plan.outputs.sha }}
+          BASE: ${{ steps.plan.outputs.base }}
+          BRANCH: ${{ steps.plan.outputs.branch }}
         run: |
-          TITLE="chore(sync): merge upstream ${{ steps.plan.outputs.tag }}"
-          BODY=$(cat <<'EOF'
-          Automated intake PR for the latest upstream release tag.
+          set -euo pipefail
 
-          - Current dev upstream tag: `${{ steps.plan.outputs.from_tag }}`
-          - Target upstream tag: `${{ steps.plan.outputs.tag }}`
-          - Mirror branch: `vendor/upstream-release`
-          - Intake branch: `${{ steps.plan.outputs.branch }}`
-          - Upstream commit: `${{ steps.plan.outputs.sha }}`
-          - Base branch: `${{ steps.plan.outputs.base }}`
-          - Merge method: `Create a merge commit`
+          if [ "$CONFLICT" = "true" ]; then
+            TITLE="chore(sync): merge upstream ${TARGET_TAG} (conflicts)"
+          else
+            TITLE="chore(sync): merge upstream ${TARGET_TAG}"
+          fi
 
-          This repository keeps fork-specific changes on `dev` and ingests upstream through a merge-based sync branch when a new upstream version tag is published.
-          EOF
-          )
+          {
+            echo "Automated intake PR for the latest upstream release tag."
+            echo
+            echo "- Current dev upstream tag: \`${FROM_TAG}\`"
+            echo "- Target upstream tag: \`${TARGET_TAG}\`"
+            echo "- Mirror branch: \`vendor/upstream-release\`"
+            echo "- Intake branch: \`${BRANCH}\`"
+            echo "- Upstream commit: \`${SHA}\`"
+            echo "- Base branch: \`${BASE}\`"
+            echo "- Merge method: \`Create a merge commit\`"
+          } > /tmp/pr-body.md
 
-          PR="$(gh pr list --state open --base "${{ steps.plan.outputs.base }}" --head "${{ steps.plan.outputs.branch }}" --json number --jq '.[0].number // empty')"
-          if [ -n "$PR" ]; then
-            gh pr edit "$PR" --title "$TITLE" --body "$BODY"
+          if [ "$CONFLICT" = "true" ]; then
+            {
+              echo
+              echo "## ⚠️ Merge conflicts detected"
+              echo
+              echo "This branch contains conflict markers and **must be resolved manually** before merging."
+              echo
+              echo "Conflicting files:"
+              echo "$CONFLICT_FILES" | sed '/^$/d' | sed 's/^/- `/' | sed 's/$/`/'
+            } >> /tmp/pr-body.md
+          fi
+
+          PR_NUMBER="$(gh pr list -R ${{ github.repository }} --state open --base "${BASE}" --head "${BRANCH}" --json number --jq '.[0].number // empty')"
+
+          if [ -n "$PR_NUMBER" ]; then
+            gh pr edit "$PR_NUMBER" -R ${{ github.repository }} --title "$TITLE" --body-file /tmp/pr-body.md
             exit 0
           fi
 
+          DRAFT_FLAG=""
+          LABEL_FLAG=""
+          if [ "$CONFLICT" = "true" ]; then
+            DRAFT_FLAG="--draft"
+            LABEL_FLAG="--label needs-manual-resolution"
+          fi
+
           gh pr create \
-            --base "${{ steps.plan.outputs.base }}" \
-            --head "${{ steps.plan.outputs.branch }}" \
+            -R ${{ github.repository }} \
+            --base "${BASE}" \
+            --head "${BRANCH}" \
             --title "$TITLE" \
-            --body "$BODY"
+            --body-file /tmp/pr-body.md \
+            $DRAFT_FLAG \
+            $LABEL_FLAG
 
       - name: Summary
         run: |
@@ -106,6 +149,7 @@ jobs:
             echo "- mirrored sha: ${{ steps.mirror.outputs.sha_short }}"
             echo "- sync needed: ${{ steps.plan.outputs.needed }}"
             echo "- sync branch: ${{ steps.plan.outputs.branch }}"
+            echo "- merge conflict: ${{ steps.sync.outputs.conflict }}"
             if [ "${{ steps.gate.outputs.blocked }}" = "true" ]; then
               echo "- blocked by open sync PR: ${{ steps.gate.outputs.existing }}"
             fi
