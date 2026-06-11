@@ -2,7 +2,7 @@
 
 import { buildClientParams, type Client, type Options as Options2, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddConfigModelErrors, AddConfigModelResponses, ConfigGroupPatchRequest, ConfigModelPatchRequest, ConfigModelRequest, GetConfigInfoResponses, GetConfigModelErrors, GetConfigModelResponses, GetHardwareResponses, GetSystemCapabilitiesResponses, GetSystemVersionResponses, ListModelsResponses, PatchConfigGroupErrors, PatchConfigGroupResponses, PatchConfigModelErrors, PatchConfigModelResponses, ReloadConfigErrors, ReloadConfigResponses, RemoveConfigModelErrors, RemoveConfigModelResponses } from './types.gen';
+import type { AddConfigModelErrors, AddConfigModelResponses, ClearDefaultModelErrors, ClearDefaultModelResponses, ConfigDefaultModelRequest, ConfigGroupPatchRequest, ConfigModelPatchRequest, ConfigModelRequest, GetConfigInfoResponses, GetConfigModelErrors, GetConfigModelResponses, GetDefaultModelResponses, GetHardwareResponses, GetSystemCapabilitiesResponses, GetSystemVersionResponses, ListModelsResponses, PatchConfigGroupErrors, PatchConfigGroupResponses, PatchConfigModelErrors, PatchConfigModelResponses, ReloadConfigErrors, ReloadConfigResponses, RemoveConfigModelErrors, RemoveConfigModelResponses, SetDefaultModelErrors, SetDefaultModelResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -172,5 +172,38 @@ export class LlamaSkeinClient extends HeyApiClient {
      */
     public reloadConfig<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
         return (options?.client ?? this.client).post<ReloadConfigResponses, ReloadConfigErrors, ThrowOnError>({ url: '/api/config/reload', ...options });
+    }
+    
+    /**
+     * Removes the default model from the on-disk config YAML and triggers reload. Idempotent.
+     */
+    public clearDefaultModel<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).delete<ClearDefaultModelResponses, ClearDefaultModelErrors, ThrowOnError>({ url: '/api/config/default-model', ...options });
+    }
+    
+    /**
+     * Returns the configured default model used when a request omits the 'model' field.
+     */
+    public getDefaultModel<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<GetDefaultModelResponses, unknown, ThrowOnError>({ url: '/api/config/default-model', ...options });
+    }
+    
+    /**
+     * Sets the default model in the on-disk config YAML and triggers reload. The model must be a configured model ID or alias.
+     */
+    public setDefaultModel<ThrowOnError extends boolean = false>(parameters: {
+        configDefaultModelRequest: ConfigDefaultModelRequest;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ key: 'configDefaultModelRequest', map: 'body' }] }]);
+        return (options?.client ?? this.client).put<SetDefaultModelResponses, SetDefaultModelErrors, ThrowOnError>({
+            url: '/api/config/default-model',
+            ...options,
+            ...params,
+            headers: {
+                'Content-Type': 'application/json',
+                ...options?.headers,
+                ...params.headers
+            }
+        });
     }
 }

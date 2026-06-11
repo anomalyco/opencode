@@ -114,6 +114,10 @@ export type Model = {
      * Inference backend type.
      */
     backend?: 'llamacpp' | 'mlx' | 'vllm';
+    /**
+     * True when this model is the configured default, used for requests that omit the 'model' field. Listed first in the model list. llama-skein extension to the OpenAI schema.
+     */
+    default?: boolean;
 };
 
 export type ConfigInfoResponse = {
@@ -121,6 +125,10 @@ export type ConfigInfoResponse = {
     models_dir: string;
     model_count: number;
     models: Array<ConfigModelInfo>;
+    /**
+     * Configured default model ID; omitted when no default is set.
+     */
+    default_model?: string;
 };
 
 export type ConfigModelInfo = {
@@ -176,6 +184,20 @@ export type ConfigGroupPatchRequest = {
 export type ConfigModelResponse = {
     id: string;
     status: string;
+};
+
+export type ConfigDefaultModelRequest = {
+    /**
+     * Model ID or alias to use when a request omits the 'model' field.
+     */
+    model: string;
+};
+
+export type ConfigDefaultModelResponse = {
+    /**
+     * Configured default model ID, or null when no default is set.
+     */
+    model: string | null;
 };
 
 export type GetSystemVersionData = {
@@ -457,3 +479,81 @@ export type ReloadConfigResponses = {
 };
 
 export type ReloadConfigResponse = ReloadConfigResponses[keyof ReloadConfigResponses];
+
+export type ClearDefaultModelData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/config/default-model';
+};
+
+export type ClearDefaultModelErrors = {
+    /**
+     * Config file path not set.
+     */
+    422: unknown;
+    /**
+     * Internal server error.
+     */
+    500: unknown;
+};
+
+export type ClearDefaultModelResponses = {
+    /**
+     * Default model cleared; reload triggered asynchronously.
+     */
+    202: ConfigModelResponse;
+};
+
+export type ClearDefaultModelResponse = ClearDefaultModelResponses[keyof ClearDefaultModelResponses];
+
+export type GetDefaultModelData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/config/default-model';
+};
+
+export type GetDefaultModelResponses = {
+    /**
+     * Default model info. 'model' is null when no default is configured.
+     */
+    200: ConfigDefaultModelResponse;
+};
+
+export type GetDefaultModelResponse = GetDefaultModelResponses[keyof GetDefaultModelResponses];
+
+export type SetDefaultModelData = {
+    body: ConfigDefaultModelRequest;
+    path?: never;
+    query?: never;
+    url: '/api/config/default-model';
+};
+
+export type SetDefaultModelErrors = {
+    /**
+     * Bad request.
+     */
+    400: unknown;
+    /**
+     * Model not found in config.
+     */
+    404: unknown;
+    /**
+     * Config file path not set.
+     */
+    422: unknown;
+    /**
+     * Internal server error.
+     */
+    500: unknown;
+};
+
+export type SetDefaultModelResponses = {
+    /**
+     * Default model updated; reload triggered asynchronously.
+     */
+    202: ConfigModelResponse;
+};
+
+export type SetDefaultModelResponse = SetDefaultModelResponses[keyof SetDefaultModelResponses];
