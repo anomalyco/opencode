@@ -34,12 +34,9 @@ const json = (req: Parameters<typeof HttpClientResponse.fromWeb>[0], body: unkno
 const none = HttpClient.make(() => Effect.die("unexpected http call"))
 
 function requestLayer(client: HttpClient.HttpClient) {
-  return LayerNode.buildLayer(
-    LayerNode.group([ShareNext.node, AccountRepo.node]),
-    {
-      replacements: [LayerNode.replace(httpClient, Layer.succeed(HttpClient.HttpClient, client))],
-    },
-  )
+  return LayerNode.buildLayer(LayerNode.group([ShareNext.node, AccountRepo.node]), {
+    replacements: [LayerNode.replace(httpClient, Layer.succeed(HttpClient.HttpClient, client))],
+  })
 }
 
 function integrationLayer(client: HttpClient.HttpClient) {
