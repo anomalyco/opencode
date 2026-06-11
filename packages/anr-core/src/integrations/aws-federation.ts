@@ -22,6 +22,9 @@ export async function exchangeTokenForAWSCredentials(idToken: string, config: AN
   const govcloud = region.startsWith("us-gov-")
   const client = new CognitoIdentityClient({
     region,
+    // Bun can trip on node-config-provider loadConfig in some mixed SDK graphs.
+    // Setting this explicitly avoids that runtime path.
+    accountIdEndpointMode: "disabled",
     ...(govcloud && { useFipsEndpoint: true }),
   })
 
