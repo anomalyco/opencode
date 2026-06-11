@@ -1,0 +1,20 @@
+live_trading:
+  ai_can_enable: false
+  requires_human_approval: true
+
+limits:
+  max_lot: 0.01
+  max_daily_loss_usd: 20
+  max_weekly_loss_usd: 50
+  max_consecutive_losses: 5
+  max_drawdown_percent: 10
+  minimum_trade_count: 30
+
+hard_blocks:
+  - martingale
+  - grid_without_max_loss
+  - increase_lot_after_loss
+  - live_deploy_without_demo_forward
+  - optimize_on_single_period_only
+  - promote_without_out_of_sample_test
+  - promote_without_spread_sensitivity_test

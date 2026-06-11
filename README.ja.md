@@ -178,6 +178,27 @@ bun run dev
 - `.opencode/mcp/service.ts`
 - `.opencode/mcp/trade-memory-server.ts`
 
+### EA Lab Memory System
+
+この fork には、MT5 EA の研究・実装・検証を証跡ベースで進めるための **EA Lab Memory System - Phase 1: Memory Foundations** が含まれます。
+
+Phase 1 は OpenCode core を変更せず、repo-local な EA Lab 専用構造化記憶基盤を追加します。
+
+- `.opencode/ea-lab-core` 配下の SQLite schema と schema health check
+- 検索可能な研究メモを保存する前の redaction
+- backtest、log、commit、URL、message、manual note を結び付ける evidence record
+- 仮説、テスト条件、metrics、stage、結果を残す experiment ledger
+- 成功、失敗、near miss、棄却理由を再利用可能にする experience memory
+- SQLite FTS による deterministic similar-experience search
+- `risk/gates.yaml` を正とする conservative risk gate parsing / check
+- `.opencode/mcp/ea-lab-*` の repo-local MCP / HTTP entrypoint
+
+`trade-memory` は会話履歴、handoff、作業文脈を保持します。EA Lab Memory は、トレード検証証跡、実験判断、リスク制約を扱う新しい構造化レイヤーです。Phase 1 では意図的に分離し、handoff 注入や model-switch 連携へ進む前に単体で検証できる形にしています。
+
+Phase 1 では **live trading の有効化、lot size の自動増加、risk gate の緩和、MT5 order execution、Context7 統合、wiki 自動化、全 OpenCode session への自動注入** は行いません。
+
+詳細は [EA Lab Memory Foundations](./docs/ea-lab-memory-foundations.md) を参照してください。
+
 ### Memory Handoff Bridge
 
 モデル切替時に重要なプロジェクト状態が黙って失われないよう、thin plugin bridge を追加しています。
