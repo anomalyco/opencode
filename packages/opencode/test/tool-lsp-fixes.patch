@@ -1,0 +1,63 @@
+@@
+   const lsp = Layer.succeed(
+     Layer.provide(RuntimeFlags.defaultLayer)(
+       Layer.provide(Config.defaultLayer)(
+         Layer.provide(EventV2Bridge.defaultLayer)(
+           Layer.provide(FSUtil.node)(
+             Layer.succeed({
+               init: () => Effect.void,
+               status: () => Effect.succeed([]),
+-              hasClients: () => Effect.succeed(false),
++              hasClients: () => Effect.succeed(false),
++              failureReason: () => Effect.succeed(undefined),
+               touchFile: () => Effect.void,
+               diagnostics: () => Effect.succeed({}),
+               hover: () => Effect.succeed(undefined),
+             }),
+           ),
+         ),
+       ),
+     ),
+   )
+@@
+   const lsp = Layer.succeed(
+     Layer.provide(RuntimeFlags.defaultLayer)(
+       Layer.provide(Config.defaultLayer)(
+         Layer.provide(EventV2Bridge.defaultLayer)(
+           Layer.provide(FSUtil.node)(
+             Layer.succeed({
+               init: () => Effect.void,
+               status: () => Effect.succeed([]),
+-              hasClients: () => Effect.succeed(false),
++              hasClients: () => Effect.succeed(false),
++              failureReason: () => Effect.succeed(undefined),
+               touchFile: () => Effect.void,
+               diagnostics: () => Effect.succeed({}),
+               hover: () => Effect.succeed(undefined),
+             }),
+           ),
+         ),
+       ),
+     ),
+   )
+@@
+   const lsp = Layer.succeed(
+     Layer.provide(RuntimeFlags.defaultLayer)(
+       Layer.provide(Config.defaultLayer)(
+         Layer.provide(EventV2Bridge.defaultLayer)(
+           Layer.provide(FSUtil.node)(
+             Layer.succeed({
+               init: () => Effect.void,
+               status: () => Effect.succeed([]),
+-              hasClients: () => Effect.succeed(true),
++              hasClients: () => Effect.succeed(true),
++              failureReason: () => Effect.succeed(undefined),
+               touchFile: () => Effect.void,
+               diagnostics: () => Effect.succeed({}),
+               hover: () => Effect.succeed([]),
+             }),
+           ),
+         ),
+       ),
+     ),
+   )
