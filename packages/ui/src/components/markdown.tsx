@@ -1081,10 +1081,14 @@ export function Markdown(
     if (!content) {
       container.innerHTML = ""
       delete container.dataset.html
+      delete container.dataset.markdownRenderedStage
       return
     }
 
-    if (container.dataset.html === content) return
+    if (container.dataset.html === content) {
+      if (!html.loading) container.dataset.markdownRenderedStage = stage()
+      return
+    }
 
     const next = untrack(labels)
     const prevHtml = container.dataset.html ?? ""
@@ -1111,6 +1115,7 @@ export function Markdown(
     const done = (mode: string) => {
       const took = performance.now() - time
       container.dataset.html = content
+      container.dataset.markdownRenderedStage = stage()
 
       if (took > DOM_WARN_MS) {
         console.warn("[markdown] slow dom", {

@@ -35,7 +35,12 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { itemStyle, timelineHeightCacheEnabled, timelineVirtualizationEnabled } from "@/pages/session/message-timeline-utils"
+import {
+  itemStyle,
+  timelineHeightCacheEnabled,
+  timelineVirtualizationEnabled,
+  visibleMarkdownRenderReady,
+} from "@/pages/session/message-timeline-utils"
 import { resolveLinkedPath } from "@/pages/session/message-link-path"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import { messageAgentColor } from "@/utils/agent"
@@ -79,6 +84,9 @@ const VIEWPORT_SHRINK_SNAP = 120
 const VISIBLE_SHRINK_CONFIRM_MS = 80
 const QUESTION_SCROLL_SNAP_MS = 700
 const QUESTION_SHRINK_RELEASE_MS = QUESTION_SCROLL_SNAP_MS + 32
+const SESSION_RENDER_OVERLAY_MIN_MS = 120
+const SESSION_RENDER_OVERLAY_MAX_MS = 1_600
+const SESSION_RENDER_OVERLAY_FADE_MS = 180
 
 const heightCacheKey = (sessionId: string, msgId: string, stage: string, signature: string) =>
   `opencode.h2.${signature}.${sessionId}.${msgId}.${stage}`
@@ -894,6 +902,115 @@ export function MessageTimeline(props: {
     )
   })
 
+  const [renderOverlayStatus, setRenderOverlayStatus] = createSignal<"hidden" | "showing" | "hiding">("hidden")
+  let renderOverlayStartedAt = 0
+  let renderOverlayToken = 0
+  let renderOverlayFrame: number | undefined
+  let renderOverlayReleaseTimer: ReturnType<typeof setTimeout> | undefined
+  let renderOverlayHideTimer: ReturnType<typeof setTimeout> | undefined
+  let renderOverlayMaxTimer: ReturnType<typeof setTimeout> | undefined
+
+  const clearRenderOverlayTimers = () => {
+    if (renderOverlayFrame !== undefined) {
+      cancelAnimationFrame(renderOverlayFrame)
+      renderOverlayFrame = undefined
+    }
+    if (renderOverlayReleaseTimer !== undefined) {
+      clearTimeout(renderOverlayReleaseTimer)
+      renderOverlayReleaseTimer = undefined
+    }
+    if (renderOverlayHideTimer !== undefined) {
+      clearTimeout(renderOverlayHideTimer)
+      renderOverlayHideTimer = undefined
+    }
+    if (renderOverlayMaxTimer !== undefined) {
+      clearTimeout(renderOverlayMaxTimer)
+      renderOverlayMaxTimer = undefined
+    }
+  }
+
+  const hideRenderOverlay = (token: number) => {
+    if (token !== renderOverlayToken) return
+    if (renderOverlayStatus() === "hidden") return
+
+    if (renderOverlayFrame !== undefined) {
+      cancelAnimationFrame(renderOverlayFrame)
+      renderOverlayFrame = undefined
+    }
+    if (renderOverlayMaxTimer !== undefined) {
+      clearTimeout(renderOverlayMaxTimer)
+      renderOverlayMaxTimer = undefined
+    }
+
+    const release = () => {
+      if (token !== renderOverlayToken) return
+      setRenderOverlayStatus("hiding")
+      renderOverlayHideTimer = setTimeout(() => {
+        if (token !== renderOverlayToken) return
+        renderOverlayHideTimer = undefined
+        setRenderOverlayStatus("hidden")
+      }, SESSION_RENDER_OVERLAY_FADE_MS)
+    }
+
+    const elapsed = performance.now() - renderOverlayStartedAt
+    const wait = Math.max(0, SESSION_RENDER_OVERLAY_MIN_MS - elapsed)
+    if (wait > 0) {
+      renderOverlayReleaseTimer = setTimeout(() => {
+        renderOverlayReleaseTimer = undefined
+        release()
+      }, wait)
+      return
+    }
+
+    release()
+  }
+
+  const visibleMarkdownReady = () => {
+    const root = viewport
+    const content = contentRef
+    if (!root || !content) return false
+    return visibleMarkdownRenderReady({
+      viewport: root,
+      content,
+      hasRenderableTurns: rendered().length > 0,
+    })
+  }
+
+  const checkRenderOverlay = (token: number) => {
+    if (token !== renderOverlayToken) return
+    renderOverlayFrame = undefined
+
+    if (visibleMarkdownReady() || performance.now() - renderOverlayStartedAt >= SESSION_RENDER_OVERLAY_MAX_MS) {
+      hideRenderOverlay(token)
+      return
+    }
+
+    renderOverlayFrame = requestAnimationFrame(() => checkRenderOverlay(token))
+  }
+
+  const showRenderOverlay = () => {
+    renderOverlayToken += 1
+    const token = renderOverlayToken
+    renderOverlayStartedAt = performance.now()
+    clearRenderOverlayTimers()
+    setRenderOverlayStatus("showing")
+    renderOverlayMaxTimer = setTimeout(() => hideRenderOverlay(token), SESSION_RENDER_OVERLAY_MAX_MS)
+    renderOverlayFrame = requestAnimationFrame(() => checkRenderOverlay(token))
+  }
+
+  createEffect(
+    on(sessionID, (newID, prevID) => {
+      if (!newID) {
+        renderOverlayToken += 1
+        clearRenderOverlayTimers()
+        setRenderOverlayStatus("hidden")
+        return
+      }
+      if (prevID === undefined || newID === prevID) return
+      showRenderOverlay()
+    }),
+  )
+
   const [timeoutDone, setTimeoutDone] = createSignal(true)
 
   const workingStatus = createMemo<"hidden" | "showing" | "hiding">((prev) => {
@@ -1484,6 +1601,7 @@ export function MessageTimeline(props: {
     if (mutationFrame !== undefined) cancelAnimationFrame(mutationFrame)
     if (pinFrame !== undefined) cancelAnimationFrame(pinFrame)
     if (blank !== undefined) cancelAnimationFrame(blank)
+    clearRenderOverlayTimers()
     for (const release of pendingShrinkReleaseById.values()) clearTimeout(release)
     pendingShrinkReleaseById.clear()
   })
@@ -2423,6 +2541,27 @@ export function MessageTimeline(props: {
             </div>
           </div>
         </ScrollView>
+        <Show when={renderOverlayStatus() !== "hidden"}>
+          <div
+            data-slot="session-render-overlay"
+            aria-live="polite"
+            aria-busy={renderOverlayStatus() === "showing" ? "true" : "false"}
+            class="absolute left-0 right-0 bottom-0 z-[70] flex items-center justify-center transition-opacity duration-200 ease-out"
+            classList={{
+              "opacity-100 pointer-events-auto": renderOverlayStatus() === "showing",
+              "opacity-0 pointer-events-none": renderOverlayStatus() === "hiding",
+            }}
+            style={{
+              top: showHeader() ? "64px" : "0px",
+              background: "var(--background-base)",
+            }}
+          >
+            <div class="flex items-center gap-2 rounded-full border border-border-weak-base bg-background-stronger px-3 py-2 text-12-medium text-text-weak shadow-sm">
+              <Spinner class="size-4" />
+              <span>{language.t("session.messages.loading")}</span>
+            </div>
+          </div>
+        </Show>
       </div>
     </Show>
   )
