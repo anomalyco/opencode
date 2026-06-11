@@ -60,6 +60,11 @@ rooms:
   keywords:
   - frontend
   - ui
+- name: backend
+  description: Files from server/
+  keywords:
+  - backend
+  - server
 - name: general
   description: Files that don't fit other rooms
   keywords: []

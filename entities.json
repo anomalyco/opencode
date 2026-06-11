@@ -3,9 +3,8 @@
   "projects": [
     "Linux",
     "Windows",
-    "Bun",
+    "Build",
     "Standard",
-    "Running",
-    "Build"
+    "Running"
   ]
 }
