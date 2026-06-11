@@ -25,6 +25,12 @@ export const dict: Record<string, string> = {
   "ui.sessionReviewV2.previousFile": "Previous file",
   "ui.sessionReviewV2.nextFile": "Next file",
   "ui.sessionReviewV2.diffView": "Diff view",
+  "ui.sessionReviewV2.empty.noGit.title": "No tracked changes",
+  "ui.sessionReviewV2.empty.noGit.description": "Track, review, and undo changes in this project",
+  "ui.sessionReviewV2.empty.noGit.action": "Create Git repository",
+  "ui.sessionReviewV2.empty.noGit.actionLoading": "Creating Git repository...",
+  "ui.sessionReviewV2.empty.openFile.title": "Open file",
+  "ui.sessionReviewV2.empty.openFile.description": "Search or select a file from file tree",
 
   "ui.sessionReview.openFile": "Open file",
   "ui.sessionReview.selection.line": "line {{line}}",

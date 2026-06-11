@@ -430,6 +430,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         onSelect: openFile,
       }),
       tab &&
+        !settings.general.newLayoutDesigns() &&
         fileCommand({
           id: "tab.close",
           title: language.t("command.tab.close"),

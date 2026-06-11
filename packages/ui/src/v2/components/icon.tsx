@@ -77,6 +77,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M2.5 1.5V12.2484H6.75M2.5 4.74838H6.75" stroke="currentColor"/><rect x="8.5" y="3.2168" width="6" height="3" fill="none" stroke="currentColor"/><rect x="8.5" y="10.75" width="6" height="3" fill="none" stroke="currentColor"/>`,
   },
+  "open-file": {
+    viewBox: "0 0 16 16",
+    body: `<path d="M5.33366 10.6663H10.667V11.9997H5.33366V10.6663ZM5.33366 7.99967H10.667V9.33301H5.33366V7.99967ZM9.33366 1.33301H4.00033C3.26699 1.33301 2.66699 1.93301 2.66699 2.66634V13.333C2.66699 14.0663 3.26033 14.6663 3.99366 14.6663H12.0003C12.7337 14.6663 13.3337 14.0663 13.3337 13.333V5.33301L9.33366 1.33301ZM12.0003 13.333H4.00033V2.66634H8.66699V5.99967H12.0003V13.333Z" fill="currentColor"/>`,
+  },
   split: {
     viewBox: "0 0 16 16",
     body: `<path d="M3.00001 4.00045L12.9998 4L13 6.99955L3 7L3.00001 4.00045Z" fill="currentColor" fill-opacity="0.5"/><path d="M3.0001 9H13L12.9999 12H3L3.0001 9Z" fill="currentColor" fill-opacity="0.5"/><path d="M1 14H15L15 2H1V14Z" stroke="currentColor"/>`,

@@ -15,13 +15,16 @@ type ReviewDiff = SnapshotFileDiff | VcsFileDiff
 export type FilesPanelV2SidebarProps = {
   title: string | JSX.Element
   state: ReviewPanelV2State
+  open?: boolean
   diffs: () => ReviewDiff[]
   activeFile?: string
   onOpenFile: (path: string) => void
+  onOpenFilePersist?: (path: string) => void
 }
 
 export function FilesPanelV2Sidebar(props: FilesPanelV2SidebarProps) {
   const file = useFile()
+  const open = createMemo(() => props.open ?? props.state.sidebarOpened())
   const diffs = createMemo(() => props.diffs().filter(filterRenderableDiff))
   const diffFiles = createMemo(() => diffs().map((diff) => diff.file))
   const kinds = createMemo(() => reviewDiffKinds(diffs()))
@@ -34,7 +37,7 @@ export function FilesPanelV2Sidebar(props: FilesPanelV2SidebarProps) {
   return (
     <SessionReviewV2Sidebar
       variant="files"
-      open={props.state.sidebarOpened()}
+      open={open()}
       title={props.title}
       filter={props.state.filesFilter()}
       onFilterChange={props.state.setFilesFilter}
@@ -51,6 +54,7 @@ export function FilesPanelV2Sidebar(props: FilesPanelV2SidebarProps) {
         query={props.state.filesFilter()}
         active={activeFile()}
         onFileClick={(node) => props.onOpenFile(node.path)}
+        onFileDoubleClick={(node) => props.onOpenFilePersist?.(node.path)}
       />
     </SessionReviewV2Sidebar>
   )
