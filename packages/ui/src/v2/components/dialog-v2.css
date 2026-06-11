@@ -7,7 +7,7 @@
   background-color: var(--v2-overlay-simple-overlay-scrim);
 }
 
-[data-component="dialog"] {
+[data-component="dialog-v2"] {
   position: fixed;
   inset: 0;
   z-index: 50;
@@ -25,7 +25,7 @@
     background: var(--v2-background-bg-layer-01);
     box-shadow: var(--v2-elevation-overlay);
     border-radius: 6px;
-    overflow: visible;
+    overflow: hidden;
     pointer-events: auto;
 
     [data-slot="dialog-content"] {
@@ -37,6 +37,7 @@
       max-height: 100%;
       flex: 1;
       overflow: auto;
+      background: transparent;
 
       scrollbar-width: none;
       -ms-overflow-style: none;

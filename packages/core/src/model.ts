@@ -1,6 +1,7 @@
 import { DateTime, Schema } from "effect"
 import { DateTimeUtcFromMillis } from "effect/Schema"
 import { ProviderV2 } from "./provider"
+import { ModelRequest } from "./model-request"
 
 export const ID = Schema.String.pipe(Schema.brand("ModelV2.ID"))
 export type ID = typeof ID.Type
@@ -60,12 +61,12 @@ export class Info extends Schema.Class<Info>("ModelV2.Info")({
   api: Api,
   capabilities: Capabilities,
   request: Schema.Struct({
-    ...ProviderV2.Request.fields,
+    ...ModelRequest.Request.fields,
     variant: Schema.String.pipe(Schema.optional),
   }),
   variants: Schema.Struct({
     id: VariantID,
-    ...ProviderV2.Request.fields,
+    ...ModelRequest.Request.fields,
   }).pipe(Schema.Array),
   time: Schema.Struct({
     released: DateTimeUtcFromMillis,
@@ -97,6 +98,8 @@ export class Info extends Schema.Class<Info>("ModelV2.Info")({
       request: {
         headers: {},
         body: {},
+        generation: {},
+        options: {},
       },
       variants: [],
       time: {

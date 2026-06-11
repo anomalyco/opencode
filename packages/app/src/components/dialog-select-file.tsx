@@ -399,6 +399,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
         items={items}
         key={(item) => item.id}
         filterKeys={["title", "description", "category"]}
+        skipFilter={(item) => item.type === "file"}
         groupBy={grouped() ? (item) => item.category : () => ""}
         onMove={handleMove}
         onSelect={handleSelect}

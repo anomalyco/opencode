@@ -20,10 +20,10 @@ const SyncEventSchemas = EventV2.registry
     return [
       Schema.Struct({
         type: Schema.Literal("sync"),
-        id: Schema.String,
+        id: EventV2.ID,
         syncEvent: Schema.Struct({
           type: Schema.Literal(EventV2.versionedType(definition.type, definition.sync.version)),
-          id: Schema.String,
+          id: EventV2.ID,
           seq: Schema.Finite,
           aggregateID: Schema.String,
           data: definition.data,
@@ -41,7 +41,7 @@ const GlobalEventSchema = Schema.Struct({
     ...EventV2.registry
       .values()
       .map((definition) =>
-        Schema.Struct({ id: Schema.String, type: Schema.Literal(definition.type), properties: definition.data }),
+        Schema.Struct({ id: EventV2.ID, type: Schema.Literal(definition.type), properties: definition.data }),
       )
       .toArray(),
     InstanceDisposed,

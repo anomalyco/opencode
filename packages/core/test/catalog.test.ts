@@ -1,6 +1,8 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Layer, Option } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Connector } from "@opencode-ai/core/connector"
+import { Credential } from "@opencode-ai/core/credential"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -17,10 +19,58 @@ const locationLayer = Layer.succeed(
   Location.Service.of(location({ directory: AbsolutePath.make("test") })),
 )
 const it = testEffect(
-  Catalog.locationLayer.pipe(Layer.provideMerge(EventV2.defaultLayer), Layer.provideMerge(locationLayer)),
+  Catalog.locationLayer.pipe(
+    Layer.provideMerge(EventV2.defaultLayer),
+    Layer.provideMerge(locationLayer),
+    Layer.provideMerge(Layer.mock(Credential.Service)({ activeAll: () => Effect.succeed(new Map()) })),
+  ),
 )
 
 describe("CatalogV2", () => {
+  it.effect("projects active credentials without rebuilding catalog state", () => {
+    const connectorID = Connector.ID.make("test")
+    const methodID = Connector.MethodID.make("api-key")
+    const first = new Credential.Info({
+      id: Credential.ID.create(),
+      connectorID,
+      methodID,
+      label: "First",
+      value: new Credential.Key({ type: "key", key: "first", metadata: { tenant: "one" } }),
+    })
+    const second = new Credential.Info({
+      id: Credential.ID.create(),
+      connectorID,
+      methodID,
+      label: "Second",
+      value: new Credential.Key({ type: "key", key: "second", metadata: { tenant: "two" } }),
+    })
+    let active = first
+    const layer = Catalog.locationLayer.pipe(
+      Layer.fresh,
+      Layer.provideMerge(EventV2.defaultLayer),
+      Layer.provideMerge(locationLayer),
+      Layer.provideMerge(
+        Layer.mock(Credential.Service)({ activeAll: () => Effect.succeed(new Map([[connectorID, active]])) }),
+      ),
+    )
+
+    return Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const transform = yield* catalog.transform()
+      yield* transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
+
+      expect(yield* catalog.provider.get(ProviderV2.ID.make("test"))).toMatchObject({
+        enabled: { via: "credential", credentialID: first.id },
+        request: { body: { apiKey: "first", tenant: "one" } },
+      })
+      active = second
+      expect(yield* catalog.provider.get(ProviderV2.ID.make("test"))).toMatchObject({
+        enabled: { via: "credential", credentialID: second.id },
+        request: { body: { apiKey: "second", tenant: "two" } },
+      })
+    }).pipe(Effect.provide(layer))
+  })
+
   it.effect("normalizes provider baseURL into api url", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
@@ -219,12 +269,16 @@ describe("CatalogV2", () => {
           model.request.headers.shared = "model"
           model.request.body.model = true
           model.request.body.request = true
+          const options = (model.request.options ??= {})
+          options.shared = "model"
+          options.model = true
         })
       })
 
       const model = yield* catalog.model.get(providerID, modelID)
       expect(model.request.headers).toEqual({ provider: "provider", shared: "model", model: "model" })
       expect(model.request.body).toEqual({ provider: true, model: true, request: true })
+      expect(model.request.options).toEqual({ shared: "model", model: true })
     }),
   )
 
@@ -278,6 +332,34 @@ describe("CatalogV2", () => {
 
       yield* transform(models)
       expect(Option.getOrUndefined(yield* catalog.model.default())?.id).toBe(newest)
+    }),
+  )
+
+  it.effect("ignores a configured default on a disabled provider", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const disabledProvider = ProviderV2.ID.make("disabled")
+      const enabledProvider = ProviderV2.ID.make("enabled")
+      const disabledModel = ModelV2.ID.make("configured")
+      const fallbackModel = ModelV2.ID.make("fallback")
+      const transform = yield* catalog.transform()
+
+      yield* transform((catalog) => {
+        catalog.provider.update(disabledProvider, (provider) => {
+          provider.enabled = false
+        })
+        catalog.model.update(disabledProvider, disabledModel, () => {})
+        catalog.provider.update(enabledProvider, (provider) => {
+          provider.enabled = { via: "custom", data: {} }
+        })
+        catalog.model.update(enabledProvider, fallbackModel, () => {})
+        catalog.model.default.set(disabledProvider, disabledModel)
+      })
+
+      expect(Option.getOrUndefined(yield* catalog.model.default())).toMatchObject({
+        providerID: enabledProvider,
+        id: fallbackModel,
+      })
     }),
   )
 

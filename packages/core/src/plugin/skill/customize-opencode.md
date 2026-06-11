@@ -73,6 +73,19 @@ Every field is optional.
     "urls": ["https://example.com/.well-known/skills/"]
   },
 
+  "references": {
+    "docs": {
+      "path": "../docs",
+      "description": "Use for product behavior and documentation conventions"
+    },
+    "sdk": {
+      "repository": "owner/sdk",
+      "branch": "main",
+      "description": "Use for SDK implementation details",
+      "hidden": true
+    }
+  },
+
   "agent": {
     "my-agent": {
       "model": "anthropic/claude-sonnet-4-6",
@@ -136,6 +149,7 @@ Shape notes worth being explicit about:
 
 - `model` always carries a provider prefix: `"anthropic/claude-sonnet-4-6"`.
 - `skills` is an object with `paths` and/or `urls`, not an array.
+- `references` is an object keyed by alias. Each value is a local path, Git repository, or string shorthand.
 - `agent` is an object keyed by agent name, not an array.
 - `plugin` is an array of strings or `[name, options]` tuples, not an object.
 - `mcp[name].command` is an array of strings, never a single string. `type` is required.
@@ -171,6 +185,38 @@ description: One sentence covering what this skill does AND when to trigger it. 
 Register skills from non-default locations via `skills.paths` (scanned
 recursively for `**/SKILL.md`) and `skills.urls` (each URL serves a list of
 skills).
+
+## References
+
+References make local directories and Git repositories outside the active
+project available as supporting context. Configure them under `references`,
+keyed by the alias used in `@` autocomplete:
+
+```json
+{
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and terminology"
+    },
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+      "description": "Use for Effect implementation details"
+    }
+  }
+}
+```
+
+Local `path` values may be relative to the declaring config, absolute, or use
+`~/`. Git `repository` values accept Git URLs, host/path references, and GitHub
+`owner/repo` shorthand; `branch` is optional. Both forms support optional
+`description` and `hidden` fields.
+
+- Only references with a `description` are advertised to agents in system context.
+- `hidden: true` removes a reference from TUI `@` autocomplete only. It remains available to agents and by direct path.
+- Reference directories are automatically allowed through the external-directory boundary; normal read/edit/tool permissions still apply.
+- String shorthand is supported: use `"docs": "../docs"` for local paths or `"effect": "Effect-TS/effect"` for Git repositories.
 
 ## Agents
 
@@ -303,7 +349,7 @@ Special object-shaped (not callbacks): `tool: { my_tool: { ... } }`,
       "type": "remote",
       "url": "https://...",
       "enabled": true,
-      "headers": { "Authorization": "Bearer ${GITHUB_TOKEN}" }
+      "headers": { "Authorization": "Bearer {env:GITHUB_TOKEN}" }
     },
     "old-server": { "enabled": false }
   }
@@ -311,7 +357,9 @@ Special object-shaped (not callbacks): `tool: { my_tool: { ... } }`,
 ```
 
 `command` is an array of strings. `type` is required. Use `enabled: false` to
-disable a server inherited from a parent config.
+disable a server inherited from a parent config. String values such as header
+tokens support `{env:VAR}` interpolation (and `{file:path}`); the shell-style
+`${VAR}` is not substituted.
 
 ## Permissions
 
