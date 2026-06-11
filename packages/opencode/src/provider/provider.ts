@@ -588,6 +588,15 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    anyapi: () =>
+      Effect.succeed({
+        options: {
+          headers: {
+            "HTTP-Referer": "https://opencode.ai/",
+            "X-Title": "opencode",
+          },
+        },
+      }),
     gitlab: Effect.fnUntraced(function* (input: Info) {
       const {
         VERSION: GITLAB_PROVIDER_VERSION,
