@@ -102,6 +102,15 @@ interface CodexAuthPluginOptions {
   experimentalWebSockets?: boolean
 }
 
+export function codexApiEndpointFromBaseURL(baseURL: unknown) {
+  if (typeof baseURL !== "string" || baseURL.trim() === "") return
+  if (!URL.canParse(baseURL)) return
+  const url = new URL(baseURL)
+  const path = url.pathname.replace(/\/+$/, "")
+  url.pathname = path.endsWith("/responses") ? path : `${path}/responses`
+  return url.toString()
+}
+
 async function exchangeCodeForTokens(code: string, redirectUri: string, pkce: PkceCodes): Promise<TokenResponse> {
   const response = await fetch(`${ISSUER}/oauth/token`, {
     method: "POST",

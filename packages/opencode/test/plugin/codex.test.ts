@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
   CodexAuthPlugin,
+  codexApiEndpointFromBaseURL,
   parseJwtClaims,
   extractAccountIdFromClaims,
   extractAccountId,
@@ -14,6 +15,41 @@ function createTestJwt(payload: object): string {
 }
 
 describe("plugin.codex", () => {
+  describe("codexApiEndpointFromBaseURL", () => {
+    test("appends responses to an OpenAI-compatible base URL", () => {
+      expect(codexApiEndpointFromBaseURL("https://proxy.example.test/v1")).toBe(
+        "https://proxy.example.test/v1/responses",
+      )
+    })
+
+    test("appends responses after trimming trailing slashes", () => {
+      expect(codexApiEndpointFromBaseURL("https://proxy.example.test/v1/")).toBe(
+        "https://proxy.example.test/v1/responses",
+      )
+    })
+
+    test("keeps an explicit responses endpoint", () => {
+      expect(codexApiEndpointFromBaseURL("https://proxy.example.test/v1/responses")).toBe(
+        "https://proxy.example.test/v1/responses",
+      )
+    })
+
+    test("preserves query parameters", () => {
+      expect(codexApiEndpointFromBaseURL("https://proxy.example.test/v1?api-version=test")).toBe(
+        "https://proxy.example.test/v1/responses?api-version=test",
+      )
+    })
+
+    test("ignores missing or blank base URLs", () => {
+      expect(codexApiEndpointFromBaseURL(undefined)).toBeUndefined()
+      expect(codexApiEndpointFromBaseURL("   ")).toBeUndefined()
+    })
+
+    test("ignores invalid base URLs", () => {
+      expect(codexApiEndpointFromBaseURL("not a url")).toBeUndefined()
+    })
+  })
+
   describe("parseJwtClaims", () => {
     test("parses valid JWT with claims", () => {
       const payload = { email: "test@example.com", chatgpt_account_id: "acc-123" }
