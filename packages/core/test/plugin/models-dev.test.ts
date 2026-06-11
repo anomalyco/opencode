@@ -23,13 +23,8 @@ const locationLayer = Layer.succeed(
 )
 const plugins = PluginV2.layer.pipe(Layer.provide(events))
 const policy = Policy.layer.pipe(Layer.provide(locationLayer))
-const credentials = Credential.layer.pipe(
-  Layer.provide(Database.layerFromPath(":memory:")),
-  Layer.provide(events),
-)
-const catalog = Catalog.layer.pipe(
-  Layer.provide(Layer.mergeAll(events, locationLayer, plugins, policy, credentials)),
-)
+const credentials = Credential.layer.pipe(Layer.provide(Database.layerFromPath(":memory:")), Layer.provide(events))
+const catalog = Catalog.layer.pipe(Layer.provide(Layer.mergeAll(events, locationLayer, plugins, policy, credentials)))
 const connectors = Connector.locationLayer.pipe(Layer.provide(credentials), Layer.provide(events))
 const layer = Layer.mergeAll(catalog, connectors, credentials, events, locationLayer, plugins)
 const it = testEffect(layer)

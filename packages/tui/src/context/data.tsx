@@ -425,10 +425,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           break
         case "credential.switched": {
           const location = { directory: metadata.directory, workspaceID: metadata.workspace }
-          void Promise.allSettled([
-            result.location.model.refresh(location),
-            result.location.provider.refresh(location),
-          ])
+          void Promise.allSettled([result.location.model.refresh(location), result.location.provider.refresh(location)])
           break
         }
         case "connector.updated":

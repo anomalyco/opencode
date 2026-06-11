@@ -47,9 +47,7 @@ describe("Connector", () => {
       yield* connectors
         .update((editor) => editor.update(openai, (connector) => (connector.name = "OpenAI")))
         .pipe(Scope.provide(scope))
-      expect(yield* connectors.get(openai)).toEqual(
-        new Connector.Info({ id: openai, name: "OpenAI", methods: [] }),
-      )
+      expect(yield* connectors.get(openai)).toEqual(new Connector.Info({ id: openai, name: "OpenAI", methods: [] }))
 
       yield* Scope.close(scope, Exit.void)
       expect(yield* connectors.get(openai)).toBeUndefined()
@@ -313,9 +311,9 @@ describe("Connector", () => {
       )
 
       const attempt = yield* connectors.connect.oauth.begin({ connectorID, methodID, inputs: {} })
-      expect(yield* connectors.connect.oauth.complete({ attemptID: attempt.attemptID }).pipe(Effect.flip)).toBeInstanceOf(
-        Connector.CodeRequiredError,
-      )
+      expect(
+        yield* connectors.connect.oauth.complete({ attemptID: attempt.attemptID }).pipe(Effect.flip),
+      ).toBeInstanceOf(Connector.CodeRequiredError)
       expect(closed).toBe(false)
       yield* connectors.connect.oauth.cancel(attempt.attemptID)
       expect(closed).toBe(true)

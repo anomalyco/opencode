@@ -16,6 +16,8 @@ export const CredentialTable = sqliteTable(
     ...Timestamps,
   },
   (table) => [
-    uniqueIndex("credential_connector_active_idx").on(table.connector_id).where(sql`${table.active} = 1`),
+    uniqueIndex("credential_connector_active_idx")
+      .on(table.connector_id)
+      .where(sql`${table.active} = 1`),
   ],
 )

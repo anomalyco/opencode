@@ -152,10 +152,12 @@ describe("CloudflareWorkersAIPlugin", () => {
               provider.api = { type: "aisdk", package: "test-provider" }
             }),
           )
-          expect((yield* catalog.provider.get(ProviderV2.ID.make("cloudflare-workers-ai"))).request.body).toMatchObject({
-            apiKey: "account-key",
-            accountId: "account-acct",
-          })
+          expect((yield* catalog.provider.get(ProviderV2.ID.make("cloudflare-workers-ai"))).request.body).toMatchObject(
+            {
+              apiKey: "account-key",
+              accountId: "account-acct",
+            },
+          )
         }),
     ),
   )

@@ -246,6 +246,7 @@ function claim(token: string) {
   }
 }
 
-const successPage = "<!doctype html><title>OpenCode</title><h1>Authorization successful</h1><p>You can close this window.</p>"
+const successPage =
+  "<!doctype html><title>OpenCode</title><h1>Authorization successful</h1><p>You can close this window.</p>"
 const errorPage = (message: string) =>
   `<!doctype html><title>OpenCode</title><h1>Authorization failed</h1><p>${message.replace(/[&<>"']/g, "")}</p>`

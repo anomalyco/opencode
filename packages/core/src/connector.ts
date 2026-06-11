@@ -213,10 +213,7 @@ export interface Interface {
         readonly inputs: Inputs
         /** User-facing label for the credential created on completion. */
         readonly label?: string
-      }) => Effect.Effect<
-        Attempt,
-        AuthorizationError
-      >
+      }) => Effect.Effect<Attempt, AuthorizationError>
       /** Returns the current state of an OAuth attempt. */
       readonly status: (attemptID: AttemptID) => Effect.Effect<AttemptStatus>
       /** Completes the attempt and stores its credential. */
@@ -273,7 +270,8 @@ export const locationLayer = Layer.effect(
         list: () => Array.from(draft.connectors.values(), (entry) => entry.connector) as Info[],
         get: (id) => draft.connectors.get(id)?.connector as Info | undefined,
         update: (id, update) => {
-          const current = draft.connectors.get(id) ??
+          const current =
+            draft.connectors.get(id) ??
             castDraft({ connector: new Info({ id, name: id, methods: [] }), implementations: new Map() })
           if (!draft.connectors.has(id)) draft.connectors.set(id, current)
           update(current.connector)
@@ -282,7 +280,8 @@ export const locationLayer = Layer.effect(
         remove: (id) => draft.connectors.delete(id),
         method: {
           update: (implementation) => {
-            const current = draft.connectors.get(implementation.connectorID) ??
+            const current =
+              draft.connectors.get(implementation.connectorID) ??
               castDraft({
                 connector: new Info({ id: implementation.connectorID, name: implementation.connectorID, methods: [] }),
                 implementations: new Map<MethodID, Implementation>(),
@@ -318,10 +317,7 @@ export const locationLayer = Layer.effect(
       return error instanceof Error ? error.message : String(error)
     }
 
-    const settle = Effect.fnUntraced(function* (
-      attemptID: AttemptID,
-      exit: Exit.Exit<Credential.Value, unknown>,
-    ) {
+    const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.Value, unknown>) {
       const now = yield* Clock.currentTimeMillis
       const result = yield* SynchronizedRef.modify(attempts, (current) => {
         const attempt = current.get(attemptID)
