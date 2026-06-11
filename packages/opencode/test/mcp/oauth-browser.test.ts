@@ -231,7 +231,7 @@ mcpTest.instance(
       expect(failure).toEqual(Option.none())
       expect(typeof url).toBe("string")
       expect(url).toContain("https://")
-      expect(transportCalls[0]?.options.requestInit?.headers).toEqual({ "X-Custom-Header": "custom-value" })
+      expect(transportCalls.at(-1)?.options.requestInit?.headers).toEqual({ "X-Custom-Header": "custom-value" })
     }),
   { config: config("test-oauth-server-3", { "X-Custom-Header": "custom-value" }) },
 )
