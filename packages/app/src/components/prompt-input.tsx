@@ -331,6 +331,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return false
   })
   const stopping = createMemo(() => working() && blank())
+  const queueModeLabel = createMemo(() => {
+    if (!props.shouldQueue?.(store.editID ?? undefined)) return null
+    const mode = settings.general.followup()
+    return language.t(`settings.general.row.followup.option.${mode === "waitingSteer" ? "wrap" : mode === "queue" ? "queue" : "steer"}` as const)
+  })
+
   const tip = () => {
     if (stopping()) {
       return (
@@ -341,10 +347,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       )
     }
 
+    const label = queueModeLabel()
     return (
-      <div class="flex items-center gap-2">
-        <span>{language.t("prompt.action.send")}</span>
-        <Icon name="enter" size="small" class="text-icon-base" />
+      <div class="flex flex-col gap-1 items-start">
+        <div class="flex items-center gap-2">
+          <span>{label ? label : language.t("prompt.action.send")}</span>
+          <Icon name="enter" size="small" class="text-icon-base" />
+        </div>
+        <Show when={label}>
+          <span class="text-[10px] text-text-weak opacity-80">{language.t("settings.general.row.followup.title")}</span>
+        </Show>
       </div>
     )
   }
@@ -1639,6 +1651,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </div>
                   </Show>
                 </div>
+                <Show when={queueModeLabel()}>
+                  <span class="text-[10px] font-medium text-v2-text-text-muted bg-v2-background-bg-subtle border border-v2-border-border-subtle rounded-md px-1.5 py-0.5 select-none mr-2 uppercase tracking-wide">
+                    {queueModeLabel()}
+                  </span>
+                </Show>
                 <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                   <IconButton
                     data-action="prompt-submit"
@@ -1782,6 +1799,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 />
 
                 <div class="flex items-center gap-1 pointer-events-auto">
+                  <Show when={queueModeLabel()}>
+                    <span class="text-[10px] font-medium text-v2-text-text-muted bg-v2-background-bg-subtle border border-v2-border-border-subtle rounded-md px-1.5 py-0.5 select-none uppercase tracking-wide mr-1">
+                      {queueModeLabel()}
+                    </span>
+                  </Show>
                   <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                     <IconButton
                       data-action="prompt-submit"
