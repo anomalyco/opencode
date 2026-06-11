@@ -94,12 +94,22 @@ const extensions = new Set([
   ".pyo",
 ])
 const startsWith = (bytes: Uint8Array, prefix: number[]) => prefix.every((value, index) => bytes[index] === value)
-const imageMime = (bytes: Uint8Array) => {
+const MP4_VIDEO_BRANDS = new Set(["isom", "iso2", "iso5", "iso6", "mp41", "mp42", "avc1", "dash", "m4v "])
+const isMp4VideoBrand = (bytes: Uint8Array) => {
+  const brand = Buffer.from(bytes.subarray(8, 12)).toString("ascii")
+  return MP4_VIDEO_BRANDS.has(brand)
+}
+const isWebmDocType = (bytes: Uint8Array) =>
+  Buffer.from(bytes.subarray(0, Math.min(bytes.length, 64))).toString("latin1").includes("webm")
+const mediaMime = (bytes: Uint8Array) => {
   if (startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) return "image/png"
   if (startsWith(bytes, [0xff, 0xd8, 0xff])) return "image/jpeg"
   if (startsWith(bytes, [0x47, 0x49, 0x46, 0x38])) return "image/gif"
   if (startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && startsWith(bytes.subarray(8), [0x57, 0x45, 0x42, 0x50]))
     return "image/webp"
+  if (bytes.length >= 12 && startsWith(bytes.subarray(4), [0x66, 0x74, 0x79, 0x70]) && isMp4VideoBrand(bytes))
+    return "video/mp4"
+  if (startsWith(bytes, [0x1a, 0x45, 0xdf, 0xa3]) && isWebmDocType(bytes)) return "video/webm"
 }
 const binary = (resource: string, bytes: Uint8Array) => {
   if (extensions.has(path.extname(resource).toLowerCase())) return true
@@ -135,7 +145,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
         yield* file.readAlloc(Math.min(64 * 1024, Number(info.size) || 4 * 1024)).pipe(Effect.orDie),
         () => new Uint8Array(),
       )
-      const mime = imageMime(first)
+      const mime = mediaMime(first)
       if (mime) {
         if (info.size > MAX_MEDIA_INGEST_BYTES)
           return yield* Effect.die(new MediaIngestLimitError(resource, MAX_MEDIA_INGEST_BYTES))

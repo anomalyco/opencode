@@ -15,6 +15,8 @@ import { Tools } from "./tools"
 
 export const name = "read"
 const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
+const SUPPORTED_VIDEO_MIMES = new Set(["video/mp4", "video/webm", "video/quicktime"])
+const SUPPORTED_MEDIA_MIMES = new Set([...SUPPORTED_IMAGE_MIMES, ...SUPPORTED_VIDEO_MIMES])
 const LocationInput = Schema.Struct({
   path: Schema.String,
   offset: ReadToolFileSystem.PageInput.fields.offset.annotate({
@@ -40,14 +42,15 @@ export const layer = Layer.effectDiscard(
       .register({
         [name]: Tool.make({
           description:
-            "Read a text file or supported image, page through a large UTF-8 text file by line offset, or list a directory page. Relative paths resolve from the current location; absolute paths are read directly.",
+            "Read a text file, supported image, or video (mp4, webm), page through a large UTF-8 text file by line offset, or list a directory page. Relative paths resolve from the current location; absolute paths are read directly.",
           input: Input,
           output: Output,
           toModelOutput: ({ input, output }) => {
-            if (!("encoding" in output) || output.encoding !== "base64" || !SUPPORTED_IMAGE_MIMES.has(output.mime))
+            if (!("encoding" in output) || output.encoding !== "base64" || !SUPPORTED_MEDIA_MIMES.has(output.mime))
               return []
+            const label = SUPPORTED_VIDEO_MIMES.has(output.mime) ? "Video" : "Image"
             return [
-              { type: "text", text: "Image read successfully" },
+              { type: "text", text: `${label} read successfully` },
               { type: "file", data: output.content, mime: output.mime, name: input.path },
             ]
           },
@@ -82,6 +85,8 @@ export const layer = Layer.effectDiscard(
                   .normalize(resource, { ...content, encoding: "base64" })
                   .pipe(Effect.catchTag("Image.ResizerUnavailableError", () => Effect.succeed(content)))
               }
+              if ("encoding" in content && content.encoding === "base64" && SUPPORTED_VIDEO_MIMES.has(content.mime))
+                return content
               if ("encoding" in content && content.encoding === "base64")
                 return yield* Effect.fail(new ReadToolFileSystem.BinaryFileError(resource))
               return content

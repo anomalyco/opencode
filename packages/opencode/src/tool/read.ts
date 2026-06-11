@@ -17,6 +17,7 @@ const MAX_BYTES = 50 * 1024
 const MAX_BYTES_LABEL = `${MAX_BYTES / 1024} KB`
 const SAMPLE_BYTES = 4096
 const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
+const SUPPORTED_VIDEO_MIMES = new Set(["video/mp4", "video/webm", "video/quicktime"])
 
 class ReadStop extends Schema.TaggedErrorClass<ReadStop>()("ReadStop", {}) {}
 
@@ -302,10 +303,11 @@ export const ReadTool = Tool.define<
 
       const mime = sniffAttachmentMime(sample, FSUtil.mimeType(filepath))
       const isImage = SUPPORTED_IMAGE_MIMES.has(mime)
+      const isVideo = SUPPORTED_VIDEO_MIMES.has(mime)
 
-      if (isImage || isPdfAttachment(mime)) {
+      if (isImage || isVideo || isPdfAttachment(mime)) {
         const bytes = yield* fs.readFile(filepath)
-        const msg = isPdfAttachment(mime) ? "PDF read successfully" : "Image read successfully"
+        const msg = isVideo ? "Video read successfully" : isPdfAttachment(mime) ? "PDF read successfully" : "Image read successfully"
         return {
           title,
           output: msg,
