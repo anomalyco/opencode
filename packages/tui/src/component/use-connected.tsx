@@ -1,9 +1,7 @@
 import { createMemo } from "solid-js"
-import { useSync } from "../context/sync"
+import { useData } from "../context/data"
 
 export function useConnected() {
-  const sync = useSync()
-  return createMemo(() =>
-    sync.data.provider.some((x) => x.id !== "opencode" || Object.values(x.models).some((y) => y.cost?.input !== 0)),
-  )
+  const data = useData()
+  return createMemo(() => (data.location.provider.list() ?? []).some((provider) => provider.enabled !== false))
 }
