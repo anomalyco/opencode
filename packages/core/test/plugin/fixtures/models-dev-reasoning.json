@@ -1,0 +1,56 @@
+{
+  "openai": {
+    "id": "openai",
+    "name": "OpenAI",
+    "env": ["OPENAI_API_KEY"],
+    "npm": "@ai-sdk/openai",
+    "models": {
+      "gpt-5.2": {
+        "id": "gpt-5.2",
+        "name": "GPT 5.2",
+        "release_date": "2025-12-01",
+        "attachment": false,
+        "reasoning": true,
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 200000, "output": 64000 }
+      }
+    }
+  },
+  "google": {
+    "id": "google",
+    "name": "Google",
+    "env": ["GOOGLE_GENERATIVE_AI_API_KEY"],
+    "npm": "@ai-sdk/google",
+    "models": {
+      "gemini-2.5-pro": {
+        "id": "gemini-2.5-pro",
+        "name": "Gemini 2.5 Pro",
+        "release_date": "2025-01-01",
+        "attachment": true,
+        "reasoning": true,
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 1000000, "output": 64000 }
+      }
+    }
+  },
+  "anthropic": {
+    "id": "anthropic",
+    "name": "Anthropic",
+    "env": ["ANTHROPIC_API_KEY"],
+    "npm": "@ai-sdk/anthropic",
+    "models": {
+      "claude-sonnet-4.6": {
+        "id": "claude-sonnet-4.6",
+        "name": "Claude Sonnet 4.6",
+        "release_date": "2025-11-01",
+        "attachment": true,
+        "reasoning": true,
+        "temperature": true,
+        "tool_call": true,
+        "limit": { "context": 200000, "output": 64000 }
+      }
+    }
+  }
+}

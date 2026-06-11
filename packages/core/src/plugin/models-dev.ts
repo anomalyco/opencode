@@ -42,14 +42,114 @@ function cost(input: ModelsDev.Model["cost"]) {
 }
 
 function variants(model: ModelsDev.Model, packageName?: string) {
-  return Object.entries(model.experimental?.modes ?? {}).map(([id, item]) => {
+  const existing = Object.entries(model.experimental?.modes ?? {}).map(([id, item]) => {
     const request = ModelRequest.normalizeAiSdkOptions(packageName, item.provider?.body ?? {})
-    return {
-      id: ModelV2.VariantID.make(id),
-      headers: { ...(item.provider?.headers ?? {}) },
-      ...request,
-    }
+    return variant(id, { headers: { ...(item.provider?.headers ?? {}) }, ...request })
   })
+  if (existing.length > 0) return existing
+  return fallbackReasoningVariants(model, packageName)
+}
+
+function variant(id: string, input: Partial<ModelRequest.Request> = {}): ModelV2.Info["variants"][number] {
+  return {
+    id: ModelV2.VariantID.make(id),
+    headers: input.headers ?? {},
+    body: input.body ?? {},
+    generation: input.generation ?? {},
+    options: input.options ?? {},
+  }
+}
+
+function fallbackReasoningVariants(model: ModelsDev.Model, packageName?: string) {
+  if (!model.reasoning) return []
+  const id = model.id.toLowerCase()
+
+  if (id.includes("gemini")) return geminiVariants(model, packageName)
+  if (id.includes("claude")) return claudeVariants(model, packageName)
+  if (/(?:^|[/.-])(?:gpt-|o[1-9])/.test(id)) return openaiVariants(id, packageName)
+  return []
+}
+
+function openaiVariants(id: string, packageName?: string) {
+  return reasoningEffortVariants(openaiEfforts(id), packageName)
+}
+
+function openaiEfforts(id: string) {
+  if (/(?:^|\/)gpt-5[.-]?pro(?:[.-]|$)/.test(id)) return ["high"]
+  if (/(?:^|\/)gpt-5[.-]\d+[.-]pro(?:[.-]|$)/.test(id)) return ["medium", "high", "xhigh"]
+  const version = Number(/(?:^|\/)gpt-5[.-](\d+)(?:[.-]|$)/.exec(id)?.[1]) || undefined
+  if (version === 1) return ["low", "medium", "high"]
+  if (version !== undefined && version >= 2) return ["low", "medium", "high", "xhigh"]
+  if (id.includes("gpt-5")) return ["low", "medium", "high", "xhigh"]
+  return ["low", "medium", "high"]
+}
+
+function reasoningEffortVariants(efforts: string[], packageName?: string) {
+  return efforts.map((effort) => variant(effort, ModelRequest.normalizeAiSdkOptions(packageName, { reasoningEffort: effort })))
+}
+
+function geminiVariants(model: ModelsDev.Model, packageName?: string) {
+  const id = model.id.toLowerCase()
+  if (packageName !== "@ai-sdk/google" && packageName !== "@ai-sdk/google-vertex") {
+    return reasoningEffortVariants(["low", "medium", "high"], packageName)
+  }
+  if (id.includes("2.5")) {
+    return [
+      variant("high", { body: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16_000 } } }),
+      variant(
+        "max",
+        {
+          body: {
+            thinkingConfig: {
+              includeThoughts: true,
+              thinkingBudget: id.includes("pro") && !id.includes("flash") ? 32_768 : 24_576,
+            },
+          },
+        },
+      ),
+    ]
+  }
+  const efforts = id.includes("flash") ? ["minimal", "low", "medium", "high"] : ["low", "medium", "high"]
+  return efforts.map((effort) =>
+    variant(effort, { body: { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } } }),
+  )
+}
+
+function claudeVariants(model: ModelsDev.Model, packageName?: string) {
+  const id = model.id.toLowerCase()
+  if (packageName !== "@ai-sdk/anthropic" && packageName !== "@ai-sdk/google-vertex/anthropic") {
+    return reasoningEffortVariants(["low", "medium", "high"], packageName)
+  }
+  if (id.includes("opus-4.7") || id.includes("fable-5")) {
+    return anthropicAdaptiveVariants(["low", "medium", "high", "xhigh", "max"], true)
+  }
+  if (["opus-4.6", "opus-4-6", "sonnet-4.6", "sonnet-4-6"].some((value) => id.includes(value))) {
+    return anthropicAdaptiveVariants(["low", "medium", "high", "max"])
+  }
+  return [
+    variant(
+      "high",
+      { options: { thinking: { type: "enabled", budgetTokens: Math.min(16_000, Math.floor(model.limit.output / 2 - 1)) } } },
+    ),
+    variant(
+      "max",
+      { options: { thinking: { type: "enabled", budgetTokens: Math.min(31_999, model.limit.output - 1) } } },
+    ),
+  ]
+}
+
+function anthropicAdaptiveVariants(efforts: string[], summarized = false) {
+  return efforts.map((effort) =>
+    variant(
+      effort,
+      {
+        options: {
+          thinking: { type: "adaptive", ...(summarized ? { display: "summarized" } : {}) },
+          effort,
+        },
+      },
+    ),
+  )
 }
 
 export const ModelsDevPlugin = PluginV2.define({

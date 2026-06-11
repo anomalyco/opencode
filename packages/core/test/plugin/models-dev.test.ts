@@ -62,4 +62,45 @@ describe("ModelsDevPlugin", () => {
         }),
     ),
   )
+
+  it.effect("adds reasoning variants when models.dev modes are absent", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const previous = {
+          path: Flag.OPENCODE_MODELS_PATH,
+          disabled: Flag.OPENCODE_DISABLE_MODELS_FETCH,
+        }
+        Flag.OPENCODE_MODELS_PATH = path.join(import.meta.dir, "fixtures", "models-dev-reasoning.json")
+        Flag.OPENCODE_DISABLE_MODELS_FETCH = true
+        return previous
+      }),
+      () =>
+        Effect.gen(function* () {
+          yield* ModelsDevPlugin.effect
+          const catalog = yield* Catalog.Service
+
+          expect((yield* catalog.model.get("openai" as any, "gpt-5.2" as any)).variants.map((item) => String(item.id))).toEqual([
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+          ])
+          expect(
+            (yield* catalog.model.get("google" as any, "gemini-2.5-pro" as any)).variants.map((item) =>
+              String(item.id),
+            ),
+          ).toEqual(["high", "max"])
+          expect(
+            (yield* catalog.model.get("anthropic" as any, "claude-sonnet-4.6" as any)).variants.map((item) =>
+              String(item.id),
+            ),
+          ).toEqual(["low", "medium", "high", "max"])
+        }).pipe(Effect.provide(ModelsDev.defaultLayer)),
+      (previous) =>
+        Effect.sync(() => {
+          Flag.OPENCODE_MODELS_PATH = previous.path
+          Flag.OPENCODE_DISABLE_MODELS_FETCH = previous.disabled
+        }),
+    ),
+  )
 })
