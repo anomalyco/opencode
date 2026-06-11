@@ -2737,16 +2737,16 @@ export type InvalidCursorError = {
   message: string
 }
 
-export type ConflictError = {
-  _tag: "ConflictError"
-  message: string
-  resource?: string
-}
-
 export type SessionNotFoundError = {
   _tag: "SessionNotFoundError"
   sessionID: string
   message: string
+}
+
+export type ConflictError = {
+  _tag: "ConflictError"
+  message: string
+  resource?: string
 }
 
 export type ServiceUnavailableError = {
@@ -9453,6 +9453,40 @@ export type V2HealthGetResponses = {
 
 export type V2HealthGetResponse = V2HealthGetResponses[keyof V2HealthGetResponses]
 
+export type V2LocationGetData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/location"
+}
+
+export type V2LocationGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2LocationGetError = V2LocationGetErrors[keyof V2LocationGetErrors]
+
+export type V2LocationGetResponses = {
+  /**
+   * Location.Info
+   */
+  200: LocationInfo
+}
+
+export type V2LocationGetResponse = V2LocationGetResponses[keyof V2LocationGetResponses]
+
 export type V2AgentListData = {
   body?: never
   path?: never
@@ -9530,6 +9564,83 @@ export type V2SessionListResponses = {
 }
 
 export type V2SessionListResponse = V2SessionListResponses[keyof V2SessionListResponses]
+
+export type V2SessionCreateData = {
+  body: {
+    id?: string
+    agent?: string
+    model?: {
+      id: string
+      providerID: string
+      variant?: string
+    }
+    location?: LocationRef
+  }
+  path?: never
+  query?: never
+  url: "/api/session"
+}
+
+export type V2SessionCreateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2SessionCreateError = V2SessionCreateErrors[keyof V2SessionCreateErrors]
+
+export type V2SessionCreateResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: SessionV2Info
+  }
+}
+
+export type V2SessionCreateResponse = V2SessionCreateResponses[keyof V2SessionCreateResponses]
+
+export type V2SessionGetData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}"
+}
+
+export type V2SessionGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionGetError = V2SessionGetErrors[keyof V2SessionGetErrors]
+
+export type V2SessionGetResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: SessionV2Info
+  }
+}
+
+export type V2SessionGetResponse = V2SessionGetResponses[keyof V2SessionGetResponses]
 
 export type V2SessionPromptData = {
   body: {
@@ -10309,6 +10420,43 @@ export type V2QuestionRequestListResponses = {
 }
 
 export type V2QuestionRequestListResponse = V2QuestionRequestListResponses[keyof V2QuestionRequestListResponses]
+
+export type V2SessionQuestionListData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/question"
+}
+
+export type V2SessionQuestionListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionQuestionListError = V2SessionQuestionListErrors[keyof V2SessionQuestionListErrors]
+
+export type V2SessionQuestionListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: Array<QuestionV2Request>
+  }
+}
+
+export type V2SessionQuestionListResponse = V2SessionQuestionListResponses[keyof V2SessionQuestionListResponses]
 
 export type V2SessionQuestionReplyData = {
   body: QuestionV2Reply
