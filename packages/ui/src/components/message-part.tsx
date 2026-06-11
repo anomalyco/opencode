@@ -1164,7 +1164,7 @@ export function UserMessageDisplay(props: {
                 </Show>
               </span>
             </Show>
-            <Show when={view()}>
+            <Show when={view() && !props.hideUserMeta}>
               <Tooltip value={label()} placement="top" gutter={4}>
                 <IconButton
                   icon={mode() === "doc" ? "code" : "window-cursor"}
