@@ -76,6 +76,8 @@ import { promptPlaceholder } from "./prompt-input/placeholder"
 import { useDirectoryPicker } from "./directory-picker"
 import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
+import { createPresetsStore } from "@/hooks/use-presets"
+import { PresetsPopover } from "@/components/presets-popover"
 import { useQueries } from "@tanstack/solid-query"
 import { useQueryOptions } from "@/context/server-sync"
 import { pathKey } from "@/utils/path-key"
@@ -144,6 +146,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const platform = usePlatform()
   const pickDirectory = useDirectoryPicker()
   const settings = useSettings()
+  const presetsStore = createPresetsStore()
   const { params, tabs, view } = useSessionLayout()
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
@@ -577,6 +580,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       editorRef.focus()
       setCursorPosition(editorRef, cursor)
       queueScroll()
+    })
+  }
+
+  const insertPreset = (text: string) => {
+    requestAnimationFrame(() => {
+      editorRef.focus()
+      document.execCommand("insertText", false, text)
     })
   }
 
@@ -1597,6 +1607,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       aria-label={language.t("prompt.action.attachFile")}
                     />
                   </TooltipKeybind>
+                  <PresetsPopover
+                    store={presetsStore}
+                    onInsert={insertPreset}
+                  />
                   <Show when={showAgentControl()}>
                     <ComposerAgentControl state={agentControlState()} />
                   </Show>
@@ -1823,6 +1837,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <Icon name="plus" class="size-4.5" />
                     </Button>
                   </TooltipKeybind>
+                  <PresetsPopover
+                    store={presetsStore}
+                    onInsert={insertPreset}
+                  />
                 </div>
               </div>
             </div>

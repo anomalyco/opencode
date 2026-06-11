@@ -20,6 +20,27 @@ import { dict as tr } from "./tr"
 
 const locales = [ar, br, bs, da, de, es, fr, ja, ko, no, pl, ru, uk, th, tr, zh, zht]
 const keys = ["command.session.previous.unseen", "command.session.next.unseen"] as const
+const presetKeys = [
+  "presets.title",
+  "presets.manage",
+  "presets.count",
+  "presets.empty",
+  "presets.empty.hint",
+  "presets.add",
+  "presets.name",
+  "presets.content",
+  "presets.content.placeholder",
+  "presets.moveUp",
+  "presets.moveDown",
+  "presets.edit",
+  "presets.delete",
+  "presets.variables.title",
+  "presets.variables.next",
+  "presets.variables.insert",
+] as const
+
+// Keys that may have the same translation as English in some languages
+const allowedSameAsEnglish = new Set(["presets.name"])
 
 describe("i18n parity", () => {
   test("non-English locales translate targeted unseen session keys", () => {
@@ -27,6 +48,17 @@ describe("i18n parity", () => {
       for (const key of keys) {
         expect(locale[key]).toBeDefined()
         expect(locale[key]).not.toBe(en[key])
+      }
+    }
+  })
+
+  test("non-English locales translate all preset keys", () => {
+    for (const locale of locales) {
+      for (const key of presetKeys) {
+        expect(locale[key]).toBeDefined()
+        if (!allowedSameAsEnglish.has(key)) {
+          expect(locale[key]).not.toBe(en[key])
+        }
       }
     }
   })
