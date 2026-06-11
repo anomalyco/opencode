@@ -12463,7 +12463,7 @@
         ]
       }
     },
-    "/api/fs/read": {
+    "/api/fs/read/*": {
       "get": {
         "tags": ["filesystem"],
         "operationId": "v2.fs.read",
@@ -12486,14 +12486,6 @@
             "required": false,
             "style": "deepObject",
             "explode": true
-          },
-          {
-            "name": "path",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
           }
         ],
         "security": [],
@@ -12501,19 +12493,10 @@
           "200": {
             "description": "Success",
             "content": {
-              "application/json": {
+              "application/octet-stream": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "location": {
-                      "$ref": "#/components/schemas/LocationInfo"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/FileSystemContent"
-                    }
-                  },
-                  "required": ["location", "data"],
-                  "additionalProperties": false
+                  "type": "string",
+                  "format": "binary"
                 }
               }
             }
@@ -12539,7 +12522,7 @@
             }
           }
         },
-        "description": "Read one file relative to the requested location.",
+        "description": "Serve one file relative to the requested location.",
         "summary": "Read file",
         "x-codeSamples": [
           {
@@ -26558,29 +26541,6 @@
           }
         },
         "required": ["id", "projectID", "action", "resource"],
-        "additionalProperties": false
-      },
-      "FileSystemContent": {
-        "type": "object",
-        "properties": {
-          "uri": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "content": {
-            "type": "string"
-          },
-          "encoding": {
-            "type": "string",
-            "enum": ["utf8", "base64"]
-          },
-          "mime": {
-            "type": "string"
-          }
-        },
-        "required": ["uri", "content", "encoding", "mime"],
         "additionalProperties": false
       },
       "FileSystemEntry": {
