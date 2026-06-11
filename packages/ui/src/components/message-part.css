@@ -1067,6 +1067,28 @@
         }
       }
     }
+
+    /* Only OTHERS picked this (not me): same filled selection shape, but a muted gray tone. */
+    &[data-soft="true"] {
+      border-color: var(--icon-base);
+      opacity: 0.7;
+
+      [data-component="icon"] {
+        opacity: 1;
+        color: var(--icon-invert-base);
+      }
+
+      &[data-type="checkbox"] {
+        background-color: var(--icon-base);
+      }
+
+      &[data-type="radio"] {
+        background-color: var(--icon-base);
+        [data-slot="question-option-radio-dot"] {
+          opacity: 1;
+        }
+      }
+    }
   }
 
   [data-slot="question-option-main"] {
@@ -1077,7 +1099,7 @@
     flex: 1;
   }
 
-  /* Who currently has this option selected (self excluded) — last 2 chars of each name. */
+  /* Everyone (self included) who currently has this option selected — last 2 chars of each name. */
   [data-slot="question-option-avatars"] {
     display: flex;
     align-items: center;

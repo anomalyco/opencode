@@ -1150,6 +1150,8 @@ export namespace Doc {
       answers: z.array(z.array(z.string())),
       custom: z.array(z.string()),
       customOn: z.array(z.boolean()),
+      // Shared current question index — navigation is group-synced (all participants move together).
+      step: z.number(),
       rev: z.number(),
     })
     .meta({ ref: "QuestionDraft" })
@@ -1163,6 +1165,8 @@ export namespace Doc {
       z.object({ kind: z.literal("toggle"), q: z.number(), label: z.string(), on: z.boolean() }),
       // Custom "직접 답변": text + toggle. `multi` mirrors the dock's single vs multi custom handling.
       z.object({ kind: z.literal("custom"), q: z.number(), text: z.string(), on: z.boolean(), multi: z.boolean() }),
+      // Group-synced navigation: move the shared current question index for everyone.
+      z.object({ kind: z.literal("step"), value: z.number() }),
     ])
     .meta({ ref: "QuestionDraftOp" })
   export type QuestionDraftOp = z.infer<typeof QuestionDraftOp>
@@ -1213,7 +1217,7 @@ export namespace Doc {
   function ensureDraft(sessionID: SessionID, requestID: string) {
     let draft = drafts.get(requestID)
     if (!draft) {
-      draft = { requestID, sessionID, answers: [], custom: [], customOn: [], rev: 0 }
+      draft = { requestID, sessionID, answers: [], custom: [], customOn: [], step: 0, rev: 0 }
       drafts.set(requestID, draft)
     }
     return draft
@@ -1224,6 +1228,13 @@ export namespace Doc {
     (input) => {
       const draft = ensureDraft(input.sessionID, input.requestID)
       const op = input.op
+      // Group-synced navigation has no `q` — apply it before the per-question padding below.
+      if (op.kind === "step") {
+        draft.step = Math.max(0, Math.floor(op.value))
+        draft.rev += 1
+        castDraft(input.requestID)
+        return draft
+      }
       while (draft.answers.length <= op.q) draft.answers.push([])
       while (draft.custom.length <= op.q) draft.custom.push("")
       while (draft.customOn.length <= op.q) draft.customOn.push(false)

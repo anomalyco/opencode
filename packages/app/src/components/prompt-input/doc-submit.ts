@@ -252,6 +252,8 @@ export type QuestionDraft = {
   answers: string[][]
   custom: string[]
   customOn: boolean[]
+  // Shared current question index — navigation is group-synced.
+  step: number
   rev: number
 }
 
@@ -259,6 +261,7 @@ export type QuestionDraftOp =
   | { kind: "single"; q: number; value: string | null }
   | { kind: "toggle"; q: number; label: string; on: boolean }
   | { kind: "custom"; q: number; text: string; on: boolean; multi: boolean }
+  | { kind: "step"; value: number }
 
 export type QuestionPresenceEntry = {
   actorID: string

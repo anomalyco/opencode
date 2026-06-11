@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, createEffect, onCleanup, onMount, type Component } from "solid-js"
+import { For, Show, createMemo, createSignal, createEffect, on as onDep, onCleanup, onMount, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { DockPrompt } from "@opencode-ai/ui/dock-prompt"
@@ -25,10 +25,16 @@ import {
 
 type Actor = { actorID: string; name: string; color: string }
 
-function Mark(props: { multi: boolean; picked: boolean; onClick?: (event: MouseEvent) => void }) {
+// `picked` = this participant's own choice (strong). `soft` = only OTHERS picked it (muted/gray).
+function Mark(props: { multi: boolean; picked: boolean; soft?: boolean; onClick?: (event: MouseEvent) => void }) {
   return (
     <span data-slot="question-option-check" aria-hidden="true" onClick={props.onClick}>
-      <span data-slot="question-option-box" data-type={props.multi ? "checkbox" : "radio"} data-picked={props.picked}>
+      <span
+        data-slot="question-option-box"
+        data-type={props.multi ? "checkbox" : "radio"}
+        data-picked={props.picked}
+        data-soft={props.soft && !props.picked ? true : undefined}
+      >
         <Show when={props.multi} fallback={<span data-slot="question-option-radio-dot" />}>
           <Icon name="check-small" size="small" />
         </Show>
@@ -61,6 +67,7 @@ function Avatars(props: { items: { actorID: string; name: string; color: string 
 function Option(props: {
   multi: boolean
   picked: boolean
+  soft: boolean
   label: string
   description?: string
   disabled: boolean
@@ -72,12 +79,13 @@ function Option(props: {
       type="button"
       data-slot="question-option"
       data-picked={props.picked}
+      data-soft={props.soft && !props.picked ? true : undefined}
       role={props.multi ? "checkbox" : "radio"}
       aria-checked={props.picked}
       disabled={props.disabled}
       onClick={props.onClick}
     >
-      <Mark multi={props.multi} picked={props.picked} />
+      <Mark multi={props.multi} picked={props.picked} soft={props.soft} />
       <span data-slot="question-option-main">
         <span data-slot="option-label">{props.label}</span>
         <Show when={props.description}>
@@ -103,27 +111,53 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   // Navigation + edit cursor stay LOCAL — each participant browses freely.
   const [tab, setTab] = createSignal(0)
   const [editing, setEditing] = createSignal(false)
+  // While my custom textarea is open, it binds to this LOCAL buffer — not the shared draft — so the
+  // server echo never resets the value mid-keystroke (which broke Korean IME composition). The
+  // shared text is still pushed out on every input; remote edits are adopted only when not editing.
+  const [localText, setLocalText] = createSignal("")
 
   // The shared answer draft is authoritative on the server; this mirrors the last broadcast.
-  const [draft, setDraft] = createStore<{ answers: string[][]; custom: string[]; customOn: boolean[]; rev: number }>({
+  const [draft, setDraft] = createStore<{
+    answers: string[][]
+    custom: string[]
+    customOn: boolean[]
+    step: number
+    rev: number
+  }>({
     answers: [],
     custom: [],
     customOn: [],
+    step: 0,
     rev: -1,
   })
-  // Each participant's own current selection on their tab (for per-option avatars).
+  // Each participant's own PREDEFINED selections on their tab (custom is tracked separately below).
   const [mine, setMine] = createStore<string[][]>([])
+  // Whether I have the custom option selected — per-person, independent of the (shared) text, and
+  // broadcast via presence.customFocused so others see me selected even before any text is typed.
+  const [myCustomOn, setMyCustomOn] = createStore<boolean[]>([])
   const [presence, setPresence] = createSignal<QuestionPresenceEntry[]>([])
   const [actor, setActor] = createSignal<Actor>()
 
   let channel: QuestionDraftChannel | undefined
   let root: HTMLDivElement | undefined
+  // Live ref + IME state for the custom textarea so remote edits can be applied imperatively
+  // without clobbering an in-progress Korean composition.
+  let customField: HTMLTextAreaElement | undefined
+  let composing = false
 
   const question = createMemo(() => questions()[tab()])
   const options = createMemo(() => question()?.options ?? [])
   const multi = createMemo(() => question()?.multiple === true)
+  // Custom text is SHARED (collaborative simultaneous editing); the on-state is per-person.
   const input = createMemo(() => draft.custom[tab()] ?? "")
-  const on = createMemo(() => draft.customOn[tab()] === true)
+  const on = createMemo(() => myCustomOn[tab()] === true)
+
+  // A participant's effective answer for question `i`: their predefined picks plus the shared custom
+  // text when they have custom selected (and the text is non-empty). Drives the gate and submit.
+  const effective = (i: number, predefined: string[], customOn: boolean) => {
+    const text = draft.custom[i] ?? ""
+    return customOn && text.trim() ? [...predefined, text] : predefined
+  }
   const last = createMemo(() => tab() >= total() - 1)
 
   const customLabel = () => language.t("ui.messagePart.option.typeOwnAnswer")
@@ -147,21 +181,97 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       color: a.color,
       qIndex: tab(),
       selection: mine[tab()] ?? [],
-      customFocused: editing(),
+      // Repurposed: "this participant currently has the custom option selected".
+      customFocused: myCustomOn[tab()] === true,
     })
   }
   createEffect(() => {
-    // Re-broadcast whenever this participant's tab, edit state, or own selection changes.
+    // Re-broadcast whenever this participant's tab, predefined picks, or custom-on state changes.
     tab()
-    editing()
     void mine[tab()]
+    void myCustomOn[tab()]
     broadcastPresence()
   })
+  // Navigation is group-synced: follow the shared step the moment the server broadcasts a change.
+  // Track only draft.step (via `on`) so an optimistic local `goto` isn't reverted by the stale step.
+  createEffect(
+    onDep(
+      () => draft.step,
+      (step) => {
+        if (step === tab()) return
+        setTab(step)
+        setEditing(false)
+      },
+    ),
+  )
+  // Seed the local textarea buffer from the shared text whenever I open the editor.
+  createEffect(
+    onDep(
+      () => editing(),
+      (isEditing) => {
+        if (isEditing) {
+          setLocalText(draft.custom[tab()] ?? "")
+        } else {
+          customField = undefined
+        }
+      },
+    ),
+  )
+  // Live collaborative editing: apply remote text changes into the open textarea imperatively, but
+  // never while the user is mid-IME-composition, and never when it already matches (my own echo).
+  createEffect(() => {
+    const text = draft.custom[tab()] ?? ""
+    if (!editing()) return
+    const el = customField
+    if (!el || composing || el.value === text) return
+    const start = el.selectionStart
+    const end = el.selectionEnd
+    el.value = text
+    setLocalText(text)
+    resizeInput(el)
+    try {
+      el.setSelectionRange(Math.min(start, text.length), Math.min(end, text.length))
+    } catch {
+      // setSelectionRange can throw on detached nodes — safe to ignore.
+    }
+  })
 
-  const avatarsFor = (optLabel: string) =>
-    presence()
-      .filter((item) => item.actorID !== actor()?.actorID && item.qIndex === tab() && item.selection.includes(optLabel))
+  // Everyone (including me) who has this option selected on the current tab — me sorted first.
+  const avatarsFor = (optLabel: string) => {
+    const self = actor()?.actorID
+    return presence()
+      .filter((item) => item.qIndex === tab() && item.selection.includes(optLabel))
       .map((item) => ({ actorID: item.actorID, name: item.name, color: item.color }))
+      .sort((a, b) => (a.actorID === self ? -1 : b.actorID === self ? 1 : 0))
+  }
+
+  // Some OTHER participant has this option selected on the current tab (drives the muted radio).
+  const othersPicked = (optLabel: string) =>
+    presence().some(
+      (item) => item.actorID !== actor()?.actorID && item.qIndex === tab() && item.selection.includes(optLabel),
+    )
+
+  // Who has the custom option selected on the current tab (presence.customFocused), self reflecting
+  // my live `on()`. Independent of whether any text has been typed.
+  const customSelectors = () => {
+    const self = actor()
+    const list = presence()
+      .filter((item) => item.qIndex === tab())
+      .map((item) => ({
+        actorID: item.actorID,
+        name: item.name,
+        color: item.color,
+        on: item.actorID === self?.actorID ? on() : item.customFocused,
+      }))
+      .filter((item) => item.on)
+    if (self && on() && !list.some((item) => item.actorID === self.actorID))
+      list.unshift({ actorID: self.actorID, name: self.name, color: self.color, on: true })
+    return list.sort((a, b) => (a.actorID === self?.actorID ? -1 : b.actorID === self?.actorID ? 1 : 0))
+  }
+  // Everyone (including me) who has custom selected — me sorted first (for the avatar chips).
+  const customAvatars = () => customSelectors().map(({ actorID, name, color }) => ({ actorID, name, color }))
+  // Some OTHER participant has custom selected (drives the custom option's muted radio).
+  const othersCustom = () => customSelectors().some((item) => item.actorID !== actor()?.actorID)
 
   // Other participants (not me) currently viewing question `index` — shown stacked above its segment.
   const othersOnTab = (index: number) =>
@@ -172,27 +282,32 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   // ── Draft ops ───────────────────────────────────────────────────────────────────────────────
   const sendOp = (op: QuestionDraftOp) => channel?.sendOp(op)
 
-  const picked = (answer: string) => draft.answers[tab()]?.includes(answer) ?? false
+  // The strong radio reflects MY own selection (not the shared last-writer draft).
+  const picked = (answer: string) => mine[tab()]?.includes(answer) ?? false
 
   const pick = (answer: string) => {
     setMine(tab(), [answer])
+    setMyCustomOn(tab(), false) // single-select: choosing a predefined option drops my custom answer
     sendOp({ kind: "single", q: tab(), value: answer })
     setEditing(false)
   }
 
   const toggle = (answer: string) => {
-    const next = !(draft.answers[tab()]?.includes(answer) ?? false)
+    const next = !(mine[tab()]?.includes(answer) ?? false)
     setMine(tab(), (current = []) => (next ? [...current.filter((x) => x !== answer), answer] : current.filter((x) => x !== answer)))
     sendOp({ kind: "toggle", q: tab(), label: answer, on: next })
   }
 
+  // Custom: the on-state is per-person (myCustomOn); the text is shared (broadcast via the custom op
+  // so everyone co-edits the same field). For single-select, selecting custom drops my predefined pick.
   const customUpdate = (value: string, selected: boolean = on()) => {
+    setMyCustomOn(tab(), selected)
+    if (selected && !multi()) setMine(tab(), [])
     sendOp({ kind: "custom", q: tab(), text: value, on: selected, multi: multi() })
-    if (selected) setMine(tab(), multi() ? (current = []) => [...current.filter((x) => x !== input().trim()), value] : [value])
   }
 
   const customToggle = () => {
-    if (sending()) return
+    if (busy()) return
     if (!multi()) {
       setEditing(true)
       customUpdate(input(), true)
@@ -204,18 +319,18 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const customOpen = () => {
-    if (sending()) return
+    if (busy()) return
     setEditing(true)
     customUpdate(input(), true)
   }
 
   const commitCustom = () => {
+    customUpdate(localText())
     setEditing(false)
-    customUpdate(input())
   }
 
   const selectOption = (optIndex: number) => {
-    if (sending()) return
+    if (busy()) return
     if (optIndex === options().length) {
       customOpen()
       return
@@ -229,19 +344,41 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     pick(opt.label)
   }
 
-  const answered = (i: number) => {
-    if ((draft.answers[i]?.length ?? 0) > 0) return true
-    return draft.customOn[i] === true && (draft.custom[i] ?? "").trim().length > 0
-  }
+  // Answered = I have a non-empty effective selection (predefined pick, or custom with shared text).
+  const answered = (i: number) => effective(i, mine[i] ?? [], myCustomOn[i] ?? false).length > 0
+
+  // ── Unanimity gate ───────────────────────────────────────────────────────────────────────────
+  // Next/Submit unlocks only when every participant on the current question has picked the SAME
+  // (non-empty) answer. Order-independent compare covers both single- and multi-select. Solo ⇒
+  // simply "I answered". My own latest pick (`mine`) is used directly so the gate doesn't lag a
+  // presence round-trip.
+  const selectionKey = (selection: string[]) => [...selection].sort().join("\u0000")
+  const mineEffective = () => effective(tab(), mine[tab()] ?? [], on())
+  const consensus = createMemo(() => {
+    const self = actor()?.actorID
+    const here = presence().filter((item) => item.qIndex === tab())
+    const selections = here.map((item) =>
+      item.actorID === self ? mineEffective() : effective(tab(), item.selection, item.customFocused),
+    )
+    if (self && !here.some((item) => item.actorID === self)) selections.push(mineEffective())
+    if (selections.length === 0) return false
+    const keys = selections.map(selectionKey)
+    if (keys.some((key) => key === "")) return false
+    return keys.every((key) => key === keys[0])
+  })
 
   // ── Consent (send / dismiss) ────────────────────────────────────────────────────────────────
   const [approval, setApproval] = createSignal<DocSubmitState>()
   const [voteKind, setVoteKind] = createSignal<DocSubmitKind>("question-send")
   const [pendingSend, setPendingSend] = createSignal(false)
+  // Direct question reply in flight (replaces the old send-consent vote).
+  const [submitting, setSubmitting] = createSignal(false)
   let approvalID: string | undefined
   let finalizedID: string | undefined
 
   const sending = createMemo(() => pendingSend() || approval()?.status === "pending")
+  // Any in-flight action that should freeze the dock's controls.
+  const busy = createMemo(() => sending() || submitting())
 
   // What the consent dialog shows: each question + the answer being agreed on (empty for a dismiss
   // vote). Built from the shared draft, which is frozen while a vote is in flight — so it matches
@@ -371,33 +508,55 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     }
   }
 
-  const submit = () => {
+  // No consent vote: the gate already guarantees unanimity, so the first press replies directly to
+  // the AI (resolving the question for everyone). Uses the shared draft, which holds the agreed
+  // answers (unanimous ⇒ last-writer value == everyone's).
+  const submit = async () => {
+    if (submitting()) return
     if (editing()) commitCustom()
-    void startVote("question-send", { answers: questions().map((_, i) => draft.answers[i] ?? []) })
+    setSubmitting(true)
+    try {
+      // The app SDK client is configured with throwOnError, so a failed reply rejects here.
+      // Use my own effective selections: the gate guarantees unanimity, so mine == everyone's.
+      await sdk.client.question.reply({
+        requestID,
+        directory: sdk.directory,
+        answers: questions().map((_, i) => effective(i, mine[i] ?? [], myCustomOn[i] ?? false)),
+      })
+      props.onSubmit()
+    } catch (err) {
+      setSubmitting(false)
+      fail(err)
+    }
   }
 
   const dismiss = () => void startVote("question-dismiss", { reject: true })
 
-  // ── Navigation (local) ──────────────────────────────────────────────────────────────────────
+  // ── Navigation (group-synced via the shared draft `step`) ─────────────────────────────────────
+  const goto = (value: number) => {
+    const clamped = Math.max(0, Math.min(total() - 1, value))
+    sendOp({ kind: "step", value: clamped })
+    setTab(clamped) // optimistic; the server echo confirms for everyone
+    setEditing(false)
+  }
   const next = () => {
-    if (sending()) return
+    if (busy()) return
     if (editing()) commitCustom()
-    if (tab() >= total() - 1) {
-      submit()
+    if (last()) {
+      void submit()
       return
     }
-    setTab(tab() + 1)
-    setEditing(false)
+    goto(tab() + 1)
   }
   const back = () => {
-    if (sending() || tab() <= 0) return
-    setTab(tab() - 1)
-    setEditing(false)
+    if (busy() || tab() <= 0) return
+    goto(tab() - 1)
   }
-  const jump = (next: number) => {
-    if (sending()) return
-    setTab(next)
-    setEditing(false)
+  const jump = (value: number) => {
+    if (busy()) return
+    // Forward movement must pass through the gated Next; only review backward / answered questions.
+    if (value > tab() && !answered(value)) return
+    goto(value)
   }
 
   // ── Lifecycle ───────────────────────────────────────────────────────────────────────────────
@@ -421,7 +580,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       sessionID,
       requestID,
       actorID: a.actorID,
-      onDraft: (d) => setDraft({ answers: d.answers, custom: d.custom, customOn: d.customOn, rev: d.rev }),
+      onDraft: (d) => setDraft({ answers: d.answers, custom: d.custom, customOn: d.customOn, step: d.step ?? 0, rev: d.rev }),
       onPresence: (list) => setPresence(list),
     })
     broadcastPresence()
@@ -486,6 +645,9 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     el.style.height = `${el.scrollHeight}px`
   }
   const focusCustom = (el: HTMLTextAreaElement) => {
+    // Seed once from the shared text; remote edits are applied imperatively by the effect below.
+    customField = el
+    el.value = draft.custom[tab()] ?? ""
     setTimeout(() => {
       el.focus()
       resizeInput(el)
@@ -512,7 +674,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                   data-slot="question-progress-segment"
                   data-active={i() === tab()}
                   data-answered={answered(i())}
-                  disabled={sending()}
+                  disabled={busy()}
                   onClick={() => jump(i())}
                   aria-label={`${language.t("ui.tool.questions")} ${i() + 1}`}
                 >
@@ -537,16 +699,21 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       }
       footer={
         <>
-          <Button variant="ghost" size="large" disabled={sending()} onClick={dismiss}>
+          <Button variant="ghost" size="large" disabled={busy()} onClick={dismiss}>
             {language.t("ui.common.dismiss")}
           </Button>
           <div data-slot="question-footer-actions">
             <Show when={tab() > 0}>
-              <Button variant="secondary" size="large" disabled={sending()} onClick={back}>
+              <Button variant="secondary" size="large" disabled={busy()} onClick={back}>
                 {language.t("ui.common.back")}
               </Button>
             </Show>
-            <Button variant={last() ? "primary" : "secondary"} size="large" disabled={sending()} onClick={next}>
+            <Button
+              variant={last() ? "primary" : "secondary"}
+              size="large"
+              disabled={busy() || !consensus()}
+              onClick={next}
+            >
               {last() ? language.t("ui.common.submit") : language.t("ui.common.next")}
             </Button>
           </div>
@@ -563,9 +730,10 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
             <Option
               multi={multi()}
               picked={picked(opt.label)}
+              soft={othersPicked(opt.label)}
               label={opt.label}
               description={opt.description}
-              disabled={sending()}
+              disabled={busy()}
               avatars={avatarsFor(opt.label)}
               onClick={() => selectOption(i())}
             />
@@ -580,16 +748,18 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
               data-slot="question-option"
               data-custom="true"
               data-picked={on()}
+              data-soft={othersCustom() && !on() ? true : undefined}
               role={multi() ? "checkbox" : "radio"}
               aria-checked={on()}
-              disabled={sending()}
+              disabled={busy()}
               onClick={customOpen}
             >
-              <Mark multi={multi()} picked={on()} onClick={toggleCustomMark} />
+              <Mark multi={multi()} picked={on()} soft={othersCustom()} onClick={toggleCustomMark} />
               <span data-slot="question-option-main">
                 <span data-slot="option-label">{customLabel()}</span>
                 <span data-slot="option-description">{input() || customPlaceholder()}</span>
               </span>
+              <Avatars items={customAvatars()} />
             </button>
           }
         >
@@ -597,10 +767,11 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
             data-slot="question-option"
             data-custom="true"
             data-picked={on()}
+            data-soft={othersCustom() && !on() ? true : undefined}
             role={multi() ? "checkbox" : "radio"}
             aria-checked={on()}
             onMouseDown={(e) => {
-              if (sending()) {
+              if (busy()) {
                 e.preventDefault()
                 return
               }
@@ -613,16 +784,16 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
               commitCustom()
             }}
           >
-            <Mark multi={multi()} picked={on()} onClick={toggleCustomMark} />
+            <Mark multi={multi()} picked={on()} soft={othersCustom()} onClick={toggleCustomMark} />
             <span data-slot="question-option-main">
               <span data-slot="option-label">{customLabel()}</span>
+              {/* Uncontrolled while editing: seeded once via ref, never re-bound, so IME is safe. */}
               <textarea
                 ref={focusCustom}
                 data-slot="question-custom-input"
                 placeholder={customPlaceholder()}
-                value={input()}
                 rows={1}
-                disabled={sending()}
+                disabled={busy()}
                 onKeyDown={(e) => {
                   if (e.key === "Escape") {
                     e.preventDefault()
@@ -633,12 +804,23 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
                   e.preventDefault()
                   commitCustom()
                 }}
+                onCompositionStart={() => {
+                  composing = true
+                }}
+                onCompositionEnd={(e) => {
+                  composing = false
+                  setLocalText(e.currentTarget.value)
+                  customUpdate(e.currentTarget.value)
+                }}
                 onInput={(e) => {
+                  // Update the local buffer first (IME-safe), then share the text.
+                  setLocalText(e.currentTarget.value)
                   customUpdate(e.currentTarget.value)
                   resizeInput(e.currentTarget)
                 }}
               />
             </span>
+            <Avatars items={customAvatars()} />
           </form>
         </Show>
       </div>
