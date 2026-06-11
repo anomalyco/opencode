@@ -1,6 +1,5 @@
 [data-component="assistant-message"] {
   contain: layout style;
-  transform: translateZ(0);
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -254,8 +253,6 @@
     gap: 4px;
     opacity: 1;
     pointer-events: auto;
-    transition: opacity 0.15s ease;
-    will-change: opacity;
 
     [data-component="tooltip-trigger"] {
       display: inline-flex;
@@ -360,7 +357,6 @@
   width: 100%;
   margin-top: 24px;
   contain: layout style;
-  transform: translateZ(0);
 
   [data-slot="text-part-body"] {
     margin-top: 0;
@@ -375,8 +371,6 @@
     gap: 10px;
     opacity: 1;
     pointer-events: auto;
-    transition: opacity 0.15s ease;
-    will-change: opacity;
 
     [data-component="tooltip-trigger"] {
       display: inline-flex;

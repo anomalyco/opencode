@@ -8,3 +8,11 @@ export function itemStyle(centered: boolean): JSX.CSSProperties {
     "margin-right": "auto",
   }
 }
+
+export function timelineVirtualizationEnabled(value: string | null | undefined): boolean {
+  return value === "1"
+}
+
+export function timelineHeightCacheEnabled(value: string | null | undefined): boolean {
+  return value === "1"
+}

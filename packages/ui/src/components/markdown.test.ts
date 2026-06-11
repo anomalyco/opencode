@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Marked } from "marked"
-import { fileLink, findFileLinks } from "./markdown"
+import { fileLink, findFileLinks, initialMarkdownMathSeen } from "./markdown"
 import { protectMathExpressions, renderMathExpressions } from "../context/marked"
 
 describe("markdown fileLink", () => {
@@ -82,6 +82,13 @@ describe("markdown fileLink", () => {
 })
 
 describe("markdown math", () => {
+  test("treats mounted structure stage as math-ready", () => {
+    expect(initialMarkdownMathSeen({ stage: "structure" })).toBe(true)
+    expect(initialMarkdownMathSeen({ stage: "full" })).toBe(true)
+    expect(initialMarkdownMathSeen({ stage: "lite", math: "defer" })).toBe(false)
+    expect(initialMarkdownMathSeen({ math: "full" })).toBe(true)
+  })
+
   test("protects display math from markdown block parsing", () => {
     const markdown = `好的，本题已完成。核心结果是：
 

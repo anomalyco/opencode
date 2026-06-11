@@ -216,6 +216,48 @@ const [loading, setLoading] = createSignal(false);
 
 Use `createResource` for page-level async data that should participate in Suspense. Use `createSignal` plus explicit loading/error state for click-driven side panels, tabs, drawers, and other local UI regions.
 
+### Avoid Persistent Compositor Promotion in Repeated UI
+
+Long message lists, tables, trees, and markdown/code blocks can contain hundreds of repeated nodes. Do not add compositor-promoting CSS to every repeated item unless profiling proves it is necessary. Persistent promotion can exhaust Chromium tile memory and cause missing paint or hover flicker in Electron.
+
+```css
+/* Bad: every message/code block can become a promoted or filtered surface. */
+[data-component="session-turn"] {
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+[data-slot="copy-button"] {
+  will-change: opacity;
+  backdrop-filter: blur(8px);
+  transform: scale(0.96);
+  transition: opacity 160ms ease, transform 160ms ease;
+}
+
+/* Good: keep repeated nodes on the normal paint path. */
+[data-component="session-turn"] {
+  contain: layout style paint;
+}
+
+[data-slot="copy-button"] {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+[data-component="code-block"]:hover [data-slot="copy-button"],
+[data-slot="copy-button"]:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+```
+
+**Validation points**:
+
+- In long sessions, hover over repeated controls and verify there is no full-list flicker.
+- Watch Electron logs for `tile memory limits exceeded`; this warning usually means too many or too-large raster/composited surfaces.
+- If `will-change`, `backdrop-filter`, `filter`, or 3D transforms are needed, scope them to a small active element and remove them after the animation.
+
 ### Debounce Expensive Operations
 
 ```tsx

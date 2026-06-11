@@ -26,6 +26,16 @@ type Mark = Record<string, string | number | boolean | undefined>
 
 export type MarkdownStage = "lite" | "structure" | "full"
 
+export function initialMarkdownMathSeen(input: {
+  stage?: MarkdownStage
+  eager?: boolean
+  math?: "full" | "defer"
+}): boolean {
+  const eager = input.stage ? input.stage !== "lite" : !!input.eager
+  const mathMode = input.stage === "full" ? "full" : input.stage === "structure" ? "defer" : (input.math ?? "full")
+  return eager || mathMode !== "defer"
+}
+
 type MarkedApi = ReturnType<typeof useMarked>
 
 const max = 200
@@ -805,7 +815,9 @@ export function Markdown(
     return local.math ?? "full"
   })
   const [seen, setSeen] = createSignal(eager())
-  const [mathSeen, setMathSeen] = createSignal(eager() || mathMode() !== "defer")
+  const [mathSeen, setMathSeen] = createSignal(
+    initialMarkdownMathSeen({ stage: local.stage, eager: local.eager, math: local.math }),
+  )
   const labels = createMemo(() => ({
     copy: i18n.t("ui.message.copy"),
     copied: i18n.t("ui.message.copied"),
@@ -1200,7 +1212,9 @@ export function Markdown(
         if (stableCount > 0 && stableCount >= existingCount - 1) {
           // Remove unstable trailing nodes from container
           while (container.childNodes.length > stableCount) {
-            container.removeChild(container.lastChild!)
+            const child = container.lastChild
+            if (!child) break
+            container.removeChild(child)
           }
           // Append all nodes from stableCount onward from temp
           while (temp.childNodes.length > stableCount) {

@@ -35,7 +35,7 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
-import { itemStyle } from "@/pages/session/message-timeline-utils"
+import { itemStyle, timelineHeightCacheEnabled, timelineVirtualizationEnabled } from "@/pages/session/message-timeline-utils"
 import { resolveLinkedPath } from "@/pages/session/message-link-path"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import { messageAgentColor } from "@/utils/agent"
@@ -100,7 +100,8 @@ const parseStage = (value: string | null | undefined): MarkdownStage | undefined
 
 const readStageCache = (sessionId: string, msgId: string): MarkdownStage | undefined => {
   try {
-    return parseStage(sessionStorage.getItem(stageCacheKey(sessionId, msgId)))
+    const stage = parseStage(sessionStorage.getItem(stageCacheKey(sessionId, msgId)))
+    return stage === "full" ? "structure" : stage
   } catch {
     return undefined
   }
@@ -108,7 +109,7 @@ const readStageCache = (sessionId: string, msgId: string): MarkdownStage | undef
 
 const writeStageCache = (sessionId: string, msgId: string, stage: MarkdownStage) => {
   try {
-    sessionStorage.setItem(stageCacheKey(sessionId, msgId), stage)
+    sessionStorage.setItem(stageCacheKey(sessionId, msgId), stage === "full" ? "structure" : stage)
   } catch {
     // QuotaExceededError — silently drop
   }
@@ -125,6 +126,7 @@ const deleteStageCache = (sessionId: string, msgId: string) => {
 const maxStage = (a: MarkdownStage, b: MarkdownStage) => (rankByStage[a] >= rankByStage[b] ? a : b)
 
 const readHeightCache = (sessionId: string, msgId: string, stage: string, signature: string): number | undefined => {
+  if (!heightCacheOn()) return undefined
   try {
     const v = sessionStorage.getItem(heightCacheKey(sessionId, msgId, stage, signature))
     if (v === null) return undefined
@@ -136,15 +138,17 @@ const readHeightCache = (sessionId: string, msgId: string, stage: string, signat
 }
 
 const writeHeightCache = (sessionId: string, msgId: string, stage: string, signature: string, height: number) => {
+  if (!heightCacheOn()) return
   try {
     sessionStorage.setItem(heightCacheKey(sessionId, msgId, stage, signature), String(height))
   } catch {
     // QuotaExceededError — silently drop
   }
 }
-const IDLE_QUEUE_MS = 1_200
 const mdKey = "opencode.markdown.debug"
 const virtKey = "opencode.session.virtual.debug"
+const virtOnKey = "opencode.session.virtual.on"
+const heightCacheOnKey = "opencode.session.heightCache.on"
 const domMs = 5_000
 const lagMs = 250
 
@@ -152,6 +156,24 @@ function mddebug() {
   if (typeof window === "undefined") return false
   try {
     return window.localStorage.getItem(mdKey) === "1"
+  } catch {
+    return false
+  }
+}
+
+function virtualOn() {
+  if (typeof window === "undefined") return false
+  try {
+    return timelineVirtualizationEnabled(window.localStorage.getItem(virtOnKey))
+  } catch {
+    return false
+  }
+}
+
+function heightCacheOn() {
+  if (typeof window === "undefined") return false
+  try {
+    return timelineHeightCacheEnabled(window.localStorage.getItem(heightCacheOnKey))
   } catch {
     return false
   }
@@ -375,7 +397,6 @@ export function MessageTimeline(props: {
   let pinFrame: number | undefined
   let pinSource = "unknown"
   let blank: number | undefined
-  let idleTimer: ReturnType<typeof setTimeout> | undefined
   let lagAt = 0
   let lagMax = 0
   let mdWasDebug = false
@@ -385,7 +406,6 @@ export function MessageTimeline(props: {
   const [revision, setRevision] = createSignal(0)
   const [stageMark, setStageMark] = createSignal(0)
   const stageByTurn = new Map<string, Map<string, MarkdownStage>>()
-  const upgraded = new Set<string>()
   const stageById = new Map<string, MarkdownStage>()
   const pendingShrinkById = new Map<string, PendingShrink>()
   const pendingShrinkReleaseById = new Map<string, ReturnType<typeof setTimeout>>()
@@ -604,11 +624,13 @@ export function MessageTimeline(props: {
     return "lite"
   }
   const saveStage = (id: string, stage: MarkdownStage, src: string) => {
+    // Historical turns should only remember that their structure is available.
+    // Full math/highlight rendering is demand-driven while a markdown node is mounted.
+    const capped = stage === "full" ? "structure" : stage
     const prev = stageById.get(id)
-    const next = prev ? maxStage(prev, stage) : stage
+    const next = prev ? maxStage(prev, capped) : capped
     if (prev === next) return false
     stageById.set(id, next)
-    if (next === "full") upgraded.add(id)
     const sid = sessionID()
     if (sid) writeStageCache(sid, id, next)
     seq += 1
@@ -851,7 +873,7 @@ export function MessageTimeline(props: {
     }),
   )
 
-  const canWindow = createMemo(() => !sessionSwitching() && eligible().enabled)
+  const canWindow = createMemo(() => virtualOn() && !sessionSwitching() && eligible().enabled)
 
   let prevCanWindow: boolean | undefined
   createEffect(() => {
@@ -1300,34 +1322,6 @@ export function MessageTimeline(props: {
     return ids.slice(windowed.start, Math.min(ids.length, windowed.end))
   })
 
-  const turnStage = (id: string): MarkdownStage => {
-    const saved = stageOf(id)
-    if (saved === "full") return "full"
-    const map = stageByTurn.get(id)
-    if (!map || map.size === 0) return saved
-    let rank = 0
-    for (const value of map.values()) {
-      if (value === "full") rank = Math.max(rank, 2)
-      else if (value === "structure") rank = Math.max(rank, 1)
-    }
-    if (rank === 2) return "full"
-    if (rank === 1) return "structure"
-    return saved
-  }
-
-  const idleTargets = createMemo(() => {
-    if (props.seekingMessageId) return [] as string[]
-    if (isWorking()) return [] as string[]
-
-    const ids = rendered()
-    const start = Math.max(0, windowed.start - 1)
-    const end = Math.min(ids.length, windowed.end + 1)
-    return ids
-      .slice(start, end)
-      .filter((id) => turnStage(id) !== "full")
-      .slice(0, 1)
-  })
-
   const audit = (source: string) => {
     if (blank !== undefined) return
     blank = requestAnimationFrame(() => {
@@ -1429,7 +1423,6 @@ export function MessageTimeline(props: {
       for (const id of stageByTurn.keys()) {
         if (!ids.has(id)) {
           stageByTurn.delete(id)
-          upgraded.delete(id)
           stageById.delete(id)
           const sid = sessionID()
           if (sid) deleteStageCache(sid, id)
@@ -1441,21 +1434,6 @@ export function MessageTimeline(props: {
       scheduleWindow()
     }),
   )
-
-  createEffect(() => {
-    const ids = idleTargets()
-    if (idleTimer !== undefined) clearTimeout(idleTimer)
-    if (ids.length === 0) return
-
-    idleTimer = setTimeout(() => {
-      idleTimer = undefined
-      const id = idleTargets()[0]
-      if (!id || stageOf(id) === "full") return
-      console.debug(`[markdown] idle upgrade: id=${id} queue=${idleTargets().join(",")}`)
-      saveStage(id, "full", "idle")
-      scheduleWindow()
-    }, IDLE_QUEUE_MS)
-  })
 
   createEffect(() => {
     if (canWindow()) return
@@ -1506,7 +1484,6 @@ export function MessageTimeline(props: {
     if (mutationFrame !== undefined) cancelAnimationFrame(mutationFrame)
     if (pinFrame !== undefined) cancelAnimationFrame(pinFrame)
     if (blank !== undefined) cancelAnimationFrame(blank)
-    if (idleTimer !== undefined) clearTimeout(idleTimer)
     for (const release of pendingShrinkReleaseById.values()) clearTimeout(release)
     pendingShrinkReleaseById.clear()
   })

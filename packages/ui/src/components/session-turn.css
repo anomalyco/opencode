@@ -8,8 +8,6 @@
   justify-content: flex-start;
   contain: layout style paint;
   isolation: isolate;
-  backface-visibility: hidden;
-  transform: translateZ(0);
 
   [data-slot="session-turn-content"] {
     flex-grow: 1;
