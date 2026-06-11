@@ -15,6 +15,16 @@ import { Glob } from "@opencode-ai/core/util/glob"
 import * as Log from "@opencode-ai/core/util/log"
 import { Discovery } from "./discovery"
 import CUSTOMIZE_OPENCODE_SKILL_BODY from "./prompt/customize-opencode.md" with { type: "text" }
+// === securecode fork: securecode-manual built-in skill ===
+import SECURECODE_MANUAL_OVERVIEW from "../securecode/skills/securecode-manual/00-overview.md" with { type: "text" }
+import SECURECODE_MANUAL_INSTALLATION from "../securecode/skills/securecode-manual/01-installation.md" with { type: "text" }
+import SECURECODE_MANUAL_QUICKSTART from "../securecode/skills/securecode-manual/02-quickstart.md" with { type: "text" }
+import SECURECODE_MANUAL_COMMANDS from "../securecode/skills/securecode-manual/03-commands.md" with { type: "text" }
+import SECURECODE_MANUAL_CONFIG from "../securecode/skills/securecode-manual/04-config.md" with { type: "text" }
+import SECURECODE_MANUAL_SANDBOX from "../securecode/skills/securecode-manual/05-sandbox.md" with { type: "text" }
+import SECURECODE_MANUAL_TROUBLESHOOTING from "../securecode/skills/securecode-manual/06-troubleshooting.md" with { type: "text" }
+import SECURECODE_MANUAL_FAQ from "../securecode/skills/securecode-manual/07-faq.md" with { type: "text" }
+// === end securecode fork ===
 import { isRecord } from "@/util/record"
 
 const log = Log.create({ service: "skill" })
@@ -32,6 +42,26 @@ const SKILL_PATTERN = "**/SKILL.md"
 const CUSTOMIZE_OPENCODE_SKILL_NAME = "customize-opencode"
 const CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION =
   "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself."
+
+// === securecode fork: securecode-manual built-in skill ===
+// End-user manual for SecureCode itself. Sources live under
+// packages/opencode/src/securecode/skills/securecode-manual/ and are inlined
+// here at build time so the manual ships inside the binary (no install-time
+// disk seeding, no version skew between binary and manual).
+const SECURECODE_MANUAL_SKILL_NAME = "securecode-manual"
+const SECURECODE_MANUAL_SKILL_DESCRIPTION =
+  "Use this skill when the user asks how to install, configure, run, or troubleshoot Acompany SecureCode itself (the CLI they are currently talking through). Covers installation, first-run setup, subcommands, configuration files, sandbox behavior, API key handling, and common errors."
+const SECURECODE_MANUAL_SKILL_BODY = [
+  SECURECODE_MANUAL_OVERVIEW,
+  SECURECODE_MANUAL_INSTALLATION,
+  SECURECODE_MANUAL_QUICKSTART,
+  SECURECODE_MANUAL_COMMANDS,
+  SECURECODE_MANUAL_CONFIG,
+  SECURECODE_MANUAL_SANDBOX,
+  SECURECODE_MANUAL_TROUBLESHOOTING,
+  SECURECODE_MANUAL_FAQ,
+].join("\n\n---\n\n")
+// === end securecode fork ===
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -277,6 +307,14 @@ export const layer = Layer.effect(
           location: "<built-in>",
           content: CUSTOMIZE_OPENCODE_SKILL_BODY,
         }
+        // === securecode fork: securecode-manual ===
+        s.skills[SECURECODE_MANUAL_SKILL_NAME] = {
+          name: SECURECODE_MANUAL_SKILL_NAME,
+          description: SECURECODE_MANUAL_SKILL_DESCRIPTION,
+          location: "<built-in>",
+          content: SECURECODE_MANUAL_SKILL_BODY,
+        }
+        // === end securecode fork ===
         yield* loadSkills(s, yield* InstanceState.get(discovered), bus)
         return s
       }),

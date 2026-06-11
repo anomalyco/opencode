@@ -187,6 +187,8 @@ function note(name: string) {
     "  - securecode.json is the preferred config name; opencode.json is also accepted.",
     "  - Branding (SecureCode wordmark / sidebar badge) ships inside the binary;",
     "    no separate plugin file install is required.",
+    "  - The `securecode-manual` skill (CLI user manual the agent can look up) is",
+    "    built into the binary; no install step is needed.",
     "",
   ].join("\n")
 }
