@@ -20,7 +20,8 @@ import { useLayout } from "@/context/layout"
 import { useSettings } from "@/context/settings"
 import { FilesPanelV2Sidebar } from "@/pages/session/v2/files-panel-v2"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
-import { FileTabContent } from "@/pages/session/file-tabs"
+import { FileTabContentV2 } from "@/pages/session/v2/file-tab-content-v2"
+import type { ReviewPanelV2Props } from "@/pages/session/v2/review-panel-v2"
 import { SESSION_OPEN_FILE_TAB, type Sizing } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -36,6 +37,7 @@ export function SessionSidePanelV2(props: {
   reviewPanel: () => JSX.Element
   reviewSidebar: () => JSX.Element
   reviewV2State: ReviewPanelV2State
+  fileTabReview: () => ReviewPanelV2Props
   reviewSnap: boolean
   size: Sizing
 }) {
@@ -316,7 +318,7 @@ export function SessionSidePanelV2(props: {
                       </Show>
 
                       <Show when={activeFileTab()} keyed>
-                        {(tab) => <FileTabContent tab={tab} />}
+                        {(tab) => <FileTabContentV2 tab={tab} review={props.fileTabReview} />}
                       </Show>
                     </div>
                   </div>

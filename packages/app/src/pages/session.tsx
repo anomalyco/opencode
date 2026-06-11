@@ -1941,6 +1941,7 @@ export default function Page() {
             reviewPanel={reviewPanelV2}
             reviewSidebar={reviewSidebarV2}
             reviewV2State={reviewV2State}
+            fileTabReview={reviewPanelV2Props}
             reviewSnap={ui.reviewSnap}
             size={size}
           />
