@@ -9,6 +9,7 @@ import type { QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import { useParentParams } from "@/context/parent-params"
+import { useClientEnv } from "@/context/client-env"
 import { label } from "@/components/blocksuite/actor"
 import { loadActor, saveActor } from "@/components/prompt-input/doc-actor"
 import { DialogDocSubmit, type DocSubmitKind } from "@/components/doc-submit/dialog-doc-submit"
@@ -102,6 +103,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const language = useLanguage()
   const dialog = useDialog()
   const parentParams = useParentParams()
+  const clientEnv = useClientEnv()
 
   const sessionID = props.request.sessionID
   const requestID = props.request.id
@@ -711,9 +713,11 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       }
       footer={
         <>
-          <Button variant="ghost" size="large" disabled={busy()} onClick={dismiss}>
-            {language.t("ui.common.dismiss")}
-          </Button>
+          <Show when={!clientEnv.disableAnswerClose()}>
+            <Button variant="ghost" size="large" disabled={busy()} onClick={dismiss}>
+              {language.t("ui.common.dismiss")}
+            </Button>
+          </Show>
           <div data-slot="question-footer-actions">
             <Show when={tab() > 0}>
               <Button variant="secondary" size="large" disabled={busy()} onClick={back}>

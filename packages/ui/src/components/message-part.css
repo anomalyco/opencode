@@ -1203,6 +1203,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    /* Stay right-aligned even when the dismiss button is hidden (no left sibling). */
+    margin-left: auto;
   }
 }
 
