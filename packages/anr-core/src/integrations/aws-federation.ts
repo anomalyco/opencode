@@ -20,13 +20,16 @@ export async function exchangeTokenForAWSCredentials(idToken: string, config: AN
 
   const region = config.awsRegion || "us-east-2"
   const govcloud = region.startsWith("us-gov-")
-  // Bun can trip on node-config-provider loadConfig in some mixed AWS SDK graphs.
-  // Casting to any lets us set accountIdEndpointMode without a type error since
-  // CognitoIdentityClientConfig doesn't declare the field even though the SDK
-  // reads it at runtime.
+  // Bun resolves some AWS SDK CJS modules differently across platforms, causing
+  // loadConfig() to appear as a Symbol instead of a function for options like
+  // accountIdEndpointMode and authSchemePreference. Supplying these explicitly
+  // prevents the SDK from calling loadConfig() for those paths at all.
   const clientConfig: any = {
     region,
     accountIdEndpointMode: "disabled",
+    authSchemePreference: [],
+    requestChecksumCalculation: "WHEN_REQUIRED",
+    responseChecksumValidation: "WHEN_REQUIRED",
     ...(govcloud && { useFipsEndpoint: true }),
   }
   const client = new CognitoIdentityClient(clientConfig)

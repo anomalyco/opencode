@@ -56,11 +56,16 @@ export interface AuditLoggerCredentials {
  */
 export function initializeAuditLogger(config: ANRConfig, credentials?: AuditLoggerCredentials): void {
   try {
-    const client = new DynamoDBClient({
+    // Bun resolves some AWS SDK CJS modules differently across platforms, causing
+    // loadConfig() to appear as a Symbol instead of a function for options like
+    // accountIdEndpointMode and authSchemePreference. Supplying these explicitly
+    // prevents the SDK from calling loadConfig() for those paths at all.
+    const clientConfig: any = {
       region: config.awsRegion,
-      // Bun can trip on node-config-provider loadConfig in some mixed SDK graphs.
-      // Setting this explicitly avoids that runtime path.
       accountIdEndpointMode: "disabled",
+      authSchemePreference: [],
+      requestChecksumCalculation: "WHEN_REQUIRED",
+      responseChecksumValidation: "WHEN_REQUIRED",
       ...(credentials && {
         credentials: {
           accessKeyId: credentials.accessKeyId,
@@ -68,7 +73,8 @@ export function initializeAuditLogger(config: ANRConfig, credentials?: AuditLogg
           sessionToken: credentials.sessionToken,
         },
       }),
-    })
+    }
+    const client = new DynamoDBClient(clientConfig)
 
     dynamoClient = DynamoDBDocumentClient.from(client)
     // Audit logger initialized (silent to avoid TUI pollution)
