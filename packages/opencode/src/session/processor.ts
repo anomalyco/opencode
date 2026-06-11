@@ -71,6 +71,7 @@ type ToolCall = {
   done: Deferred.Deferred<void>
   inputEnded: boolean
   raw: string
+  tool: string
 }
 
 interface ProcessorContext extends Input {
@@ -333,15 +334,16 @@ export const layer = Layer.effect(
           state: { status: "pending", input: {}, raw: "" },
           metadata: input.providerExecuted ? { providerExecuted: true } : undefined,
         } satisfies SessionV1.ToolPart)
-        ctx.toolcalls[input.id] = {
-          assistantMessageID,
-          done: yield* Deferred.make<void>(),
-          partID: part.id,
-          messageID: part.messageID,
-          sessionID: part.sessionID,
-          inputEnded: false,
-          raw: "",
-        }
+  ctx.toolcalls[input.id] = {
+    assistantMessageID,
+    done: yield* Deferred.make<void>(),
+    partID: part.id,
+    messageID: part.messageID,
+    sessionID: part.sessionID,
+    inputEnded: false,
+    raw: "",
+    tool: input.name,
+  }
         return { call: ctx.toolcalls[input.id], part }
       })
 
@@ -882,33 +884,41 @@ export const layer = Layer.effect(
           { concurrency: "unbounded" },
         )
 
-        for (const toolCallID of Object.keys(ctx.toolcalls)) {
-          const match = yield* readToolCall(toolCallID)
-          if (!match) continue
-          const part = match.part
-          if (mirrorAssistant && match.call.assistantMessageID) {
-            yield* events.publish(SessionEvent.Tool.Failed, {
-              sessionID: ctx.sessionID,
-              assistantMessageID: match.call.assistantMessageID,
-              callID: toolCallID,
-              error: { type: "unknown", message: "Tool execution aborted" },
-              provider: { executed: part.metadata?.providerExecuted === true },
-              timestamp: DateTime.makeUnsafe(Date.now()),
-            })
-          }
-          const end = Date.now()
-          const metadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
-          yield* session.updatePart({
-            ...part,
-            state: {
-              ...part.state,
-              status: "error",
-              error: "Tool execution aborted",
-              metadata: { ...metadata, interrupted: true },
-              time: { start: "time" in part.state ? part.state.time.start : end, end },
-            },
-          })
-        }
+  for (const toolCallID of Object.keys(ctx.toolcalls)) {
+    const call = ctx.toolcalls[toolCallID]
+    const match = yield* readToolCall(toolCallID)
+    const part = match?.part ?? {
+      id: call.partID,
+      messageID: call.messageID,
+      sessionID: call.sessionID,
+      type: "tool" as const,
+      callID: toolCallID,
+      tool: call.tool,
+      state: { status: "pending" as const, input: {}, raw: call.raw },
+    } satisfies SessionV1.ToolPart
+    if (mirrorAssistant && call.assistantMessageID) {
+      yield* events.publish(SessionEvent.Tool.Failed, {
+        sessionID: ctx.sessionID,
+        assistantMessageID: call.assistantMessageID,
+        callID: toolCallID,
+        error: { type: "unknown", message: "Tool execution aborted" },
+        provider: { executed: part.metadata?.providerExecuted === true },
+        timestamp: DateTime.makeUnsafe(Date.now()),
+      })
+    }
+    const end = Date.now()
+    const metadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
+    yield* session.updatePart({
+      ...part,
+      state: {
+        ...part.state,
+        status: "error",
+        error: "Tool execution aborted",
+        metadata: { ...metadata, interrupted: true },
+        time: { start: "time" in part.state ? part.state.time.start : end, end },
+      },
+    })
+  }
         ctx.toolcalls = {}
         ctx.assistantMessage.time.completed = Date.now()
         yield* session.updateMessage(ctx.assistantMessage)
