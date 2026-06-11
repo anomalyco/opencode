@@ -2,6 +2,7 @@ import { useEvent } from "./event"
 import type {
   AgentV2Info,
   CommandV2Info,
+  ConnectorInfo,
   Event,
   LocationRef,
   ModelV2Info,
@@ -26,6 +27,7 @@ import { createSignal, onMount } from "solid-js"
 type LocationData = {
   agent?: AgentV2Info[]
   command?: CommandV2Info[]
+  connector?: ConnectorInfo[]
   model?: ModelV2Info[]
   provider?: ProviderV2Info[]
   reference?: ReferenceInfo[]
@@ -119,7 +121,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       },
     }
 
-    event.subscribe((event) => {
+    event.subscribe((event, metadata) => {
       switch (event.type) {
         case "session.next.agent.switched":
           message.update(event.properties.sessionID, (draft) => {
@@ -421,6 +423,17 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "reference.updated":
           void result.location.reference.refresh()
           break
+        case "credential.switched": {
+          const location = { directory: metadata.directory, workspaceID: metadata.workspace }
+          void Promise.allSettled([
+            result.location.model.refresh(location),
+            result.location.provider.refresh(location),
+          ])
+          break
+        }
+        case "connector.updated":
+          void result.location.connector.refresh({ directory: metadata.directory, workspaceID: metadata.workspace })
+          break
       }
     })
 
@@ -503,6 +516,16 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             setStore("location", key, "command", result.data.data)
           },
         },
+        connector: {
+          list(location?: LocationRef) {
+            return store.location[locationKey(location ?? defaultLocation())]?.connector
+          },
+          async refresh(ref?: LocationRef) {
+            const result = await sdk.client.v2.connector.list({ location: locationQuery(ref) }, { throwOnError: true })
+            const key = locationKey(result.data.location)
+            setStore("location", key, "connector", result.data.data)
+          },
+        },
         model: {
           list(location?: LocationRef) {
             return store.location[locationKey(location ?? defaultLocation())]?.model
@@ -550,6 +573,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       void Promise.allSettled([
         result.location.refresh(),
         result.location.agent.refresh(),
+        result.location.connector.refresh(),
         result.location.model.refresh(),
         result.location.provider.refresh(),
         result.location.reference.refresh(),
