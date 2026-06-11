@@ -59,23 +59,61 @@ export function duration(input: number) {
 }
 
 export function truncate(str: string, len: number): string {
-  if (str.length <= len) return str
-  return str.slice(0, len - 1) + "…"
+  if (Bun.stringWidth(str) <= len) return str
+  let out = ""
+  let width = 0
+  for (const char of str) {
+    const w = Bun.stringWidth(char)
+    if (width + w > len - 1) break
+    out += char
+    width += w
+  }
+  return out + "…"
 }
 
 export function truncateLeft(str: string, len: number): string {
-  if (str.length <= len) return str
-  return "…" + str.slice(-(len - 1))
+  if (Bun.stringWidth(str) <= len) return str
+  const chars = Array.from(str)
+  let out = ""
+  let width = 0
+  for (let i = chars.length - 1; i >= 0; i--) {
+    const w = Bun.stringWidth(chars[i])
+    if (width + w > len - 1) break
+    out = chars[i] + out
+    width += w
+  }
+  return "…" + out
 }
 
 export function truncateMiddle(str: string, maxLength: number = 35): string {
-  if (str.length <= maxLength) return str
+  if (Bun.stringWidth(str) <= maxLength) return str
 
   const ellipsis = "…"
-  const keepStart = Math.ceil((maxLength - ellipsis.length) / 2)
-  const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
+  const budget = maxLength - ellipsis.length
+  const keepStart = Math.ceil(budget / 2)
+  const keepEnd = Math.floor(budget / 2)
 
-  return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
+  let startOut = ""
+  let startWidth = 0
+  for (const char of str) {
+    const w = Bun.stringWidth(char)
+    if (startWidth + w > keepStart) break
+    startOut += char
+    startWidth += w
+  }
+
+  const chars = Array.from(str)
+  let endOut = ""
+  let endWidth = 0
+  for (let i = chars.length - 1; i >= 0; i--) {
+    const char = chars[i]
+    const w = Bun.stringWidth(char)
+    if (endWidth + w > keepEnd) break
+    endOut = char + endOut
+    endWidth += w
+  }
+
+  return startOut + ellipsis + endOut
 }
 
 export function pluralize(count: number, singular: string, plural: string): string {
