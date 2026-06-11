@@ -1,6 +1,10 @@
 {
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
   "name": "OpenCode",
   "short_name": "OpenCode",
+  "description": "AI coding agent for your terminal and browser",
   "icons": [
     {
       "src": "/web-app-manifest-192x192.png",
@@ -9,13 +13,41 @@
       "purpose": "maskable"
     },
     {
+      "src": "/web-app-manifest-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
       "src": "/web-app-manifest-512x512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "/web-app-manifest-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
     }
   ],
-  "theme_color": "#ffffff",
-  "background_color": "#ffffff",
-  "display": "standalone"
+  "theme_color": "#F8F7F7",
+  "background_color": "#F8F7F7",
+  "display": "standalone",
+  "screenshots": [
+    {
+      "src": "/screenshots/desktop.png",
+      "sizes": "1440x940",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "OpenCode session view on desktop"
+    },
+    {
+      "src": "/screenshots/mobile.png",
+      "sizes": "390x844",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "OpenCode session view on mobile"
+    }
+  ]
 }

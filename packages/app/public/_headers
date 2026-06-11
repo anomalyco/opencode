@@ -1,3 +1,6 @@
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
 /assets/*.js
   Content-Type: application/javascript
 
@@ -9,9 +12,12 @@
 
 /*.js
   Content-Type: application/javascript
+  Cache-Control: no-cache
 
 /*.mjs
   Content-Type: application/javascript
+  Cache-Control: no-cache
 
 /*.css
   Content-Type: text/css
+  Cache-Control: no-cache
