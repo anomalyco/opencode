@@ -16,6 +16,7 @@ import FileTreeV2 from "@/components/file-tree-v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
 import {
+  applyFileListKeyDown,
   filterRenderableDiff,
   filterReviewFiles,
   reviewDiffKinds,
@@ -26,6 +27,17 @@ import {
   type ReviewPanelV2State,
 } from "@/pages/session/v2/review-panel-v2-state"
 import { SessionFileListV2 } from "@/pages/session/v2/session-file-list-v2"
+
+export function makeReadFile(sdk: ReturnType<typeof useSDK>) {
+  return async (path: string) =>
+    sdk.client.file
+      .read({ path })
+      .then((x) => x.data)
+      .catch((error) => {
+        console.debug("[session-review-v2] failed to read file", { path, error })
+        return undefined
+      })
+}
 
 type ReviewDiff = SnapshotFileDiff | VcsFileDiff
 
@@ -101,25 +113,10 @@ export function ReviewPanelV2Sidebar(props: ReviewPanelV2Props) {
 
   const onFilterKeyDown = (event: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
     if (!flatMode()) return
-    const files = model.filteredFiles()
-    if (files.length === 0) return
-
-    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-      const highlighted = highlightedPath()
-      const currentIndex = highlighted ? files.indexOf(highlighted) : -1
-      const delta = event.key === "ArrowDown" ? 1 : -1
-      const start = currentIndex === -1 ? (delta > 0 ? 0 : files.length - 1) : currentIndex + delta
-      const index = Math.max(0, Math.min(files.length - 1, start))
-      setHighlightedPath(files[index]!)
-      event.preventDefault()
-      return
-    }
-
-    if (event.key !== "Enter") return
-    const target = highlightedPath() ?? files[0]
-    if (!target) return
-    props.onSelectFile(target)
-    event.preventDefault()
+    applyFileListKeyDown(event, model.filteredFiles(), highlightedPath(), {
+      onHighlight: setHighlightedPath,
+      onSelect: props.onSelectFile,
+    })
   }
 
   return (
@@ -144,7 +141,20 @@ export function ReviewPanelV2Sidebar(props: ReviewPanelV2Props) {
           </div>
         }
       >
-        <Show when={flatMode()}>
+        <Show
+          when={flatMode()}
+          fallback={
+            <FileTreeV2
+              path=""
+              allowed={model.filteredFiles()}
+              kinds={model.kinds()}
+              showFolderChangeIndicator={false}
+              draggable={false}
+              active={model.activeDiff()}
+              onFileClick={(node) => props.onSelectFile(node.path)}
+            />
+          }
+        >
           <Show
             when={model.filteredFiles().length > 0}
             fallback={<div class="px-2 py-2 text-12-regular text-text-weak">{language.t("palette.empty")}</div>}
@@ -161,16 +171,6 @@ export function ReviewPanelV2Sidebar(props: ReviewPanelV2Props) {
             />
           </Show>
         </Show>
-        <Show when={!flatMode()}>
-          <FileTreeV2
-            path=""
-            allowed={model.filteredFiles()}
-            kinds={model.kinds()}
-            draggable={false}
-            active={model.activeDiff()}
-            onFileClick={(node) => props.onSelectFile(node.path)}
-          />
-        </Show>
       </Show>
     </SessionReviewV2Sidebar>
   )
@@ -179,16 +179,7 @@ export function ReviewPanelV2Sidebar(props: ReviewPanelV2Props) {
 export function ReviewPanelV2(props: ReviewPanelV2Props) {
   const sdk = useSDK()
   const model = useReviewPanelV2Data(props)
-
-  const readFile = async (path: string) => {
-    return sdk.client.file
-      .read({ path })
-      .then((x) => x.data)
-      .catch((error) => {
-        console.debug("[session-review-v2] failed to read file", { path, error })
-        return undefined
-      })
-  }
+  const readFile = makeReadFile(sdk)
 
   return (
     <SessionReviewV2
@@ -199,7 +190,6 @@ export function ReviewPanelV2(props: ReviewPanelV2Props) {
       sidebarOpen={props.state.sidebarOpened()}
       filter={props.state.filter()}
       onFilterChange={props.state.setFilter}
-      sidebar={<></>}
       activeFile={model.activeDiff()}
       files={model.filteredFiles()}
       onSelectFile={props.onSelectFile}

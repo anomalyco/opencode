@@ -31,17 +31,27 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
     })
 
     const findFile = Effect.fn("FileHttpApi.findFile")(function* (ctx: {
-      query: { query: string; dirs?: "true" | "false"; type?: "file" | "directory"; limit?: number }
+      query: {
+        query: string
+        dirs?: "true" | "false"
+        type?: "file" | "directory"
+        fallback?: "none" | "glob"
+        limit?: number
+      }
     }) {
       const directory = (yield* InstanceState.context).directory
       const limit = ctx.query.limit ?? 10
       const kind = ctx.query.type ?? (ctx.query.dirs === "false" ? "file" : "all")
+      const fallback = ctx.query.fallback ?? "none"
       const started = performance.now()
-      const fff = yield* search.file({ cwd: directory, query: ctx.query.query, limit, kind }).pipe(Effect.orDie)
+      const fff = yield* search
+        .file({ cwd: directory, query: ctx.query.query, limit, kind, fallback })
+        .pipe(Effect.orDie)
       yield* Effect.logInfo("find file", {
         engine: "search.file",
         query: ctx.query.query,
         kind,
+        fallback,
         directory,
         limit,
         results: fff.length,

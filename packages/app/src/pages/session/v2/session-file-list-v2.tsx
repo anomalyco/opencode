@@ -2,12 +2,9 @@ import { FileIcon } from "@opencode-ai/ui/file-icon"
 import "@opencode-ai/ui/v2/file-tree-v2.css"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { createEffect, For, Show } from "solid-js"
+import { normalizePath } from "@/pages/session/v2/review-diff-kinds"
 
 type FileKind = "add" | "del" | "mix"
-
-function normalizePath(path: string) {
-  return path.replaceAll("\\", "/").replace(/\/+$/, "")
-}
 
 function kindLabel(kind: FileKind, showModifiedLabel: boolean) {
   if (kind === "add") return "A"

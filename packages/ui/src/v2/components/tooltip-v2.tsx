@@ -92,7 +92,7 @@ export function TooltipV2(props: TooltipV2Props) {
           gutter={4}
           {...others}
           placement={local.placement ?? "bottom"}
-          openDelay={local.openDelay ?? 2000}
+          openDelay={local.openDelay ?? 0}
           closeDelay={0}
           ignoreSafeArea={local.ignoreSafeArea ?? true}
           open={local.forceOpen || state.open}

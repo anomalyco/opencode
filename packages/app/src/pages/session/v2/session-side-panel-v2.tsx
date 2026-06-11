@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { createMediaQuery } from "@solid-primitives/media"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
@@ -49,10 +50,9 @@ export function SessionSidePanelV2(props: {
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
   const reviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened())
-  const open = createMemo(() => reviewOpen())
   const reviewTab = createMemo(() => isDesktop())
   const panelWidth = createMemo(() => {
-    if (!open()) return "0px"
+    if (!reviewOpen()) return "0px"
     return "auto"
   })
 
@@ -79,11 +79,13 @@ export function SessionSidePanelV2(props: {
   const activeTab = tabsV2.tabState.activeTab
   const activeFileTab = tabsV2.tabState.activeFileTab
   const [focusFilesFilterToken, setFocusFilesFilterToken] = createSignal(0)
-  let previousActiveTab: string | undefined
-  let previousTemporaryTab: string | undefined
-  let previousHadOpenFileTab = false
-  let initializedOpenFileTracking = false
-  let wasOpenFileTab = false
+  const [tracking, setTracking] = createStore({
+    prevActiveTab: undefined as string | undefined,
+    prevTemporaryTab: undefined as string | undefined,
+    prevHadOpenFileTab: false,
+    wasOpenFileTab: false,
+    initialized: false,
+  })
   const filesSidebarOpen = createMemo(
     () => props.reviewV2State.sidebarOpened() || activeTab() === SESSION_OPEN_FILE_TAB,
   )
@@ -91,22 +93,23 @@ export function SessionSidePanelV2(props: {
   createEffect(() => {
     const currentActiveTab = activeTab()
     const currentTemporaryTab = tabsV2.temporaryTab()
-    const currentTabs = tabs().all()
-    const currentHadOpenFileTab = currentTabs.includes(SESSION_OPEN_FILE_TAB)
+    const currentHadOpenFileTab = tabs().all().includes(SESSION_OPEN_FILE_TAB)
     const isOpenFileTab = currentActiveTab === SESSION_OPEN_FILE_TAB
-    if (isOpenFileTab && !wasOpenFileTab) {
+    if (isOpenFileTab && !tracking.wasOpenFileTab) {
       const shouldClearFilter =
-        initializedOpenFileTracking &&
-        !previousHadOpenFileTab &&
-        previousActiveTab !== previousTemporaryTab
+        tracking.initialized &&
+        !tracking.prevHadOpenFileTab &&
+        tracking.prevActiveTab !== tracking.prevTemporaryTab
       if (shouldClearFilter) props.reviewV2State.setFilesFilter("")
       setFocusFilesFilterToken((token) => token + 1)
     }
-    initializedOpenFileTracking = true
-    previousActiveTab = currentActiveTab
-    previousTemporaryTab = currentTemporaryTab
-    previousHadOpenFileTab = currentHadOpenFileTab
-    wasOpenFileTab = isOpenFileTab
+    setTracking({
+      prevActiveTab: currentActiveTab,
+      prevTemporaryTab: currentTemporaryTab,
+      prevHadOpenFileTab: currentHadOpenFileTab,
+      wasOpenFileTab: isOpenFileTab,
+      initialized: true,
+    })
   })
 
   createEffect(() => {
@@ -155,11 +158,11 @@ export function SessionSidePanelV2(props: {
       <aside
         id="review-panel"
         aria-label={language.t("session.panel.reviewAndFiles")}
-        aria-hidden={!open()}
-        inert={!open()}
+        aria-hidden={!reviewOpen()}
+        inert={!reviewOpen()}
         class="relative min-w-0 h-full flex shrink-0 overflow-hidden bg-background-base"
         classList={{
-          "pointer-events-none": !open(),
+          "pointer-events-none": !reviewOpen(),
           "transition-[width] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
             !props.size.active() && !props.reviewSnap,
           "rounded-[10px] shadow-[var(--v2-elevation-raised)] overflow-hidden": settings.general.newLayoutDesigns(),
@@ -167,7 +170,7 @@ export function SessionSidePanelV2(props: {
         }}
         style={{ width: panelWidth() }}
       >
-        <Show when={open()}>
+        <Show when={reviewOpen()}>
           <div class="size-full flex">
             <div
               aria-hidden={!reviewOpen()}
@@ -293,18 +296,22 @@ export function SessionSidePanelV2(props: {
                   </div>
 
                   <div class="session-review-v2-panel-body">
-                    <Show when={onReviewTab()}>{props.reviewSidebar()}</Show>
-                    <Show when={!onReviewTab()}>
-                      <FilesPanelV2Sidebar
-                        title={projectName()}
-                        state={props.reviewV2State}
-                        open={filesSidebarOpen()}
-                        focusFilterToken={focusFilesFilterToken()}
-                        diffs={props.diffs}
-                        activeFile={activeFileTab()}
-                        onOpenFile={(path) => tabsV2.openFileTab(path)}
-                        onOpenFilePersist={(path) => tabsV2.openFileTab(path, { persist: true })}
-                      />
+                    <Show
+                      when={onReviewTab()}
+                      fallback={
+                        <FilesPanelV2Sidebar
+                          title={projectName()}
+                          state={props.reviewV2State}
+                          open={filesSidebarOpen()}
+                          focusFilterToken={focusFilesFilterToken()}
+                          diffs={props.diffs}
+                          activeFile={activeFileTab()}
+                          onOpenFile={(path) => tabsV2.openFileTab(path)}
+                          onOpenFilePersist={(path) => tabsV2.openFileTab(path, { persist: true })}
+                        />
+                      }
+                    >
+                      {props.reviewSidebar()}
                     </Show>
                     <div class="flex flex-col flex-1 min-w-0 min-h-0 overflow-hidden">
                       <Show when={reviewTab() && props.canReview()}>

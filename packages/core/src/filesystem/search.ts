@@ -29,6 +29,7 @@ export interface FileInput {
   readonly limit?: number
   readonly current?: string
   readonly kind?: "file" | "directory" | "all"
+  readonly fallback?: "none" | "glob"
 }
 
 export interface FileResult {
@@ -415,9 +416,9 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
     const file: Interface["file"] = Effect.fn("Search.file")(function* (input) {
       const query = input.query.trim()
       const kind = input.kind ?? "file"
+      const fallback = input.fallback ?? "none"
       const dir = FSUtil.resolve(input.cwd)
       const limit = input.limit ?? 100
-      if (!query) return []
 
       const rows = yield* Effect.gen(function* () {
         const entry = yield* acquire(input.cwd)
@@ -440,7 +441,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
           yield* Effect.logWarning(`fff ${kind} search failed`, { dir, query, error: fffResult.error })
           return yield* Effect.fail(new Error(fffResult.error))
         }
-        if (fffResult.value.length === 0) {
+        if (fffResult.value.length === 0 && fallback === "glob") {
           return yield* fallbackFileSearch({
             cwd: input.cwd,
             query,
@@ -451,15 +452,17 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
         }
         return fffResult.value
       }).pipe(
-        Effect.catch((error) =>
-          fallbackFileSearch({
-              cwd: input.cwd,
-              query,
-              kind,
-              limit,
-              error,
-            }),
-        ),
+        fallback === "glob"
+          ? Effect.catch((error) =>
+              fallbackFileSearch({
+                cwd: input.cwd,
+                query,
+                kind,
+                limit,
+                error,
+              }),
+            )
+          : Effect.catch((error) => Effect.fail(error)),
       )
       remember(
         state,

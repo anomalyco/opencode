@@ -4,12 +4,13 @@ import { useFile } from "@/context/file"
 import { useSDK } from "@/context/sdk"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import { filterRenderableDiff } from "@/pages/session/v2/review-diff-kinds"
-import type { ReviewPanelV2Props } from "@/pages/session/v2/review-panel-v2"
+import { makeReadFile, type ReviewPanelV2Props } from "@/pages/session/v2/review-panel-v2"
 
 export function FileTabContentV2(props: { tab: string; review: () => ReviewPanelV2Props }) {
   const file = useFile()
   const sdk = useSDK()
   const review = props.review
+  const readFile = makeReadFile(sdk)
 
   const path = createMemo(() => file.pathFromTab(props.tab))
   const diffItem = createMemo(() => {
@@ -17,16 +18,6 @@ export function FileTabContentV2(props: { tab: string; review: () => ReviewPanel
     if (!value) return
     return review().diffs().filter(filterRenderableDiff).find((diff) => diff.file === value)
   })
-
-  const readFile = async (filePath: string) => {
-    return sdk.client.file
-      .read({ path: filePath })
-      .then((x) => x.data)
-      .catch((error) => {
-        console.debug("[file-tab-content-v2] failed to read file", { path: filePath, error })
-        return undefined
-      })
-  }
 
   return (
     <Show when={diffItem()} keyed fallback={<FileTabContent tab={props.tab} embedded />}>

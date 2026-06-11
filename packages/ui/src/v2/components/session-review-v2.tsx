@@ -25,7 +25,7 @@ export type SessionReviewV2Props = {
   sidebarOpen?: boolean
   filter: string
   onFilterChange: (value: string) => void
-  sidebar: JSX.Element
+  sidebar?: JSX.Element
   activeFile?: string
   files: string[]
   onSelectFile: (file: string) => void
@@ -230,6 +230,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
                   class="session-review-v2-toolbar-group--file-nav"
                 >
                 <TooltipV2
+                  openDelay={2000}
                   value={
                     <>
                       {i18n.t("ui.sessionReviewV2.previousFile")}
@@ -252,6 +253,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
                   />
                 </TooltipV2>
                 <TooltipV2
+                  openDelay={2000}
                   value={
                     <>
                       {i18n.t("ui.sessionReviewV2.nextFile")}
@@ -288,7 +290,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
                   class="session-review-v2-segmented-control session-review-v2-segmented-control--icon"
                   aria-label={i18n.t("ui.sessionReviewV2.expandMode")}
                 >
-                  <TooltipV2 value={i18n.t("ui.sessionReviewV2.showAllLines")}>
+                  <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.showAllLines")}>
                     <SegmentedControlItemV2
                       value="expand"
                       aria-label={i18n.t("ui.sessionReviewV2.showAllLines")}
@@ -296,7 +298,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
                       <IconV2 name="expand" />
                     </SegmentedControlItemV2>
                   </TooltipV2>
-                  <TooltipV2 value={i18n.t("ui.sessionReviewV2.hideNonDiffLines")}>
+                  <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.hideNonDiffLines")}>
                     <SegmentedControlItemV2
                       value="collapse"
                       aria-label={i18n.t("ui.sessionReviewV2.hideNonDiffLines")}
@@ -315,7 +317,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
                     class="session-review-v2-segmented-control session-review-v2-segmented-control--icon"
                     aria-label={i18n.t("ui.sessionReviewV2.diffView")}
                   >
-                    <TooltipV2 value={i18n.t("ui.sessionReviewV2.unifiedDiff")}>
+                    <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.unifiedDiff")}>
                       <SegmentedControlItemV2
                         value="unified"
                         aria-label={i18n.t("ui.sessionReviewV2.unifiedDiff")}
@@ -323,7 +325,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
                         <IconV2 name="split" />
                       </SegmentedControlItemV2>
                     </TooltipV2>
-                    <TooltipV2 value={i18n.t("ui.sessionReviewV2.splitDiff")}>
+                    <TooltipV2 openDelay={2000} value={i18n.t("ui.sessionReviewV2.splitDiff")}>
                       <SegmentedControlItemV2
                         value="split"
                         aria-label={i18n.t("ui.sessionReviewV2.splitDiff")}
