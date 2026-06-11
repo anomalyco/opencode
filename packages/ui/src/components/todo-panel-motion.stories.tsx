@@ -2,7 +2,7 @@
 import { createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { Todo } from "@opencode-ai/sdk/v2"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSync } from "@/context/global-sync"
 import { SessionComposerRegion, createSessionComposerState } from "@/pages/session/composer"
 
 export default {
@@ -129,7 +129,7 @@ const css = `
 
 export const Playground = {
   render: () => {
-    const global = useGlobalSync()
+    const global = useServerSync()
     const [cfg, setCfg] = createStore({
       open: true,
       step: 1,

@@ -302,6 +302,7 @@ export const dict = {
   "mcp.status.connected": "tilkoblet",
   "mcp.status.failed": "mislyktes",
   "mcp.status.needs_auth": "trenger autentisering",
+  "mcp.auth.clickToAuthenticate": "Klikk for å autentisere",
   "mcp.status.disabled": "deaktivert",
 
   "dialog.fork.empty": "Ingen meldinger å forgrene fra",
@@ -450,6 +451,8 @@ export const dict = {
   "error.page.description": "Det oppstod en feil under lasting av applikasjonen.",
   "error.page.details.label": "Feildetaljer",
   "error.page.action.restart": "Start på nytt",
+  "error.page.action.report": "Rapporter feil",
+  "error.page.action.reported": "Feil rapportert",
   "error.page.action.checking": "Sjekker...",
   "error.page.action.checkUpdates": "Se etter oppdateringer",
   "error.page.action.updateTo": "Oppdater til {{version}}",
@@ -460,7 +463,7 @@ export const dict = {
   "error.dev.rootNotFound":
     "Rotelement ikke funnet. Glemte du å legge det til i index.html? Eller kanskje id-attributten er feilstavet?",
 
-  "error.globalSync.connectFailed": "Kunne ikke koble til server. Kjører det en server på `{{url}}`?",
+  "error.serverSync.connectFailed": "Kunne ikke koble til server. Kjører det en server på `{{url}}`?",
   "directory.error.invalidUrl": "Invalid directory in URL.",
 
   "error.chain.unknown": "Ukjent feil",
@@ -807,8 +810,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Hent innhold fra en URL",
   "settings.permissions.tool.websearch.title": "Websøk",
   "settings.permissions.tool.websearch.description": "Søk på nettet",
-  "settings.permissions.tool.codesearch.title": "Kodesøk",
-  "settings.permissions.tool.codesearch.description": "Søk etter kode på nettet",
   "settings.permissions.tool.external_directory.title": "Ekstern mappe",
   "settings.permissions.tool.external_directory.description": "Få tilgang til filer utenfor prosjektmappen",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
@@ -926,8 +927,8 @@ export const dict = {
   "common.key.insert": "Insert",
   "common.unknown": "ukjent",
   "error.page.circular": "[Sirkulær]",
-  "error.globalSDK.noServerAvailable": "Ingen server tilgjengelig",
-  "error.globalSDK.serverNotAvailable": "Server ikke tilgjengelig",
+  "error.serverSDK.noServerAvailable": "Ingen server tilgjengelig",
+  "error.serverSDK.serverNotAvailable": "Server ikke tilgjengelig",
   "error.childStore.persistedCacheCreateFailed": "Kunne ikke opprette vedvarende hurtigbuffer",
   "error.childStore.persistedProjectMetadataCreateFailed": "Kunne ikke opprette vedvarende prosjektmetadata",
   "error.childStore.persistedProjectIconCreateFailed": "Kunne ikke opprette vedvarende prosjektikon",

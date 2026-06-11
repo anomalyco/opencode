@@ -15,7 +15,6 @@ import { Binary } from "@opencode-ai/core/util/binary"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { DateTime } from "luxon"
 import { createStore } from "solid-js/store"
-import z from "zod"
 import NotFound from "../[...404]"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { MessageNav } from "@opencode-ai/ui/message-nav"
@@ -33,13 +32,28 @@ const ClientOnlyWorkerPoolProvider = clientOnly(() =>
   })),
 )
 
-const SessionDataMissingError = NamedError.create(
-  "SessionDataMissingError",
-  z.object({
-    sessionID: z.string(),
-    message: z.string().optional(),
-  }),
-)
+class SessionDataMissingError extends NamedError {
+  public override readonly name = "SessionDataMissingError"
+
+  constructor(
+    public readonly data: { sessionID: string; message?: string },
+    options?: ErrorOptions,
+  ) {
+    super("SessionDataMissingError", options)
+  }
+
+  static isInstance(input: unknown): input is SessionDataMissingError {
+    return NamedError.hasName(input, "SessionDataMissingError")
+  }
+
+  schema(): never {
+    throw new Error("SessionDataMissingError does not expose a schema")
+  }
+
+  toObject() {
+    return { name: this.name, data: this.data }
+  }
+}
 
 const getData = query(async (shareID) => {
   "use server"
@@ -309,6 +323,12 @@ export default function () {
                                       current={activeMessage()}
                                       size="compact"
                                       onMessageSelect={setActiveMessage}
+                                      getLabel={(message) =>
+                                        data()
+                                          .part[message.id]?.find((part) => part.type === "text")
+                                          ?.text.trim()
+                                          .split("\n")[0]
+                                      }
                                     />
                                   </Show>
                                   <SessionTurn

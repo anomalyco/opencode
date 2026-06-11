@@ -23,18 +23,17 @@ type Usage = {
   }
 }
 
-export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage, safetyIdentifier }) => ({
+export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage }) => ({
   format: "oa-compat",
   modifyUrl: (providerApi: string) => providerApi + "/chat/completions",
-  modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
+  modifyHeaders: (headers: Headers, apiKey: string, stickyId: string) => {
     headers.set("authorization", `Bearer ${apiKey}`)
-    headers.set("x-session-affinity", headers.get("x-opencode-session") ?? "")
+    headers.set("x-session-affinity", stickyId)
   },
   modifyBody: (body: Record<string, any>, _workspaceID?: string) => {
     return {
       ...body,
       ...(body.stream ? { stream_options: { include_usage: true } } : {}),
-      ...(safetyIdentifier ? { safety_identifier: safetyIdentifier } : {}),
     }
   },
   createBinaryStreamDecoder: () => undefined,
@@ -59,6 +58,7 @@ export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage, safetyIdentif
       retrieve: () => usage,
     }
   },
+  extractUsage: (response: any) => response.usage,
   normalizeUsage: (usage: Usage) => {
     let inputTokens = usage.prompt_tokens ?? 0
     const outputTokens = usage.completion_tokens ?? 0

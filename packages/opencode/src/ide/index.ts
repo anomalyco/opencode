@@ -1,9 +1,7 @@
-import { BusEvent } from "@/bus/bus-event"
-import z from "zod"
+import { EventV2 } from "@opencode-ai/core/event"
 import { Schema } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
-import { Log } from "../util"
-import { Process } from "@/util"
+import { Process } from "@/util/process"
 
 const SUPPORTED_IDES = [
   { name: "Windsurf" as const, cmd: "windsurf" },
@@ -13,25 +11,20 @@ const SUPPORTED_IDES = [
   { name: "VSCodium" as const, cmd: "codium" },
 ]
 
-const log = Log.create({ service: "ide" })
-
 export const Event = {
-  Installed: BusEvent.define(
-    "ide.installed",
-    Schema.Struct({
+  Installed: EventV2.define({
+    type: "ide.installed",
+    schema: {
       ide: Schema.String,
-    }),
-  ),
+    },
+  }),
 }
 
-export const AlreadyInstalledError = NamedError.create("AlreadyInstalledError", z.object({}))
+export const AlreadyInstalledError = NamedError.create("AlreadyInstalledError", {})
 
-export const InstallFailedError = NamedError.create(
-  "InstallFailedError",
-  z.object({
-    stderr: z.string(),
-  }),
-)
+export const InstallFailedError = NamedError.create("InstallFailedError", {
+  stderr: Schema.String,
+})
 
 export function ide() {
   if (process.env["TERM_PROGRAM"] === "vscode") {
@@ -56,12 +49,6 @@ export async function install(ide: (typeof SUPPORTED_IDES)[number]["name"]) {
   })
   const stdout = p.stdout.toString()
   const stderr = p.stderr.toString()
-
-  log.info("installed", {
-    ide,
-    stdout,
-    stderr,
-  })
 
   if (p.code !== 0) {
     throw new InstallFailedError({ stderr })

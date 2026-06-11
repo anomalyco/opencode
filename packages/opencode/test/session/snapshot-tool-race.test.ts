@@ -11,147 +11,171 @@
  * before tools run by hooking into start-step, but the AI SDK executes
  * tools internally during multi-step processing before emitting events.
  */
-import { expect } from "bun:test"
-import { Effect, Layer } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
-import fs from "fs/promises"
-import path from "path"
-import { Session } from "../../src/session"
-import { LLM } from "../../src/session/llm"
-import { SessionPrompt } from "../../src/session/prompt"
-import { SessionRevert } from "../../src/session/revert"
-import { SessionSummary } from "../../src/session/summary"
-import { MessageV2 } from "../../src/session/message-v2"
-import { Log } from "../../src/util"
-import { provideTmpdirServer } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
-import { TestLLMServer } from "../lib/llm-server"
-
+import {BackgroundJob} from '@/background/job'
+import {Config} from '@/config/config'
+import {RuntimeFlags} from '@/effect/runtime-flags'
+import {EventV2Bridge} from '@/event-v2-bridge'
+import {LSP} from '@/lsp/lsp'
+import {Provider as ProviderSvc} from '@/provider/provider'
+import {Session} from '@/session/session'
+import {ToolRegistry} from '@/tool/registry'
+import {Truncate} from '@/tool/truncate'
 // Same layer setup as prompt-effect.test.ts
-import { NodeFileSystem } from "@effect/platform-node"
-import { Agent as AgentSvc } from "../../src/agent/agent"
-import { Bus } from "../../src/bus"
-import { Command } from "../../src/command"
-import { Config } from "../../src/config"
-import { LSP } from "../../src/lsp"
-import { MCP } from "../../src/mcp"
-import { Permission } from "../../src/permission"
-import { Plugin } from "../../src/plugin"
-import { Provider as ProviderSvc } from "../../src/provider"
-import { Env } from "../../src/env"
-import { Question } from "../../src/question"
-import { Skill } from "../../src/skill"
-import { SystemPrompt } from "../../src/session/system"
-import { Todo } from "../../src/session/todo"
-import { SessionCompaction } from "../../src/session/compaction"
-import { Instruction } from "../../src/session/instruction"
-import { SessionProcessor } from "../../src/session/processor"
-import { SessionRunState } from "../../src/session/run-state"
-import { SessionStatus } from "../../src/session/status"
-import { Snapshot } from "../../src/snapshot"
-import { ToolRegistry } from "../../src/tool"
-import { Truncate } from "../../src/tool"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Ripgrep } from "../../src/file/ripgrep"
-import { Format } from "../../src/format"
+import {NodeFileSystem} from '@effect/platform-node'
+import {CrossSpawnSpawner} from '@opencode-ai/core/cross-spawn-spawner'
+import {Database} from '@opencode-ai/core/database/database'
+import {FSUtil} from '@opencode-ai/core/fs-util'
+import {Ripgrep} from '@opencode-ai/core/ripgrep'
+import {SessionV1} from '@opencode-ai/core/v1/session'
+import {expect} from 'bun:test'
+import {Effect, Layer} from 'effect'
+import {FetchHttpClient} from 'effect/unstable/http'
+import fs from 'fs/promises'
+import path from 'path'
 
-void Log.init({ print: false })
+import {Agent as AgentSvc} from '../../src/agent/agent'
+import {Command} from '../../src/command'
+import {Env} from '../../src/env'
+import {Format} from '../../src/format'
+import {Git} from '../../src/git'
+import {Image} from '../../src/image/image'
+import {MCP} from '../../src/mcp'
+import {Permission} from '../../src/permission'
+import {Plugin} from '../../src/plugin'
+import {Question} from '../../src/question'
+import {SessionCompaction} from '../../src/session/compaction'
+import {Instruction} from '../../src/session/instruction'
+import {LLM} from '../../src/session/llm'
+import {MessageV2} from '../../src/session/message-v2'
+import {SessionProcessor} from '../../src/session/processor'
+import {SessionPrompt} from '../../src/session/prompt'
+import {SessionRevert} from '../../src/session/revert'
+import {SessionRunState} from '../../src/session/run-state'
+import {SessionStatus} from '../../src/session/status'
+import {SessionSummary} from '../../src/session/summary'
+import {SystemPrompt} from '../../src/session/system'
+import {Todo} from '../../src/session/todo'
+import {Skill} from '../../src/skill'
+import {Snapshot} from '../../src/snapshot'
+import {provideTmpdirServer} from '../fixture/fixture'
+import {testEffect} from '../lib/effect'
+import {TestLLMServer} from '../lib/llm-server'
 
 const mcp = Layer.succeed(
-  MCP.Service,
-  MCP.Service.of({
-    status: () => Effect.succeed({}),
-    clients: () => Effect.succeed({}),
-    tools: () => Effect.succeed({}),
-    prompts: () => Effect.succeed({}),
-    resources: () => Effect.succeed({}),
-    add: () => Effect.succeed({ status: { status: "disabled" as const } }),
-    connect: () => Effect.void,
-    disconnect: () => Effect.void,
-    getPrompt: () => Effect.succeed(undefined),
-    readResource: () => Effect.succeed(undefined),
-    startAuth: () => Effect.die("unexpected MCP auth"),
-    authenticate: () => Effect.die("unexpected MCP auth"),
-    finishAuth: () => Effect.die("unexpected MCP auth"),
-    removeAuth: () => Effect.void,
-    supportsOAuth: () => Effect.succeed(false),
-    hasStoredTokens: () => Effect.succeed(false),
-    getAuthStatus: () => Effect.succeed("not_authenticated" as const),
-  }),
+    MCP.Service,
+    MCP.Service.of({
+      status: () => Effect.succeed({}),
+      clients: () => Effect.succeed({}),
+      tools: () => Effect.succeed({}),
+      prompts: () => Effect.succeed({}),
+      resources: () => Effect.succeed({}),
+      add: () => Effect.succeed({status: {status: 'disabled' as const}}),
+      connect: () => Effect.void,
+      disconnect: () => Effect.void,
+      getPrompt: () => Effect.succeed(undefined),
+      readResource: () => Effect.succeed(undefined),
+      startAuth: () => Effect.die('unexpected MCP auth'),
+      authenticate: () => Effect.die('unexpected MCP auth'),
+      finishAuth: () => Effect.die('unexpected MCP auth'),
+      removeAuth: () => Effect.void,
+      supportsOAuth: () => Effect.succeed(false),
+      hasStoredTokens: () => Effect.succeed(false),
+      getAuthStatus: () => Effect.succeed('not_authenticated' as const),
+    }),
 )
 
 const lsp = Layer.succeed(
-  LSP.Service,
-  LSP.Service.of({
-    init: () => Effect.void,
-    status: () => Effect.succeed([]),
-    hasClients: () => Effect.succeed(false),
-    touchFile: () => Effect.void,
-    diagnostics: () => Effect.succeed({}),
-    hover: () => Effect.succeed(undefined),
-    definition: () => Effect.succeed([]),
-    references: () => Effect.succeed([]),
-    implementation: () => Effect.succeed([]),
-    documentSymbol: () => Effect.succeed([]),
-    workspaceSymbol: () => Effect.succeed([]),
-    prepareCallHierarchy: () => Effect.succeed([]),
-    incomingCalls: () => Effect.succeed([]),
-    outgoingCalls: () => Effect.succeed([]),
-  }),
+    LSP.Service,
+    LSP.Service.of({
+      init: () => Effect.void,
+      status: () => Effect.succeed([]),
+      hasClients: () => Effect.succeed(false),
+      touchFile: () => Effect.void,
+      diagnostics: () => Effect.succeed({}),
+      hover: () => Effect.succeed(undefined),
+      definition: () => Effect.succeed([]),
+      references: () => Effect.succeed([]),
+      implementation: () => Effect.succeed([]),
+      documentSymbol: () => Effect.succeed([]),
+      workspaceSymbol: () => Effect.succeed([]),
+      prepareCallHierarchy: () => Effect.succeed([]),
+      incomingCalls: () => Effect.succeed([]),
+      outgoingCalls: () => Effect.succeed([]),
+    }),
 )
 
-const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
+const status =
+    SessionStatus.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer))
 const run = SessionRunState.layer.pipe(Layer.provide(status))
-const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
+const infra =
+    Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
 
 function makeHttp() {
-  const deps = Layer.mergeAll(
-    Session.defaultLayer,
-    Snapshot.defaultLayer,
-    LLM.defaultLayer,
-    Env.defaultLayer,
-    AgentSvc.defaultLayer,
-    Command.defaultLayer,
-    Permission.defaultLayer,
-    Plugin.defaultLayer,
-    Config.defaultLayer,
-    ProviderSvc.defaultLayer,
-    lsp,
-    mcp,
-    AppFileSystem.defaultLayer,
-    status,
-  ).pipe(Layer.provideMerge(infra))
+  const deps = Layer
+                   .mergeAll(
+                       Session.defaultLayer,
+                       Snapshot.defaultLayer,
+                       LLM.defaultLayer,
+                       Env.defaultLayer,
+                       AgentSvc.defaultLayer,
+                       Command.defaultLayer,
+                       Permission.defaultLayer,
+                       Plugin.defaultLayer,
+                       Config.defaultLayer,
+                       ProviderSvc.defaultLayer,
+                       lsp,
+                       mcp,
+                       FSUtil.defaultLayer,
+                       BackgroundJob.defaultLayer,
+                       status,
+                       Database.defaultLayer,
+                       EventV2Bridge.defaultLayer,
+                       )
+                   .pipe(Layer.provideMerge(infra))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
   const registry = ToolRegistry.layer.pipe(
-    Layer.provide(Skill.defaultLayer),
-    Layer.provide(FetchHttpClient.layer),
-    Layer.provide(CrossSpawnSpawner.defaultLayer),
-    Layer.provide(Ripgrep.defaultLayer),
-    Layer.provide(Format.defaultLayer),
-    Layer.provideMerge(todo),
-    Layer.provideMerge(question),
-    Layer.provideMerge(deps),
+      Layer.provide(Skill.defaultLayer),
+      Layer.provide(FetchHttpClient.layer),
+      Layer.provide(CrossSpawnSpawner.defaultLayer),
+      Layer.provide(Git.defaultLayer),
+      Layer.provide(Ripgrep.defaultLayer),
+      Layer.provide(Format.defaultLayer),
+      Layer.provide(RuntimeFlags.layer({experimentalEventSystem: true})),
+      Layer.provideMerge(todo),
+      Layer.provideMerge(question),
+      Layer.provideMerge(deps),
   )
   const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
-  const proc = SessionProcessor.layer.pipe(Layer.provide(SessionSummary.defaultLayer), Layer.provideMerge(run), Layer.provideMerge(deps))
-  const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
-  return Layer.mergeAll(
-    TestLLMServer.layer,
-    SessionSummary.defaultLayer,
-    SessionPrompt.layer.pipe(
-      Layer.provide(SessionRevert.defaultLayer),
+  const proc = SessionProcessor.layer.pipe(
       Layer.provide(SessionSummary.defaultLayer),
       Layer.provideMerge(run),
-      Layer.provideMerge(compact),
-      Layer.provideMerge(proc),
-      Layer.provideMerge(registry),
-      Layer.provideMerge(trunc),
-      Layer.provide(Instruction.defaultLayer),
-      Layer.provide(SystemPrompt.defaultLayer),
+      Layer.provide(Image.defaultLayer),
+      Layer.provide(RuntimeFlags.layer({experimentalEventSystem: true})),
       Layer.provideMerge(deps),
-    ),
+  )
+  const compact = SessionCompaction.layer.pipe(
+      Layer.provide(RuntimeFlags.layer({experimentalEventSystem: true})),
+      Layer.provideMerge(proc),
+      Layer.provideMerge(deps),
+  )
+  return Layer.mergeAll(
+      TestLLMServer.layer,
+      SessionSummary.defaultLayer,
+      SessionPrompt.layer.pipe(
+          Layer.provide(SessionRevert.defaultLayer),
+          Layer.provide(Image.defaultLayer),
+          Layer.provide(SessionSummary.defaultLayer),
+          Layer.provideMerge(run),
+          Layer.provideMerge(compact),
+          Layer.provideMerge(proc),
+          Layer.provideMerge(registry),
+          Layer.provideMerge(trunc),
+          Layer.provide(Instruction.defaultLayer),
+          Layer.provide(SystemPrompt.defaultLayer),
+          Layer.provide(RuntimeFlags.layer({experimentalEventSystem: true})),
+          Layer.provideMerge(deps),
+          ),
   )
 }
 
@@ -160,90 +184,102 @@ const it = testEffect(makeHttp())
 const providerCfg = (url: string) => ({
   provider: {
     test: {
-      name: "Test",
-      id: "test",
+      name: 'Test',
+      id: 'test',
       env: [],
-      npm: "@ai-sdk/openai-compatible",
+      npm: '@ai-sdk/openai-compatible',
       models: {
-        "test-model": {
-          id: "test-model",
-          name: "Test Model",
+        'test-model': {
+          id: 'test-model',
+          name: 'Test Model',
           attachment: false,
           reasoning: false,
           temperature: false,
           tool_call: true,
-          release_date: "2025-01-01",
-          limit: { context: 100000, output: 10000 },
-          cost: { input: 0, output: 0 },
+          release_date: '2025-01-01',
+          limit: {context: 100000, output: 10000},
+          cost: {input: 0, output: 0},
           options: {},
         },
       },
       options: {
-        apiKey: "test-key",
+        apiKey: 'test-key',
         baseURL: url,
       },
     },
   },
 })
 
-it.live("tool execution produces non-empty session diff (snapshot race)", () =>
-  provideTmpdirServer(
-    Effect.fnUntraced(function* ({ dir, llm }) {
-      const prompt = yield* SessionPrompt.Service
-      const sessions = yield* Session.Service
-      const summary = yield* SessionSummary.Service
+it.live(
+    'tool execution produces non-empty session diff (snapshot race)',
+    () => provideTmpdirServer(
+        Effect.fnUntraced(function*({dir, llm}) {
+          const prompt = yield* SessionPrompt.Service
+          const sessions = yield* Session.Service
+          const summary = yield* SessionSummary.Service
 
-      const session = yield* sessions.create({
-        title: "snapshot race test",
-        permission: [{ permission: "*", pattern: "*", action: "allow" }],
-      })
+          const session = yield* sessions.create({
+            title: 'snapshot race test',
+            permission: [{permission: '*', pattern: '*', action: 'allow'}],
+          })
 
-      // Use bash tool (always registered) to create a file
-      const command = `echo 'snapshot race test content' > ${path.join(dir, "race-test.txt")}`
-      yield* llm.toolMatch((hit) => JSON.stringify(hit.body).includes("create the file"), "bash", {
-        command,
-        description: "create test file",
-      })
-      yield* llm.textMatch((hit) => JSON.stringify(hit.body).includes("bash"), "done")
+          // Use bash tool (always registered) to create a file
+          const command = `echo 'snapshot race test content' > ${
+              path.join(dir, 'race-test.txt')}`
+          yield*
+              llm.toolMatch(
+                  (hit) => JSON.stringify(hit.body).includes('create the file'),
+                  'bash', {
+                    command,
+                    description: 'create test file',
+                  })
+          yield*
+              llm.textMatch(
+                  (hit) => JSON.stringify(hit.body).includes('bash'), 'done')
 
-      // Seed user message
-      yield* prompt.prompt({
-        sessionID: session.id,
-        agent: "build",
-        noReply: true,
-        parts: [{ type: "text", text: "create the file" }],
-      })
+          // Seed user message
+          yield* prompt.prompt({
+            sessionID: session.id,
+            agent: 'build',
+            noReply: true,
+            parts: [{type: 'text', text: 'create the file'}],
+          })
 
-      // Run the agent loop
-      const result = yield* prompt.loop({ sessionID: session.id })
-      expect(result.info.role).toBe("assistant")
+          // Run the agent loop
+          const result = yield* prompt.loop({sessionID: session.id})
+          expect(result.info.role).toBe('assistant')
 
-      // Verify the file was created
-      const filePath = path.join(dir, "race-test.txt")
-      const fileExists = yield* Effect.promise(() =>
-        fs
-          .access(filePath)
-          .then(() => true)
-          .catch(() => false),
-      )
-      expect(fileExists).toBe(true)
+          // Verify the file was created
+          const filePath = path.join(dir, 'race-test.txt')
+          const fileExists = yield*
+              Effect.promise(
+                  () => fs.access(filePath).then(() => true).catch(() => false),
+              )
+          expect(fileExists).toBe(true)
 
-      // Verify the tool call completed (in the first assistant message)
-      const allMsgs = yield* MessageV2.filterCompactedEffect(session.id)
-      const tool = allMsgs
-        .flatMap((m) => m.parts)
-        .find((p): p is MessageV2.ToolPart => p.type === "tool" && p.tool === "bash")
-      expect(tool?.state.status).toBe("completed")
+          // Verify the tool call completed (in the first assistant message)
+          const allMsgs = yield* MessageV2.filterCompactedEffect(session.id)
+          const user = allMsgs.find(
+              (msg): msg is SessionV1.WithParts&{info: SessionV1.User} =>
+                  msg.info.role === 'user',
+          )
+          const tool = allMsgs.flatMap((m) => m.parts)
+                           .find(
+                               (p): p is SessionV1.ToolPart =>
+                                   p.type === 'tool' && p.tool === 'bash')
+          expect(tool?.state.status).toBe('completed')
+          if (!user) throw new Error('Expected user message')
 
-      // Poll for diff — summarize() is fire-and-forget
-      let diff: Array<{ file: string }> = []
-      for (let i = 0; i < 50; i++) {
-        diff = yield* summary.diff({ sessionID: session.id })
-        if (diff.length > 0) break
-        yield* Effect.sleep("100 millis")
-      }
-      expect(diff.length).toBeGreaterThan(0)
-    }),
-    { git: true, config: providerCfg },
-  ),
+          // Poll for the turn diff — summarize() is fire-and-forget.
+          let diff: Array<{file?: string}> = []
+          for (let i = 0; i < 50; i++) {
+            diff = yield*
+                summary.diff({sessionID: session.id, messageID: user.info.id})
+            if (diff.length > 0) break
+            yield* Effect.sleep('100 millis')
+          }
+          expect(diff.length).toBeGreaterThan(0)
+        }),
+        {git: true, config: providerCfg},
+        ),
 )

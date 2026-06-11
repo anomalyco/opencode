@@ -277,6 +277,7 @@ export const dict = {
   "mcp.status.connected": "connecté",
   "mcp.status.failed": "échoué",
   "mcp.status.needs_auth": "nécessite auth",
+  "mcp.auth.clickToAuthenticate": "Cliquez pour vous authentifier",
   "mcp.status.disabled": "désactivé",
   "dialog.fork.empty": "Aucun message à partir duquel bifurquer",
   "dialog.directory.search.placeholder": "Rechercher des dossiers",
@@ -406,6 +407,8 @@ export const dict = {
   "error.page.description": "Une erreur s'est produite lors du chargement de l'application.",
   "error.page.details.label": "Détails de l'erreur",
   "error.page.action.restart": "Redémarrer",
+  "error.page.action.report": "Signaler l'erreur",
+  "error.page.action.reported": "Erreur signalée",
   "error.page.action.checking": "Vérification...",
   "error.page.action.checkUpdates": "Vérifier les mises à jour",
   "error.page.action.updateTo": "Mettre à jour vers {{version}}",
@@ -414,7 +417,7 @@ export const dict = {
   "error.page.version": "Version : {{version}}",
   "error.dev.rootNotFound":
     "Élément racine introuvable. Avez-vous oublié de l'ajouter à votre index.html ? Ou peut-être que l'attribut id est mal orthographié ?",
-  "error.globalSync.connectFailed":
+  "error.serverSync.connectFailed":
     "Impossible de se connecter au serveur. Y a-t-il un serveur en cours d'exécution à `{{url}}` ?",
   "directory.error.invalidUrl": "Répertoire invalide dans l'URL.",
   "error.chain.unknown": "Erreur inconnue",
@@ -741,8 +744,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Récupérer le contenu d'une URL",
   "settings.permissions.tool.websearch.title": "Recherche Web",
   "settings.permissions.tool.websearch.description": "Rechercher sur le web",
-  "settings.permissions.tool.codesearch.title": "Recherche de code",
-  "settings.permissions.tool.codesearch.description": "Rechercher du code sur le web",
   "settings.permissions.tool.external_directory.title": "Répertoire externe",
   "settings.permissions.tool.external_directory.description": "Accéder aux fichiers en dehors du répertoire du projet",
   "settings.permissions.tool.doom_loop.title": "Boucle infernale",
@@ -859,8 +860,8 @@ export const dict = {
   "common.key.insert": "Inser",
   "common.unknown": "inconnu",
   "error.page.circular": "[Circulaire]",
-  "error.globalSDK.noServerAvailable": "Aucun serveur disponible",
-  "error.globalSDK.serverNotAvailable": "Serveur non disponible",
+  "error.serverSDK.noServerAvailable": "Aucun serveur disponible",
+  "error.serverSDK.serverNotAvailable": "Serveur non disponible",
   "error.childStore.persistedCacheCreateFailed": "Échec de la création du cache persistant",
   "error.childStore.persistedProjectMetadataCreateFailed":
     "Échec de la création des métadonnées de projet persistantes",

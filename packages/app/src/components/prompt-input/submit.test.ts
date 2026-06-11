@@ -61,6 +61,8 @@ beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
     useNavigate: () => () => undefined,
     useParams: () => params,
+    useLocation: () => ({}),
+    useSearchParams: () => [{}, () => undefined],
   }))
 
   mock.module("@opencode-ai/sdk/v2/client", () => ({
@@ -103,6 +105,16 @@ beforeAll(async () => {
     }),
   }))
 
+  mock.module("@/context/server", () => ({
+    useServer: () => ({ key: "server-key" }),
+  }))
+
+  mock.module("@/context/tabs", () => ({
+    useTabs: () => ({
+      promoteDraft: () => undefined,
+    }),
+  }))
+
   mock.module("@/context/prompt", () => ({
     usePrompt: () => ({
       current: () => promptValue,
@@ -127,6 +139,7 @@ beforeAll(async () => {
   mock.module("@/context/sdk", () => ({
     useSDK: () => {
       const sdk = {
+        scope: "local",
         directory: "/repo/main",
         client: rootClient,
         url: "http://localhost:4096",
@@ -162,8 +175,8 @@ beforeAll(async () => {
     }),
   }))
 
-  mock.module("@/context/global-sync", () => ({
-    useGlobalSync: () => ({
+  mock.module("@/context/server-sync", () => ({
+    useServerSync: () => ({
       child: (directory: string) => {
         syncedDirectories.push(directory)
         storedSessions[directory] ??= []
@@ -408,7 +421,7 @@ describe("prompt submit worktree selection", () => {
 
     await sendFollowupDraft({
       client: client as any,
-      globalSync,
+      serverSync: globalSync,
       sync,
       draft: {
         sessionID: "session-1",
@@ -427,7 +440,7 @@ describe("prompt submit worktree selection", () => {
     
     await sendFollowupDraft({
       client: client as any,
-      globalSync,
+      serverSync: globalSync,
       sync,
       draft: {
         sessionID: "session-1",

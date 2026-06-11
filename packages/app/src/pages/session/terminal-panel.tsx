@@ -26,7 +26,7 @@ export function TerminalPanel() {
   const terminal = useTerminal()
   const language = useLanguage()
   const command = useCommand()
-  const { params, view } = useSessionLayout()
+  const { params, workspaceKey, view } = useSessionLayout()
 
   const opened = createMemo(() => view().terminal.opened())
   const size = createSizing()
@@ -37,6 +37,7 @@ export function TerminalPanel() {
   const [store, setStore] = createStore({
     autoCreated: false,
     activeDraggable: undefined as string | undefined,
+    recovered: {} as Record<string, boolean>,
     view: typeof window === "undefined" ? 1000 : (window.visualViewport?.height ?? window.innerHeight),
   })
 
@@ -125,7 +126,7 @@ export function TerminalPanel() {
     language.locale()
 
     setTerminalHandoff(
-      dir,
+      workspaceKey(),
       terminal.all().map((pty) =>
         terminalTabLabel({
           title: pty.title,
@@ -139,11 +140,26 @@ export function TerminalPanel() {
   const handoff = createMemo(() => {
     const dir = params.dir
     if (!dir) return []
-    return getTerminalHandoff(dir) ?? []
+    return getTerminalHandoff(workspaceKey()) ?? []
   })
 
   const all = terminal.all
   const ids = createMemo(() => all().map((pty) => pty.id))
+
+  const recoverTerminal = (key: string, id: string, clone: (id: string) => Promise<void>) => {
+    if (store.recovered[key]) return
+    setStore("recovered", key, true)
+    void clone(id)
+  }
+
+  const terminalRecoveryKey = (pty: { id: string; title: string; titleNumber: number }) => {
+    return String(pty.titleNumber || pty.title || pty.id)
+  }
+
+  const markTerminalConnected = (key: string, id: string, trim: (id: string) => void) => {
+    setStore("recovered", key, false)
+    trim(id)
+  }
 
   const handleTerminalDragStart = (event: unknown) => {
     const id = getDraggableId(event)
@@ -280,9 +296,9 @@ export function TerminalPanel() {
                             <Terminal
                               pty={pty()}
                               autoFocus={opened()}
-                              onConnect={() => ops.trim(id)}
+                              onConnect={() => markTerminalConnected(terminalRecoveryKey(pty()), id, ops.trim)}
                               onCleanup={ops.update}
-                              onConnectError={() => ops.clone(id)}
+                              onConnectError={() => recoverTerminal(terminalRecoveryKey(pty()), id, ops.clone)}
                             />
                           </div>
                         )}

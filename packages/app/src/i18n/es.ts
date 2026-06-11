@@ -299,6 +299,7 @@ export const dict = {
   "mcp.status.connected": "conectado",
   "mcp.status.failed": "fallido",
   "mcp.status.needs_auth": "necesita auth",
+  "mcp.auth.clickToAuthenticate": "Haz clic para autenticar",
   "mcp.status.disabled": "deshabilitado",
 
   "dialog.fork.empty": "No hay mensajes desde donde bifurcar",
@@ -449,6 +450,8 @@ export const dict = {
   "error.page.description": "Ocurrió un error al cargar la aplicación.",
   "error.page.details.label": "Detalles del error",
   "error.page.action.restart": "Reiniciar",
+  "error.page.action.report": "Informar error",
+  "error.page.action.reported": "Error informado",
   "error.page.action.checking": "Comprobando...",
   "error.page.action.checkUpdates": "Buscar actualizaciones",
   "error.page.action.updateTo": "Actualizar a {{version}}",
@@ -459,7 +462,7 @@ export const dict = {
   "error.dev.rootNotFound":
     "Elemento raíz no encontrado. ¿Olvidaste añadirlo a tu index.html? ¿O tal vez el atributo id está mal escrito?",
 
-  "error.globalSync.connectFailed": "No se pudo conectar al servidor. ¿Hay un servidor ejecutándose en `{{url}}`?",
+  "error.serverSync.connectFailed": "No se pudo conectar al servidor. ¿Hay un servidor ejecutándose en `{{url}}`?",
   "directory.error.invalidUrl": "URL de directorio inválida.",
 
   "error.chain.unknown": "Error desconocido",
@@ -813,8 +816,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Obtener contenido de una URL",
   "settings.permissions.tool.websearch.title": "Búsqueda Web",
   "settings.permissions.tool.websearch.description": "Buscar en la web",
-  "settings.permissions.tool.codesearch.title": "Búsqueda de Código",
-  "settings.permissions.tool.codesearch.description": "Buscar código en la web",
   "settings.permissions.tool.external_directory.title": "Directorio Externo",
   "settings.permissions.tool.external_directory.description": "Acceder a archivos fuera del directorio del proyecto",
   "settings.permissions.tool.doom_loop.title": "Bucle Infinito",
@@ -932,8 +933,8 @@ export const dict = {
   "common.key.insert": "Insert",
   "common.unknown": "desconocido",
   "error.page.circular": "[Circular]",
-  "error.globalSDK.noServerAvailable": "Ningún servidor disponible",
-  "error.globalSDK.serverNotAvailable": "Servidor no disponible",
+  "error.serverSDK.noServerAvailable": "Ningún servidor disponible",
+  "error.serverSDK.serverNotAvailable": "Servidor no disponible",
   "error.childStore.persistedCacheCreateFailed": "Error al crear caché persistente",
   "error.childStore.persistedProjectMetadataCreateFailed": "Error al crear metadatos de proyecto persistentes",
   "error.childStore.persistedProjectIconCreateFailed": "Error al crear icono de proyecto persistente",

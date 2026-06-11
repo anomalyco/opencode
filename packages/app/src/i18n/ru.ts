@@ -299,6 +299,7 @@ export const dict = {
   "mcp.status.connected": "подключено",
   "mcp.status.failed": "ошибка",
   "mcp.status.needs_auth": "требуется авторизация",
+  "mcp.auth.clickToAuthenticate": "Нажмите, чтобы авторизоваться",
   "mcp.status.disabled": "отключено",
 
   "dialog.fork.empty": "Нет сообщений для ответвления",
@@ -448,6 +449,8 @@ export const dict = {
   "error.page.description": "Произошла ошибка при загрузке приложения.",
   "error.page.details.label": "Детали ошибки",
   "error.page.action.restart": "Перезапустить",
+  "error.page.action.report": "Сообщить об ошибке",
+  "error.page.action.reported": "Об ошибке сообщено",
   "error.page.action.checking": "Проверка...",
   "error.page.action.checkUpdates": "Проверить обновления",
   "error.page.action.updateTo": "Обновить до {{version}}",
@@ -458,7 +461,7 @@ export const dict = {
   "error.dev.rootNotFound":
     "Корневой элемент не найден. Вы забыли добавить его в index.html? Или, может быть, атрибут id был написан неправильно?",
 
-  "error.globalSync.connectFailed": "Не удалось подключиться к серверу. Запущен ли сервер по адресу `{{url}}`?",
+  "error.serverSync.connectFailed": "Не удалось подключиться к серверу. Запущен ли сервер по адресу `{{url}}`?",
   "directory.error.invalidUrl": "Недопустимая директория в URL.",
 
   "error.chain.unknown": "Неизвестная ошибка",
@@ -808,8 +811,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Получение контента по URL",
   "settings.permissions.tool.websearch.title": "Web Search",
   "settings.permissions.tool.websearch.description": "Поиск в интернете",
-  "settings.permissions.tool.codesearch.title": "Code Search",
-  "settings.permissions.tool.codesearch.description": "Поиск кода в интернете",
   "settings.permissions.tool.external_directory.title": "Внешняя директория",
   "settings.permissions.tool.external_directory.description": "Доступ к файлам вне директории проекта",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
@@ -928,8 +929,8 @@ export const dict = {
   "common.key.insert": "Insert",
   "common.unknown": "неизвестно",
   "error.page.circular": "[Циклично]",
-  "error.globalSDK.noServerAvailable": "Нет доступного сервера",
-  "error.globalSDK.serverNotAvailable": "Сервер недоступен",
+  "error.serverSDK.noServerAvailable": "Нет доступного сервера",
+  "error.serverSDK.serverNotAvailable": "Сервер недоступен",
   "error.childStore.persistedCacheCreateFailed": "Не удалось создать постоянный кэш",
   "error.childStore.persistedProjectMetadataCreateFailed": "Не удалось создать постоянные метаданные проекта",
   "error.childStore.persistedProjectIconCreateFailed": "Не удалось создать постоянный значок проекта",

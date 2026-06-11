@@ -1,7 +1,7 @@
 import fs from "fs/promises"
 import os from "os"
 import { Effect, Layer } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { Global } from "@opencode-ai/core/global"
 
@@ -18,22 +18,19 @@ function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
-const msg: Msg = JSON.parse(process.argv[2]!)
+const msg: Msg = JSON.parse(process.argv[2])
 
-const testGlobal = Layer.succeed(
-  Global.Service,
-  Global.Service.of({
-    home: os.homedir(),
-    data: os.tmpdir(),
-    cache: os.tmpdir(),
-    config: os.tmpdir(),
-    state: os.tmpdir(),
-    bin: os.tmpdir(),
-    log: os.tmpdir(),
-  }),
-)
+const testGlobal = Global.layerWith({
+  home: os.homedir(),
+  data: os.tmpdir(),
+  cache: os.tmpdir(),
+  config: os.tmpdir(),
+  state: os.tmpdir(),
+  bin: os.tmpdir(),
+  log: os.tmpdir(),
+})
 
-const testLayer = EffectFlock.layer.pipe(Layer.provide(testGlobal), Layer.provide(AppFileSystem.defaultLayer))
+const testLayer = EffectFlock.layer.pipe(Layer.provide(testGlobal), Layer.provide(FSUtil.defaultLayer))
 
 async function job() {
   if (msg.ready) await fs.writeFile(msg.ready, String(process.pid))

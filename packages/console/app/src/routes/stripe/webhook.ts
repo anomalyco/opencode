@@ -9,7 +9,7 @@ import { Actor } from "@opencode-ai/console-core/actor.js"
 import { Resource } from "@opencode-ai/console-resource"
 import { LiteData } from "@opencode-ai/console-core/lite.js"
 import { BlackData } from "@opencode-ai/console-core/black.js"
-import { User } from "@opencode-ai/console-core/user.js"
+import { Referral } from "@opencode-ai/console-core/referral.js"
 
 export async function POST(input: APIEvent) {
   const body = await Billing.stripe().webhooks.constructEventAsync(
@@ -160,9 +160,26 @@ export async function POST(input: APIEvent) {
               userID: userID,
             })
 
-            if (userEmail && coupon === LiteData.firstMonth100Coupon) {
-              await Billing.redeemCoupon(userEmail, "GOFREEMONTH")
+            if (userEmail) {
+              if (coupon === LiteData.firstMonth50Coupon) {
+                await Billing.redeemCoupon(userEmail, "GO1MONTH50")
+              } else if (coupon === LiteData.firstMonth100Coupon) {
+                await Billing.redeemCoupon(userEmail, "GOFREEMONTH")
+              } else if (coupon === LiteData.threeMonths100Coupon) {
+                await Billing.redeemCoupon(userEmail, "GO3MONTHS100")
+              } else if (coupon === LiteData.sixMonths100Coupon) {
+                await Billing.redeemCoupon(userEmail, "GO6MONTHS100")
+              } else if (coupon === LiteData.twelveMonths100Coupon) {
+                await Billing.redeemCoupon(userEmail, "GO12MONTHS100")
+              }
             }
+          })
+
+          await Referral.completeFromLiteSubscription({
+            workspaceID,
+            userID,
+          }).catch((error) => {
+            console.error("Referral sync failed", error)
           })
         })
       }
@@ -209,7 +226,7 @@ export async function POST(input: APIEvent) {
           expand: ["discounts", "payments"],
         })
         const paymentID = invoice.payments?.data[0]?.payment.payment_intent as string
-        const couponID = (invoice.discounts[0] as Stripe.Discount).coupon?.id as string
+        const couponID = (invoice.discounts[0] as Stripe.Discount)?.coupon?.id as string
         if (!paymentID) {
           // payment id can be undefined when using coupon
           if (!couponID) throw new Error("Payment ID not found")

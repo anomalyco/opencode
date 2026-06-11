@@ -299,6 +299,7 @@ export const dict = {
   "mcp.status.connected": "เชื่อมต่อแล้ว",
   "mcp.status.failed": "ล้มเหลว",
   "mcp.status.needs_auth": "ต้องการการตรวจสอบสิทธิ์",
+  "mcp.auth.clickToAuthenticate": "คลิกเพื่อยืนยันตัวตน",
   "mcp.status.disabled": "ปิดใช้งาน",
 
   "dialog.fork.empty": "ไม่มีข้อความให้แตกแขนง",
@@ -447,6 +448,8 @@ export const dict = {
   "error.page.description": "เกิดข้อผิดพลาดระหว่างการโหลดแอปพลิเคชัน",
   "error.page.details.label": "รายละเอียดข้อผิดพลาด",
   "error.page.action.restart": "รีสตาร์ท",
+  "error.page.action.report": "รายงานข้อผิดพลาด",
+  "error.page.action.reported": "รายงานข้อผิดพลาดแล้ว",
   "error.page.action.checking": "กำลังตรวจสอบ...",
   "error.page.action.checkUpdates": "ตรวจสอบการอัปเดต",
   "error.page.action.updateTo": "อัปเดตเป็น {{version}}",
@@ -456,7 +459,7 @@ export const dict = {
 
   "error.dev.rootNotFound": "ไม่พบองค์ประกอบรูท คุณลืมเพิ่มใน index.html หรือบางทีแอตทริบิวต์ id อาจสะกดผิด?",
 
-  "error.globalSync.connectFailed": "ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ มีเซิร์ฟเวอร์ทำงานอยู่ที่ `{{url}}` หรือไม่?",
+  "error.serverSync.connectFailed": "ไม่สามารถเชื่อมต่อกับเซิร์ฟเวอร์ มีเซิร์ฟเวอร์ทำงานอยู่ที่ `{{url}}` หรือไม่?",
   "directory.error.invalidUrl": "ไดเรกทอรีใน URL ไม่ถูกต้อง",
 
   "error.chain.unknown": "ข้อผิดพลาดที่ไม่รู้จัก",
@@ -796,8 +799,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "ดึงเนื้อหาจาก URL",
   "settings.permissions.tool.websearch.title": "ค้นหาเว็บ",
   "settings.permissions.tool.websearch.description": "ค้นหาบนเว็บ",
-  "settings.permissions.tool.codesearch.title": "ค้นหาโค้ด",
-  "settings.permissions.tool.codesearch.description": "ค้นหาโค้ดบนเว็บ",
   "settings.permissions.tool.external_directory.title": "ไดเรกทอรีภายนอก",
   "settings.permissions.tool.external_directory.description": "เข้าถึงไฟล์นอกไดเรกทอรีโปรเจกต์",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",
@@ -915,8 +916,8 @@ export const dict = {
   "common.key.insert": "Insert",
   "common.unknown": "ไม่ทราบ",
   "error.page.circular": "[วงกลม]",
-  "error.globalSDK.noServerAvailable": "ไม่มีเซิร์ฟเวอร์",
-  "error.globalSDK.serverNotAvailable": "เซิร์ฟเวอร์ไม่พร้อมใช้งาน",
+  "error.serverSDK.noServerAvailable": "ไม่มีเซิร์ฟเวอร์",
+  "error.serverSDK.serverNotAvailable": "เซิร์ฟเวอร์ไม่พร้อมใช้งาน",
   "error.childStore.persistedCacheCreateFailed": "ไม่สามารถสร้างแคชถาวร",
   "error.childStore.persistedProjectMetadataCreateFailed": "ไม่สามารถสร้างเมตาดาต้าโปรเจกต์ถาวร",
   "error.childStore.persistedProjectIconCreateFailed": "ไม่สามารถสร้างไอคอนโปรเจกต์ถาวร",
