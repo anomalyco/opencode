@@ -124,12 +124,14 @@ export const PgSessionMessageTable = pgTable(
       .notNull()
       .references(() => PgSessionTable.id, { onDelete: "cascade" }),
     type: text().$type<SessionMessage.Type>().notNull(),
+    seq: integer().notNull(),
     ...PgTimestamps,
     data: jsonb().notNull().$type<SessionMessageData>(),
   },
   (table) => [
-    index("session_message_session_idx").on(table.session_id),
-    index("session_message_session_type_idx").on(table.session_id, table.type),
+    uniqueIndex("session_message_session_seq_idx").on(table.session_id, table.seq),
+    index("session_message_session_type_seq_idx").on(table.session_id, table.type, table.seq),
+    index("session_message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id),
     index("session_message_time_created_idx").on(table.time_created),
   ],
 )
