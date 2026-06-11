@@ -132,7 +132,6 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             text: event.data.prompt.text,
             files: event.data.prompt.files,
             agents: event.data.prompt.agents,
-            references: event.data.prompt.references,
             time: { created: event.data.timestamp },
           }),
         )
@@ -308,6 +307,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
                 input: match.state.input,
                 structured: event.data.structured,
                 content: [...event.data.content],
+                outputPaths: event.data.outputPaths ? [...event.data.outputPaths] : [],
                 result: event.data.result,
               }),
             )

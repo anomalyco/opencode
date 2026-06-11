@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Duration, Effect, Layer, Schedule, Schema, Semaphore, Context } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { formatPatch, structuredPatch } from "diff"
@@ -8,7 +9,6 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Config } from "@/config/config"
 import { Global } from "@opencode-ai/core/global"
-import * as Log from "@opencode-ai/core/util/log"
 
 export const Patch = Schema.Struct({
   hash: Schema.String,
@@ -28,7 +28,6 @@ export const FileDiff = Schema.Struct({
 }).annotate({ identifier: "SnapshotFileDiff" })
 export type FileDiff = typeof FileDiff.Type
 
-const log = Log.create({ service: "snapshot" })
 const prune = "7.days"
 const limit = 2 * 1024 * 1024
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
@@ -153,7 +152,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
             },
           )
           if (result.code === 0) return
-          log.warn("failed to add snapshot files", {
+          yield* Effect.logWarning("failed to add snapshot files", {
             exitCode: result.code,
             stderr: result.stderr,
           })
@@ -192,6 +191,46 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           yield* fs.writeFileString(target, text ? `${text}\n` : "").pipe(Effect.orDie)
         })
 
+        // Reuse the hashes for the git storage between the original repo and snapshot
+        // on huge repos like chromium checkout the git add --all rebuilding the
+        // hashes can take minutes. By doing this we eliminating this at all
+        const seed = Effect.fnUntraced(function* () {
+          if (state.vcs !== "git") return
+
+          const commonDir = yield* git(["rev-parse", "--path-format=absolute", "--git-common-dir"], {
+            cwd: state.worktree,
+          })
+
+          if (commonDir.code !== 0) return
+          const source = commonDir.text.trim()
+          if (!source || !(yield* exists(source))) return
+
+          // Share the source object database (and the source's own alternates,
+          // skipping any that no longer exist) so seeded blobs resolve.
+          const sourceObjects = path.join(source, "objects")
+          const chained = (yield* read(path.join(sourceObjects, "info", "alternates")))
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+          const alternates: string[] = []
+          for (const candidate of [sourceObjects, ...chained]) {
+            if (yield* exists(candidate)) alternates.push(candidate)
+          }
+          if (!alternates.length) return
+
+          yield* fs.ensureDir(path.join(state.gitdir, "objects", "info")).pipe(Effect.orDie)
+          yield* fs
+            .writeFileString(path.join(state.gitdir, "objects", "info", "alternates"), alternates.join("\n") + "\n")
+            .pipe(Effect.orDie)
+
+          // Seed the index from the source repo so already-hashed entries are reused.
+          // Best-effort: a missing/incompatible index just falls back to a full add.
+          const sourceIndex = path.join(source, "index")
+          if (yield* exists(sourceIndex)) {
+            yield* fs.copyFile(sourceIndex, path.join(state.gitdir, "index")).pipe(Effect.catch(() => Effect.void))
+          }
+        })
+
         const add = Effect.fnUntraced(function* () {
           yield* sync()
           const [diff, other] = yield* Effect.all(
@@ -206,7 +245,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
             { concurrency: 2 },
           )
           if (diff.code !== 0 || other.code !== 0) {
-            log.warn("failed to list snapshot files", {
+            yield* Effect.logWarning("failed to list snapshot files", {
               diffCode: diff.code,
               diffStderr: diff.stderr,
               otherCode: other.code,
@@ -227,7 +266,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           // Remove newly-ignored files from snapshot index to prevent re-adding
           if (ignored.size > 0) {
             const ignoredFiles = Array.from(ignored)
-            log.info("removing gitignored files from snapshot", { count: ignoredFiles.length })
+            yield* Effect.logInfo("removing gitignored files from snapshot", { count: ignoredFiles.length })
             yield* drop(ignoredFiles)
           }
 
@@ -264,13 +303,13 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               if (!(yield* exists(state.gitdir))) return
               const result = yield* git(args(["gc", `--prune=${prune}`]), { cwd: state.directory })
               if (result.code !== 0) {
-                log.warn("cleanup failed", {
+                yield* Effect.logWarning("cleanup failed", {
                   exitCode: result.code,
                   stderr: result.stderr,
                 })
                 return
               }
-              log.info("cleanup", { prune })
+              yield* Effect.logInfo("cleanup", { prune })
             }),
           )
         })
@@ -289,12 +328,18 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
                 yield* git(["--git-dir", state.gitdir, "config", "core.longpaths", "true"])
                 yield* git(["--git-dir", state.gitdir, "config", "core.symlinks", "true"])
                 yield* git(["--git-dir", state.gitdir, "config", "core.fsmonitor", "false"])
-                log.info("initialized")
+                // Tuning for very large worktrees so the first add stays bounded.
+                yield* git(["--git-dir", state.gitdir, "config", "feature.manyFiles", "true"])
+                yield* git(["--git-dir", state.gitdir, "config", "index.version", "4"])
+                yield* git(["--git-dir", state.gitdir, "config", "index.threads", "true"])
+                yield* git(["--git-dir", state.gitdir, "config", "core.untrackedCache", "true"])
+                yield* seed()
+                yield* Effect.logInfo("initialized")
               }
               yield* add()
               const result = yield* git(args(["write-tree"]), { cwd: state.directory })
               const hash = result.text.trim()
-              log.info("tracking", { hash, cwd: state.directory, git: state.gitdir })
+              yield* Effect.logInfo("tracking", { hash, cwd: state.directory, git: state.gitdir })
               return hash
             }),
           )
@@ -311,7 +356,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
                 },
               )
               if (result.code !== 0) {
-                log.warn("failed to get diff", { hash, exitCode: result.code })
+                yield* Effect.logWarning("failed to get diff", { hash, exitCode: result.code })
                 return { hash, files: [] }
               }
               const files = result.text
@@ -336,21 +381,21 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
         const restore = Effect.fnUntraced(function* (snapshot: string) {
           return yield* locked(
             Effect.gen(function* () {
-              log.info("restore", { commit: snapshot })
+              yield* Effect.logInfo("restore", { commit: snapshot })
               const result = yield* git([...core, ...args(["read-tree", snapshot])], { cwd: state.worktree })
               if (result.code === 0) {
                 const checkout = yield* git([...core, ...args(["checkout-index", "-a", "-f"])], {
                   cwd: state.worktree,
                 })
                 if (checkout.code === 0) return
-                log.error("failed to restore snapshot", {
+                yield* Effect.logError("failed to restore snapshot", {
                   snapshot,
                   exitCode: checkout.code,
                   stderr: checkout.stderr,
                 })
                 return
               }
-              log.error("failed to restore snapshot", {
+              yield* Effect.logError("failed to restore snapshot", {
                 snapshot,
                 exitCode: result.code,
                 stderr: result.stderr,
@@ -377,7 +422,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               }
 
               const single = Effect.fnUntraced(function* (op: (typeof ops)[number]) {
-                log.info("reverting", { file: op.file, hash: op.hash })
+                yield* Effect.logInfo("reverting", { file: op.file, hash: op.hash })
                 const result = yield* git([...core, ...args(["checkout", op.hash, "--", op.file])], {
                   cwd: state.worktree,
                 })
@@ -386,10 +431,13 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
                   cwd: state.worktree,
                 })
                 if (tree.code === 0 && tree.text.trim()) {
-                  log.info("file existed in snapshot but checkout failed, keeping", { file: op.file, hash: op.hash })
+                  yield* Effect.logInfo("file existed in snapshot but checkout failed, keeping", {
+                    file: op.file,
+                    hash: op.hash,
+                  })
                   return
                 }
-                log.info("file did not exist in snapshot, deleting", { file: op.file, hash: op.hash })
+                yield* Effect.logInfo("file did not exist in snapshot, deleting", { file: op.file, hash: op.hash })
                 yield* remove(op.file)
               })
 
@@ -422,7 +470,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
                 )
 
                 if (tree.code !== 0) {
-                  log.info("batched ls-tree failed, falling back to single-file revert", {
+                  yield* Effect.logInfo("batched ls-tree failed, falling back to single-file revert", {
                     hash: first.hash,
                     files: run.length,
                   })
@@ -442,7 +490,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
                 )
                 const list = run.filter((item) => have.has(item.rel))
                 if (list.length) {
-                  log.info("reverting", { hash: first.hash, files: list.length })
+                  yield* Effect.logInfo("reverting", { hash: first.hash, files: list.length })
                   const result = yield* git(
                     [...core, ...args(["checkout", first.hash, "--", ...list.map((item) => item.file)])],
                     {
@@ -450,7 +498,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
                     },
                   )
                   if (result.code !== 0) {
-                    log.info("batched checkout failed, falling back to single-file revert", {
+                    yield* Effect.logInfo("batched checkout failed, falling back to single-file revert", {
                       hash: first.hash,
                       files: list.length,
                     })
@@ -464,7 +512,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
 
                 for (const op of run) {
                   if (have.has(op.rel)) continue
-                  log.info("file did not exist in snapshot, deleting", { file: op.file, hash: op.hash })
+                  yield* Effect.logInfo("file did not exist in snapshot, deleting", { file: op.file, hash: op.hash })
                   yield* remove(op.file)
                 }
 
@@ -482,7 +530,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
                 cwd: state.worktree,
               })
               if (result.code !== 0) {
-                log.warn("failed to get diff", {
+                yield* Effect.logWarning("failed to get diff", {
                   hash,
                   exitCode: result.code,
                   stderr: result.stderr,
@@ -560,16 +608,18 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
                     { stdin: refs.map((item) => item.ref).join("\n") + "\n" },
                   )
                   if (batch.exitCode !== 0) {
-                    log.info("git cat-file --batch failed during snapshot diff, falling back to per-file git show", {
-                      stderr: batch.stderr.toString("utf8"),
-                      refs: refs.length,
-                    })
+                    yield* Effect.logInfo(
+                      "git cat-file --batch failed during snapshot diff, falling back to per-file git show",
+                      {
+                        stderr: batch.stderr.toString("utf8"),
+                        refs: refs.length,
+                      },
+                    )
                     return
                   }
                   const out = batch.stdout
 
                   const fail = (msg: string, extra?: Record<string, string>) => {
-                    log.info(msg, { ...extra, refs: refs.length })
                     return undefined
                   }
 
@@ -708,10 +758,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
         })
 
         yield* cleanup().pipe(
-          Effect.catchCause((cause) => {
-            log.error("cleanup loop failed", { cause: Cause.pretty(cause) })
-            return Effect.void
-          }),
+          Effect.catchCause((cause) => Effect.logError("cleanup loop failed", { cause: Cause.pretty(cause) })),
           Effect.repeat(Schedule.spaced(Duration.hours(1))),
           Effect.delay(Duration.minutes(1)),
           Effect.forkScoped,
@@ -755,5 +802,7 @@ export const defaultLayer = layer.pipe(
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Config.defaultLayer),
 )
+
+export const node = LayerNode.make(layer, [FSUtil.node, AppProcess.node, Config.node])
 
 export * as Snapshot from "."

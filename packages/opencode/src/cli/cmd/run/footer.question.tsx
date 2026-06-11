@@ -40,6 +40,7 @@ import {
   questionTabs,
   questionTotal,
 } from "./question.shared"
+import { footerWidthPolicy } from "./footer.width"
 import type { RunFooterTheme } from "./theme"
 import type { QuestionReject, QuestionReply } from "./types"
 
@@ -58,7 +59,7 @@ export function RunQuestionBody(props: {
   const other = createMemo(() => questionOther(props.request, state()))
   const picked = createMemo(() => questionPicked(state()))
   const disabled = createMemo(() => state().submitting)
-  const narrow = createMemo(() => dims().width < 80)
+  const narrow = createMemo(() => footerWidthPolicy(dims().width).dialog.narrow)
   const verb = createMemo(() => {
     if (confirm()) {
       return "submit"

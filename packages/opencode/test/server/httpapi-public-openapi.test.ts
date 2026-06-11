@@ -58,7 +58,9 @@ function componentName(ref: string) {
 function componentNames(response: OpenApiResponse | undefined) {
   const schema = response?.content?.["application/json"]?.schema
   if (!schema) return []
-  return [schema, ...(schema.anyOf ?? [])].flatMap((item) => (item.$ref ? [componentName(item.$ref)] : []))
+  return [
+    ...new Set([schema, ...(schema.anyOf ?? [])].flatMap((item) => (item.$ref ? [componentName(item.$ref)] : []))),
+  ]
 }
 
 function isBuiltInEndpointError(name: string) {
@@ -92,17 +94,13 @@ describe("PublicApi OpenAPI v2 errors", () => {
     }
   })
 
-  test("documents optional project reference aliases for filesystem reads and lists", () => {
+  test("documents references separately from filesystem routes", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
-    for (const path of ["/api/fs/read", "/api/fs/list"]) {
-      expect(spec.paths[path]?.get?.parameters, path).toContainEqual({
-        in: "query",
-        name: "reference",
-        required: false,
-        schema: { type: "string" },
-      })
+    for (const path of ["/api/fs/read/*", "/api/fs/list"]) {
+      expect(spec.paths[path]?.get?.parameters, path).not.toContainEqual(expect.objectContaining({ name: "reference" }))
     }
+    expect(spec.paths["/api/reference"]?.get).toBeDefined()
   })
 
   test("preserves required request bodies for v2 mutations", () => {
@@ -110,8 +108,32 @@ describe("PublicApi OpenAPI v2 errors", () => {
 
     for (const path of [
       "/api/session/{sessionID}/prompt",
-      "/api/session/{sessionID}/permission/request/{requestID}/reply",
-      "/api/session/{sessionID}/question/request/{requestID}/reply",
+      "/api/session/{sessionID}/permission/{requestID}/reply",
+      "/api/session/{sessionID}/question/{requestID}/reply",
+    ]) {
+      expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
+    }
+  })
+
+  test("documents connector discovery and connection routes", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const [method, path] of [
+      ["get", "/api/connector"],
+      ["get", "/api/connector/{connectorID}"],
+      ["post", "/api/connector/{connectorID}/connect/key"],
+      ["post", "/api/connector/{connectorID}/connect/oauth"],
+      ["get", "/api/connector/oauth/{attemptID}"],
+      ["post", "/api/connector/oauth/{attemptID}/complete"],
+      ["delete", "/api/connector/oauth/{attemptID}"],
+    ] as const) {
+      expect(spec.paths[path]?.[method], `${method.toUpperCase()} ${path}`).toBeDefined()
+    }
+
+    for (const path of [
+      "/api/connector/{connectorID}/connect/key",
+      "/api/connector/{connectorID}/connect/oauth",
+      "/api/connector/oauth/{attemptID}/complete",
     ]) {
       expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
     }
@@ -175,9 +197,7 @@ describe("PublicApi OpenAPI v2 errors", () => {
       ["get", "/api/session/{sessionID}/context"],
       ["get", "/api/session/{sessionID}/message"],
     ] as const) {
-      expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["404"]) ?? "")).toBe(
-        "SessionNotFoundError",
-      )
+      expect(componentNames(spec.paths[route[1]]?.[route[0]]?.responses?.["404"])).toContain("SessionNotFoundError")
     }
   })
 
@@ -237,12 +257,12 @@ describe("PublicApi OpenAPI v2 errors", () => {
       )
     }
     for (const route of [
-      ["post", "/api/session/{sessionID}/question/request/{requestID}/reply"],
-      ["post", "/api/session/{sessionID}/question/request/{requestID}/reject"],
+      ["post", "/api/session/{sessionID}/question/{requestID}/reply"],
+      ["post", "/api/session/{sessionID}/question/{requestID}/reject"],
     ] as const) {
       expect(componentNames(spec.paths[route[1]]?.[route[0]]?.responses?.["404"])).toEqual([
-        "SessionNotFoundError",
         "QuestionNotFoundError",
+        "SessionNotFoundError",
       ])
     }
   })

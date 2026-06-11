@@ -133,6 +133,7 @@ describe("createChildStoreManager", () => {
       const [store] = manager.child("/project")
 
       expect(store.status).toBe("loading")
+      expect(store.limit).toBe(5)
       expect(bootstraps).toEqual(["/project"])
     } finally {
       dispose()

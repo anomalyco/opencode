@@ -437,13 +437,79 @@ async function addMcpToConfig(name: string, mcpConfig: ConfigMCPV1.Info, configP
 }
 
 export const McpAddCommand = effectCmd({
-  command: "add",
+  command: "add [name]",
   describe: "add an MCP server",
-  handler: Effect.fn("Cli.mcp.add")(function* () {
+  builder: (yargs) =>
+    yargs
+      .positional("name", {
+        describe: "name of the MCP server",
+        type: "string",
+      })
+      .option("url", {
+        describe: "URL for a remote MCP server",
+        type: "string",
+      })
+      .option("env", {
+        describe: "environment variable for a local MCP server (KEY=VALUE)",
+        type: "string",
+        array: true,
+      })
+      .option("header", {
+        describe: "HTTP header for a remote MCP server (KEY=VALUE)",
+        type: "string",
+        array: true,
+      }),
+  handler: Effect.fn("Cli.mcp.add")(function* (args) {
     const maybeCtx = yield* InstanceRef
     if (!maybeCtx) return yield* Effect.die("InstanceRef not provided")
     const ctx = maybeCtx
     yield* Effect.promise(async () => {
+      const command = args["--"] ?? []
+      if (!args.name && (args.url || args.env?.length || args.header?.length || command.length)) {
+        throw new Error("A server name is required for non-interactive MCP configuration")
+      }
+      if (args.name) {
+        if (!!args.url === !!command.length) {
+          throw new Error("Provide either --url <url> or a command after --")
+        }
+        if (args.url && !URL.canParse(args.url)) {
+          throw new Error(`Invalid URL: ${args.url}`)
+        }
+        if (args.url && args.env?.length) {
+          throw new Error("--env is only valid for local MCP servers")
+        }
+        if (command.length && args.header?.length) {
+          throw new Error("--header is only valid for remote MCP servers")
+        }
+
+        const entries = (values: string[], kind: string) =>
+          Object.fromEntries(
+            values.map((entry) => {
+              const index = entry.indexOf("=")
+              if (index < 1) throw new Error(`Invalid ${kind}: ${entry}. Expected KEY=VALUE`)
+              return [entry.slice(0, index), entry.slice(index + 1)]
+            }),
+          )
+        const environment = entries(args.env ?? [], "environment variable")
+        const headers = entries(args.header ?? [], "HTTP header")
+        const mcpConfig: ConfigMCPV1.Info = args.url
+          ? {
+              type: "remote",
+              url: args.url,
+              ...(Object.keys(headers).length ? { headers } : {}),
+            }
+          : {
+              type: "local",
+              command,
+              ...(Object.keys(environment).length ? { environment } : {}),
+            }
+
+        const configPath = await resolveConfigPath(Global.Path.config, true)
+        await addMcpToConfig(args.name, mcpConfig, configPath)
+        prompts.log.success(`MCP server "${args.name}" added to ${configPath}`)
+        return
+      }
+
       UI.empty()
       prompts.intro("Add MCP server")
 
@@ -678,6 +744,7 @@ export const McpDebugCommand = effectCmd({
         const response = await fetch(serverConfig.url, {
           method: "POST",
           headers: {
+            ...serverConfig.headers,
             "Content-Type": "application/json",
             Accept: "application/json, text/event-stream",
           },
@@ -726,6 +793,7 @@ export const McpDebugCommand = effectCmd({
           // Try creating transport with auth provider to trigger discovery
           const transport = new StreamableHTTPClientTransport(new URL(serverConfig.url), {
             authProvider,
+            requestInit: serverConfig.headers ? { headers: serverConfig.headers } : undefined,
           })
 
           try {

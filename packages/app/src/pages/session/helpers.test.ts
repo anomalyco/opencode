@@ -8,7 +8,16 @@ import {
   focusTerminalById,
   getTabReorderIndex,
   shouldFocusTerminalOnKeyDown,
+  shouldShowFileTree,
 } from "./helpers"
+
+describe("shouldShowFileTree", () => {
+  test("does not reserve space for a disabled v2 file tree", () => {
+    expect(shouldShowFileTree({ desktopV2: true, showFileTree: false, opened: true })).toBe(false)
+    expect(shouldShowFileTree({ desktopV2: false, showFileTree: false, opened: true })).toBe(true)
+    expect(shouldShowFileTree({ desktopV2: true, showFileTree: true, opened: true })).toBe(true)
+  })
+})
 
 describe("createOpenReviewFile", () => {
   test("opens and loads selected review file", () => {

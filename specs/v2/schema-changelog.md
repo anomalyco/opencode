@@ -178,28 +178,26 @@ Compatibility:
 - Tool results are durably settled before provider continuation.
 - Legacy text, JSON, and inline-media results remain convertible; unresolved URL and file sources must be materialized or explicitly rejected before provider lowering.
 
-### Managed Tool-Output Resources
+### Managed Tool-Output Files
 
 Affected schema:
 
-- New `ToolOutputStore.Resource` and `ToolOutputStore.Page` schemas.
-- New `tool-output://<opaque-id>` URI contract.
-- `read` tool resource-page input.
+- New optional managed `outputPath` and `outputPaths` fields on tool results and completed Session tool state.
+- Absolute managed output paths accepted by ordinary `read` and `grep` inputs.
 
 Change:
 
-- Spill oversized model-facing tool text into Session-owned opaque managed resources.
-- Page stored UTF-8 content by byte offset with bounded reads and explicit `truncated` and `next` metadata.
+- Spill oversized model-facing tool text into globally unique files under OpenCode's shared tool-output directory.
+- Include the absolute file path in the bounded preview so ordinary `read`, `grep`, and `bash` operations can inspect it.
 
 Reason:
 
 - Tool results need bounded model context without discarding the full output.
-- Opaque Session ownership prevents one Session from reading another Session's managed output.
+- Filesystem resolution admits only direct generated `tool_*` files from the managed directory, while existing permissions whitelist that directory.
 
 Compatibility:
 
-- This is an additive internal and model-facing resource contract.
-- Managed output is retained for a bounded period and is not a public filesystem path.
+- Managed output is retained for a bounded period and exposed as a normal host filesystem path.
 
 ### Location-Scoped Filesystem Read And Search Contracts
 

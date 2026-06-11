@@ -235,7 +235,7 @@ describe("Anthropic Messages route", () => {
               resultType: "content",
               result: [
                 { type: "text", text: "Image read successfully" },
-                { type: "media", mediaType: "image/png", data: "AAECAw==" },
+                { type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png" },
               ],
             }),
           ],
@@ -262,7 +262,7 @@ describe("Anthropic Messages route", () => {
               id: "call_1",
               name: "screenshot",
               resultType: "content",
-              result: [{ type: "media", mediaType: "image/jpeg", data: "/9j/AA==" }],
+              result: [{ type: "file", uri: "data:image/jpeg;base64,/9j/AA==", mime: "image/jpeg" }],
             }),
           ],
           cache: "none",
@@ -287,7 +287,7 @@ describe("Anthropic Messages route", () => {
               id: "call_1",
               name: "fetch",
               resultType: "content",
-              result: [{ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" }],
+              result: [{ type: "file", uri: "data:audio/mpeg;base64,AAECAw==", mime: "audio/mpeg" }],
             }),
           ],
           cache: "none",
@@ -474,6 +474,29 @@ describe("Anthropic Messages route", () => {
       // Prefix the error type so consumers can distinguish overloads, rate
       // limits, and quota errors without parsing the message string.
       expect(response.events).toEqual([{ type: "provider-error", message: "overloaded_error: Overloaded" }])
+    }),
+  )
+
+  it.effect("classifies prompt-too-long provider errors", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "error",
+              error: { type: "invalid_request_error", message: "prompt is too long: 210000 tokens" },
+            }),
+          ),
+        ),
+      )
+
+      expect(response.events).toEqual([
+        {
+          type: "provider-error",
+          message: "invalid_request_error: prompt is too long: 210000 tokens",
+          classification: "context-overflow",
+        },
+      ])
     }),
   )
 

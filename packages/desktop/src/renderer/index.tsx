@@ -2,7 +2,6 @@
 
 import {
   ACCEPTED_FILE_EXTENSIONS,
-  ACCEPTED_FILE_TYPES,
   AppBaseProviders,
   AppInterface,
   handleNotificationClick,
@@ -13,17 +12,21 @@ import {
   PlatformProvider,
   ServerConnection,
   useCommand,
+  useWslServers,
 } from "@opencode-ai/app"
+import type { UpdaterState } from "@opencode-ai/app/updater"
 import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { MemoryRouter } from "@solidjs/router"
-import { createEffect, createResource, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
 import { initializationData, initializationReady } from "./initialization"
 import { resetZoom, setPinchZoomEnabled, webviewZoom, zoomIn, zoomOut } from "./webview-zoom"
+import { availableStartupServer, readyWslConnections } from "./wsl/connections"
 import "./styles.css"
+import { Splash } from "@opencode-ai/ui/logo"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 
 const root = document.getElementById("root")
@@ -56,6 +59,9 @@ if (import.meta.env.VITE_SENTRY_DSN) {
 
 void initI18n()
 
+const [updaterState, setUpdaterState] = createSignal<UpdaterState>({ status: "disabled" })
+void window.api.updater.subscribe(setUpdaterState)
+
 const deepLinkEvent = "opencode:deep-link"
 
 const emitDeepLinks = (urls: string[]) => {
@@ -79,27 +85,6 @@ const createPlatform = (): Platform => {
     if (ua.includes("Linux")) return "linux"
     return undefined
   })()
-
-  const isWslEnabled = async () => {
-    if (os !== "windows") return false
-    return window.api
-      .getWslConfig()
-      .then((config) => config.enabled)
-      .catch(() => false)
-  }
-
-  const wslHome = async () => {
-    if (!(await isWslEnabled())) return undefined
-    return window.api.wslPath("~", "windows").catch(() => undefined)
-  }
-
-  const handleWslPicker = async <T extends string | string[]>(result: T | null): Promise<T | null> => {
-    if (!result || !(await isWslEnabled())) return result
-    if (Array.isArray(result)) {
-      return Promise.all(result.map((path) => window.api.wslPath(path, "linux").catch(() => path))) as any
-    }
-    return window.api.wslPath(result, "linux").catch(() => result) as any
-  }
 
   const runDesktopMenuAction: Platform["runDesktopMenuAction"] = (action) => {
     switch (action) {
@@ -144,37 +129,42 @@ const createPlatform = (): Platform => {
     }
   })()
 
+  const wslServersApi = os === "windows" ? window.api.wslServers : undefined
+
   return {
     platform: "desktop",
     os,
     version: pkg.version,
 
     async openDirectoryPickerDialog(opts) {
-      const defaultPath = await wslHome()
-      const result = await window.api.openDirectoryPicker({
+      return window.api.openDirectoryPicker({
         multiple: opts?.multiple ?? false,
         title: opts?.title ?? t("desktop.dialog.chooseFolder"),
-        defaultPath,
       })
-      return await handleWslPicker(result)
     },
 
-    async openFilePickerDialog(opts) {
+    async openAttachmentPickerDialog(opts, onFile) {
       const result = await window.api.openFilePicker({
         multiple: opts?.multiple ?? false,
         title: opts?.title ?? t("desktop.dialog.chooseFile"),
-        accept: opts?.accept ?? ACCEPTED_FILE_TYPES,
+        defaultPath: opts?.defaultPath,
         extensions: opts?.extensions ?? ACCEPTED_FILE_EXTENSIONS,
       })
-      return handleWslPicker(result)
+      if (!result) return
+      try {
+        for (const file of result.files) {
+          await onFile(new File([await window.api.readPickedFile(result.token, file.path)], file.name))
+        }
+      } finally {
+        await window.api.releasePickedFiles(result.token)
+      }
     },
 
     async saveFilePickerDialog(opts) {
-      const result = await window.api.saveFilePicker({
+      return window.api.saveFilePicker({
         title: opts?.title ?? t("desktop.dialog.saveFile"),
         defaultPath: opts?.defaultPath,
       })
-      return handleWslPicker(result)
     },
 
     openLink(url: string) {
@@ -183,14 +173,7 @@ const createPlatform = (): Platform => {
     async openPath(path: string, app?: string) {
       if (os === "windows") {
         const resolvedApp = app ? await window.api.resolveAppPath(app).catch(() => null) : null
-        const resolvedPath = await (async () => {
-          if (await isWslEnabled()) {
-            const converted = await window.api.wslPath(path, "windows").catch(() => null)
-            if (converted) return converted
-          }
-          return path
-        })()
-        return window.api.openPath(resolvedPath, resolvedApp ?? undefined)
+        return window.api.openPath(path, resolvedApp ?? undefined)
       }
       return window.api.openPath(path, app)
     },
@@ -205,16 +188,10 @@ const createPlatform = (): Platform => {
 
     storage,
 
-    checkUpdate: async () => {
-      const config = await window.api.getWindowConfig().catch(() => ({ updaterEnabled: false }))
-      if (!config.updaterEnabled) return { updateAvailable: false }
-      return window.api.checkUpdate()
-    },
-
-    updateAndRestart: async () => {
-      const config = await window.api.getWindowConfig().catch(() => ({ updaterEnabled: false }))
-      if (!config.updaterEnabled) return
-      await window.api.installUpdate()
+    updater: {
+      state: updaterState,
+      check: () => window.api.updater.check(),
+      install: () => window.api.updater.install(),
     },
 
     exportDebugLogs: () => window.api.exportDebugLogs(),
@@ -247,12 +224,6 @@ const createPlatform = (): Platform => {
       return fetch(input, init)
     },
 
-    getWslEnabled: () => isWslEnabled(),
-
-    setWslEnabled: async (enabled) => {
-      await window.api.setWslConfig({ enabled })
-    },
-
     getDefaultServer: async () => {
       const url = await window.api.getDefaultServerUrl().catch(() => null)
       if (!url) return null
@@ -262,6 +233,8 @@ const createPlatform = (): Platform => {
     setDefaultServer: async (url: string | null) => {
       await window.api.setDefaultServerUrl(url)
     },
+
+    wslServers: wslServersApi,
 
     getDisplayBackend: async () => {
       return window.api.getDisplayBackend().catch(() => null)
@@ -304,7 +277,6 @@ listenForDeepLinks()
 
 render(() => {
   const platform = createPlatform()
-  const [windowConfig] = createResource(() => window.api.getWindowConfig().catch(() => ({ updaterEnabled: false })))
   const loadLocale = async () => {
     const current = await platform.storage?.("opencode.global.dat").getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
@@ -322,28 +294,8 @@ render(() => {
   // Fetch sidecar credentials (available immediately, before health check)
   const [sidecar] = createResource(() => window.api.awaitInitialization())
 
-  const [defaultServer] = createResource(() =>
-    platform.getDefaultServer?.().then((url) => {
-      if (url) return ServerConnection.key({ type: "http", http: { url } })
-    }),
-  )
+  const [defaultServer] = createResource(() => platform.getDefaultServer?.())
   const [locale] = createResource(loadLocale)
-
-  const servers = () => {
-    const data = initializationData(sidecar)
-    if (!data) return []
-    const server: ServerConnection.Sidecar = {
-      displayName: "Local Server",
-      type: "sidecar",
-      variant: "base",
-      http: {
-        url: data.url,
-        username: data.username ?? undefined,
-        password: data.password ?? undefined,
-      },
-    }
-    return [server] as ServerConnection.Any[]
-  }
 
   function handleClick(e: MouseEvent) {
     const link = (e.target as HTMLElement).closest("a.external-link") as HTMLAnchorElement | null
@@ -371,6 +323,52 @@ render(() => {
     return null
   }
 
+  function App() {
+    const wslServers = useWslServers()
+    const splash = (
+      <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
+        <Splash class="w-16 h-20 opacity-50 animate-pulse" />
+      </div>
+    )
+
+    const ready = createMemo(
+      () => !defaultServer.loading && !sidecar.loading && !windowCount.loading && !locale.loading,
+    )
+    const servers = createMemo(() => {
+      const data = initializationData(sidecar)
+      const list: ServerConnection.Any[] = []
+      if (data) {
+        list.push({
+          displayName: "Local Server",
+          type: "sidecar",
+          variant: "base",
+          http: {
+            url: data.url,
+            username: data.username ?? undefined,
+            password: data.password ?? undefined,
+          },
+        })
+      }
+      list.push(...readyWslConnections(wslServers.data))
+      return list
+    })
+    const effectiveDefaultServer = createMemo(() =>
+      ServerConnection.Key.make(availableStartupServer(defaultServer.latest, wslServers.data)),
+    )
+
+    return (
+      <Show when={ready()} fallback={splash}>
+        <Show when={effectiveDefaultServer()} keyed>
+          {(key) => (
+            <AppInterface defaultServer={key} servers={servers()} router={MemoryRouter}>
+              <Inner />
+            </AppInterface>
+          )}
+        </Show>
+      </Show>
+    )
+  }
+
   onMount(() => {
     document.addEventListener("click", handleClick)
     onCleanup(() => {
@@ -381,27 +379,7 @@ render(() => {
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders locale={locale.latest}>
-        <Show
-          when={
-            !defaultServer.loading &&
-            initializationReady(sidecar) &&
-            !windowConfig.loading &&
-            !windowCount.loading &&
-            !locale.loading
-          }
-        >
-          {(_) => {
-            return (
-              <AppInterface
-                defaultServer={defaultServer.latest ?? ServerConnection.Key.make("sidecar")}
-                servers={servers()}
-                router={MemoryRouter}
-              >
-                <Inner />
-              </AppInterface>
-            )
-          }}
-        </Show>
+        <Show when={true}>{(_) => <App />}</Show>
       </AppBaseProviders>
     </PlatformProvider>
   )

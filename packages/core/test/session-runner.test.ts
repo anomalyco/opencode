@@ -4,8 +4,8 @@ import {
   LLMError,
   LLMEvent,
   Model,
-  Tool,
   TransportReason,
+  InvalidRequestReason,
   type LLMClientShape,
   type LLMRequest,
 } from "@opencode-ai/llm"
@@ -32,11 +32,12 @@ import { SessionRunner } from "@opencode-ai/core/session/runner"
 import * as SessionRunnerLLM from "@opencode-ai/core/session/runner/llm"
 import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { ToolOutputStore } from "@opencode-ai/core/tool-output-store"
 import { ApplicationTools } from "@opencode-ai/core/tool/application-tools"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigCompaction } from "@opencode-ai/core/config/compaction"
-import { NativeTool } from "@opencode-ai/core/tool/native"
+import { Tool } from "@opencode-ai/core/tool/tool"
 import {
   SessionContextEpochTable,
   SessionInputTable,
@@ -47,6 +48,7 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { SystemContext } from "@opencode-ai/core/system-context"
 import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
 import { SkillGuidance } from "@opencode-ai/core/skill/guidance"
+import { ReferenceGuidance } from "@opencode-ai/core/reference/guidance"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { Location } from "@opencode-ai/core/location"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -103,7 +105,12 @@ const compactModel = Model.make({
   provider: "fake",
   route: OpenAIChat.route.with({ limits: { context: 4_000, output: 50 } }),
 })
-const authorizations: ToolRegistry.AuthorizeInput[] = []
+const recoveryModel = Model.make({
+  id: "recovery",
+  provider: "fake",
+  route: OpenAIChat.route.with({ limits: { context: 20_000, output: 1_000 } }),
+})
+const authorizations: Tool.Context[] = []
 const executions: string[] = []
 const permission = Layer.succeed(
   PermissionV2.Service,
@@ -117,42 +124,39 @@ const permission = Layer.succeed(
   }),
 )
 const applications = ApplicationTools.layer
-const registry = ToolRegistry.layer.pipe(Layer.provide(permission), Layer.provide(applications))
+const registry = ToolRegistry.layer.pipe(
+  Layer.provide(permission),
+  Layer.provide(applications),
+  Layer.provide(ToolOutputStore.defaultLayer),
+)
 const agents = AgentV2.layer
 const echo = Layer.effectDiscard(
   ToolRegistry.Service.use((registry) =>
-    registry.contribute((editor) => {
-      ;(editor.set("echo", {
-        authorize: (input) =>
-          Effect.sync(() => {
-            authorizations.push(input)
-          }),
-        tool: Tool.make({
-          description: "Echo text",
-          parameters: Schema.Struct({ text: Schema.String }),
-          success: Schema.Struct({ text: Schema.String }),
-          toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
-          execute: ({ text }) =>
-            Effect.gen(function* () {
-              executions.push(text)
-              activeToolExecutions++
-              maxActiveToolExecutions = Math.max(maxActiveToolExecutions, activeToolExecutions)
-              if (activeToolExecutions === toolExecutionsReady && toolExecutionsStarted) {
-                yield* Deferred.succeed(toolExecutionsStarted, undefined)
-              }
-              if (toolExecutionGate) yield* Deferred.await(toolExecutionGate)
-              return { text }
-            }).pipe(Effect.ensuring(Effect.sync(() => activeToolExecutions--))),
-        }),
+    registry.register({
+      echo: Tool.make({
+        description: "Echo text",
+        input: Schema.Struct({ text: Schema.String }),
+        output: Schema.Struct({ text: Schema.String }),
+        toModelOutput: ({ output }) => [{ type: "text", text: output.text }],
+        execute: ({ text }, context) =>
+          Effect.gen(function* () {
+            authorizations.push(context)
+            executions.push(text)
+            activeToolExecutions++
+            maxActiveToolExecutions = Math.max(maxActiveToolExecutions, activeToolExecutions)
+            if (activeToolExecutions === toolExecutionsReady && toolExecutionsStarted) {
+              yield* Deferred.succeed(toolExecutionsStarted, undefined)
+            }
+            if (toolExecutionGate) yield* Deferred.await(toolExecutionGate)
+            return { text }
+          }).pipe(Effect.ensuring(Effect.sync(() => activeToolExecutions--))),
       }),
-        editor.set("defect", {
-          tool: Tool.make({
-            description: "Fail unexpectedly",
-            parameters: Schema.Struct({}),
-            success: Schema.Struct({}),
-            execute: () => Effect.die("unexpected tool defect"),
-          }),
-        }))
+      defect: Tool.make({
+        description: "Fail unexpectedly",
+        input: Schema.Struct({}),
+        output: Schema.Struct({}),
+        execute: () => Effect.die("unexpected tool defect"),
+      }),
     }),
   ),
 ).pipe(Layer.provide(registry))
@@ -170,7 +174,7 @@ const skillBaselines = new Map<AgentV2.ID, string>()
 const systemContext = Layer.effectDiscard(
   SystemContextRegistry.Service.pipe(
     Effect.flatMap((registry) =>
-      registry.contribute({
+      registry.register({
         key: systemContextKey,
         load: Effect.sync(() =>
           SystemContext.combine(
@@ -212,6 +216,7 @@ const skillGuidance = Layer.mock(SkillGuidance.Service, {
         : SystemContext.empty,
     ),
 })
+const referenceGuidance = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
 const config = Layer.succeed(
   Config.Service,
   Config.Service.of({
@@ -240,6 +245,7 @@ const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(location),
   Layer.provide(agents),
   Layer.provide(skillGuidance),
+  Layer.provide(referenceGuidance),
   Layer.provide(config),
 )
 const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
@@ -342,6 +348,21 @@ const providerUnavailable = () =>
     method: "stream",
     reason: new TransportReason({ message: "Provider unavailable" }),
   })
+
+const setupOverflowRecovery = Effect.gen(function* () {
+  yield* setup
+  const session = yield* SessionV2.Service
+  response = fragmentFixture("text", "text-earlier", ["Earlier answer"]).completeEvents
+  yield* session.prompt({
+    sessionID,
+    prompt: new Prompt({ text: "Earlier question ".repeat(700) }),
+    resume: false,
+  })
+  yield* session.resume(sessionID)
+  currentModel = recoveryModel
+  requests.length = 0
+  return session
+})
 
 const userTexts = (request: LLMRequest) =>
   request.messages.flatMap((message) =>
@@ -541,12 +562,12 @@ describe("SessionRunnerLLM", () => {
       yield* setup
       const applicationTools = yield* ApplicationTools.Service
       const session = yield* SessionV2.Service
-      const contexts: NativeTool.Context[] = []
-      yield* applicationTools.attach({
-        application_context: NativeTool.make({
+      const contexts: Tool.Context[] = []
+      yield* applicationTools.register({
+        application_context: Tool.make({
           description: "Read application context",
-          parameters: Schema.Struct({ query: Schema.String }),
-          success: Schema.Struct({ answer: Schema.String }),
+          input: Schema.Struct({ query: Schema.String }),
+          output: Schema.Struct({ answer: Schema.String }),
           execute: ({ query }, context) =>
             Effect.sync(() => {
               contexts.push(context)
@@ -568,7 +589,14 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests[0]?.tools.map((tool) => tool.name)).toContain("application_context")
-      expect(contexts).toEqual([{ sessionID, id: "call-application", name: "application_context" }])
+      expect(contexts).toEqual([
+        {
+          sessionID,
+          agent: AgentV2.ID.make("build"),
+          assistantMessageID: expect.stringMatching(/^msg_/),
+          toolCallID: "call-application",
+        },
+      ])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Use application context" },
         {
@@ -1456,6 +1484,131 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("forces one compaction and retries after provider context overflow", () =>
+    Effect.gen(function* () {
+      const session = yield* setupOverflowRecovery
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" }),
+        ],
+        fragmentFixture("text", "text-summary", ["## Goal\n- Recover overflow"]).completeEvents,
+        fragmentFixture("text", "text-final", ["Recovered"]).completeEvents,
+      ]
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Continue" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(3)
+      expect(userTexts(requests[1])[0]).toContain("## Goal")
+      expect(userTexts(requests[2])[0]).toContain("<summary>\n## Goal\n- Recover overflow\n</summary>")
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "compaction", summary: "## Goal\n- Recover overflow" },
+        { type: "assistant", finish: "stop" },
+      ])
+      yield* replaySessionProjection(sessionID)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "compaction" },
+        { type: "assistant", finish: "stop" },
+      ])
+    }),
+  )
+
+  it.effect("persists a second context overflow after one recovery", () =>
+    Effect.gen(function* () {
+      const session = yield* setupOverflowRecovery
+      const overflow = () => [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" }),
+      ]
+      responses = [
+        overflow(),
+        fragmentFixture("text", "text-summary", ["## Goal\n- Recover once"]).completeEvents,
+        overflow(),
+      ]
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Continue" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(3)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "compaction" },
+        { type: "assistant", finish: "error", error: { message: "prompt too long" } },
+      ])
+    }),
+  )
+
+  it.effect("recovers once from a raw context overflow failure", () =>
+    Effect.gen(function* () {
+      const session = yield* setupOverflowRecovery
+      responseStream = Stream.fail(
+        new LLMError({
+          module: "test",
+          method: "stream",
+          reason: new InvalidRequestReason({
+            message: "prompt too long",
+            classification: "context-overflow",
+          }),
+        }),
+      )
+      responses = [
+        fragmentFixture("text", "text-summary", ["## Goal\n- Recover raw overflow"]).completeEvents,
+        fragmentFixture("text", "text-final", ["Recovered"]).completeEvents,
+      ]
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Continue" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(3)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "compaction", summary: "## Goal\n- Recover raw overflow" },
+        { type: "assistant", finish: "stop" },
+      ])
+    }),
+  )
+
+  it.effect("publishes the original overflow when recovery summarization fails", () =>
+    Effect.gen(function* () {
+      const session = yield* setupOverflowRecovery
+      responses = [
+        [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+        [LLMEvent.providerError({ message: "summary unavailable" })],
+      ]
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Continue" }), resume: false })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      const context = yield* session.context(sessionID)
+      expect(context.some((message) => message.type === "compaction")).toBe(false)
+      expect(context.slice(-2)).toMatchObject([
+        { type: "user", text: "Continue" },
+        { type: "assistant", finish: "error", error: { message: "prompt too long" } },
+      ])
+    }),
+  )
+
+  it.effect("interrupts overflow recovery while the summary provider is running", () =>
+    Effect.gen(function* () {
+      const session = yield* setupOverflowRecovery
+      responses = [
+        [LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" })],
+        fragmentFixture("text", "text-summary", ["## Goal\n- Interrupted"]).completeEvents,
+      ]
+      const firstGate = yield* Deferred.make<void>()
+      const summaryGate = yield* Deferred.make<void>()
+      streamGate = firstGate
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Continue" }), resume: false })
+      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
+      while (requests.length < 1) yield* Effect.yieldNow
+      streamGate = summaryGate
+      yield* Deferred.succeed(firstGate, undefined)
+      while (requests.length < 2) yield* Effect.yieldNow
+
+      yield* session.interrupt(sessionID)
+      expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
+      streamGate = undefined
+      expect(requests).toHaveLength(2)
+      expect((yield* session.context(sessionID)).some((message) => message.type === "compaction")).toBe(false)
+    }),
+  )
+
   it.effect("preserves effective System updates while compaction replacement is blocked", () =>
     Effect.gen(function* () {
       yield* setup
@@ -1537,7 +1690,7 @@ describe("SessionRunnerLLM", () => {
             type: "content",
             value: [
               { type: "text", text: "Hello" },
-              { type: "media", mediaType: "image/png", data: "data:image/png;base64,aGVsbG8=", filename: "hello.png" },
+              { type: "file", uri: "data:image/png;base64,aGVsbG8=", mime: "image/png", name: "hello.png" },
             ],
           },
           providerExecuted: true,
@@ -1590,7 +1743,7 @@ describe("SessionRunnerLLM", () => {
                 structured: {},
                 content: [
                   { type: "text", text: "Hello" },
-                  { type: "file", mime: "image/png", source: { type: "data", data: "aGVsbG8=" }, name: "hello.png" },
+                  { type: "file", mime: "image/png", uri: "data:image/png;base64,aGVsbG8=", name: "hello.png" },
                 ],
               },
             },
@@ -1632,7 +1785,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests).toHaveLength(2)
       expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
-      expect(authorizations).toMatchObject([{ sessionID, call: { id: "call-echo", name: "echo" } }])
+      expect(authorizations).toMatchObject([{ sessionID, toolCallID: "call-echo" }])
       expect(executions).toEqual(["hello"])
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Echo this" },
@@ -2661,11 +2814,51 @@ describe("SessionRunnerLLM", () => {
       yield* Effect.yieldNow
 
       expect(requests).toHaveLength(2)
+      expect(requests.map((request) => request.providerOptions?.openai?.promptCacheKey)).toEqual([
+        sessionID,
+        otherSessionID,
+      ])
       yield* Deferred.succeed(streamGate, undefined)
       yield* Fiber.join(first)
       yield* Fiber.join(second)
       streamGate = undefined
       streamStarted = undefined
+    }),
+  )
+
+  it.effect("bounds external session prompt cache keys", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const externalSessionID = SessionV2.ID.fromExternal({
+        namespace: "discord",
+        key: "thread-one",
+      })
+      const otherExternalSessionID = SessionV2.ID.fromExternal({
+        namespace: "discord",
+        key: "thread-two",
+      })
+      yield* insertSession(externalSessionID)
+      yield* insertSession(otherExternalSessionID)
+      const session = yield* SessionV2.Service
+      yield* session.prompt({
+        sessionID: externalSessionID,
+        prompt: new Prompt({ text: "Run external session" }),
+        resume: false,
+      })
+      yield* session.prompt({
+        sessionID: otherExternalSessionID,
+        prompt: new Prompt({ text: "Run other external session" }),
+        resume: false,
+      })
+
+      requests.length = 0
+      yield* session.resume(externalSessionID)
+      yield* session.resume(otherExternalSessionID)
+
+      const keys = requests.map((request) => request.providerOptions?.openai?.promptCacheKey)
+      expect(keys).toEqual([externalSessionID.slice(4), otherExternalSessionID.slice(4)])
+      expect(keys.every((key) => typeof key === "string" && key.length === 64)).toBe(true)
+      expect(keys[0]).not.toBe(keys[1])
     }),
   )
 
@@ -2746,7 +2939,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("durably settles unexpected local tool defects before continuing", () =>
+  it.effect("propagates unexpected local tool defects operationally", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -2760,12 +2953,11 @@ describe("SessionRunnerLLM", () => {
           LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
           LLMEvent.finish({ reason: "tool-calls" }),
         ],
-        [],
       ]
 
-      yield* session.resume(sessionID)
+      expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe("unexpected tool defect")
 
-      expect(requests).toHaveLength(2)
+      expect(requests).toHaveLength(1)
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Call defect" },
         {
@@ -2774,7 +2966,10 @@ describe("SessionRunnerLLM", () => {
             {
               type: "tool",
               id: "call-defect",
-              state: { status: "error", error: { message: "unexpected tool defect" } },
+              state: {
+                status: "error",
+                error: { type: "unknown", message: "Tool execution failed: unexpected tool defect" },
+              },
             },
           ],
         },
@@ -2788,17 +2983,15 @@ describe("SessionRunnerLLM", () => {
       const session = yield* SessionV2.Service
       const registry = yield* ToolRegistry.Service
       const questions = yield* QuestionV2.Service
-      const transform = yield* registry.transform()
-      yield* transform((editor) =>
-        editor.set("question", {
-          tool: Tool.make({
-            description: "Ask the user",
-            parameters: Schema.Struct({}),
-            success: Schema.Struct({}),
-          }),
-          execute: ({ sessionID }) => questions.ask({ sessionID, questions: [] }).pipe(Effect.as({}), Effect.orDie),
+      yield* registry.register({
+        question: Tool.make({
+          description: "Ask the user",
+          input: Schema.Struct({}),
+          output: Schema.Struct({}),
+          execute: (_, context) =>
+            questions.ask({ sessionID: context.sessionID, questions: [] }).pipe(Effect.as({}), Effect.orDie),
         }),
-      )
+      })
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Ask then stop" }), resume: false })
 
       requests.length = 0
@@ -3104,6 +3297,35 @@ describe("SessionRunnerLLM", () => {
       expect(yield* session.context(sessionID)).toMatchObject([
         { type: "user", text: "Fail before step" },
         { type: "assistant", finish: "error", error: { type: "unknown", message: "Provider unavailable" } },
+      ])
+    }),
+  )
+
+  it.effect("does not recover context overflow after durable assistant output", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fail after output" }), resume: false })
+
+      requests.length = 0
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "text-partial" }),
+        LLMEvent.textDelta({ id: "text-partial", text: "Partial" }),
+        LLMEvent.textEnd({ id: "text-partial" }),
+        LLMEvent.providerError({ message: "prompt too long", classification: "context-overflow" }),
+      ]
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Fail after output" },
+        {
+          type: "assistant",
+          finish: "error",
+          error: { message: "prompt too long" },
+          content: [{ type: "text", text: "Partial" }],
+        },
       ])
     }),
   )
