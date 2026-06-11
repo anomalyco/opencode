@@ -93,7 +93,7 @@ export const Definitions = {
   session_unshare: keybind("none", "Unshare current session"),
   session_interrupt: keybind("escape", "Interrupt current session"),
   session_background: keybind("ctrl+b", "Background synchronous subagents"),
-  session_toggle_queue_mode: keybind("ctrl+y", "Toggle follow-up mode"),
+  session_toggle_queue_mode: keybind("ctrl+y,<leader>f", "Toggle follow-up mode"),
   session_compact: keybind("<leader>c", "Compact the session"),
   session_toggle_timestamps: keybind("none", "Toggle message timestamps"),
   session_toggle_generic_tool_output: keybind("none", "Toggle generic tool output"),

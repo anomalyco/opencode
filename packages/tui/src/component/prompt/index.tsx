@@ -302,9 +302,23 @@ export function Prompt(props: PromptProps) {
     interrupt: 0,
     queuedDrafts: [],
   })
+  const session = createMemo(() => props.sessionID ? sync.session.get(props.sessionID) : undefined)
+  const children = createMemo(() => {
+    const s = session()
+    if (!s) return []
+    const parentID = s.parentID ?? s.id
+    return sync.data.session.filter((x) => x.parentID === parentID || x.id === parentID)
+  })
+  const hasPendingRequests = createMemo(() => {
+    if (session()?.parentID) return false
+    const list = children()
+    const permissions = list.flatMap((x) => sync.data.permission[x.id] ?? [])
+    const questions = list.flatMap((x) => sync.data.question[x.id] ?? [])
+    return permissions.length > 0 || questions.length > 0
+  })
 
   createEffect(() => {
-    if (status().type === "idle" && store.queuedDrafts.length > 0) {
+    if (status().type === "idle" && !hasPendingRequests() && store.queuedDrafts.length > 0) {
       const draft = store.queuedDrafts[0]
       setStore("queuedDrafts", store.queuedDrafts.slice(1))
       const { followupMode, ...payload } = draft
@@ -1545,31 +1559,34 @@ export function Prompt(props: PromptProps) {
                         Log.Default.info(`[UpArrow Debug] hasStarted=${hasStarted}`)
                         if (!hasStarted) {
                           e.preventDefault()
-                          Log.Default.info(`[UpArrow Debug] reverting message ${lastMsg.id}`)
-                          sdk.client.session
-                            .revert({
-                              sessionID: props.sessionID!,
-                              messageID: lastMsg.id,
-                            })
-                            .then(() => {
-                              Log.Default.info(`[UpArrow Debug] reverted successfully`)
-                              const parts = sync.data.part[lastMsg.id] ?? []
-                              const promptInfo = parts.reduce(
-                                (agg, part) => {
-                                  if (part.type === "text" && !part.synthetic) agg.input += part.text
-                                  if (part.type === "file") agg.parts.push(stripPromptPartIDs(part))
-                                  return agg
-                                },
-                                { input: "", parts: [] as PromptInfo["parts"] },
-                              )
-                              input.setText(promptInfo.input)
-                              setStore("prompt", promptInfo)
-                              restoreExtmarksFromParts(promptInfo.parts)
-                              input.cursorOffset = promptInfo.input.length
-                            })
-                            .catch((err) => {
-                              Log.Default.error(`[UpArrow Debug] revert failed: ${err}`)
-                            })
+                          Log.Default.info(`[UpArrow Debug] aborting session and reverting message ${lastMsg.id}`)
+                          void (async () => {
+                            await sdk.client.session.abort({ sessionID: props.sessionID! }).catch(() => {})
+                            await sdk.client.session
+                              .revert({
+                                sessionID: props.sessionID!,
+                                messageID: lastMsg.id,
+                              })
+                              .then(() => {
+                                Log.Default.info(`[UpArrow Debug] reverted successfully`)
+                                const parts = sync.data.part[lastMsg.id] ?? []
+                                const promptInfo = parts.reduce(
+                                  (agg, part) => {
+                                    if (part.type === "text" && !part.synthetic) agg.input += part.text
+                                    if (part.type === "file") agg.parts.push(stripPromptPartIDs(part))
+                                    return agg
+                                  },
+                                  { input: "", parts: [] as PromptInfo["parts"] },
+                                )
+                                input.setText(promptInfo.input)
+                                setStore("prompt", promptInfo)
+                                restoreExtmarksFromParts(promptInfo.parts)
+                                input.cursorOffset = promptInfo.input.length
+                              })
+                              .catch((err) => {
+                                Log.Default.error(`[UpArrow Debug] revert failed: ${err}`)
+                              })
+                          })()
                           return
                         }
                       }
