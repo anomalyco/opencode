@@ -56,8 +56,8 @@ function prepend(messages: SessionMessage[], message: SessionMessage) {
   messages.unshift(message)
 }
 
-export const { use: useSyncV2, provider: SyncProviderV2 } = createSimpleContext({
-  name: "SyncV2",
+export const { use: useData, provider: DataProvider } = createSimpleContext({
+  name: "Data",
   init: () => {
     const [store, setStore] = createStore<{
       messages: {

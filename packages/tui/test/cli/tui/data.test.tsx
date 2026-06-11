@@ -5,7 +5,7 @@ import type { Event, GlobalEvent } from "@opencode-ai/sdk/v2"
 import { onMount } from "solid-js"
 import { ProjectProvider } from "../../../src/context/project"
 import { SDKProvider } from "../../../src/context/sdk"
-import { SyncProviderV2, useSyncV2 } from "../../../src/context/sync-v2"
+import { DataProvider, useData } from "../../../src/context/data"
 import { createEventSource, createFetch, directory, json } from "../../fixture/tui-sdk"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 
@@ -38,14 +38,14 @@ test("sync v2 refreshes references after updates", async () => {
       data: requests === 1 ? [] : [{ name: "docs", path: "/docs", source: { type: "local", path: "/docs" } }],
     })
   })
-  let sync!: ReturnType<typeof useSyncV2>
+  let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
     ready = resolve
   })
 
   function Probe() {
-    sync = useSyncV2()
+    sync = useData()
     onMount(ready)
     return <box />
   }
@@ -54,9 +54,9 @@ test("sync v2 refreshes references after updates", async () => {
     <TestTuiContexts>
       <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
         <ProjectProvider>
-          <SyncProviderV2>
+          <DataProvider>
             <Probe />
-          </SyncProviderV2>
+          </DataProvider>
         </ProjectProvider>
       </SDKProvider>
     </TestTuiContexts>
@@ -76,14 +76,14 @@ test("sync v2 refreshes references after updates", async () => {
 test("sync v2 settles pending tools when a live failure arrives", async () => {
   const events = createEventSource()
   const calls = createFetch()
-  let sync!: ReturnType<typeof useSyncV2>
+  let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
     ready = resolve
   })
 
   function Probe() {
-    sync = useSyncV2()
+    sync = useData()
     onMount(ready)
     return <box />
   }
@@ -92,9 +92,9 @@ test("sync v2 settles pending tools when a live failure arrives", async () => {
     <TestTuiContexts>
       <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
         <ProjectProvider>
-          <SyncProviderV2>
+          <DataProvider>
             <Probe />
-          </SyncProviderV2>
+          </DataProvider>
         </ProjectProvider>
       </SDKProvider>
     </TestTuiContexts>
@@ -205,14 +205,14 @@ test("sync v2 settles pending tools when a live failure arrives", async () => {
 test("sync v2 renders admitted prompts only after promotion", async () => {
   const events = createEventSource()
   const calls = createFetch()
-  let sync!: ReturnType<typeof useSyncV2>
+  let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
     ready = resolve
   })
 
   function Probe() {
-    sync = useSyncV2()
+    sync = useData()
     onMount(ready)
     return <box />
   }
@@ -221,9 +221,9 @@ test("sync v2 renders admitted prompts only after promotion", async () => {
     <TestTuiContexts>
       <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
         <ProjectProvider>
-          <SyncProviderV2>
+          <DataProvider>
             <Probe />
-          </SyncProviderV2>
+          </DataProvider>
         </ProjectProvider>
       </SDKProvider>
     </TestTuiContexts>
@@ -269,14 +269,14 @@ test("sync v2 renders admitted prompts only after promotion", async () => {
 test("sync v2 renders a promoted prompt when admission was missed", async () => {
   const events = createEventSource()
   const calls = createFetch()
-  let sync!: ReturnType<typeof useSyncV2>
+  let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
     ready = resolve
   })
 
   function Probe() {
-    sync = useSyncV2()
+    sync = useData()
     onMount(ready)
     return <box />
   }
@@ -285,9 +285,9 @@ test("sync v2 renders a promoted prompt when admission was missed", async () => 
     <TestTuiContexts>
       <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
         <ProjectProvider>
-          <SyncProviderV2>
+          <DataProvider>
             <Probe />
-          </SyncProviderV2>
+          </DataProvider>
         </ProjectProvider>
       </SDKProvider>
     </TestTuiContexts>
@@ -317,14 +317,14 @@ test("sync v2 renders a promoted prompt when admission was missed", async () => 
 test("sync v2 projects live context updates with their message ID", async () => {
   const events = createEventSource()
   const calls = createFetch()
-  let sync!: ReturnType<typeof useSyncV2>
+  let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
     ready = resolve
   })
 
   function Probe() {
-    sync = useSyncV2()
+    sync = useData()
     onMount(ready)
     return <box />
   }
@@ -333,9 +333,9 @@ test("sync v2 projects live context updates with their message ID", async () => 
     <TestTuiContexts>
       <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
         <ProjectProvider>
-          <SyncProviderV2>
+          <DataProvider>
             <Probe />
-          </SyncProviderV2>
+          </DataProvider>
         </ProjectProvider>
       </SDKProvider>
     </TestTuiContexts>
@@ -372,14 +372,14 @@ test("sync v2 preserves live events while snapshot hydration is in flight", asyn
     if (url.pathname === "/api/session/session-1/message") return response.promise
     return undefined
   })
-  let sync!: ReturnType<typeof useSyncV2>
+  let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
     ready = resolve
   })
 
   function Probe() {
-    sync = useSyncV2()
+    sync = useData()
     onMount(ready)
     return <box />
   }
@@ -388,9 +388,9 @@ test("sync v2 preserves live events while snapshot hydration is in flight", asyn
     <TestTuiContexts>
       <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
         <ProjectProvider>
-          <SyncProviderV2>
+          <DataProvider>
             <Probe />
-          </SyncProviderV2>
+          </DataProvider>
         </ProjectProvider>
       </SDKProvider>
     </TestTuiContexts>
@@ -422,14 +422,14 @@ test("sync v2 replaces stale cached rows while preserving in-flight live rows", 
     if (url.pathname === "/api/session/session-1/message") return response.promise
     return undefined
   })
-  let sync!: ReturnType<typeof useSyncV2>
+  let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
     ready = resolve
   })
 
   function Probe() {
-    sync = useSyncV2()
+    sync = useData()
     onMount(ready)
     return <box />
   }
@@ -438,9 +438,9 @@ test("sync v2 replaces stale cached rows while preserving in-flight live rows", 
     <TestTuiContexts>
       <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
         <ProjectProvider>
-          <SyncProviderV2>
+          <DataProvider>
             <Probe />
-          </SyncProviderV2>
+          </DataProvider>
         </ProjectProvider>
       </SDKProvider>
     </TestTuiContexts>
@@ -491,14 +491,14 @@ test("sync v2 preserves snapshot order and metadata for in-flight updates", asyn
     if (url.pathname === "/api/session/session-1/message") return response.promise
     return undefined
   })
-  let sync!: ReturnType<typeof useSyncV2>
+  let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
     ready = resolve
   })
 
   function Probe() {
-    sync = useSyncV2()
+    sync = useData()
     onMount(ready)
     return <box />
   }
@@ -507,9 +507,9 @@ test("sync v2 preserves snapshot order and metadata for in-flight updates", asyn
     <TestTuiContexts>
       <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
         <ProjectProvider>
-          <SyncProviderV2>
+          <DataProvider>
             <Probe />
-          </SyncProviderV2>
+          </DataProvider>
         </ProjectProvider>
       </SDKProvider>
     </TestTuiContexts>

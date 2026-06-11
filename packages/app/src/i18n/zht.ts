@@ -35,6 +35,7 @@ export const dict = {
   "command.session.previous.unseen": "上一個未讀會話",
   "command.session.next.unseen": "下一個未讀會話",
   "command.session.archive": "封存工作階段",
+  "command.project.switch": "切換到專案 {{number}}",
 
   "command.palette": "命令面板",
 

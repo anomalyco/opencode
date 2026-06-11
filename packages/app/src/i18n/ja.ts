@@ -29,6 +29,7 @@ export const dict = {
   "command.session.previous.unseen": "前の未読セッション",
   "command.session.next.unseen": "次の未読セッション",
   "command.session.archive": "セッションをアーカイブ",
+  "command.project.switch": "プロジェクト {{number}} に切り替え",
   "command.palette": "コマンドパレット",
   "command.theme.cycle": "テーマの切り替え",
   "command.theme.set": "テーマを使用: {{theme}}",

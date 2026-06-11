@@ -5,8 +5,10 @@ import { Button } from "@opencode-ai/ui/button"
 import { ContextMenu } from "@opencode-ai/ui/context-menu"
 import { HoverCard } from "@opencode-ai/ui/hover-card"
 import { Icon } from "@opencode-ai/ui/icon"
+import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { useLayout, type LocalProject } from "@/context/layout"
+import { useCommand } from "@/context/command"
 import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useNotification } from "@/context/notification"
@@ -273,9 +275,11 @@ export const SortableProject = (props: {
   mobile?: boolean
   ctx: ProjectSidebarContext
   sortNow: Accessor<number>
+  index: number
 }): JSX.Element => {
   const serverSync = useServerSync()
   const language = useLanguage()
+  const command = useCommand()
   const sortable = createSortable(props.project.worktree)
   const selected = createMemo(() => props.ctx.currentProject()?.worktree === props.project.worktree)
   const workspaces = createMemo(() => props.ctx.workspaceIds(props.project).slice(0, 2))
@@ -342,7 +346,18 @@ export const SortableProject = (props: {
   return (
     // @ts-ignore
     <div use:sortable classList={{ "opacity-30": sortable.isActiveDraggable }}>
-      <Show when={preview() && !selected()} fallback={tile()}>
+      <Show
+        when={preview() && !selected()}
+        fallback={
+          <TooltipKeybind
+            placement="right"
+            title={displayName(props.project)}
+            keybind={props.index < 9 ? command.keybind(`project.switch.${props.index}`) : ""}
+          >
+            {tile()}
+          </TooltipKeybind>
+        }
+      >
         <HoverCard
           open={!state.suppressHover && hoverOpen() && !state.menu}
           openDelay={0}

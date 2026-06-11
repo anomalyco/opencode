@@ -1,6 +1,6 @@
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
-import { useSyncV2 } from "../../context/sync-v2"
+import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
 import { Spinner } from "../../component/spinner"
 import { useTheme } from "../../context/theme"
@@ -44,7 +44,7 @@ function currentSessionID(api: TuiPluginApi) {
 }
 
 function View(props: { api: TuiPluginApi; sessionID: string }) {
-  const sync = useSyncV2()
+  const sync = useData()
   const dimensions = useTerminalDimensions()
   const { theme, syntax, subtleSyntax } = useTheme()
   const messages = createMemo(() => sync.data.messages[props.sessionID] ?? [])
@@ -85,7 +85,7 @@ function View(props: { api: TuiPluginApi; sessionID: string }) {
           >
             <box height={1} />
             <Show when={messages().length === 0}>
-              <MissingData label="Messages" detail="No v2 messages loaded from useSyncV2 yet." />
+              <MissingData label="Messages" detail="No v2 messages loaded from useData yet." />
             </Show>
             <For each={renderedMessages()}>
               {(message, index) => (

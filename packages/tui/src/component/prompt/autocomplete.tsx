@@ -9,7 +9,7 @@ import { useEditorContext } from "../../context/editor"
 import { useProject } from "../../context/project"
 import { useSDK } from "../../context/sdk"
 import { useSync } from "../../context/sync"
-import { useSyncV2 } from "../../context/sync-v2"
+import { useData } from "../../context/data"
 import { getScrollAcceleration } from "../../util/scroll"
 import { useTuiPaths } from "../../context/runtime"
 import { useTuiConfig } from "../../config"
@@ -85,7 +85,7 @@ export function Autocomplete(props: {
   const editor = useEditorContext()
   const sdk = useSDK()
   const sync = useSync()
-  const syncV2 = useSyncV2()
+  const syncV2 = useData()
   const project = useProject()
   const slashes = useCommandSlashes()
   const modeStack = useOpencodeModeStack()

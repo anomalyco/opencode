@@ -40,6 +40,7 @@ export const dict = {
   "command.session.previous.unseen": "上一个未读会话",
   "command.session.next.unseen": "下一个未读会话",
   "command.session.archive": "归档会话",
+  "command.project.switch": "切换到项目 {{number}}",
 
   "command.palette": "命令面板",
 
