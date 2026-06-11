@@ -3,9 +3,11 @@ import { Duration, Effect, Exit, Layer, Scope } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { Connector } from "@opencode-ai/core/connector"
 import { Credential } from "@opencode-ai/core/credential"
+import { EventV2 } from "@opencode-ai/core/event"
 import { it } from "./lib/effect"
 
 const layer = Connector.locationLayer.pipe(
+  Layer.provide(EventV2.defaultLayer),
   Layer.provide(
     Layer.mock(Credential.Service)({
       create: () => Effect.die("unexpected credential creation"),
@@ -22,6 +24,7 @@ function connectionLayer(
   }>,
 ) {
   return Connector.locationLayer.pipe(
+    Layer.provide(EventV2.defaultLayer),
     Layer.provide(
       Layer.mock(Credential.Service)({
         create: (input) =>
@@ -171,6 +174,7 @@ describe("Connector", () => {
     })
     const updated: Array<{ id: Credential.ID; value: Credential.Value }> = []
     const refreshLayer = Connector.locationLayer.pipe(
+      Layer.provide(EventV2.defaultLayer),
       Layer.provide(
         Layer.mock(Credential.Service)({
           get: () =>

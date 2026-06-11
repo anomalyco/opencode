@@ -5,6 +5,8 @@ import { Credential } from "@opencode-ai/core/credential"
 import { Connector } from "@opencode-ai/core/connector"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Global } from "@opencode-ai/core/global"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -20,6 +22,79 @@ function testLayer(directory: string) {
 }
 
 describe("Credential", () => {
+  it.live("imports supported legacy auth.json credentials once", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(tmp.path, "auth.json"),
+              JSON.stringify({
+                openai: {
+                  type: "oauth",
+                  refresh: "refresh",
+                  access: "access",
+                  expires: 123,
+                  accountId: "account",
+                },
+                azure: { type: "api", key: "key", metadata: { resourceName: "resource" } },
+                ignored: { type: "wellknown", key: "TOKEN", token: "secret" },
+              }),
+            ),
+          )
+          const database = Database.layerFromPath(path.join(tmp.path, "credential.db")).pipe(Layer.fresh)
+          const global = Global.layerWith({ data: tmp.path })
+          const importer = Credential.legacyImportLayer.pipe(
+            Layer.provide(database),
+            Layer.provide(FSUtil.defaultLayer),
+            Layer.provide(global),
+          )
+          const credentials = Credential.layer.pipe(
+            Layer.provide(database),
+            Layer.provide(EventV2.defaultLayer),
+            Layer.provideMerge(importer),
+          )
+          const result = yield* Effect.gen(function* () {
+            const service = yield* Credential.Service
+            return yield* service.all()
+          }).pipe(Effect.provide(credentials), Effect.scoped)
+
+          expect(result).toHaveLength(2)
+          expect(result).toContainEqual(
+            expect.objectContaining({
+              connectorID: Connector.ID.make("openai"),
+              methodID: Connector.MethodID.make("chatgpt-browser"),
+              label: "Imported",
+              value: expect.objectContaining({
+                type: "oauth",
+                refresh: "refresh",
+                access: "access",
+                expires: 123,
+                metadata: { accountID: "account" },
+              }),
+            }),
+          )
+          expect(result).toContainEqual(
+            expect.objectContaining({
+              connectorID: Connector.ID.make("azure"),
+              methodID: Connector.MethodID.make("api-key"),
+              value: expect.objectContaining({ type: "key", key: "key", metadata: { resourceName: "resource" } }),
+            }),
+          )
+
+          yield* importer.pipe(Layer.build, Effect.scoped)
+          const after = yield* Effect.gen(function* () {
+            return yield* (yield* Credential.Service).all()
+          }).pipe(Effect.provide(credentials), Effect.scoped)
+          expect(after).toHaveLength(2)
+        }),
+      ),
+    ),
+  )
+
   it.live("emits credential lifecycle events", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

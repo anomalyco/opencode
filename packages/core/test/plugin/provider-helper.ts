@@ -49,6 +49,7 @@ export const catalogLayer = Layer.succeed(
 )
 
 const connectors = Connector.locationLayer.pipe(
+  Layer.provide(EventV2.defaultLayer),
   Layer.provide(Layer.mock(Credential.Service)({ create: () => Effect.die("unexpected credential creation") })),
 )
 

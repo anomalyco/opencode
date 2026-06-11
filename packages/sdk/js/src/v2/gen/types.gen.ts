@@ -55,6 +55,7 @@ export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventFileEdited
+  | EventConnectorUpdated
   | EventPermissionV2Asked
   | EventPermissionV2Replied
   | EventReferenceUpdated
@@ -1270,6 +1271,13 @@ export type GlobalEvent = {
         type: "file.edited"
         properties: {
           file: string
+        }
+      }
+    | {
+        id: string
+        type: "connector.updated"
+        properties: {
+          [key: string]: unknown
         }
       }
     | {
@@ -4945,6 +4953,14 @@ export type EventFileEdited = {
   type: "file.edited"
   properties: {
     file: string
+  }
+}
+
+export type EventConnectorUpdated = {
+  id: string
+  type: "connector.updated"
+  properties: {
+    [key: string]: unknown
   }
 }
 

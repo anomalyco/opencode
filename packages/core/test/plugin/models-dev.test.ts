@@ -30,7 +30,7 @@ const credentials = Credential.layer.pipe(
 const catalog = Catalog.layer.pipe(
   Layer.provide(Layer.mergeAll(events, locationLayer, plugins, policy, credentials)),
 )
-const connectors = Connector.locationLayer.pipe(Layer.provide(credentials))
+const connectors = Connector.locationLayer.pipe(Layer.provide(credentials), Layer.provide(events))
 const layer = Layer.mergeAll(catalog, connectors, credentials, events, locationLayer, plugins)
 const it = testEffect(layer)
 

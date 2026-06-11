@@ -8,6 +8,7 @@ import { withStatics } from "./schema"
 import { State } from "./state"
 import { Identifier } from "./util/identifier"
 import { KeyedMutex } from "./effect/keyed-mutex"
+import { EventV2 } from "./event"
 
 export const ID = ConnectorSchema.ID
 export type ID = ConnectorSchema.ID
@@ -149,6 +150,13 @@ export class AuthorizationError extends Schema.TaggedErrorClass<AuthorizationErr
 
 export type Error = CodeRequiredError | AuthorizationError
 
+export const Event = {
+  Updated: EventV2.define({
+    type: "connector.updated",
+    schema: {},
+  }),
+}
+
 type Entry = {
   connector: Info
   implementations: Map<MethodID, Implementation>
@@ -255,6 +263,7 @@ export const locationLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const credentials = yield* Credential.Service
+    const events = yield* EventV2.Service
     const scope = yield* Scope.Scope
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
     const refreshLocks = KeyedMutex.makeUnsafe<Credential.ID>()
@@ -295,6 +304,7 @@ export const locationLayer = Layer.effect(
           },
         },
       }),
+      finalize: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
     })
 
     const authorize = <A, E, R>(effect: Effect.Effect<A, E, R>) =>

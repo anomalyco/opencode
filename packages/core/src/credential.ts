@@ -1,13 +1,17 @@
 export * as Credential from "./credential"
 
 import { and, asc, eq, ne } from "drizzle-orm"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schema } from "effect"
 import { Database } from "./database/database"
 import { ConnectorSchema } from "./connector/schema"
 import { EventV2 } from "./event"
 import { NonNegativeInt, withStatics } from "./schema"
 import { CredentialTable } from "./credential/sql"
 import { Identifier } from "./util/identifier"
+import { FSUtil } from "./fs-util"
+import { Global } from "./global"
+import { DataMigrationTable } from "./data-migration.sql"
+import path from "path"
 
 export const ID = Schema.String.pipe(
   Schema.brand("Credential.ID"),
@@ -33,6 +37,23 @@ export const Value = Schema.Union([OAuth, Key])
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "Credential.Value" })
 export type Value = Schema.Schema.Type<typeof Value>
+
+const LegacyOAuth = Schema.Struct({
+  type: Schema.Literal("oauth"),
+  refresh: Schema.String,
+  access: Schema.String,
+  expires: NonNegativeInt,
+  accountId: Schema.optional(Schema.String),
+  enterpriseUrl: Schema.optional(Schema.String),
+})
+
+const LegacyKey = Schema.Struct({
+  type: Schema.Literal("api"),
+  key: Schema.String,
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+})
+
+const LegacyValue = Schema.Union([LegacyOAuth, LegacyKey])
 
 export class Info extends Schema.Class<Info>("Credential.Info")({
   id: ID,
@@ -79,6 +100,66 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Credential") {}
+
+export const legacyImportLayer = Layer.effectDiscard(
+  Effect.gen(function* () {
+    const { db } = yield* Database.Service
+    const fs = yield* FSUtil.Service
+    const global = yield* Global.Service
+    const name = "credential.auth-json"
+    if (yield* db.select().from(DataMigrationTable).where(eq(DataMigrationTable.name, name)).get()) return
+    const raw = yield* fs.readJson(path.join(global.data, "auth.json")).pipe(Effect.option)
+    if (Option.isNone(raw) || typeof raw.value !== "object" || raw.value === null || Array.isArray(raw.value)) return
+    const decode = Schema.decodeUnknownOption(LegacyValue)
+    const values = Object.entries(raw.value).flatMap(([connectorID, value]) => {
+      const decoded = decode(value)
+      if (Option.isNone(decoded)) return []
+      const credential = decoded.value
+      const id = ID.create()
+      const connector = ConnectorSchema.ID.make(connectorID.replace(/\/+$/, ""))
+      const methodID = ConnectorSchema.MethodID.make(
+        credential.type === "api" ? "api-key" : connector === ConnectorSchema.ID.make("openai") ? "chatgpt-browser" : "oauth",
+      )
+      const next: Value =
+        credential.type === "api"
+          ? new Key({ type: "key", key: credential.key, metadata: credential.metadata })
+          : new OAuth({
+              type: "oauth",
+              refresh: credential.refresh,
+              access: credential.access,
+              expires: credential.expires,
+              metadata: {
+                ...(credential.accountId ? { accountID: credential.accountId } : {}),
+                ...(credential.enterpriseUrl ? { enterpriseURL: credential.enterpriseUrl } : {}),
+              },
+            })
+      return [{ id, connectorID: connector, methodID, value: next }]
+    })
+    yield* db.transaction((tx) =>
+      Effect.gen(function* () {
+        for (const item of values) {
+          if (
+            yield* tx
+              .select({ id: CredentialTable.id })
+              .from(CredentialTable)
+              .where(eq(CredentialTable.connector_id, item.connectorID))
+              .get()
+          )
+            continue
+          yield* tx.insert(CredentialTable).values({
+            id: item.id,
+            connector_id: item.connectorID,
+            method_id: item.methodID,
+            label: "Imported",
+            value: item.value,
+            active: true,
+          })
+        }
+        yield* tx.insert(DataMigrationTable).values({ name, time_completed: Date.now() }).onConflictDoNothing().run()
+      }),
+    )
+  }).pipe(Effect.orDie),
+)
 
 export const layer = Layer.effect(
   Service,
@@ -235,4 +316,14 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer), Layer.provide(EventV2.defaultLayer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(EventV2.defaultLayer),
+  Layer.provideMerge(
+    legacyImportLayer.pipe(
+      Layer.provide(Database.defaultLayer),
+      Layer.provide(FSUtil.defaultLayer),
+      Layer.provide(Global.defaultLayer),
+    ),
+  ),
+)
