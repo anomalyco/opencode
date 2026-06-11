@@ -1861,6 +1861,7 @@ function InlineTool(props: {
   )
 
   const failed = createMemo(() => Boolean(error() && !denied()))
+  const failure = createMemo(() => toolFailureLabel(props.part.tool))
   const clickable = createMemo(() => Boolean(props.onClick || failed()))
   const fg = createMemo(() => {
     if (props.color) return props.color
@@ -1884,6 +1885,7 @@ function InlineTool(props: {
       errorExpanded={errorExpanded()}
       complete={props.complete}
       pending={props.pending}
+      failure={failure()}
       spinner={props.spinner}
       subagent={props.subagent}
       separateAfter={(id) => id !== undefined && ctx.userMessageIDs().has(id)}
@@ -1915,6 +1917,7 @@ export function InlineToolRow(props: {
   errorExpanded?: boolean
   complete: unknown
   pending: string
+  failure?: string
   spinner?: boolean
   subagent?: boolean
   children: JSX.Element
@@ -1958,7 +1961,7 @@ export function InlineToolRow(props: {
                 ~ {props.pending}
               </text>
             }
-            when={props.complete}
+            when={props.complete || props.failed}
           >
             <box flexDirection="row">
               <text
@@ -1973,7 +1976,7 @@ export function InlineToolRow(props: {
                 fg={props.failed ? props.errorColor : props.color}
                 attributes={props.denied ? TextAttributes.STRIKETHROUGH : undefined}
               >
-                {props.children}
+                {props.failed ? (props.failure ?? props.children) : props.children}
               </text>
             </box>
           </Show>
@@ -2578,6 +2581,15 @@ const toolDisplays = new Set([
 
 export function toolDisplay(tool: string) {
   return toolDisplays.has(tool) ? tool : "generic"
+}
+
+export function toolFailureLabel(tool: string) {
+  if (tool === "apply_patch") return "Patch failed"
+  if (tool === "bash") return "Command failed"
+  if (tool === "webfetch") return "Web fetch failed"
+  if (tool === "websearch") return "Web search failed"
+  if (tool === "todowrite") return "Todo update failed"
+  return `${Locale.titlecase(tool.replaceAll("_", " "))} failed`
 }
 
 function recordValue(value: unknown): Record<string, unknown> | undefined {
