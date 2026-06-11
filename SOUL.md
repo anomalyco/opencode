@@ -4,6 +4,12 @@
 **目標**: AXIORY テラ口座で 24時間 安定稼働し、年 +50% リターン達成。
 複数通貨ペア・複数戦略を**モジュール化**し、ロジック追加・削除を容易にする。
 
+## 現在の作業分担
+
+- `opencode` は主開発、実装量の多い変更、CI 修正、進行中 PR を扱う
+- `codex` は README、運用文書、設計メモ、branch 整理、限定監査などの周辺作業を扱う
+- この分担は現フェーズの運用ルールであり、将来の恒久設計ではない
+
 ## コア設計原則
 
 ### 1. 戦略は相互独立
@@ -19,6 +25,11 @@ Global Drawdown:  -25% (アカウント停止)
 Monthly Drawdown: -20% (戦略一時停止)
 Daily Drawdown:   -3%  (ロット削減)
 Position Risk:    Quarter Kelly sizing
+
+補足:
+- Safety Gate first. Strategy second. ML last.
+- 検証ゲート未通過の戦略、モデル、設定は `NO-GO`
+- AI は仮説生成、実装補助、解析補助に使うが、本番判断は人間承認を必須とする
 
 ### 3. ヒストリカルデータは真実
 - Dukascopy BBO + OFI (XAUUSD, EURUSD 利用可)

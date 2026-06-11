@@ -4,6 +4,13 @@
 
 **IMPORTANT**: Always respond in Japanese. This is the highest priority rule that must be strictly followed at all times.
 
+## Current Tool Split
+
+- 現在の運用分担:
+  - `opencode` は主開発、実装量の多い変更、CI 修正、進行中 PR の作業を担当する
+  - `codex` は README 更新、開発フロー文書、設計メモ整理、branch hygiene、限定監査などの周辺作業を担当する
+- これは現フェーズの運用指針であり、恒久的なアーキテクチャ境界ではない。運用が変われば見直す。
+
 ## エージェント構成
 
 ### 1. **Hermes-Agent (司令塔)** — wag-air (Mac)
@@ -12,7 +19,7 @@
   - 参考URL (QuantConnect, Kaggle, MQL5等) の定期リサーチ
   - 新ロジック検証後の統合判定
   - 3ノード間の同期（Tailscale SSH）
-  - Codeberg へのコミット・PRレビュー指示
+  - GitHub fork へのコミット・PRレビュー指示
 - **使用ツール**: shell scripts, Python orchestration
 - **成果物**: ROADMAP.md, SPRINT.md
 
