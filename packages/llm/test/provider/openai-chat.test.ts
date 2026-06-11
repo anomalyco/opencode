@@ -238,7 +238,7 @@ describe("OpenAI Chat route", () => {
                 type: "content",
                 value: [
                   { type: "text", text: "Image read successfully" },
-                  { type: "media", mediaType: "image/png", data: "AAECAw==", filename: "pixel.png" },
+                  { type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png", name: "pixel.png" },
                 ],
               },
             }),
@@ -285,13 +285,19 @@ describe("OpenAI Chat route", () => {
                   type: "tool-result",
                   id: "call_1",
                   name: "read",
-                  result: { type: "content", value: [{ type: "media", mediaType: "image/png", data: "AAEC" }] },
+                  result: {
+                    type: "content",
+                    value: [{ type: "file", uri: "data:image/png;base64,AAEC", mime: "image/png" }],
+                  },
                 },
                 {
                   type: "tool-result",
                   id: "call_2",
                   name: "read",
-                  result: { type: "content", value: [{ type: "media", mediaType: "image/jpeg", data: "/9j/" }] },
+                  result: {
+                    type: "content",
+                    value: [{ type: "file", uri: "data:image/jpeg;base64,/9j/", mime: "image/jpeg" }],
+                  },
                 },
               ],
             }),
@@ -321,12 +327,18 @@ describe("OpenAI Chat route", () => {
             Message.tool({
               id: "call_1",
               name: "read",
-              result: { type: "content", value: [{ type: "media", mediaType: "image/png", data: "AAEC" }] },
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: "data:image/png;base64,AAEC", mime: "image/png" }],
+              },
             }),
             Message.tool({
               id: "call_2",
               name: "read",
-              result: { type: "content", value: [{ type: "media", mediaType: "image/webp", data: "UklG" }] },
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: "data:image/webp;base64,UklG", mime: "image/webp" }],
+              },
             }),
             Message.system("Inspect both images."),
           ],

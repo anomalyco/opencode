@@ -8,6 +8,8 @@ import { Hash } from "./util/hash"
 import { FSUtil } from "./fs-util"
 import { InstallationChannel, InstallationVersion } from "./installation/version"
 import { EventV2 } from "./event"
+import { LayerNode } from "./effect/layer-node"
+import { httpClient } from "./effect/layer-node-platform"
 
 export const CatalogModelStatus = Schema.Literals(["alpha", "beta", "deprecated"])
 export type CatalogModelStatus = typeof CatalogModelStatus.Type
@@ -54,7 +56,7 @@ export const Model = Schema.Struct({
     Schema.Union([
       Schema.Literal(true),
       Schema.Struct({
-        field: Schema.Literals(["reasoning_content", "reasoning_details"]),
+        field: Schema.Literals(["reasoning", "reasoning_content", "reasoning_details"]),
       }),
     ]),
   ),
@@ -246,5 +248,6 @@ export const defaultLayer = layer.pipe(
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
 )
+export const node = LayerNode.make(layer, [FSUtil.node, EventV2.node, httpClient])
 
 export * as ModelsDev from "./models-dev"

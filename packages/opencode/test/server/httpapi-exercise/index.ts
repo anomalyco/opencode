@@ -670,7 +670,12 @@ const scenarios: Scenario[] = [
     .at((ctx) => ({ path: "/api/fs/read?path=hello.txt", headers: ctx.headers() }))
     .json(200, locationData(object)),
   http.protected.get("/api/fs/list", "v2.fs.list").json(200, locationData(array)),
-  http.protected.get("/reference", "reference.list").json(200, array),
+  http.protected
+    .get("/api/fs/find", "v2.fs.find")
+    .seeded((ctx) => ctx.file("hello.txt", "hello\n"))
+    .at((ctx) => ({ path: "/api/fs/find?query=hello&type=file", headers: ctx.headers() }))
+    .json(200, locationData(array)),
+  http.protected.get("/api/reference", "v2.reference.list").json(200, object),
   http.protected
     .get("/api/provider/{providerID}", "v2.provider.get")
     .at((ctx) => ({ path: route("/api/provider/{providerID}", { providerID: "missing" }), headers: ctx.headers() }))

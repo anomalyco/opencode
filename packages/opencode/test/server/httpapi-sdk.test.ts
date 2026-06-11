@@ -390,10 +390,13 @@ describe("HttpApi SDK", () => {
           onRequest: (value) => (request = value),
         })
         const file = yield* call(() => sdk.v2.fs.read({ path: "hello.txt" }))
+        const found = yield* call(() => sdk.v2.fs.find({ query: "hello", type: "file" }))
         const url = new URL(request!.url)
 
         expect(file.response.status).toBe(200)
         expect(file.data).toMatchObject({ data: { content: "hello" } })
+        expect(found.response.status).toBe(200)
+        expect(found.data).toMatchObject({ data: [{ path: "hello.txt", type: "file" }] })
         expect(url.searchParams.get("directory")).toBe(directory)
         expect(url.searchParams.get("workspace")).toBe(workspaceID)
         expect(url.searchParams.get("location[directory]")).toBe(directory)

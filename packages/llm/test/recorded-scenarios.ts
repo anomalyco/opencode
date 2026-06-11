@@ -388,7 +388,7 @@ const runImageToolResultScenario = (context: GoldenScenarioContext) =>
             resultType: "content",
             result: [
               { type: "text", text: "Image read successfully" },
-              { type: "media", mediaType: "image/png", data: image },
+              { type: "file", uri: `data:image/png;base64,${image}`, mime: "image/png" },
             ],
           }),
         ],
