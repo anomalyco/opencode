@@ -1,56 +1,15 @@
 import path from "path"
 import { describe, expect } from "bun:test"
-import { produce } from "immer"
-import { Effect, Fiber, Layer, Option, Stream } from "effect"
+import { Effect, Fiber, Layer, Stream } from "effect"
 import { Credential } from "@opencode-ai/core/credential"
 import { Connector } from "@opencode-ai/core/connector"
-import { Catalog } from "@opencode-ai/core/catalog"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
 import { PluginV2 } from "@opencode-ai/core/plugin"
-import { CredentialPlugin } from "@opencode-ai/core/plugin/credential"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { ProviderV2 } from "@opencode-ai/core/provider"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(PluginV2.locationLayer.pipe(Layer.provide(EventV2.defaultLayer)))
-
-function context(
-  records: { provider: ProviderV2.Info; models: Map<ModelV2.ID, ModelV2.Info> }[],
-  updates: Array<{ id: ProviderV2.ID; enabled: ProviderV2.Info["enabled"]; apiKey?: string }>,
-): Catalog.Editor {
-  return {
-    provider: {
-      list: () => records,
-      get: (providerID) => records.find((item) => item.provider.id === providerID),
-      update: (providerID, fn) => {
-        const record = records.find((item) => item.provider.id === providerID)
-        const provider = produce(record?.provider ?? ProviderV2.Info.empty(providerID), fn)
-        if (record) record.provider = provider
-        else records.push({ provider, models: new Map<ModelV2.ID, ModelV2.Info>() })
-        updates.push({
-          id: providerID,
-          enabled: provider.enabled,
-          apiKey: typeof provider.request.body.apiKey === "string" ? provider.request.body.apiKey : undefined,
-        })
-      },
-      remove: (providerID) => {
-        const index = records.findIndex((item) => item.provider.id === providerID)
-        if (index !== -1) records.splice(index, 1)
-      },
-    },
-    model: {
-      get: () => undefined,
-      update: () => {},
-      remove: () => {},
-      default: {
-        get: () => undefined,
-        set: () => {},
-      },
-    },
-  }
-}
 
 function testLayer(directory: string) {
   return Credential.layer.pipe(
@@ -170,111 +129,4 @@ describe("Credential", () => {
     ),
   )
 
-  it.live("credential plugin refreshes providers on credential lifecycle events", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((tmp) =>
-        Effect.gen(function* () {
-          const credentials = yield* Credential.Service
-          const plugin = yield* PluginV2.Service
-          const records = [
-            {
-              provider: ProviderV2.Info.empty(ProviderV2.ID.make("provider")),
-              models: new Map<ModelV2.ID, ModelV2.Info>(),
-            },
-          ]
-          const updates: Array<{ id: ProviderV2.ID; enabled: ProviderV2.Info["enabled"]; apiKey?: string }> = []
-          const catalog = Catalog.Service.of({
-            transform: () => Effect.die("unexpected catalog.transform"),
-            provider: {
-              get: () => Effect.die("unexpected provider.get"),
-              all: () => Effect.succeed([]),
-              available: () => Effect.succeed([]),
-            },
-            model: {
-              get: () => Effect.die("unexpected model.get"),
-              all: () => Effect.succeed([]),
-              available: () => Effect.succeed([]),
-              default: () => Effect.succeed(Option.none<ModelV2.Info>()),
-              small: () => Effect.succeed(Option.none<ModelV2.Info>()),
-            },
-          })
-
-          const eventSvc = yield* EventV2.Service
-          yield* plugin.add({
-            ...CredentialPlugin,
-            effect: CredentialPlugin.effect.pipe(
-              Effect.provideService(Credential.Service, credentials),
-              Effect.provideService(Catalog.Service, catalog),
-              Effect.provideService(EventV2.Service, eventSvc),
-              Effect.provideService(PluginV2.Service, plugin),
-            ),
-          })
-          yield* Effect.yieldNow
-
-          const first = yield* credentials.create({
-            connectorID: Connector.ID.make("provider"),
-            methodID: Connector.MethodID.make("key"),
-            value: new Credential.Key({ type: "key", key: "first-key" }),
-          })
-          expect(first).toBeDefined()
-          if (!first) return
-          yield* plugin.trigger("catalog.transform", context(records, updates), {})
-          expect(updates).toEqual([
-            {
-              id: ProviderV2.ID.make("provider"),
-              enabled: { via: "credential", connector: Connector.ID.make("provider") },
-              apiKey: "first-key",
-            },
-          ])
-
-          updates.length = 0
-          const second = yield* credentials.create({
-            connectorID: Connector.ID.make("provider"),
-            methodID: Connector.MethodID.make("key"),
-            value: new Credential.Key({ type: "key", key: "second-key" }),
-          })
-          expect(second).toBeDefined()
-          if (!second) return
-          yield* plugin.trigger("catalog.transform", context(records, updates), {})
-          expect(updates).toEqual([
-            {
-              id: ProviderV2.ID.make("provider"),
-              enabled: { via: "credential", connector: Connector.ID.make("provider") },
-              apiKey: "second-key",
-            },
-          ])
-
-          updates.length = 0
-          yield* credentials.activate(first.id)
-          yield* plugin.trigger("catalog.transform", context(records, updates), {})
-          expect(updates).toEqual([
-            {
-              id: ProviderV2.ID.make("provider"),
-              enabled: { via: "credential", connector: Connector.ID.make("provider") },
-              apiKey: "first-key",
-            },
-          ])
-
-          updates.length = 0
-          yield* credentials.remove(first.id)
-          yield* plugin.trigger("catalog.transform", context(records, updates), {})
-          expect(updates).toEqual([
-            {
-              id: ProviderV2.ID.make("provider"),
-              enabled: { via: "credential", connector: Connector.ID.make("provider") },
-              apiKey: "second-key",
-            },
-          ])
-
-          updates.length = 0
-          yield* credentials.remove(second.id)
-          yield* plugin.trigger("catalog.transform", context(records, updates), {})
-          expect(updates).toEqual([])
-        }).pipe(Effect.provide(testLayer(tmp.path))),
-      ),
-    ),
-  )
 })

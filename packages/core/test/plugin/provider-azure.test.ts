@@ -7,7 +7,6 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { PluginV2 } from "@opencode-ai/core/plugin"
-import { CredentialPlugin } from "@opencode-ai/core/plugin/credential"
 import { AzurePlugin } from "@opencode-ai/core/plugin/provider/azure"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -83,7 +82,6 @@ describe("AzurePlugin", () => {
           const plugin = yield* PluginV2.Service
           const credentials = yield* Credential.Service
           const catalog = yield* Catalog.Service
-          const events = yield* EventV2.Service
           yield* credentials.create({
             connectorID: Connector.ID.make("azure"),
             methodID: Connector.MethodID.make("api-key"),
@@ -92,15 +90,6 @@ describe("AzurePlugin", () => {
               key: "key",
               metadata: { resourceName: "from-account" },
             }),
-          })
-          yield* plugin.add({
-            ...CredentialPlugin,
-            effect: CredentialPlugin.effect.pipe(
-              Effect.provideService(Credential.Service, credentials),
-              Effect.provideService(Catalog.Service, catalog),
-              Effect.provideService(EventV2.Service, events),
-              Effect.provideService(PluginV2.Service, plugin),
-            ),
           })
           yield* plugin.add(AzurePlugin)
           const transform = yield* catalog.transform()

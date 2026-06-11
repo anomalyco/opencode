@@ -6,6 +6,9 @@ export type ClientOptions = {
 
 export type Event =
   | EventModelsDevRefreshed
+  | EventCredentialAdded
+  | EventCredentialRemoved
+  | EventCredentialSwitched
   | EventPluginAdded
   | EventCatalogModelUpdated
   | EventSessionCreated
@@ -52,9 +55,6 @@ export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventFileEdited
-  | EventCredentialAdded
-  | EventCredentialRemoved
-  | EventCredentialSwitched
   | EventPermissionV2Asked
   | EventPermissionV2Replied
   | EventReferenceUpdated
@@ -732,6 +732,29 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "credential.added"
+        properties: {
+          credential: CredentialInfo
+        }
+      }
+    | {
+        id: string
+        type: "credential.removed"
+        properties: {
+          credential: CredentialInfo
+        }
+      }
+    | {
+        id: string
+        type: "credential.switched"
+        properties: {
+          connectorID: string
+          from?: string
+          to?: string
+        }
+      }
+    | {
+        id: string
         type: "plugin.added"
         properties: {
           id: string
@@ -1247,29 +1270,6 @@ export type GlobalEvent = {
         type: "file.edited"
         properties: {
           file: string
-        }
-      }
-    | {
-        id: string
-        type: "credential.added"
-        properties: {
-          credential: CredentialInfo
-        }
-      }
-    | {
-        id: string
-        type: "credential.removed"
-        properties: {
-          credential: CredentialInfo
-        }
-      }
-    | {
-        id: string
-        type: "credential.switched"
-        properties: {
-          connectorID: string
-          from?: string
-          to?: string
         }
       }
     | {
@@ -2838,6 +2838,34 @@ export type MoveSessionDestination = {
   directory: string
 }
 
+export type CredentialOAuth = {
+  type: "oauth"
+  refresh: string
+  access: string
+  expires: number
+  metadata?: {
+    [key: string]: string
+  }
+}
+
+export type CredentialKey = {
+  type: "key"
+  key: string
+  metadata?: {
+    [key: string]: string
+  }
+}
+
+export type CredentialValue = CredentialOAuth | CredentialKey
+
+export type CredentialInfo = {
+  id: string
+  connectorID: string
+  methodID: string
+  label: string
+  value: CredentialValue
+}
+
 export type ModelV2Info = {
   id: string
   providerID: string
@@ -2986,33 +3014,6 @@ export type SessionNextRetryError = {
   metadata?: {
     [key: string]: string
   }
-}
-
-export type CredentialOAuth = {
-  type: "oauth"
-  refresh: string
-  access: string
-  expires: number
-  metadata?: {
-    [key: string]: string
-  }
-}
-
-export type CredentialKey = {
-  type: "key"
-  key: string
-  metadata?: {
-    [key: string]: string
-  }
-}
-
-export type CredentialValue = CredentialOAuth | CredentialKey
-
-export type CredentialInfo = {
-  id: string
-  connectorID: string
-  label: string
-  value: CredentialValue
 }
 
 export type PermissionV2Source = {
@@ -4066,7 +4067,7 @@ export type ProviderV2Info = {
       }
     | {
         via: "credential"
-        connector: string
+        credentialID: string
       }
     | {
         via: "custom"
@@ -4257,6 +4258,32 @@ export type EventModelsDevRefreshed = {
   type: "models-dev.refreshed"
   properties: {
     [key: string]: unknown
+  }
+}
+
+export type EventCredentialAdded = {
+  id: string
+  type: "credential.added"
+  properties: {
+    credential: CredentialInfo
+  }
+}
+
+export type EventCredentialRemoved = {
+  id: string
+  type: "credential.removed"
+  properties: {
+    credential: CredentialInfo
+  }
+}
+
+export type EventCredentialSwitched = {
+  id: string
+  type: "credential.switched"
+  properties: {
+    connectorID: string
+    from?: string
+    to?: string
   }
 }
 
@@ -4918,32 +4945,6 @@ export type EventFileEdited = {
   type: "file.edited"
   properties: {
     file: string
-  }
-}
-
-export type EventCredentialAdded = {
-  id: string
-  type: "credential.added"
-  properties: {
-    credential: CredentialInfo
-  }
-}
-
-export type EventCredentialRemoved = {
-  id: string
-  type: "credential.removed"
-  properties: {
-    credential: CredentialInfo
-  }
-}
-
-export type EventCredentialSwitched = {
-  id: string
-  type: "credential.switched"
-  properties: {
-    connectorID: string
-    from?: string
-    to?: string
   }
 }
 

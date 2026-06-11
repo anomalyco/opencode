@@ -8,7 +8,6 @@ import { Location } from "@opencode-ai/core/location"
 import { EventV2 } from "@opencode-ai/core/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
-import { CredentialPlugin } from "@opencode-ai/core/plugin/credential"
 import { CloudflareWorkersAIPlugin } from "@opencode-ai/core/plugin/provider/cloudflare-workers-ai"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -137,7 +136,6 @@ describe("CloudflareWorkersAIPlugin", () => {
           const plugin = yield* PluginV2.Service
           const credentials = yield* Credential.Service
           const catalog = yield* Catalog.Service
-          const events = yield* EventV2.Service
           yield* credentials.create({
             connectorID: Connector.ID.make("cloudflare-workers-ai"),
             methodID: Connector.MethodID.make("api-key"),
@@ -147,15 +145,6 @@ describe("CloudflareWorkersAIPlugin", () => {
               metadata: { accountId: "account-acct" },
             }),
           })
-          yield* plugin.add({
-            ...CredentialPlugin,
-            effect: CredentialPlugin.effect.pipe(
-              Effect.provideService(Credential.Service, credentials),
-              Effect.provideService(Catalog.Service, catalog),
-              Effect.provideService(EventV2.Service, events),
-              Effect.provideService(PluginV2.Service, plugin),
-            ),
-          })
           yield* plugin.add(CloudflareWorkersAIPlugin)
           const transform = yield* catalog.transform()
           yield* transform((catalog) =>
@@ -163,10 +152,9 @@ describe("CloudflareWorkersAIPlugin", () => {
               provider.api = { type: "aisdk", package: "test-provider" }
             }),
           )
-          expect((yield* catalog.provider.get(ProviderV2.ID.make("cloudflare-workers-ai"))).api).toEqual({
-            type: "aisdk",
-            package: "test-provider",
-            url: "https://api.cloudflare.com/client/v4/accounts/account-acct/ai/v1",
+          expect((yield* catalog.provider.get(ProviderV2.ID.make("cloudflare-workers-ai"))).request.body).toMatchObject({
+            apiKey: "account-key",
+            accountId: "account-acct",
           })
         }),
     ),

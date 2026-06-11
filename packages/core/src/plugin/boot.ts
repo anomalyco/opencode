@@ -18,7 +18,6 @@ import { Location } from "../location"
 import { ModelsDev } from "../models-dev"
 import { Npm } from "../npm"
 import { PluginV2 } from "../plugin"
-import { CredentialPlugin } from "./credential"
 import { AgentPlugin } from "./agent"
 import { CommandPlugin } from "./command"
 import { SkillPlugin } from "./skill"
@@ -101,7 +100,6 @@ export const layer = Layer.effect(
 
     const boot = Effect.gen(function* () {
       yield* add(EnvPlugin)
-      yield* add(CredentialPlugin)
       yield* add(AgentPlugin.Plugin)
       yield* add(CommandPlugin.Plugin)
       yield* add(SkillPlugin.Plugin)

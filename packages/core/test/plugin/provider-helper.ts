@@ -55,6 +55,7 @@ const connectors = Connector.locationLayer.pipe(
 export const it = testEffect(
   Catalog.locationLayer.pipe(
     Layer.provideMerge(connectors),
+    Layer.provideMerge(Layer.mock(Credential.Service)({ activeAll: () => Effect.succeed(new Map()) })),
     Layer.provideMerge(EventV2.defaultLayer),
     Layer.provideMerge(locationLayer),
     Layer.provideMerge(npmLayer),

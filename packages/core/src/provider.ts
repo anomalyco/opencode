@@ -2,6 +2,7 @@ export * as ProviderV2 from "./provider"
 
 import { withStatics } from "./schema"
 import { Schema } from "effect"
+import { Credential } from "./credential"
 
 export const ID = Schema.String.pipe(
   Schema.brand("ProviderV2.ID"),
@@ -55,7 +56,7 @@ export class Info extends Schema.Class<Info>("ProviderV2.Info")({
     }),
     Schema.Struct({
       via: Schema.Literal("credential"),
-      connector: Schema.String,
+      credentialID: Credential.ID,
     }),
     Schema.Struct({
       via: Schema.Literal("custom"),

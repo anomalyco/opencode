@@ -25,14 +25,6 @@ type HookSpec = {
     input: Catalog.Editor
     output: {}
   }
-  "credential.switched": {
-    input: {
-      connectorID: import("./connector").Connector.ID
-      from?: import("./credential").Credential.ID
-      to?: import("./credential").Credential.ID
-    }
-    output: {}
-  }
   "aisdk.language": {
     input: {
       model: ModelV2.Info
