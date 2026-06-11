@@ -140,6 +140,7 @@ describe("CloudflareWorkersAIPlugin", () => {
           const events = yield* EventV2.Service
           yield* credentials.create({
             connectorID: Connector.ID.make("cloudflare-workers-ai"),
+            methodID: Connector.MethodID.make("api-key"),
             value: new Credential.Key({
               type: "key",
               key: "account-key",

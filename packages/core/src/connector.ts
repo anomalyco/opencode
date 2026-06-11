@@ -7,6 +7,7 @@ import { ConnectorSchema } from "./connector/schema"
 import { withStatics } from "./schema"
 import { State } from "./state"
 import { Identifier } from "./util/identifier"
+import { KeyedMutex } from "./effect/keyed-mutex"
 
 export const ID = ConnectorSchema.ID
 export type ID = ConnectorSchema.ID
@@ -95,6 +96,7 @@ export interface OAuthImplementation {
   readonly connectorID: ID
   readonly method: OAuthMethod
   readonly authorize: (inputs: Inputs) => Effect.Effect<OAuthAuthorization, unknown, Scope.Scope>
+  readonly refresh?: (credential: Credential.OAuth) => Effect.Effect<Credential.OAuth, unknown>
 }
 
 export interface KeyImplementation {
@@ -176,6 +178,8 @@ export interface Interface {
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
   /** Returns all connectors with their serializable login methods. */
   readonly list: () => Effect.Effect<Info[]>
+  /** Refreshes an OAuth credential with its originating method. */
+  readonly refresh: (credentialID: Credential.ID) => Effect.Effect<void, AuthorizationError>
   readonly connect: {
     /** Runs a key method and stores the resulting credential. */
     readonly key: (input: {
@@ -234,6 +238,7 @@ type PendingAttempt = {
   completing: boolean
   authorization: OAuthAuthorization
   connectorID: ID
+  methodID: MethodID
   label?: string
   scope: Scope.Closeable
   time: AttemptTime
@@ -252,6 +257,7 @@ export const locationLayer = Layer.effect(
     const credentials = yield* Credential.Service
     const scope = yield* Scope.Scope
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
+    const refreshLocks = KeyedMutex.makeUnsafe<Credential.ID>()
     const state = State.create<Data, Editor>({
       initial: () => ({ connectors: new Map<ID, Entry>() }),
       editor: (draft) => ({
@@ -317,7 +323,12 @@ export const locationLayer = Layer.effect(
       })
       if (!result) return
       if (Exit.isSuccess(exit)) {
-        yield* credentials.create({ connectorID: result.connectorID, label: result.label, value: exit.value })
+        yield* credentials.create({
+          connectorID: result.connectorID,
+          methodID: result.methodID,
+          label: result.label,
+          value: exit.value,
+        })
       }
       yield* close(result.scope)
     })
@@ -353,6 +364,27 @@ export const locationLayer = Layer.effect(
           a.name.localeCompare(b.name),
         )
       }),
+      refresh: Effect.fn("Connector.refresh")(function* (credentialID) {
+        yield* refreshLocks.withLock(credentialID)(
+          Effect.gen(function* () {
+            const credential = yield* credentials.get(credentialID)
+            if (!credential || credential.value.type !== "oauth") {
+              return yield* Effect.die(`OAuth credential not found: ${credentialID}`)
+            }
+            const implementation = state
+              .get()
+              .connectors.get(credential.connectorID)
+              ?.implementations.get(credential.methodID)
+            if (!implementation || !isOAuthImplementation(implementation) || !implementation.refresh) {
+              return yield* Effect.die(
+                `OAuth refresh method not found: ${credential.connectorID}/${credential.methodID}`,
+              )
+            }
+            const value = yield* authorize(implementation.refresh(credential.value))
+            yield* credentials.update(credential.id, { value })
+          }),
+        )
+      }),
       connect: {
         key: Effect.fn("Connector.connect.key")(function* (input) {
           const method = state.get().connectors.get(input.connectorID)?.implementations.get(input.methodID)
@@ -360,7 +392,12 @@ export const locationLayer = Layer.effect(
             return yield* Effect.die(`Key method not found: ${input.connectorID}/${input.methodID}`)
           }
           const value = yield* authorize(method.authorize(input.key, input.inputs))
-          yield* credentials.create({ connectorID: input.connectorID, label: input.label, value })
+          yield* credentials.create({
+            connectorID: input.connectorID,
+            methodID: input.methodID,
+            label: input.label,
+            value,
+          })
         }),
         oauth: {
           begin: Effect.fn("Connector.connect.oauth.begin")(function* (input) {
@@ -382,6 +419,7 @@ export const locationLayer = Layer.effect(
                 completing: authorization.mode === "auto",
                 authorization,
                 connectorID: input.connectorID,
+                methodID: input.methodID,
                 label: input.label,
                 scope: attemptScope,
                 time,

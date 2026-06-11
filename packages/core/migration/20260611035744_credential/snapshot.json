@@ -398,6 +398,16 @@
       "autoincrement": false,
       "default": null,
       "generated": null,
+      "name": "method_id",
+      "entityType": "columns",
+      "table": "credential"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
       "name": "label",
       "entityType": "columns",
       "table": "credential"

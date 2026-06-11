@@ -37,6 +37,7 @@ export type Value = Schema.Schema.Type<typeof Value>
 export class Info extends Schema.Class<Info>("Credential.Info")({
   id: ID,
   connectorID: ConnectorSchema.ID,
+  methodID: ConnectorSchema.MethodID,
   label: Schema.String,
   value: Value,
 }) {}
@@ -65,6 +66,7 @@ export interface Interface {
   readonly all: () => Effect.Effect<Info[]>
   readonly create: (input: {
     connectorID: ConnectorSchema.ID
+    methodID: ConnectorSchema.MethodID
     value: Value
     label?: string
   }) => Effect.Effect<Info>
@@ -88,6 +90,7 @@ export const layer = Layer.effect(
       new Info({
         id: row.id,
         connectorID: row.connector_id,
+        methodID: row.method_id,
         label: row.label,
         value: decodeValue(row.value),
       })
@@ -154,6 +157,7 @@ export const layer = Layer.effect(
         const credential = new Info({
           id: ID.create(),
           connectorID: input.connectorID,
+          methodID: input.methodID,
           label: input.label ?? "default",
           value: input.value,
         })
@@ -175,6 +179,7 @@ export const layer = Layer.effect(
                 .values({
                   id: credential.id,
                   connector_id: credential.connectorID,
+                  method_id: credential.methodID,
                   label: credential.label,
                   value: credential.value,
                   active: true,

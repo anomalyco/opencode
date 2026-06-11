@@ -84,6 +84,7 @@ describe("Credential", () => {
 
           const first = yield* credentials.create({
             connectorID: Connector.ID.make("lifecycle"),
+            methodID: Connector.MethodID.make("key"),
             value: new Credential.Key({ type: "key", key: "raw-key" }),
           })
           expect(first).toBeDefined()
@@ -100,6 +101,7 @@ describe("Credential", () => {
 
           const second = yield* credentials.create({
             connectorID: Connector.ID.make("lifecycle"),
+            methodID: Connector.MethodID.make("key"),
             value: new Credential.Key({ type: "key", key: "second-key" }),
           })
           expect(second).toBeDefined()
@@ -138,14 +140,17 @@ describe("Credential", () => {
 
           const first = yield* credentials.create({
             connectorID: Connector.ID.make("switch"),
+            methodID: Connector.MethodID.make("key"),
             value: new Credential.Key({ type: "key", key: "first-key" }),
           })
           const second = yield* credentials.create({
             connectorID: Connector.ID.make("switch"),
+            methodID: Connector.MethodID.make("key"),
             value: new Credential.Key({ type: "key", key: "second-key" }),
           })
           const third = yield* credentials.create({
             connectorID: Connector.ID.make("switch"),
+            methodID: Connector.MethodID.make("key"),
             value: new Credential.Key({ type: "key", key: "third-key" }),
           })
 
@@ -211,6 +216,7 @@ describe("Credential", () => {
 
           const first = yield* credentials.create({
             connectorID: Connector.ID.make("provider"),
+            methodID: Connector.MethodID.make("key"),
             value: new Credential.Key({ type: "key", key: "first-key" }),
           })
           expect(first).toBeDefined()
@@ -227,6 +233,7 @@ describe("Credential", () => {
           updates.length = 0
           const second = yield* credentials.create({
             connectorID: Connector.ID.make("provider"),
+            methodID: Connector.MethodID.make("key"),
             value: new Credential.Key({ type: "key", key: "second-key" }),
           })
           expect(second).toBeDefined()

@@ -86,6 +86,7 @@ describe("AzurePlugin", () => {
           const events = yield* EventV2.Service
           yield* credentials.create({
             connectorID: Connector.ID.make("azure"),
+            methodID: Connector.MethodID.make("api-key"),
             value: new Credential.Key({
               type: "key",
               key: "key",

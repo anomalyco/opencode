@@ -81,6 +81,7 @@ export const browser = {
         ),
       }
     }),
+  refresh: (value) => refresh(value),
 } satisfies Connector.OAuthImplementation
 
 export const headless = {
@@ -140,6 +141,7 @@ export const headless = {
         }),
       }
     }),
+  refresh: (value) => refresh(value),
 } satisfies Connector.OAuthImplementation
 
 function headers(contentType: string) {
@@ -158,6 +160,26 @@ function exchange(code: string, redirect: string, pkce: Pkce) {
       code_verifier: pkce.verifier,
     }).toString(),
   })
+}
+
+function refresh(value: Credential.OAuth) {
+  return request<TokenResponse>(`${issuer}/oauth/token`, {
+    method: "POST",
+    headers: headers("application/x-www-form-urlencoded"),
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: value.refresh,
+      client_id: clientID,
+    }).toString(),
+  }).pipe(
+    Effect.map((tokens) => {
+      const next = credential(tokens)
+      return new Credential.OAuth({
+        ...next,
+        metadata: next.metadata ?? value.metadata,
+      })
+    }),
+  )
 }
 
 function request<A>(url: string, init: RequestInit) {

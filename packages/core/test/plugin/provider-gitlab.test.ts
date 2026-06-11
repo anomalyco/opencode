@@ -177,6 +177,7 @@ describe("GitLabPlugin", () => {
           const events = yield* EventV2.Service
           yield* credentials.create({
             connectorID: Connector.ID.make("gitlab"),
+            methodID: Connector.MethodID.make("api-key"),
             value: new Credential.Key({ type: "key", key: "account-token" }),
           })
           yield* plugin.add({
@@ -220,6 +221,7 @@ describe("GitLabPlugin", () => {
           const events = yield* EventV2.Service
           yield* credentials.create({
             connectorID: Connector.ID.make("gitlab"),
+            methodID: Connector.MethodID.make("oauth"),
             value: new Credential.OAuth({
               type: "oauth",
               refresh: "refresh-token",

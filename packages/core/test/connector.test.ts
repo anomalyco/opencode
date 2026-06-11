@@ -13,7 +13,14 @@ const layer = Connector.locationLayer.pipe(
   ),
 )
 
-function connectionLayer(created: Array<{ connectorID: Connector.ID; label?: string; value: Credential.Value }>) {
+function connectionLayer(
+  created: Array<{
+    connectorID: Connector.ID
+    methodID: Connector.MethodID
+    label?: string
+    value: Credential.Value
+  }>,
+) {
   return Connector.locationLayer.pipe(
     Layer.provide(
       Layer.mock(Credential.Service)({
@@ -111,7 +118,12 @@ describe("Connector", () => {
   )
 
   it.effect("connects with a key and stores the credential", () => {
-    const created: Array<{ connectorID: Connector.ID; label?: string; value: Credential.Value }> = []
+    const created: Array<{
+      connectorID: Connector.ID
+      methodID: Connector.MethodID
+      label?: string
+      value: Credential.Value
+    }> = []
     return Effect.gen(function* () {
       const connectors = yield* Connector.Service
       const connectorID = Connector.ID.make("openai")
@@ -138,6 +150,7 @@ describe("Connector", () => {
       expect(created).toEqual([
         {
           connectorID,
+          methodID,
           label: "Work",
           value: new Credential.Key({ type: "key", key: "secret", metadata: { organization: "acme" } }),
         },
@@ -145,8 +158,82 @@ describe("Connector", () => {
     }).pipe(Effect.provide(connectionLayer(created)))
   })
 
+  it.effect("refreshes OAuth with the originating method", () => {
+    const connectorID = Connector.ID.make("openai")
+    const methodID = Connector.MethodID.make("chatgpt")
+    const credentialID = Credential.ID.create()
+    const current = new Credential.OAuth({
+      type: "oauth",
+      access: "old-access",
+      refresh: "old-refresh",
+      expires: 1,
+      metadata: { accountID: "account" },
+    })
+    const updated: Array<{ id: Credential.ID; value: Credential.Value }> = []
+    const refreshLayer = Connector.locationLayer.pipe(
+      Layer.provide(
+        Layer.mock(Credential.Service)({
+          get: () =>
+            Effect.succeed(
+              new Credential.Info({
+                id: credentialID,
+                connectorID,
+                methodID,
+                label: "Personal",
+                value: current,
+              }),
+            ),
+          update: (id, input) =>
+            Effect.sync(() => {
+              if (input.value) updated.push({ id, value: input.value })
+            }),
+        }),
+      ),
+    )
+
+    return Effect.gen(function* () {
+      const connectors = yield* Connector.Service
+      yield* connectors.update((editor) =>
+        editor.method.update({
+          connectorID,
+          method: new Connector.OAuthMethod({ id: methodID, type: "oauth", label: "ChatGPT" }),
+          authorize: () => Effect.die("unexpected authorization"),
+          refresh: (value) =>
+            Effect.succeed(
+              new Credential.OAuth({
+                type: "oauth",
+                access: "new-access",
+                refresh: "new-refresh",
+                expires: 2,
+                metadata: value.metadata,
+              }),
+            ),
+        }),
+      )
+
+      yield* connectors.refresh(credentialID)
+      expect(updated).toEqual([
+        {
+          id: credentialID,
+          value: new Credential.OAuth({
+            type: "oauth",
+            access: "new-access",
+            refresh: "new-refresh",
+            expires: 2,
+            metadata: { accountID: "account" },
+          }),
+        },
+      ])
+    }).pipe(Effect.provide(refreshLayer))
+  })
+
   it.effect("completes code OAuth once and stores the credential", () => {
-    const created: Array<{ connectorID: Connector.ID; label?: string; value: Credential.Value }> = []
+    const created: Array<{
+      connectorID: Connector.ID
+      methodID: Connector.MethodID
+      label?: string
+      value: Credential.Value
+    }> = []
     return Effect.gen(function* () {
       const connectors = yield* Connector.Service
       const connectorID = Connector.ID.make("openai")
@@ -180,6 +267,7 @@ describe("Connector", () => {
 
       expect(created[0]).toEqual({
         connectorID,
+        methodID,
         label: "Personal",
         value: new Credential.OAuth({
           type: "oauth",
@@ -193,7 +281,12 @@ describe("Connector", () => {
   })
 
   it.effect("keeps code attempts open when the code is missing and closes them on cancel", () => {
-    const created: Array<{ connectorID: Connector.ID; label?: string; value: Credential.Value }> = []
+    const created: Array<{
+      connectorID: Connector.ID
+      methodID: Connector.MethodID
+      label?: string
+      value: Credential.Value
+    }> = []
     return Effect.gen(function* () {
       const connectors = yield* Connector.Service
       const connectorID = Connector.ID.make("openai")
@@ -227,7 +320,12 @@ describe("Connector", () => {
   })
 
   it.effect("completes auto OAuth in the background", () => {
-    const created: Array<{ connectorID: Connector.ID; label?: string; value: Credential.Value }> = []
+    const created: Array<{
+      connectorID: Connector.ID
+      methodID: Connector.MethodID
+      label?: string
+      value: Credential.Value
+    }> = []
     return Effect.gen(function* () {
       const connectors = yield* Connector.Service
       const connectorID = Connector.ID.make("openai")
@@ -259,7 +357,12 @@ describe("Connector", () => {
   })
 
   it.effect("expires abandoned OAuth attempts", () => {
-    const created: Array<{ connectorID: Connector.ID; label?: string; value: Credential.Value }> = []
+    const created: Array<{
+      connectorID: Connector.ID
+      methodID: Connector.MethodID
+      label?: string
+      value: Credential.Value
+    }> = []
     return Effect.gen(function* () {
       const connectors = yield* Connector.Service
       const connectorID = Connector.ID.make("openai")
