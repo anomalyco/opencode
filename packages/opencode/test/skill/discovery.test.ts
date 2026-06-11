@@ -1,5 +1,5 @@
 import { describe, expect, beforeAll, afterAll } from "bun:test"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, Layer } from "effect"
 import { Discovery } from "../../src/skill/discovery"
 import { Global } from "@opencode-ai/core/global"
@@ -14,7 +14,7 @@ let downloadCount = 0
 
 const fixturePath = path.join(import.meta.dir, "../fixture/skills")
 const cacheDir = path.join(Global.Path.cache, "skills")
-const it = testEffect(Layer.mergeAll(Discovery.defaultLayer, AppFileSystem.defaultLayer))
+const it = testEffect(Layer.mergeAll(Discovery.defaultLayer, FSUtil.defaultLayer))
 
 beforeAll(async () => {
   await rm(cacheDir, { recursive: true, force: true })
@@ -52,7 +52,7 @@ afterAll(async () => {
 describe("Discovery.pull", () => {
   it.live("downloads skills from cloudflare url", () =>
     Effect.gen(function* () {
-      const fsys = yield* AppFileSystem.Service
+      const fsys = yield* FSUtil.Service
       const discovery = yield* Discovery.Service
       const dirs = yield* discovery.pull(CLOUDFLARE_SKILLS_URL)
       expect(dirs.length).toBeGreaterThan(0)
@@ -66,7 +66,7 @@ describe("Discovery.pull", () => {
 
   it.live("url without trailing slash works", () =>
     Effect.gen(function* () {
-      const fsys = yield* AppFileSystem.Service
+      const fsys = yield* FSUtil.Service
       const discovery = yield* Discovery.Service
       const dirs = yield* discovery.pull(CLOUDFLARE_SKILLS_URL.replace(/\/$/, ""))
       expect(dirs.length).toBeGreaterThan(0)
@@ -96,7 +96,7 @@ describe("Discovery.pull", () => {
 
   it.live("downloads reference files alongside SKILL.md", () =>
     Effect.gen(function* () {
-      const fsys = yield* AppFileSystem.Service
+      const fsys = yield* FSUtil.Service
       const discovery = yield* Discovery.Service
       const dirs = yield* discovery.pull(CLOUDFLARE_SKILLS_URL)
       // find a skill dir that should have reference files (e.g. agents-sdk)

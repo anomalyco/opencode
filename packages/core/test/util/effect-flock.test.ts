@@ -5,7 +5,7 @@ import path from "path"
 import os from "os"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { testEffect } from "../lib/effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { Global } from "@opencode-ai/core/global"
 import { Hash } from "@opencode-ai/core/util/hash"
@@ -65,19 +65,25 @@ function spawnWorker(msg: Msg) {
   })
 }
 
-function stopWorker(proc: ReturnType<typeof spawnWorker>) {
-  if (proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve()
+async function stopWorker(proc: ReturnType<typeof spawnWorker>) {
+  if (proc.exitCode !== null || proc.signalCode !== null) return
+
+  const closed = new Promise<void>((resolve) => proc.once("close", () => resolve()))
+
   if (process.platform !== "win32" || !proc.pid) {
     proc.kill()
-    return Promise.resolve()
+    await closed
+    return
   }
-  return new Promise<void>((resolve) => {
+
+  await new Promise<void>((resolve) => {
     const killProc = spawn("taskkill", ["/pid", String(proc.pid), "/T", "/F"])
     killProc.on("close", () => {
       proc.kill()
       resolve()
     })
   })
+  await closed
 }
 
 async function waitForFile(file: string, timeout = 3_000) {
@@ -103,7 +109,7 @@ const testGlobal = Global.layerWith({
   log: os.tmpdir(),
 })
 
-const testLayer = EffectFlock.layer.pipe(Layer.provide(testGlobal), Layer.provide(AppFileSystem.defaultLayer))
+const testLayer = EffectFlock.layer.pipe(Layer.provide(testGlobal), Layer.provide(FSUtil.defaultLayer))
 
 // ---------------------------------------------------------------------------
 // Tests
@@ -363,7 +369,6 @@ describe("util.effect-flock", () => {
         try {
           await waitForFile(ready, 5_000)
           await stopWorker(proc)
-          await new Promise((resolve) => proc.on("close", resolve))
 
           // Backdate lock files so they're past STALE_MS (60s)
           const lockDir = lock(dir, "eflock:crash")

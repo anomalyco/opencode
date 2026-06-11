@@ -2,7 +2,7 @@ import { Npm } from "@opencode-ai/core/npm"
 import type { InstanceContext } from "../project/instance-context"
 import { Filesystem } from "@/util/filesystem"
 import { Process } from "@/util/process"
-import { which } from "../util/which"
+import { which } from "@opencode-ai/core/util/which"
 
 export interface Context extends Pick<InstanceContext, "directory" | "worktree"> {
   experimentalOxfmt: boolean

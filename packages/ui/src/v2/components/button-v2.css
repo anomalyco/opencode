@@ -11,7 +11,6 @@
   justify-content: center;
   gap: 6px;
   border-radius: 6px;
-  font-family: var(--font-family-sans);
   font-style: normal;
   font-weight: 530;
   font-size: 13px;
@@ -142,6 +141,29 @@
 }
 
 [data-component="button-v2"][data-variant="ghost"]:is(:disabled, [data-state="disabled"]) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Ghost muted */
+[data-component="button-v2"][data-variant="ghost-muted"] {
+  background-color: transparent;
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="button-v2"][data-variant="ghost-muted"] [data-slot="icon-svg"] {
+  color: var(--v2-icon-icon-muted);
+}
+
+[data-component="button-v2"][data-variant="ghost-muted"]:is(:hover, [data-state="hover"]):not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-component="button-v2"][data-variant="ghost-muted"]:is(:active, [data-state="pressed"]):not(:disabled) {
+  background-color: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-component="button-v2"][data-variant="ghost-muted"]:is(:disabled, [data-state="disabled"]) {
   opacity: 0.5;
   cursor: not-allowed;
 }

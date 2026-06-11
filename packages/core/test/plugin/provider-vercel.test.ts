@@ -12,18 +12,18 @@ describe("VercelPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* plugin.add(VercelPlugin)
-      const load = yield* catalog.loader()
-      yield* load((catalog) => {
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => {
         const item = provider("vercel", {
-          endpoint: { type: "aisdk", package: "@ai-sdk/vercel" },
-          options: { headers: { Existing: "1" }, body: {}, aisdk: { provider: {}, request: {} } },
+          api: { type: "aisdk", package: "@ai-sdk/vercel" },
+          request: { headers: { Existing: "1" }, body: {} },
         })
         catalog.provider.update(item.id, (draft) => {
-          draft.endpoint = item.endpoint
-          draft.options = item.options
+          draft.api = item.api
+          draft.request = item.request
         })
       })
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("vercel"))).options.headers).toEqual({
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("vercel"))).request.headers).toEqual({
         Existing: "1",
         "http-referer": "https://opencode.ai/",
         "x-title": "opencode",
@@ -36,17 +36,17 @@ describe("VercelPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* plugin.add(VercelPlugin)
-      const load = yield* catalog.loader()
-      yield* load((catalog) => {
-        const item = provider("vercel", { endpoint: { type: "aisdk", package: "@ai-sdk/vercel" } })
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => {
+        const item = provider("vercel", { api: { type: "aisdk", package: "@ai-sdk/vercel" } })
         catalog.provider.update(item.id, (draft) => {
-          draft.endpoint = item.endpoint
+          draft.api = item.api
         })
       })
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("vercel"))).options.headers).not.toHaveProperty(
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("vercel"))).request.headers).not.toHaveProperty(
         "HTTP-Referer",
       )
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("vercel"))).options.headers).not.toHaveProperty("X-Title")
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("vercel"))).request.headers).not.toHaveProperty("X-Title")
     }),
   )
 
@@ -69,9 +69,9 @@ describe("VercelPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* plugin.add(VercelPlugin)
-      const load = yield* catalog.loader()
-      yield* load((catalog) => catalog.provider.update(provider("gateway").id, () => {}))
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("gateway"))).options.headers).toEqual({})
+      const transform = yield* catalog.transform()
+      yield* transform((catalog) => catalog.provider.update(provider("gateway").id, () => {}))
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("gateway"))).request.headers).toEqual({})
     }),
   )
 })

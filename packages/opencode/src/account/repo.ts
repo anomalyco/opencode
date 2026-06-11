@@ -1,16 +1,14 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { eq } from "drizzle-orm"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Effect, Layer, Option, Schema, Context } from "effect"
 
-import { Database } from "@/storage/db"
-import { AccountStateTable, AccountTable } from "./account.sql"
+import { Database } from "@opencode-ai/core/database/database"
+import { AccountStateTable, AccountTable } from "@opencode-ai/core/account/sql"
 import { AccessToken, AccountID, AccountRepoError, Info, OrgID, RefreshToken } from "./schema"
 import { normalizeServerUrl } from "./url"
 
 export type AccountRow = (typeof AccountTable)["$inferSelect"]
-
-type DbClient = Parameters<typeof Database.use>[0] extends (db: infer T) => unknown ? T : never
-type DbTransactionCallback<A> = Parameters<typeof Database.transaction<A>>[0]
 
 const ACCOUNT_STATE_ID = 1
 
@@ -41,32 +39,24 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Ac
 
 export const use = serviceUse(Service)
 
-export const layer: Layer.Layer<Service> = Layer.effect(
+export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const { db } = yield* Database.Service
     const decode = Schema.decodeUnknownSync(Info)
 
-    const query = <A>(f: DbTransactionCallback<A>) =>
-      Effect.try({
-        try: () => Database.use(f),
-        catch: (cause) => new AccountRepoError({ message: "Database operation failed", cause }),
-      })
+    const query = <A, E>(effect: Effect.Effect<A, E>) =>
+      effect.pipe(Effect.mapError((cause) => new AccountRepoError({ message: "Database operation failed", cause })))
 
-    const tx = <A>(f: DbTransactionCallback<A>) =>
-      Effect.try({
-        try: () => Database.transaction(f),
-        catch: (cause) => new AccountRepoError({ message: "Database operation failed", cause }),
-      })
-
-    const current = (db: DbClient) => {
-      const state = db.select().from(AccountStateTable).where(eq(AccountStateTable.id, ACCOUNT_STATE_ID)).get()
+    const current = Effect.fnUntraced(function* () {
+      const state = yield* db.select().from(AccountStateTable).where(eq(AccountStateTable.id, ACCOUNT_STATE_ID)).get()
       if (!state?.active_account_id) return
-      const account = db.select().from(AccountTable).where(eq(AccountTable.id, state.active_account_id)).get()
+      const account = yield* db.select().from(AccountTable).where(eq(AccountTable.id, state.active_account_id)).get()
       if (!account) return
       return { ...account, active_org_id: state.active_org_id ?? null }
-    }
+    })
 
-    const state = (db: DbClient, accountID: AccountID, orgID: Option.Option<OrgID>) => {
+    const state = (accountID: AccountID, orgID: Option.Option<OrgID>) => {
       const id = Option.getOrNull(orgID)
       return db
         .insert(AccountStateTable)
@@ -79,41 +69,46 @@ export const layer: Layer.Layer<Service> = Layer.effect(
     }
 
     const active = Effect.fn("AccountRepo.active")(() =>
-      query((db) => current(db)).pipe(Effect.map((row) => (row ? Option.some(decode(row)) : Option.none()))),
+      query(current()).pipe(Effect.map((row) => (row ? Option.some(decode(row)) : Option.none()))),
     )
 
     const list = Effect.fn("AccountRepo.list")(() =>
-      query((db) =>
+      query(
         db
           .select()
           .from(AccountTable)
           .all()
-          .map((row: AccountRow) => decode({ ...row, active_org_id: null })),
+          .pipe(Effect.map((rows) => rows.map((row: AccountRow) => decode({ ...row, active_org_id: null })))),
       ),
     )
 
     const remove = Effect.fn("AccountRepo.remove")((accountID: AccountID) =>
-      tx((db) => {
-        db.update(AccountStateTable)
-          .set({ active_account_id: null, active_org_id: null })
-          .where(eq(AccountStateTable.active_account_id, accountID))
-          .run()
-        db.delete(AccountTable).where(eq(AccountTable.id, accountID)).run()
-      }).pipe(Effect.asVoid),
+      query(
+        db.transaction((tx) =>
+          Effect.gen(function* () {
+            yield* tx
+              .update(AccountStateTable)
+              .set({ active_account_id: null, active_org_id: null })
+              .where(eq(AccountStateTable.active_account_id, accountID))
+              .run()
+            yield* tx.delete(AccountTable).where(eq(AccountTable.id, accountID)).run()
+          }),
+        ),
+      ).pipe(Effect.asVoid),
     )
 
     const use = Effect.fn("AccountRepo.use")((accountID: AccountID, orgID: Option.Option<OrgID>) =>
-      query((db) => state(db, accountID, orgID)).pipe(Effect.asVoid),
+      query(state(accountID, orgID)).pipe(Effect.asVoid),
     )
 
     const getRow = Effect.fn("AccountRepo.getRow")((accountID: AccountID) =>
-      query((db) => db.select().from(AccountTable).where(eq(AccountTable.id, accountID)).get()).pipe(
+      query(db.select().from(AccountTable).where(eq(AccountTable.id, accountID)).get()).pipe(
         Effect.map(Option.fromNullishOr),
       ),
     )
 
     const persistToken = Effect.fn("AccountRepo.persistToken")((input) =>
-      query((db) =>
+      query(
         db
           .update(AccountTable)
           .set({
@@ -127,31 +122,36 @@ export const layer: Layer.Layer<Service> = Layer.effect(
     )
 
     const persistAccount = Effect.fn("AccountRepo.persistAccount")((input) =>
-      tx((db) => {
-        const url = normalizeServerUrl(input.url)
+      query(
+        db.transaction((tx) =>
+          Effect.gen(function* () {
+            const url = normalizeServerUrl(input.url)
 
-        db.insert(AccountTable)
-          .values({
-            id: input.id,
-            email: input.email,
-            url,
-            access_token: input.accessToken,
-            refresh_token: input.refreshToken,
-            token_expiry: input.expiry,
-          })
-          .onConflictDoUpdate({
-            target: AccountTable.id,
-            set: {
-              email: input.email,
-              url,
-              access_token: input.accessToken,
-              refresh_token: input.refreshToken,
-              token_expiry: input.expiry,
-            },
-          })
-          .run()
-        void state(db, input.id, input.orgID)
-      }).pipe(Effect.asVoid),
+            yield* tx
+              .insert(AccountTable)
+              .values({
+                id: input.id,
+                email: input.email,
+                url,
+                access_token: input.accessToken,
+                refresh_token: input.refreshToken,
+                token_expiry: input.expiry,
+              })
+              .onConflictDoUpdate({
+                target: AccountTable.id,
+                set: {
+                  email: input.email,
+                  url,
+                  access_token: input.accessToken,
+                  refresh_token: input.refreshToken,
+                  token_expiry: input.expiry,
+                },
+              })
+              .run()
+            yield* state(input.id, input.orgID)
+          }),
+        ),
+      ).pipe(Effect.asVoid),
     )
 
     return Service.of({
@@ -165,5 +165,9 @@ export const layer: Layer.Layer<Service> = Layer.effect(
     })
   }),
 )
+
+export const defaultLayer = layer.pipe(Layer.provide(Database.defaultLayer))
+
+export const node = LayerNode.make(layer, [Database.node])
 
 export * as AccountRepo from "./repo"

@@ -1,14 +1,16 @@
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, eq, inArray, or } from "drizzle-orm"
 import { Effect, Layer } from "effect"
 import * as Context from "effect/Context"
 import { DatabaseError, DrizzleClient } from "../database"
 import { modelStat } from "../database/schema"
+import { RETIRED_STAT_MODELS, RETIRED_STAT_PROVIDERS } from "./model-normalization"
 import {
   chunks,
   collapseRows,
   inserted,
   rankBy,
   statPeriodKey,
+  statRowScope,
   synthesizeAllTierRows,
   toStatBaseRow,
   UPSERT_CHUNK_SIZE,
@@ -19,8 +21,8 @@ export type ModelStatRow = typeof modelStat.$inferInsert
 export type ModelStatAggregate = StatBaseAggregate & { provider: string; model: string; provider_model: string }
 
 export type ModelStatMetric = {
-  periodStart: Date
-  periodEnd: Date
+  periodKey: string
+  updatedAt: Date
   tier: string
   provider: string
   model: string
@@ -39,6 +41,7 @@ export declare namespace ModelStatRepo {
   export interface Service {
     readonly listDaily: () => Effect.Effect<ModelStatMetric[], DatabaseError>
     readonly upsert: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
+    readonly deleteRetiredDimensions: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
   }
 }
 
@@ -55,8 +58,8 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
           try: () =>
             db
               .select({
-                periodStart: modelStat.period_start,
-                periodEnd: modelStat.period_end,
+                periodKey: modelStat.period_key,
+                updatedAt: modelStat.updated_at,
                 tier: modelStat.tier,
                 provider: modelStat.provider,
                 model: modelStat.model,
@@ -72,7 +75,7 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
               })
               .from(modelStat)
               .where(and(eq(modelStat.grain, "day"), eq(modelStat.client, "all"), eq(modelStat.source, "all")))
-              .orderBy(asc(modelStat.period_start)),
+              .orderBy(asc(modelStat.period_key)),
           catch: (cause) => DatabaseError.make({ cause }),
         })
       })
@@ -88,7 +91,6 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
                   .values(chunk)
                   .onDuplicateKeyUpdate({
                     set: {
-                      period_end: inserted("period_end"),
                       provider_model: inserted("provider_model"),
                       sessions: inserted("sessions"),
                       requests: inserted("requests"),
@@ -121,7 +123,34 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
         )
       })
 
-      return ModelStatRepo.of({ listDaily, upsert })
+      const deleteRetiredDimensions = Effect.fn("ModelStatRepo.deleteRetiredDimensions")(function* (
+        rows: ModelStatRow[],
+      ) {
+        const scope = statRowScope(rows)
+        if (!scope) return
+
+        yield* Effect.tryPromise({
+          try: () =>
+            db
+              .delete(modelStat)
+              .where(
+                and(
+                  inArray(modelStat.grain, scope.grains),
+                  inArray(modelStat.period_key, scope.periodKeys),
+                  inArray(modelStat.dataset, scope.datasets),
+                  inArray(modelStat.client, scope.clients),
+                  inArray(modelStat.source, scope.sources),
+                  or(
+                    inArray(modelStat.provider, RETIRED_STAT_PROVIDERS),
+                    inArray(modelStat.model, RETIRED_STAT_MODELS),
+                  ),
+                ),
+              ),
+          catch: (cause) => DatabaseError.make({ cause }),
+        })
+      })
+
+      return ModelStatRepo.of({ listDaily, upsert, deleteRetiredDimensions })
     }),
   )
 }

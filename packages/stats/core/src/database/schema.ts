@@ -16,7 +16,7 @@ export const modelStat = mysqlTable(
   (table) => [
     uniqueIndex("uniq_model_period").on(
       table.grain,
-      table.period_start,
+      table.period_key,
       table.dataset,
       table.tier,
       table.client,
@@ -24,8 +24,8 @@ export const modelStat = mysqlTable(
       table.provider,
       table.model,
     ),
-    index("idx_leaderboard_tokens").on(table.grain, table.period_start, table.dataset, table.tier, table.total_tokens),
-    index("idx_model").on(table.model, table.grain, table.period_start),
+    index("idx_leaderboard_tokens").on(table.grain, table.period_key, table.dataset, table.tier, table.total_tokens),
+    index("idx_model").on(table.model, table.grain, table.period_key),
   ],
 )
 
@@ -45,7 +45,7 @@ export const providerStat = mysqlTable(
   (table) => [
     uniqueIndex("uniq_provider_period").on(
       table.grain,
-      table.period_start,
+      table.period_key,
       table.dataset,
       table.tier,
       table.client,
@@ -54,20 +54,20 @@ export const providerStat = mysqlTable(
     ),
     index("idx_provider_leaderboard_tokens").on(
       table.grain,
-      table.period_start,
+      table.period_key,
       table.dataset,
       table.tier,
       table.total_tokens,
     ),
     index("idx_provider_market_share").on(
       table.grain,
-      table.period_start,
+      table.period_key,
       table.dataset,
       table.tier,
       table.market_share_tokens,
     ),
-    index("idx_provider_rank").on(table.grain, table.period_start, table.dataset, table.tier, table.rank_by_tokens),
-    index("idx_provider").on(table.provider, table.grain, table.period_start),
+    index("idx_provider_rank").on(table.grain, table.period_key, table.dataset, table.tier, table.rank_by_tokens),
+    index("idx_provider").on(table.provider, table.grain, table.period_key),
   ],
 )
 
@@ -75,6 +75,8 @@ export const geoStat = mysqlTable(
   "geo_stat",
   {
     ...periodColumns(),
+    provider: varchar({ length: 128 }).notNull().default("all"),
+    model: varchar({ length: 256 }).notNull().default("all"),
     country: char({ length: 2 }).notNull(),
     continent: varchar({ length: 8 }).notNull().default(""),
     ...metricColumns(),
@@ -88,17 +90,20 @@ export const geoStat = mysqlTable(
   (table) => [
     uniqueIndex("uniq_country_period").on(
       table.grain,
-      table.period_start,
+      table.period_key,
       table.dataset,
       table.tier,
       table.client,
       table.source,
+      table.provider,
+      table.model,
       table.country,
     ),
-    index("idx_country_map_tokens").on(table.grain, table.period_start, table.dataset, table.tier, table.total_tokens),
-    index("idx_country_rank").on(table.grain, table.period_start, table.dataset, table.tier, table.rank_by_tokens),
-    index("idx_country").on(table.country, table.grain, table.period_start),
-    index("idx_continent").on(table.continent, table.grain, table.period_start),
+    index("idx_country_map_tokens").on(table.grain, table.period_key, table.dataset, table.tier, table.total_tokens),
+    index("idx_country_rank").on(table.grain, table.period_key, table.dataset, table.tier, table.rank_by_tokens),
+    index("idx_country").on(table.country, table.grain, table.period_key),
+    index("idx_continent").on(table.continent, table.grain, table.period_key),
+    index("idx_country_model").on(table.model, table.country, table.grain, table.period_key),
   ],
 )
 
@@ -106,8 +111,7 @@ function periodColumns() {
   return {
     id: bigint({ mode: "number" }).autoincrement().primaryKey(),
     grain: varchar({ length: 16 }).notNull(),
-    period_start: datetime({ mode: "date" }).notNull(),
-    period_end: datetime({ mode: "date" }).notNull(),
+    period_key: varchar({ length: 32 }).notNull(),
     dataset: varchar({ length: 64 }).notNull().default("all"),
     tier: varchar({ length: 64 }).notNull().default("all"),
     client: varchar({ length: 64 }).notNull().default("all"),

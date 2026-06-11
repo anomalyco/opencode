@@ -6,7 +6,7 @@ export {}
 // import { test, expect, describe } from "bun:test"
 // import path from "path"
 
-// import { ProviderID, ModelID } from "../../src/provider/schema"
+// import { ProviderV2 } from "@opencode-ai/core/provider"
 // import { tmpdir, withTestInstance } from "../fixture/fixture"
 // import { Provider } from "@/provider/provider"
 // import { Env } from "../../src/env"

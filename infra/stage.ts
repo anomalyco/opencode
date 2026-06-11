@@ -5,10 +5,8 @@ export const domain = (() => {
 })()
 
 export const zoneID = "430ba34c138cfb5360826c4909f99be8"
-// Dev owns the shared AWS lake/stats infra for all non-production stages.
 export const awsStage = $app.stage === "production" ? "production" : "dev"
-// Temporarily omit AWS infra so SST removes the lake/stats resources.
-export const deployAws = false
+export const deployAws = $app.stage === awsStage
 
 new cloudflare.RegionalHostname("RegionalHostname", {
   hostname: domain,

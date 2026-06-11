@@ -1,9 +1,10 @@
-import { BusEvent } from "@/bus/bus-event"
-import { Bus } from "@/bus"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { InstanceState } from "@/effect/instance-state"
 import { SessionID } from "./schema"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Effect, Layer, Context, Schema } from "effect"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 
 export const Info = Schema.Union([
   Schema.Struct({
@@ -32,20 +33,20 @@ export const Info = Schema.Union([
 export type Info = Schema.Schema.Type<typeof Info>
 
 export const Event = {
-  Status: BusEvent.define(
-    "session.status",
-    Schema.Struct({
+  Status: EventV2.define({
+    type: "session.status",
+    schema: {
       sessionID: SessionID,
       status: Info,
-    }),
-  ),
+    },
+  }),
   // deprecated
-  Idle: BusEvent.define(
-    "session.idle",
-    Schema.Struct({
+  Idle: EventV2.define({
+    type: "session.idle",
+    schema: {
       sessionID: SessionID,
-    }),
-  ),
+    },
+  }),
 }
 
 export interface Interface {
@@ -59,7 +60,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
 
     const state = yield* InstanceState.make(
       Effect.fn("SessionStatus.state")(() => Effect.succeed(new Map<SessionID, Info>())),
@@ -76,9 +77,9 @@ export const layer = Layer.effect(
 
     const set = Effect.fn("SessionStatus.set")(function* (sessionID: SessionID, status: Info) {
       const data = yield* InstanceState.get(state)
-      yield* bus.publish(Event.Status, { sessionID, status })
+      yield* events.publish(Event.Status, { sessionID, status })
       if (status.type === "idle") {
-        yield* bus.publish(Event.Idle, { sessionID })
+        yield* events.publish(Event.Idle, { sessionID })
         data.delete(sessionID)
         return
       }
@@ -89,6 +90,8 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Bus.layer))
+export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer))
+
+export const node = LayerNode.make(layer, [EventV2Bridge.node])
 
 export * as SessionStatus from "./status"

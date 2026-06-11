@@ -198,6 +198,11 @@ export const lakeCatalog = $interpolate`${glueCatalogName}/${tableBucket.name}`
 export const lakeAthenaWorkgroup = athenaWorkgroup
 
 const ingestSecret = new random.RandomPassword("LakeIngestSecret", { length: 32 })
+export const ingestSecretSsm = new aws.ssm.Parameter("LakeIngestSecretSsm", {
+  name: $interpolate`/${$app.name}/${$app.stage}/lake/ingest/secret`,
+  type: "SecureString",
+  value: ingestSecret.result,
+})
 
 const ingestConfig = new sst.Linkable("LakeIngestConfig", {
   properties: {
@@ -209,8 +214,8 @@ const ingestConfig = new sst.Linkable("LakeIngestConfig", {
 const ingestService = new sst.aws.Service("LakeIngestService", {
   cluster: lakeCluster,
   architecture: "arm64",
-  cpu: "0.5 vCPU",
-  memory: "1 GB",
+  cpu: "1 vCPU",
+  memory: "4 GB",
   image: {
     context: ".",
     dockerfile: "packages/stats/server/Dockerfile",

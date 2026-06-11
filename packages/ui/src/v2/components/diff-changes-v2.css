@@ -6,7 +6,6 @@
 
   [data-slot="diff-changes-additions"],
   [data-slot="diff-changes-deletions"] {
-    font-family: var(--font-family-sans);
     font-size: 11px;
     font-style: normal;
     font-weight: 440;

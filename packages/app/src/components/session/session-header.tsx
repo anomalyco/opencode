@@ -5,7 +5,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Keybind } from "@opencode-ai/ui/keybind"
 import { Spinner } from "@opencode-ai/ui/spinner"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@/utils/toast"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { createEffect, createMemo, createSignal, For, onMount, Show } from "solid-js"
@@ -25,8 +25,8 @@ import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover, StatusPopoverV2 } from "../status-popover"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 
 const OPEN_APPS = [
   "vscode",
@@ -44,8 +44,6 @@ const OPEN_APPS = [
   "powershell",
   "sublime-text",
 ] as const
-
-const USE_V2_TITLEBAR = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
 type OpenApp = (typeof OPEN_APPS)[number]
 type OS = "macos" | "windows" | "linux" | "unknown"
@@ -157,11 +155,11 @@ export function SessionHeader() {
   })
   const hotkey = createMemo(() => command.keybind("file.open"))
   const os = createMemo(() => detectOS(platform))
-  const isDesktopV2 = platform.platform === "desktop" && USE_V2_TITLEBAR
-  const search = createMemo(() => (isDesktopV2 ? settings.general.showSearch() : true))
-  const tree = createMemo(() => (isDesktopV2 ? settings.general.showFileTree() : true))
-  const term = createMemo(() => (isDesktopV2 ? settings.general.showTerminal() : true))
-  const status = createMemo(() => (isDesktopV2 ? settings.general.showStatus() : true))
+  const isDesktopV2 = createMemo(() => platform.platform === "desktop" && settings.general.newLayoutDesigns())
+  const search = createMemo(() => (isDesktopV2() ? settings.general.showSearch() : true))
+  const tree = createMemo(() => (isDesktopV2() ? settings.general.showFileTree() : true))
+  const term = createMemo(() => (isDesktopV2() ? settings.general.showTerminal() : true))
+  const status = createMemo(() => (isDesktopV2() ? settings.general.showStatus() : true))
 
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
     finder: true,
@@ -532,7 +530,7 @@ type SessionHeaderV2ActionsState = {
 
 function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
   return (
-    <div class="flex items-center gap-0">
+    <div class="flex items-center gap-2">
       <Show when={props.state.statusVisible}>
         <Tooltip placement="bottom" value={props.state.statusLabel}>
           <StatusPopoverV2 />

@@ -33,9 +33,7 @@ export interface Settings {
     editToolPartsExpanded: boolean
     showSessionProgressBar: boolean
     showCustomAgents: boolean
-  }
-  updates: {
-    startup: boolean
+    newLayoutDesigns?: boolean
   }
   appearance: {
     fontSize: number
@@ -54,6 +52,7 @@ export interface Settings {
 export const monoDefault = "System Mono"
 export const sansDefault = "System Sans"
 export const terminalDefault = "JetBrainsMono Nerd Font Mono"
+export const newLayoutDesignsDefault = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
 
 const monoFallback =
   'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
@@ -120,9 +119,6 @@ const defaultSettings: Settings = {
     showSessionProgressBar: true,
     showCustomAgents: false,
   },
-  updates: {
-    startup: true,
-  },
   appearance: {
     fontSize: 14,
     mono: "",
@@ -154,6 +150,7 @@ function withFallback<T>(read: () => T | undefined, fallback: T) {
 
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
+  gate: false,
   init: () => {
     const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
 
@@ -242,11 +239,9 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowCustomAgents(value: boolean) {
           setStore("general", "showCustomAgents", value)
         },
-      },
-      updates: {
-        startup: withFallback(() => store.updates?.startup, defaultSettings.updates.startup),
-        setStartup(value: boolean) {
-          setStore("updates", "startup", value)
+        newLayoutDesigns: withFallback(() => store.general?.newLayoutDesigns, newLayoutDesignsDefault),
+        setNewLayoutDesigns(value: boolean) {
+          setStore("general", "newLayoutDesigns", value)
         },
       },
       appearance: {
