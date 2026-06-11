@@ -93,15 +93,12 @@ export const headless = {
   }),
   authorize: () =>
     Effect.gen(function* () {
-      const controller = new AbortController()
-      yield* Effect.addFinalizer(() => Effect.sync(() => controller.abort()))
       const device = yield* request<{ device_auth_id: string; user_code: string; interval: string }>(
         `${issuer}/api/accounts/deviceauth/usercode`,
         {
           method: "POST",
           headers: headers("application/json"),
           body: JSON.stringify({ client_id: clientID }),
-          signal: controller.signal,
         },
       )
       const interval = Math.max(Number.parseInt(device.interval) || 5, 1) * 1000
@@ -112,12 +109,12 @@ export const headless = {
         callback: Effect.gen(function* () {
           while (true) {
             const response = yield* Effect.tryPromise({
-              try: () =>
+              try: (signal) =>
                 fetch(`${issuer}/api/accounts/deviceauth/token`, {
                   method: "POST",
                   headers: headers("application/json"),
                   body: JSON.stringify({ device_auth_id: device.device_auth_id, user_code: device.user_code }),
-                  signal: controller.signal,
+                  signal,
                 }),
               catch: (cause) => cause,
             })
@@ -184,8 +181,8 @@ function refresh(value: Credential.OAuth) {
 
 function request<A>(url: string, init: RequestInit) {
   return Effect.tryPromise({
-    try: async () => {
-      const response = await fetch(url, init)
+    try: async (signal) => {
+      const response = await fetch(url, { ...init, signal })
       if (!response.ok) throw new Error(`Request failed: ${response.status}`)
       return response.json() as Promise<A>
     },
