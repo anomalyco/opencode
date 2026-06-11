@@ -155,7 +155,7 @@ export const {
 
     function listSessions() {
       return sdk.client.session
-        .list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000, ...sessionListQuery() })
+        .list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000, roots: true, ...sessionListQuery() })
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
     }
 
