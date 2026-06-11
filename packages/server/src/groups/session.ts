@@ -117,14 +117,13 @@ export const SessionGroup = HttpApiGroup.make("server.session")
         location: Location.Ref.pipe(Schema.optional),
       }),
       success: Schema.Struct({ data: SessionV2.Info }),
-    })
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "v2.session.create",
-          summary: "Create session",
-          description: "Create a session at the requested location.",
-        }),
-      ),
+    }).annotateMerge(
+      OpenApi.annotations({
+        identifier: "v2.session.create",
+        summary: "Create session",
+        description: "Create a session at the requested location.",
+      }),
+    ),
   )
   .add(
     HttpApiEndpoint.get("session.get", "/api/session/:sessionID", {
