@@ -14,6 +14,7 @@ import { SessionCompaction } from "./compaction"
 import { Bus } from "../bus"
 import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
+import { Memory } from "@/memory/memory"
 import { Plugin } from "../plugin"
 import MAX_STEPS from "../session/prompt/max-steps.txt"
 import { ToolRegistry } from "@/tool/registry"
@@ -121,6 +122,7 @@ export const layer = Layer.effect(
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const scope = yield* Scope.Scope
     const instruction = yield* Instruction.Service
+    const memory = yield* Memory.Service
     const state = yield* SessionRunState.Service
     const revert = yield* SessionRevert.Service
     const summary = yield* SessionSummary.Service
@@ -1432,13 +1434,20 @@ export const layer = Layer.effect(
 
             yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
 
-            const [skills, env, instructions, modelMsgs] = yield* Effect.all([
+            const recallQueryMsg = msgs.findLast((m) => m.info.role === "user")
+            const recallTexts = recallQueryMsg?.parts.filter((p) => p.type === "text").map((p) => p.text) ?? []
+            const recallQuery = recallTexts.join(" ").trim()
+
+            const [skills, env, instructions, memories, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
               sys.environment(model),
               instruction.system().pipe(Effect.orDie),
+              recallQuery
+                ? memory.recall(recallQuery).pipe(Effect.option, Effect.map((o) => Option.isSome(o) ? o.value : []))
+                : Effect.succeed([]),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
-            const system = [...env, ...instructions, ...(skills ? [skills] : [])]
+            const system = [...env, ...instructions, ...memories, ...(skills ? [skills] : [])]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
@@ -1639,39 +1648,43 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = Layer.suspend(() =>
-  layer.pipe(
-    Layer.provide(SessionRunState.defaultLayer),
-    Layer.provide(SessionStatus.defaultLayer),
-    Layer.provide(SessionCompaction.defaultLayer),
-    Layer.provide(SessionProcessor.defaultLayer),
-    Layer.provide(Command.defaultLayer),
-    Layer.provide(Permission.defaultLayer),
-    Layer.provide(MCP.defaultLayer),
-    Layer.provide(LSP.defaultLayer),
-    Layer.provide(ToolRegistry.defaultLayer),
-    Layer.provide(Truncate.defaultLayer),
-    Layer.provide(Provider.defaultLayer),
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(Instruction.defaultLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
-    Layer.provide(Plugin.defaultLayer),
-    Layer.provide(Session.defaultLayer),
-    Layer.provide(SessionRevert.defaultLayer),
-    Layer.provide(SessionSummary.defaultLayer),
-    Layer.provide(Image.defaultLayer),
-    Layer.provide(
-      Layer.mergeAll(
-        EventV2Bridge.defaultLayer,
-        Agent.defaultLayer,
-        SystemPrompt.defaultLayer,
-        LLM.defaultLayer,
-        Reference.defaultLayer,
-        Bus.layer,
-        CrossSpawnSpawner.defaultLayer,
-        RuntimeFlags.defaultLayer,
+  layer
+    .pipe(
+      Layer.provide(SessionRunState.defaultLayer),
+      Layer.provide(SessionStatus.defaultLayer),
+      Layer.provide(SessionCompaction.defaultLayer),
+      Layer.provide(SessionProcessor.defaultLayer),
+      Layer.provide(Command.defaultLayer),
+      Layer.provide(Permission.defaultLayer),
+      Layer.provide(MCP.defaultLayer),
+      Layer.provide(LSP.defaultLayer),
+      Layer.provide(ToolRegistry.defaultLayer),
+      Layer.provide(Truncate.defaultLayer),
+      Layer.provide(Provider.defaultLayer),
+      Layer.provide(Config.defaultLayer),
+      Layer.provide(Instruction.defaultLayer),
+      Layer.provide(AppFileSystem.defaultLayer),
+      Layer.provide(Plugin.defaultLayer),
+      Layer.provide(Session.defaultLayer),
+      Layer.provide(SessionRevert.defaultLayer),
+      Layer.provide(SessionSummary.defaultLayer),
+      Layer.provide(Image.defaultLayer),
+    )
+    .pipe(
+      Layer.provide(Memory.defaultLayer),
+      Layer.provide(
+        Layer.mergeAll(
+          EventV2Bridge.defaultLayer,
+          Agent.defaultLayer,
+          SystemPrompt.defaultLayer,
+          LLM.defaultLayer,
+          Reference.defaultLayer,
+          Bus.layer,
+          CrossSpawnSpawner.defaultLayer,
+          RuntimeFlags.defaultLayer,
+        ),
       ),
     ),
-  ),
 )
 const ModelRef = Schema.Struct({
   providerID: ProviderID,

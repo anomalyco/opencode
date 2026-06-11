@@ -172,8 +172,8 @@ export class ToolRuntime extends Context.Service<ToolRuntime, ToolRuntimeInterfa
               message: `Tool "${name}" not found. Register it first.`,
             })
           }
-          return yield* Effect.try({
-            try: () => tool.fn(args),
+          return yield* Effect.tryPromise({
+            try: () => Promise.resolve(tool.fn(args)),
             catch: (cause) => new ToolRuntimeError({ message: `Tool "${name}" execution failed`, cause }),
           })
         }),

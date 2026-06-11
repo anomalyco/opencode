@@ -6,7 +6,7 @@ import * as Schema from "effect/Schema"
 import { eq, desc } from "drizzle-orm"
 import { Database } from "@/storage/db"
 import { MemoryTable } from "./memory.sql"
-import { EmbeddingService, cosineSimilarity } from "@opencode-ai/database/embedding/service"
+import { EmbeddingService, cosineSimilarity, OLLAMA_BASE } from "@opencode-ai/database/embedding/service"
 
 export class MemoryError extends Schema.TaggedErrorClass<MemoryError>()("MemoryError", {
   message: Schema.String,
@@ -39,11 +39,52 @@ export interface Interface {
   get(id: string): Effect.Effect<Option.Option<MemoryEntry>, MemoryError>
 
   forget(id: string): Effect.Effect<void, MemoryError>
+
+  recall(query: string, opts?: {
+    limit?: number
+  }): Effect.Effect<string[], MemoryError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Memory") {}
 
 const OLLAMA_TIMEOUT = 10000
+
+const ollamaPing = Effect.tryPromise({
+  try: async () => {
+    const res = await fetch(`${OLLAMA_BASE}/api/tags`, { signal: AbortSignal.timeout(3000) })
+    return true as const
+  },
+  catch: () => false as const,
+}).pipe(Effect.option)
+
+let ollamaReady = false
+
+const ensureOllama = Effect.gen(function* () {
+  if (ollamaReady) return
+
+  const okOpt = yield* ollamaPing
+  if (Option.isSome(okOpt) && okOpt.value) {
+    ollamaReady = true
+    return
+  }
+
+  yield* Effect.sync(() => {
+    Bun.spawn(["ollama", "serve"], {
+      stdio: ["ignore", "ignore", "ignore"],
+    }).unref()
+  })
+
+  for (let i = 0; i < 30; i++) {
+    const readyOpt = yield* ollamaPing
+    if (Option.isSome(readyOpt) && readyOpt.value) {
+      ollamaReady = true
+      return
+    }
+    yield* Effect.sleep("1 seconds")
+  }
+
+  yield* Effect.die(new MemoryError({ message: "Ollama failed to start after 30 seconds" }))
+})
 
 export const layer = Layer.effect(
   Service,
@@ -51,6 +92,8 @@ export const layer = Layer.effect(
     const embeddings = yield* EmbeddingService
 
     const add: Interface["add"] = Effect.fn("Memory.add")(function* (input) {
+      yield* ensureOllama
+
       const id = crypto.randomUUID()
 
       const embedded = yield* embeddings.embed(input.content).pipe(
@@ -73,6 +116,8 @@ export const layer = Layer.effect(
     })
 
     const search: Interface["search"] = Effect.fn("Memory.search")(function* (query, opts) {
+      yield* ensureOllama
+
       const limit = opts?.limit ?? 10
 
       const queryVec = yield* embeddings.embed(query).pipe(
@@ -142,7 +187,18 @@ export const layer = Layer.effect(
       )
     })
 
-    return Service.of({ add, search, list, get, forget })
+    const recall: Interface["recall"] = Effect.fn("Memory.recall")(function* (query, opts) {
+      const results = yield* search(query, opts)
+      if (results.length === 0) return []
+
+      const lines = results.map(
+        (r) => `- [${r.score.toFixed(2)}] ${r.content}`,
+      )
+
+      return ["<memories>", ...lines, "</memories>"]
+    })
+
+    return Service.of({ add, search, list, get, forget, recall })
   }),
 ).pipe(Layer.provide(EmbeddingService.layer))
 
