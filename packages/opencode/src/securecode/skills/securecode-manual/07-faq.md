@@ -6,7 +6,7 @@
 
 ### Q. 私のソースコードはどこに送られる？
 
-A. SecureCode は Acompany が運用する **Confidential Computing 環境上の LLM endpoint**（既定では `conf-ai.acompany-az.com`）にのみコードを送ります。endpoint は TEE (Trusted Execution Environment) 上で動作し、インフラ事業者やモデル提供者からも処理中データが見えない設計です。
+A. セキュアコード は Acompany が運用する **Confidential Computing 環境上の LLM endpoint**（既定では `conf-ai.acompany-az.com`）にのみコードを送ります。endpoint は TEE (Trusted Execution Environment) 上で動作し、インフラ事業者やモデル提供者からも処理中データが見えない設計です。
 
 ### Q. 第三者の LLM provider（OpenAI / Anthropic 等）に送られることはある？
 

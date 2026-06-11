@@ -1,6 +1,6 @@
 # 04. 設定ファイル
 
-SecureCode の設定は `~/.config/securecode/` 配下にまとまっています（`XDG_CONFIG_HOME` を設定している場合はそちら）。
+セキュアコード の設定は `~/.config/securecode/` 配下にまとまっています（`XDG_CONFIG_HOME` を設定している場合はそちら）。
 
 ## 場所と役割
 
