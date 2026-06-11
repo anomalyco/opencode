@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, onCleanup, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, Show, type JSX } from "solid-js"
 import { Portal } from "solid-js/web"
 import { createMediaQuery } from "@solid-primitives/media"
 import { TabsV2 } from "@opencode-ai/ui/v2/tabs-v2"
@@ -78,9 +78,36 @@ export function SessionSidePanelV2(props: {
   const contextOpen = tabsV2.tabState.contextOpen
   const activeTab = tabsV2.tabState.activeTab
   const activeFileTab = tabsV2.tabState.activeFileTab
+  const [focusFilesFilterToken, setFocusFilesFilterToken] = createSignal(0)
+  let previousActiveTab: string | undefined
+  let previousTemporaryTab: string | undefined
+  let previousHadOpenFileTab = false
+  let initializedOpenFileTracking = false
+  let wasOpenFileTab = false
   const filesSidebarOpen = createMemo(
     () => props.reviewV2State.sidebarOpened() || activeTab() === SESSION_OPEN_FILE_TAB,
   )
+
+  createEffect(() => {
+    const currentActiveTab = activeTab()
+    const currentTemporaryTab = tabsV2.temporaryTab()
+    const currentTabs = tabs().all()
+    const currentHadOpenFileTab = currentTabs.includes(SESSION_OPEN_FILE_TAB)
+    const isOpenFileTab = currentActiveTab === SESSION_OPEN_FILE_TAB
+    if (isOpenFileTab && !wasOpenFileTab) {
+      const shouldClearFilter =
+        initializedOpenFileTracking &&
+        !previousHadOpenFileTab &&
+        previousActiveTab !== previousTemporaryTab
+      if (shouldClearFilter) props.reviewV2State.setFilesFilter("")
+      setFocusFilesFilterToken((token) => token + 1)
+    }
+    initializedOpenFileTracking = true
+    previousActiveTab = currentActiveTab
+    previousTemporaryTab = currentTemporaryTab
+    previousHadOpenFileTab = currentHadOpenFileTab
+    wasOpenFileTab = isOpenFileTab
+  })
 
   createEffect(() => {
     if (!file.ready()) return
@@ -272,6 +299,7 @@ export function SessionSidePanelV2(props: {
                         title={projectName()}
                         state={props.reviewV2State}
                         open={filesSidebarOpen()}
+                        focusFilterToken={focusFilesFilterToken()}
                         diffs={props.diffs}
                         activeFile={activeFileTab()}
                         onOpenFile={(path) => tabsV2.openFileTab(path)}

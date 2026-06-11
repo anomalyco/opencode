@@ -44,6 +44,8 @@ export type SessionReviewV2SidebarProps = {
   stats?: JSX.Element
   filter: string
   onFilterChange: (value: string) => void
+  onFilterKeyDown?: JSX.EventHandlerUnion<HTMLInputElement, KeyboardEvent>
+  focusFilterToken?: number
   width?: number
   onWidthChange?: (width: number) => void
   minWidth?: number
@@ -57,6 +59,17 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
   const width = () => props.width ?? SIDEBAR_WIDTH_DEFAULT
   const minWidth = () => props.minWidth ?? SIDEBAR_WIDTH_MIN
   const maxWidth = () => props.maxWidth ?? SIDEBAR_WIDTH_MAX
+  let filterInputRef: HTMLInputElement | undefined
+
+  createEffect(() => {
+    const token = props.focusFilterToken
+    if (!props.open || !token || token <= 0) return
+    queueMicrotask(() => {
+      if (!props.open) return
+      filterInputRef?.focus()
+      filterInputRef?.select()
+    })
+  })
 
   createEffect(() => {
     if (!resizing()) return
@@ -84,9 +97,16 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
           </div>
           <div data-slot="session-review-v2-sidebar-filter">
             <TextInputV2
+              ref={(el) => {
+                filterInputRef = el
+              }}
               type="search"
               value={props.filter}
               onInput={(event) => props.onFilterChange(event.currentTarget.value)}
+              onKeyDown={props.onFilterKeyDown}
+              showClearButton={props.filter.length > 0}
+              clearLabel={i18n.t("ui.list.clearFilter")}
+              onClearClick={() => props.onFilterChange("")}
               placeholder={i18n.t("ui.sessionReviewV2.filterFiles")}
               aria-label={i18n.t("ui.sessionReviewV2.filterFiles")}
               leadingIcon={

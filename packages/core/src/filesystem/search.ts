@@ -159,6 +159,10 @@ function collectPaths<T>(
   })
 }
 
+function escapeGlob(text: string) {
+  return text.replaceAll("\\", "\\\\").replace(/[?*[\]{}()!]/g, "\\$&")
+}
+
 function searchFff(
   pick: Fff.Picker,
   kind: "file" | "directory" | "all",
@@ -326,6 +330,57 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
     const files: Interface["files"] = (input) => rg.files(input)
     const tree: Interface["tree"] = (input) => rg.tree(input)
 
+    const fallbackFileSearch = Effect.fn("Search.fileFallback")(function* (input: {
+      cwd: string
+      query: string
+      kind: "file" | "directory" | "all"
+      limit: number
+      error: unknown
+    }) {
+      return yield* Effect.gen(function* () {
+        const dir = FSUtil.resolve(input.cwd)
+        const pattern = `**/*${escapeGlob(input.query)}*`
+        yield* Effect.logWarning("fff file search fallback to glob", {
+          dir,
+          query: input.query,
+          kind: input.kind,
+          pattern,
+          error: input.error,
+        })
+        const scanned = yield* Effect.tryPromise({
+          try: () => Glob.scan(pattern, { cwd: dir, include: "all", dot: true }),
+          catch: (cause) => new Error("glob fallback scan failed", { cause }),
+        })
+        const typed = yield* Effect.forEach(
+          scanned,
+          Effect.fnUntraced(function* (relative) {
+            const absolute = path.join(dir, relative)
+            const stat = yield* fs.stat(absolute).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            const type = stat?.type === "Directory" ? "directory" : stat?.type === "File" ? "file" : undefined
+            if (!type) return
+            if (input.kind !== "all" && input.kind !== type) return
+            return { path: normalize(relative), type } satisfies FileResult
+          }),
+          { concurrency: 32, discard: false },
+        )
+        const seen = new Set<string>()
+        const deduped = typed.flatMap((item): FileResult[] => {
+          if (!item) return []
+          if (seen.has(item.path)) return []
+          seen.add(item.path)
+          return [item]
+        })
+        deduped.sort((a, b) => a.path.length - b.path.length || a.path.localeCompare(b.path))
+        return deduped.slice(0, input.limit)
+      }).pipe(
+        Effect.catch((error) =>
+          Effect.logWarning("glob fallback file search failed", { query: input.query, error }).pipe(
+            Effect.as([] as FileResult[]),
+          ),
+        ),
+      )
+    })
+
     // in 99% of use cases user that is opened opencode at certain directory will
     // conduct a file search in this direcotry, it could be switched later but
     // mostly always we will need a file picker for cwd
@@ -360,36 +415,57 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Ripgrep.Service
     const file: Interface["file"] = Effect.fn("Search.file")(function* (input) {
       const query = input.query.trim()
       const kind = input.kind ?? "file"
-
-      const entry = yield* acquire(input.cwd)
-      if (!entry) return yield* Effect.fail(new Error("fff is unavailable"))
-      yield* entry.ready
       const dir = FSUtil.resolve(input.cwd)
       const limit = input.limit ?? 100
-      const fffResult = yield* fffSync(`${kind} search`, () =>
-        searchFff(entry.pick, kind, query, {
-          pageIndex: 0,
-          currentFile: input.current, // supports both relative and absolute (relative preferred)
-          pageSize: limit,
-        }),
-      ).pipe(
-        Effect.catch((error) =>
-          Effect.logWarning(`fff ${kind} search failed`, { dir, query, error }).pipe(
-            Effect.andThen(Effect.fail(error)),
+      if (!query) return []
+
+      const rows = yield* Effect.gen(function* () {
+        const entry = yield* acquire(input.cwd)
+        if (!entry) return yield* Effect.fail(new Error("fff is unavailable"))
+        yield* entry.ready
+        const fffResult = yield* fffSync(`${kind} search`, () =>
+          searchFff(entry.pick, kind, query, {
+            pageIndex: 0,
+            currentFile: input.current, // supports both relative and absolute (relative preferred)
+            pageSize: limit,
+          }),
+        ).pipe(
+          Effect.catch((error) =>
+            Effect.logWarning(`fff ${kind} search failed`, { dir, query, error }).pipe(
+              Effect.andThen(Effect.fail(error)),
+            ),
           ),
+        )
+        if (!fffResult.ok) {
+          yield* Effect.logWarning(`fff ${kind} search failed`, { dir, query, error: fffResult.error })
+          return yield* Effect.fail(new Error(fffResult.error))
+        }
+        if (fffResult.value.length === 0) {
+          return yield* fallbackFileSearch({
+            cwd: input.cwd,
+            query,
+            kind,
+            limit,
+            error: "fff returned no matches",
+          })
+        }
+        return fffResult.value
+      }).pipe(
+        Effect.catch((error) =>
+          fallbackFileSearch({
+              cwd: input.cwd,
+              query,
+              kind,
+              limit,
+              error,
+            }),
         ),
       )
-      if (!fffResult.ok) {
-        yield* Effect.logWarning(`fff ${kind} search failed`, { dir, query, error: fffResult.error })
-        return yield* Effect.fail(new Error(fffResult.error))
-      }
-
-      const rows = fffResult.value
       remember(
         state,
         dir,
         query,
-        rows.map((row) => path.join(dir, row.path)),
+        rows.map((row: FileResult) => path.join(dir, row.path)),
       )
       return rows.slice(0, limit)
     })

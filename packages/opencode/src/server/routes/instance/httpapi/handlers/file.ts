@@ -39,7 +39,7 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       const started = performance.now()
       const fff = yield* search.file({ cwd: directory, query: ctx.query.query, limit, kind }).pipe(Effect.orDie)
       yield* Effect.logInfo("find file", {
-        engine: "fff",
+        engine: "search.file",
         query: ctx.query.query,
         kind,
         directory,

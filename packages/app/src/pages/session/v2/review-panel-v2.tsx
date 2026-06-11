@@ -1,4 +1,4 @@
-import { createEffect, createMemo, Show, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, Show, type JSX } from "solid-js"
 import type { SnapshotFileDiff, VcsFileDiff } from "@opencode-ai/sdk/v2"
 import { SessionReviewV2, SessionReviewV2Sidebar } from "@opencode-ai/ui/v2/session-review-v2"
 import { SessionReviewFilePreviewV2 } from "@opencode-ai/ui/v2/session-review-file-preview-v2"
@@ -25,6 +25,7 @@ import {
   REVIEW_PANEL_V2_SIDEBAR_WIDTH_MIN,
   type ReviewPanelV2State,
 } from "@/pages/session/v2/review-panel-v2-state"
+import { SessionFileListV2 } from "@/pages/session/v2/session-file-list-v2"
 
 type ReviewDiff = SnapshotFileDiff | VcsFileDiff
 
@@ -51,20 +52,27 @@ function useReviewPanelV2Data(props: ReviewPanelV2Props) {
   const diffs = createMemo(() => props.diffs().filter(filterRenderableDiff))
   const diffFiles = createMemo(() => diffs().map((diff) => diff.file))
   const filteredFiles = createMemo(() => filterReviewFiles(diffFiles(), props.state.filter()))
+  const searching = createMemo(() => props.state.filter().trim().length > 0)
   const kinds = createMemo(() => reviewDiffKinds(diffs()))
   const activeDiff = createMemo(() => {
     const active = props.activeFile
+    if (searching()) return active
     const files = filteredFiles()
     if (active && files.includes(active)) return active
     return files[0]
   })
   const activeItem = createMemo(() => diffs().find((diff) => diff.file === activeDiff()))
 
-  return { diffs, filteredFiles, kinds, activeDiff, activeItem }
+  return { diffs, filteredFiles, searching, kinds, activeDiff, activeItem }
 }
 
-function useReviewPanelV2ActiveFile(props: ReviewPanelV2Props, filteredFiles: () => string[]) {
+function useReviewPanelV2ActiveFile(
+  props: ReviewPanelV2Props,
+  filteredFiles: () => string[],
+  searching: () => boolean,
+) {
   createEffect(() => {
+    if (searching()) return
     const files = filteredFiles()
     const active = props.activeFile
     if (files.length === 0) return
@@ -76,7 +84,43 @@ function useReviewPanelV2ActiveFile(props: ReviewPanelV2Props, filteredFiles: ()
 export function ReviewPanelV2Sidebar(props: ReviewPanelV2Props) {
   const language = useLanguage()
   const model = useReviewPanelV2Data(props)
-  useReviewPanelV2ActiveFile(props, model.filteredFiles)
+  const flatMode = createMemo(() => model.searching())
+  const [highlightedPath, setHighlightedPath] = createSignal<string | undefined>()
+  useReviewPanelV2ActiveFile(props, model.filteredFiles, model.searching)
+
+  createEffect(() => {
+    const files = model.filteredFiles()
+    if (!flatMode() || files.length === 0) {
+      if (highlightedPath()) setHighlightedPath(undefined)
+      return
+    }
+    const highlighted = highlightedPath()
+    if (highlighted && files.includes(highlighted)) return
+    setHighlightedPath(files[0]!)
+  })
+
+  const onFilterKeyDown = (event: KeyboardEvent & { currentTarget: HTMLInputElement }) => {
+    if (!flatMode()) return
+    const files = model.filteredFiles()
+    if (files.length === 0) return
+
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      const highlighted = highlightedPath()
+      const currentIndex = highlighted ? files.indexOf(highlighted) : -1
+      const delta = event.key === "ArrowDown" ? 1 : -1
+      const start = currentIndex === -1 ? (delta > 0 ? 0 : files.length - 1) : currentIndex + delta
+      const index = Math.max(0, Math.min(files.length - 1, start))
+      setHighlightedPath(files[index]!)
+      event.preventDefault()
+      return
+    }
+
+    if (event.key !== "Enter") return
+    const target = highlightedPath() ?? files[0]
+    if (!target) return
+    props.onSelectFile(target)
+    event.preventDefault()
+  }
 
   return (
     <SessionReviewV2Sidebar
@@ -85,6 +129,7 @@ export function ReviewPanelV2Sidebar(props: ReviewPanelV2Props) {
       stats={<DiffChanges changes={model.diffs()} />}
       filter={props.state.filter()}
       onFilterChange={props.state.setFilter}
+      onFilterKeyDown={onFilterKeyDown}
       width={props.state.sidebarWidth()}
       onWidthChange={props.state.resizeSidebar}
       minWidth={REVIEW_PANEL_V2_SIDEBAR_WIDTH_MIN}
@@ -99,14 +144,33 @@ export function ReviewPanelV2Sidebar(props: ReviewPanelV2Props) {
           </div>
         }
       >
-        <FileTreeV2
-          path=""
-          allowed={model.filteredFiles()}
-          kinds={model.kinds()}
-          draggable={false}
-          active={model.activeDiff()}
-          onFileClick={(node) => props.onSelectFile(node.path)}
-        />
+        <Show when={flatMode()}>
+          <Show
+            when={model.filteredFiles().length > 0}
+            fallback={<div class="px-2 py-2 text-12-regular text-text-weak">{language.t("palette.empty")}</div>}
+          >
+            <SessionFileListV2
+              files={model.filteredFiles()}
+              kinds={model.kinds()}
+              active={model.activeDiff()}
+              highlighted={highlightedPath()}
+              onFileClick={(path) => {
+                setHighlightedPath(path)
+                props.onSelectFile(path)
+              }}
+            />
+          </Show>
+        </Show>
+        <Show when={!flatMode()}>
+          <FileTreeV2
+            path=""
+            allowed={model.filteredFiles()}
+            kinds={model.kinds()}
+            draggable={false}
+            active={model.activeDiff()}
+            onFileClick={(node) => props.onSelectFile(node.path)}
+          />
+        </Show>
       </Show>
     </SessionReviewV2Sidebar>
   )

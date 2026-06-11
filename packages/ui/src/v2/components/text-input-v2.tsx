@@ -7,9 +7,14 @@ export interface TextInputV2Props extends Omit<ComponentProps<"input">, "type"> 
   leadingIcon?: JSX.Element
   /** Show the trailing copy action. */
   showCopyButton?: boolean
+  /** Show the trailing clear action. */
+  showClearButton?: boolean
   /** Accessible label for the copy button. */
   copyLabel?: string
+  /** Accessible label for the clear button. */
+  clearLabel?: string
   onCopyClick?: (event: MouseEvent) => void
+  onClearClick?: (event: MouseEvent) => void
   /** Apply tabular numerals to the field value. */
   numeric?: boolean
   /** Error styling for the field and value text. */
@@ -25,8 +30,11 @@ export function TextInputV2(props: TextInputV2Props) {
     "classList",
     "leadingIcon",
     "showCopyButton",
+    "showClearButton",
     "copyLabel",
+    "clearLabel",
     "onCopyClick",
+    "onClearClick",
     "numeric",
     "invalid",
     "appearance",
@@ -58,15 +66,26 @@ export function TextInputV2(props: TextInputV2Props) {
           data-slot="text-input-v2-input"
         />
       </div>
-      <Show when={local.showCopyButton}>
+      <Show when={local.showClearButton || local.showCopyButton}>
         <button
           type="button"
           data-slot="text-input-v2-icon-button"
-          aria-label={local.copyLabel ?? "Copy"}
+          data-variant={local.showClearButton ? "clear" : "copy"}
+          aria-label={local.showClearButton ? (local.clearLabel ?? "Clear") : (local.copyLabel ?? "Copy")}
           disabled={local.disabled}
-          onClick={local.onCopyClick}
+          onMouseDown={(event) => {
+            if (!local.showClearButton) return
+            event.preventDefault()
+          }}
+          onClick={(event) => {
+            if (local.showClearButton) {
+              local.onClearClick?.(event)
+              return
+            }
+            local.onCopyClick?.(event)
+          }}
         >
-          <Icon name="copy" />
+          <Icon name={local.showClearButton ? "xmark-small" : "copy"} />
         </button>
       </Show>
     </div>

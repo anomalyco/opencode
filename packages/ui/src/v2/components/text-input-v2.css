@@ -100,6 +100,12 @@
   color: var(--v2-text-text-faint);
 }
 
+[data-component="text-input-v2"] [data-slot="text-input-v2-input"][type="search"]::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
 [data-component="text-input-v2"][data-numeric] [data-slot="text-input-v2-input"] {
   font-variant-numeric: tabular-nums;
 }
@@ -151,6 +157,14 @@
   display: block;
   flex: none;
   color: currentColor;
+}
+
+[data-component="text-input-v2"] [data-slot="text-input-v2-icon-button"][data-variant="clear"] {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 6px;
+  margin-right: -8px;
 }
 
 [data-component="text-input-v2"][data-invalid]:not([data-disabled]) [data-slot="text-input-v2-input"] {
