@@ -199,6 +199,41 @@ describe("Instruction.resolve", () => {
   )
 
   test.todo("fetches remote instructions from config URLs via HttpClient", () => {})
+
+  it.live("find returns all existing instruction files in the directory", () =>
+    withFiles({ "AGENTS.md": "# Agents", "CONTRIBUTING.md": "# Contributing" }, (dir) =>
+      Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const files = yield* svc.find(dir)
+        expect(files).toHaveLength(2)
+        expect(files).toContain(path.join(dir, "AGENTS.md"))
+        expect(files).toContain(path.join(dir, "CONTRIBUTING.md"))
+      }),
+    ),
+  )
+
+  it.live("resolve returns multiple instruction files from subdirectory", () =>
+    withFiles(
+      {
+        "subdir/AGENTS.md": "# Agents",
+        "subdir/CONTRIBUTING.md": "# Contributing",
+        "subdir/nested/file.ts": "const x = 1",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const results = yield* svc.resolve(
+            [],
+            path.join(dir, "subdir", "nested", "file.ts"),
+            MessageID.make("msg_message-test-multiresolve"),
+          )
+          expect(results.length).toBe(2)
+          const paths = results.map((r) => r.filepath)
+          expect(paths).toContain(path.join(dir, "subdir", "AGENTS.md"))
+          expect(paths).toContain(path.join(dir, "subdir", "CONTRIBUTING.md"))
+        }),
+    ),
+  )
 })
 
 describe("Instruction.system", () => {
@@ -217,6 +252,29 @@ describe("Instruction.system", () => {
         expect(rules).toHaveLength(2)
         expect(rules[0]).toBe(`Instructions from: ${path.join(globalTmp, "AGENTS.md")}\n# Global Instructions`)
         expect(rules[1]).toBe(`Instructions from: ${path.join(projectTmp, "AGENTS.md")}\n# Project Instructions`)
+      }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
+    }),
+  )
+
+  it.live("loads multiple project instruction files (e.g. AGENTS.md and CONTRIBUTING.md) when both exist", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpdirScoped()
+      const projectTmp = yield* tmpWithFiles({
+        "AGENTS.md": "# Project Agents",
+        "CONTRIBUTING.md": "# Project Contributing",
+      })
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const paths = yield* svc.systemPaths()
+        expect(paths.has(path.join(projectTmp, "AGENTS.md"))).toBe(true)
+        expect(paths.has(path.join(projectTmp, "CONTRIBUTING.md"))).toBe(true)
+
+        const rules = yield* svc.system()
+        expect(rules).toHaveLength(2)
+        const ruleContents = rules.join("\n")
+        expect(ruleContents).toContain("# Project Agents")
+        expect(ruleContents).toContain("# Project Contributing")
       }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
     }),
   )

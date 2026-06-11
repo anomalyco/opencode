@@ -63,6 +63,8 @@ When making changes to files, first understand the file's code conventions. Mimi
 - When you create a new component, first look at existing components to see how they're written; then consider framework choice, naming conventions, typing, and other conventions.
 - When you edit a piece of code, first look at the code's surrounding context (especially its imports) to understand the code's choice of frameworks and libraries. Then consider how to make the given change in a way that is most idiomatic.
 - Always follow security best practices. Never introduce code that exposes or logs secrets and keys. Never commit secrets or keys to the repository.
+- Before creating a pull request, you MUST read and follow the repository's pull request templates (e.g., `.github/pull_request_template.md` or `pull_request_template.md`) and contributing guidelines (e.g., `CONTRIBUTING.md`). Ensure the PR description follows the required format and answers all template questions.
+- If a repository bot flags a PR or enforces rules with a deadline (e.g., a 2-hour edit/response window), prioritize honoring that deadline and edit the PR description or code immediately to resolve the issue.
 
 # Code style
 - IMPORTANT: DO NOT ADD ***ANY*** COMMENTS unless asked

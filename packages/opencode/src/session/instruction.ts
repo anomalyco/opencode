@@ -35,7 +35,7 @@ export interface Interface {
   readonly clear: (messageID: MessageID) => Effect.Effect<void>
   readonly systemPaths: () => Effect.Effect<Set<string>, FSUtil.Error>
   readonly system: () => Effect.Effect<string[], FSUtil.Error>
-  readonly find: (dir: string) => Effect.Effect<string | undefined, FSUtil.Error>
+  readonly find: (dir: string) => Effect.Effect<string[], FSUtil.Error>
   readonly resolve: (
     messages: SessionV1.WithParts[],
     filepath: string,
@@ -65,6 +65,11 @@ export const layer: Layer.Layer<
       "AGENTS.md",
       ...(!flags.disableClaudeCodePrompt ? ["CLAUDE.md"] : []),
       "CONTEXT.md", // deprecated
+      "CONTRIBUTING.md",
+      ".github/pull_request_template.md",
+      ".github/PULL_REQUEST_TEMPLATE.md",
+      "pull_request_template.md",
+      "PULL_REQUEST_TEMPLATE.md",
     ]
 
     const state = yield* InstanceState.make(
@@ -126,8 +131,7 @@ export const layer: Layer.Layer<
             .findUp(file, ctx.directory, ctx.worktree)
             .pipe(Effect.catch(() => Effect.succeed([])))
           if (matches.length > 0) {
-            matches.forEach((item) => paths.add(path.resolve(item)))
-            break
+            paths.add(path.resolve(matches[0]))
           }
         }
       }
@@ -169,11 +173,14 @@ export const layer: Layer.Layer<
     })
 
     const find = Effect.fn("Instruction.find")(function* (dir: string) {
+      const results: string[] = []
       for (const file of instructionFiles) {
         const filepath = path.resolve(path.join(dir, file))
-        if (yield* fs.existsSafe(filepath)) return filepath
+        if (yield* fs.existsSafe(filepath)) {
+          results.push(filepath)
+        }
       }
-      return undefined
+      return results
     })
 
     const resolve = Effect.fn("Instruction.resolve")(function* (
@@ -192,26 +199,26 @@ export const layer: Layer.Layer<
 
       // Walk upward from the file being read and attach nearby instruction files once per message.
       while (current.startsWith(root) && current !== root) {
-        const found = yield* find(current)
-        if (!found || found === target || sys.has(found) || already.has(found)) {
-          current = path.dirname(current)
-          continue
-        }
+        const foundList = yield* find(current)
+        for (const found of foundList) {
+          if (found === target || sys.has(found) || already.has(found)) {
+            continue
+          }
 
-        let set = s.claims.get(messageID)
-        if (!set) {
-          set = new Set()
-          s.claims.set(messageID, set)
-        }
-        if (set.has(found)) {
-          current = path.dirname(current)
-          continue
-        }
+          let set = s.claims.get(messageID)
+          if (!set) {
+            set = new Set()
+            s.claims.set(messageID, set)
+          }
+          if (set.has(found)) {
+            continue
+          }
 
-        set.add(found)
-        const content = yield* read(found)
-        if (content) {
-          results.push({ filepath: found, content: `Instructions from: ${found}\n${content}` })
+          set.add(found)
+          const content = yield* read(found)
+          if (content) {
+            results.push({ filepath: found, content: `Instructions from: ${found}\n${content}` })
+          }
         }
 
         current = path.dirname(current)

@@ -95,6 +95,11 @@ assistant: [Uses the Task tool]
 
 IMPORTANT: Always use the TodoWrite tool to plan and track tasks throughout the conversation.
 
+# Pull Requests and Conventions
+
+- Before creating a pull request, you MUST read and follow the repository's pull request templates (e.g., `.github/pull_request_template.md` or `pull_request_template.md`) and contributing guidelines (e.g., `CONTRIBUTING.md`). Ensure the PR description follows the required format and answers all template questions.
+- If a repository bot flags a PR or enforces rules with a deadline (e.g., a 2-hour edit/response window), prioritize honoring that deadline and edit the PR description or code immediately to resolve the issue.
+
 # Code References
 
 When referencing specific functions or pieces of code include the pattern `file_path:line_number` to allow the user to easily navigate to the source code location.
