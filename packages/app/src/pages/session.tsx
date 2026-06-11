@@ -61,6 +61,7 @@ import { useServer } from "@/context/server"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { SessionSidePanelV2 } from "@/pages/session/v2/session-side-panel-v2"
+import { SessionReviewEmptyChangesV2 } from "@opencode-ai/ui/v2/session-review-empty-changes-v2"
 import { SessionReviewEmptyNoGitV2 } from "@opencode-ai/ui/v2/session-review-empty-no-git-v2"
 import { ReviewPanelV2, ReviewPanelV2Sidebar } from "@/pages/session/v2/review-panel-v2"
 import { createReviewPanelV2State } from "@/pages/session/v2/review-panel-v2-state"
@@ -1013,17 +1014,17 @@ export default function Page() {
   const reviewEmptyV2 = (input: { loadingClass: string }) => {
     if (store.changes === "git" || store.changes === "branch") {
       if (!reviewReady()) return <div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>
-      return empty(reviewEmptyText())
+      return <SessionReviewEmptyChangesV2 />
     }
 
     if (store.changes === "turn") {
       if (nogit()) {
         return <SessionReviewEmptyNoGitV2 pending={gitMutation.isPending} onInitGit={initGit} />
       }
-      return empty(reviewEmptyText())
+      return <SessionReviewEmptyChangesV2 />
     }
 
-    return empty(reviewEmptyText())
+    return <SessionReviewEmptyChangesV2 />
   }
 
   const reviewContent = (input: {

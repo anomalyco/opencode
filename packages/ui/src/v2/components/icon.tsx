@@ -89,6 +89,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M1 14H15L15 2H1V14Z" stroke="currentColor"/><rect x="3" y="4" width="4" height="8" fill="currentColor" fill-opacity="0.5"/><rect x="9" y="4" width="4" height="8" fill="currentColor" fill-opacity="0.5"/>`,
   },
+  review: {
+    viewBox: "0 0 20 20",
+    body: `<path d="M7 14.5H13M7 7.99512H10.0049M10.0049 7.99512H13M10.0049 7.99512V5M10.0049 7.99512V11M18 18V2L2 2L2 18H18Z" stroke="currentColor"/>`,
+  },
 }
 
 const spriteID = "opencode-v2-icon-sprite"

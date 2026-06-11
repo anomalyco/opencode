@@ -570,3 +570,40 @@
   letter-spacing: -0.04px;
   color: var(--v2-text-text-muted);
 }
+
+[data-slot="session-review-v2-empty-changes"] {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 24px;
+  text-align: center;
+}
+
+[data-slot="session-review-v2-empty-changes"] [data-slot="icon-svg"] {
+  flex: none;
+  color: var(--v2-icon-icon-muted);
+}
+
+[data-slot="session-review-v2-empty-changes-title"] {
+  flex: none;
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 530;
+  line-height: 100%;
+  letter-spacing: -0.04px;
+  color: var(--v2-text-text-base);
+}
+
+[data-slot="session-review-v2-empty-changes-description"] {
+  flex: none;
+  max-width: 282px;
+  font-size: 13px;
+  font-weight: 440;
+  line-height: 20px;
+  text-align: center;
+  letter-spacing: -0.04px;
+  color: var(--v2-text-text-muted);
+}
