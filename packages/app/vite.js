@@ -9,7 +9,7 @@ const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
   if (process.env.OPENCODE_CHANNEL === "latest") return "prod"
-  return "dev"
+  return "prod"
 })()
 
 /**

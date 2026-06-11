@@ -29,7 +29,7 @@ async function signWindows(configuration: { path: string }) {
 const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
   if (raw === "dev" || raw === "beta" || raw === "prod") return raw
-  return "dev"
+  return "prod"
 })()
 
 const APP_IDS = {
