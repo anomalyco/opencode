@@ -129,7 +129,8 @@ export function retryable(error: Err, provider: string) {
     if (
       lower.includes("rate increased too quickly") ||
       lower.includes("rate limit") ||
-      lower.includes("too many requests")
+      lower.includes("too many requests") ||
+      lower.includes("engine busy")
     ) {
       return { message: msg }
     }
