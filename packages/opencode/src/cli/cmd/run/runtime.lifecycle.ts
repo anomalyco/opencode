@@ -14,6 +14,7 @@ import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Global } from "@opencode-ai/core/global"
 import { openEditor } from "@opencode-ai/tui/editor"
 import { registerOpencodeKeymap } from "@opencode-ai/tui/keymap"
+import { TERMINAL_ENV_KEYS } from "@opencode-ai/tui/terminal-env"
 import { Session as SessionApi } from "@/session/session"
 import * as Locale from "@/util/locale"
 import { resolveInteractiveStdin } from "./runtime.stdin"
@@ -186,6 +187,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       autoFocus: false,
       openConsoleOnError: false,
       exitOnCtrlC: false,
+      forwardEnvKeys: TERMINAL_ENV_KEYS,
       useKittyKeyboard: { events: process.platform === "win32" },
       screenMode: "split-footer",
       footerHeight: FOOTER_HEIGHT,
