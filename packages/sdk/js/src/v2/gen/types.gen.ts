@@ -52,9 +52,9 @@ export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventFileEdited
-  | EventAccountAdded
-  | EventAccountRemoved
-  | EventAccountSwitched
+  | EventCredentialAdded
+  | EventCredentialRemoved
+  | EventCredentialSwitched
   | EventPermissionV2Asked
   | EventPermissionV2Replied
   | EventReferenceUpdated
@@ -1251,23 +1251,23 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "account.added"
+        type: "credential.added"
         properties: {
-          account: AuthInfo
+          credential: CredentialInfo
         }
       }
     | {
         id: string
-        type: "account.removed"
+        type: "credential.removed"
         properties: {
-          account: AuthInfo
+          credential: CredentialInfo
         }
       }
     | {
         id: string
-        type: "account.switched"
+        type: "credential.switched"
         properties: {
-          serviceID: string
+          connectorID: string
           from?: string
           to?: string
         }
@@ -2988,28 +2988,31 @@ export type SessionNextRetryError = {
   }
 }
 
-export type AuthOAuthCredential = {
+export type CredentialOAuth = {
   type: "oauth"
   refresh: string
   access: string
   expires: number
+  metadata?: {
+    [key: string]: string
+  }
 }
 
-export type AuthApiKeyCredential = {
-  type: "api"
+export type CredentialKey = {
+  type: "key"
   key: string
   metadata?: {
     [key: string]: string
   }
 }
 
-export type AuthCredential = AuthOAuthCredential | AuthApiKeyCredential
+export type CredentialValue = CredentialOAuth | CredentialKey
 
-export type AuthInfo = {
+export type CredentialInfo = {
   id: string
-  serviceID: string
-  description: string
-  credential: AuthCredential
+  connectorID: string
+  label: string
+  value: CredentialValue
 }
 
 export type PermissionV2Source = {
@@ -4062,8 +4065,8 @@ export type ProviderV2Info = {
         name: string
       }
     | {
-        via: "account"
-        service: string
+        via: "credential"
+        connector: string
       }
     | {
         via: "custom"
@@ -4095,6 +4098,63 @@ export type ProviderV2Info = {
     body: {
       [key: string]: unknown
     }
+  }
+}
+
+export type ConnectorWhen = {
+  key: string
+  op: "eq" | "neq"
+  value: string
+}
+
+export type ConnectorTextPrompt = {
+  type: "text"
+  key: string
+  message: string
+  placeholder?: string
+  when?: ConnectorWhen
+}
+
+export type ConnectorSelectPrompt = {
+  type: "select"
+  key: string
+  message: string
+  options: Array<{
+    label: string
+    value: string
+    hint?: string
+  }>
+  when?: ConnectorWhen
+}
+
+export type ConnectorOAuthMethod = {
+  id: string
+  type: "oauth"
+  label: string
+  prompts?: Array<ConnectorTextPrompt | ConnectorSelectPrompt>
+}
+
+export type ConnectorKeyMethod = {
+  id: string
+  type: "key"
+  label: string
+  prompts?: Array<ConnectorTextPrompt | ConnectorSelectPrompt>
+}
+
+export type ConnectorInfo = {
+  id: string
+  name: string
+  methods: Array<ConnectorOAuthMethod | ConnectorKeyMethod>
+}
+
+export type ConnectorAttempt = {
+  attemptID: string
+  url: string
+  instructions: string
+  mode: "auto" | "code"
+  time: {
+    created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
   }
 }
 
@@ -4861,27 +4921,27 @@ export type EventFileEdited = {
   }
 }
 
-export type EventAccountAdded = {
+export type EventCredentialAdded = {
   id: string
-  type: "account.added"
+  type: "credential.added"
   properties: {
-    account: AuthInfo
+    credential: CredentialInfo
   }
 }
 
-export type EventAccountRemoved = {
+export type EventCredentialRemoved = {
   id: string
-  type: "account.removed"
+  type: "credential.removed"
   properties: {
-    account: AuthInfo
+    credential: CredentialInfo
   }
 }
 
-export type EventAccountSwitched = {
+export type EventCredentialSwitched = {
   id: string
-  type: "account.switched"
+  type: "credential.switched"
   properties: {
-    serviceID: string
+    connectorID: string
     from?: string
     to?: string
   }
@@ -9981,6 +10041,320 @@ export type V2ProviderGetResponses = {
 }
 
 export type V2ProviderGetResponse = V2ProviderGetResponses[keyof V2ProviderGetResponses]
+
+export type V2ConnectorListData = {
+  body?: never
+  path?: never
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/connector"
+}
+
+export type V2ConnectorListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2ConnectorListError = V2ConnectorListErrors[keyof V2ConnectorListErrors]
+
+export type V2ConnectorListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: Array<ConnectorInfo>
+  }
+}
+
+export type V2ConnectorListResponse = V2ConnectorListResponses[keyof V2ConnectorListResponses]
+
+export type V2ConnectorGetData = {
+  body?: never
+  path: {
+    connectorID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/connector/{connectorID}"
+}
+
+export type V2ConnectorGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2ConnectorGetError = V2ConnectorGetErrors[keyof V2ConnectorGetErrors]
+
+export type V2ConnectorGetResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: ConnectorInfo
+  }
+}
+
+export type V2ConnectorGetResponse = V2ConnectorGetResponses[keyof V2ConnectorGetResponses]
+
+export type V2ConnectorConnectKeyData = {
+  body: {
+    methodID: string
+    key: string
+    inputs: {
+      [key: string]: string
+    }
+    label?: string
+  }
+  path: {
+    connectorID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/connector/{connectorID}/connect/key"
+}
+
+export type V2ConnectorConnectKeyErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2ConnectorConnectKeyError = V2ConnectorConnectKeyErrors[keyof V2ConnectorConnectKeyErrors]
+
+export type V2ConnectorConnectKeyResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2ConnectorConnectKeyResponse = V2ConnectorConnectKeyResponses[keyof V2ConnectorConnectKeyResponses]
+
+export type V2ConnectorConnectOauthBeginData = {
+  body: {
+    methodID: string
+    inputs: {
+      [key: string]: string
+    }
+    label?: string
+  }
+  path: {
+    connectorID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/connector/{connectorID}/connect/oauth"
+}
+
+export type V2ConnectorConnectOauthBeginErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2ConnectorConnectOauthBeginError =
+  V2ConnectorConnectOauthBeginErrors[keyof V2ConnectorConnectOauthBeginErrors]
+
+export type V2ConnectorConnectOauthBeginResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data: ConnectorAttempt
+  }
+}
+
+export type V2ConnectorConnectOauthBeginResponse =
+  V2ConnectorConnectOauthBeginResponses[keyof V2ConnectorConnectOauthBeginResponses]
+
+export type V2ConnectorConnectOauthCancelData = {
+  body?: never
+  path: {
+    attemptID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/connector/oauth/{attemptID}"
+}
+
+export type V2ConnectorConnectOauthCancelErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2ConnectorConnectOauthCancelError =
+  V2ConnectorConnectOauthCancelErrors[keyof V2ConnectorConnectOauthCancelErrors]
+
+export type V2ConnectorConnectOauthCancelResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2ConnectorConnectOauthCancelResponse =
+  V2ConnectorConnectOauthCancelResponses[keyof V2ConnectorConnectOauthCancelResponses]
+
+export type V2ConnectorConnectOauthStatusData = {
+  body?: never
+  path: {
+    attemptID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/connector/oauth/{attemptID}"
+}
+
+export type V2ConnectorConnectOauthStatusErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2ConnectorConnectOauthStatusError =
+  V2ConnectorConnectOauthStatusErrors[keyof V2ConnectorConnectOauthStatusErrors]
+
+export type V2ConnectorConnectOauthStatusResponses = {
+  /**
+   * Success
+   */
+  200: {
+    location: LocationInfo
+    data:
+      | {
+          status: "pending"
+          time: {
+            created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
+        }
+      | {
+          status: "complete"
+          time: {
+            created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
+        }
+      | {
+          status: "failed"
+          message: string
+          time: {
+            created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
+        }
+      | {
+          status: "expired"
+          time: {
+            created: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            expires: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          }
+        }
+  }
+}
+
+export type V2ConnectorConnectOauthStatusResponse =
+  V2ConnectorConnectOauthStatusResponses[keyof V2ConnectorConnectOauthStatusResponses]
+
+export type V2ConnectorConnectOauthCompleteData = {
+  body: {
+    code?: string
+  }
+  path: {
+    attemptID: string
+  }
+  query?: {
+    location?: {
+      directory?: string
+      workspace?: string
+    }
+  }
+  url: "/api/connector/oauth/{attemptID}/complete"
+}
+
+export type V2ConnectorConnectOauthCompleteErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2ConnectorConnectOauthCompleteError =
+  V2ConnectorConnectOauthCompleteErrors[keyof V2ConnectorConnectOauthCompleteErrors]
+
+export type V2ConnectorConnectOauthCompleteResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2ConnectorConnectOauthCompleteResponse =
+  V2ConnectorConnectOauthCompleteResponses[keyof V2ConnectorConnectOauthCompleteResponses]
 
 export type V2PermissionRequestListData = {
   body?: never

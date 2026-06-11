@@ -265,6 +265,20 @@ import type {
   V2AgentListResponses,
   V2CommandListErrors,
   V2CommandListResponses,
+  V2ConnectorConnectKeyErrors,
+  V2ConnectorConnectKeyResponses,
+  V2ConnectorConnectOauthBeginErrors,
+  V2ConnectorConnectOauthBeginResponses,
+  V2ConnectorConnectOauthCancelErrors,
+  V2ConnectorConnectOauthCancelResponses,
+  V2ConnectorConnectOauthCompleteErrors,
+  V2ConnectorConnectOauthCompleteResponses,
+  V2ConnectorConnectOauthStatusErrors,
+  V2ConnectorConnectOauthStatusResponses,
+  V2ConnectorGetErrors,
+  V2ConnectorGetResponses,
+  V2ConnectorListErrors,
+  V2ConnectorListResponses,
   V2EventSubscribeErrors,
   V2EventSubscribeResponses,
   V2FsFindErrors,
@@ -5567,6 +5581,297 @@ export class Provider2 extends HeyApiClient {
   }
 }
 
+export class Oauth2 extends HeyApiClient {
+  /**
+   * Begin OAuth connection
+   *
+   * Start an OAuth attempt and return the authorization details.
+   */
+  public begin<ThrowOnError extends boolean = false>(
+    parameters: {
+      connectorID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      methodID?: string
+      inputs?: {
+        [key: string]: string
+      }
+      label?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "connectorID" },
+            { in: "query", key: "location" },
+            { in: "body", key: "methodID" },
+            { in: "body", key: "inputs" },
+            { in: "body", key: "label" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      V2ConnectorConnectOauthBeginResponses,
+      V2ConnectorConnectOauthBeginErrors,
+      ThrowOnError
+    >({
+      url: "/api/connector/{connectorID}/connect/oauth",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Cancel OAuth connection
+   *
+   * Cancel an OAuth attempt and release its resources.
+   */
+  public cancel<ThrowOnError extends boolean = false>(
+    parameters: {
+      attemptID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "attemptID" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      V2ConnectorConnectOauthCancelResponses,
+      V2ConnectorConnectOauthCancelErrors,
+      ThrowOnError
+    >({
+      url: "/api/connector/oauth/{attemptID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get OAuth attempt status
+   *
+   * Poll the current status of an OAuth attempt.
+   */
+  public status<ThrowOnError extends boolean = false>(
+    parameters: {
+      attemptID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "attemptID" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      V2ConnectorConnectOauthStatusResponses,
+      V2ConnectorConnectOauthStatusErrors,
+      ThrowOnError
+    >({
+      url: "/api/connector/oauth/{attemptID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Complete OAuth connection
+   *
+   * Complete a code-based OAuth attempt and store the resulting credential.
+   */
+  public complete<ThrowOnError extends boolean = false>(
+    parameters: {
+      attemptID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      code?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "attemptID" },
+            { in: "query", key: "location" },
+            { in: "body", key: "code" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      V2ConnectorConnectOauthCompleteResponses,
+      V2ConnectorConnectOauthCompleteErrors,
+      ThrowOnError
+    >({
+      url: "/api/connector/oauth/{attemptID}/complete",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
+export class Connect extends HeyApiClient {
+  /**
+   * Connect with key
+   *
+   * Run a key authentication method and store the resulting credential.
+   */
+  public key<ThrowOnError extends boolean = false>(
+    parameters: {
+      connectorID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      methodID?: string
+      key?: string
+      inputs?: {
+        [key: string]: string
+      }
+      label?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "connectorID" },
+            { in: "query", key: "location" },
+            { in: "body", key: "methodID" },
+            { in: "body", key: "key" },
+            { in: "body", key: "inputs" },
+            { in: "body", key: "label" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      V2ConnectorConnectKeyResponses,
+      V2ConnectorConnectKeyErrors,
+      ThrowOnError
+    >({
+      url: "/api/connector/{connectorID}/connect/key",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  private _oauth?: Oauth2
+  get oauth(): Oauth2 {
+    return (this._oauth ??= new Oauth2({ client: this.client }))
+  }
+}
+
+export class Connector extends HeyApiClient {
+  /**
+   * List connectors
+   *
+   * Retrieve available connectors and their authentication methods.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+    return (options?.client ?? this.client).get<V2ConnectorListResponses, V2ConnectorListErrors, ThrowOnError>({
+      url: "/api/connector",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get connector
+   *
+   * Retrieve one connector and its authentication methods.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      connectorID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "connectorID" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2ConnectorGetResponses, V2ConnectorGetErrors, ThrowOnError>({
+      url: "/api/connector/{connectorID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _connect?: Connect
+  get connect(): Connect {
+    return (this._connect ??= new Connect({ client: this.client }))
+  }
+}
+
 export class Request extends HeyApiClient {
   /**
    * List pending permission requests
@@ -5920,6 +6225,11 @@ export class V2 extends HeyApiClient {
   private _provider?: Provider2
   get provider(): Provider2 {
     return (this._provider ??= new Provider2({ client: this.client }))
+  }
+
+  private _connector?: Connector
+  get connector(): Connector {
+    return (this._connector ??= new Connector({ client: this.client }))
   }
 
   private _permission?: Permission3

@@ -161,7 +161,7 @@ describe("OpencodePlugin", () => {
         yield* plugin.add(OpencodePlugin)
         const transform = yield* catalog.transform()
         yield* transform((catalog) => {
-          const item = provider("opencode", { enabled: { via: "account", service: "opencode" } })
+          const item = provider("opencode", { enabled: { via: "credential", connector: "opencode" } })
           catalog.provider.update(item.id, (draft) => {
             draft.enabled = item.enabled
           })

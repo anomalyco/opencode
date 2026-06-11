@@ -25,11 +25,11 @@ type HookSpec = {
     input: Catalog.Editor
     output: {}
   }
-  "account.switched": {
+  "credential.switched": {
     input: {
-      serviceID: import("./auth").Auth.ServiceID
-      from?: import("./auth").Auth.ID
-      to?: import("./auth").Auth.ID
+      connectorID: import("./connector").Connector.ID
+      from?: import("./credential").Credential.ID
+      to?: import("./credential").Credential.ID
     }
     output: {}
   }
