@@ -97,7 +97,7 @@ describe("PublicApi OpenAPI v2 errors", () => {
   test("documents references separately from filesystem routes", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
-    for (const path of ["/api/fs/read", "/api/fs/list"]) {
+    for (const path of ["/api/fs/read/*", "/api/fs/list"]) {
       expect(spec.paths[path]?.get?.parameters, path).not.toContainEqual(expect.objectContaining({ name: "reference" }))
     }
     expect(spec.paths["/api/reference"]?.get).toBeDefined()
@@ -110,6 +110,30 @@ describe("PublicApi OpenAPI v2 errors", () => {
       "/api/session/{sessionID}/prompt",
       "/api/session/{sessionID}/permission/{requestID}/reply",
       "/api/session/{sessionID}/question/{requestID}/reply",
+    ]) {
+      expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
+    }
+  })
+
+  test("documents connector discovery and connection routes", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const [method, path] of [
+      ["get", "/api/connector"],
+      ["get", "/api/connector/{connectorID}"],
+      ["post", "/api/connector/{connectorID}/connect/key"],
+      ["post", "/api/connector/{connectorID}/connect/oauth"],
+      ["get", "/api/connector/oauth/{attemptID}"],
+      ["post", "/api/connector/oauth/{attemptID}/complete"],
+      ["delete", "/api/connector/oauth/{attemptID}"],
+    ] as const) {
+      expect(spec.paths[path]?.[method], `${method.toUpperCase()} ${path}`).toBeDefined()
+    }
+
+    for (const path of [
+      "/api/connector/{connectorID}/connect/key",
+      "/api/connector/{connectorID}/connect/oauth",
+      "/api/connector/oauth/{attemptID}/complete",
     ]) {
       expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
     }
