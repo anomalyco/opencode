@@ -1,5 +1,5 @@
 import { MCP } from "@/mcp"
-import { ConfigMCP } from "@/config/mcp"
+import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { McpServerNotFoundError } from "../errors"
@@ -10,7 +10,7 @@ import { described } from "./metadata"
 
 export const AddPayload = Schema.Struct({
   name: Schema.String,
-  config: ConfigMCP.Info,
+  config: ConfigMCPV1.Info,
 })
 
 export const StatusMap = Schema.Record(Schema.String, MCP.Status)

@@ -1,4 +1,4 @@
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, Stream } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createHash } from "node:crypto"
@@ -69,7 +69,7 @@ function notFound() {
 }
 
 function embeddedUIResponse(file: string, body: Uint8Array, basePath = "") {
-  const mime = AppFileSystem.mimeType(file)
+  const mime = FSUtil.mimeType(file)
   const headers = new Headers({ "content-type": mime })
   if (mime.startsWith("text/html")) {
     let html = new TextDecoder().decode(body)
@@ -82,7 +82,7 @@ function embeddedUIResponse(file: string, body: Uint8Array, basePath = "") {
 
 export function serveEmbeddedUIEffect(
   requestPath: string,
-  fs: AppFileSystem.Interface,
+  fs: FSUtil.Interface,
   embeddedWebUI: Record<string, string>,
   basePath = "",
 ) {
@@ -97,7 +97,7 @@ export function serveEmbeddedUIEffect(
 
 export function serveUIEffect(
   request: HttpServerRequest.HttpServerRequest,
-  services: { fs: AppFileSystem.Interface; client: HttpClient.HttpClient; disableEmbeddedWebUi: boolean; basePath?: string },
+  services: { fs: FSUtil.Interface; client: HttpClient.HttpClient; disableEmbeddedWebUi: boolean; basePath?: string },
 ) {
   return Effect.gen(function* () {
     const embeddedWebUI = yield* Effect.promise(() => embeddedUI(services.disableEmbeddedWebUi))

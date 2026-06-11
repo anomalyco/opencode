@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { setTimeout as sleep } from "node:timers/promises"
 import { Effect, Layer } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import { McpAuth } from "../../src/mcp/auth"
 
@@ -11,11 +11,11 @@ function authFile() {
   let sawOverlap = false
 
   const layer = Layer.effect(
-    AppFileSystem.Service,
+    FSUtil.Service,
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
 
-      return AppFileSystem.Service.of({
+      return FSUtil.Service.of({
         ...fs,
         readJson: (file) =>
           file.endsWith("mcp-auth.json")
@@ -24,7 +24,7 @@ function authFile() {
                   if (!raw) throw new Error("mcp-auth.json missing")
                   return JSON.parse(raw)
                 },
-                catch: (cause) => new AppFileSystem.FileSystemError({ method: "readJson", cause }),
+                catch: (cause) => new FSUtil.FileSystemError({ method: "readJson", cause }),
               })
             : fs.readJson(file),
         writeJson: (file, value, mode) =>
@@ -41,12 +41,12 @@ function authFile() {
             : fs.writeJson(file, value, mode),
       })
     }),
-  ).pipe(Layer.provide(AppFileSystem.defaultLayer))
+  ).pipe(Layer.provide(FSUtil.defaultLayer))
 
   return { layer, raw: () => raw }
 }
 
-function authService(layer: Layer.Layer<AppFileSystem.Service>) {
+function authService(layer: Layer.Layer<FSUtil.Service>) {
   return McpAuth.Service.use((auth) => Effect.succeed(auth)).pipe(
     Effect.provide(McpAuth.layer.pipe(Layer.provide(EffectFlock.defaultLayer), Layer.provide(layer))),
   )

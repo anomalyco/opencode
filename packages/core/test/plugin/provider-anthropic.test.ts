@@ -15,18 +15,18 @@ describe("AnthropicPlugin", () => {
       const transform = yield* catalog.transform()
       yield* transform((catalog) => {
         const item = provider("anthropic", {
-          endpoint: { type: "aisdk", package: "@ai-sdk/anthropic" },
-          options: { headers: { Existing: "1" }, body: {}, aisdk: { provider: {}, request: {} } },
+          api: { type: "aisdk", package: "@ai-sdk/anthropic" },
+          request: { headers: { Existing: "1" }, body: {} },
         })
         catalog.provider.update(item.id, (draft) => {
-          draft.endpoint = item.endpoint
-          draft.options = item.options
+          draft.api = item.api
+          draft.request = item.request
         })
       })
-      expect((yield* catalog.provider.get(ProviderV2.ID.anthropic)).options.headers["anthropic-beta"]).toBe(
+      expect((yield* catalog.provider.get(ProviderV2.ID.anthropic)).request.headers["anthropic-beta"]).toBe(
         "interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14",
       )
-      expect((yield* catalog.provider.get(ProviderV2.ID.anthropic)).options.headers.Existing).toBe("1")
+      expect((yield* catalog.provider.get(ProviderV2.ID.anthropic)).request.headers.Existing).toBe("1")
     }),
   )
 
@@ -37,7 +37,7 @@ describe("AnthropicPlugin", () => {
       yield* plugin.add(AnthropicPlugin)
       const transform = yield* catalog.transform()
       yield* transform((catalog) => catalog.provider.update(provider("openai").id, () => {}))
-      expect((yield* catalog.provider.get(ProviderV2.ID.openai)).options.headers["anthropic-beta"]).toBeUndefined()
+      expect((yield* catalog.provider.get(ProviderV2.ID.openai)).request.headers["anthropic-beta"]).toBeUndefined()
     }),
   )
 

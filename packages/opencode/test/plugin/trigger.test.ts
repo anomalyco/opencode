@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -18,10 +18,11 @@ import { AccountTest } from "../fake/account"
 import { AuthTest } from "../fake/auth"
 import { NpmTest } from "../fake/npm"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const configLayer = Config.layer.pipe(
   Layer.provide(EffectFlock.defaultLayer),
-  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Env.defaultLayer),
   Layer.provide(AuthTest.empty),
   Layer.provide(AccountTest.empty),
@@ -75,7 +76,7 @@ const triggerSystemTransform = Effect.fn("PluginTriggerTest.triggerSystemTransfo
     {
       model: {
         providerID: ProviderV2.ID.anthropic,
-        modelID: ProviderV2.ModelID.make("claude-sonnet-4-6"),
+        modelID: ModelV2.ID.make("claude-sonnet-4-6"),
       },
     },
     out,
