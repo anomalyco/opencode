@@ -115,8 +115,34 @@
   [data-slot="session-review-v2-sidebar-tree"] {
   flex: 1;
   min-height: 0;
-  overflow: auto;
+}
+
+:is([data-component="session-review-v2"], [data-component="session-review-v2-sidebar-root"])
+  [data-slot="session-review-v2-sidebar-tree"]
+  .scroll-view__viewport {
   padding: 0 8px 12px;
+}
+
+:is([data-component="session-review-v2"], [data-component="session-review-v2-sidebar-root"])
+  [data-slot="session-review-v2-sidebar-tree"]
+  .scroll-view__thumb {
+  width: 16px;
+}
+
+:is([data-component="session-review-v2"], [data-component="session-review-v2-sidebar-root"])
+  [data-slot="session-review-v2-sidebar-tree"]
+  .scroll-view__thumb::after {
+  width: 6px;
+  background-color: var(--v2-border-border-muted, var(--border-weak-base));
+}
+
+:is([data-component="session-review-v2"], [data-component="session-review-v2-sidebar-root"])
+  [data-slot="session-review-v2-sidebar-tree"]
+  .scroll-view__thumb:hover::after,
+:is([data-component="session-review-v2"], [data-component="session-review-v2-sidebar-root"])
+  [data-slot="session-review-v2-sidebar-tree"]
+  .scroll-view__thumb[data-dragging="true"]::after {
+  background-color: var(--v2-border-border-strong, var(--border-strong-base));
 }
 
 [data-component="session-review-v2"] [data-slot="session-review-v2-preview"] {

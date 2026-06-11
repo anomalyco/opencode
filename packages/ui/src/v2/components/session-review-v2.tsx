@@ -8,6 +8,7 @@ import { IconButtonV2 } from "./icon-button-v2"
 import { TooltipV2 } from "./tooltip-v2"
 import type { SessionReviewDiffStyle } from "../../components/session-review"
 import { ResizeHandle } from "../../components/resize-handle"
+import { ScrollView } from "../../components/scroll-view"
 import { Show, createEffect, createSignal, onCleanup, type JSX } from "solid-js"
 import "./session-review-v2.css"
 
@@ -127,9 +128,13 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
               }
             />
           </div>
-          <div data-slot="session-review-v2-sidebar-tree" class="group/file-tree-v2">
+          <ScrollView
+            data-slot="session-review-v2-sidebar-tree"
+            class="group/file-tree-v2"
+            thumbVisibility="scroll"
+          >
             {props.children}
-          </div>
+          </ScrollView>
         </Show>
       </aside>
       <Show when={props.open && props.onWidthChange}>
