@@ -98,11 +98,13 @@ function init() {
             <Kobalte.Portal>
               <Kobalte.Overlay
                 data-component="dialog-overlay"
+                data-closing={closing() ? "" : undefined}
                 style={{ "z-index": String(zIndex) }}
                 onClick={() => close(id)}
               />
               <div
                 data-dialog-layer={layer}
+                data-closing={closing() ? "" : undefined}
                 style={{
                   position: "fixed",
                   inset: "0",
