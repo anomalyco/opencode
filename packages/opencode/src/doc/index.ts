@@ -508,7 +508,7 @@ export namespace Doc {
       targetID: z.string(),
       // For 'question' votes: whether this vote sends a reply or dismisses the question — lets every
       // participant (not just the requester) see the right dialog copy.
-      questionAction: z.enum(["send", "dismiss"]).optional(),
+      questionAction: z.enum(["send", "dismiss", "back"]).optional(),
       actorID: ActorID.zod,
       status: SubmitStatus,
       actors: SubmitActorInfo.array(),
@@ -527,12 +527,13 @@ export namespace Doc {
     .meta({ ref: "DocSubmitEvent" })
   export type SubmitEvent = z.infer<typeof SubmitEvent>
 
-  // The payload persisted in doc_submit.prompt for a 'question' vote: either a reply (answers per
-  // question) or a close vote (reject). Mirrors the SessionPrompt blob used for 'doc' votes.
+  // The payload persisted in doc_submit.prompt for a 'question' vote: a reply (answers per question),
+  // a close vote (reject), or a navigation vote (step = target question index to move everyone to).
   export const QuestionPayload = z.object({
     requestID: z.string(),
     answers: z.array(z.array(z.string())).optional(),
     reject: z.boolean().optional(),
+    step: z.number().optional(),
   })
   export type QuestionPayload = z.infer<typeof QuestionPayload>
 
@@ -596,12 +597,12 @@ export namespace Doc {
       name: item.name,
       status: SubmitActorStatus.parse(item.status),
     }))
-    const questionAction: "send" | "dismiss" | undefined =
-      row.target_kind === "question"
-        ? QuestionPayload.safeParse(JSON.parse(row.prompt)).data?.reject
-          ? "dismiss"
-          : "send"
-        : undefined
+    const questionAction: "send" | "dismiss" | "back" | undefined = (() => {
+      if (row.target_kind !== "question") return undefined
+      const payload = QuestionPayload.safeParse(JSON.parse(row.prompt)).data
+      if (payload?.step !== undefined) return "back"
+      return payload?.reject ? "dismiss" : "send"
+    })()
     return {
       submitID: row.id,
       sessionID: row.session_id,
@@ -655,6 +656,12 @@ export namespace Doc {
     }
     if (row.target_kind === "question") {
       const payload = QuestionPayload.parse(JSON.parse(row.prompt))
+      // Navigation vote: don't resolve the question — just move the shared step for everyone and
+      // keep the draft/presence alive so editing continues on the target question.
+      if (payload.step !== undefined) {
+        questionDraftApply({ sessionID: row.session_id, requestID: payload.requestID, op: { kind: "step", value: payload.step } })
+        return
+      }
       const requestID = QuestionID.make(payload.requestID)
       const run = payload.reject ? Question.reject(requestID) : Question.reply({ requestID, answers: payload.answers ?? [] })
       run.catch((err) => fail(row, err))

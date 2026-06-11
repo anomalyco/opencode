@@ -10,7 +10,7 @@ import { useCountdown } from "./use-countdown"
 import "./doc-submit.css"
 
 // What the vote will do once approved — drives the dialog copy.
-export type DocSubmitKind = "doc" | "question-send" | "question-dismiss" | "stop"
+export type DocSubmitKind = "doc" | "question-send" | "question-dismiss" | "question-back" | "stop"
 
 // For question votes: the question(s) and the answer(s) being agreed on, shown so everyone sees
 // exactly what is about to be sent (or which question is being dismissed).
@@ -60,14 +60,21 @@ function Preview(props: { items: () => DocSubmitPreviewItem[]; dismiss?: boolean
 function headline(kind: DocSubmitKind | undefined) {
   if (kind === "question-send") return "이 답변, 보낼까요?"
   if (kind === "question-dismiss") return "이 질문, 닫을까요?"
+  if (kind === "question-back") return "이전 질문으로 돌아갈까요?"
   if (kind === "stop") return "AI 응답을 멈출까요?"
   return "이 프롬프트, 보낼까요?"
 }
 
 function requestVerb(kind: DocSubmitKind | undefined) {
   if (kind === "question-dismiss") return "닫기를"
+  if (kind === "question-back") return "되돌리기를"
   if (kind === "stop") return "중지를"
   return "전송을"
+}
+
+// Votes that show only the question text (no answers) in the preview.
+function hideAnswers(kind: DocSubmitKind | undefined) {
+  return kind === "question-dismiss" || kind === "question-back"
 }
 
 function role(
@@ -108,7 +115,7 @@ function VotingBody(props: {
 
   return (
     <>
-      <Show when={props.preview}>{(items) => <Preview items={items()} dismiss={props.kind === "question-dismiss"} />}</Show>
+      <Show when={props.preview}>{(items) => <Preview items={items()} dismiss={hideAnswers(props.kind)} />}</Show>
       <div class="ds-ring-stage">
         <MatchAcceptRing remaining={remaining()} total={total()} />
         <div class="ds-ring-inner">
@@ -155,7 +162,7 @@ function WaitingBody(props: {
 
   return (
     <>
-      <Show when={props.preview}>{(items) => <Preview items={items()} dismiss={props.kind === "question-dismiss"} />}</Show>
+      <Show when={props.preview}>{(items) => <Preview items={items()} dismiss={hideAnswers(props.kind)} />}</Show>
       <div class="ds-ring-stage">
         <MatchAcceptRing full total={props.state.timeoutMs / 1000} />
         <div class="ds-ring-inner">
@@ -166,7 +173,9 @@ function WaitingBody(props: {
               ? "모두 동의하면 AI 응답을 멈춥니다"
               : props.kind === "question-dismiss"
                 ? "모두 동의하면 질문을 닫습니다"
-                : "모두 동의하면 AI에 자동으로 전송됩니다"}
+                : props.kind === "question-back"
+                  ? "모두 동의하면 이전 질문으로 돌아갑니다"
+                  : "모두 동의하면 AI에 자동으로 전송됩니다"}
           </div>
           <Show when={pending().length > 0}>
             <div class="ds-pending-list">

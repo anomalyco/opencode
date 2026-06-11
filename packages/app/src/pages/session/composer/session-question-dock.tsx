@@ -380,14 +380,18 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   // Any in-flight action that should freeze the dock's controls.
   const busy = createMemo(() => sending() || submitting())
 
-  // What the consent dialog shows: each question + the answer being agreed on (empty for a dismiss
-  // vote). Built from the shared draft, which is frozen while a vote is in flight — so it matches
-  // exactly what will be sent, and every participant sees the same thing.
-  const previewItems = () =>
-    questions().map((q, i) => ({
+  // What the consent dialog shows. A back vote shows just the question we'd return to; a dismiss
+  // shows every question (no answers); a send would show each question + its agreed answer.
+  const previewItems = () => {
+    if (voteKind() === "question-back") {
+      const target = questions()[Math.max(0, tab() - 1)]
+      return target ? [{ question: target.question, answers: [] }] : []
+    }
+    return questions().map((q, i) => ({
       question: q.question,
       answers: voteKind() === "question-dismiss" ? [] : (draft.answers[i] ?? []),
     }))
+  }
 
   const closeApproval = () => {
     dialog.close()
@@ -400,7 +404,14 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     if (!a) return
     if (!state.actors.some((item) => item.actorID === a.actorID)) return
     // Show the right copy even for participants who did not start the vote.
-    if (state.questionAction) setVoteKind(state.questionAction === "dismiss" ? "question-dismiss" : "question-send")
+    if (state.questionAction)
+      setVoteKind(
+        state.questionAction === "dismiss"
+          ? "question-dismiss"
+          : state.questionAction === "back"
+            ? "question-back"
+            : "question-send",
+      )
     // Terminal states handled exactly once: a reconnect replay must not re-open or re-fire.
     if (state.status !== "pending") {
       if (finalizedID === state.submitID) return
@@ -483,7 +494,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     return { actorIDs: Array.from(ids), names }
   }
 
-  const startVote = async (kind: DocSubmitKind, payload: { answers?: string[][]; reject?: boolean }) => {
+  const startVote = async (kind: DocSubmitKind, payload: { answers?: string[][]; reject?: boolean; step?: number }) => {
     const a = actor()
     if (!a || sending()) return
     setVoteKind(kind)
@@ -548,9 +559,10 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     }
     goto(tab() + 1)
   }
+  // Going back needs group consent (like send/dismiss): on approval the server moves the shared step.
   const back = () => {
     if (busy() || tab() <= 0) return
-    goto(tab() - 1)
+    void startVote("question-back", { step: tab() - 1 })
   }
   const jump = (value: number) => {
     if (busy()) return

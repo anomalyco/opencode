@@ -14,8 +14,8 @@ export type DocSubmitState = {
   // doc id whose in-flight AI response a consensus would cancel.
   targetKind: "doc" | "question" | "stop"
   targetID: string
-  // For 'question' votes: whether the vote sends a reply or dismisses the question.
-  questionAction?: "send" | "dismiss"
+  // For 'question' votes: whether the vote sends a reply, dismisses the question, or navigates back.
+  questionAction?: "send" | "dismiss" | "back"
   actorID: string
   status: "pending" | "sent" | "cancelled" | "expired" | "left"
   actors: DocSubmitActor[]
@@ -156,7 +156,7 @@ const parse = (data: string) => {
 
 // ── Question reply consent (reuses the generalized consent machine, question endpoints) ──────────
 
-export type QuestionSubmitPayload = { requestID: string; answers?: string[][]; reject?: boolean }
+export type QuestionSubmitPayload = { requestID: string; answers?: string[][]; reject?: boolean; step?: number }
 
 type QuestionStartInput = {
   baseUrl: string
