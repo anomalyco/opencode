@@ -2279,8 +2279,6 @@ noLLMServer.instance(
   30_000,
 )
 
-// Permission deny / reject loop semantics — auto-reject helper mimics a plugin
-// using the v1 SDK that rejects every permission ask as soon as it is published.
 const autoRejectAsks = Effect.fn("test.autoRejectAsks")(function* (message?: string) {
   const events = yield* EventV2Bridge.Service
   const permission = yield* Permission.Service
@@ -2305,9 +2303,6 @@ unix(
   () =>
     withSh(() =>
       Effect.gen(function* () {
-        // A reject sent WITH a message produces PermissionV1.CorrectedError.
-        // Without CorrectedError in the blocked check, the model receives the
-        // feedback as a tool error and retries the same call in a tight loop.
         const { llm, dir } = yield* useServerConfig((url) => ({
           ...providerCfg(url),
           experimental: { continue_loop_on_deny: false },
@@ -2331,7 +2326,6 @@ unix(
 
         const result = yield* prompt.loop({ sessionID: session.id })
         expect(result.info.role).toBe("assistant")
-        // Only 1 LLM call: the first reject with feedback must end the turn.
         expect(yield* llm.calls).toBe(1)
 
         const msgs = yield* MessageV2.filterCompactedEffect(session.id)
