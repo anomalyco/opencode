@@ -32,7 +32,10 @@ import {
   type ThemePreference,
 } from "../stats-shell"
 
-const statsModelFallbackUrl = "https://stats.opencode.ai"
+const statsCanonicalBaseUrl = "https://opencode.ai/data/"
+const statsUnfurlPath = "banner.png"
+const statsUnfurlAlt = "OpenCode Data wordmark on a dark patterned background"
+const statsUnfurlUrl = new URL(statsUnfurlPath, statsCanonicalBaseUrl).toString()
 const modelHeaderLinks: readonly HeaderLink[] = [
   { href: "#overview", label: "Overview" },
   { href: "#usage", label: "Usage" },
@@ -118,8 +121,8 @@ export default function StatsModel() {
   )
   const modelUrl = createMemo(() =>
     new URL(
-      `${import.meta.env.BASE_URL}${catalogEntry()?.id ?? `${labParam()}/${stats()?.slug ?? modelParam()}`}`,
-      event?.request.url ?? (typeof window === "undefined" ? statsModelFallbackUrl : window.location.href),
+      catalogEntry()?.id ?? [labParam(), stats()?.slug ?? modelParam()].filter((part) => part.length > 0).join("/"),
+      statsCanonicalBaseUrl,
     ).toString(),
   )
   const updateThemePreference = (preference: ThemePreference) => {
@@ -147,9 +150,16 @@ export default function StatsModel() {
       <Meta property="og:title" content={modelTitle()} />
       <Meta property="og:description" content={modelDescription()} />
       <Meta property="og:url" content={modelUrl()} />
-      <Meta name="twitter:card" content="summary" />
+      <Meta property="og:image" content={statsUnfurlUrl} />
+      <Meta property="og:image:type" content="image/png" />
+      <Meta property="og:image:width" content="1200" />
+      <Meta property="og:image:height" content="630" />
+      <Meta property="og:image:alt" content={statsUnfurlAlt} />
+      <Meta name="twitter:card" content="summary_large_image" />
       <Meta name="twitter:title" content={modelTitle()} />
       <Meta name="twitter:description" content={modelDescription()} />
+      <Meta name="twitter:image" content={statsUnfurlUrl} />
+      <Meta name="twitter:image:alt" content={statsUnfurlAlt} />
       <Header githubStars={githubStars() ?? "150K"} links={modelHeaderLinks} brandHref={import.meta.env.BASE_URL} />
       <div data-component="container">
         <div data-component="content">
