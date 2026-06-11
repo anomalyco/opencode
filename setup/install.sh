@@ -5,7 +5,6 @@
 #   - copy securecode.json into ~/.config/securecode/    (preserves any existing one)
 #   - copy tui.json into  ~/.config/securecode/         (preserves any existing one)
 #   - copy themes/*.json into ~/.config/securecode/themes/ (preserves any existing one)
-#   - copy skills/* into ~/.config/securecode/skills/    (preserves any existing per-skill dir)
 #   - seed ~/.local/state/securecode/kv.json with initial theme (only when missing)
 #
 # Branding (SecureCode wordmark / sidebar badge) is shipped inside the binary
@@ -70,25 +69,6 @@ for theme in "$src/themes"/*.json; do
     echo "skipped (already exists): $dest/themes/$name"
   fi
 done
-
-# skills/ 配下の各スキルを ~/.config/securecode/skills/ にコピーする。
-# securecode が起動時に Global.Path.config 配下の {skill,skills}/**/SKILL.md を
-# 自動 discovery するため、ここに置くだけで AI から `Skill(name=...)` で参照できる。
-# スキルごとにディレクトリ単位で「既存があれば触らない」ポリシーにする。
-# (マニュアル更新を反映したい場合はユーザーが該当ディレクトリを消して再 install する想定)
-if [ -d "$src/skills" ]; then
-  mkdir -p "$dest/skills"
-  for skill_dir in "$src/skills"/*/; do
-    [ -d "$skill_dir" ] || continue
-    name=$(basename "$skill_dir")
-    if [ ! -e "$dest/skills/$name" ]; then
-      cp -R "$skill_dir" "$dest/skills/$name"
-      echo "installed: $dest/skills/$name/"
-    else
-      echo "skipped (already exists): $dest/skills/$name/"
-    fi
-  done
-fi
 
 # 初期テーマを kv.json に書き込む (まだ存在しないときのみ)。
 # /themes で切り替えた値もここに保存され、次回起動で読み込まれる。
