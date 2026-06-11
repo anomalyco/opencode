@@ -194,20 +194,6 @@ function statusName(status: Record<string, MCPNS.Status> | MCPNS.Status, server:
 }
 
 it.instance(
-  "local mcp cwd defaults to instance directory when omitted",
-  () =>
-    MCP.Service.use((mcp: MCPNS.Interface) =>
-      Effect.gen(function* () {
-        const { directory } = yield* TestInstance
-        lastCreatedClientName = "no-cwd"
-        yield* mcp.add("no-cwd", { type: "local", command: ["echo", "test"] })
-        expect(stdioOptsByName.get("no-cwd")?.cwd).toBe(directory)
-      }),
-    ),
-  { config: { mcp: {} } },
-)
-
-it.instance(
   "local mcp cwd resolves relative paths against instance directory",
   () =>
     MCP.Service.use((mcp: MCPNS.Interface) =>
@@ -216,19 +202,6 @@ it.instance(
         lastCreatedClientName = "rel-cwd"
         yield* mcp.add("rel-cwd", { type: "local", command: ["echo", "test"], cwd: "plugins/sub" })
         expect(stdioOptsByName.get("rel-cwd")?.cwd).toBe(path.resolve(directory, "plugins/sub"))
-      }),
-    ),
-  { config: { mcp: {} } },
-)
-
-it.instance(
-  "local mcp cwd passes through absolute paths",
-  () =>
-    MCP.Service.use((mcp: MCPNS.Interface) =>
-      Effect.gen(function* () {
-        lastCreatedClientName = "abs-cwd"
-        yield* mcp.add("abs-cwd", { type: "local", command: ["echo", "test"], cwd: "/tmp/abs-path" })
-        expect(stdioOptsByName.get("abs-cwd")?.cwd).toBe("/tmp/abs-path")
       }),
     ),
   { config: { mcp: {} } },

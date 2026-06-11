@@ -9,7 +9,7 @@ export const Local = Schema.Struct({
     description: "Command and arguments to run the MCP server",
   }),
   cwd: Schema.optional(Schema.String).annotate({
-    description: "Working directory for the MCP server process",
+    description: "Working directory for the MCP server process. Relative paths resolve from the workspace directory.",
   }),
   environment: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({
     description: "Environment variables to set when running the MCP server",
