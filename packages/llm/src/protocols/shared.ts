@@ -193,7 +193,17 @@ export const MEDIA_MIMES = [...IMAGE_MIMES, ...VIDEO_MIMES] as const
 export const MAX_MEDIA_ENCODED_BYTES = 8 * 1024 * 1024
 export const MAX_MEDIA_DECODED_BYTES = 6 * 1024 * 1024
 
-const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
+const isBase64 = (value: string) => {
+  if (!value || value.length % 4 !== 0) return false
+  const padding = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0
+  const end = value.length - padding
+  for (let i = 0; i < end; i++) {
+    const c = value.charCodeAt(i)
+    if ((c >= 65 && c <= 90) || (c >= 97 && c <= 122) || (c >= 48 && c <= 57) || c === 43 || c === 47) continue
+    return false
+  }
+  return true
+}
 
 export interface ValidatedMedia {
   readonly mime: string
@@ -235,7 +245,7 @@ export const validateMedia = Effect.fn("ProviderShared.validateMedia")(function*
 
   if (Buffer.byteLength(base64, "utf8") > maxEncoded)
     return yield* invalidRequest(`${route} media exceeds the ${maxEncoded} byte encoded limit`)
-  if (!base64 || base64.length % 4 !== 0 || !base64Pattern.test(base64))
+  if (!isBase64(base64))
     return yield* invalidRequest(`${route} media must contain valid base64`)
   const bytes = Buffer.from(base64, "base64")
   if (bytes.byteLength > maxDecoded)

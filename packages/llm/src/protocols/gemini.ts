@@ -22,7 +22,7 @@ import { Lifecycle } from "./utils/lifecycle"
 
 const ADAPTER = "gemini"
 const MEDIA_MIMES = new Set<string>(ProviderShared.MEDIA_MIMES)
-const VIDEO_LIMITS: ProviderShared.MediaLimits = { maxDecodedBytes: 20 * 1024 * 1024, maxEncodedBytes: 28 * 1024 * 1024 }
+const VIDEO_LIMITS: ProviderShared.MediaLimits = { maxDecodedBytes: 14 * 1024 * 1024, maxEncodedBytes: 20 * 1024 * 1024 }
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 // =============================================================================
@@ -183,7 +183,7 @@ const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
 
 const lowerUserPart = Effect.fn("Gemini.lowerUserPart")(function* (part: TextPart | MediaPart) {
   if (part.type === "text") return { text: part.text }
-  const limits = part.mediaType.startsWith("video/") ? VIDEO_LIMITS : undefined
+  const limits = part.mediaType.toLowerCase().startsWith("video/") ? VIDEO_LIMITS : undefined
   const media = yield* ProviderShared.validateMedia("Gemini", part, MEDIA_MIMES, limits)
   return { inlineData: { mimeType: media.mime, data: media.base64 } }
 })
@@ -277,7 +277,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       })
       for (const item of content) {
         if (item.type === "text") continue
-        const limits = item.mime.startsWith("video/") ? VIDEO_LIMITS : undefined
+        const limits = item.mime.toLowerCase().startsWith("video/") ? VIDEO_LIMITS : undefined
         const media = yield* ProviderShared.validateToolFile("Gemini", item, MEDIA_MIMES, limits)
         parts.push({ inlineData: { mimeType: media.mime, data: media.base64 } })
       }
