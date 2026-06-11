@@ -426,6 +426,17 @@ function normalizeUnicode(str: string): string {
 
 type Comparator = (a: string, b: string) => boolean
 
+function tryTransformedMatch(
+  lines: string[],
+  pattern: string[],
+  startIndex: number,
+  transform: (value: string) => string,
+  eof: boolean,
+): number {
+  const transformedPattern = pattern.map(transform)
+  return tryMatch(lines, transformedPattern, startIndex, (a, b) => transform(a) === b, eof)
+}
+
 function tryMatch(lines: string[], pattern: string[], startIndex: number, compare: Comparator, eof: boolean): number {
   // If EOF anchor, try matching from end of file first
   if (eof) {
@@ -465,22 +476,19 @@ function seekSequence(lines: string[], pattern: string[], startIndex: number, eo
   if (exact !== -1) return exact
 
   // Pass 2: rstrip (trim trailing whitespace)
-  const rstrip = tryMatch(lines, pattern, startIndex, (a, b) => a.trimEnd() === b.trimEnd(), eof)
+  const rstrip = tryTransformedMatch(lines, pattern, startIndex, (line) => line.trimEnd(), eof)
   if (rstrip !== -1) return rstrip
 
   // Pass 3: trim (both ends)
-  const trim = tryMatch(lines, pattern, startIndex, (a, b) => a.trim() === b.trim(), eof)
+  const trim = tryTransformedMatch(lines, pattern, startIndex, (line) => line.trim(), eof)
   if (trim !== -1) return trim
 
   // Pass 4: normalized (Unicode punctuation to ASCII)
-  const normalized = tryMatch(
-    lines,
-    pattern,
-    startIndex,
-    (a, b) => normalizeUnicode(a.trim()) === normalizeUnicode(b.trim()),
-    eof,
-  )
-  return normalized
+  const normalized = tryTransformedMatch(lines, pattern, startIndex, (line) => normalizeUnicode(line.trim()), eof)
+  if (normalized !== -1) return normalized
+
+  // Pass 5: combine the accepted punctuation fallback with NFC for lines that differ in both ways.
+  return tryTransformedMatch(lines, pattern, startIndex, (line) => normalizeUnicode(line).normalize("NFC").trim(), eof)
 }
 
 function generateUnifiedDiff(oldContent: string, newContent: string): string {

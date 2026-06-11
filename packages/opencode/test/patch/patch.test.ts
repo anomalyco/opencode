@@ -316,6 +316,121 @@ PATCH`
   })
 
   describe("edge cases", () => {
+    test("should match canonically equivalent unicode lines", () => {
+      const result = Patch.deriveNewContentsFromChunks(
+        "unicode.md",
+        [
+          {
+            old_lines: ["Район: Астана".normalize("NFC")],
+            new_lines: ["Район: Алматы"],
+          },
+        ],
+        "# Сводка\nРайон: Астана\n".normalize("NFD"),
+      )
+
+      expect(result.content).toBe("# Сводка\nРайон: Алматы\n")
+    })
+
+    test("should combine canonical unicode and punctuation fallbacks", () => {
+      const result = Patch.deriveNewContentsFromChunks(
+        "unicode-punctuation.md",
+        [
+          {
+            old_lines: ['Район: Астана - "центр"'.normalize("NFC")],
+            new_lines: ["Район: Алматы"],
+          },
+        ],
+        "# Сводка\nРайон: Астана — “центр”\n".normalize("NFD"),
+      )
+
+      expect(result.content).toBe("# Сводка\nРайон: Алматы\n")
+    })
+
+    test("should match multi-line canonically equivalent unicode chunks", () => {
+      const result = Patch.deriveNewContentsFromChunks(
+        "unicode-multiline.md",
+        [
+          {
+            old_lines: ["Район: Астана".normalize("NFC"), "Статус: открыт".normalize("NFC")],
+            new_lines: ["Район: Алматы", "Статус: закрыт"],
+          },
+        ],
+        "# Сводка\nРайон: Астана\nСтатус: открыт\n".normalize("NFD"),
+      )
+
+      expect(result.content).toBe("# Сводка\nРайон: Алматы\nСтатус: закрыт\n")
+    })
+
+    test("should prefer eof canonical fallback matches from the end", () => {
+      const equivalent = "Район: Астана".normalize("NFD")
+
+      const result = Patch.deriveNewContentsFromChunks(
+        "unicode-eof.md",
+        [
+          {
+            old_lines: ["Район: Астана".normalize("NFC")],
+            new_lines: ["Район: Алматы"],
+            is_end_of_file: true,
+          },
+        ],
+        `${equivalent}\n${equivalent}\n`,
+      )
+
+      expect(result.content).toBe(`${equivalent}\nРайон: Алматы\n`)
+    })
+
+    test("should prefer exact unicode matches before canonical fallback", () => {
+      const exact = "Район: Астана".normalize("NFC")
+      const equivalent = "Район: Астана".normalize("NFD")
+
+      const result = Patch.deriveNewContentsFromChunks(
+        "unicode-order.md",
+        [
+          {
+            old_lines: [exact],
+            new_lines: ["Район: Алматы"],
+          },
+        ],
+        `${equivalent}\n${exact}\n`,
+      )
+
+      expect(result.content).toBe(`${equivalent}\nРайон: Алматы\n`)
+    })
+
+    test("should not match compatibility-equivalent unicode lines", () => {
+      expect(() =>
+        Patch.deriveNewContentsFromChunks(
+          "compatibility.md",
+          [
+            {
+              old_lines: ["office"],
+              new_lines: ["studio"],
+            },
+          ],
+          "ofﬁce\n",
+        ),
+      ).toThrow("Failed to find expected lines")
+    })
+
+    test("should match lines with trailing and leading whitespace differences", () => {
+      const result = Patch.deriveNewContentsFromChunks(
+        "whitespace.md",
+        [
+          {
+            old_lines: ["alpha"],
+            new_lines: ["ALPHA"],
+          },
+          {
+            old_lines: ["beta"],
+            new_lines: ["BETA"],
+          },
+        ],
+        "alpha   \n  beta\n",
+      )
+
+      expect(result.content).toBe("ALPHA\nBETA\n")
+    })
+
     it.live("should handle empty files", () =>
       Effect.gen(function* () {
         const emptyFile = path.join(tempDir, "empty.txt")
