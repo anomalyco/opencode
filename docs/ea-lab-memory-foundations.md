@@ -21,22 +21,33 @@ OpenCode core は変更せず、`.opencode/ea-lab-core` と `.opencode/mcp/ea-la
 
 EA Lab Memory は別レイヤーです。会話ログ全体を信用済み記憶として扱わず、evidence、experiment、experience、risk gate という構造化 record に変換された情報だけを判断材料にします。
 
-現在は「完全統合済み」ではなく「統合できる土台を横付けした」段階です。
+現在は「完全統合済み」ではなく「統合できる土台を横付けした」段階です。ただし、当初の Phase 1 から一歩進み、EA Lab service の一部 safety hardening は実装済みです。
+
+## 現在の実装状態
+
+Phase 1 の基盤に加えて、現在は以下が入っています。
+
+- `ea-lab-service.ts` の mutating path で promotion / live stage 遷移を fail-closed で gate check
+- `result_status: promoted` と `stage: micro_live / limited_live` を危険遷移として扱う service-level enforcement
+- evidence locator、searchable text、JSON payload に対する secret-like redaction の強化
+- EA Lab HTTP health endpoint の local bind / token guard
+
+この hardening は OpenCode core ではなく、repo-local な `.opencode/ea-lab-core` / `.opencode/mcp/ea-lab-*` で行っています。
 
 ## Phase 1 で追加されるもの
 
 - `.opencode/ea-lab-core/db.ts`: EA Lab SQLite database を開く
 - `.opencode/ea-lab-core/schema.ts`: schema 作成、FTS table、trigger、meta version
-- `.opencode/ea-lab-core/redaction.ts`: token、secret、password、account login の redaction
+- `.opencode/ea-lab-core/redaction.ts`: token、secret、password、account login、query param、JSON key-aware redaction
 - `.opencode/ea-lab-core/evidence.ts`: evidence 保存と FTS search
 - `.opencode/ea-lab-core/experiments.ts`: experiment 保存と result update
 - `.opencode/ea-lab-core/experiences.ts`: experience 保存、evidence link、similar search
 - `.opencode/ea-lab-core/risk-gates.ts`: `risk/gates.yaml` parse と hard gate check
 - `.opencode/mcp/ea-lab-service.ts`: core modules を束ねる service facade
-- `.opencode/mcp/ea-lab-http.ts`: HTTP health wrapper
+- `.opencode/mcp/ea-lab-http.ts`: local-only / token-guarded HTTP health wrapper
 - `.opencode/mcp/ea-lab-server.ts`: MCP / HTTP entrypoint
 - `risk/gates.yaml`: 初期 conservative risk policy
-- `packages/opencode/test/tool/ea-lab-*.test.ts`: Phase 1 targeted tests
+- `packages/opencode/test/tool/ea-lab-*.test.ts`: targeted tests for Phase 1 + safety hardening
 
 ## Database
 
@@ -69,7 +80,9 @@ Phase 1 schema は以下を含みます。
 
 この policy は AI が勝手に緩和してはいけません。緩和が必要な場合は人間の明示判断と review evidence が必要です。
 
-## Phase 1 でまだ行わないこと
+現在の実装では、`ea_lab_check_risk_gates` という advisory tool だけでなく、`ea-lab-service.ts` の experiment 作成 / 更新経路でも promotion / live 遷移時に gate を強制します。
+
+## 現在もまだ行わないこと
 
 - live trading の有効化
 - lot size の自動増加
@@ -80,6 +93,12 @@ Phase 1 schema は以下を含みます。
 - wiki writer automation
 - model-switch bridge
 - 全 OpenCode session への automatic handoff injection
+
+加えて、以下も未実装です。
+
+- human-approved live override path
+- evidence IDs 由来の自動 gate 判定
+- `risk_gate_check` / `promotion_decision` への永続監査ログ連携
 
 ## Validation
 
@@ -96,7 +115,7 @@ bun test test/tool/ea-lab-service.test.ts
 bun typecheck
 ```
 
-PR #2 では targeted tests と local typecheck は通過済みです。PR 上の `test` workflow は Phase 1 の変更範囲に合わせ、EA Lab targeted tests と MT5 parser fixture tests のみを必須確認にします。full unit / e2e は push to `dev` または `workflow_dispatch` 側で実行します。
+PR #2 では targeted tests と local typecheck は通過済みです。その後の EA Lab hardening でも、EA Lab targeted tests と local `bun typecheck` を継続して gate に使います。PR 上の `test` workflow は EA Lab targeted tests と MT5 parser fixture tests を必須確認にし、full unit / e2e は push to `dev` または `workflow_dispatch` 側で実行します。
 
 ## CI Runner Policy
 
@@ -112,7 +131,7 @@ Blacksmith runner が GitHub / Blacksmith 側で有効化され、PR job が que
 
 ## Next Phases
 
-Phase 2 以降で検討する項目は以下です。
+次フェーズで検討する項目は以下です。
 
 - bounded handoff injection
 - model-switch bridge
@@ -120,3 +139,4 @@ Phase 2 以降で検討する項目は以下です。
 - MT5 report parser integration
 - evidence-backed promotion workflow
 - session restart / compaction / model switch を跨ぐ memory admission proof
+- human-approved live transition workflow

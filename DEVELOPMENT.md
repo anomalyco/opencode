@@ -6,6 +6,10 @@
 - The canonical trading plan is [EA_TRADING_PLAN.md](./EA_TRADING_PLAN.md).
 - Sentinel-specific work is defined in [SENTINEL_BREAKOUT_IMPLEMENTATION_PLAN.md](./SENTINEL_BREAKOUT_IMPLEMENTATION_PLAN.md).
 - Remote MT5 compile and smoke procedures live in [REMOTE_MT5_COMPILE_SMOKE_RUNBOOK.md](./REMOTE_MT5_COMPILE_SMOKE_RUNBOOK.md).
+- Current tool split:
+  - `opencode` handles the main development stream, implementation-heavy changes, CI repair, and active PR work.
+  - `codex` currently handles supporting work such as documentation cleanup, README maintenance, design/spec edits, branch hygiene, and focused audits.
+- This split is intentionally lightweight and may change later. Treat it as a current working convention, not a hard architectural boundary.
 
 When documents conflict, prefer:
 
@@ -31,6 +35,13 @@ git remote -v
 ```
 
 Do not assume Codeberg paths or remote names from older notes. Use the actual remote configuration of the current checkout.
+
+## Branch Model
+
+- Keep `dev` as the shared mainline.
+- Use `feature/...` branches for implementation work that is actively being developed in `opencode`.
+- Use short-lived `docs/...` or `fix/...` branches for supporting work from `codex`, then merge or cherry-pick back into `dev` and delete them promptly.
+- Avoid accumulating `wip/...` branches and detached worktrees unless there is a specific reason to preserve unfinished state.
 
 ## Node Layout
 
