@@ -4,6 +4,8 @@ type Keys = keyof typeof en
 
 export const dict = {
   "ui.sessionReview.title": "工作階段變更",
+  "ui.sessionReview.title.git": "Git 變更",
+  "ui.sessionReview.title.branch": "分支變更",
   "ui.sessionReview.title.lastTurn": "上一輪變更",
   "ui.sessionReview.diffStyle.unified": "整合",
   "ui.sessionReview.diffStyle.split": "拆分",
@@ -41,6 +43,10 @@ export const dict = {
   "ui.sessionTurn.steps.hide": "隱藏步驟",
   "ui.sessionTurn.summary.response": "回覆",
   "ui.sessionTurn.diff.showMore": "顯示更多變更 ({{count}})",
+  "ui.sessionTurn.diffs.changed": "已變更",
+  "ui.sessionTurn.diffs.showAll": "顯示全部",
+  "ui.sessionTurn.diffs.showLess": "顯示較少",
+  "ui.sessionTurn.diffs.more": "還有 {{count}} 個檔案",
 
   "ui.sessionTurn.retry.retrying": "重試中",
   "ui.sessionTurn.retry.inSeconds": "{{seconds}} 秒後",
