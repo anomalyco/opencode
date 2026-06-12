@@ -145,22 +145,10 @@
 }
 
 [data-page="stats"] [data-slot="stats-wordmark"] {
-  display: flex;
+  display: block;
   flex-shrink: 0;
-  align-items: center;
-  gap: 12px;
-}
-
-[data-page="stats"] [data-slot="brand-mark"] {
-  display: block;
-  width: 19px;
-  height: 24px;
-}
-
-[data-page="stats"] [data-slot="brand-label"] {
-  display: block;
-  width: 50.851px;
-  height: 14px;
+  width: 66px;
+  height: 20px;
 }
 
 [data-page="stats"] [data-component="section-nav"] {
@@ -1731,7 +1719,6 @@
 [data-page="stats"] [data-component="leaderboard"],
 [data-page="stats"] [data-slot="leaderboard-featured"],
 [data-page="stats"] [data-slot="leaderboard-compact"],
-[data-page="stats"] [data-slot="leaderboard-column"],
 [data-page="stats"] [data-slot="leaderboard-mobile"] {
   display: grid;
 }
@@ -1762,11 +1749,6 @@
   -webkit-mask-position: center top;
   -webkit-mask-repeat: repeat;
   -webkit-mask-size: 6px 6px;
-}
-
-[data-page="stats"] [data-slot="leaderboard-column"] {
-  gap: 8px;
-  align-content: start;
 }
 
 [data-page="stats"] [data-slot="leaderboard-mobile"] {

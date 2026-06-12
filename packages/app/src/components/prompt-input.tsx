@@ -31,9 +31,10 @@ import {
   FileAttachmentPart,
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
-import { useNavigate } from "@solidjs/router"
+import { useNavigate, useSearchParams } from "@solidjs/router"
 import { useSDK } from "@/context/sdk"
 import { useServer } from "@/context/server"
+import { useTabs } from "@/context/tabs"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
@@ -52,7 +53,6 @@ import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
-import { serverAttachmentFile } from "./prompt-input/server-attachment"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
@@ -144,6 +144,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const platform = usePlatform()
   const pickDirectory = useDirectoryPicker()
   const settings = useSettings()
+  const tabsStore = useTabs()
+  const [search] = useSearchParams<{ draftId?: string }>()
   const { params, tabs, view } = useSessionLayout()
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
@@ -470,34 +472,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const escBlur = () => platform.platform === "desktop" && platform.os === "macos"
 
   const pick = () => {
-    if (server.isLocal()) {
-      pickAttachmentFiles({
-        picker: platform.openAttachmentPickerDialog,
-        directory: () => sdk.directory,
-        fallback: () => fileInputRef?.click(),
-        onFile: addAttachment,
-        onError: (error) =>
-          showToast({
-            variant: "error",
-            title: language.t("common.requestFailed"),
-            description: error instanceof Error ? error.message : String(error),
-          }),
-      })
-      return
-    }
-    void import("@/components/dialog-select-file").then((module) =>
-      dialog.show(() => (
-        <module.DialogSelectFile
-          mode="files"
-          onSelectFile={(path) => {
-            void sdk.client.v2.fs
-              .read({ path })
-              .then((response) => response.data?.data)
-              .then((data) => data && addAttachments([serverAttachmentFile(path, data)]))
-          }}
-        />
-      )),
-    )
+    pickAttachmentFiles({
+      picker: platform.openAttachmentPickerDialog,
+      directory: () => sdk.directory,
+      fallback: () => fileInputRef?.click(),
+      onFile: addAttachment,
+      onError: (error) =>
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: error instanceof Error ? error.message : String(error),
+        }),
+    })
   }
 
   const setMode = (mode: "normal" | "shell") => {
@@ -658,6 +644,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     },
     key: atKey,
     filterKeys: ["display"],
+    skipFilter: (item) => item.type === "file" && !item.recent,
     groupBy: (item) => {
       if (item.type === "agent") return "agent"
       if (item.recent) return "recent"
@@ -1397,6 +1384,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
     layout.projects.open(worktree)
     server.projects.touch(worktree)
+
+    // On the draft route, retarget the existing draft in place so we keep the same
+    // draft id (and its tab/prompt) instead of spawning a new draft for the new directory.
+    const draftID = search.draftId
+    if (draftID) {
+      tabsStore.updateDraft(draftID, { server: server.key, directory: worktree })
+      restoreFocus()
+      return
+    }
+
     navigate(`/${base64Encode(worktree)}/session`)
   }
   const addProject = () => {

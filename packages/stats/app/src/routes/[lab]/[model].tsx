@@ -32,7 +32,10 @@ import {
   type ThemePreference,
 } from "../stats-shell"
 
-const statsModelFallbackUrl = "https://stats.opencode.ai"
+const statsCanonicalBaseUrl = "https://opencode.ai/data/"
+const statsUnfurlPath = "banner.png"
+const statsUnfurlAlt = "OpenCode Data wordmark on a dark patterned background"
+const statsUnfurlUrl = new URL(statsUnfurlPath, statsCanonicalBaseUrl).toString()
 const modelHeaderLinks: readonly HeaderLink[] = [
   { href: "#overview", label: "Overview" },
   { href: "#usage", label: "Usage" },
@@ -41,7 +44,7 @@ const modelHeaderLinks: readonly HeaderLink[] = [
   { href: "#peers", label: "Peers" },
 ]
 const modelFooterLinks: readonly HeaderLink[] = [
-  { href: import.meta.env.BASE_URL, label: "Stats Home" },
+  { href: import.meta.env.BASE_URL, label: "Data Home" },
   { href: `${import.meta.env.BASE_URL}#top-models`, label: "Top Models" },
   { href: `${import.meta.env.BASE_URL}#leaderboard`, label: "Leaderboard" },
   { href: `${import.meta.env.BASE_URL}#session-cost`, label: "Session Cost" },
@@ -110,16 +113,16 @@ export default function StatsModel() {
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const modelName = createMemo(() => catalogEntry()?.name ?? stats()?.model ?? modelParam() ?? "Model")
   const labName = createMemo(() => formatCatalogLabName(catalogEntry()?.lab ?? stats()?.provider ?? labParam()))
-  const modelTitle = createMemo(() => `${modelName()} Stats`)
+  const modelTitle = createMemo(() => `${modelName()} Data`)
   const modelDescription = createMemo(() =>
     stats()
-      ? `${modelName()} usage, rank, token mix, cost, geo breakdown, and peer stats across OpenCode.`
+      ? `${modelName()} usage, rank, token mix, cost, geo breakdown, and peer data across OpenCode.`
       : `${modelName()} model facts, limits, and OpenCode usage availability.`,
   )
   const modelUrl = createMemo(() =>
     new URL(
-      `${import.meta.env.BASE_URL}${catalogEntry()?.id ?? `${labParam()}/${stats()?.slug ?? modelParam()}`}`,
-      event?.request.url ?? (typeof window === "undefined" ? statsModelFallbackUrl : window.location.href),
+      catalogEntry()?.id ?? [labParam(), stats()?.slug ?? modelParam()].filter((part) => part.length > 0).join("/"),
+      statsCanonicalBaseUrl,
     ).toString(),
   )
   const updateThemePreference = (preference: ThemePreference) => {
@@ -147,9 +150,16 @@ export default function StatsModel() {
       <Meta property="og:title" content={modelTitle()} />
       <Meta property="og:description" content={modelDescription()} />
       <Meta property="og:url" content={modelUrl()} />
-      <Meta name="twitter:card" content="summary" />
+      <Meta property="og:image" content={statsUnfurlUrl} />
+      <Meta property="og:image:type" content="image/png" />
+      <Meta property="og:image:width" content="1200" />
+      <Meta property="og:image:height" content="630" />
+      <Meta property="og:image:alt" content={statsUnfurlAlt} />
+      <Meta name="twitter:card" content="summary_large_image" />
       <Meta name="twitter:title" content={modelTitle()} />
       <Meta name="twitter:description" content={modelDescription()} />
+      <Meta name="twitter:image" content={statsUnfurlUrl} />
+      <Meta name="twitter:image:alt" content={statsUnfurlAlt} />
       <Header githubStars={githubStars() ?? "150K"} links={modelHeaderLinks} brandHref={import.meta.env.BASE_URL} />
       <div data-component="container">
         <div data-component="content">
@@ -183,15 +193,15 @@ function ModelLoading() {
         <div data-slot="model-hero-grid">
           <div data-slot="model-hero-copy">
             <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-              Stats
+              Data
             </a>
-            <h1>Model Stats</h1>
+            <h1>Model Data</h1>
             <p>Reading model aggregates from model_stat.</p>
           </div>
         </div>
       </section>
       <section data-section="model-panel">
-        <ModelEmptyState title="Loading model stats" description="Reading the model profile." />
+        <ModelEmptyState title="Loading model data" description="Reading the model profile." />
       </section>
     </>
   )
@@ -204,7 +214,7 @@ function ModelNotFound(props: { lab: string; model: string }) {
         <div data-slot="model-hero-grid">
           <div data-slot="model-hero-copy">
             <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-              Stats
+              Data
             </a>
             <h1>{props.model || "Model"}</h1>
             <p>No model facts or model_stat rows matched {props.lab ? `${props.lab}/${props.model}` : props.model}.</p>
@@ -225,7 +235,7 @@ function ModelHero(props: { data: StatsModelData | null; catalog: ModelCatalogEn
   return (
     <section id="overview" data-section="model-hero">
       <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-        Stats
+        Data
       </a>
       <div data-slot="model-hero-grid">
         <div data-slot="model-hero-copy">
@@ -279,7 +289,7 @@ function ModelCatalogCallout(props: { catalog: ModelCatalogEntry | null }) {
     <div data-component="model-rank-panel">
       <span>Model Profile</span>
       <strong>{props.catalog?.releaseDate ? formatCatalogDate(props.catalog.releaseDate) : "Listed"}</strong>
-      <p>No OpenCode usage in the current stats window.</p>
+      <p>No OpenCode usage in the current data window.</p>
     </div>
   )
 }
@@ -446,7 +456,7 @@ function ModelEfficiencySection(props: { data: StatsModelData | null }) {
       <Show
         when={props.data}
         fallback={
-          <ModelEmptyState title="No efficiency data" description="Cost and cache stats appear after usage lands." />
+          <ModelEmptyState title="No efficiency data" description="Efficiency data appears after usage lands." />
         }
       >
         {(data) => (

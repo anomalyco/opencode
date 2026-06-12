@@ -252,6 +252,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "folgenden Ausnahmen",
 
   "go.title": "OpenCode Go | Kostengünstige Coding-Modelle für alle",
+  "go.banner.text": "MiniMax M3 erhält für begrenzte Zeit 3x Nutzungslimits",
   "go.meta.description":
     "Go beginnt bei $5 für den ersten Monat, danach $10/Monat, mit großzügigen 5-Stunden-Anfragelimits für GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro und DeepSeek V4 Flash.",
   "go.hero.title": "Kostengünstige Coding-Modelle für alle",
