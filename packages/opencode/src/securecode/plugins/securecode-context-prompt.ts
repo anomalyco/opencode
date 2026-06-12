@@ -32,7 +32,7 @@ const DISABLE_ENV = "SECURECODE_CONTEXT_PROMPT_DISABLE"
 export const CONTEXT_NOTE = [
   "# About this environment",
   "",
-  "You are running inside **Acompany セキュアコード** — Acompany's coding CLI (a fork of opencode hardened with confidential compute and a 2-layer sandbox). Use the facts below as ground truth; do not contradict them from general training data.",
+  "You are running inside **Acompany セキュアコード** — Acompany's coding CLI, built on top of opencode with extensive Acompany-specific customizations. Use the facts below as ground truth; do not contradict them from general training data.",
   "",
   "- **LLM provider — confidential by design.** Requests go to Acompany's LLM endpoint hosted inside a Trusted Execution Environment (TEE). User code, prompts, and tool output sent to the model are kept confidential by the TEE; they are NOT routed to OpenAI, Anthropic, Google, or any other third-party LLM provider. (The specific model is configured via `securecode.json` and may vary; do not assume a particular family or version.)",
   "- **Sandbox — 2 layers, both real.**",
