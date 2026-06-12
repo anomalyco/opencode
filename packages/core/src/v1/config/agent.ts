@@ -18,8 +18,14 @@ const AgentSchema = Schema.StructWithRest(
     temperature: Schema.optional(Schema.Finite),
     top_p: Schema.optional(Schema.Finite),
     prompt: Schema.optional(Schema.String),
-    plan_reminder: Schema.optional(Schema.String),
-    build_switch_reminder: Schema.optional(Schema.String),
+    plan_reminder: Schema.optional(Schema.String).annotate({
+      description:
+        "Override the reminder injected when the plan agent enters plan mode. Supports ${planInfo} interpolation.",
+    }),
+    build_switch_reminder: Schema.optional(Schema.String).annotate({
+      description:
+        "Override the reminder injected when switching from plan mode back to the build agent. Supports ${planInfo} interpolation.",
+    }),
     tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({
       description: "@deprecated Use 'permission' field instead",
     }),

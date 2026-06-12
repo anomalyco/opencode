@@ -346,6 +346,30 @@ Specify a custom system prompt file for this agent with the `prompt` config. The
 
 This path is relative to where the config file is located. So this works for both the global OpenCode config and the project specific config.
 
+### Plan reminders
+
+The built-in `plan` and `build` agents also support reminder-specific overrides that are separate from the main `prompt`.
+
+- `plan_reminder` customizes the reminder injected when the `plan` agent enters plan mode.
+- `build_switch_reminder` customizes the reminder injected when control returns from `plan` to `build`.
+
+Both fields support `${planInfo}`, which expands to the current plan-file guidance.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "plan": {
+      "plan_reminder": "You are in planning mode.\n\n${planInfo}"
+    },
+    "build": {
+      "build_switch_reminder": "Implementation can begin.\n\n${planInfo}"
+    }
+  }
+}
+```
+
+Use these when you want to customize plan-mode guidance without replacing the agent's full system prompt.
+
 ---
 
 ### Model

@@ -15,8 +15,14 @@ export class Info extends Schema.Class<Info>("ConfigV2.Agent")({
   variant: Schema.String.pipe(Schema.optional),
   request: ConfigProvider.Request.pipe(Schema.optional),
   system: Schema.String.pipe(Schema.optional),
-  plan_reminder: Schema.String.pipe(Schema.optional),
-  build_switch_reminder: Schema.String.pipe(Schema.optional),
+  plan_reminder: Schema.String.pipe(Schema.optional).annotate({
+    description:
+      "Override the reminder injected when the plan agent enters plan mode. Supports ${planInfo} interpolation.",
+  }),
+  build_switch_reminder: Schema.String.pipe(Schema.optional).annotate({
+    description:
+      "Override the reminder injected when switching from plan mode back to the build agent. Supports ${planInfo} interpolation.",
+  }),
   description: Schema.String.pipe(Schema.optional),
   mode: Schema.Literals(["subagent", "primary", "all"]).pipe(Schema.optional),
   hidden: Schema.Boolean.pipe(Schema.optional),

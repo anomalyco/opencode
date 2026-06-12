@@ -519,6 +519,29 @@ You can configure specialized agents for specific tasks through the `agent` opti
 
 You can also define agents using markdown files in `~/.config/opencode/agents/` or `.opencode/agents/`. [Learn more here](/docs/agents).
 
+Agent configs also support reminder overrides for the built-in plan workflow:
+
+- `plan_reminder` overrides the reminder injected when the `plan` agent enters plan mode.
+- `build_switch_reminder` overrides the reminder injected when control switches back to the `build` agent.
+
+Both fields support `${planInfo}`, which expands to the current plan-file guidance.
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agent": {
+    "plan": {
+      "plan_reminder": "Plan mode is active.\n\n${planInfo}\n\nKeep the plan concise and execution-ready."
+    },
+    "build": {
+      "build_switch_reminder": "Plan approved. Resume implementation.\n\n${planInfo}"
+    }
+  }
+}
+```
+
+These fields only affect the injected reminder text. They do not change the agent's main `prompt`, and they are unrelated to model catalog settings like `OPENCODE_MODELS_PATH`.
+
 ---
 
 ### Default agent
