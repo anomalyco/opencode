@@ -125,6 +125,7 @@
     "ignore": "7.0.5",
     "immer": "11.1.4",
     "jsonc-parser": "3.3.1",
+    "mammoth": "1.12.0",
     "mime-types": "3.0.2",
     "minimatch": "10.0.3",
     "npm-package-arg": "13.0.2",
@@ -146,6 +147,7 @@
     "web-tree-sitter": "0.25.10",
     "ws": "8.21.0",
     "xdg-basedir": "5.1.0",
+    "xlsx": "0.18.5",
     "yargs": "18.0.0",
     "zod": "catalog:"
   },

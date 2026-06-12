@@ -9,6 +9,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { convertOfficeFile, officeExtMime } from "@/util/office"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -321,6 +322,28 @@ export const ReadTool = Tool.define<
               url: `data:${mime};base64,${Buffer.from(bytes).toString("base64")}`,
             },
           ],
+        }
+      }
+
+      const officeFileMime = officeExtMime(path.extname(filepath))
+      if (officeFileMime) {
+        const bytes = yield* fs.readFile(filepath)
+        const text = yield* Effect.promise(() => convertOfficeFile(bytes, officeFileMime))
+        if (text) {
+          const output = [
+            `<path>${filepath}</path>`,
+            `<type>file</type>`,
+            `<content>\n${text}\n</content>`,
+          ].join("\n")
+          return {
+            title,
+            output,
+            metadata: {
+              preview: text.slice(0, 200),
+              truncated: false,
+              loaded: [] as string[],
+            },
+          }
         }
       }
 
