@@ -4,6 +4,8 @@ import { Effect, Layer, Record, Result, Schema, Context } from "effect"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Global } from "@opencode-ai/core/global"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Credential } from "@opencode-ai/core/credential"
+import { IntegrationSchema } from "@opencode-ai/core/integration/schema"
 
 export const OAUTH_DUMMY_KEY = "opencode-oauth-dummy-key"
 
@@ -53,6 +55,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fsys = yield* FSUtil.Service
+    const credentials = yield* Credential.Service
     const decode = Schema.decodeUnknownOption(Info)
 
     const all = Effect.fn("Auth.all")(function* () {
@@ -78,6 +81,31 @@ export const layer = Layer.effect(
       yield* fsys
         .writeJson(file, { ...data, [norm]: info }, 0o600)
         .pipe(Effect.mapError(fail("Failed to write auth data")))
+
+      yield* credentials
+        .create({
+          integrationID: IntegrationSchema.ID.make(norm),
+          label: "default",
+          value:
+            info.type === "api"
+              ? new Credential.Key({ type: "key", key: info.key, metadata: info.metadata })
+              : info.type === "oauth"
+                ? new Credential.OAuth({
+                    type: "oauth",
+                    access: info.access,
+                    refresh: info.refresh,
+                    expires: info.expires,
+                    metadata: {
+                      ...(info.accountId ? { clientId: info.accountId } : {}),
+                      ...(info.enterpriseUrl ? { clientSecret: info.enterpriseUrl } : {}),
+                    },
+                  })
+                : new Credential.Key({
+                    type: "key",
+                    key: info.token,
+                  }),
+        })
+        .pipe(Effect.orDie)
     })
 
     const remove = Effect.fn("Auth.remove")(function* (key: string) {
@@ -86,13 +114,21 @@ export const layer = Layer.effect(
       delete data[key]
       delete data[norm]
       yield* fsys.writeJson(file, data, 0o600).pipe(Effect.mapError(fail("Failed to write auth data")))
+
+      const existing = yield* credentials.list(IntegrationSchema.ID.make(norm)).pipe(Effect.orDie)
+      for (const item of existing) {
+        yield* credentials.remove(item.id).pipe(Effect.orDie)
+      }
     })
 
     return Service.of({ get, all, set, remove })
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(FSUtil.defaultLayer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(FSUtil.defaultLayer),
+  Layer.provide(Credential.defaultLayer),
+)
 
 export const node = LayerNode.make(layer, [FSUtil.node])
 
