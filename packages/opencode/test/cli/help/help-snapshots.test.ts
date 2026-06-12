@@ -47,19 +47,17 @@ function normalize(text: string): string {
   })
 }
 
-// Top-level commands. Order matches what `securecode --help` prints today;
-// keep it in that order so the snapshot file reads as a table of contents.
-// `completion` is intentionally excluded — it's a yargs built-in that emits
-// top-level help on `--help` and exits 1; not a real opencode command.
-// SecureCode keeps only `[project]` (TUI default, excluded per the banner
-// caveat above) and `run` registered (see #347, follow-up to #71). Other
-// upstream subcommands fall through to top-level help.
-const TOP_LEVEL = ["run"] as const
+// Top-level commands. `completion` is intentionally excluded — it's a
+// yargs built-in that emits top-level help on `--help` and exits 1; not a
+// real opencode command. The TUI default `[project]` is excluded per the
+// banner caveat above. SecureCode no longer registers any other top-level
+// subcommands (see #347, follow-up to #71), so this list is currently
+// empty.
+const TOP_LEVEL: ReadonlyArray<string> = []
 
 // Subcommands worth pinning. Not exhaustive — the goal is one snapshot per
 // distinct argv shape, not every leaf. Add new entries when a subcommand
-// gains user-visible flags that we want to lock in. Currently empty because
-// `run` has no nested subcommands.
+// gains user-visible flags that we want to lock in.
 const SUBCOMMANDS: ReadonlyArray<readonly string[]> = []
 
 // Fixed wrap width so a developer's terminal doesn't affect snapshots.

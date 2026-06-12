@@ -88,8 +88,10 @@ gh auth status
 
 ## ログを取りたい
 
+`--print-logs --log-level DEBUG` を付けて TUI を起動するとログが stderr に流れます。
+
 ```bash
-securecode run --print-logs --log-level debug "your prompt"
+securecode --print-logs --log-level DEBUG
 ```
 
 問題切り分け時はログを Acompany 担当者へ添付してください。**ログ内に API キーや機密ファイル内容が含まれていないか必ず確認**してから共有を。

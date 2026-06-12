@@ -1,6 +1,5 @@
 import yargs from "yargs"
 import { hideBin } from "yargs/helpers"
-import { RunCommand } from "./cli/cmd/run"
 import * as Log from "@opencode-ai/core/util/log"
 import { UI } from "./cli/ui"
 import { Installation } from "./installation"
@@ -135,7 +134,6 @@ const cli = yargs(args)
   .usage("")
   .completion("completion", "generate shell completion script")
   .command(TuiThreadCommand)
-  .command(RunCommand)
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||
