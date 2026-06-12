@@ -362,6 +362,7 @@ export const locationLayer = Layer.effect(
       return error instanceof Error ? error.message : String(error)
     }
 
+    // Decoder for legacy dynamic plugin auth success callback payloads (Ref: Issue #32101)
     const decodeLegacySuccess = Schema.decodeUnknownOption(Credential.LegacySuccessValue)
 
     const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.Info, unknown>) {
