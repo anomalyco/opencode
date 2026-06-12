@@ -3506,7 +3506,7 @@
   }
 }
 
-@media (min-width: 75rem) {
+@media (min-width: 90rem) {
   [data-page="stats"] [data-slot="header-bar"] {
     gap: 32px;
   }
