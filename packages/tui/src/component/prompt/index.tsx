@@ -1195,6 +1195,12 @@ export function Prompt(props: PromptProps) {
         })
         return
       }
+      if (attachment?.type === "office") {
+        const ext = path.extname(filename).toLowerCase()
+        const label = ext === ".docx" ? "DOCX" : ext === ".xlsx" ? "XLSX" : "Office"
+        pasteText(attachment.content, `[${label}: ${filename}]`)
+        return
+      }
     }
 
     const lineCount = (pastedContent.match(/\n/g)?.length ?? 0) + 1
