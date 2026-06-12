@@ -20,7 +20,13 @@ import { createMemo, createSignal, For, onMount, Show, type JSX } from "solid-js
 import { getRequestEvent } from "solid-js/web"
 import type { FeatureCollection, GeometryObject, GeoJsonProperties } from "geojson"
 import type { GeometryCollection, Topology } from "topojson-specification"
-import { findModelCatalogEntry, formatCatalogLabName, getModelCatalog, type ModelCatalogEntry } from "../model-catalog"
+import {
+  findModelCatalogEntry,
+  formatCatalogLabName,
+  getModelCatalog,
+  type ModelCatalogCost,
+  type ModelCatalogEntry,
+} from "../model-catalog"
 import {
   applyThemePreference,
   Footer,
@@ -169,7 +175,7 @@ export default function StatsModel() {
                 <ModelHero data={stats() ?? null} catalog={catalogEntry() ?? null} labName={labName()} />
                 <ModelOverview data={stats() ?? null} />
                 <ModelUsageSection data={stats()?.usage ?? []} />
-                <ModelEfficiencySection data={stats() ?? null} />
+                <ModelEfficiencySection data={stats() ?? null} catalog={catalogEntry() ?? null} />
                 <ModelGeoBreakdownSection data={stats()?.country ?? emptyCountryRecord()} />
                 <ModelPeersSection data={stats() ?? null} />
               </>
@@ -449,7 +455,7 @@ function ModelUsageSection(props: { data: ModelUsagePoint[] }) {
   )
 }
 
-function ModelEfficiencySection(props: { data: StatsModelData | null }) {
+function ModelEfficiencySection(props: { data: StatsModelData | null; catalog: ModelCatalogEntry | null }) {
   return (
     <section id="efficiency" data-section="model-panel">
       <SectionTitle title="Efficiency" description="Cost, cache behavior, and average session shape." />
@@ -462,7 +468,15 @@ function ModelEfficiencySection(props: { data: StatsModelData | null }) {
         {(data) => (
           <div data-component="model-metric-grid" data-variant="dense">
             <MetricCard label="Cost" value={formatMoney(data().totals.cost)} detail="total spend" />
-            <MetricCard label="Cost / 1M" value={formatMoney(data().totals.costPerMillion)} detail="all tokens" />
+            <MetricCard
+              label="Cost / 1M"
+              value={
+                props.catalog?.cost
+                  ? formatCatalogPrice(props.catalog.cost)
+                  : formatMoney(data().totals.costPerMillion)
+              }
+              detail={props.catalog?.cost ? "input / output" : "observed all tokens"}
+            />
             <MetricCard
               label="Cost / Session"
               value={formatSessionCost(data().totals.costPerSession)}
@@ -782,6 +796,15 @@ function formatMoney(value: number) {
   if (value >= 1_000_000) return `$${trimNumber(value / 1_000_000, value >= 10_000_000 ? 0 : 1)}M`
   if (value >= 1_000) return `$${trimNumber(value / 1_000, value >= 10_000 ? 0 : 1)}K`
   return `$${value.toFixed(value >= 10 ? 0 : 2)}`
+}
+
+function formatCatalogPrice(value: ModelCatalogCost) {
+  return `${formatModelPrice(value.input)} / ${formatModelPrice(value.output)}`
+}
+
+function formatModelPrice(value: number) {
+  if (value > 0 && value < 0.01) return `$${value.toFixed(4)}`
+  return formatMoney(value)
 }
 
 function formatSessionCost(value: number) {
