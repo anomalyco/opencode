@@ -76,8 +76,7 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { promptFromDocMarkdown } from "@/components/prompt-input/prompt-plain"
-import { PromptDrawingShell } from "./prompt-input/drawing-shell"
-import { createPromptDrawing } from "./prompt-input/drawing"
+import { PromptDocShell } from "./prompt-input/doc-shell"
 import { createPromptDoc } from "./prompt-input/doc"
 import { createOpenSessionFile } from "./prompt-input/open-session-file"
 import { lineRefToSelection } from "@/components/blocksuite/line-reference-url"
@@ -141,9 +140,9 @@ const permissionsOff = import.meta.env.VITE_DISABLE_PROMPT_PERMISSIONS === "true
 const footerOff = import.meta.env.VITE_DISABLE_PROMPT_FOOTER === "true"
 const wysiwygOnly = import.meta.env.VITE_DISABLE_WYSIWYG_ONLY === "true"
 
-type PromptMode = "normal" | "shell" | "draw" | "doc"
+type PromptMode = "normal" | "shell" | "doc"
 
-const canvasMode = (mode: PromptMode) => mode === "draw" || mode === "doc"
+const canvasMode = (mode: PromptMode) => mode === "doc"
 const DOC_MIN = 150
 const DOC_HEIGHT = 300
 const DOC_RATIO = 0.8
@@ -542,9 +541,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return prompt.context.items().filter((item) => !!item.comment?.trim()).length
   })
 
-  const drawing = createPromptDrawing({
-    t: (key) => language.t(key as Parameters<typeof language.t>[0]),
-  })
   const parentParams = useParentParams()
   const doc = createPromptDoc({
     sessionID: () => params.id,
@@ -614,7 +610,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const hasDraft = createMemo(() => {
     if (store.mode === "doc") return doc.filled()
-    if (store.mode === "draw") return drawing.filled()
     if (imageAttachments().length > 0 || commentCount() > 0) return true
     if (!prompt.dirty()) return false
     return promptHasDraft(prompt.current())
@@ -984,7 +979,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const setMode = (mode: PromptMode) => {
     if (store.mode === mode) return
     if (store.mode === "doc" && mode !== "doc") doc.detach()
-    if (canvasMode(store.mode) && !canvasMode(mode)) drawing.dispose()
     setStore("mode", mode)
     setStore("popover", null)
     if (mode === "normal") requestAnimationFrame(() => editorRef?.focus())
@@ -994,7 +988,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const normalModeKey = "mod+shift+e"
   const modes = [
     { mode: "doc", icon: "code-lines", label: "prompt.mode.doc", action: "prompt-doc" },
-    { mode: "draw", icon: "pencil-line", label: "prompt.mode.draw", action: "prompt-draw" },
     { mode: "normal", icon: "prompt", label: "prompt.mode.normal", action: "prompt-normal" },
   ] as const
 
@@ -1053,13 +1046,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       keybind: normalModeKey,
       disabled: store.mode === "normal",
       onSelect: () => setMode("normal"),
-    },
-    {
-      id: "prompt.mode.draw",
-      title: language.t("command.prompt.mode.draw"),
-      category: language.t("command.category.session"),
-      disabled: store.mode === "draw",
-      onSelect: () => setMode("draw"),
     },
     {
       id: "prompt.mode.doc",
@@ -1667,7 +1653,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const { addAttachments, removeAttachment, handlePaste } = createPromptAttachments({
-    enabled: () => store.mode !== "draw",
+    enabled: () => true,
     editor: () => editorRef,
     isDialogActive: () => !!dialog.active,
     setDraggingType: (type) => setStore("draggingType", type),
@@ -1860,24 +1846,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    if (store.mode === "draw") {
-      const part = await drawing.commit()
-      if (!part) {
-        if (working()) {
-          await abort()
-          return
-        }
-        showToast({
-          title: language.t("prompt.toast.drawEmpty.title"),
-          description: language.t("prompt.toast.drawEmpty.description"),
-        })
-        return
-      }
-      drawing.dispose()
-      await handleSubmit(undefined, [part])
-      return
-    }
-
     if (store.mode === "doc") {
       const next = await doc.commitMarkdown()
       const text = next?.text
@@ -1989,13 +1957,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return
       }
 
-      if (store.mode === "draw") {
-        setMode("normal")
-        event.preventDefault()
-        event.stopPropagation()
-        return
-      }
-
       if (working()) {
         void requestStop()
         event.preventDefault()
@@ -2096,7 +2057,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         void requestStop()
         return
       }
-      if (store.mode === "draw" || store.mode === "doc") {
+      if (store.mode === "doc") {
         void submit()
         return
       }
@@ -2109,8 +2070,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       ref={(el) => (rootRef = el)}
       classList={{
         "relative flex w-full flex-col gap-0": true,
-        "h-[300px] max-h-[512px]": store.mode === "draw" && !props.expanded,
-        "size-full max-h-[512px] min-h-0": store.mode !== "doc" && store.mode !== "draw" && !props.expanded,
+        "size-full max-h-[512px] min-h-0": store.mode !== "doc" && !props.expanded,
         "flex-1 min-h-0": props.expanded,
         relative: props.expanded,
       }}
@@ -2177,14 +2137,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           [props.class ?? ""]: !!props.class,
         }}
       >
-        <Show when={store.mode !== "draw"}>
-          <PromptDragOverlay
-            type={store.draggingType}
-            label={language.t(
-              store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label",
-            )}
-          />
-        </Show>
+        <PromptDragOverlay
+          type={store.draggingType}
+          label={language.t(
+            store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label",
+          )}
+        />
         <PromptContextItems
           items={contextItems()}
           active={(item) => {
@@ -2218,7 +2176,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             if (!(target instanceof HTMLElement)) return
             if (
               target.closest(
-                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-normal"], [data-action="prompt-draw"], [data-action="prompt-doc"], [data-action="prompt-draw-exit"], [data-action="prompt-doc-exit"], [data-action="prompt-permissions"]',
+                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-normal"], [data-action="prompt-doc"], [data-action="prompt-doc-exit"], [data-action="prompt-permissions"]',
               )
             ) {
               return
@@ -2227,90 +2185,69 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           }}
         >
           <Show
-            when={store.mode === "draw"}
-            keyed
+            when={store.mode === "doc"}
             fallback={
-              <Show
-                when={store.mode === "doc"}
-                fallback={
-                  <div
-                    classList={{
-                      "relative overflow-y-auto no-scrollbar": true,
-                      "max-h-[240px]": !props.expanded,
-                      "flex-1 min-h-0": props.expanded,
-                    }}
-                    ref={(el) => (scrollRef = el)}
-                    style={{ "scroll-padding-bottom": space }}
-                  >
-                    <div
-                      data-component="prompt-input"
-                      ref={(el) => {
-                        editorRef = el
-                        props.ref?.(el)
-                      }}
-                      role="textbox"
-                      aria-multiline="true"
-                      aria-label={placeholder()}
-                      contenteditable="true"
-                      autocapitalize={store.mode === "normal" ? "sentences" : "off"}
-                      autocorrect={store.mode === "normal" ? "on" : "off"}
-                      spellcheck={store.mode === "normal"}
-                      onInput={handleInput}
-                      onPaste={handlePaste}
-                      onCompositionStart={handleCompositionStart}
-                      onCompositionEnd={handleCompositionEnd}
-                      onBlur={handleBlur}
-                      onKeyDown={handleKeyDown}
-                      classList={{
-                        "select-text": true,
-                        "w-full text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
-                        "[&_[data-type=file]]:text-syntax-property": true,
-                        "[&_[data-type=agent]]:text-syntax-type": true,
-                        "font-mono!": store.mode === "shell",
-                      }}
-                      style={{ "padding-bottom": space }}
-                    />
-                    <Show when={!prompt.dirty()}>
-                      <div
-                        data-component="prompt-input-placeholder"
-                        class="absolute top-0 inset-x-0 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
-                        classList={{ "font-mono!": store.mode === "shell" }}
-                        style={{ "padding-bottom": space }}
-                      >
-                        {placeholder()}
-                      </div>
-                    </Show>
-                  </div>
-                }
+              <div
+                classList={{
+                  "relative overflow-y-auto no-scrollbar": true,
+                  "max-h-[240px]": !props.expanded,
+                  "flex-1 min-h-0": props.expanded,
+                }}
+                ref={(el) => (scrollRef = el)}
+                style={{ "scroll-padding-bottom": space }}
               >
-                <PromptDrawingShell
-                  variant="doc"
-                  drawing={drawing}
-                  doc={doc}
-                  submitIcon={submitIcon()}
-                  submitLabel={submitLabel()}
-                  submitDisabled={submitAction() === "send" && !hasDraft()}
-                  tip={tip()}
-                  onExit={exitDoc}
-                  modes={modeButtons()}
-                  expand={composerExpand()}
-                  autoExpand={{ enabled: autoExpand(), onToggle: toggleAutoExpand }}
-                  capture={{ active: capturing(), onCapture: captureTab }}
+                <div
+                  data-component="prompt-input"
+                  ref={(el) => {
+                    editorRef = el
+                    props.ref?.(el)
+                  }}
+                  role="textbox"
+                  aria-multiline="true"
+                  aria-label={placeholder()}
+                  contenteditable="true"
+                  autocapitalize={store.mode === "normal" ? "sentences" : "off"}
+                  autocorrect={store.mode === "normal" ? "on" : "off"}
+                  spellcheck={store.mode === "normal"}
+                  onInput={handleInput}
+                  onPaste={handlePaste}
+                  onCompositionStart={handleCompositionStart}
+                  onCompositionEnd={handleCompositionEnd}
+                  onBlur={handleBlur}
+                  onKeyDown={handleKeyDown}
+                  classList={{
+                    "select-text": true,
+                    "w-full text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+                    "[&_[data-type=file]]:text-syntax-property": true,
+                    "[&_[data-type=agent]]:text-syntax-type": true,
+                    "font-mono!": store.mode === "shell",
+                  }}
+                  style={{ "padding-bottom": space }}
                 />
-              </Show>
+                <Show when={!prompt.dirty()}>
+                  <div
+                    data-component="prompt-input-placeholder"
+                    class="absolute top-0 inset-x-0 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
+                    classList={{ "font-mono!": store.mode === "shell" }}
+                    style={{ "padding-bottom": space }}
+                  >
+                    {placeholder()}
+                  </div>
+                </Show>
+              </div>
             }
           >
-            <PromptDrawingShell
-              variant="draw"
-              drawing={drawing}
+            <PromptDocShell
               doc={doc}
               submitIcon={submitIcon()}
               submitLabel={submitLabel()}
               submitDisabled={submitAction() === "send" && !hasDraft()}
               tip={tip()}
-              onExit={() => setMode("normal")}
+              onExit={exitDoc}
               modes={modeButtons()}
               expand={composerExpand()}
+              autoExpand={{ enabled: autoExpand(), onToggle: toggleAutoExpand }}
+              capture={{ active: capturing(), onCapture: captureTab }}
             />
           </Show>
 

@@ -4,7 +4,7 @@ import type { SelectedLineRange } from "@/context/file"
 import type { FileNodeType } from "@/components/blocksuite/file-reference-block"
 import type { LineRefInput } from "@/components/blocksuite/line-reference-url"
 
-type Mode = "normal" | "shell" | "draw" | "doc"
+type Mode = "normal" | "shell" | "doc"
 
 export type LineReferenceInput = {
   path: string

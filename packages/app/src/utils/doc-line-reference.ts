@@ -3,7 +3,7 @@ import type { SelectedLineRange } from "@/context/file"
 import type { LineReferenceInput } from "@/context/prompt-doc-bridge"
 
 type Bridge = {
-  mode: () => "normal" | "shell" | "draw" | "doc"
+  mode: () => "normal" | "shell" | "doc"
   addLineReference: (input: LineReferenceInput) => boolean
 }
 

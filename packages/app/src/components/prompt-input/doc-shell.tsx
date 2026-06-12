@@ -5,15 +5,10 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useClientEnv } from "@/context/client-env"
 import { useLanguage } from "@/context/language"
 import { ACCEPTED_FILE_TYPES } from "./files"
-import { PromptDrawingColors } from "./drawing-colors"
-import { PromptDrawingPanel } from "./drawing-panel"
 import { PromptDocPanel } from "./doc-panel"
-import type { createPromptDrawing } from "./drawing"
 import type { createPromptDoc } from "./doc"
 
 type ShellProps = {
-  variant: "draw" | "doc"
-  drawing: ReturnType<typeof createPromptDrawing>
   doc: ReturnType<typeof createPromptDoc>
   submitIcon: IconProps["name"]
   submitLabel: string
@@ -36,14 +31,14 @@ type ShellProps = {
   }
 }
 
-export const PromptDrawingShell: Component<ShellProps> = (props) => {
+export const PromptDocShell: Component<ShellProps> = (props) => {
   const env = useClientEnv()
   const language = useLanguage()
   let fileInputRef: HTMLInputElement | undefined
   const [copied, setCopied] = createSignal(false)
-  const history = () => (props.variant === "doc" ? props.doc.history : props.drawing.history)
-  const undo = () => (props.variant === "doc" ? props.doc.undo() : props.drawing.undo())
-  const redo = () => (props.variant === "doc" ? props.doc.redo() : props.drawing.redo())
+  const history = () => props.doc.history
+  const undo = () => props.doc.undo()
+  const redo = () => props.doc.redo()
   const label = () => {
     const id = props.doc.docID()
     if (!id) return "—"
@@ -64,7 +59,7 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
 
   return (
     <div
-      data-component={props.variant === "doc" ? "prompt-doc-shell" : "prompt-draw-shell"}
+      data-component="prompt-doc-shell"
       class="flex min-h-0 w-full flex-1 flex-col overflow-hidden"
     >
       <div
@@ -74,102 +69,98 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
         }}
         onMouseDown={(e) => e.stopPropagation()}
       >
-        <Show when={props.variant === "doc"} fallback={<PromptDrawingPanel drawing={props.drawing} />}>
-          <PromptDocPanel doc={props.doc} />
-          <Show when={!env.productionLayout()}>
-            <div
-              data-component="prompt-doc-id"
-              class="absolute bottom-0 right-0 z-10 max-w-[40%] rounded-tl-[10px] text-text-weaker"
+        <PromptDocPanel doc={props.doc} />
+        <Show when={!env.productionLayout()}>
+          <div
+            data-component="prompt-doc-id"
+            class="absolute bottom-0 right-0 z-10 max-w-[40%] rounded-tl-[10px] text-text-weaker"
+          >
+            <Tooltip
+              placement="top"
+              value={copied() ? language.t("ui.message.copied") : language.t("ui.textField.copyToClipboard")}
             >
-              <Tooltip
-                placement="top"
-                value={copied() ? language.t("ui.message.copied") : language.t("ui.textField.copyToClipboard")}
+              <button
+                type="button"
+                class="flex max-w-full items-center justify-start rounded-tl-lg rounded-tr-none rounded-br-none rounded-bl-none bg-surface-raised-stronger-non-alpha px-2 py-1 font-mono text-11-regular leading-[13px] text-text-weaker shadow-sm ring-1 ring-border-weaker-base hover:ring-border-base"
+                title={props.doc.docID() ?? ""}
+                onClick={copy}
+                aria-label={copied() ? language.t("ui.message.copied") : language.t("ui.textField.copyToClipboard")}
               >
-                <button
-                  type="button"
-                  class="flex max-w-full items-center justify-start rounded-tl-lg rounded-tr-none rounded-br-none rounded-bl-none bg-surface-raised-stronger-non-alpha px-2 py-1 font-mono text-11-regular leading-[13px] text-text-weaker shadow-sm ring-1 ring-border-weaker-base hover:ring-border-base"
-                  title={props.doc.docID() ?? ""}
-                  onClick={copy}
-                  aria-label={copied() ? language.t("ui.message.copied") : language.t("ui.textField.copyToClipboard")}
-                >
-                  <span class="truncate">{label()}</span>
-                </button>
-              </Tooltip>
-            </div>
-          </Show>
+                <span class="truncate">{label()}</span>
+              </button>
+            </Tooltip>
+          </div>
         </Show>
       </div>
       <div
-        data-component="prompt-draw-actions"
+        data-component="prompt-doc-actions"
         class="relative flex h-11 shrink-0 items-center justify-between gap-2 border-t border-border-weaker-base bg-surface-raised-stronger-non-alpha px-2 py-0"
       >
         <div class="flex items-center gap-0.5">
           {props.modes}
-          <Tooltip placement="top" value={language.t("prompt.action.drawUndo")}>
+          <Tooltip placement="top" value={language.t("prompt.action.docUndo")}>
             <IconButton
-              data-action="prompt-draw-undo"
+              data-action="prompt-doc-undo"
               type="button"
               icon="arrow-left"
               variant="ghost"
               class="size-7.5"
               disabled={!history().undo}
               onClick={undo}
-              aria-label={language.t("prompt.action.drawUndo")}
+              aria-label={language.t("prompt.action.docUndo")}
             />
           </Tooltip>
-          <Tooltip placement="top" value={language.t("prompt.action.drawRedo")}>
+          <Tooltip placement="top" value={language.t("prompt.action.docRedo")}>
             <IconButton
-              data-action="prompt-draw-redo"
+              data-action="prompt-doc-redo"
               type="button"
               icon="arrow-right"
               variant="ghost"
               class="size-7.5"
               disabled={!history().redo}
               onClick={redo}
-              aria-label={language.t("prompt.action.drawRedo")}
+              aria-label={language.t("prompt.action.docRedo")}
             />
           </Tooltip>
-          <Show when={props.variant === "doc"}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              multiple
-              accept={ACCEPTED_FILE_TYPES.join(",")}
-              hidden
-              tabindex={-1}
-              aria-hidden="true"
-              onChange={(e) => {
-                const list = e.currentTarget.files
-                if (list?.length) void props.doc.addFiles(Array.from(list))
-                e.currentTarget.value = ""
-              }}
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            accept={ACCEPTED_FILE_TYPES.join(",")}
+            hidden
+            tabindex={-1}
+            aria-hidden="true"
+            onChange={(e) => {
+              const list = e.currentTarget.files
+              if (list?.length) void props.doc.addFiles(Array.from(list))
+              e.currentTarget.value = ""
+            }}
+          />
+          <Tooltip placement="top" value={language.t("prompt.action.attachFile")}>
+            <IconButton
+              data-action="prompt-doc-attach"
+              type="button"
+              icon="plus"
+              variant="ghost"
+              class="size-7.5"
+              disabled={!props.doc.ready()}
+              onClick={() => fileInputRef?.click()}
+              aria-label={language.t("prompt.action.attachFile")}
             />
-            <Tooltip placement="top" value={language.t("prompt.action.attachFile")}>
+          </Tooltip>
+          <Show when={props.capture}>
+            <Tooltip placement="top" value={language.t("prompt.action.captureTab")}>
               <IconButton
-                data-action="prompt-doc-attach"
+                data-action="prompt-doc-capture-tab"
                 type="button"
-                icon="plus"
+                icon="photo"
                 variant="ghost"
                 class="size-7.5"
-                disabled={!props.doc.ready()}
-                onClick={() => fileInputRef?.click()}
-                aria-label={language.t("prompt.action.attachFile")}
+                disabled={!props.doc.ready() || props.capture!.active}
+                onClick={() => props.capture!.onCapture()}
+                aria-label={language.t("prompt.action.captureTab")}
               />
             </Tooltip>
-            <Show when={props.capture}>
-              <Tooltip placement="top" value={language.t("prompt.action.captureTab")}>
-                <IconButton
-                  data-action="prompt-doc-capture-tab"
-                  type="button"
-                  icon="photo"
-                  variant="ghost"
-                  class="size-7.5"
-                  disabled={!props.doc.ready() || props.capture!.active}
-                  onClick={() => props.capture!.onCapture()}
-                  aria-label={language.t("prompt.action.captureTab")}
-                />
-              </Tooltip>
-            </Show>
           </Show>
           <Show when={props.expand && !env.productionLayout()}>
             <Tooltip placement="top" value={expandLabel()}>
@@ -211,9 +202,6 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
             </Tooltip>
           </Show>
         </div>
-        <Show when={props.variant === "draw"}>
-          <PromptDrawingColors drawing={props.drawing} />
-        </Show>
         <Tooltip
           placement="top"
           inactive={props.submitIcon === "arrow-up-bold" && !props.submitDisabled}

@@ -1,10 +1,7 @@
 import { readFileSync } from "node:fs"
-import react from "@vitejs/plugin-react"
 import solidPlugin from "vite-plugin-solid"
 import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "url"
-
-const excalidraw = /[/\\]excalidraw[/\\]/
 
 const theme = fileURLToPath(new URL("./public/oc-theme-preload.js", import.meta.url))
 
@@ -45,6 +42,5 @@ export default [
     },
   },
   tailwindcss(),
-  react({ include: excalidraw }),
-  solidPlugin({ exclude: excalidraw }),
+  solidPlugin(),
 ]
