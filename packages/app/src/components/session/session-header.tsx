@@ -27,6 +27,7 @@ import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover, StatusPopoverV2 } from "../status-popover"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 
 const OPEN_APPS = [
   "vscode",
@@ -47,6 +48,9 @@ const OPEN_APPS = [
 
 type OpenApp = (typeof OPEN_APPS)[number]
 type OS = "macos" | "windows" | "linux" | "unknown"
+
+const isOpenApp = (value: unknown): value is OpenApp =>
+  typeof value === "string" && OPEN_APPS.some((app) => app === value)
 
 const MAC_APPS = [
   {
@@ -322,7 +326,7 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <Show
-              when={isDesktopV2}
+              when={isDesktopV2()}
               fallback={
                 <div class="flex items-center gap-2">
                   <Show when={projectDirectory()}>
@@ -390,8 +394,8 @@ export function SessionHeader() {
                                       class="mt-1"
                                       value={current().id}
                                       onChange={(value) => {
-                                        if (!OPEN_APPS.includes(value as OpenApp)) return
-                                        selectApp(value as OpenApp)
+                                        if (!isOpenApp(value)) return
+                                        selectApp(value)
                                       }}
                                     >
                                       <For each={options()}>
@@ -510,7 +514,114 @@ export function SessionHeader() {
                 </div>
               }
             >
-              <SessionHeaderV2Actions state={v2ActionsState()} />
+              <div class="flex items-center gap-2">
+                <Show when={projectDirectory()}>
+                  <Show
+                    when={canOpen()}
+                    fallback={
+                      <Tooltip placement="bottom" value={language.t("session.header.open.copyPath")}>
+                        <IconButtonV2
+                          type="button"
+                          variant="ghost-muted"
+                          size="large"
+                          class="!w-9 shrink-0"
+                          onClick={copyPath}
+                          aria-label={language.t("session.header.open.copyPath")}
+                          icon={<IconV2 name="copy" />}
+                        />
+                      </Tooltip>
+                    }
+                  >
+                    <div class="flex h-7 items-center overflow-hidden rounded-md border border-border-weak-base bg-surface-panel">
+                      <IconButtonV2
+                        type="button"
+                        variant="ghost"
+                        size="large"
+                        class="!w-9 h-full shrink-0 rounded-none border-none shadow-none"
+                        state={opening() ? "pressed" : undefined}
+                        disabled={opening()}
+                        onClick={() => openDir(current().id)}
+                        aria-label={language.t("session.header.open.ariaLabel", { app: current().label })}
+                        icon={
+                          <Show
+                            when={opening()}
+                            fallback={
+                              <div class="flex size-4 items-center justify-center [&_[data-component=app-icon]]:size-4">
+                                <AppIcon id={current().icon} />
+                              </div>
+                            }
+                          >
+                            <Spinner class="size-3.5" style={{ color: tint() ?? "var(--icon-base)" }} />
+                          </Show>
+                        }
+                      />
+                      <MenuV2
+                        gutter={4}
+                        placement="bottom-end"
+                        open={menu.open}
+                        onOpenChange={(open) => setMenu("open", open)}
+                      >
+                        <MenuV2.Trigger
+                          as={IconButtonV2}
+                          type="button"
+                          variant="ghost"
+                          size="large"
+                          class="!w-6 h-full shrink-0 rounded-none border-none px-0 shadow-none"
+                          state={opening() || menu.open ? "pressed" : undefined}
+                          disabled={opening()}
+                          aria-label={language.t("session.header.open.menu")}
+                          icon={<IconV2 name="outline-chevron-down" size="small" />}
+                        />
+                        <MenuV2.Portal>
+                          <MenuV2.Content>
+                            <MenuV2.Group>
+                              <MenuV2.GroupLabel>{language.t("session.header.openIn")}</MenuV2.GroupLabel>
+                              <MenuV2.RadioGroup
+                                value={current().id}
+                                onChange={(value) => {
+                                  if (!isOpenApp(value)) return
+                                  selectApp(value)
+                                }}
+                              >
+                                <For each={options()}>
+                                  {(option) => (
+                                    <MenuV2.RadioItem
+                                      value={option.id}
+                                      disabled={opening()}
+                                      onSelect={() => {
+                                        setMenu("open", false)
+                                        openDir(option.id)
+                                      }}
+                                    >
+                                      <div class="flex size-5 shrink-0 items-center justify-center [&_[data-component=app-icon]]:size-5">
+                                        <AppIcon id={option.icon} />
+                                      </div>
+                                      <span>{option.label}</span>
+                                    </MenuV2.RadioItem>
+                                  )}
+                                </For>
+                              </MenuV2.RadioGroup>
+                            </MenuV2.Group>
+                            <MenuV2.Separator />
+                            <MenuV2.Item
+                              onSelect={() => {
+                                setMenu("open", false)
+                                copyPath()
+                              }}
+                            >
+                              <div class="flex size-5 shrink-0 items-center justify-center">
+                                <IconV2 name="copy" size="small" />
+                              </div>
+                              <span>{language.t("session.header.open.copyPath")}</span>
+                            </MenuV2.Item>
+                          </MenuV2.Content>
+                        </MenuV2.Portal>
+                      </MenuV2>
+                    </div>
+                  </Show>
+                </Show>
+                <SessionHeaderV2Actions state={v2ActionsState()} />
+              </div>
             </Show>
           </Portal>
         )}
