@@ -280,3 +280,52 @@
   max-width: 100%;
   height: auto;
 }
+
+/* File preview markdown: proper heading hierarchy */
+[data-markdown-preview] [data-component="markdown"] {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    margin-top: 24px;
+    margin-bottom: 16px;
+    line-height: 1.25;
+  }
+
+  h1 {
+    font-size: 2em;
+    font-weight: 700;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--border-weak-base);
+  }
+
+  h2 {
+    font-size: 1.5em;
+    font-weight: 600;
+    padding-bottom: 0.3em;
+    border-bottom: 1px solid var(--border-weak-base);
+  }
+
+  h3 {
+    font-size: 1.25em;
+    font-weight: 600;
+  }
+
+  h4 {
+    font-size: 1em;
+    font-weight: 600;
+  }
+
+  h5 {
+    font-size: 0.875em;
+    font-weight: 600;
+  }
+
+  h6 {
+    font-size: 0.85em;
+    font-weight: 600;
+    color: var(--text-weak);
+  }
+}

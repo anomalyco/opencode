@@ -462,7 +462,7 @@ export function FileTabContent(props: { tab: string }) {
           }}
         />
       }>
-        <div class="px-6 py-4 select-text">
+        <div class="px-6 py-4 select-text" data-markdown-preview>
           <Markdown text={source} />
         </div>
       </Show>
