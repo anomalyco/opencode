@@ -253,7 +253,7 @@ export const dict = {
   "go.title": "OpenCode Go | Недорогі моделі кодування для всіх",
   "go.banner.text": "MiniMax M3 отримує 3x ліміти використання протягом обмеженого часу",
   "go.meta.description":
-    "Go починається від $5 за перший місяць, потім $10/місяць, з generous 5-годинними лімітами запитів для GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro та DeepSeek V4 Flash.",
+    "Go починається від $5 за перший місяць, потім $10/місяць, з generous 5-годинними лімітами запитів для GLM-5.1, GLM-5, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro та DeepSeek V4 Flash.",
   "go.hero.title": "Недорогі моделі кодування для всіх",
   "go.hero.body":
     "Go надає агентне програмування програмістам у всьому світі, пропонуючи щедрі ліміти та надійний доступ до найкращих моделей з відкритим кодом.",
@@ -302,7 +302,7 @@ export const dict = {
   "go.problem.item2": "Щедрі ліміти та надійний доступ",
   "go.problem.item3": "Створено для якомога більшої кількості програмістів",
   "go.problem.item4":
-    "Включає GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro та DeepSeek V4 Flash",
+    "Включає GLM-5.1, GLM-5, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro та DeepSeek V4 Flash",
   "go.how.title": "Як працює Go",
   "go.how.body":
     "Go починається від $5 за перший місяць, потім $10/місяць. Використовуйте з OpenCode або будь-яким агентом.",
@@ -328,7 +328,7 @@ export const dict = {
   "go.faq.a2": "Go включає моделі, перелічені нижче, із щедрими лімітами та надійним доступом.",
   "go.faq.q3": "Чи Go те саме, що Zen?",
   "go.faq.a3":
-    "Ні. Zen — це плата за використання, тоді як Go починається від $5 за перший місяць, потім $10/місяць, із щедрими лімітами та надійним доступом до моделей з відкритим кодом GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro та DeepSeek V4 Flash.",
+    "Ні. Zen — це плата за використання, тоді як Go починається від $5 за перший місяць, потім $10/місяць, із щедрими лімітами та надійним доступом до моделей з відкритим кодом GLM-5.1, GLM-5, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro та DeepSeek V4 Flash.",
   "go.faq.q4": "Скільки коштує Go?",
   "go.faq.a4.p1.beforePricing": "Go коштує",
   "go.faq.a4.p1.pricingLink": "$5 за перший місяць",
@@ -351,7 +351,7 @@ export const dict = {
 
   "go.faq.q9": "Яка різниця між безкоштовними моделями та Go?",
   "go.faq.a9":
-    "Безкоштовні моделі включають Big Pickle та акційні моделі з лімітом 200 запитів/день. Go включає GLM-5.1, GLM-5, Kimi K2.5, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.5, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro та DeepSeek V4 Flash із вищими лімітами.",
+    "Безкоштовні моделі включають Big Pickle та акційні моделі з лімітом 200 запитів/день. Go включає GLM-5.1, GLM-5, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro та DeepSeek V4 Flash із вищими лімітами.",
 
   "zen.api.error.rateLimitExceeded": "Перевищено ліміт запитів. Спробуйте пізніше.",
   "zen.api.error.modelNotSupported": "Модель {{model}} не підтримується",
