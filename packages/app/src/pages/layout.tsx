@@ -63,7 +63,9 @@ import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DebugBar } from "@/components/debug-bar"
+import { HelpButton } from "@/components/help-button"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
+import { useDirectoryPicker } from "@/components/directory-picker"
 import { ServerConnection, useServer } from "@/context/server"
 import { useLanguage, type Locale } from "@/context/language"
 import { pathKey } from "@/utils/path-key"
@@ -117,6 +119,7 @@ export default function Layout(props: ParentProps) {
   const layout = useLayout()
   const layoutReady = createMemo(() => layout.ready())
   const platform = usePlatform()
+  const pickDirectory = useDirectoryPicker()
   const settings = useSettings()
   const server = useServer()
   const notification = useNotification()
@@ -1457,7 +1460,7 @@ export default function Layout(props: ParentProps) {
     })
   }
 
-  async function chooseProject() {
+  function chooseProject() {
     const conn = server.current
     if (!conn) return
     function resolve(result: string | string[] | null) {
@@ -1471,22 +1474,12 @@ export default function Layout(props: ParentProps) {
       }
     }
 
-    if (platform.openDirectoryPickerDialog && server.isLocal()) {
-      const result = await platform.openDirectoryPickerDialog?.({
-        title: language.t("command.project.open"),
-        multiple: true,
-      })
-      resolve(result)
-    } else {
-      const run = ++dialogRun
-      void import("@/components/dialog-select-directory").then((x) => {
-        if (dialogDead || dialogRun !== run) return
-        dialog.show(
-          () => <x.DialogSelectDirectory multiple={true} onSelect={resolve} server={conn} />,
-          () => resolve(null),
-        )
-      })
-    }
+    pickDirectory({
+      server: conn,
+      title: language.t("command.project.open"),
+      multiple: true,
+      onSelect: resolve,
+    })
   }
 
   const deleteWorkspace = async (root: string, directory: string, leaveDeletedWorkspace = false) => {
@@ -2372,6 +2365,7 @@ export default function Layout(props: ParentProps) {
             </Show>
           </main>
           {import.meta.env.DEV && <DebugBar />}
+          <HelpButton />
           <ToastRegion v2={newDesign()} />
         </div>
       }
@@ -2525,6 +2519,7 @@ export default function Layout(props: ParentProps) {
           </div>
           {import.meta.env.DEV && <DebugBar />}
         </div>
+        <HelpButton />
         <ToastRegion v2={newDesign()} />
       </div>
     </Show>

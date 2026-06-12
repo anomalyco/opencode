@@ -124,7 +124,7 @@ describe("Gemini route", () => {
                 type: "content",
                 value: [
                   { type: "text", text: "Image read successfully" },
-                  { type: "media", mediaType: "image/png", data: "AAECAw==", filename: "pixel.png" },
+                  { type: "file", uri: "data:image/png;base64,AAECAw==", mime: "image/png", name: "pixel.png" },
                 ],
               },
             }),
@@ -163,7 +163,7 @@ describe("Gemini route", () => {
               name: "read",
               result: {
                 type: "content",
-                value: [{ type: "media", mediaType: "image/jpeg", data: "data:image/jpeg;base64,/9j/" }],
+                value: [{ type: "file", uri: "data:image/jpeg;base64,/9j/", mime: "image/jpeg" }],
               },
             }),
           ],

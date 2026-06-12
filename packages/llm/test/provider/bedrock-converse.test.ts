@@ -189,7 +189,7 @@ describe("Bedrock Converse route", () => {
                 type: "content",
                 value: [
                   { type: "text", text: "Screenshot captured." },
-                  { type: "media", mediaType: "image/png", data: "AAAA" },
+                  { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" },
                 ],
               },
             }),

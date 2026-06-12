@@ -1,14 +1,12 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { InstanceState } from "@/effect/instance-state"
-import * as Log from "@opencode-ai/core/util/log"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { Deferred, Effect, Layer, Context } from "effect"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
-
-const log = Log.create({ service: "permission" })
 
 export const Event = {
   Asked: EventV2.define({ type: "permission.asked", schema: PermissionV1.Request.fields }),
@@ -84,7 +82,7 @@ export const layer = Layer.effect(
 
       for (const pattern of request.patterns) {
         const rule = evaluate(request.permission, pattern, ruleset, approved)
-        log.info("evaluated", { permission: request.permission, pattern, action: rule })
+        yield* Effect.logInfo("evaluated", { permission: request.permission, pattern, action: rule })
         if (rule.action === "deny") {
           return yield* new PermissionV1.DeniedError({
             ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
@@ -106,7 +104,7 @@ export const layer = Layer.effect(
         always: request.always,
         tool: request.tool,
       }
-      log.info("asking", { id, permission: info.permission, patterns: info.patterns })
+      yield* Effect.logInfo("asking", { id, permission: info.permission, patterns: info.patterns })
 
       const deferred = yield* Deferred.make<void, PermissionV1.RejectedError | PermissionV1.CorrectedError>()
       pending.set(id, { info, deferred })
@@ -226,5 +224,7 @@ export function disabled(tools: string[], ruleset: PermissionV1.Ruleset): Set<st
 }
 
 export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer))
+
+export const node = LayerNode.make(layer, [EventV2Bridge.node])
 
 export * as Permission from "."

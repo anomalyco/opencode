@@ -15,6 +15,10 @@ function statusColor(theme: RunFooterTheme, status: FooterSubagentTab["status"])
     return theme.highlight
   }
 
+  if (status === "cancelled") {
+    return theme.muted
+  }
+
   if (status === "error") {
     return theme.error
   }
@@ -25,6 +29,10 @@ function statusColor(theme: RunFooterTheme, status: FooterSubagentTab["status"])
 function statusIcon(status: FooterSubagentTab["status"]) {
   if (status === "completed") {
     return "●"
+  }
+
+  if (status === "cancelled") {
+    return "○"
   }
 
   if (status === "error") {
