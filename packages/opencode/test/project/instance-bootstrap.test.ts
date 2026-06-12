@@ -5,13 +5,23 @@ import { pathToFileURL } from "node:url"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
 import { bootstrap as cliBootstrap } from "../../src/cli/bootstrap"
+import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceLayer } from "../../src/project/instance-layer"
 import { InstanceStore } from "../../src/project/instance-store"
+import { Project } from "../../src/project/project"
 import { disposeAllInstances, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { waitGlobalBusEvent } from "../server/global-bus"
 
-const it = testEffect(Layer.mergeAll(InstanceLayer.layer, CrossSpawnSpawner.defaultLayer))
+const it = testEffect(
+  Layer.mergeAll(
+    InstanceLayer.layer.pipe(
+      Layer.provide(InstanceBootstrap.defaultLayer),
+      Layer.provide(Project.defaultLayer),
+    ),
+    CrossSpawnSpawner.defaultLayer,
+  ),
+)
 
 // InstanceBootstrap must run before any code touches the instance —
 // originally tracked by PRs #25389 and #25449, now a permanent

@@ -1,6 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { path } from "@opencode-ai/core/effect/layer-node-platform"
 import { Global } from "@opencode-ai/core/global"
+import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceLayer } from "@/project/instance-layer"
 import { InstanceStore } from "@/project/instance-store"
 import { Project } from "@/project/project"
@@ -639,7 +640,14 @@ export const appLayer = layer.pipe(
   Layer.provide(NodePath.layer),
 )
 
-export const defaultLayer = appLayer.pipe(Layer.provide(InstanceLayer.layer))
+export const defaultLayer = appLayer.pipe(
+  Layer.provide(
+    InstanceLayer.layer.pipe(
+      Layer.provide(InstanceBootstrap.defaultLayer),
+      Layer.provide(Project.defaultLayer),
+    ),
+  ),
+)
 
 export const node = LayerNode.make(layer, [
   FSUtil.node,

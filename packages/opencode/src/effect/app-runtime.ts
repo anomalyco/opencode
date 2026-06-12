@@ -38,6 +38,7 @@ import { Command } from "@/command"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { Format } from "@/format"
+import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceLayer } from "@/project/instance-layer"
 import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
@@ -101,7 +102,12 @@ export const AppLayer = Layer.mergeAll(
   SessionShare.defaultLayer,
 ).pipe(
   Layer.provideMerge(Ripgrep.defaultLayer),
-  Layer.provideMerge(InstanceLayer.layer),
+  Layer.provideMerge(
+    InstanceLayer.layer.pipe(
+      Layer.provide(InstanceBootstrap.defaultLayer),
+      Layer.provide(Project.defaultLayer),
+    ),
+  ),
   Layer.provideMerge(Observability.layer),
 )
 
