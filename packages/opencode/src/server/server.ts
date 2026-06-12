@@ -1,6 +1,7 @@
 import "./init-projectors"
 
 import { NodeHttpServer } from "@effect/platform-node"
+import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import { ConfigProvider, Context, Effect, Exit, Layer, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/unstable/http"
 import { OpenApi } from "effect/unstable/httpapi"
@@ -123,7 +124,12 @@ function startWithPortFallback(opts: ListenOptions) {
 
 function startListener(opts: ListenOptions, port: number) {
   const scope = Scope.makeUnsafe()
-  return Layer.buildWithMemoMap(listenerLayer(opts, port), Layer.makeMemoMapUnsafe(), scope).pipe(
+  // Use the shared process-global memoMap (not a fresh Layer.makeMemoMapUnsafe()) so the
+  // TCP listener pipeline and the in-process webHandler/app-runtime pipeline materialize a
+  // single InstanceStore.Service per directory. A fresh memoMap here builds a second
+  // InstanceStore, so a question registered on one instance and answered on the other never
+  // resolves — wedging the Question tool on submit.
+  return Layer.buildWithMemoMap(listenerLayer(opts, port), memoMap, scope).pipe(
     Effect.provide(HttpApiApp.context),
     Effect.onError(() => Scope.close(scope, Exit.void).pipe(Effect.ignore)),
     Effect.map(
