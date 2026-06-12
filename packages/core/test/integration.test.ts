@@ -296,6 +296,59 @@ describe("Integration", () => {
     }).pipe(Effect.provide(connectionLayer(created)))
   })
 
+  it.effect("completes legacy success callback OAuth and translates it to Credential.Value", () => {
+    const created: Array<{
+      integrationID: Integration.ID
+      label?: string
+      value: Credential.Info
+    }> = []
+    return Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const integrationID = Integration.ID.make("openai")
+      const methodID = Integration.MethodID.make("legacy")
+      yield* integrations.update((editor) =>
+        editor.method.update({
+          integrationID,
+          method: new Integration.OAuthMethod({ id: methodID, type: "oauth", label: "Legacy" }),
+          authorize: () =>
+            Effect.succeed({
+              mode: "auto" as const,
+              url: "https://example.com/authorize",
+              instructions: "Sign in",
+              callback: Effect.succeed({
+                type: "success",
+                access: "token-legacy",
+                refresh: "refresh-legacy",
+                expires: 100,
+                accountId: "legacy-client-id",
+                enterpriseUrl: "legacy-client-secret",
+                metadata: { customField: "val" },
+              } as any),
+            }),
+        }),
+      )
+
+      const attempt = yield* integrations.connect.oauth({ integrationID, methodID, inputs: {} })
+      yield* Effect.yieldNow
+      expect(yield* integrations.attempt.status(attempt.attemptID)).toEqual({
+        status: "complete",
+        time: attempt.time,
+      })
+      expect(created).toHaveLength(1)
+      expect(created[0].value.type).toBe("oauth")
+      if (created[0].value.type === "oauth") {
+        expect(created[0].value.access).toBe("token-legacy")
+        expect(created[0].value.refresh).toBe("refresh-legacy")
+        expect(created[0].value.expires).toBe(100)
+        expect(created[0].value.metadata).toEqual({
+          clientId: "legacy-client-id",
+          clientSecret: "legacy-client-secret",
+          customField: "val",
+        })
+      }
+    }).pipe(Effect.provide(connectionLayer(created)))
+  })
+
   it.effect("expires abandoned OAuth attempts", () => {
     const created: Array<{
       integrationID: Integration.ID
