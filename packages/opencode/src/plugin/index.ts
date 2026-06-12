@@ -27,6 +27,7 @@ import { QwenThinkingDefaultPlugin } from "@/securecode/plugins/qwen-thinking-de
 import { PermissionPolicyPlugin } from "@/securecode/plugins/permission-policy"
 import { DefensiveSystemPromptPlugin } from "@/securecode/plugins/defensive-system-prompt"
 import { SecurecodeContextPromptPlugin } from "@/securecode/plugins/securecode-context-prompt"
+import { CompactionLanguagePreservePlugin } from "@/securecode/plugins/compaction-language-preserve"
 import { Effect, Layer, Context, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
@@ -82,6 +83,7 @@ const INTERNAL_PLUGINS: PluginInstance[] = [
   QwenQuestionNormalizePlugin,
   QwenThinkingDefaultPlugin,
   PermissionPolicyPlugin,
+  CompactionLanguagePreservePlugin,
   // Inject SecureCode runtime context (what the binary is, TEE provider,
   // 2-layer sandbox, `sandbox.json` remediation, manual skill pointer)
   // BEFORE the defensive note so the model reads identity first and the
