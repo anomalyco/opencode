@@ -1544,23 +1544,24 @@ export const layer = Layer.effect(
           })
         }
 
-        // auto-discover models for user-configured OpenAI-compatible providers (e.g. LM Studio)
+        // auto-discover models for user-configured providers with a baseURL (e.g. LM Studio)
         for (const [id, provider] of Object.entries(providers)) {
           const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
           if (provider.source !== "config") continue
           const baseURL = provider.options?.baseURL
           if (!baseURL) continue
-          const hasOpenAICompatible = Object.values(provider.models).some(m => m.api.npm === "@ai-sdk/openai-compatible")
-          if (!hasOpenAICompatible) continue
           yield* Effect.promise(async () => {
             try {
               const cleanURL = baseURL.replace(/\/+$/, "")
               const headers: Record<string, string> = {}
               if (provider.key) headers["Authorization"] = `Bearer ${provider.key}`
-              const response = await fetch(`${cleanURL}/models`, { headers, signal: AbortSignal.timeout(5000) })
-              if (!response.ok) return
-              const data = await response.json() as { data?: Array<{ id: string }> }
+              const urls = [`${cleanURL}/v1/models`, `${cleanURL}/models`]
+              let data: { data?: Array<{ id: string }> } | undefined
+              for (const url of urls) {
+                const res = await fetch(url, { headers, signal: AbortSignal.timeout(5000) })
+                if (res.ok) { data = await res.json() as typeof data; break }
+              }
               if (!data?.data) return
               for (const item of data.data) {
                 const modelID = item.id
