@@ -91,7 +91,7 @@ export async function authenticateWithOIDC(config: ANRConfig): Promise<OIDCToken
     code_challenge: codeChallenge,
   })
 
-  const authURL = `${baseURL}/login?${params.toString()}`
+  const authURL = `${baseURL}/oauth2/authorize?${params.toString()}`
 
   console.log(`🌐 Opening browser for authentication...`)
   const isDesktop = process.env.OPENCODE_CLIENT === "desktop"
@@ -212,7 +212,8 @@ export async function authenticateWithOIDC(config: ANRConfig): Promise<OIDCToken
         })
 
         if (!res.ok) {
-          throw new Error(`Token request failed: ${res.statusText}`)
+          const errorBody = await res.text().catch(() => "")
+          throw new Error(`Token request failed: ${res.status} ${res.statusText}${errorBody ? ` — ${errorBody}` : ""}`)
         }
 
         const data = (await res.json()) as {
