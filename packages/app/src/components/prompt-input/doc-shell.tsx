@@ -148,7 +148,7 @@ export const PromptDocShell: Component<ShellProps> = (props) => {
               aria-label={language.t("prompt.action.attachFile")}
             />
           </Tooltip>
-          <Show when={props.capture}>
+          <Show when={props.capture && !env.productionLayout()}>
             <Tooltip placement="top" value={language.t("prompt.action.captureTab")}>
               <IconButton
                 data-action="prompt-doc-capture-tab"

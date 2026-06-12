@@ -2346,20 +2346,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <Icon name="plus" class="size-4.5" />
                     </Button>
                   </TooltipKeybind>
-                  <Tooltip placement="top" value={language.t("prompt.action.captureTab")}>
-                    <Button
-                      data-action="prompt-capture-tab"
-                      type="button"
-                      variant="ghost"
-                      class="size-7.5 p-0"
-                      style={buttons()}
-                      onClick={captureTab}
-                      aria-disabled={capturing()}
-                      aria-label={language.t("prompt.action.captureTab")}
-                    >
-                      <Icon name="photo" class="size-4.5" />
-                    </Button>
-                  </Tooltip>
+                  <Show when={!env.productionLayout()}>
+                    <Tooltip placement="top" value={language.t("prompt.action.captureTab")}>
+                      <Button
+                        data-action="prompt-capture-tab"
+                        type="button"
+                        variant="ghost"
+                        class="size-7.5 p-0"
+                        style={buttons()}
+                        onClick={captureTab}
+                        aria-disabled={capturing()}
+                        aria-label={language.t("prompt.action.captureTab")}
+                      >
+                        <Icon name="photo" class="size-4.5" />
+                      </Button>
+                    </Tooltip>
+                  </Show>
                   {modeButtons()}
                 </div>
               </Show>
