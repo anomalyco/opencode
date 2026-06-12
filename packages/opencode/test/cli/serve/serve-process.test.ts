@@ -10,7 +10,11 @@ import { Effect } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { cliIt } from "../../lib/cli-process"
 
-describe("opencode serve (subprocess)", () => {
+// SecureCode fork removes the `serve` subcommand from CLI registration
+// (issue #347, follow-up to #71). The handler file is kept under src/ for
+// upstream-sync hygiene, but the subprocess test can no longer reach it.
+// Same pattern as the acp subprocess skip (#272).
+describe.skip("opencode serve (subprocess)", () => {
   // Smoke test: server starts, binds a port, and /global/health responds.
   // If this fails, all other serve tests likely will too — debug here first.
   cliIt.live(

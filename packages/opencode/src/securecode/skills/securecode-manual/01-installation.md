@@ -56,10 +56,6 @@ gh release download -R acompany-develop/securecode --pattern install -O - | bash
 
 `~/.config/securecode/` 直下の設定は **再 install しても上書きされません**（既存ファイル保持）。マニュアルなどの skill ファイルを最新版に差し替えたい場合は、該当ディレクトリを `trash` で消してから再 install してください。
 
-## アンインストール
-
-`securecode uninstall` サブコマンドが用意されています。配置されたバイナリと `~/.config/securecode/` を確認しながら削除します。
-
 ## 関連
 
 - 詳しい配布パイプライン（バイナリ生成・dual publish）→ `docs/04-binary-build.md`

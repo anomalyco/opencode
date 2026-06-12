@@ -7,7 +7,11 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { cliIt } from "../../lib/cli-process"
 
-describe("opencode run (non-interactive subprocess)", () => {
+// SecureCode fork removes the `run` subcommand from CLI registration
+// (issue #347, follow-up to #71). The handler file is kept under src/ for
+// upstream-sync hygiene, but the subprocess test can no longer reach it.
+// Same pattern as the serve / acp subprocess skips.
+describe.skip("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
   // If this fails, all the others likely will too — debug here first.
   cliIt.concurrent(

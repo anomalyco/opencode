@@ -18,7 +18,12 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { cliIt } from "../../lib/cli-process"
 
-describe("opencode read-only commands (smoke)", () => {
+// SecureCode fork keeps only `[project]` (TUI) and `run` registered (issue #347,
+// follow-up to #71). The subcommands these smoke tests exercise (`mcp` /
+// `providers` / `models` / `agent` / `session` / `stats` / `db`) are no longer
+// reachable via the CLI even though the handler files still live in src/.
+// Skipping mirrors the pattern from issue #272.
+describe.skip("opencode read-only commands (smoke)", () => {
   // `mcp list` reads MCP server config and pings each one. With the empty
   // OPENCODE_CONFIG_CONTENT={} we provide, no servers should be configured
   // and the command should report that cleanly.

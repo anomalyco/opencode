@@ -70,7 +70,7 @@ Windows ネイティブは配布対象外です。WSL2 上で Linux 版を使っ
 
 ## サンドボックス境界の確認
 
-`securecode debug` 以下のサブコマンドで、現在のサンドボックス設定や許可ドメインを dump できます。「なぜブロックされた？」のときに有用。
+「なぜブロックされた？」のときは、`~/.config/securecode/sandbox.json` の `allow` / `deny` ルールと、起動時に supervisor が stderr に出す `allowedDomains = ...` のログを直接確認してください。`--print-logs --log-level DEBUG` で詳しく見られます。
 
 ## 関連
 

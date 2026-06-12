@@ -15,7 +15,9 @@
 # After install, set SECURECODE_QWEN3_API_KEY in your shell environment to the
 # Qwen3.6-35B-A3B-FP8 API key your Acompany contact issued for you, then run:
 #
-#   securecode run "Hello"
+#   securecode
+#
+# (no arguments — that launches the TUI.)
 #
 # Re-running this script is safe: existing config files are kept.
 
@@ -39,7 +41,7 @@ if [ ! -e "$dest/securecode.json" ]; then
   echo
   echo "Next steps:"
   echo "  1. export SECURECODE_QWEN3_API_KEY=<your Qwen3.6 API key from Acompany>"
-  echo "  2. securecode run \"Hello\""
+  echo "  2. securecode    # launches the TUI"
 else
   echo "skipped (already exists): $dest/securecode.json"
   lsp_added=$(SECURECODE_CONF="$dest/securecode.json" node -e "
