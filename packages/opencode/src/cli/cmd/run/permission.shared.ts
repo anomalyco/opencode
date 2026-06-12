@@ -109,6 +109,21 @@ export function permissionInfo(request: PermissionRequest): PermissionInfo {
   }
 
   if (request.permission === "doom_loop") {
+    const meta = dict(request.metadata)
+    if (meta.outcome === "empty_mcp_resource_discovery") {
+      const tool = text(meta.tool) || pats[0]
+      const count = typeof meta.count === "number" ? meta.count : undefined
+      return {
+        icon: "⟳",
+        title: "Continue after empty MCP resource searches",
+        lines: [
+          ...(tool ? [`Tool: ${tool}`] : []),
+          ...(count ? [`Empty results: ${count}`] : []),
+          "Continuing may waste time or tokens without finding new resources.",
+        ],
+      }
+    }
+
     return {
       icon: "⟳",
       title: "Continue after repeated failures",

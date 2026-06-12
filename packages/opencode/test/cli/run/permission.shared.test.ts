@@ -122,6 +122,28 @@ describe("run permission shared", () => {
 
     expect(permissionInfo(req({ permission: "doom_loop" }))).toMatchObject({
       title: "Continue after repeated failures",
+      lines: ["This keeps the session running despite repeated failures."],
+    })
+
+    expect(
+      permissionInfo(
+        req({
+          permission: "doom_loop",
+          patterns: ["gumps_mcp_resource_list"],
+          metadata: {
+            tool: "gumps_mcp_resource_list",
+            outcome: "empty_mcp_resource_discovery",
+            count: 3,
+          },
+        }),
+      ),
+    ).toMatchObject({
+      title: "Continue after empty MCP resource searches",
+      lines: [
+        "Tool: gumps_mcp_resource_list",
+        "Empty results: 3",
+        "Continuing may waste time or tokens without finding new resources.",
+      ],
     })
 
     expect(permissionInfo(req({ permission: "custom_tool" }))).toMatchObject({

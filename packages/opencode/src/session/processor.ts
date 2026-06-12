@@ -83,11 +83,67 @@ interface ProcessorContext extends Input {
   currentTextID: string | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
   v2AssistantMessageID: SessionMessage.ID | undefined
+  noProgress: { key: string; count: number } | undefined
 }
 
 type StreamEvent = LLMEvent
+type ToolResultEvent = Extract<StreamEvent, { type: "tool-result" }>
+type ToolResultOutput = {
+  title: string
+  metadata: Record<string, unknown>
+  output: string
+  attachments?: SessionV1.FilePart[]
+}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") {}
+
+function isMcpResourceDiscoveryTool(name: string) {
+  const normalized = name.toLowerCase()
+  return (
+    normalized.includes("mcp") &&
+    normalized.includes("resource") &&
+    (normalized.includes("list") || normalized.includes("search"))
+  )
+}
+
+function isEmptyDiscoveryResult(value: unknown, output: string) {
+  if (Array.isArray(value)) return value.length === 0
+  if (isRecord(value)) {
+    const discoveryEntries = Object.entries(value).filter(
+      ([key, item]) =>
+        /^(content|items|matches|resources|results|tools)$/i.test(key) && Array.isArray(item),
+    )
+    if (discoveryEntries.length) {
+      if (hasDiscoveryCursor(value)) return false
+      if (hasDiscoverySideData(value)) return false
+      return discoveryEntries.every(([, item]) => Array.isArray(item) && item.length === 0)
+    }
+  }
+
+  const trimmed = output.trim().toLowerCase()
+  return (
+    trimmed === "" ||
+    trimmed === "[]" ||
+    trimmed === "{}" ||
+    /^no (matching )?(mcp )?resources? found[.!]?$/.test(trimmed)
+  )
+}
+
+function hasDiscoveryCursor(value: Record<string, unknown>) {
+  return typeof value.nextCursor === "string" && value.nextCursor.length > 0
+}
+
+function hasDiscoverySideData(value: Record<string, unknown>) {
+  return Object.entries(value).some(([key, item]) => {
+    if (/^(content|items|matches|resources|results|tools)$/i.test(key)) return Array.isArray(item) && item.length > 0
+    if (/^(cursor|filter|limit|nextCursor|offset|page|prefix|query|search|total|count)$/i.test(key)) return false
+    if (Array.isArray(item)) return item.length > 0
+    if (isRecord(item)) return Object.keys(item).length > 0
+    if (typeof item !== "string") return false
+    if (!/^(hint|message|note|reason|suggestion|suggestions)$/i.test(key)) return false
+    return !/^no (matching )?(mcp )?resources? found[.!]?$/.test(item.trim().toLowerCase())
+  })
+}
 
 export const layer = Layer.effect(
   Service,
@@ -125,6 +181,7 @@ export const layer = Layer.effect(
         currentTextID: undefined,
         reasoningMap: {},
         v2AssistantMessageID: undefined,
+        noProgress: undefined,
       }
       const mirrorAssistant = flags.experimentalEventSystem && !input.assistantMessage.summary
       let aborted = false
@@ -347,9 +404,7 @@ export const layer = Layer.effect(
 
       const isFilePart = (value: unknown): value is SessionV1.FilePart => Schema.is(SessionV1.FilePart)(value)
 
-      const toolResultOutput = (
-        value: Extract<StreamEvent, { type: "tool-result" }>,
-      ): { title: string; metadata: Record<string, any>; output: string; attachments?: SessionV1.FilePart[] } => {
+      const toolResultOutput = (value: ToolResultEvent): ToolResultOutput => {
         if (isRecord(value.result.value) && typeof value.result.value.output === "string") {
           return {
             title: typeof value.result.value.title === "string" ? value.result.value.title : value.name,
@@ -367,6 +422,45 @@ export const layer = Layer.effect(
             typeof value.result.value === "string" ? value.result.value : (JSON.stringify(value.result.value) ?? ""),
         }
       }
+
+      const noProgressKey = (value: ToolResultEvent, output: ToolResultOutput) => {
+        if (!isMcpResourceDiscoveryTool(value.name)) return
+        if (output.attachments?.length) return
+        if (hasDiscoveryCursor(output.metadata) || hasDiscoverySideData(output.metadata)) return
+        if (!isEmptyDiscoveryResult(value.result.value, output.output)) return
+        return `${value.name}:empty`
+      }
+
+      const checkNoProgress = Effect.fn("SessionProcessor.checkNoProgress")(function* (
+        value: ToolResultEvent,
+        output: ToolResultOutput,
+      ) {
+        const key = noProgressKey(value, output)
+        if (!key) {
+          ctx.noProgress = undefined
+          return
+        }
+
+        ctx.noProgress = {
+          key,
+          count: ctx.noProgress?.key === key ? ctx.noProgress.count + 1 : 1,
+        }
+        if (ctx.noProgress.count < DOOM_LOOP_THRESHOLD) return
+
+        const agent = yield* agents.get(ctx.assistantMessage.agent)
+        yield* permission.ask({
+          permission: "doom_loop",
+          patterns: [value.name],
+          sessionID: ctx.assistantMessage.sessionID,
+          metadata: {
+            tool: value.name,
+            outcome: "empty_mcp_resource_discovery",
+            count: ctx.noProgress.count,
+          },
+          always: [value.name],
+          ruleset: agent.permission,
+        })
+      })
 
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
         switch (value.type) {
@@ -643,6 +737,7 @@ export const layer = Layer.effect(
                 })
             }
             yield* completeToolCall(value.id, output)
+            yield* checkNoProgress(value, output)
             return
           }
 

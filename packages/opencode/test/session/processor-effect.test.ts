@@ -70,6 +70,8 @@ const cfg = {
     },
   },
 }
+const denyDoomLoopCfg = { ...cfg, permission: { doom_loop: "deny" as const } }
+const allowDoomLoopCfg = { ...cfg, permission: { doom_loop: "allow" as const } }
 
 function providerCfg(url: string) {
   return {
@@ -209,6 +211,102 @@ const providerErrorEnv = LayerNode.buildLayer(root, {
 })
 const itProviderError = testEffect(providerErrorEnv)
 
+function providerToolEvents(name: string, results: unknown[]) {
+  return results.flatMap((value, index) => [
+    LLMEvent.toolInputStart({ id: `call-${index}`, name }),
+    LLMEvent.toolInputEnd({ id: `call-${index}`, name }),
+    LLMEvent.toolCall({
+      id: `call-${index}`,
+      name,
+      input: { filter: `m365-inbox-${index}` },
+      providerExecuted: true,
+    }),
+    LLMEvent.toolResult({
+      id: `call-${index}`,
+      name,
+      result: { type: "json" as const, value },
+      providerExecuted: true,
+    }),
+  ])
+}
+
+function mcpResourceListEvents(results: unknown[][]) {
+  return providerToolEvents(
+    "gumps_mcp_resource_list",
+    results.map((resources) => ({ resources })),
+  )
+}
+
+function toolStreamTest(events: LLMEvent[]) {
+  const llm = Layer.succeed(
+    LLM.Service,
+    LLM.Service.of({
+      stream: () =>
+        Stream.make(
+          LLMEvent.stepStart({ index: 0 }),
+          ...events,
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ),
+    }),
+  )
+  return testEffect(
+    LayerNode.buildLayer(root, {
+      replacements: [...replacements, LayerNode.replace(LLM.node, llm)],
+    }),
+  )
+}
+
+const itRepeatedEmptyMcpList = toolStreamTest(mcpResourceListEvents([[], [], [], [], [], []]))
+
+const itProgressingMcpList = toolStreamTest(mcpResourceListEvents([[], [], [{ uri: "mcp://mail/inbox" }], [], []]))
+
+const itEmptyNonMcpSearch = toolStreamTest(
+  providerToolEvents(
+    "repo_search",
+    Array.from({ length: 6 }, () => ({ results: [] })),
+  ),
+)
+
+const itEmptyMcpToolList = toolStreamTest(
+  providerToolEvents(
+    "gumps_mcp_tool_list",
+    Array.from({ length: 6 }, () => ({ tools: [] })),
+  ),
+)
+
+const itPaginatedEmptyMcpResourceList = toolStreamTest(
+  providerToolEvents(
+    "gumps_mcp_resource_list",
+    Array.from({ length: 6 }, (_, index) =>
+      index % 2 === 0
+        ? { resources: [], nextCursor: `page-${index + 1}` }
+        : { title: "Resources", output: "[]", metadata: { nextCursor: `page-${index + 1}` } },
+    ),
+  ),
+)
+
+const itSuggestingEmptyMcpResourceList = toolStreamTest(
+  providerToolEvents(
+    "gumps_mcp_resource_list",
+    Array.from({ length: 6 }, (_, index) => ({
+      resources: [],
+      suggestions: [`mcp://mail/candidate-${index}`],
+    })),
+  ),
+)
+
+const itEchoingEmptyMcpResourceList = toolStreamTest(
+  providerToolEvents(
+    "gumps_mcp_resource_list",
+    Array.from({ length: 6 }, (_, index) => ({
+      resources: [],
+      query: `m365-inbox-${index}`,
+      total: 0,
+    })),
+  ),
+)
+
 const fragmentFailureLLM = Layer.succeed(
   LLM.Service,
   LLM.Service.of({
@@ -235,9 +333,163 @@ const boot = Effect.fn("test.boot")(function* () {
   return { processors, session, provider }
 })
 
+const processSyntheticToolStream = Effect.fn("test.processSyntheticToolStream")(function* (dir: string) {
+  const { processors, session, provider } = yield* boot()
+
+  const chat = yield* session.create({})
+  const parent = yield* user(chat.id, "find m365-inbox")
+  const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+  const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+  const handle = yield* processors.create({
+    assistantMessage: msg,
+    sessionID: chat.id,
+    model: mdl,
+  })
+
+  const input = {
+    user: {
+      id: parent.id,
+      sessionID: chat.id,
+      role: "user",
+      time: parent.time,
+      agent: parent.agent,
+      model: { providerID: ref.providerID, modelID: ref.modelID },
+    } satisfies SessionV1.User,
+    sessionID: chat.id,
+    model: mdl,
+    agent: agent(),
+    system: [],
+    messages: [{ role: "user", content: "find m365-inbox" }],
+    tools: {},
+  } satisfies LLM.StreamInput
+
+  const value = yield* handle.process(input)
+
+  const calls = (yield* MessageV2.parts(msg.id)).filter((part): part is SessionV1.ToolPart => part.type === "tool")
+  return { value, calls, handle }
+})
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+itRepeatedEmptyMcpList.live("session.processor gates repeated empty MCP resource searches through doom_loop", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const result = yield* processSyntheticToolStream(dir)
+
+        expect(result.value).toBe("stop")
+        expect(result.calls).toHaveLength(3)
+        expect(result.calls.every((call) => call.state.status === "completed")).toBe(true)
+        expect(JSON.stringify(result.handle.message.error)).toContain("prevents you from using this specific tool call")
+      }),
+    { config: denyDoomLoopCfg },
+  ),
+)
+
+itRepeatedEmptyMcpList.live("session.processor continues repeated empty MCP resource searches when doom_loop allows", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const result = yield* processSyntheticToolStream(dir)
+
+        expect(result.value).toBe("continue")
+        expect(result.calls).toHaveLength(6)
+        expect(result.handle.message.error).toBeUndefined()
+      }),
+    { config: allowDoomLoopCfg },
+  ),
+)
+
+itProgressingMcpList.live("session.processor keeps MCP resource searches that produce progress", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const result = yield* processSyntheticToolStream(dir)
+
+        expect(result.value).toBe("continue")
+        expect(result.calls).toHaveLength(5)
+        expect(result.handle.message.error).toBeUndefined()
+      }),
+    { config: cfg },
+  ),
+)
+
+itEmptyNonMcpSearch.live("session.processor does not stop repeated empty non-MCP searches", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const result = yield* processSyntheticToolStream(dir)
+
+        expect(result.value).toBe("continue")
+        expect(result.calls).toHaveLength(6)
+        expect(result.calls.every((call) => call.tool === "repo_search")).toBe(true)
+        expect(result.handle.message.error).toBeUndefined()
+      }),
+    { config: cfg },
+  ),
+)
+
+itEmptyMcpToolList.live("session.processor does not stop repeated empty MCP tool-list searches", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const result = yield* processSyntheticToolStream(dir)
+
+        expect(result.value).toBe("continue")
+        expect(result.calls).toHaveLength(6)
+        expect(result.calls.every((call) => call.tool === "gumps_mcp_tool_list")).toBe(true)
+        expect(result.handle.message.error).toBeUndefined()
+      }),
+    { config: cfg },
+  ),
+)
+
+itPaginatedEmptyMcpResourceList.live("session.processor does not stop MCP resource pagination that advances", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const result = yield* processSyntheticToolStream(dir)
+
+        expect(result.value).toBe("continue")
+        expect(result.calls).toHaveLength(6)
+        expect(result.calls.every((call) => call.tool === "gumps_mcp_resource_list")).toBe(true)
+        expect(result.handle.message.error).toBeUndefined()
+      }),
+    { config: cfg },
+  ),
+)
+
+itSuggestingEmptyMcpResourceList.live("session.processor does not stop empty MCP resource searches with suggestions", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const result = yield* processSyntheticToolStream(dir)
+
+        expect(result.value).toBe("continue")
+        expect(result.calls).toHaveLength(6)
+        expect(result.calls.every((call) => call.tool === "gumps_mcp_resource_list")).toBe(true)
+        expect(result.handle.message.error).toBeUndefined()
+      }),
+    { config: cfg },
+  ),
+)
+
+itEchoingEmptyMcpResourceList.live("session.processor gates empty MCP resource searches with only echoed queries", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const result = yield* processSyntheticToolStream(dir)
+
+        expect(result.value).toBe("stop")
+        expect(result.calls).toHaveLength(3)
+        expect(result.calls.every((call) => call.tool === "gumps_mcp_resource_list")).toBe(true)
+        expect(JSON.stringify(result.handle.message.error)).toContain("prevents you from using this specific tool call")
+      }),
+    { config: denyDoomLoopCfg },
+  ),
+)
 
 it.live("session.processor effect tests capture llm input cleanly", () =>
   provideTmpdirServer(
