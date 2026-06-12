@@ -755,18 +755,18 @@ async function resolveExternalPlugins(list: ConfigPlugin.Origin[], wait: () => P
       error(candidate, retry, stage, error, resolved) {
         const spec = candidate.plan.spec
         if (stage === "install") {
-          fail("failed to resolve tui plugin", { path: spec, retry, error })
+          warn("failed to resolve tui plugin", { path: spec, retry, error })
           return
         }
         if (stage === "compatibility") {
-          fail("tui plugin incompatible", { path: spec, retry, error })
+          warn("tui plugin incompatible", { path: spec, retry, error })
           return
         }
         if (stage === "entry") {
-          fail("failed to resolve tui plugin entry", { path: spec, retry, error })
+          warn("failed to resolve tui plugin entry", { path: spec, retry, error })
           return
         }
-        fail("failed to load tui plugin", { path: spec, target: resolved?.entry, retry, error })
+        warn("failed to load tui plugin", { path: spec, target: resolved?.entry, retry, error })
       },
     },
   })
