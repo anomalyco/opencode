@@ -227,6 +227,8 @@ describe("SkillV2 hot-reload", () => {
               // RED: cache should be invalidated → fresh load → v2
               const second = yield* skill.list()
               expect(second[0]?.content.trim()).toBe("body v2")
+              // watch() must be called exactly once regardless of how many invalidations occur
+              expect(w.calls.filter((d) => d === skillDir)).toHaveLength(1)
             }).pipe(Effect.provide(layer))
           }),
         ),
@@ -515,6 +517,45 @@ describe("SkillV2 hot-reload", () => {
               expect(skills).toHaveLength(1)
               expect(skills[0]?.name).toBe("myskill")
               expect(skills[0]?.content.trim()).toBe("body v1")
+            }).pipe(Effect.provide(layer))
+          }),
+        ),
+      ),
+  )
+
+  it.live(
+    "T9: should not throw or interrupt caller when cache is invalidated during list()",
+    () =>
+      Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (t) => Effect.promise(() => t[Symbol.asyncDispose]()),
+      ).pipe(
+        Effect.flatMap((tmp) =>
+          Effect.gen(function* () {
+            const skillDir = path.join(tmp.path, "skills")
+            yield* writeSkill(skillDir, "myskill", "body v1")
+
+            const ev = yield* makeEventMock
+            const w = yield* makeWatcherSpy
+            const layer = buildLayer(ev.layer, w.layer)
+
+            yield* Effect.gen(function* () {
+              const skill = yield* withDirectorySource(skillDir)
+
+              // Populate the cache with an initial load
+              yield* skill.list()
+
+              // Publish an invalidation event concurrently
+              yield* ev.service.publish(Watcher.Event.Updated, {
+                file: path.join(skillDir, "SKILL.md"),
+                event: "change",
+              })
+              yield* Effect.yieldNow
+              yield* Effect.yieldNow
+
+              // list() after invalidation must not throw and must return an array
+              const result = yield* skill.list()
+              expect(Array.isArray(result)).toBe(true)
             }).pipe(Effect.provide(layer))
           }),
         ),

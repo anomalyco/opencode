@@ -1,7 +1,7 @@
 export * as SkillV2 from "./skill"
 
 import path from "path"
-import { Context, Effect, Layer, Option, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Option, Schema, Stream } from "effect"
 import { castDraft } from "immer"
 import { AgentV2 } from "./agent"
 import { ConfigMarkdown } from "./config/markdown"
@@ -168,8 +168,8 @@ export const layer = Layer.effect(
         let loaded = cache.get(key)
         if (!loaded) {
           loaded = yield* load(source)
-          // MEDIUM-M1: if the cache was cleared during load (race with a watcher event),
-          // reload once more so the caller receives up-to-date content.
+          // If the cache was cleared by a watcher event while we were loading,
+          // reload once to return fresh content in this same list() call.
           if (!cache.has(key)) {
             loaded = yield* load(source)
           }
@@ -200,7 +200,9 @@ export const layer = Layer.effect(
           ),
           // MEDIUM-M3: log fiber failures so hot-reload doesn't die silently.
           Effect.catchCause((cause) =>
-            Effect.logError("SkillV2 hot-reload fiber failed", cause),
+            Cause.hasInterrupts(cause)
+              ? Effect.void
+              : Effect.logError("SkillV2 hot-reload fiber failed", cause),
           ),
         ),
       )

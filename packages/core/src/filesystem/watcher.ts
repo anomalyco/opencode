@@ -58,8 +58,10 @@ export const hasNativeBinding = () => !!watcher()
 
 export interface Interface {
   /**
-   * Register a directory for hot-reload watching.
-   * Called by SkillV2 when loading a DirectorySource for the first time.
+   * Subscribe to filesystem events for the given directory.
+   * NOTE: This method is NOT idempotent — calling it twice with the same
+   * directory will create two OS-level subscriptions, doubling events.
+   * Callers are responsible for deduplication (e.g., via a Set of watched dirs).
    */
   readonly watch: (directory: string) => Effect.Effect<void>
 }
