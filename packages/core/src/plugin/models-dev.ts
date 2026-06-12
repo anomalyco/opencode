@@ -1,7 +1,6 @@
 import { DateTime, Effect, Scope, Stream } from "effect"
 import { Catalog } from "../catalog"
-import { Connector } from "../connector"
-import { Credential } from "../credential"
+import { Integration } from "../integration"
 import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
 import { ModelRequest } from "../model-request"
@@ -56,27 +55,31 @@ export const ModelsDevPlugin = PluginV2.define({
   id: PluginV2.ID.make("models-dev"),
   effect: Effect.gen(function* () {
     const catalog = yield* Catalog.Service
-    const connectors = yield* Connector.Service
+    const integrations = yield* Integration.Service
     const modelsDev = yield* ModelsDev.Service
     const events = yield* EventV2.Service
     const scope = yield* Scope.Scope
     const transform = yield* catalog.transform()
-    const connectorTransform = yield* connectors.transform()
+    const integrationTransform = yield* integrations.transform()
     const refresh = Effect.fn("ModelsDevPlugin.refresh")(function* () {
       const data = yield* modelsDev.get()
-      yield* connectorTransform((connectors) => {
+      yield* integrationTransform((integrations) => {
         for (const item of Object.values(data)) {
           if (item.env.length === 0) continue
-          const connectorID = Connector.ID.make(item.id)
-          connectors.update(connectorID, (connector) => (connector.name = item.name))
-          connectors.method.update({
-            connectorID,
-            method: new Connector.KeyMethod({
-              id: Connector.MethodID.make("api-key"),
+          const integrationID = Integration.ID.make(item.id)
+          integrations.update(integrationID, (integration) => (integration.name = item.name))
+          integrations.method.update({
+            integrationID,
+            method: new Integration.KeyMethod({
               type: "key",
-              label: "API Key",
             }),
-            authorize: (key: string) => Effect.succeed(new Credential.Key({ type: "key", key })),
+          })
+          integrations.method.update({
+            integrationID,
+            method: new Integration.EnvMethod({
+              type: "env",
+              names: [...item.env],
+            }),
           })
         }
       })
