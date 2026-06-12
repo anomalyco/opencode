@@ -10,7 +10,13 @@ import { SessionStatus } from "./status"
 
 export interface Interface {
   readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError>
-  readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
+  /**
+   * Cancels the session's runner and every background job reachable from it.
+   * `seedSessionIDs` widens the job matching with additional session IDs —
+   * the session tree's descendants act as a second cancel source (design-final
+   * §4.5 Ü1) so mid-tree cancels reach jobs whose metadata chain is broken.
+   */
+  readonly cancel: (sessionID: SessionID, seedSessionIDs?: ReadonlyArray<SessionID>) => Effect.Effect<void>
   readonly ensureRunning: (
     sessionID: SessionID,
     onInterrupt: Effect.Effect<SessionV1.WithParts>,
@@ -74,8 +80,11 @@ export const layer = Layer.effect(
       if (existing?.busy) yield* busyError(sessionID)
     })
 
-    const cancel = Effect.fn("SessionRunState.cancel")(function* (sessionID: SessionID) {
-      yield* cancelBackgroundJobs(background, sessionID)
+    const cancel = Effect.fn("SessionRunState.cancel")(function* (
+      sessionID: SessionID,
+      seedSessionIDs?: ReadonlyArray<SessionID>,
+    ) {
+      yield* cancelBackgroundJobs(background, sessionID, seedSessionIDs)
       const data = yield* InstanceState.get(state)
       const existing = data.runners.get(sessionID)
       if (!existing) {
@@ -116,35 +125,42 @@ export const defaultLayer = layer.pipe(
 const cancelBackgroundJobs = Effect.fn("SessionRunState.cancelBackgroundJobs")(function* (
   background: BackgroundJob.Interface,
   sessionID: SessionID,
+  seedSessionIDs?: ReadonlyArray<SessionID>,
 ) {
   const jobs = yield* background.list()
-  const pending = new Set<string>([sessionID])
-  const cancelled = new Set<string>()
-  const matches = (job: BackgroundJob.Info) => {
-    if (job.status !== "running") return false
-    if (cancelled.has(job.id)) return false
+  // The reachable frontier: the cancelled session, the optional seeds (the
+  // session tree's descendants — the second cancel source for mid-tree
+  // cancels whose job metadata chain is broken), and every session/job the
+  // metadata chain (parentSessionId → sessionId) reaches from there.
+  const pending = new Set<string>([sessionID, ...(seedSessionIDs ?? [])])
+  const reaches = (job: BackgroundJob.Info) => {
     if (pending.has(job.id)) return true
     if (typeof job.metadata?.sessionId === "string" && pending.has(job.metadata.sessionId)) return true
+    // Root match (design-final §4.5 Ü1): root-level cancels are O(jobs) and
+    // immune to gaps in the parentSessionId chain.
+    if (typeof job.metadata?.rootSessionId === "string" && pending.has(job.metadata.rootSessionId)) return true
     return typeof job.metadata?.parentSessionId === "string" && pending.has(job.metadata.parentSessionId)
   }
-  let batch = jobs.filter(matches)
-  while (batch.length > 0) {
-    yield* Effect.forEach(
-      batch,
-      (job) =>
-        background.cancel(job.id).pipe(
-          Effect.tap(() =>
-            Effect.sync(() => {
-              cancelled.add(job.id)
-              pending.add(job.id)
-              if (typeof job.metadata?.sessionId === "string") pending.add(job.metadata.sessionId)
-            }),
-          ),
-        ),
-      { concurrency: "unbounded", discard: true },
-    )
-    batch = jobs.filter(matches)
+  // Expansion to a fixpoint over ALL job records — a completed mid-tree job
+  // still bridges the chain to its children (the release race: the middle
+  // task finished while its grandchild is still running). Only running jobs
+  // are cancelled below; completed ones serve purely as bridges.
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const job of jobs) {
+      if (!reaches(job)) continue
+      const before = pending.size
+      pending.add(job.id)
+      if (typeof job.metadata?.sessionId === "string") pending.add(job.metadata.sessionId)
+      if (pending.size > before) changed = true
+    }
   }
+  yield* Effect.forEach(
+    jobs.filter((job) => job.status === "running" && reaches(job)),
+    (job) => background.cancel(job.id),
+    { concurrency: "unbounded", discard: true },
+  )
 })
 
 function busyError(sessionID: SessionID) {
