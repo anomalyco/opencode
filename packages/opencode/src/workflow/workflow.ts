@@ -3693,7 +3693,12 @@ export const layer = Layer.effect(
             // dispatch from the same run session fails the same way), so
             // nulling it inside a while-loop would spin forever — same
             // rationale as the lifetime/budget gates above.
-            !(error instanceof SubagentLimits.SubagentDepthError)
+            !(error instanceof SubagentLimits.SubagentDepthError) &&
+            // Finding B: a failed lineage walk (corrupt/cyclic session
+            // parents) is just as deterministic for the whole run as the
+            // depth gate — the same chain fails on every dispatch — so it is
+            // carved out for the identical reason.
+            !(error instanceof SubagentLimits.SubagentLineageError)
           ) {
             return null
           }

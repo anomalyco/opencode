@@ -11,7 +11,7 @@ import { TurnBudget } from "@/session/turn-budget"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { WorkflowRunTable } from "@opencode-ai/core/workflow/sql"
-import { MessageTable } from "@opencode-ai/core/session/sql"
+import { MessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { MessageID } from "@opencode-ai/core/v1/session"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { eq, sql } from "drizzle-orm"
@@ -419,6 +419,19 @@ export async function run(args, ctx) {
   ctx.setPhase("run")
   await ctx.agent({ prompt: "gated", onError: "null" })
   return { ok: true }
+}
+`
+
+// Finding B (lineage carve-out): onError:"null" must NOT swallow a
+// SubagentLineageError either — a failed lineage walk (corrupt/cyclic session
+// parents) is deterministic for the whole run, so nulling it in a while-loop
+// would spin forever, exactly like the depth gate.
+const ONERROR_LINEAGE_FIXTURE = "onerror-lineage"
+const ONERROR_LINEAGE_WORKFLOW = `export const meta = { name: "${ONERROR_LINEAGE_FIXTURE}", phases: ["run"] }
+export async function run(args, ctx) {
+  ctx.setPhase("run")
+  const r = await ctx.agent({ prompt: "x", onError: "null" })
+  return { swallowed: r === null }
 }
 `
 
@@ -8446,6 +8459,49 @@ export async function run(args, ctx) {
       const done = (yield* workflow.wait({ id: run.id })).run ?? (yield* Effect.fail(new Error("run did not finish")))
       expect(done.status).toBe("failed")
       expect(done.error ?? "").toMatch(/budget exhausted/i)
+    }),
+  )
+
+  // Finding B: a SubagentLineageError (corrupt/cyclic session parents in the
+  // dispatch depth guard's lineage walk) is NEVER swallowed by onError:"null"
+  // — it is deterministic for the whole run (every dispatch fails the same
+  // way), so nulling it would spin a while-loop forever, exactly like the
+  // depth/budget gates. The cycle is injected via the noReply start banner:
+  // its prompt runs AFTER the run session exists but BEFORE the body's first
+  // dispatch, so self-parenting the run session there deterministically fails
+  // the dispatch lineage walk at the iteration cap.
+  it.instance("onError:null does NOT swallow a lineage failure", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => writeWorkflow(test.directory, ONERROR_LINEAGE_FIXTURE, ONERROR_LINEAGE_WORKFLOW))
+      const workflow = yield* Workflow.Service
+      const { db } = yield* Database.Service
+
+      const ops: Workflow.PromptOps = {
+        prompt: (input) =>
+          Effect.gen(function* () {
+            if (input.noReply) {
+              // Corrupt the parent chain: the run session becomes its own
+              // parent — the exact shape LINEAGE_ITERATION_CAP defends against.
+              yield* db
+                .update(SessionTable)
+                .set({ parent_id: SessionID.make(input.sessionID) })
+                .where(eq(SessionTable.id, input.sessionID))
+                .run()
+                .pipe(Effect.orDie)
+            }
+            return assistantReply()
+          }),
+        cancel: () => Effect.void,
+      }
+
+      const run = yield* workflow.start({ name: ONERROR_LINEAGE_FIXTURE, args: {}, prompt: ops })
+      const done = (yield* workflow.wait({ id: run.id })).run ?? (yield* Effect.fail(new Error("run did not finish")))
+      // NOT swallowed: the run fails with the lineage error instead of
+      // completing with { swallowed: true }.
+      expect(done.status).toBe("failed")
+      expect(done.error ?? "").toMatch(/ancestry could not be resolved/i)
+      expect(done.agents[0]?.status).toBe("failed")
     }),
   )
 
