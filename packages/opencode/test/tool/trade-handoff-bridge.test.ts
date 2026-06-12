@@ -8,6 +8,7 @@ import { createTradeMemoryService } from "../../../../.opencode/mcp/service"
 import { syncTradeMemoryNow } from "../../../../.opencode/trade-memory-core/sync"
 import { createTradeHandoffBridgeHooks, parseServiceCommand, readModelSwitchedEvent } from "../../../../.opencode/plugins/trade-handoff-bridge"
 import { tmpdir } from "../fixture/fixture"
+import { startTestHttpServer } from "../lib/http-server"
 import type { Model } from "../../src/provider/provider"
 
 const baseEnv = {
@@ -58,7 +59,7 @@ describe("trade-handoff bridge", () => {
     process.env.OPENCODE_TRADE_MEMORY_SERVICE_TOKEN = "test-token"
 
     const service = createTradeMemoryService({ indexDbPath, sourceDbPath })
-    const server = startTradeMemoryHttpServer({ service, port: 0 })
+    const server = startTestHttpServer((port) => startTradeMemoryHttpServer({ service, hostname: "127.0.0.1", port }))
     process.env.OPENCODE_TRADE_MEMORY_SERVICE_PORT = String(server.port)
     process.env.OPENCODE_TRADE_MEMORY_SERVICE_URL = `http://127.0.0.1:${server.port}`
     const hooks = createTradeHandoffBridgeHooks(tmp.path)
@@ -124,7 +125,7 @@ describe("trade-handoff bridge", () => {
     console.error = () => undefined
 
     const service = createTradeMemoryService({ indexDbPath, sourceDbPath: path.join(tmp.path, "missing.db") })
-    const server = startTradeMemoryHttpServer({ service, port: 0 })
+    const server = startTestHttpServer((port) => startTradeMemoryHttpServer({ service, hostname: "127.0.0.1", port }))
     process.env.OPENCODE_TRADE_MEMORY_SERVICE_PORT = String(server.port)
     process.env.OPENCODE_TRADE_MEMORY_SERVICE_URL = `http://127.0.0.1:${server.port}`
     const hooks = createTradeHandoffBridgeHooks(tmp.path)
@@ -161,7 +162,7 @@ describe("trade-handoff bridge", () => {
     process.env.OPENCODE_TRADE_MEMORY_SERVICE_TOKEN = "test-token"
 
     const service = createTradeMemoryService({ indexDbPath, sourceDbPath })
-    const server = startTradeMemoryHttpServer({ service, port: 0 })
+    const server = startTestHttpServer((port) => startTradeMemoryHttpServer({ service, hostname: "127.0.0.1", port }))
     process.env.OPENCODE_TRADE_MEMORY_SERVICE_PORT = String(server.port)
     process.env.OPENCODE_TRADE_MEMORY_SERVICE_URL = `http://127.0.0.1:${server.port}`
     const hooks = createTradeHandoffBridgeHooks(tmp.path)
@@ -196,7 +197,7 @@ describe("trade-handoff bridge", () => {
     const service = createTradeMemoryService({ indexDbPath, sourceDbPath })
     service.markModelSwitched({ sessionID: "ses_test", modelID: "gpt-5.4", pendingSince: 100 })
     service.sync()
-    const server = startTradeMemoryHttpServer({ service, port: 0 })
+    const server = startTestHttpServer((port) => startTradeMemoryHttpServer({ service, hostname: "127.0.0.1", port }))
     process.env.OPENCODE_TRADE_MEMORY_SERVICE_PORT = String(server.port)
     process.env.OPENCODE_TRADE_MEMORY_SERVICE_URL = `http://127.0.0.1:${server.port}`
     const hooks = createTradeHandoffBridgeHooks(tmp.path)
@@ -247,6 +248,29 @@ describe("trade-handoff bridge", () => {
     const report = syncTradeMemoryNow({ sourceDbPath, indexDbPath })
 
     expect(report.fullResync).toBe(true)
+  })
+
+  test("handoff context respects strict max chars", async () => {
+    await using tmp = await tmpdir()
+    const sourceDbPath = path.join(tmp.path, "opencode.db")
+    const indexDbPath = path.join(tmp.path, "memory.sqlite3")
+    seedSourceDb(sourceDbPath)
+    process.env.OPENCODE_DB = sourceDbPath
+
+    const service = createTradeMemoryService({ indexDbPath, sourceDbPath })
+    service.sync()
+    service.storeNote({
+      title: "A".repeat(200),
+      body: "B".repeat(400),
+      memory_type: "decision",
+      importance: 5,
+      status: "active",
+      scope: "project",
+    })
+
+    const context = service.buildHandoffContext({ sessionID: "ses_test", modelID: "gpt-5.4", maxChars: 120 })
+
+    expect(context.block.length).toBeLessThanOrEqual(120)
   })
 
   test("autostart attempts to spawn local service when enabled", async () => {

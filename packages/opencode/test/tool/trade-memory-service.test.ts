@@ -3,6 +3,7 @@ import path from "path"
 import { startTradeMemoryHttpServer } from "../../../../.opencode/mcp/http"
 import { createTradeMemoryService, TradeMemoryInputError } from "../../../../.opencode/mcp/service"
 import { tmpdir } from "../fixture/fixture"
+import { startTestHttpServer } from "../lib/http-server"
 
 describe("trade-memory service", () => {
   test("renderOracleNote returns decision template", async () => {
@@ -88,7 +89,7 @@ describe("trade-memory service", () => {
     const originalToken = process.env.OPENCODE_TRADE_MEMORY_SERVICE_TOKEN
     process.env.OPENCODE_TRADE_MEMORY_SERVICE_TOKEN = "test-token"
     const service = createTradeMemoryService({ indexDbPath: path.join(tmp.path, "memory.sqlite3") })
-    const server = startTradeMemoryHttpServer({ service, port: 0 })
+    const server = startTestHttpServer((port) => startTradeMemoryHttpServer({ service, hostname: "127.0.0.1", port }))
 
     try {
       const unauthorized = await fetch(`http://127.0.0.1:${server.port}/notes`, {

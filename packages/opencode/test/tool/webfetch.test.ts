@@ -7,6 +7,7 @@ import { WebFetchTool } from "../../src/tool/webfetch"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Tool } from "@/tool/tool"
 import { testEffect } from "../lib/effect"
+import { startTestHttpServer } from "../lib/http-server"
 
 const it = testEffect(Layer.mergeAll(FetchHttpClient.layer, Truncate.defaultLayer, Agent.defaultLayer))
 
@@ -26,7 +27,7 @@ const withFetch = <A, E, R>(
   fn: (url: URL) => Effect.Effect<A, E, R>,
 ) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => Bun.serve({ port: 0, fetch })),
+    Effect.sync(() => startTestHttpServer((port) => Bun.serve({ hostname: "127.0.0.1", port, fetch }))),
     (server) => fn(server.url),
     (server) => Effect.sync(() => server.stop(true)),
   )
