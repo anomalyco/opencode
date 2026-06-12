@@ -105,7 +105,7 @@ export const layer = Layer.effect(
       }
     }
 
-    // MEDIUM-M2: wrap w.subscribe() inside Effect.promise so the OS-level
+    // wrap w.subscribe() inside Effect.promise so the OS-level
     // subscription is created during Effect execution, not at construction time.
     const subscribe = (directory: string, ignore: string[]) =>
       Effect.promise(() => w.subscribe(directory, callback, { ignore, backend })).pipe(

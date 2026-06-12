@@ -150,7 +150,7 @@ export const layer = Layer.effect(
 
     const invalidated = new Set<string>()
     const cache = new Map<string, Info[]>()
-    // HIGH-H1/H2: track which directories are already subscribed to prevent
+    // track which directories are already subscribed to prevent
     // O(N) subscription growth when cache entries are repeatedly invalidated.
     const watched = new Set<string>()
     const list = Effect.fn("SkillV2.list")(function* () {
@@ -198,7 +198,7 @@ export const layer = Layer.effect(
               }
             }),
           ),
-          // MEDIUM-M3: log fiber failures so hot-reload doesn't die silently.
+          // log fiber failures so hot-reload doesn't die silently.
           Effect.catchCause((cause) =>
             Cause.hasInterrupts(cause)
               ? Effect.void
