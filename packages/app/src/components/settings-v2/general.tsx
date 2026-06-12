@@ -371,17 +371,19 @@ export const SettingsGeneralV2: Component = () => {
       <h3 class="settings-v2-section-title">{language.t("settings.general.section.advanced")}</h3>
 
       <SettingsListV2>
-        <SettingsRowV2
-          title={language.t("settings.general.row.showFileTree.title")}
-          description={language.t("settings.general.row.showFileTree.description")}
-        >
-          <div data-action="settings-show-file-tree">
-            <Switch
-              checked={settings.general.showFileTree()}
-              onChange={(checked) => settings.general.setShowFileTree(checked)}
-            />
-          </div>
-        </SettingsRowV2>
+        <Show when={desktop()}>
+          <SettingsRowV2
+            title={language.t("settings.general.row.showFileTree.title")}
+            description={language.t("settings.general.row.showFileTree.description")}
+          >
+            <div data-action="settings-show-file-tree">
+              <Switch
+                checked={settings.general.showFileTree()}
+                onChange={(checked) => settings.general.setShowFileTree(checked)}
+              />
+            </div>
+          </SettingsRowV2>
+        </Show>
 
         <SettingsRowV2
           title={language.t("settings.general.row.showNavigation.title")}
@@ -395,41 +397,47 @@ export const SettingsGeneralV2: Component = () => {
           </div>
         </SettingsRowV2>
 
-        <SettingsRowV2
-          title={language.t("settings.general.row.showSearch.title")}
-          description={language.t("settings.general.row.showSearch.description")}
-        >
-          <div data-action="settings-show-search">
-            <Switch
-              checked={settings.general.showSearch()}
-              onChange={(checked) => settings.general.setShowSearch(checked)}
-            />
-          </div>
-        </SettingsRowV2>
+        <Show when={desktop()}>
+          <SettingsRowV2
+            title={language.t("settings.general.row.showSearch.title")}
+            description={language.t("settings.general.row.showSearch.description")}
+          >
+            <div data-action="settings-show-search">
+              <Switch
+                checked={settings.general.showSearch()}
+                onChange={(checked) => settings.general.setShowSearch(checked)}
+              />
+            </div>
+          </SettingsRowV2>
+        </Show>
 
-        <SettingsRowV2
-          title={language.t("settings.general.row.showTerminal.title")}
-          description={language.t("settings.general.row.showTerminal.description")}
-        >
-          <div data-action="settings-show-terminal">
-            <Switch
-              checked={settings.general.showTerminal()}
-              onChange={(checked) => settings.general.setShowTerminal(checked)}
-            />
-          </div>
-        </SettingsRowV2>
+        <Show when={desktop()}>
+          <SettingsRowV2
+            title={language.t("settings.general.row.showTerminal.title")}
+            description={language.t("settings.general.row.showTerminal.description")}
+          >
+            <div data-action="settings-show-terminal">
+              <Switch
+                checked={settings.general.showTerminal()}
+                onChange={(checked) => settings.general.setShowTerminal(checked)}
+              />
+            </div>
+          </SettingsRowV2>
+        </Show>
 
-        <SettingsRowV2
-          title={language.t("settings.general.row.showStatus.title")}
-          description={language.t("settings.general.row.showStatus.description")}
-        >
-          <div data-action="settings-show-status">
-            <Switch
-              checked={settings.general.showStatus()}
-              onChange={(checked) => settings.general.setShowStatus(checked)}
-            />
-          </div>
-        </SettingsRowV2>
+        <Show when={desktop()}>
+          <SettingsRowV2
+            title={language.t("settings.general.row.showStatus.title")}
+            description={language.t("settings.general.row.showStatus.description")}
+          >
+            <div data-action="settings-show-status">
+              <Switch
+                checked={settings.general.showStatus()}
+                onChange={(checked) => settings.general.setShowStatus(checked)}
+              />
+            </div>
+          </SettingsRowV2>
+        </Show>
 
         <SettingsRowV2
           title={language.t("settings.general.row.showCustomAgents.title")}
@@ -767,9 +775,7 @@ export const SettingsGeneralV2: Component = () => {
 
         <DisplaySection />
 
-        <Show when={desktop()}>
-          <AdvancedSection />
-        </Show>
+        <AdvancedSection />
       </div>
     </>
   )
