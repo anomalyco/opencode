@@ -1497,12 +1497,12 @@ export default function Page() {
       const value = draft(input.messageID)
       batch(() => {
         roll(input.sessionID, { messageID: input.messageID })
-        prompt.set(value)
       })
       await halt(input.sessionID)
         .then(() => sdk.client.session.revert(input))
         .then((result) => {
           if (result.data) merge(result.data)
+          prompt.set(value)
         })
         .catch((err) => {
           batch(() => {
@@ -1522,14 +1522,10 @@ export default function Page() {
       const next = userMessages().find((item) => item.id > id)
       const prev = prompt.current().slice()
       const last = info()?.revert
+      const value = next ? draft(next.id) : undefined
 
       batch(() => {
         roll(sessionID, next ? { messageID: next.id } : undefined)
-        if (next) {
-          prompt.set(draft(next.id))
-          return
-        }
-        prompt.reset()
       })
 
       const task = !next
@@ -1544,6 +1540,11 @@ export default function Page() {
       await task
         .then((result) => {
           if (result.data) merge(result.data)
+          if (value) {
+            prompt.set(value)
+            return
+          }
+          prompt.reset()
         })
         .catch((err) => {
           batch(() => {
