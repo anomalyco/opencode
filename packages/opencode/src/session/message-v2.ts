@@ -661,6 +661,18 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
+    case e instanceof DOMException && e.name === "TimeoutError":
+      return new APIError(
+        {
+          message: "Request timed out",
+          isRetryable: true,
+          metadata: {
+            code: e.name,
+            message: e.message,
+          },
+        },
+        { cause: e },
+      ).toObject()
     case e instanceof ProviderError.HeaderTimeoutError:
       return new APIError(
         {

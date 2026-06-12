@@ -1443,6 +1443,23 @@ describe("session.message-v2.fromError", () => {
     })
   })
 
+  test("serializes fetch timeouts as retryable APIError", () => {
+    const input = new DOMException("The operation timed out.", "TimeoutError")
+    const result = MessageV2.fromError(input, { providerID })
+
+    expect(result).toStrictEqual({
+      name: "APIError",
+      data: {
+        message: "Request timed out",
+        isRetryable: true,
+        metadata: {
+          code: "TimeoutError",
+          message: "The operation timed out.",
+        },
+      },
+    })
+  })
+
   test("detects context overflow from APICallError provider messages", () => {
     const cases = [
       "prompt is too long: 213462 tokens > 200000 maximum",
