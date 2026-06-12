@@ -620,7 +620,6 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                         >
                           <Button
                             variant="ghost"
-                            icon={creating() ? "new-session-active" : "new-session"}
                             class="titlebar-icon w-8 h-6 p-0 box-border"
                             disabled={layout.sidebar.opened()}
                             tabIndex={layout.sidebar.opened() ? -1 : undefined}
@@ -630,7 +629,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             }}
                             aria-label={language.t("command.session.new")}
                             aria-current={creating() ? "page" : undefined}
-                          />
+                          >
+                            <IconV2 name="edit" size="small" />
+                          </Button>
                         </TooltipKeybind>
                       </div>
                     </div>
@@ -904,7 +905,7 @@ function DraftTabItem(props: {
         }}
         class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-5 text-v2-text-text-faint group-data-[active='true']:text-[var(--v2-text-text-base)]"
       >
-        <span class="flex size-4 shrink-0 rotate-90 items-center justify-center">
+        <span class="flex size-4 shrink-0 items-center justify-center">
           <IconV2 name="edit" />
         </span>
         <span class="truncate leading-5">{props.title}</span>
@@ -946,7 +947,7 @@ function NewSessionTabItem(props: { ref?: HTMLDivElement; href: string; title: s
         aria-current="page"
         class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-5 text-[var(--v2-text-text-base)]"
       >
-        <span class="flex size-4 shrink-0 rotate-90 items-center justify-center">
+        <span class="flex size-4 shrink-0 items-center justify-center">
           <IconV2 name="edit" />
         </span>
         <span class="truncate leading-5">{props.title}</span>

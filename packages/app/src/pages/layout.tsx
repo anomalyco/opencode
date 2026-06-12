@@ -21,6 +21,7 @@ import { base64Encode } from "@opencode-ai/core/util/encode"
 import { decode64 } from "@/utils/base64"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { Button } from "@opencode-ai/ui/button"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
@@ -2211,7 +2212,6 @@ export default function Layout(props: ParentProps) {
                       <div class="shrink-0 py-4">
                         <Button
                           size="large"
-                          icon="new-session"
                           class="w-full"
                           onClick={() => {
                             const dir = worktree()
@@ -2219,6 +2219,7 @@ export default function Layout(props: ParentProps) {
                             navigateWithSidebarReset(`/${base64Encode(dir)}/session`)
                           }}
                         >
+                          <IconV2 name="edit" size="small" />
                           {language.t("command.session.new")}
                         </Button>
                       </div>
