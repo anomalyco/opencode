@@ -61,8 +61,7 @@ function message(error: ProjectCopy.Error) {
     return `Project copy destination already exists: ${error.directory}`
   if (error instanceof ProjectCopy.DirectoryUnavailableError)
     return `Project copy directory unavailable: ${error.directory}`
-  if (error instanceof ProjectCopy.InvalidDirectoryError)
-    return `Invalid project copy directory: ${error.directory}`
+  if (error instanceof ProjectCopy.InvalidDirectoryError) return `Invalid project copy directory: ${error.directory}`
   if (error instanceof ProjectCopy.StrategyUnavailableError)
     return `Project copy strategy unavailable: ${error.strategy}`
   return error.message

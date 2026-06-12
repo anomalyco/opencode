@@ -18,7 +18,9 @@ export default {
           CONSTRAINT \`fk_project_directory_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
         );
       `)
-      yield* tx.run(`INSERT INTO \`__new_project_directory\`(\`project_id\`, \`directory\`, \`type\`, \`time_created\`) SELECT \`project_id\`, \`directory\`, \`type\`, \`time_created\` FROM \`project_directory\`;`)
+      yield* tx.run(
+        `INSERT INTO \`__new_project_directory\`(\`project_id\`, \`directory\`, \`type\`, \`time_created\`) SELECT \`project_id\`, \`directory\`, \`type\`, \`time_created\` FROM \`project_directory\`;`,
+      )
       yield* tx.run(`DROP TABLE \`project_directory\`;`)
       yield* tx.run(`ALTER TABLE \`__new_project_directory\` RENAME TO \`project_directory\`;`)
       yield* tx.run(`PRAGMA foreign_keys=ON;`)

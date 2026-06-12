@@ -52,17 +52,11 @@ describe("ProjectDirectories", () => {
       const service = yield* ProjectDirectories.Service
       yield* service.create({ projectID, directory, strategy: "old/strategy" })
 
-      expect(
-        yield* service.create({ projectID, directory, strategy: "new/strategy", behavior: "replace" }),
-      ).toBe(true)
-      expect(
-        yield* service.create({ projectID, directory, strategy: "new/strategy", behavior: "replace" }),
-      ).toBe(false)
+      expect(yield* service.create({ projectID, directory, strategy: "new/strategy", behavior: "replace" })).toBe(true)
+      expect(yield* service.create({ projectID, directory, strategy: "new/strategy", behavior: "replace" })).toBe(false)
       expect(yield* service.create({ projectID, directory, behavior: "replace" })).toBe(true)
       expect(yield* service.create({ projectID, directory, behavior: "replace" })).toBe(false)
-      expect(
-        yield* service.create({ projectID, directory, strategy: "new/strategy", behavior: "replace" }),
-      ).toBe(true)
+      expect(yield* service.create({ projectID, directory, strategy: "new/strategy", behavior: "replace" })).toBe(true)
       expect(yield* service.list(projectID)).toEqual([{ directory, strategy: "new/strategy" }])
     }),
   )

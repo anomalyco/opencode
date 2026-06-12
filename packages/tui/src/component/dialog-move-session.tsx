@@ -80,8 +80,8 @@ export function DialogMoveSession(props: {
     { initialValue: props.initialDirectories },
   )
 
-  const currentDirectory = createMemo(() =>
-    replacementCurrent() ?? (props.current?.type === "directory" ? props.current.directory : currentCheckout()),
+  const currentDirectory = createMemo(
+    () => replacementCurrent() ?? (props.current?.type === "directory" ? props.current.directory : currentCheckout()),
   )
   const currentRoot = createMemo<ProjectDirectory | undefined>(() => {
     const directory = currentDirectory()
