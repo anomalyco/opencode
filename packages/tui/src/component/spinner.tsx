@@ -1,9 +1,17 @@
 import { Show } from "solid-js"
+import { extend } from "@opentui/solid/components"
+import { SpinnerRenderable } from "opentui-spinner"
 import { useTheme } from "../context/theme"
 import { useKV } from "../context/kv"
 import type { JSX } from "@opentui/solid"
 import type { RGBA } from "@opentui/core"
-import "opentui-spinner/solid"
+
+// Register the <spinner> intrinsic element explicitly. The previous
+// side-effect-only `import "opentui-spinner/solid"` got tree-shaken by
+// Bun's bundler at compile time — confirmed by `extend({spinner` being
+// absent from the bundled binary while `dots` (cli-spinners default)
+// was present. Explicit named import + call survives tree-shaking.
+extend({ spinner: SpinnerRenderable })
 
 export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"]
 
