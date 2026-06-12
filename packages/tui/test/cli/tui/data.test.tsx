@@ -92,6 +92,63 @@ test("refreshes resources into reactive getters", async () => {
   }
 })
 
+test("refreshes connectors after connector updates", async () => {
+  const events = createEventSource()
+  let requests = 0
+  const calls = createFetch((url) => {
+    if (url.pathname !== "/api/connector") return
+    requests++
+    return json({
+      location: { directory, project: { id: "proj_test", directory } },
+      data:
+        requests === 1
+          ? []
+          : [
+              {
+                id: "openai",
+                name: "OpenAI",
+                methods: [{ id: "api-key", type: "key", label: "API Key" }],
+              },
+            ],
+    })
+  })
+  let data!: ReturnType<typeof useData>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    data = useData()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await mounted
+    await wait(() => data.location.connector.list() !== undefined)
+    expect(data.location.connector.list()).toEqual([])
+
+    emitEvent(events, { id: "evt_connector", type: "connector.updated", properties: {} })
+    await wait(() => data.location.connector.list()?.length === 1)
+    expect(data.location.connector.list()?.[0]).toMatchObject({ id: "openai", name: "OpenAI" })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("refreshes references after updates", async () => {
   const events = createEventSource()
   let requests = 0

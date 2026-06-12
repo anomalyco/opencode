@@ -4,12 +4,13 @@ import { Policy } from "./policy"
 import { Config } from "./config"
 import { PluginV2 } from "./plugin"
 import { Catalog } from "./catalog"
+import { Connector } from "./connector"
 import { CommandV2 } from "./command"
 import { AgentV2 } from "./agent"
 import { PluginBoot } from "./plugin/boot"
 import { Project } from "./project"
 import { EventV2 } from "./event"
-import { Auth } from "./auth"
+import { Credential } from "./credential"
 import { Npm } from "./npm"
 import { ModelsDev } from "./models-dev"
 import { FSUtil } from "./fs-util"
@@ -58,6 +59,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Reference.locationLayer,
       PluginV2.locationLayer,
       Catalog.locationLayer,
+      Connector.locationLayer,
       CommandV2.locationLayer,
       AgentV2.locationLayer,
       PluginBoot.locationLayer,
@@ -114,7 +116,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
   dependencies: [
     Project.defaultLayer,
     EventV2.defaultLayer,
-    Auth.defaultLayer,
+    Credential.defaultLayer,
     Npm.defaultLayer,
     ModelsDev.defaultLayer,
     FSUtil.defaultLayer,

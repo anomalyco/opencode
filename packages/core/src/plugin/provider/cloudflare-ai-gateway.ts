@@ -45,7 +45,7 @@ const decodeJson = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
 function gatewayConfig(options: Record<string, unknown>): GatewayConfig | undefined {
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID ?? stringOption(options, "accountId")
-  // AccountPlugin copies CLI prompt metadata into options. The prompt stores the
+  // Credential projection copies key metadata into options. The prompt stores the
   // gateway as gatewayId, while older config examples may use gateway.
   const gatewayId =
     process.env.CLOUDFLARE_GATEWAY_ID ?? stringOption(options, "gatewayId") ?? stringOption(options, "gateway")

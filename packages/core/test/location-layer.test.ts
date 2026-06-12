@@ -13,7 +13,8 @@ import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { toolDefinitions } from "./lib/tool"
 import { FSUtil } from "../src/fs-util"
-import { Auth } from "../src/auth"
+import { Credential } from "../src/credential"
+import { Database } from "../src/database/database"
 import { EventV2 } from "../src/event"
 import { Global } from "../src/global"
 import { ModelsDev } from "../src/models-dev"
@@ -33,7 +34,10 @@ const it = testEffect(
         Layer.mergeAll(
           Project.defaultLayer,
           EventV2.defaultLayer,
-          Auth.defaultLayer,
+          Credential.layer.pipe(
+            Layer.provide(Database.layerFromPath(":memory:").pipe(Layer.fresh)),
+            Layer.provide(EventV2.defaultLayer),
+          ),
           Npm.defaultLayer,
           ModelsDev.defaultLayer,
           FSUtil.defaultLayer,
