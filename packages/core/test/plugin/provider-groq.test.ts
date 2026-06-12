@@ -75,25 +75,21 @@ describe("GroqPlugin", () => {
     }),
   )
 
-  aisdkIt.effect("uses the default languageModel(apiID) behavior", () =>
+  aisdkIt.effect("uses the default languageModel(api.id) behavior", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const aisdk = yield* AISDK.Service
       yield* plugin.add(GroqPlugin)
       const result = yield* aisdk.language(
         model("groq", "alias", {
-          apiID: ModelV2.ID.make("llama-api"),
-          endpoint: {
+          api: {
+            id: ModelV2.ID.make("llama-api"),
             type: "aisdk",
             package: "@ai-sdk/groq",
           },
-          options: {
+          request: {
             headers: {},
-            body: {},
-            aisdk: {
-              provider: { apiKey: "test" },
-              request: {},
-            },
+            body: { apiKey: "test" },
           },
         }),
       )

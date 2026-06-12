@@ -1,7 +1,7 @@
 import { afterEach, expect } from "bun:test"
 import { $ } from "bun"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Fiber, Layer } from "effect"
@@ -15,7 +15,7 @@ import {
 } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(Snapshot.defaultLayer, AppFileSystem.defaultLayer, testInstanceStoreLayer))
+const it = testEffect(Layer.mergeAll(Snapshot.defaultLayer, FSUtil.defaultLayer, testInstanceStoreLayer))
 
 // Git always outputs /-separated paths internally. Snapshot.patch() joins them
 // with path.join (which produces \ on Windows) then normalizes back to /.
@@ -37,12 +37,12 @@ const exec = (cwd: string, command: string[]) =>
   })
 
 const write = (file: string, content: string | Uint8Array) =>
-  AppFileSystem.Service.use((fs) => fs.writeWithDirs(file, content))
-const readText = (file: string) => AppFileSystem.Service.use((fs) => fs.readFileString(file))
-const exists = (file: string) => AppFileSystem.Service.use((fs) => fs.existsSafe(file))
-const mkdirp = (dir: string) => AppFileSystem.Service.use((fs) => fs.ensureDir(dir))
+  FSUtil.Service.use((fs) => fs.writeWithDirs(file, content))
+const readText = (file: string) => FSUtil.Service.use((fs) => fs.readFileString(file))
+const exists = (file: string) => FSUtil.Service.use((fs) => fs.existsSafe(file))
+const mkdirp = (dir: string) => FSUtil.Service.use((fs) => fs.ensureDir(dir))
 const rm = (file: string) =>
-  AppFileSystem.Service.use((fs) => fs.remove(file, { recursive: true, force: true }).pipe(Effect.ignore))
+  FSUtil.Service.use((fs) => fs.remove(file, { recursive: true, force: true }).pipe(Effect.ignore))
 
 const initialize = Effect.fn("SnapshotTest.initialize")(function* (dir: string) {
   const unique = Math.random().toString(36).slice(2)

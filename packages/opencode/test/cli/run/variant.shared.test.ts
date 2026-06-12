@@ -1,6 +1,6 @@
 import path from "path"
 import { NodeFileSystem } from "@effect/platform-node"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { describe, expect, test } from "bun:test"
 import { Effect, FileSystem, Layer } from "effect"
 import { Global } from "@opencode-ai/core/global"
@@ -98,7 +98,7 @@ function userMessage(
   }
 }
 
-const it = testEffect(Layer.mergeAll(AppFileSystem.defaultLayer, NodeFileSystem.layer))
+const it = testEffect(Layer.mergeAll(FSUtil.defaultLayer, NodeFileSystem.layer))
 
 function remap(root: string, file: string) {
   if (file === Global.Path.state) {
@@ -114,16 +114,16 @@ function remap(root: string, file: string) {
 
 function remappedFs(root: string) {
   return Layer.effect(
-    AppFileSystem.Service,
+    FSUtil.Service,
     Effect.gen(function* () {
-      const fs = yield* AppFileSystem.Service
-      return AppFileSystem.Service.of({
+      const fs = yield* FSUtil.Service
+      return FSUtil.Service.of({
         ...fs,
         readJson: (file) => fs.readJson(remap(root, file)),
         writeJson: (file, data, mode) => fs.writeJson(remap(root, file), data, mode),
       })
     }),
-  ).pipe(Layer.provide(AppFileSystem.defaultLayer))
+  ).pipe(Layer.provide(FSUtil.defaultLayer))
 }
 
 describe("run variant shared", () => {
@@ -160,7 +160,7 @@ describe("run variant shared", () => {
   it.live("reads and writes saved variants through a runtime-backed app fs layer", () =>
     Effect.gen(function* () {
       const filesys = yield* FileSystem.FileSystem
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const root = yield* filesys.makeTempDirectoryScoped()
       const file = path.join(root, "model.json")
 
@@ -197,7 +197,7 @@ describe("run variant shared", () => {
   it.live("repairs malformed saved variant state on the next write", () =>
     Effect.gen(function* () {
       const filesys = yield* FileSystem.FileSystem
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const root = yield* filesys.makeTempDirectoryScoped()
       const file = path.join(root, "model.json")
 

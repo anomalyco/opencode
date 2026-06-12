@@ -4,9 +4,10 @@ import { batch, createEffect, createMemo, createRoot, on, onCleanup } from "soli
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
 import type { Platform } from "./platform"
-import { ServerConnection, useServer } from "./server"
+import { useServer } from "./server"
 import { defaultTitle, titleNumber } from "./terminal-title"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
+import { ScopedKey, ServerScope, type ServerScope as ServerScopeValue } from "@/utils/server-scope"
 
 export type LocalPTY = {
   id: string
@@ -83,29 +84,8 @@ export function migrateTerminalState(value: unknown) {
   }
 }
 
-export function getWorkspaceTerminalCacheKey(dir: string, scope?: string) {
-  if (scope) return `${scope}:${dir}:${WORKSPACE_KEY}`
-  return `${dir}:${WORKSPACE_KEY}`
-}
-
-export function getTerminalServerScope(conn: ServerConnection.Any | undefined, key: ServerConnection.Key) {
-  if (!conn) return
-  if (conn.type === "sidecar" && conn.variant === "base") return
-  if (conn.type === "http") {
-    try {
-      const url = new URL(conn.http.url)
-      if (
-        url.hostname === "localhost" ||
-        url.hostname === "127.0.0.1" ||
-        url.hostname === "::1" ||
-        url.hostname === "[::1]"
-      )
-        return
-    } catch {
-      return key
-    }
-  }
-  return key
+export function getWorkspaceTerminalCacheKey(dir: string, scope: ServerScopeValue = ServerScope.local) {
+  return ScopedKey.from(scope, dir, WORKSPACE_KEY)
 }
 
 export function getLegacyTerminalStorageKeys(dir: string, legacySessionID?: string) {
@@ -132,16 +112,25 @@ const trimTerminal = (pty: LocalPTY) => {
   }
 }
 
-export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], platform?: Platform, scope?: string) {
+function terminalPersistTarget(scope: ServerScopeValue, dir: string, legacy?: string[]) {
+  return Persist.serverWorkspace(scope, dir, "terminal", legacy)
+}
+
+export function clearWorkspaceTerminals(
+  dir: string,
+  sessionIDs?: string[],
+  platform?: Platform,
+  scope: ServerScopeValue = ServerScope.local,
+) {
   const key = getWorkspaceTerminalCacheKey(dir, scope)
   for (const cache of caches) {
     const entry = cache.get(key)
     entry?.value.clear()
   }
 
-  void removePersisted(Persist.workspace(dir, scope ? `terminal:${scope}` : "terminal"), platform)
+  void removePersisted(terminalPersistTarget(scope, dir), platform)
 
-  if (scope) return
+  if (scope !== ServerScope.local) return
   const legacy = new Set(getLegacyTerminalStorageKeys(dir))
   for (const id of sessionIDs ?? []) {
     for (const key of getLegacyTerminalStorageKeys(dir, id)) {
@@ -156,14 +145,14 @@ export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], plat
 function createWorkspaceTerminalSession(
   sdk: ReturnType<typeof useSDK>,
   dir: string,
+  scope: ServerScopeValue,
   legacySessionID?: string,
-  scope?: string,
 ) {
-  const legacy = scope ? [] : getLegacyTerminalStorageKeys(dir, legacySessionID)
+  const legacy = scope === ServerScope.local ? getLegacyTerminalStorageKeys(dir, legacySessionID) : []
 
   const [store, setStore, _, ready] = persisted(
     {
-      ...Persist.workspace(dir, scope ? `terminal:${scope}` : "terminal", legacy),
+      ...terminalPersistTarget(scope, dir, legacy),
       migrate: migrateTerminalState,
     },
     createStore<{
@@ -388,9 +377,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
     const server = useServer()
     const params = useParams()
     const cache = new Map<string, TerminalCacheEntry>()
-    const scope = createMemo(() => {
-      return getTerminalServerScope(server.current, server.key)
-    })
+    const scope = server.scope()
 
     caches.add(cache)
     onCleanup(() => caches.delete(cache))
@@ -414,7 +401,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       }
     }
 
-    const loadWorkspace = (dir: string, legacySessionID: string | undefined, serverScope: string | undefined) => {
+    const loadWorkspace = (dir: string, legacySessionID: string | undefined, serverScope: ServerScopeValue) => {
       // Terminals are workspace-scoped so tabs persist while switching sessions in the same directory.
       const key = getWorkspaceTerminalCacheKey(dir, serverScope)
       const existing = cache.get(key)
@@ -425,7 +412,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       }
 
       const entry = createRoot((dispose) => ({
-        value: createWorkspaceTerminalSession(sdk, dir, legacySessionID, serverScope),
+        value: createWorkspaceTerminalSession(sdk, dir, serverScope, legacySessionID),
         dispose,
       }))
 
@@ -434,11 +421,11 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       return entry.value
     }
 
-    const workspace = createMemo(() => loadWorkspace(params.dir!, params.id, scope()))
+    const workspace = createMemo(() => loadWorkspace(params.dir!, params.id, scope))
 
     createEffect(
       on(
-        () => ({ dir: params.dir, id: params.id, scope: scope() }),
+        () => ({ dir: params.dir, id: params.id, scope }),
         (next, prev) => {
           if (!prev?.dir) return
           if (next.dir === prev.dir && next.id === prev.id && next.scope === prev.scope) return

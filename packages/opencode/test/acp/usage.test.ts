@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionNotification } from "@agentclientprotocol/sdk"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { UsageService } from "@/acp/usage"
 import { Provider } from "@/provider/provider"
 import { Effect, Layer } from "effect"
@@ -41,7 +42,7 @@ const assistantWithoutProvider = (): UsageService.SessionMessage => ({
   },
 })
 
-const model = (providerID: ProviderV2.ID, modelID: ProviderV2.ModelID, context: number): Provider.Model => ({
+const model = (providerID: ProviderV2.ID, modelID: ModelV2.ID, context: number): Provider.Model => ({
   id: modelID,
   providerID,
   api: {
@@ -77,7 +78,7 @@ const model = (providerID: ProviderV2.ID, modelID: ProviderV2.ModelID, context: 
 
 const providers = (context = 128_000): Record<ProviderV2.ID, Provider.Info> => {
   const providerID = ProviderV2.ID.make("anthropic")
-  const modelID = ProviderV2.ModelID.make("claude-sonnet")
+  const modelID = ModelV2.ID.make("claude-sonnet")
   return {
     [providerID]: {
       id: providerID,
@@ -179,12 +180,12 @@ describe("acp usage", () => {
       const first = yield* usage.contextLimit({
         directory: "/workspace",
         providerID: ProviderV2.ID.make("anthropic"),
-        modelID: ProviderV2.ModelID.make("claude-sonnet"),
+        modelID: ModelV2.ID.make("claude-sonnet"),
       })
       const second = yield* usage.contextLimit({
         directory: "/workspace",
         providerID: ProviderV2.ID.make("anthropic"),
-        modelID: ProviderV2.ModelID.make("claude-sonnet"),
+        modelID: ModelV2.ID.make("claude-sonnet"),
       })
 
       expect(first).toBe(200_000)

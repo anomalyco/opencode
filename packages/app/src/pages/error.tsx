@@ -7,6 +7,7 @@ import { createStore } from "solid-js/store"
 import { usePlatform } from "@/context/platform"
 import { useLanguage } from "@/context/language"
 import { Icon } from "@opencode-ai/ui/icon"
+import { errorDescriptionKey } from "./error-description"
 
 export type InitError = {
   name: string
@@ -224,8 +225,6 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const formattedError = () => formatError(props.error, language.t)
   let recordedFatalError: Promise<void> | undefined
   const [store, setStore] = createStore({
-    checking: false,
-    version: undefined as string | undefined,
     actionError: undefined as string | undefined,
   })
 
@@ -246,30 +245,23 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   })
 
   async function checkForUpdates() {
-    if (!platform.checkUpdate) return
-    setStore("checking", true)
-    await platform
-      .checkUpdate()
-      .then((result) => {
-        setStore("actionError", undefined)
-        if (result.updateAvailable && result.version) setStore("version", result.version)
-      })
-      .catch((err) => {
-        setStore("actionError", formatError(err, language.t))
-      })
-      .finally(() => {
-        setStore("checking", false)
-      })
+    const state = await platform.updater?.check()
+    setStore("actionError", state?.status === "error" ? state.message : undefined)
   }
 
   async function installUpdate() {
-    if (!platform.updateAndRestart) return
-    await platform
-      .updateAndRestart()
+    await platform.updater
+      ?.install()
       .then(() => setStore("actionError", undefined))
       .catch((err) => {
         setStore("actionError", formatError(err, language.t))
       })
+  }
+
+  const updateVersion = () => {
+    const state = platform.updater?.state()
+    if (state?.status !== "ready") return
+    return state.version
   }
 
   async function exportDebugLogs() {
@@ -289,7 +281,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
         <Logo class="w-58.5 opacity-12 shrink-0" />
         <div class="flex flex-col items-center gap-2 text-center">
           <h1 class="text-lg font-medium text-text-strong">{language.t("error.page.title")}</h1>
-          <p class="text-sm text-text-weak">{language.t("error.page.description")}</p>
+          <p class="text-sm text-text-weak">{language.t(errorDescriptionKey(props.error))}</p>
         </div>
         <TextField
           value={formattedError()}
@@ -326,20 +318,27 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
               )
             }}
           </Show>
-          <Show when={platform.checkUpdate}>
+          <Show when={platform.updater}>
             <Show
-              when={store.version}
+              when={updateVersion()}
               fallback={
-                <Button size="large" variant="ghost" onClick={checkForUpdates} disabled={store.checking}>
-                  {store.checking
+                <Button
+                  size="large"
+                  variant="ghost"
+                  onClick={checkForUpdates}
+                  disabled={["checking", "downloading", "installing"].includes(platform.updater?.state().status ?? "")}
+                >
+                  {platform.updater?.state().status === "checking"
                     ? language.t("error.page.action.checking")
                     : language.t("error.page.action.checkUpdates")}
                 </Button>
               }
             >
-              <Button size="large" onClick={installUpdate}>
-                {language.t("error.page.action.updateTo", { version: store.version ?? "" })}
-              </Button>
+              {(version) => (
+                <Button size="large" onClick={installUpdate}>
+                  {language.t("error.page.action.updateTo", { version: version() })}
+                </Button>
+              )}
             </Show>
           </Show>
         </div>

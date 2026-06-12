@@ -6,15 +6,16 @@ import type { ListRef } from "@opencode-ai/ui/list"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import fuzzysort from "fuzzysort"
 import { createMemo, createResource, createSignal } from "solid-js"
-import { useServerSDK } from "@/context/server-sdk"
-import { useServerSync } from "@/context/server-sync"
-import { useLayout } from "@/context/layout"
+import { ServerSDK } from "@/context/server-sdk"
 import { useLanguage } from "@/context/language"
+import { ServerConnection } from "@/context/server"
+import { useGlobal } from "@/context/global"
 
 interface DialogSelectDirectoryProps {
   title?: string
   multiple?: boolean
   onSelect: (result: string | string[] | null) => void
+  server: ServerConnection.Any
 }
 
 type Row = {
@@ -127,11 +128,7 @@ function uniqueRows(rows: Row[]) {
   })
 }
 
-function useDirectorySearch(args: {
-  sdk: ReturnType<typeof useServerSDK>
-  start: () => string | undefined
-  home: () => string
-}) {
+function useDirectorySearch(args: { sdk: ServerSDK; start: () => string | undefined; home: () => string }) {
   const cache = new Map<string, Promise<Array<{ name: string; absolute: string }>>>()
   let current = 0
 
@@ -246,9 +243,8 @@ function useDirectorySearch(args: {
 }
 
 export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
-  const sync = useServerSync()
-  const sdk = useServerSDK()
-  const layout = useLayout()
+  const global = useGlobal()
+  const { sync, sdk, ...serverCtx } = global.createServerCtx(props.server)
   const dialog = useDialog()
   const language = useLanguage()
 
@@ -279,7 +275,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   })
 
   const recentProjects = createMemo(() => {
-    const projects = layout.projects.list()
+    const projects = serverCtx.projects.list()
     const byProject = new Map<string, number>()
 
     for (const project of projects) {
@@ -324,6 +320,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   return (
     <Dialog title={props.title ?? language.t("command.project.open")}>
       <List
+        class="px-3"
         search={{ placeholder: language.t("dialog.directory.search.placeholder"), autofocus: true }}
         emptyMessage={language.t("dialog.directory.empty")}
         loadingMessage={language.t("common.loading")}

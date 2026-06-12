@@ -143,6 +143,7 @@ describe("run runtime queue", () => {
         text: "hello",
         phase: "start",
         source: "system",
+        messageID: expect.any(String),
       },
     ])
   })
@@ -205,6 +206,22 @@ describe("run runtime queue", () => {
     await task
   })
 
+  test("shell mode does not emit a turn duration summary", async () => {
+    const ui = footer()
+
+    const task = runPromptQueue({
+      footer: ui.api,
+      run: async () => {
+        ui.api.close()
+      },
+    })
+
+    ui.submit("ls", "shell")
+    await task
+
+    expect(ui.events.some((event) => event.type === "turn.duration")).toBe(false)
+  })
+
   test("preserves whitespace for initial input", async () => {
     const ui = footer()
     const seen: string[] = []
@@ -225,6 +242,7 @@ describe("run runtime queue", () => {
         text: "  hello  ",
         phase: "start",
         source: "system",
+        messageID: expect.any(String),
       },
     ])
   })
@@ -260,6 +278,7 @@ describe("run runtime queue", () => {
             text: "/fmt bash",
             phase: "start",
             source: "system",
+            messageID: expect.any(String),
           },
         ])
         ui.api.close()
@@ -321,7 +340,7 @@ describe("run runtime queue", () => {
     await Promise.resolve()
 
     expect(turns.map((item) => item.text)).toEqual(["one"])
-    expect(turns[0]?.messageID).toBeUndefined()
+    expect(turns[0]?.messageID).toEqual(expect.any(String))
     expect(ui.commits.map((item) => item.text)).toEqual(["one"])
     const first = ui.events.find((item) => item.type === "queued.prompts")
     const event = ui.events.findLast((item) => item.type === "queued.prompts")

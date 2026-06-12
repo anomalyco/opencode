@@ -1,8 +1,7 @@
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Schema } from "effect"
-import * as Stream from "effect/Stream"
-import { Ripgrep } from "../file/ripgrep"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Skill } from "../skill"
 import * as Tool from "./tool"
 import DESCRIPTION from "./skill.txt"
@@ -15,7 +14,7 @@ export const SkillTool = Tool.define(
   "skill",
   Effect.gen(function* () {
     const skill = yield* Skill.Service
-    const rg = yield* Ripgrep.Service
+    const ripgrep = yield* Ripgrep.Service
 
     return {
       description: DESCRIPTION,
@@ -35,14 +34,14 @@ export const SkillTool = Tool.define(
 
           const dir = path.dirname(info.location)
           const base = pathToFileURL(dir).href
-          const limit = 10
-          const files = yield* rg.files({ cwd: dir, follow: false, hidden: true, signal: ctx.abort }).pipe(
-            Stream.filter((file) => !file.includes("SKILL.md")),
-            Stream.map((file) => path.resolve(dir, file)),
-            Stream.take(limit),
-            Stream.runCollect,
-            Effect.map((chunk) => [...chunk].map((file) => `<file>${file}</file>`).join("\n")),
-          )
+          const files = yield* ripgrep.find({
+            cwd: dir,
+            pattern: "!**/SKILL.md",
+            hidden: true,
+            follow: false,
+            signal: ctx.abort,
+            limit: 10,
+          })
 
           return {
             title: `Loaded skill: ${info.name}`,
@@ -57,7 +56,7 @@ export const SkillTool = Tool.define(
               "Note: file list is sampled.",
               "",
               "<skill_files>",
-              files,
+              files.map((file) => `<file>${path.resolve(dir, file.path)}</file>`).join("\n"),
               "</skill_files>",
               "</skill_content>",
             ].join("\n"),

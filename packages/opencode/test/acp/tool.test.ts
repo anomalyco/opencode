@@ -15,15 +15,15 @@ describe("acp tool conversion", () => {
     expect(toToolKind("shell")).toBe("execute")
     expect(toToolKind("webfetch")).toBe("fetch")
     expect(toToolKind("edit")).toBe("edit")
+    expect(toToolKind("apply_patch")).toBe("edit")
     expect(toToolKind("patch")).toBe("edit")
     expect(toToolKind("write")).toBe("edit")
     expect(toToolKind("grep")).toBe("search")
     expect(toToolKind("glob")).toBe("search")
-    expect(toToolKind("repo_clone")).toBe("search")
-    expect(toToolKind("repo_overview")).toBe("search")
     expect(toToolKind("context7_resolve_library_id")).toBe("search")
     expect(toToolKind("context7_get_library_docs")).toBe("search")
     expect(toToolKind("read")).toBe("read")
+    expect(toToolKind("task")).toBe("think")
     expect(toToolKind("custom_tool")).toBe("other")
   })
 
@@ -33,9 +33,10 @@ describe("acp tool conversion", () => {
     expect(toLocations("write", { filePath: "/tmp/c.ts" })).toEqual([{ path: "/tmp/c.ts" }])
     expect(toLocations("grep", { path: "/repo/src" })).toEqual([{ path: "/repo/src" }])
     expect(toLocations("glob", { path: "/repo/test" })).toEqual([{ path: "/repo/test" }])
-    expect(toLocations("repo_clone", { path: "/repo" })).toEqual([{ path: "/repo" }])
-    expect(toLocations("repo_overview", { path: "/repo" })).toEqual([{ path: "/repo" }])
     expect(toLocations("context7_get_library_docs", { path: "/docs" })).toEqual([{ path: "/docs" }])
+    expect(toLocations("external_directory", { directories: ["/tmp/outside"], patterns: ["/tmp/outside/*"] })).toEqual([
+      { path: "/tmp/outside" },
+    ])
     expect(toLocations("bash", { filePath: "/tmp/nope.ts", path: "/tmp" })).toEqual([])
     expect(toLocations("read", { path: "/tmp/missing-file-path.ts" })).toEqual([])
   })
@@ -101,6 +102,46 @@ describe("acp tool conversion", () => {
         content: { type: "text", text: "wrote /tmp/file.ts" },
       },
     ])
+  })
+
+  test("uses clean read display text for completed content", () => {
+    const output = [
+      "<path>/tmp/file.ts</path>",
+      "<type>file</type>",
+      "<content>",
+      "7: first",
+      "8: second",
+      "",
+      "(End of file - total 8 lines)",
+      "</content>",
+    ].join("\n")
+    const state = {
+      status: "completed" as const,
+      input: { filePath: "/tmp/file.ts" },
+      output,
+      metadata: {
+        display: {
+          type: "file",
+          path: "/tmp/file.ts",
+          text: "first\nsecond",
+          lineStart: 7,
+          lineEnd: 8,
+          totalLines: 8,
+          truncated: false,
+        },
+      },
+    }
+
+    expect(completedToolContent("read", state)).toEqual([
+      {
+        type: "content",
+        content: { type: "text", text: "first\nsecond" },
+      },
+    ])
+    expect(completedToolRawOutput(state)).toEqual({
+      output,
+      metadata: state.metadata,
+    })
   })
 
   test("builds completed raw output with optional metadata and attachments", () => {

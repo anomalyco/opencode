@@ -1,39 +1,62 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Equal, Hash, Layer, Schema } from "effect"
+import { Tool } from "@opencode-ai/core/public"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { Location } from "@opencode-ai/core/location"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { AppFileSystem } from "../src/filesystem"
-import { Auth } from "../src/auth"
+import { toolDefinitions } from "./lib/tool"
+import { FSUtil } from "../src/fs-util"
+import { Credential } from "../src/credential"
+import { Database } from "../src/database/database"
 import { EventV2 } from "../src/event"
 import { Global } from "../src/global"
 import { ModelsDev } from "../src/models-dev"
 import { Npm } from "../src/npm"
 import { Project } from "../src/project"
+import { Reference } from "../src/reference"
+import { ToolRegistry } from "../src/tool/registry"
+import { ApplicationTools } from "../src/tool/application-tools"
 
+const applicationTools = ApplicationTools.layer
 const it = testEffect(
-  LocationServiceMap.layer.pipe(
-    Layer.provide(
-      Layer.mergeAll(
-        Project.defaultLayer,
-        EventV2.defaultLayer,
-        Auth.defaultLayer,
-        Npm.defaultLayer,
-        ModelsDev.defaultLayer,
-        AppFileSystem.defaultLayer,
-        Global.defaultLayer,
+  Layer.merge(
+    Layer.mergeAll(applicationTools, Database.defaultLayer, EventV2.defaultLayer),
+    LocationServiceMap.layer.pipe(
+      Layer.provide(applicationTools),
+      Layer.provide(
+        Layer.mergeAll(
+          Project.defaultLayer,
+          EventV2.defaultLayer,
+          Credential.defaultLayer,
+          Credential.layer.pipe(Layer.provide(Database.layerFromPath(":memory:").pipe(Layer.fresh))),
+          Npm.defaultLayer,
+          ModelsDev.defaultLayer,
+          FSUtil.defaultLayer,
+          Global.defaultLayer,
+        ),
       ),
     ),
   ),
 )
 
 describe("LocationServiceMap", () => {
+  it.effect("compares equivalent location refs by value", () =>
+    Effect.sync(() => {
+      const directory = AbsolutePath.make("/project")
+      expect(Equal.equals(Location.Ref.make({ directory }), Location.Ref.make({ directory }))).toBe(true)
+      expect(Hash.hash(Location.Ref.make({ directory }))).toBe(
+        Hash.hash(Location.Ref.make({ directory, workspaceID: undefined })),
+      )
+    }),
+  )
+
   it.live("isolates location state while sharing location policy with catalog", () =>
     Effect.acquireRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
@@ -41,6 +64,14 @@ describe("LocationServiceMap", () => {
     ).pipe(
       Effect.flatMap(([blocked, allowed]) =>
         Effect.gen(function* () {
+          yield* (yield* ApplicationTools.Service).register({
+            application_context: Tool.make({
+              description: "Read application context",
+              input: Schema.Struct({}),
+              output: Schema.Struct({ ok: Schema.Boolean }),
+              execute: () => Effect.succeed({ ok: true }),
+            }),
+          })
           yield* Effect.promise(() =>
             fs.writeFile(
               path.join(blocked.path, "opencode.json"),
@@ -53,18 +84,53 @@ describe("LocationServiceMap", () => {
           const update = (directory: string) =>
             Effect.gen(function* () {
               yield* PluginBoot.Service.use((boot) => boot.wait())
+              yield* Reference.Service
               const catalog = yield* Catalog.Service
               const transform = yield* catalog.transform()
               yield* transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
-              return yield* catalog.provider.all()
-            }).pipe(Effect.scoped, Effect.provide(LocationServiceMap.get({ directory: AbsolutePath.make(directory) })))
+              return {
+                providers: yield* catalog.provider.all(),
+                tools: yield* toolDefinitions(yield* ToolRegistry.Service),
+              }
+            }).pipe(
+              Effect.scoped,
+              Effect.provide(LocationServiceMap.get(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+            )
 
-          expect((yield* update(blocked.path)).some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(
-            false,
-          )
-          expect((yield* update(allowed.path)).some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(
-            true,
-          )
+          const blockedState = yield* update(blocked.path)
+          expect(blockedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(false)
+          expect(blockedState.tools.map((tool) => tool.name).sort()).toEqual([
+            "application_context",
+            "apply_patch",
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "question",
+            "read",
+            "skill",
+            "todowrite",
+            "webfetch",
+            "websearch",
+            "write",
+          ])
+          const allowedState = yield* update(allowed.path)
+          expect(allowedState.providers.some((provider) => provider.id === ProviderV2.ID.make("test"))).toBe(true)
+          expect(allowedState.tools.map((tool) => tool.name).sort()).toEqual([
+            "application_context",
+            "apply_patch",
+            "bash",
+            "edit",
+            "glob",
+            "grep",
+            "question",
+            "read",
+            "skill",
+            "todowrite",
+            "webfetch",
+            "websearch",
+            "write",
+          ])
         }),
       ),
     ),

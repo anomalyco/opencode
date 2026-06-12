@@ -4,10 +4,10 @@
   position: fixed;
   inset: 0;
   z-index: 50;
-  background-color: var(--overlay-simple-overlay-scrim);
+  background-color: var(--v2-overlay-simple-overlay-scrim);
 }
 
-[data-component="dialog"] {
+[data-component="dialog-v2"] {
   position: fixed;
   inset: 0;
   z-index: 50;
@@ -22,10 +22,10 @@
     align-items: flex-start;
     width: 480px;
     height: 368px;
-    background: var(--background-bg-layer-01);
-    box-shadow: var(--elevation-overlay);
+    background: var(--v2-background-bg-layer-01);
+    box-shadow: var(--v2-elevation-overlay);
     border-radius: 6px;
-    overflow: visible;
+    overflow: hidden;
     pointer-events: auto;
 
     [data-slot="dialog-content"] {
@@ -37,6 +37,7 @@
       max-height: 100%;
       flex: 1;
       overflow: auto;
+      background: transparent;
 
       scrollbar-width: none;
       -ms-overflow-style: none;
@@ -64,22 +65,20 @@
 
         [data-slot="dialog-title"] {
           margin: 0;
-          font-family: "Inter", var(--v2-font-family-sans);
           font-weight: 530;
           font-size: 15px;
           line-height: 100%;
           letter-spacing: -0.13px;
-          color: var(--text-text-base);
+          color: var(--v2-text-text-base);
           font-variation-settings: "slnt" 0;
         }
 
         [data-slot="dialog-description"] {
-          font-family: "Inter", var(--v2-font-family-sans);
           font-weight: 440;
           font-size: 13px;
           line-height: 100%;
           letter-spacing: -0.04px;
-          color: var(--text-text-muted);
+          color: var(--v2-text-text-muted);
           font-variation-settings: "slnt" 0;
         }
 
@@ -94,7 +93,7 @@
           cursor: pointer;
 
           &:hover {
-            background: var(--overlay-simple-overlay-hover);
+            background: var(--v2-overlay-simple-overlay-hover);
           }
         }
       }

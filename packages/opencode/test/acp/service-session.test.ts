@@ -12,6 +12,7 @@ import type {
 } from "@agentclientprotocol/sdk"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { Effect } from "effect"
 import * as ACPService from "@/acp/service"
 import * as ACPError from "@/acp/error"
@@ -19,9 +20,9 @@ import { UsageService } from "@/acp/usage"
 import type { Provider } from "@/provider/provider"
 
 const providerID = ProviderV2.ID.make("test")
-const modelID = ProviderV2.ModelID.make("test-model")
-const configuredModelID = ProviderV2.ModelID.make("configured-model")
-const secondModelID = ProviderV2.ModelID.make("second-model")
+const modelID = ModelV2.ID.make("test-model")
+const configuredModelID = ModelV2.ID.make("configured-model")
+const secondModelID = ModelV2.ID.make("second-model")
 
 const provider: Provider.Info = {
   id: providerID,
@@ -313,6 +314,46 @@ describe("ACP service sessions", () => {
 
     expect(result.configOptions?.find((option) => option.id === "effort")?.currentValue).toBe("high")
     expect(result.configOptions?.find((option) => option.id === "mode")?.currentValue).toBe("plan")
+  })
+
+  it("replays loaded session transcript chunks", async () => {
+    const { service, updates } = makeService([
+      {
+        info: { id: "msg_user", sessionID: "ses_loaded", role: "user" },
+        parts: [{ id: "part_user", sessionID: "ses_loaded", messageID: "msg_user", type: "text", text: "hello" }],
+      },
+      {
+        info: { id: "msg_assistant", sessionID: "ses_loaded", role: "assistant" },
+        parts: [
+          {
+            id: "part_assistant",
+            sessionID: "ses_loaded",
+            messageID: "msg_assistant",
+            type: "text",
+            text: "hi there",
+          },
+        ],
+      },
+    ])
+
+    await Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }))
+
+    expect(
+      updates
+        .map((item) => item.update)
+        .filter((item) => item.sessionUpdate === "user_message_chunk" || item.sessionUpdate === "agent_message_chunk"),
+    ).toEqual([
+      {
+        sessionUpdate: "user_message_chunk",
+        messageId: "msg_user",
+        content: { type: "text", text: "hello" },
+      },
+      {
+        sessionUpdate: "agent_message_chunk",
+        messageId: "msg_assistant",
+        content: { type: "text", text: "hi there" },
+      },
+    ])
   })
 
   it("lists sessions sorted by updated time with cursor support", async () => {
