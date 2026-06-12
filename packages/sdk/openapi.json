@@ -19865,6 +19865,9 @@
                 "type": "integer",
                 "exclusiveMinimum": 0
               },
+              "read_screenshots": {
+                "type": "boolean"
+              },
               "policies": {
                 "type": "array",
                 "items": {
