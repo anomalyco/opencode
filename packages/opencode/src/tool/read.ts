@@ -351,7 +351,7 @@ export const ReadTool = Tool.define<
       const model = ctx.extra?.["model"] as Provider.Model | undefined
       const screenshots =
         (yield* config.get()).experimental?.read_screenshots &&
-        file.raw.length > 0 &&
+        file.raw.length >= ReadScreenshot.MIN_LINES &&
         model &&
         ReadScreenshot.supports(model.api.id)
           ? yield* ReadScreenshot.render({
@@ -371,7 +371,7 @@ export const ReadTool = Tool.define<
 
       let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>\n"].join("\n")
       output += screenshots
-        ? `(File content attached as ${screenshots.length} screenshot image${screenshots.length === 1 ? "" : "s"} covering lines ${file.offset}-${last}. The gutter shows real file line numbers; lines wider than ${ReadScreenshot.COLUMNS} columns wrap onto unnumbered rows.)`
+        ? `(Content attached as ${screenshots.length} screenshot${screenshots.length === 1 ? "" : "s"}, lines ${file.offset}-${last}; rows marked ↪ continue the previous line.)`
         : file.raw.map((line, i) => `${i + file.offset}: ${line}`).join("\n")
       output += `\n\n${status}`
       output += "\n</content>"

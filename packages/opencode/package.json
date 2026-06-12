@@ -46,6 +46,7 @@
     "@types/yargs": "17.0.33",
     "@typescript/native-preview": "catalog:",
     "drizzle-orm": "catalog:",
+    "gpt-tokenizer": "3.4.0",
     "prettier": "3.6.2",
     "typescript": "catalog:",
     "vscode-languageserver-types": "3.17.5",

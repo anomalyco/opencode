@@ -4,6 +4,7 @@ import {
   COLUMNS,
   dimensions,
   language,
+  pageColumns,
   paginate,
   render,
   supports,
@@ -45,14 +46,28 @@ describe("language", () => {
   })
 })
 
+describe("pageColumns", () => {
+  test("tracks the widest row within bounds", () => {
+    expect(pageColumns(paginate([plain("short"), plain("x".repeat(80))], 1)[0]!)).toBe(80)
+    expect(pageColumns(paginate([plain("tiny")], 1)[0]!)).toBe(60)
+    expect(pageColumns(paginate([plain("z".repeat(400))], 1)[0]!)).toBe(COLUMNS)
+  })
+})
+
 describe("dimensions", () => {
   test("stays inside the strictest vision budget", () => {
     for (const max of [1, 999, 99999, 9999999]) {
-      const dim = dimensions(max)
-      expect(Math.max(dim.width, dim.height)).toBeLessThanOrEqual(LIMIT)
-      expect(Math.ceil(dim.width / PATCH) * Math.ceil(dim.height / PATCH)).toBeLessThanOrEqual(LIMIT)
-      expect(dim.rows).toBeGreaterThan(50)
+      for (const cols of [60, 80, 100, 120]) {
+        const dim = dimensions(max, cols)
+        expect(Math.max(dim.width, dim.height)).toBeLessThanOrEqual(LIMIT)
+        expect(Math.ceil(dim.width / PATCH) * Math.ceil(dim.height / PATCH)).toBeLessThanOrEqual(LIMIT)
+        expect(dim.rows).toBeGreaterThan(80)
+      }
     }
+  })
+
+  test("narrow content produces narrower pages", () => {
+    expect(dimensions(100, 60).width).toBeLessThan(dimensions(100, 120).width)
   })
 })
 
@@ -82,6 +97,23 @@ describe("paginate", () => {
     expect(widths).toEqual([COLUMNS, COLUMNS, COLUMNS, COLUMNS, 20])
   })
 
+  test("wrapped lines never shift file numbering", () => {
+    const lines = Array.from({ length: 400 }, (_, index) =>
+      index % 7 === 0 ? plain("w".repeat(COLUMNS * 2 + 15)) : plain(`line ${index}`),
+    )
+    const pages = paginate(lines, 21)
+    const numbers = pages.flatMap((page) => page.rows.flatMap((row) => row.line ?? []))
+    expect(numbers).toEqual(Array.from({ length: 400 }, (_, index) => index + 21))
+    expect(pages.at(-1)!.end).toBe(420)
+  })
+
+  test("wraps at the adaptive column width", () => {
+    const pages = paginate([plain("x".repeat(75))], 1, 60)
+    expect(pages[0]!.rows.length).toBe(2)
+    const widths = pages[0]!.rows.map((row) => row.tokens.map((token) => token.content).join("").length)
+    expect(widths).toEqual([60, 15])
+  })
+
   test("starts every page on a numbered row", () => {
     const capacity = dimensions(200).rows
     const lines = [
@@ -103,18 +135,18 @@ describe("paginate", () => {
 
 describe("render", () => {
   test("produces in-budget png pages with continuous coverage", async () => {
-    const lines = Array.from({ length: 250 }, (_, index) =>
+    const lines = Array.from({ length: 350 }, (_, index) =>
       index % 10 === 0
         ? `\texport const value${index} = { nested: "<tag> & 'quote' é→" } // ${"x".repeat(140)}`
         : `const item${index} = compute(${index}) // item ${index}`,
     )
     const pages = await Effect.runPromise(
-      render({ path: "packages/example/src/sample.ts", filepath: "/tmp/sample.ts", lines, offset: 1, total: 250 }),
+      render({ path: "packages/example/src/sample.ts", filepath: "/tmp/sample.ts", lines, offset: 1, total: 350 }),
     )
     expect(pages.length).toBeGreaterThanOrEqual(2)
     expect(pages[0]!.start).toBe(1)
-    expect(pages.at(-1)!.end).toBe(250)
-    const dim = dimensions(250)
+    expect(pages.at(-1)!.end).toBe(350)
+    const dim = dimensions(350, COLUMNS)
     for (const [index, page] of pages.entries()) {
       if (index > 0) expect(page.start).toBe(pages[index - 1]!.end + 1)
       const image = png(page.url)
@@ -123,5 +155,28 @@ describe("render", () => {
       expect(Math.max(image.width, image.height)).toBeLessThanOrEqual(LIMIT)
       expect(Math.ceil(image.width / PATCH) * Math.ceil(image.height / PATCH)).toBeLessThanOrEqual(LIMIT)
     }
+  }, 30000)
+
+  test("page width adapts to narrow files", async () => {
+    const lines = Array.from({ length: 40 }, (_, index) => `let v${index} = ${index}`)
+    const pages = await Effect.runPromise(
+      render({ path: "a.ts", filepath: "/x/a.ts", lines, offset: 1, total: 40 }),
+    )
+    expect(pages.length).toBe(1)
+    expect(png(pages[0]!.url).width).toBe(dimensions(40, 60).width)
+  }, 30000)
+
+  test("each page is only as wide as its own content", async () => {
+    const capacity = dimensions(200, COLUMNS).rows
+    const lines = [
+      ...Array.from({ length: capacity }, () => `// ${"x".repeat(92)}`),
+      ...Array.from({ length: 30 }, (_, index) => `let n${index} = ${index}`),
+    ]
+    const pages = await Effect.runPromise(
+      render({ path: "b.ts", filepath: "/x/b.ts", lines, offset: 1, total: lines.length }),
+    )
+    expect(pages.length).toBe(2)
+    expect(png(pages[0]!.url).width).toBe(dimensions(lines.length, 95).width)
+    expect(png(pages[1]!.url).width).toBe(dimensions(lines.length, 60).width)
   }, 30000)
 })

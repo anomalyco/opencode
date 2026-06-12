@@ -8,17 +8,21 @@ import { fileURLToPath } from "url"
 // are the strictest: an image is downscaled once it exceeds 1568px on the long
 // edge or ceil(w/28) * ceil(h/28) > 1568 visual tokens (one token per 28px
 // patch). Inside both limits the model sees the exact pixels rendered here,
-// and OpenAI's resize pipeline also leaves these dimensions effectively alone.
-// One rendered row costs ceil(width/28) * (LINE_HEIGHT/28) ≈ 13.5 visual
-// tokens at these defaults — the number to beat against the same line as text.
+// and OpenAI's resize pipeline also leaves these dimensions alone.
+//
+// Cost per rendered row is ceil(width/28) * (LINE_HEIGHT/28) visual tokens, so
+// every page is kept as narrow as its content allows: ~6.1 tokens per line at
+// the full 120 columns, ~4.3 at 80, ~3.3 at 60. The same lines as text
+// typically cost 10-25 tokens each including the line-number prefix.
+// script/read-screenshot-cost.ts measures the delta on real files.
 
-const FONT_SIZE = 10
-const LINE_HEIGHT = 13
+const FONT_SIZE = 7
+const LINE_HEIGHT = 8.5
 // JetBrains Mono's advance width is exactly 0.6em, so columns map 1:1 to pixels.
 const CHAR_WIDTH = FONT_SIZE * 0.6
 const TAB = " ".repeat(4)
-const PADDING = 16
-const HEADER_HEIGHT = 24
+const PADDING = 8
+const HEADER_HEIGHT = 16
 const PATCH = 28
 const PAGE_TOKENS = 1568
 const PAGE_EDGE = 1568
@@ -26,8 +30,16 @@ const THEME = "github-light"
 // The NL (no ligatures) variant keeps glyphs and characters 1:1, so what the
 // model reads maps byte-exactly onto the file — `===` never becomes `≡`.
 const FONT_FAMILY = "JetBrains Mono NL"
+// Continuation rows of a wrapped source line carry this dim gutter marker
+// instead of a line number, so numbering always tracks file lines.
+const WRAP_MARKER = "↪"
 
 export const COLUMNS = 120
+const MIN_COLUMNS = 60
+// Below this many lines the fixed payload (note text + page chrome) outweighs
+// the pixel savings — measured on this repo with script/read-screenshot-cost.ts,
+// reads under 15 lines are cheaper as plain text.
+export const MIN_LINES = 15
 
 export interface Token {
   content: string
@@ -76,23 +88,34 @@ export function language(filepath: string) {
   return LANGUAGES[path.extname(base).slice(1)]
 }
 
-export function dimensions(maxLine: number) {
+// Per-line pixel cost scales with page width, so every page is only as wide
+// as its own widest row. Wrapping stays fixed at COLUMNS so identical lines
+// render identically on every page.
+export function pageColumns(page: Page) {
+  const widest = page.rows.reduce(
+    (max, row) => Math.max(max, row.tokens.reduce((n, token) => n + token.content.length, 0)),
+    0,
+  )
+  return Math.min(COLUMNS, Math.max(MIN_COLUMNS, widest))
+}
+
+export function dimensions(maxLine: number, cols: number = COLUMNS) {
   const digits = Math.max(3, String(Math.max(1, maxLine)).length)
-  const gutter = Math.ceil(digits * CHAR_WIDTH) + 12
-  const width = Math.ceil(PADDING * 2 + gutter + COLUMNS * CHAR_WIDTH)
+  const gutter = Math.ceil(digits * CHAR_WIDTH) + 8
+  const width = Math.ceil(PADDING * 2 + gutter + cols * CHAR_WIDTH)
   const height = Math.min(PAGE_EDGE, Math.floor(PAGE_TOKENS / Math.ceil(width / PATCH)) * PATCH)
   const rows = Math.floor((height - PADDING * 2 - HEADER_HEIGHT) / LINE_HEIGHT)
-  return { width, gutter, height, rows }
+  return { width, gutter, height, rows, cols }
 }
 
 // Pages break at source-line boundaries so every page starts with a numbered
-// row. Safe because read caps lines at 2000 chars (≤ 17 wrapped rows), far
+// row. Safe because read caps lines at 2000 chars (≤ 34 wrapped rows), far
 // below a page's row capacity.
-export function paginate(lines: Token[][], offset: number): Page[] {
-  const capacity = dimensions(offset + lines.length - 1).rows
+export function paginate(lines: Token[][], offset: number, cols: number = COLUMNS): Page[] {
+  const capacity = dimensions(offset + lines.length - 1, cols).rows
   return lines
     .reduce<Row[][]>((pages, tokens, index) => {
-      const rows = wrap(tokens).map((slice, part) => ({
+      const rows = wrap(tokens, cols).map((slice, part) => ({
         ...(part === 0 && { line: offset + index }),
         tokens: slice,
       }))
@@ -121,12 +144,12 @@ async function paint(input: Input): Promise<Rendered[]> {
   })
   const env = await painter
   const id = language(input.filepath)
-  const code = input.lines.map((line) => line.replaceAll("\t", TAB)).join("\n")
-  const result = env.highlighter.codeToTokens(code, {
+  const expanded = input.lines.map((line) => line.replaceAll("\t", TAB))
+  const result = env.highlighter.codeToTokens(expanded.join("\n"), {
     lang: id && env.highlighter.getLoadedLanguages().includes(id) ? id : "text",
     theme: THEME,
   })
-  const size = dimensions(input.offset + input.lines.length - 1)
+  const last = input.offset + input.lines.length - 1
   const pages = paginate(result.tokens, input.offset)
   return pages.map((page, index) => ({
     start: page.start,
@@ -136,7 +159,7 @@ async function paint(input: Input): Promise<Rendered[]> {
       svg({
         page,
         source: input,
-        size,
+        size: dimensions(last, pageColumns(page)),
         index,
         count: pages.length,
         fg: result.fg ?? "#1f2328",
@@ -208,16 +231,16 @@ function asset(file: string) {
   return path.isAbsolute(file) ? file : fileURLToPath(new URL(file, import.meta.url))
 }
 
-function wrap(tokens: Token[]) {
+function wrap(tokens: Token[], cols: number) {
   const rows: Token[][] = [[]]
   let used = 0
   for (const token of tokens) {
     for (let text = token.content; text.length > 0; ) {
-      if (used === COLUMNS) {
+      if (used === cols) {
         rows.push([])
         used = 0
       }
-      const piece = text.slice(0, COLUMNS - used)
+      const piece = text.slice(0, cols - used)
       rows.at(-1)!.push({ ...token, content: piece })
       used += piece.length
       text = text.slice(piece.length)
@@ -242,24 +265,24 @@ function svg(args: {
       ? `lines ${args.page.start}-${args.page.end}`
       : `lines ${args.page.start}-${args.page.end} of ${args.source.total}`
   const suffix = ` · ${range} · screenshot ${args.index + 1} of ${args.count}`
-  const file = fit(args.source.path, COLUMNS + Math.floor(args.size.gutter / CHAR_WIDTH) - suffix.length)
+  const file = fit(args.source.path, args.size.cols + Math.floor(args.size.gutter / CHAR_WIDTH) - suffix.length)
   const rows = args.page.rows.flatMap((row, index) => {
-    const y = top + (index + 1) * LINE_HEIGHT - 3
-    const number =
+    const y = top + (index + 1) * LINE_HEIGHT - 2.2
+    const gutter =
       row.line === undefined
-        ? ""
-        : `<text x="${PADDING + args.size.gutter - 12}" y="${y}" text-anchor="end" fill="${args.fg}" fill-opacity="0.4">${row.line}</text>`
+        ? `<text x="${PADDING + args.size.gutter - 8}" y="${y}" text-anchor="end" fill="${args.fg}" fill-opacity="0.3">${WRAP_MARKER}</text>`
+        : `<text x="${PADDING + args.size.gutter - 8}" y="${y}" text-anchor="end" fill="${args.fg}" fill-opacity="0.4">${row.line}</text>`
     const code =
       row.tokens.length === 0
         ? ""
         : `<text x="${PADDING + args.size.gutter}" y="${y}" xml:space="preserve">${row.tokens.map((token) => span(token, args.fg)).join("")}</text>`
-    return number || code ? [number + code] : []
+    return [gutter + code]
   })
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" width="${args.size.width}" height="${height}" font-family="${FONT_FAMILY}" font-size="${FONT_SIZE}">`,
     `<rect width="100%" height="100%" fill="${args.bg}"/>`,
     `<text x="${PADDING}" y="${PADDING + FONT_SIZE + 2}" fill="${args.fg}" fill-opacity="0.55">${escape(file + suffix)}</text>`,
-    `<line x1="${PADDING}" y1="${PADDING + HEADER_HEIGHT - 7}" x2="${args.size.width - PADDING}" y2="${PADDING + HEADER_HEIGHT - 7}" stroke="${args.fg}" stroke-opacity="0.15"/>`,
+    `<line x1="${PADDING}" y1="${PADDING + HEADER_HEIGHT - 4}" x2="${args.size.width - PADDING}" y2="${PADDING + HEADER_HEIGHT - 4}" stroke="${args.fg}" stroke-opacity="0.15"/>`,
     ...rows,
     `</svg>`,
   ].join("")
