@@ -362,6 +362,25 @@ export const locationLayer = Layer.effect(
       return error instanceof Error ? error.message : String(error)
     }
 
+    const LegacySuccessOAuth = Schema.Struct({
+      type: Schema.Literal("success"),
+      access: Schema.String,
+      refresh: Schema.optional(Schema.String),
+      expires: Schema.optional(Schema.Number),
+      accountId: Schema.optional(Schema.String),
+      enterpriseUrl: Schema.optional(Schema.String),
+      metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+    })
+
+    const LegacySuccessKey = Schema.Struct({
+      type: Schema.Literal("success"),
+      key: Schema.String,
+      metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+    })
+
+    const LegacySuccessValue = Schema.Union([LegacySuccessOAuth, LegacySuccessKey])
+    const decodeLegacySuccess = Schema.decodeUnknownOption(LegacySuccessValue)
+
     const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.Info, unknown>) {
       const now = yield* Clock.currentTimeMillis
       const result = yield* SynchronizedRef.modify(attempts, (current) => {
@@ -375,24 +394,26 @@ export const locationLayer = Layer.effect(
       if (!result) return
       if (Exit.isSuccess(exit)) {
         let value = exit.value
-        if ((value as any).type === "success") {
-          if ("access" in value) {
+        const decodedOption = decodeLegacySuccess(value)
+        if (decodedOption._tag === "Some") {
+          const legacy = decodedOption.value
+          if ("access" in legacy) {
             value = new Credential.OAuth({
               type: "oauth",
-              access: (value as any).access,
-              refresh: (value as any).refresh || "",
-              expires: (value as any).expires || 0,
+              access: legacy.access,
+              refresh: legacy.refresh ?? "",
+              expires: legacy.expires ?? 0,
               metadata: {
-                ...((value as any).accountId ? { clientId: (value as any).accountId } : {}),
-                ...((value as any).enterpriseUrl ? { clientSecret: (value as any).enterpriseUrl } : {}),
-                ...((value as any).metadata ?? {}),
+                ...(legacy.accountId ? { clientId: legacy.accountId } : {}),
+                ...(legacy.enterpriseUrl ? { clientSecret: legacy.enterpriseUrl } : {}),
+                ...(legacy.metadata ?? {}),
               },
             })
           } else {
             value = new Credential.Key({
               type: "key",
-              key: (value as any).key,
-              metadata: (value as any).metadata,
+              key: legacy.key,
+              metadata: legacy.metadata,
             })
           }
         }
