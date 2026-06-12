@@ -116,7 +116,22 @@ export const McpListCommand = effectCmd({
     prompts.intro("MCP Servers")
 
     const { config, statuses, stored } = yield* listState()
-    const servers = configuredServers(config)
+    const servers = configuredServers(config).sort((a, b) => {
+      const priority = (s: MCP.Status | undefined) => {
+        if (!s) return 2
+        switch (s.status) {
+          case "connected": return 0
+          case "disabled": return 1
+          case "needs_auth": return 3
+          case "needs_client_registration": return 4
+          case "failed": return 5
+        }
+      }
+      const pa = priority(statuses[a[0]])
+      const pb = priority(statuses[b[0]])
+      if (pa !== pb) return pa - pb
+      return a[0].localeCompare(b[0])
+    })
 
     if (servers.length === 0) {
       prompts.log.warn("No MCP servers configured")
