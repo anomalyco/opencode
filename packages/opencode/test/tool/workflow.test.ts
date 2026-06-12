@@ -12,6 +12,7 @@ import { WorkflowTool, workflowDescription, WORKFLOW_GATE_DEFAULT, WORKFLOW_GATE
 import AUTHORING_GUIDE from "@/tool/workflow.txt"
 import { Workflow } from "@/workflow/workflow"
 import { Session } from "@/session/session"
+import { Permission } from "@/permission"
 import { TurnBudget } from "@/session/turn-budget"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
@@ -38,6 +39,11 @@ const it = testEffect(
     Session.defaultLayer,
     Workflow.defaultLayer,
     CrossSpawnSpawner.defaultLayer,
+    // Finding C: Permission.defaultLayer is merged so the ask-routing tests can
+    // observe the SAME permission instance the engine's ctx.shell gate asks
+    // through (identical const reference ⇒ one memoised instance, exactly like
+    // the engine test suite merges it).
+    Permission.defaultLayer,
   ).pipe(Layer.provide(Ripgrep.defaultLayer)),
 )
 
@@ -670,7 +676,9 @@ export async function run(args, ctx) { if (args.hang) await new Promise(() => {}
     ),
   )
 
-  it.live("routes workflow agent permission asks to the caller session", () =>
+  // The caller session here is itself the tree root (depth 1), so root routing
+  // (Finding C) degenerates to the caller — byte-identical to the old behavior.
+  it.live("routes workflow agent permission asks to the caller session when the caller is the root", () =>
     provideTmpdirInstance((dir) =>
       Effect.gen(function* () {
         yield* Effect.promise(() =>
@@ -691,6 +699,99 @@ export async function run(args, ctx) {
 
         expect(result.output).toContain(`<workflow_run id="${result.metadata.runId}" state="completed">`)
         expect(recorder.prompts.some((prompt) => prompt.permissionSessionID === recorder.ctx.sessionID)).toBe(true)
+      }),
+    ),
+  )
+
+  // Finding C (design-final §4.3): a start from a NESTED subagent session must
+  // route the run's permission asks to the TREE ROOT (the session a UI
+  // actually watches), not to the spawner — mirroring how task.ts bubbles
+  // permissionSessionID to the lineage root.
+  it.live("routes workflow agent permission asks to the tree root when started from a subagent session", () =>
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() =>
+          writeWorkflow(
+            dir,
+            "ask",
+            `export const meta = { name: "Ask" }
+export async function run(args, ctx) {
+  return await ctx.agent({ prompt: "Need permission" })
+}
+`,
+          ),
+        )
+
+        const sessions = yield* Session.Service
+        const root = yield* sessions.create({ title: "root" })
+        const child = yield* sessions.create({ title: "subagent", parentID: root.id })
+
+        const tool = yield* workflowTool()
+        const recorder = requestRecorder()
+        const ctx: Tool.Context = { ...recorder.ctx, sessionID: child.id }
+        const result = yield* tool.execute({ action: "start", name: "ask" }, ctx)
+
+        expect(result.output).toContain(`<workflow_run id="${result.metadata.runId}" state="completed">`)
+        // The dispatched agent prompt carries the ROOT as permissionSessionID,
+        // not the spawning subagent session.
+        expect(recorder.prompts.some((prompt) => prompt.permissionSessionID === root.id)).toBe(true)
+        expect(recorder.prompts.some((prompt) => prompt.permissionSessionID === child.id)).toBe(false)
+      }),
+    ),
+  )
+
+  // Finding C (origin attribution, Ü3): when the asks are routed away from the
+  // spawner, the engine's own asks (the ctx.shell gate) must carry the origin
+  // metadata (originSessionID/originAgent/originDepth) so the surfaced request
+  // still names WHO asked — the same convention SessionTools.resolve attaches
+  // to routed subagent tool asks.
+  it.live("ctx.shell asks from a subagent-started run surface on the root with origin metadata", () =>
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() =>
+          writeWorkflow(
+            dir,
+            "shelly",
+            `export const meta = { name: "Shelly" }
+export async function run(args, ctx) {
+  await ctx.shell("echo gated")
+  return { ok: true }
+}
+`,
+          ),
+        )
+
+        const sessions = yield* Session.Service
+        const permission = yield* Permission.Service
+        const workflow = yield* Workflow.Service
+        const root = yield* sessions.create({ title: "root" })
+        const child = yield* sessions.create({ title: "subagent", parentID: root.id })
+
+        const tool = yield* workflowTool()
+        const recorder = requestRecorder()
+        const ctx: Tool.Context = { ...recorder.ctx, sessionID: child.id }
+        // Explicit short foreground timeout: the run parks on the interactive
+        // shell ask and the tool returns the still-running state immediately.
+        const result = yield* tool.execute({ action: "start", name: "shelly", timeout: 50 }, ctx)
+        expect(result.title).toContain("still running")
+
+        const pending = yield* pollWithTimeout(
+          Effect.gen(function* () {
+            const list = yield* permission.list()
+            return list.length > 0 ? list : undefined
+          }),
+          "ctx.shell ask never became pending",
+        )
+        const ask = pending[0]!
+        // Routed to the tree ROOT...
+        expect(ask.sessionID).toBe(root.id)
+        // ...with the origin convention naming the asking subagent session.
+        expect(ask.metadata.originSessionID).toBe(child.id)
+        expect(ask.metadata.originAgent).toBe("build")
+        expect(ask.metadata.originDepth).toBe(2)
+
+        // Cleanup: stop the parked run (interrupts the open ask).
+        yield* workflow.cancel(Workflow.RunID.make(String(result.metadata.runId)))
       }),
     ),
   )

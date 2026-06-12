@@ -568,6 +568,28 @@ function startWorkflow(input: {
           Effect.catchCause(() => Effect.succeed(undefined)),
         )
       : undefined
+    // Finding C (design-final §4.3): permission asks raised by the run must
+    // surface on the session-tree ROOT — a start from a nested subagent would
+    // otherwise park its asks on a session no UI watches. Mirrors task.ts:
+    // root via Session.lineage. The walk is best-effort: a missing or corrupt
+    // chain falls back to the caller session itself (an ask must never fail on
+    // attribution), which is also the depth-≤-1 case — there rootID equals
+    // ctx.sessionID and everything stays byte-identical to before.
+    const lineage = yield* input.sessions
+      .lineage(input.ctx.sessionID)
+      .pipe(Effect.catchCause(() => Effect.succeed<Session.Info[]>([])))
+    const rootID = lineage.at(-1)?.id ?? input.ctx.sessionID
+    // Origin attribution (Ü3): attached only when the asks are routed AWAY
+    // from the asking session, so UIs can render "asked by @agent (depth N)" —
+    // the same convention SessionTools.resolve uses for routed tool asks.
+    const origin =
+      rootID === input.ctx.sessionID
+        ? undefined
+        : {
+            originSessionID: input.ctx.sessionID,
+            originAgent: input.ctx.agent,
+            originDepth: lineage.length,
+          }
     const run = yield* input.workflow
       .start({
         name: input.name,
@@ -579,10 +601,17 @@ function startWorkflow(input: {
             ? { usd: input.params.budget, tokens: input.params.budget_tokens }
             : undefined,
         prompt: ops,
-        permissionSessionID: input.ctx.sessionID,
+        // Finding C: asks bubble to the tree root (computed above), exactly
+        // like the task tool's `permissionSessionID: rootID`.
+        permissionSessionID: rootID,
+        // Origin attribution for the engine's direct asks (ctx.shell gate);
+        // undefined when the caller IS the root (nothing was routed away).
+        origin,
         // Pass the caller's identity so every subagent the run spawns inherits
         // this session's deny/external_directory rules and this agent's edit-class
         // denies (Plan Mode) — the same ruleset the task tool derives (#26514).
+        // Deliberately the SPAWNER session (not the root): rules derive from the
+        // actual caller, only the ask ROUTING targets the root.
         caller: { sessionID: input.ctx.sessionID, agent: input.ctx.agent },
         caller_model: callerModel,
         source: input.source,

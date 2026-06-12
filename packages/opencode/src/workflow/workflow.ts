@@ -375,6 +375,17 @@ export type StartOptions = StartInput & {
    */
   caller?: { sessionID: SessionID; agent?: string }
   /**
+   * Origin attribution (design-final §4.3 Ü3) for the permission asks the
+   * engine raises DIRECTLY (the ctx.shell gate): set by the workflow tool
+   * whenever `permissionSessionID` routes asks AWAY from the asking session
+   * (a start from a nested subagent), so the surfaced request still names WHO
+   * asked. The keys follow the `Request.metadata` convention
+   * (originSessionID/originAgent/originDepth); subagent-STEP asks get the same
+   * attribution automatically via SessionTools.resolve, because their prompt
+   * runs carry `permissionSessionID` ≠ their own session id.
+   */
+  origin?: { originSessionID: SessionID; originAgent?: string; originDepth?: number }
+  /**
    * Item 24: the caller TURN's shared budget pool — a live, shared mutable
    * object (NOT a schema field; it is not serializable and binds to exactly
    * one prompt turn). When set, every `ctx.agent` step must pass BOTH the
@@ -3769,6 +3780,9 @@ export const layer = Layer.effect(
                       source: "workflow.shell",
                       directories,
                       patterns: globs,
+                      // Finding C (Ü3): origin attribution whenever the ask is
+                      // routed away from the asking session.
+                      ...input.origin,
                     },
                   })
                   .pipe(Effect.mapError(denied))
@@ -3781,7 +3795,15 @@ export const layer = Layer.effect(
                     always: Array.from(scan.always),
                     sessionID: askSessionID,
                     ruleset: active.shellRuleset,
-                    metadata: { command, cwd, workflow: active.run.workflow, source: "workflow.shell" },
+                    metadata: {
+                      command,
+                      cwd,
+                      workflow: active.run.workflow,
+                      source: "workflow.shell",
+                      // Finding C (Ü3): origin attribution whenever the ask is
+                      // routed away from the asking session.
+                      ...input.origin,
+                    },
                   })
                   .pipe(Effect.mapError(denied))
               }
