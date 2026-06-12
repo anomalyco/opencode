@@ -1,24 +1,19 @@
 #!/usr/bin/env python3
 """
-Data Collector for Dukascopy Historical Data
-Downloads 1-minute OHLC data for specified symbols.
+Stub collector for Dukascopy historical data.
+The actual .bi5 decode and OHLC resampling path is not implemented yet.
 
 Usage:
     python data_collector_SYMBOL.py --symbol XAUUSD --start 2023-01-01 --end 2024-12-31
 """
 
 import argparse
-import os
 import sys
-from datetime import datetime, timedelta
 from typing import Optional
-import pandas as pd
-import requests
-import time
 
 
 class DukascopyDownloader:
-    """Downloads historical forex/commodity data from Dukascopy."""
+    """Placeholder for future Dukascopy historical data download support."""
     
     BASE_URL = "https://datafeed.dukascopy.com/datafeed"
     
@@ -38,43 +33,11 @@ class DukascopyDownloader:
             print(f"Error: Unknown symbol '{symbol}'. Available: {list(self.SYMBOL_MAP.keys())}")
             return None
         
-        ds_symbol = self.SYMBOL_MAP[symbol]
-        output_path = os.path.join(self.output_dir, symbol, "ohlc_1m.csv")
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        
-        start = datetime.strptime(start_date, "%Y-%m-%d")
-        end = datetime.strptime(end_date, "%Y-%m-%d")
-        
-        all_data = []
-        current = start
-        
-        while current <= end:
-            year = current.year
-            month = current.month - 1  # 0-indexed
-            
-            url = f"{self.BASE_URL}/{ds_symbol}/{year}/{month}/1/1m.bi5"
-            
-            try:
-                response = requests.get(url, timeout=30)
-                if response.status_code == 200:
-                    # Parse bi5 format (compressed tick data)
-                    # This is a simplified version - actual parsing requires lzma decompression
-                    pass
-                else:
-                    print(f"Failed to fetch {url}: {response.status_code}")
-            except Exception as e:
-                print(f"Error downloading {url}: {e}")
-            
-            current += timedelta(days=30)
-            time.sleep(0.5)  # Rate limiting
-        
-        if all_data:
-            df = pd.DataFrame(all_data, columns=["DateTime", "Open", "High", "Low", "Close", "Volume"])
-            df.to_csv(output_path, index=False)
-            print(f"Saved {len(df)} records to {output_path}")
-            return output_path
-        
-        return None
+        _ = (self.output_dir, self.BASE_URL, self.SYMBOL_MAP[symbol], start_date, end_date)
+        raise NotImplementedError(
+            "Dukascopy .bi5 decoding and 1-minute OHLC export are not implemented yet. "
+            "Do not treat src/Scripts/data_collector.py as a working collector."
+        )
 
 
 def main():
@@ -87,14 +50,18 @@ def main():
     args = parser.parse_args()
     
     downloader = DukascopyDownloader(args.output)
-    result = downloader.download(args.symbol, args.start, args.end)
-    
+    try:
+        result = downloader.download(args.symbol, args.start, args.end)
+    except NotImplementedError as exc:
+        print(str(exc))
+        sys.exit(1)
+
     if result:
         print(f"Successfully downloaded data to: {result}")
         sys.exit(0)
-    else:
-        print("Download failed.")
-        sys.exit(1)
+
+    print("Download failed.")
+    sys.exit(1)
 
 
 if __name__ == "__main__":

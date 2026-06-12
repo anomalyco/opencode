@@ -46,7 +46,7 @@ The current trading design centers on:
 - `src/Include/DataFeed.mqh`
   - market data export and local data bridge utilities
 - `src/Scripts/data_collector.py`
-  - Dukascopy historical data collection helper
+  - Dukascopy collector stub; `.bi5` decode and OHLC export are not implemented yet
 - `backtest/test_scenarios.json`
   - scenario definitions used by the backtest flow
 
@@ -172,20 +172,21 @@ Implementation files:
 
 This fork includes **EA Lab Memory System - Phase 1: Memory Foundations**, a repo-local memory foundation for evidence-gated MT5 EA research and development.
 
-Phase 1 adds a separate structured memory layer without modifying OpenCode core:
+Phase 1 adds a separate structured memory layer without modifying OpenCode core. The current repo also includes follow-up safety hardening on top of that foundation:
 
 - SQLite schema and schema health checks under `.opencode/ea-lab-core`
-- redaction before storing searchable research notes
+- redaction before storing searchable research notes, locators, and JSON payloads
 - evidence records for backtests, logs, commits, URLs, messages, and manual notes
 - experiment ledger for hypotheses, test conditions, metrics, stages, and outcomes
 - experience memory for reusable successes, failures, near misses, and rejection rules
 - deterministic similar-experience search through SQLite FTS
 - conservative risk gate parsing and checks from `risk/gates.yaml`
-- repo-local MCP/HTTP entrypoints under `.opencode/mcp/ea-lab-*`
+- service-level enforcement that blocks unsafe promotion and live-stage experiment transitions
+- repo-local MCP entrypoint and HTTP health endpoint under `.opencode/mcp/ea-lab-*`
 
 `trade-memory` keeps conversation and handoff context. EA Lab Memory is the new structured layer for trading evidence, experiment decisions, and risk constraints. It is intentionally separate in Phase 1 so it can be tested before deeper handoff injection or model-switch integration.
 
-Phase 1 does **not** enable live trading, automatic lot-size changes, risk-gate relaxation, MT5 execution, Context7 integration, wiki automation, or automatic injection into every OpenCode session.
+EA Lab still does **not** enable live trading, automatic lot-size changes, risk-gate relaxation, MT5 execution, Context7 integration, wiki automation, or automatic injection into every OpenCode session. There is also no human-approved live override path yet.
 
 See [EA Lab Memory Foundations](./docs/ea-lab-memory-foundations.md) for details.
 
