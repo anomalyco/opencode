@@ -14,6 +14,16 @@ import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
+import { createHash } from "crypto"
+
+function isSlug(taskId: string): boolean {
+  return !taskId.startsWith("ses_")
+}
+
+function deriveSlugSessionID(slug: string, rootID: SessionID): SessionID {
+  const hash = createHash("sha256").update(rootID).digest("hex").slice(0, 4)
+  return SessionID.descending(`ses_${hash}_${slug}`)
+}
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -46,7 +56,7 @@ const BaseParameterFields = {
   subagent_type: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
   task_id: Schema.optional(Schema.String).annotate({
     description:
-      "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
+      'A human-readable slug (e.g. "explore-auth") to create or resume a named task session within this root session. If the slug has not been used yet, a new task is created with that identifier. If it already exists, the existing session is resumed. Also accepts full "ses_..." session IDs to resume a specific session directly.',
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
 }
@@ -118,8 +128,13 @@ export const TaskTool = Tool.define(
         return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
       }
 
+      const slugTaskId = params.task_id && isSlug(params.task_id) ? params.task_id : undefined
+      const derivedID = slugTaskId
+        ? deriveSlugSessionID(slugTaskId, yield* sessions.root(ctx.sessionID))
+        : undefined
+
       const session = params.task_id
-        ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+        ? yield* sessions.get(derivedID ?? SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
       const parent = yield* sessions.get(ctx.sessionID)
       const childPermission = deriveSubagentSessionPermission({
@@ -142,6 +157,7 @@ export const TaskTool = Tool.define(
       const nextSession =
         session ??
         (yield* sessions.create({
+          id: derivedID,
           parentID: ctx.sessionID,
           title: params.description + ` (@${next.name} subagent)`,
           agent: next.name,

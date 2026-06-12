@@ -255,6 +255,7 @@ export const CreateInput = Schema.optional(
     metadata: Schema.optional(Metadata),
     permission: Schema.optional(PermissionV1.Ruleset),
     workspaceID: Schema.optional(WorkspaceV2.ID),
+    id: Schema.optional(SessionID),
   }),
 )
 export type CreateInput = Types.DeepMutable<Schema.Schema.Type<typeof CreateInput>>
@@ -469,7 +470,9 @@ export interface Interface {
     metadata?: typeof Metadata.Type
     permission?: PermissionV1.Ruleset
     workspaceID?: WorkspaceV2.ID
+    id?: SessionID
   }) => Effect.Effect<Info>
+  readonly root: (sessionID: SessionID) => Effect.Effect<SessionID, NotFound>
   readonly fork: (input: { sessionID: SessionID; messageID?: MessageID }) => Effect.Effect<Info, NotFound>
   readonly touch: (sessionID: SessionID) => Effect.Effect<void>
   readonly get: (id: SessionID) => Effect.Effect<Info, NotFound>
@@ -714,10 +717,12 @@ export const layer: Layer.Layer<
       metadata?: typeof Metadata.Type
       permission?: PermissionV1.Ruleset
       workspaceID?: WorkspaceV2.ID
+      id?: SessionID
     }) {
       const ctx = yield* InstanceState.context
       const workspace = yield* InstanceState.workspaceID
       return yield* createNext({
+        id: input?.id,
         parentID: input?.parentID,
         directory: ctx.directory,
         path: sessionPath(ctx.worktree, ctx.directory),
@@ -728,6 +733,15 @@ export const layer: Layer.Layer<
         permission: input?.permission,
         workspaceID: input?.workspaceID ?? workspace,
       })
+    })
+
+    const root = Effect.fn("Session.root")(function* (sessionID: SessionID) {
+      let current = sessionID
+      while (true) {
+        const s = yield* get(current)
+        if (!s.parentID) return current
+        current = s.parentID
+      }
     })
 
     const fork = Effect.fn("Session.fork")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
@@ -936,6 +950,7 @@ export const layer: Layer.Layer<
       list,
       listGlobal,
       create,
+      root,
       fork,
       touch,
       get,
