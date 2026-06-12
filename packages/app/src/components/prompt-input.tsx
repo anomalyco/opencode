@@ -49,6 +49,7 @@ import { createOpenDiffTab, createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
+import { captureDisplayImage } from "./prompt-input/capture"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
 import {
   canNavigateHistoryAtCursor,
@@ -346,6 +347,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })(),
   )
   const [focusWithin, setFocusWithin] = createSignal(false)
+  // 탭 캡처 진행 중 여부. 아래 자동 확대 이펙트가 이 값을 보고 캡처 동안 입력창을 강제 축소한다.
+  const [capturing, setCapturing] = createSignal(false)
   // 컴포저 내부에서 시작된 클릭(포커스 못 받는 버튼/컨트롤 포함)으로 포커스가 body 로 빠지는 걸
   // '이탈'로 오인해 축소→재확장 깜빡이는 걸 막기 위한 플래그.
   let pointerDownInside = false
@@ -362,6 +365,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   // 자동 확대 ON 이면 포커스 상태를 expanded 에 반영. OFF면 무조건 축소(collapse) 모드로 강제한다.
   createEffect(() => {
     if (!props.onComposerExpand || !props.onComposerCollapse) return
+    // 탭 캡처 중엔 확대된 입력창이 캡처 화면을 가리므로 강제로 축소하고, 캡처가 완전히 끝날
+    // 때까지 재확대를 막는다. 끝나면(capturing=false) 아래 포커스 기준 로직이 원래 상태로 되돌린다.
+    if (capturing()) {
+      if (props.expanded) props.onComposerCollapse()
+      return
+    }
     if (!autoExpand()) {
       if (props.expanded) props.onComposerCollapse()
       return
@@ -952,6 +961,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const escBlur = () => platform.platform === "desktop" && platform.os === "macos"
 
   const pick = () => fileInputRef?.click()
+
+  // 캡처 동안엔 확대된 입력창이 화면을 가리므로 축소 상태를 강제한다. 실제 축소/복귀는 위쪽
+  // 자동 확대 이펙트가 capturing() 을 보고 처리한다 — 캡처가 완전히 끝나기 전엔 재확대하지 않고,
+  // 끝나면 원래(포커스 기준) 상태로 되돌린다. 이미 축소 상태였다면 그대로 축소를 유지한다.
+  const captureTab = async () => {
+    if (capturing()) return
+    setCapturing(true)
+    try {
+      const file = await captureDisplayImage()
+      if (file) {
+        if (store.mode === "doc") await doc.addFiles([file])
+        else await addAttachments([file])
+      }
+    } catch {
+      showToast({ title: language.t("common.requestFailed") })
+    } finally {
+      setCapturing(false)
+    }
+  }
 
   const setMode = (mode: PromptMode) => {
     if (store.mode === mode) return
@@ -2267,6 +2295,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   modes={modeButtons()}
                   expand={composerExpand()}
                   autoExpand={{ enabled: autoExpand(), onToggle: toggleAutoExpand }}
+                  capture={{ active: capturing(), onCapture: captureTab }}
                 />
               </Show>
             }
@@ -2359,6 +2388,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <Icon name="plus" class="size-4.5" />
                     </Button>
                   </TooltipKeybind>
+                  <Tooltip placement="top" value={language.t("prompt.action.captureTab")}>
+                    <Button
+                      data-action="prompt-capture-tab"
+                      type="button"
+                      variant="ghost"
+                      class="size-7.5 p-0"
+                      style={buttons()}
+                      onClick={captureTab}
+                      aria-disabled={capturing()}
+                      aria-label={language.t("prompt.action.captureTab")}
+                    >
+                      <Icon name="photo" class="size-4.5" />
+                    </Button>
+                  </Tooltip>
                   {modeButtons()}
                 </div>
               </Show>

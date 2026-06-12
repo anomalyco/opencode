@@ -30,6 +30,10 @@ type ShellProps = {
     enabled: boolean
     onToggle: () => void
   }
+  capture?: {
+    active: boolean
+    onCapture: () => void
+  }
 }
 
 export const PromptDrawingShell: Component<ShellProps> = (props) => {
@@ -152,6 +156,20 @@ export const PromptDrawingShell: Component<ShellProps> = (props) => {
                 aria-label={language.t("prompt.action.attachFile")}
               />
             </Tooltip>
+            <Show when={props.capture}>
+              <Tooltip placement="top" value={language.t("prompt.action.captureTab")}>
+                <IconButton
+                  data-action="prompt-doc-capture-tab"
+                  type="button"
+                  icon="photo"
+                  variant="ghost"
+                  class="size-7.5"
+                  disabled={!props.doc.ready() || props.capture!.active}
+                  onClick={() => props.capture!.onCapture()}
+                  aria-label={language.t("prompt.action.captureTab")}
+                />
+              </Tooltip>
+            </Show>
           </Show>
           <Show when={props.expand && !env.productionLayout()}>
             <Tooltip placement="top" value={expandLabel()}>
