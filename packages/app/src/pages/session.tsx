@@ -70,14 +70,20 @@ import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
+import {
+  changeModeTitleKey,
+  createChangeModeOptions,
+  defaultChangeMode,
+  reviewDiffsForMode,
+  reviewReadyForMode,
+  type ChangeMode,
+  type VcsMode,
+} from "./session-review-mode"
 
 const emptyUserMessages: UserMessage[] = []
 type FollowupItem = FollowupDraft & { id: string }
 type FollowupEdit = Pick<FollowupItem, "id" | "prompt" | "context">
 const emptyFollowups: FollowupItem[] = []
-
-type ChangeMode = "git" | "branch" | "turn"
-type VcsMode = "git" | "branch"
 
 type SessionHistoryWindowInput = {
   sessionID: () => string | undefined
@@ -392,7 +398,7 @@ export default function Page() {
   const [store, setStore] = createStore({
     messageId: undefined as string | undefined,
     mobileTab: "session" as "session" | "changes",
-    changes: "git" as ChangeMode,
+    changes: defaultChangeMode,
     newSessionWorktree: "main",
     deferRender: false,
   })
@@ -446,20 +452,13 @@ export default function Page() {
 
   const turnDiffs = createMemo(() => list(lastUserMessage()?.summary?.diffs))
   const nogit = createMemo(() => !!sync.project && sync.project.vcs !== "git")
-  const changesOptions = createMemo<ChangeMode[]>(() => {
-    const list: ChangeMode[] = []
-    if (sync.project?.vcs === "git") list.push("git")
-    if (
-      sync.project?.vcs === "git" &&
-      sync.data.vcs?.branch &&
-      sync.data.vcs?.default_branch &&
-      sync.data.vcs.branch !== sync.data.vcs.default_branch
-    ) {
-      list.push("branch")
-    }
-    list.push("turn")
-    return list
-  })
+  const changesOptions = createMemo<ChangeMode[]>(() =>
+    createChangeModeOptions({
+      vcs: sync.project?.vcs,
+      branch: sync.data.vcs?.branch,
+      defaultBranch: sync.data.vcs?.default_branch,
+    }),
+  )
   const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
   const wantsReview = createMemo(() =>
     isDesktop()
@@ -493,16 +492,23 @@ export default function Page() {
   })
   const refreshVcs = debounce(() => void queryClient.invalidateQueries({ queryKey: vcsKey() }), 100)
   const reviewDiffs = () => {
-    if (store.changes === "git" || store.changes === "branch")
+    return reviewDiffsForMode({
+      mode: store.changes,
+      sessionDiffs: diffs(),
+      turnDiffs: turnDiffs(),
       // avoids suspense
-      return vcsQuery.isFetched ? (vcsQuery.data ?? []) : []
-    return turnDiffs()
+      vcsDiffs: vcsQuery.data ?? [],
+      vcsFetched: vcsQuery.isFetched,
+    })
   }
   const reviewCount = () => reviewDiffs().length
   const hasReview = () => reviewCount() > 0
   const reviewReady = () => {
-    if (store.changes === "git" || store.changes === "branch") return !vcsQuery.isPending
-    return true
+    return reviewReadyForMode({
+      mode: store.changes,
+      sessionDiffsLoaded: params.id ? sync.data.session_diff[params.id] !== undefined : true,
+      vcsPending: vcsQuery.isPending,
+    })
   }
 
   const newSessionWorktree = createMemo(() => {
@@ -717,7 +723,7 @@ export default function Page() {
       sessionKey,
       () => {
         setStore("messageId", undefined)
-        setStore("changes", "git")
+        setStore("changes", defaultChangeMode)
         setUi("pendingMessage", undefined)
       },
       { defer: true },
@@ -930,9 +936,7 @@ export default function Page() {
     }
 
     const label = (option: ChangeMode) => {
-      if (option === "git") return language.t("ui.sessionReview.title.git")
-      if (option === "branch") return language.t("ui.sessionReview.title.branch")
-      return language.t("ui.sessionReview.title.lastTurn")
+      return language.t(changeModeTitleKey(option))
     }
 
     return (
@@ -977,8 +981,11 @@ export default function Page() {
   })
 
   const reviewEmpty = (input: { loadingClass: string; emptyClass: string }) => {
+    if (store.changes !== "turn" && !reviewReady()) {
+      return <div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>
+    }
+
     if (store.changes === "git" || store.changes === "branch") {
-      if (!reviewReady()) return <div class={input.loadingClass}>{language.t("session.review.loadingChanges")}</div>
       return empty(reviewEmptyText())
     }
 
