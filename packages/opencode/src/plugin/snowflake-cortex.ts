@@ -35,7 +35,7 @@ let pendingOAuth: PendingOAuth | undefined
 let oauthServerPort: number | undefined
 
 function normalizeAccount(input: string) {
-  return input.replace(/^https?:\/\//, "").replace(/\.snowflakecomputing\.com\/?$/, "").replace(/\/+$/, "")
+  return input.trim().replace(/^https?:\/\//, "").replace(/\.snowflakecomputing\.com\/?$/, "").replace(/\/+$/, "")
 }
 
 function generateRandomString(length: number) {
@@ -188,29 +188,12 @@ async function startOAuthServer() {
       return
     }
 
-    const code = url.searchParams.get("code")
     const state = url.searchParams.get("state")
+    const code = url.searchParams.get("code")
     const error = url.searchParams.get("error")
     const errorDescription = url.searchParams.get("error_description")
 
-    if (error) {
-      const message = errorDescription || error
-      pendingOAuth?.reject(new Error(message))
-      pendingOAuth = undefined
-      res.writeHead(200, { "Content-Type": "text/html" })
-      res.end(htmlError(message))
-      return
-    }
-
-    if (!code) {
-      const message = "Missing authorization code"
-      pendingOAuth?.reject(new Error(message))
-      pendingOAuth = undefined
-      res.writeHead(400, { "Content-Type": "text/html" })
-      res.end(htmlError(message))
-      return
-    }
-
+    // CSRF guard: validate state before processing any callback
     if (!pendingOAuth || state !== pendingOAuth.state) {
       const message = "Invalid state - potential CSRF attack"
       pendingOAuth?.reject(new Error(message))
@@ -222,6 +205,23 @@ async function startOAuthServer() {
 
     const current = pendingOAuth
     pendingOAuth = undefined
+
+    if (error) {
+      const message = errorDescription || error
+      current.reject(new Error(message))
+      res.writeHead(200, { "Content-Type": "text/html" })
+      res.end(htmlError(message))
+      return
+    }
+
+    if (!code) {
+      const message = "Missing authorization code"
+      current.reject(new Error(message))
+      res.writeHead(400, { "Content-Type": "text/html" })
+      res.end(htmlError(message))
+      return
+    }
+
     exchangeCodeForToken(current.account, code, current.pkce)
       .then((tokens) => current.resolve(tokens))
       .catch((err) => current.reject(err instanceof Error ? err : new Error(String(err))))

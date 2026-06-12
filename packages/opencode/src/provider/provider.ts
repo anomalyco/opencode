@@ -856,13 +856,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         (auth?.type === "oauth" ? auth.accountId : undefined) ??
         input.options?.account
 
-      const token =
-        env["SNOWFLAKE_CORTEX_TOKEN"] ??
-        env["SNOWFLAKE_CORTEX_PAT"] ??
-        (auth?.type === "api" ? auth.key : undefined) ??
-        (auth?.type === "oauth" ? auth.access : undefined) ??
-        input.options?.token ??
-        input.options?.apiKey
+      const envToken = env["SNOWFLAKE_CORTEX_TOKEN"] ?? env["SNOWFLAKE_CORTEX_PAT"]
+      const apiKeyToken = auth?.type === "api" ? auth.key : undefined
+      const oauthToken = auth?.type === "oauth" ? auth.access : undefined
+      const configToken = input.options?.token ?? input.options?.apiKey
+
+      const token = envToken ?? apiKeyToken ?? oauthToken ?? configToken
 
       if (!account || !token) {
         const missing = [!account && "SNOWFLAKE_ACCOUNT", !token && "SNOWFLAKE_CORTEX_TOKEN"].filter(Boolean).join(", ")
@@ -879,7 +878,14 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const baseURL = `https://${account}.snowflakecomputing.com/api/v2/cortex/v1`
 
       const options: Record<string, any> = { baseURL, apiKey: token }
-      if (auth?.type !== "oauth") {
+
+      // Only skip provider-level fetch when the token is from OAuth with no override.
+      // For OAuth tokens, the plugin auth loader's combined fetch handles
+      // OAuth refresh + snowflake transformations in one place.
+      // For env/config/API-key tokens, the provider fetch applies snowflake
+      // transformations directly.
+      const useOAuthHandler = oauthToken !== undefined && envToken === undefined && apiKeyToken === undefined && configToken === undefined
+      if (!useOAuthHandler) {
         options.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
           if (init?.body && typeof init.body === "string") {
             try {
