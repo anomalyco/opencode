@@ -5,7 +5,7 @@ import { geoEquirectangular, geoPath } from "d3-geo"
 import { scaleSqrt } from "d3-scale"
 import countryCodesSource from "i18n-iso-countries/codes.json?raw"
 import { feature, mesh } from "topojson-client"
-import countriesTopologySource from "world-atlas/countries-110m.json?raw"
+import countriesTopologySource from "world-atlas/countries-50m.json?raw"
 import {
   getStatsModelData,
   type CountryEntry,
@@ -20,7 +20,13 @@ import { createMemo, createSignal, For, onMount, Show, type JSX } from "solid-js
 import { getRequestEvent } from "solid-js/web"
 import type { FeatureCollection, GeometryObject, GeoJsonProperties } from "geojson"
 import type { GeometryCollection, Topology } from "topojson-specification"
-import { findModelCatalogEntry, formatCatalogLabName, getModelCatalog, type ModelCatalogEntry } from "../model-catalog"
+import {
+  findModelCatalogEntry,
+  formatCatalogLabName,
+  getModelCatalog,
+  type ModelCatalogCost,
+  type ModelCatalogEntry,
+} from "../model-catalog"
 import {
   applyThemePreference,
   Footer,
@@ -32,7 +38,10 @@ import {
   type ThemePreference,
 } from "../stats-shell"
 
-const statsModelFallbackUrl = "https://stats.opencode.ai"
+const statsCanonicalBaseUrl = "https://opencode.ai/data/"
+const statsUnfurlPath = "banner.png"
+const statsUnfurlAlt = "OpenCode Data wordmark on a dark patterned background"
+const statsUnfurlUrl = new URL(statsUnfurlPath, statsCanonicalBaseUrl).toString()
 const modelHeaderLinks: readonly HeaderLink[] = [
   { href: "#overview", label: "Overview" },
   { href: "#usage", label: "Usage" },
@@ -41,7 +50,7 @@ const modelHeaderLinks: readonly HeaderLink[] = [
   { href: "#peers", label: "Peers" },
 ]
 const modelFooterLinks: readonly HeaderLink[] = [
-  { href: import.meta.env.BASE_URL, label: "Stats Home" },
+  { href: import.meta.env.BASE_URL, label: "Data Home" },
   { href: `${import.meta.env.BASE_URL}#top-models`, label: "Top Models" },
   { href: `${import.meta.env.BASE_URL}#leaderboard`, label: "Leaderboard" },
   { href: `${import.meta.env.BASE_URL}#session-cost`, label: "Session Cost" },
@@ -80,6 +89,7 @@ const worldPath = geoPath(worldProjection)
 const worldCountryPaths = worldCountries.features.map((country) => ({
   id: String(country.id ?? "").padStart(3, "0"),
   path: worldPath(country) ?? "",
+  marker: geoCountryMarker(country),
 }))
 const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a, b) => a !== b)) ?? ""
 
@@ -110,16 +120,16 @@ export default function StatsModel() {
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const modelName = createMemo(() => catalogEntry()?.name ?? stats()?.model ?? modelParam() ?? "Model")
   const labName = createMemo(() => formatCatalogLabName(catalogEntry()?.lab ?? stats()?.provider ?? labParam()))
-  const modelTitle = createMemo(() => `${modelName()} Stats`)
+  const modelTitle = createMemo(() => `${modelName()} Data`)
   const modelDescription = createMemo(() =>
     stats()
-      ? `${modelName()} usage, rank, token mix, cost, geo breakdown, and peer stats across OpenCode.`
+      ? `${modelName()} usage, rank, token mix, cost, geo breakdown, and peer data across OpenCode.`
       : `${modelName()} model facts, limits, and OpenCode usage availability.`,
   )
   const modelUrl = createMemo(() =>
     new URL(
-      `${import.meta.env.BASE_URL}${catalogEntry()?.id ?? `${labParam()}/${stats()?.slug ?? modelParam()}`}`,
-      event?.request.url ?? (typeof window === "undefined" ? statsModelFallbackUrl : window.location.href),
+      catalogEntry()?.id ?? [labParam(), stats()?.slug ?? modelParam()].filter((part) => part.length > 0).join("/"),
+      statsCanonicalBaseUrl,
     ).toString(),
   )
   const updateThemePreference = (preference: ThemePreference) => {
@@ -147,9 +157,16 @@ export default function StatsModel() {
       <Meta property="og:title" content={modelTitle()} />
       <Meta property="og:description" content={modelDescription()} />
       <Meta property="og:url" content={modelUrl()} />
-      <Meta name="twitter:card" content="summary" />
+      <Meta property="og:image" content={statsUnfurlUrl} />
+      <Meta property="og:image:type" content="image/png" />
+      <Meta property="og:image:width" content="1200" />
+      <Meta property="og:image:height" content="630" />
+      <Meta property="og:image:alt" content={statsUnfurlAlt} />
+      <Meta name="twitter:card" content="summary_large_image" />
       <Meta name="twitter:title" content={modelTitle()} />
       <Meta name="twitter:description" content={modelDescription()} />
+      <Meta name="twitter:image" content={statsUnfurlUrl} />
+      <Meta name="twitter:image:alt" content={statsUnfurlAlt} />
       <Header githubStars={githubStars() ?? "150K"} links={modelHeaderLinks} brandHref={import.meta.env.BASE_URL} />
       <div data-component="container">
         <div data-component="content">
@@ -159,7 +176,7 @@ export default function StatsModel() {
                 <ModelHero data={stats() ?? null} catalog={catalogEntry() ?? null} labName={labName()} />
                 <ModelOverview data={stats() ?? null} />
                 <ModelUsageSection data={stats()?.usage ?? []} />
-                <ModelEfficiencySection data={stats() ?? null} />
+                <ModelEfficiencySection data={stats() ?? null} catalog={catalogEntry() ?? null} />
                 <ModelGeoBreakdownSection data={stats()?.country ?? emptyCountryRecord()} />
                 <ModelPeersSection data={stats() ?? null} />
               </>
@@ -183,15 +200,15 @@ function ModelLoading() {
         <div data-slot="model-hero-grid">
           <div data-slot="model-hero-copy">
             <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-              Stats
+              Data
             </a>
-            <h1>Model Stats</h1>
+            <h1>Model Data</h1>
             <p>Reading model aggregates from model_stat.</p>
           </div>
         </div>
       </section>
       <section data-section="model-panel">
-        <ModelEmptyState title="Loading model stats" description="Reading the model profile." />
+        <ModelEmptyState title="Loading model data" description="Reading the model profile." />
       </section>
     </>
   )
@@ -204,7 +221,7 @@ function ModelNotFound(props: { lab: string; model: string }) {
         <div data-slot="model-hero-grid">
           <div data-slot="model-hero-copy">
             <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-              Stats
+              Data
             </a>
             <h1>{props.model || "Model"}</h1>
             <p>No model facts or model_stat rows matched {props.lab ? `${props.lab}/${props.model}` : props.model}.</p>
@@ -225,7 +242,7 @@ function ModelHero(props: { data: StatsModelData | null; catalog: ModelCatalogEn
   return (
     <section id="overview" data-section="model-hero">
       <a data-slot="model-back-link" href={import.meta.env.BASE_URL}>
-        Stats
+        Data
       </a>
       <div data-slot="model-hero-grid">
         <div data-slot="model-hero-copy">
@@ -279,7 +296,7 @@ function ModelCatalogCallout(props: { catalog: ModelCatalogEntry | null }) {
     <div data-component="model-rank-panel">
       <span>Model Profile</span>
       <strong>{props.catalog?.releaseDate ? formatCatalogDate(props.catalog.releaseDate) : "Listed"}</strong>
-      <p>No OpenCode usage in the current stats window.</p>
+      <p>No OpenCode usage in the current data window.</p>
     </div>
   )
 }
@@ -439,20 +456,26 @@ function ModelUsageSection(props: { data: ModelUsagePoint[] }) {
   )
 }
 
-function ModelEfficiencySection(props: { data: StatsModelData | null }) {
+function ModelEfficiencySection(props: { data: StatsModelData | null; catalog: ModelCatalogEntry | null }) {
   return (
     <section id="efficiency" data-section="model-panel">
       <SectionTitle title="Efficiency" description="Cost, cache behavior, and average session shape." />
       <Show
         when={props.data}
         fallback={
-          <ModelEmptyState title="No efficiency data" description="Cost and cache stats appear after usage lands." />
+          <ModelEmptyState title="No efficiency data" description="Efficiency data appears after usage lands." />
         }
       >
         {(data) => (
           <div data-component="model-metric-grid" data-variant="dense">
             <MetricCard label="Cost" value={formatMoney(data().totals.cost)} detail="total spend" />
-            <MetricCard label="Cost / 1M" value={formatMoney(data().totals.costPerMillion)} detail="all tokens" />
+            <MetricCard
+              label="Cost / 1M"
+              value={
+                props.catalog?.cost ? formatCatalogPrice(props.catalog.cost) : formatMoney(data().totals.costPerMillion)
+              }
+              detail={props.catalog?.cost ? "input / output" : "observed all tokens"}
+            />
             <MetricCard
               label="Cost / Session"
               value={formatSessionCost(data().totals.costPerSession)}
@@ -563,6 +586,7 @@ function GeoWorldMap(props: {
             return (
               <path
                 d={country.path}
+                data-country-id={country.id}
                 data-has-data={entry() ? "true" : undefined}
                 data-active={entry()?.country === props.activeCountry ? "true" : undefined}
                 style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
@@ -578,6 +602,37 @@ function GeoWorldMap(props: {
                   props.onActiveCountryChange(item.country)
                 }}
               />
+            )
+          }}
+        </For>
+      </g>
+      <g data-slot="geo-country-markers">
+        <For each={worldCountryPaths}>
+          {(country) => {
+            const entry = () => props.countryById.get(country.id)
+            return (
+              <Show when={country.marker && entry() ? country.marker : undefined}>
+                {(marker) => (
+                  <circle
+                    cx={marker().x}
+                    cy={marker().y}
+                    r={entry()?.country === props.activeCountry ? 3.4 : 2.4}
+                    data-active={entry()?.country === props.activeCountry ? "true" : undefined}
+                    style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
+                    aria-hidden="true"
+                    onPointerEnter={() => {
+                      const item = entry()
+                      if (!item) return
+                      props.onActiveCountryChange(item.country)
+                    }}
+                    onClick={() => {
+                      const item = entry()
+                      if (!item) return
+                      props.onActiveCountryChange(item.country)
+                    }}
+                  />
+                )}
+              </Show>
             )
           }}
         </For>
@@ -710,6 +765,14 @@ function countryNumericId(country: string) {
   return countryNumericIds.get(country.toUpperCase())?.padStart(3, "0")
 }
 
+function geoCountryMarker(country: (typeof worldCountries.features)[number]) {
+  const bounds = worldPath.bounds(country)
+  const [x, y] = worldPath.centroid(country)
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined
+  if (bounds[1][0] - bounds[0][0] >= 3 && bounds[1][1] - bounds[0][1] >= 3) return undefined
+  return { x, y }
+}
+
 function formatCountryName(country: string) {
   const code = country.toUpperCase()
   if (code === "ZZ") return "Unknown"
@@ -772,6 +835,15 @@ function formatMoney(value: number) {
   if (value >= 1_000_000) return `$${trimNumber(value / 1_000_000, value >= 10_000_000 ? 0 : 1)}M`
   if (value >= 1_000) return `$${trimNumber(value / 1_000, value >= 10_000 ? 0 : 1)}K`
   return `$${value.toFixed(value >= 10 ? 0 : 2)}`
+}
+
+function formatCatalogPrice(value: ModelCatalogCost) {
+  return `${formatModelPrice(value.input)} / ${formatModelPrice(value.output)}`
+}
+
+function formatModelPrice(value: number) {
+  if (value > 0 && value < 0.01) return `$${value.toFixed(4)}`
+  return formatMoney(value)
 }
 
 function formatSessionCost(value: number) {

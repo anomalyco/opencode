@@ -1,34 +1,34 @@
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Location } from "@opencode-ai/core/location"
-import { RelativePath } from "@opencode-ai/core/schema"
+import { PositiveInt, RelativePath } from "@opencode-ai/core/schema"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi, LocationMiddleware } from "./location"
-
-const ReadQuery = Schema.Struct({
-  ...LocationQuery.fields,
-  path: RelativePath,
-  reference: Schema.String.pipe(Schema.optional),
-})
 
 const ListQuery = Schema.Struct({
   ...LocationQuery.fields,
   path: RelativePath.pipe(Schema.optional),
-  reference: Schema.String.pipe(Schema.optional),
+})
+
+const FindQuery = Schema.Struct({
+  ...LocationQuery.fields,
+  query: FileSystem.FindInput.fields.query,
+  type: FileSystem.FindInput.fields.type,
+  limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional),
 })
 
 export const FileSystemGroup = HttpApiGroup.make("server.fs")
   .add(
-    HttpApiEndpoint.get("fs.read", "/api/fs/read", {
-      query: ReadQuery,
-      success: Location.response(FileSystem.Content),
+    HttpApiEndpoint.get("fs.read", "/api/fs/read/*", {
+      query: LocationQuery,
+      success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
     })
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
           identifier: "v2.fs.read",
           summary: "Read file",
-          description: "Read one file relative to the requested location.",
+          description: "Serve one file relative to the requested location.",
         }),
       ),
   )
@@ -43,6 +43,20 @@ export const FileSystemGroup = HttpApiGroup.make("server.fs")
           identifier: "v2.fs.list",
           summary: "List directory",
           description: "List direct children of one directory relative to the requested location.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("fs.find", "/api/fs/find", {
+      query: FindQuery,
+      success: Location.response(Schema.Array(FileSystem.Entry)),
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.fs.find",
+          summary: "Find files",
+          description: "Find recursively ranked filesystem entries relative to the requested location.",
         }),
       ),
   )
