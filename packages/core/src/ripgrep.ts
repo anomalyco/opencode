@@ -161,6 +161,7 @@ export const layer = Layer.effect(
           args: [
             "--no-config",
             "--files",
+            "--no-ignore-vcs",
             ...(input.hidden ? ["--hidden"] : []),
             ...(input.follow ? ["--follow"] : []),
             `--glob=${input.pattern}`,

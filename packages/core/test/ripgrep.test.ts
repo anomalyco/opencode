@@ -30,6 +30,27 @@ describe("Ripgrep", () => {
     ),
   )
 
+  it.live("includes gitignored files in glob results", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "node_modules", "pkg"), { recursive: true }))
+          yield* Effect.promise(() => Bun.$`git init -q ${tmp.path}`)
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, ".gitignore"), "node_modules/\n"))
+          yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "node_modules", "pkg", "index.js"), "ignored\n"))
+
+          const files = yield* (yield* Ripgrep.Service).glob({
+            cwd: tmp.path,
+            pattern: "node_modules/pkg/index.js",
+            limit: 10,
+          })
+          expect(files.map((item) => item.path)).toContain(RelativePath.make("node_modules/pkg/index.js"))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("never includes git metadata", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

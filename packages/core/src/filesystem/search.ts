@@ -232,6 +232,15 @@ export const fffLayer = Layer.effect(
   }),
 )
 
+const fffWithRipgrepFallbackLayer = fffLayer.pipe(
+  Layer.catchCause((cause) =>
+    Layer.merge(
+      Layer.effectDiscard(Effect.logWarning("FFF search initialization failed; falling back to ripgrep", { cause })),
+      ripgrepLayer,
+    ),
+  ),
+)
+
 export const defaultLayer = Layer.unwrap(
-  Effect.sync(() => (Flag.OPENCODE_DISABLE_FFF || !Fff.available() ? ripgrepLayer : fffLayer)),
+  Effect.sync(() => (Flag.OPENCODE_DISABLE_FFF || !Fff.available() ? ripgrepLayer : fffWithRipgrepFallbackLayer)),
 )
