@@ -50,6 +50,7 @@ import { promptEnabled, promptProbe } from "@/testing/prompt"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
 import { captureDisplayImage } from "./prompt-input/capture"
+import { CaptureEditDialog } from "./prompt-input/capture-edit-dialog"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
 import {
   canNavigateHistoryAtCursor,
@@ -963,17 +964,37 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const captureTab = async () => {
     if (capturing()) return
     setCapturing(true)
+    let file: File | null = null
     try {
-      const file = await captureDisplayImage()
-      if (file) {
-        if (store.mode === "doc") await doc.addFiles([file])
-        else await addAttachments([file])
-      }
+      file = await captureDisplayImage()
     } catch {
       showToast({ title: language.t("common.requestFailed") })
-    } finally {
       setCapturing(false)
+      return
     }
+    if (!file) {
+      // 피커 취소 → 모달 없이 컴포저 복귀.
+      setCapturing(false)
+      return
+    }
+    // 찍은 이미지를 편집 모달에서 크롭/드로잉한 뒤 "추가" 시에만 입력창에 넣는다.
+    // capturing 은 모달이 닫힐 때(onClose)만 해제 → 그동안 컴포저는 축소 유지.
+    dialog.show(
+      () => (
+        <CaptureEditDialog
+          file={file!}
+          onAdd={async (edited) => {
+            try {
+              if (store.mode === "doc") await doc.addFiles([edited])
+              else await addAttachments([edited])
+            } catch {
+              showToast({ title: language.t("common.requestFailed") })
+            }
+          }}
+        />
+      ),
+      () => setCapturing(false),
+    )
   }
 
   const setMode = (mode: PromptMode) => {
