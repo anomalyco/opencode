@@ -1,11 +1,13 @@
 export * as SkillV2 from "./skill"
 
 import path from "path"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, Option, Schema, Stream } from "effect"
 import { castDraft } from "immer"
 import { AgentV2 } from "./agent"
 import { ConfigMarkdown } from "./config/markdown"
+import { EventV2 } from "./event"
 import { FSUtil } from "./fs-util"
+import { Watcher } from "./filesystem/watcher"
 import { PermissionV2 } from "./permission"
 import { AbsolutePath, withStatics } from "./schema"
 import { SkillDiscovery } from "./skill/discovery"
@@ -86,6 +88,9 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const discovery = yield* SkillDiscovery.Service
     const fs = yield* FSUtil.Service
+    const eventsOpt = yield* Effect.serviceOption(EventV2.Service)
+    const watcherOpt = yield* Effect.serviceOption(Watcher.Service)
+    const watcher = Option.getOrElse(watcherOpt, (): Watcher.Interface => ({ watch: () => Effect.void }))
 
     const state = State.create<Data, Editor>({
       initial: () => ({ sources: [] }),
@@ -131,22 +136,54 @@ export const layer = Layer.effect(
           )
         }
       }
+      const key = Source.key(source)
+      cache.set(key, skills)
+      if (invalidated.has(key)) {
+        cache.delete(key)
+        invalidated.delete(key)
+      }
       return skills
     })
 
     // QUESTION(Dax): Should local skill sources invalidate on filesystem watch
     // events, following the reload policy chosen for other context sources?
+    const invalidated = new Set<string>()
     const cache = new Map<string, Info[]>()
     const list = Effect.fn("SkillV2.list")(function* () {
       const skills = new Map<string, Info>()
       for (const source of state.get().sources) {
         const key = Source.key(source)
+        if (source.type === "directory" && !cache.has(key)) {
+          yield* Effect.forkDetach(watcher.watch(source.path))
+        }
         const loaded = cache.get(key) ?? (yield* load(source))
-        cache.set(key, loaded)
         for (const skill of loaded) skills.set(skill.name, skill)
       }
       return Array.from(skills.values())
     })
+
+    if (Option.isSome(eventsOpt)) {
+      yield* Effect.forkScoped(
+        eventsOpt.value.subscribe(Watcher.Event.Updated).pipe(
+          Stream.runForEach((event) =>
+            Effect.sync(() => {
+              for (const source of state.get().sources) {
+                if (source.type !== "directory") continue
+                const sep = path.sep
+                if (
+                  event.data.file.startsWith(source.path + sep) ||
+                  event.data.file === source.path
+                ) {
+                  const key = Source.key(source)
+                  if (cache.has(key)) cache.delete(key)
+                  else invalidated.add(key)
+                }
+              }
+            }),
+          ),
+        ),
+      )
+    }
 
     return Service.of({
       transform: state.transform,
@@ -158,4 +195,7 @@ export const layer = Layer.effect(
   }),
 )
 
-export const locationLayer = layer.pipe(Layer.provide(SkillDiscovery.defaultLayer))
+export const locationLayer = layer.pipe(
+  Layer.provide(SkillDiscovery.defaultLayer),
+  Layer.provide(Watcher.locationLayer),
+)
