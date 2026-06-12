@@ -65,13 +65,15 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const { db } = yield* Database.Service
     const decode = Schema.decodeUnknownSync(Info)
-    const stored = (row: typeof CredentialTable.$inferSelect) =>
-      new Stored({
+    const stored = (row: typeof CredentialTable.$inferSelect) => {
+      if (!row.integration_id) return
+      return new Stored({
         id: row.id,
         integrationID: row.integration_id,
         label: row.label,
         value: decode(row.value),
       })
+    }
 
     return Service.of({
       all: Effect.fn("Credential.all")(function* () {
@@ -80,7 +82,10 @@ export const layer = Layer.effect(
           .from(CredentialTable)
           .orderBy(asc(CredentialTable.time_created))
           .all()
-          .pipe(Effect.orDie)).map(stored)
+          .pipe(Effect.orDie)).flatMap((row) => {
+          const credential = stored(row)
+          return credential ? [credential] : []
+        })
       }),
       list: Effect.fn("Credential.list")(function* (integrationID) {
         return (yield* db
@@ -89,7 +94,10 @@ export const layer = Layer.effect(
           .where(eq(CredentialTable.integration_id, integrationID))
           .orderBy(asc(CredentialTable.time_created))
           .all()
-          .pipe(Effect.orDie)).map(stored)
+          .pipe(Effect.orDie)).flatMap((row) => {
+          const credential = stored(row)
+          return credential ? [credential] : []
+        })
       }),
       create: Effect.fn("Credential.create")(function* (input) {
         const credential = new Stored({
