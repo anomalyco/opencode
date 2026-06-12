@@ -1058,8 +1058,21 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       flexDirection="column"
       backgroundColor={theme.background}
       onMouseDown={(evt) => {
-        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
         if (evt.button !== MouseButton.RIGHT) return
+
+        // On Windows, right-click is the native paste gesture for cmd.exe,
+        // powershell.exe and Windows Terminal. Enabling mouse tracking
+        // suppresses the terminal's built-in right-click paste (the click is
+        // delivered to us as a mouse event instead), so emulate it: copy the
+        // current selection if there is one, otherwise paste into the prompt.
+        if (process.platform === "win32") {
+          if (!Selection.copy(renderer, toast, clipboard)) keymap.dispatchCommand("prompt.paste")
+          evt.preventDefault()
+          evt.stopPropagation()
+          return
+        }
+
+        if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
 
         if (!Selection.copy(renderer, toast, clipboard)) return
         evt.preventDefault()

@@ -193,6 +193,17 @@ export function DialogProvider(props: ParentProps) {
     return true
   }
 
+  // Paste clipboard text into the focused dialog input. Used to emulate the
+  // native right-click paste gesture on Windows terminals, where enabling mouse
+  // tracking suppresses the terminal's built-in right-click paste.
+  function pasteIntoFocused() {
+    const focused = renderer.currentFocusedRenderable as { insertText?: (text: string) => void } | null
+    if (!focused?.insertText) return
+    void clipboard.read?.().then((content) => {
+      if (content?.mime === "text/plain") focused.insertText!(content.data)
+    })
+  }
+
   return (
     <ctx.Provider value={value}>
       {props.children}
@@ -200,8 +211,18 @@ export function DialogProvider(props: ParentProps) {
         position="absolute"
         zIndex={3000}
         onMouseDown={(evt: { button: number; preventDefault(): void; stopPropagation(): void }) => {
-          if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
           if (evt.button !== MouseButton.RIGHT) return
+
+          // On Windows, emulate the native right-click paste gesture: copy the
+          // current selection if there is one, otherwise paste into the input.
+          if (process.platform === "win32") {
+            if (!copySelection()) pasteIntoFocused()
+            evt.preventDefault()
+            evt.stopPropagation()
+            return
+          }
+
+          if (!Flag.OPENCODE_EXPERIMENTAL_DISABLE_COPY_ON_SELECT) return
 
           if (!copySelection()) return
           evt.preventDefault()
