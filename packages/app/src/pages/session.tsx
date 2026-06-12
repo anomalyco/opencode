@@ -25,6 +25,7 @@ import { Tabs } from "@opencode-ai/ui/tabs"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
 import { useLocation, useNavigate, useSearchParams } from "@solidjs/router"
@@ -50,7 +51,7 @@ import {
   focusTerminalById,
   shouldFocusTerminalOnKeyDown,
 } from "@/pages/session/helpers"
-import { MessageTimeline } from "@/pages/session/message-timeline"
+import { MessageTimeline, type SessionRenderOverlayStatus } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { isExtraAgentDirectory } from "@/pages/layout/extra-agents"
@@ -123,6 +124,7 @@ export default function Page() {
     reviewSnap: false,
     scrollGesture: 0,
     mode: "live" as ScrollMode,
+    renderOverlayStatus: "hidden" as SessionRenderOverlayStatus,
     scroll: {
       overflow: false,
       bottom: true,
@@ -254,6 +256,10 @@ export default function Page() {
     const ready = sync.data.message[id] !== undefined
     console.warn(`[flash-debug] messagesReady: id=${id} ready=${ready} time=${performance.now().toFixed(1)}`)
     return ready
+  })
+  const sessionRenderOverlayStatus = createMemo<SessionRenderOverlayStatus>(() => {
+    if (params.id && !messagesReady()) return "showing"
+    return ui.renderOverlayStatus
   })
   const historyMore = createMemo(() => {
     const id = params.id
@@ -2133,6 +2139,7 @@ export default function Page() {
                       scrollToMessage(message, "auto")
                     }}
                     anchor={anchor}
+                    onRenderOverlayStatusChange={(status) => setUi("renderOverlayStatus", status)}
                   />
                 </Show>
               </Match>
@@ -2203,6 +2210,27 @@ export default function Page() {
               promptDock = el
             }}
           />
+
+          <Show when={sessionRenderOverlayStatus() !== "hidden"}>
+            <div
+              data-slot="session-render-overlay"
+              aria-live="polite"
+              aria-busy={sessionRenderOverlayStatus() === "showing" ? "true" : "false"}
+              class="absolute inset-0 z-[70] flex items-center justify-center transition-opacity duration-200 ease-out"
+              classList={{
+                "opacity-100 pointer-events-auto": sessionRenderOverlayStatus() === "showing",
+                "opacity-0 pointer-events-none": sessionRenderOverlayStatus() === "hiding",
+              }}
+              style={{
+                background: "var(--background-base)",
+              }}
+            >
+              <div class="flex items-center gap-2 rounded-full border border-border-weak-base bg-background-stronger px-3 py-2 text-12-medium text-text-weak shadow-sm">
+                <Spinner class="size-4" />
+                <span>{language.t("session.messages.loading")}</span>
+              </div>
+            </div>
+          </Show>
 
           <Show when={desktopReviewOpen()}>
             <div onPointerDown={() => size.start()}>

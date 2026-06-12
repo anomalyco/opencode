@@ -270,6 +270,8 @@ type UserActions = {
   revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
 }
 
+export type SessionRenderOverlayStatus = "hidden" | "showing" | "hiding"
+
 const messageComments = (parts: Part[]): MessageComment[] =>
   parts.flatMap((part) => {
     if (part.type !== "text" || !(part as TextPart).synthetic) return []
@@ -382,6 +384,7 @@ export function MessageTimeline(props: {
   seekingMessageId?: string
   onJumpToMessage: (message: UserMessage) => void
   anchor: (id: string) => string
+  onRenderOverlayStatusChange?: (status: SessionRenderOverlayStatus) => void
 }) {
   let touchGesture: number | undefined
   let contentRef: HTMLDivElement | undefined
@@ -902,7 +905,7 @@ export function MessageTimeline(props: {
     )
   })
 
-  const [renderOverlayStatus, setRenderOverlayStatus] = createSignal<"hidden" | "showing" | "hiding">("hidden")
+  const [renderOverlayStatus, setRenderOverlayStatus] = createSignal<SessionRenderOverlayStatus>("hidden")
   let renderOverlayStartedAt = 0
   let renderOverlayToken = 0
   let renderOverlayFrame: number | undefined
@@ -1010,6 +1013,10 @@ export function MessageTimeline(props: {
       showRenderOverlay()
     }),
   )
+
+  createEffect(() => {
+    props.onRenderOverlayStatusChange?.(renderOverlayStatus())
+  })
 
   const [timeoutDone, setTimeoutDone] = createSignal(true)
 
@@ -1602,6 +1609,7 @@ export function MessageTimeline(props: {
     if (pinFrame !== undefined) cancelAnimationFrame(pinFrame)
     if (blank !== undefined) cancelAnimationFrame(blank)
     clearRenderOverlayTimers()
+    props.onRenderOverlayStatusChange?.("hidden")
     for (const release of pendingShrinkReleaseById.values()) clearTimeout(release)
     pendingShrinkReleaseById.clear()
   })
@@ -2541,7 +2549,7 @@ export function MessageTimeline(props: {
             </div>
           </div>
         </ScrollView>
-        <Show when={renderOverlayStatus() !== "hidden"}>
+        <Show when={!props.onRenderOverlayStatusChange && renderOverlayStatus() !== "hidden"}>
           <div
             data-slot="session-render-overlay"
             aria-live="polite"
