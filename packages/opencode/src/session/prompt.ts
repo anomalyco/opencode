@@ -1558,7 +1558,16 @@ export const layer = Layer.effect(
       }
 
       const templateParts = yield* resolvePromptParts(template)
-      const inputFiles = new Set(input.parts?.map((part) => new URL(part.url).pathname))
+      const normalizeFileURL = (value: string) => {
+        const url = new URL(value)
+        url.search = ""
+        url.hash = ""
+        return url.href
+      }
+      const inputFileURLs = new Set(input.parts?.map((part) => normalizeFileURL(part.url)))
+      const uniqueTemplateParts = templateParts.filter(
+        (part) => part.type !== "file" || !inputFileURLs.has(normalizeFileURL(part.url)),
+      )
       const isSubtask = (agent.mode === "subagent" && cmd.subtask !== false) || cmd.subtask === true
       const parts = isSubtask
         ? [
@@ -1571,10 +1580,7 @@ export const layer = Layer.effect(
               prompt: templateParts.find((y) => y.type === "text")?.text ?? "",
             },
           ]
-        : [
-            ...templateParts.filter((part) => part.type !== "file" || !inputFiles.has(new URL(part.url).pathname)),
-            ...(input.parts ?? []),
-          ]
+        : [...uniqueTemplateParts, ...(input.parts ?? [])]
 
       const userAgent = isSubtask ? (input.agent ?? (yield* agents.defaultInfo()).name) : agent.name
       const userModel = isSubtask
