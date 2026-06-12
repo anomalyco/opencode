@@ -5,7 +5,7 @@ import { geoEquirectangular, geoPath } from "d3-geo"
 import { scaleSqrt } from "d3-scale"
 import countryCodesSource from "i18n-iso-countries/codes.json?raw"
 import { feature, mesh } from "topojson-client"
-import countriesTopologySource from "world-atlas/countries-110m.json?raw"
+import countriesTopologySource from "world-atlas/countries-50m.json?raw"
 import {
   getStatsModelData,
   type CountryEntry,
@@ -89,6 +89,7 @@ const worldPath = geoPath(worldProjection)
 const worldCountryPaths = worldCountries.features.map((country) => ({
   id: String(country.id ?? "").padStart(3, "0"),
   path: worldPath(country) ?? "",
+  marker: geoCountryMarker(country),
 }))
 const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a, b) => a !== b)) ?? ""
 
@@ -587,6 +588,7 @@ function GeoWorldMap(props: {
             return (
               <path
                 d={country.path}
+                data-country-id={country.id}
                 data-has-data={entry() ? "true" : undefined}
                 data-active={entry()?.country === props.activeCountry ? "true" : undefined}
                 style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
@@ -602,6 +604,37 @@ function GeoWorldMap(props: {
                   props.onActiveCountryChange(item.country)
                 }}
               />
+            )
+          }}
+        </For>
+      </g>
+      <g data-slot="geo-country-markers">
+        <For each={worldCountryPaths}>
+          {(country) => {
+            const entry = () => props.countryById.get(country.id)
+            return (
+              <Show when={country.marker && entry() ? country.marker : undefined}>
+                {(marker) => (
+                  <circle
+                    cx={marker().x}
+                    cy={marker().y}
+                    r={entry()?.country === props.activeCountry ? 3.4 : 2.4}
+                    data-active={entry()?.country === props.activeCountry ? "true" : undefined}
+                    style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
+                    aria-hidden="true"
+                    onPointerEnter={() => {
+                      const item = entry()
+                      if (!item) return
+                      props.onActiveCountryChange(item.country)
+                    }}
+                    onClick={() => {
+                      const item = entry()
+                      if (!item) return
+                      props.onActiveCountryChange(item.country)
+                    }}
+                  />
+                )}
+              </Show>
             )
           }}
         </For>
@@ -732,6 +765,14 @@ function emptyCountryRecord(): Record<UsageRange, CountryEntry[]> {
 
 function countryNumericId(country: string) {
   return countryNumericIds.get(country.toUpperCase())?.padStart(3, "0")
+}
+
+function geoCountryMarker(country: (typeof worldCountries.features)[number]) {
+  const bounds = worldPath.bounds(country)
+  const [x, y] = worldPath.centroid(country)
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined
+  if (bounds[1][0] - bounds[0][0] >= 3 && bounds[1][1] - bounds[0][1] >= 3) return undefined
+  return { x, y }
 }
 
 function formatCountryName(country: string) {
