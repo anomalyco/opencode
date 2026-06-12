@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Layer, Option } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { Connector } from "@opencode-ai/core/connector"
+import { Integration } from "@opencode-ai/core/integration"
 import { Credential } from "@opencode-ai/core/credential"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
@@ -22,35 +22,38 @@ const it = testEffect(
   Catalog.locationLayer.pipe(
     Layer.provideMerge(EventV2.defaultLayer),
     Layer.provideMerge(locationLayer),
-    Layer.provideMerge(Layer.mock(Credential.Service)({ activeAll: () => Effect.succeed(new Map()) })),
+    Layer.provideMerge(
+      Layer.mock(Credential.Service)({
+        all: () => Effect.succeed([]),
+      }),
+    ),
   ),
 )
 
 describe("CatalogV2", () => {
   it.effect("projects active credentials without rebuilding catalog state", () => {
-    const connectorID = Connector.ID.make("test")
-    const methodID = Connector.MethodID.make("api-key")
-    const first = new Credential.Info({
+    const integrationID = Integration.ID.make("test")
+    const first = {
       id: Credential.ID.create(),
-      connectorID,
-      methodID,
+      integrationID,
       label: "First",
       value: new Credential.Key({ type: "key", key: "first", metadata: { tenant: "one" } }),
-    })
-    const second = new Credential.Info({
+    }
+    const second = {
       id: Credential.ID.create(),
-      connectorID,
-      methodID,
+      integrationID,
       label: "Second",
       value: new Credential.Key({ type: "key", key: "second", metadata: { tenant: "two" } }),
-    })
+    }
     let active = first
     const layer = Catalog.locationLayer.pipe(
       Layer.fresh,
       Layer.provideMerge(EventV2.defaultLayer),
       Layer.provideMerge(locationLayer),
       Layer.provideMerge(
-        Layer.mock(Credential.Service)({ activeAll: () => Effect.succeed(new Map([[connectorID, active]])) }),
+        Layer.mock(Credential.Service)({
+          all: () => Effect.sync(() => [active]),
+        }),
       ),
     )
 
