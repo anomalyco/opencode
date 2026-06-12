@@ -18,6 +18,8 @@ const AgentSchema = Schema.StructWithRest(
     temperature: Schema.optional(Schema.Finite),
     top_p: Schema.optional(Schema.Finite),
     prompt: Schema.optional(Schema.String),
+    plan_reminder: Schema.optional(Schema.String),
+    build_switch_reminder: Schema.optional(Schema.String),
     tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({
       description: "@deprecated Use 'permission' field instead",
     }),
@@ -45,6 +47,8 @@ const KNOWN_KEYS = new Set([
   "model",
   "variant",
   "prompt",
+  "plan_reminder",
+  "build_switch_reminder",
   "description",
   "temperature",
   "top_p",

@@ -6,7 +6,6 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { PartID } from "./schema"
-import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import PROMPT_PLAN from "./prompt/plan.txt"
 import BUILD_SWITCH from "./prompt/build-switch.txt"
@@ -25,23 +24,33 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
 
   if (!flags.experimentalPlanMode) {
     if (input.agent.name === "plan") {
+      const text = yield* Effect.gen(function* () {
+        if (!input.agent.planReminder) return PROMPT_PLAN
+        const state = yield* planState(input.session, fsys)
+        return render(input.agent.planReminder, state.planReminder)
+      })
       userMessage.parts.push({
         id: PartID.ascending(),
         messageID: userMessage.info.id,
         sessionID: userMessage.info.sessionID,
         type: "text",
-        text: PROMPT_PLAN,
+        text,
         synthetic: true,
       })
     }
     const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
     if (wasPlan && input.agent.name === "build") {
+      const text = yield* Effect.gen(function* () {
+        if (!input.agent.buildSwitchReminder) return BUILD_SWITCH
+        const state = yield* planState(input.session, fsys)
+        return render(input.agent.buildSwitchReminder, state.buildSwitch)
+      })
       userMessage.parts.push({
         id: PartID.ascending(),
         messageID: userMessage.info.id,
         sessionID: userMessage.info.sessionID,
         type: "text",
-        text: BUILD_SWITCH,
+        text,
         synthetic: true,
       })
     }
@@ -50,17 +59,17 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
 
   const assistantMessage = input.messages.findLast((msg) => msg.info.role === "assistant")
   if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
-    const ctx = yield* InstanceState.context
-    const plan = Session.plan(input.session, ctx)
-    const exists = yield* fsys.existsSafe(plan)
+    const state = yield* planState(input.session, fsys)
     const part = yield* sessions.updatePart({
       id: PartID.ascending(),
       messageID: userMessage.info.id,
       sessionID: userMessage.info.sessionID,
       type: "text",
-      text: exists
-        ? `${BUILD_SWITCH}\n\nA plan file exists at ${plan}. You should execute on the plan defined within it`
-        : BUILD_SWITCH,
+      text: input.agent.buildSwitchReminder
+        ? render(input.agent.buildSwitchReminder, state.buildSwitch)
+        : state.exists
+          ? `${BUILD_SWITCH}\n\n${state.buildSwitch}`
+          : BUILD_SWITCH,
       synthetic: true,
     })
     userMessage.parts.push(part)
@@ -69,24 +78,38 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
 
   if (input.agent.name !== "plan" || assistantMessage?.info.agent === "plan") return input.messages
 
-  const ctx = yield* InstanceState.context
-  const plan = Session.plan(input.session, ctx)
-  const exists = yield* fsys.existsSafe(plan)
-  if (!exists) yield* fsys.ensureDir(path.dirname(plan)).pipe(Effect.catch(Effect.die))
+  const state = yield* planState(input.session, fsys)
+  if (!state.exists) yield* fsys.ensureDir(path.dirname(state.filepath)).pipe(Effect.catch(Effect.die))
   const part = yield* sessions.updatePart({
     id: PartID.ascending(),
     messageID: userMessage.info.id,
     sessionID: userMessage.info.sessionID,
     type: "text",
-    text: PLAN_MODE.replace("${planInfo}", () =>
-      exists
-        ? `A plan file already exists at ${plan}. You can read it and make incremental edits using the edit tool.`
-        : `No plan file exists yet. You should create your plan at ${plan} using the write tool.`,
-    ),
+    text: input.agent.planReminder ? render(input.agent.planReminder, state.planReminder) : render(PLAN_MODE, state.planReminder),
     synthetic: true,
   })
   userMessage.parts.push(part)
   return input.messages
 })
+
+function render(template: string, planInfo: string) {
+  return template.replaceAll("${planInfo}", planInfo)
+}
+
+function planState(session: Session.Info, fsys: FSUtil.Interface) {
+  return Effect.gen(function* () {
+    const ctx = yield* InstanceState.context
+    const filepath = Session.plan(session, ctx)
+    const exists = yield* fsys.existsSafe(filepath)
+    return {
+      exists,
+      filepath,
+      planReminder: exists
+        ? `A plan file already exists at ${filepath}. You can read it and make incremental edits using the edit tool.`
+        : `No plan file exists yet. You should create your plan at ${filepath} using the write tool.`,
+      buildSwitch: exists ? `A plan file exists at ${filepath}. You should execute on the plan defined within it` : "",
+    }
+  })
+}
 
 export * as SessionReminders from "./reminders"

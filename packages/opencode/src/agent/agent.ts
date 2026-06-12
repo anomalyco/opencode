@@ -50,6 +50,8 @@ export const Info = Schema.Struct({
   ),
   variant: Schema.optional(Schema.String),
   prompt: Schema.optional(Schema.String),
+  planReminder: Schema.optional(Schema.String),
+  buildSwitchReminder: Schema.optional(Schema.String),
   options: Schema.Record(Schema.String, Schema.Unknown),
   steps: Schema.optional(Schema.Finite),
 }).annotate({ identifier: "Agent" })
@@ -279,6 +281,8 @@ export const layer = Layer.effect(
           if (value.model) item.model = Provider.parseModel(value.model)
           item.variant = value.variant ?? item.variant
           item.prompt = value.prompt ?? item.prompt
+          item.planReminder = value.plan_reminder ?? item.planReminder
+          item.buildSwitchReminder = value.build_switch_reminder ?? item.buildSwitchReminder
           item.description = value.description ?? item.description
           item.temperature = value.temperature ?? item.temperature
           item.topP = value.top_p ?? item.topP

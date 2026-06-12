@@ -115,6 +115,8 @@ export function migrateAgent(info: ConfigAgentV1.Info) {
     variant: info.variant,
     request: Object.keys(body).length ? { body } : undefined,
     system: info.prompt,
+    plan_reminder: info.plan_reminder,
+    build_switch_reminder: info.build_switch_reminder,
     description: info.description,
     mode: info.mode,
     hidden: info.hidden,

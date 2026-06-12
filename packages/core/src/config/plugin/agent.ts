@@ -24,6 +24,8 @@ const agentKeys = new Set([
   "variant",
   "request",
   "system",
+  "plan_reminder",
+  "build_switch_reminder",
   "description",
   "mode",
   "hidden",
@@ -87,6 +89,8 @@ export const Plugin = PluginV2.define({
               Object.assign(agent.request.body, item.request.body ?? {})
             }
             if (item.system !== undefined) agent.system = item.system
+            if (item.plan_reminder !== undefined) agent.planReminder = item.plan_reminder
+            if (item.build_switch_reminder !== undefined) agent.buildSwitchReminder = item.build_switch_reminder
             if (item.description !== undefined) agent.description = item.description
             if (item.mode !== undefined) agent.mode = item.mode
             if (item.hidden !== undefined) agent.hidden = item.hidden

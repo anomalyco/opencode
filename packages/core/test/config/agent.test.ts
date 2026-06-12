@@ -121,6 +121,8 @@ describe("ConfigAgentPlugin.Plugin", () => {
                   reviewer: {
                     model: "anthropic/claude-sonnet",
                     system: "Review carefully.",
+                    plan_reminder: "Plan carefully ${planInfo}",
+                    build_switch_reminder: "Build carefully ${planInfo}",
                     description: "Reviews changes",
                     mode: "subagent",
                     hidden: true,
@@ -159,6 +161,8 @@ describe("ConfigAgentPlugin.Plugin", () => {
       if (!reviewer) throw new Error("expected configured reviewer agent")
       expect(reviewer).toMatchObject({
         system: "Review carefully.",
+        planReminder: "Plan carefully ${planInfo}",
+        buildSwitchReminder: "Build carefully ${planInfo}",
         description: "Reviews changes",
         mode: "subagent",
         hidden: true,
@@ -215,6 +219,8 @@ describe("ConfigAgentPlugin.Plugin", () => {
 model: openrouter/openai/gpt-5
 description: Markdown description
 temperature: 0.5
+plan_reminder: Markdown plan reminder \${planInfo}
+build_switch_reminder: Markdown build reminder \${planInfo}
 tools:
   write: false
 ---
@@ -259,6 +265,8 @@ Use native v2 fields.`,
           expect(yield* agents.get(AgentV2.ID.make("reviewer"))).toMatchObject({
             model: { providerID: "openrouter", id: "openai/gpt-5" },
             system: "Review carefully.",
+            planReminder: "Markdown plan reminder ${planInfo}",
+            buildSwitchReminder: "Markdown build reminder ${planInfo}",
             description: "Markdown description",
             request: { body: { temperature: 0.5 } },
             permissions: [{ action: "edit", resource: "*", effect: "deny" }],

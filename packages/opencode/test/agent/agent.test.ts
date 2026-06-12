@@ -371,6 +371,25 @@ it.instance(
 )
 
 it.instance(
+  "agent reminder overrides can be set from config",
+  () =>
+    Effect.gen(function* () {
+      const build = yield* load((svc) => svc.get("build"))
+      const plan = yield* load((svc) => svc.get("plan"))
+      expect(build?.buildSwitchReminder).toBe("Custom build reminder")
+      expect(plan?.planReminder).toBe("Custom plan reminder")
+    }),
+  {
+    config: {
+      agent: {
+        build: { build_switch_reminder: "Custom build reminder" },
+        plan: { plan_reminder: "Custom plan reminder" },
+      },
+    },
+  },
+)
+
+it.instance(
   "unknown agent properties are placed into options",
   () =>
     Effect.gen(function* () {

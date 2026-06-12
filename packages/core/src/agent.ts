@@ -22,6 +22,8 @@ export class Info extends Schema.Class<Info>("AgentV2.Info")({
   model: ModelV2.Ref.pipe(Schema.optional),
   request: ProviderV2.Request,
   system: Schema.String.pipe(Schema.optional),
+  planReminder: Schema.String.pipe(Schema.optional),
+  buildSwitchReminder: Schema.String.pipe(Schema.optional),
   description: Schema.String.pipe(Schema.optional),
   mode: Schema.Literals(["subagent", "primary", "all"]),
   hidden: Schema.Boolean,

@@ -144,6 +144,30 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("migrates v1 agent reminder overrides", () =>
+    Effect.sync(() => {
+      const migrated = ConfigMigrateV1.migrate({
+        agent: {
+          plan: {
+            prompt: "Plan system",
+            plan_reminder: "Plan reminder ${planInfo}",
+          },
+          build: {
+            build_switch_reminder: "Build reminder ${planInfo}",
+          },
+        },
+      })
+
+      expect(migrated.agents?.plan).toMatchObject({
+        system: "Plan system",
+        plan_reminder: "Plan reminder ${planInfo}",
+      })
+      expect(migrated.agents?.build).toMatchObject({
+        build_switch_reminder: "Build reminder ${planInfo}",
+      })
+    }),
+  )
+
   it.live("returns an empty configuration when directory files do not exist", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
