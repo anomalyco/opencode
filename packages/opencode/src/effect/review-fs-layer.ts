@@ -1,5 +1,6 @@
 import { Effect, FileSystem, Layer, Option } from "effect"
 import * as PlatformError from "effect/PlatformError"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { ReviewOverlay } from "@opencode-ai/core/review-overlay"
 
@@ -136,5 +137,7 @@ export const layer = Layer.effect(
 ).pipe(Layer.provide(FSUtil.defaultLayer))
 
 export const defaultLayer = layer
+
+export const node = LayerNode.make(layer, [FSUtil.node])
 
 export * as ReviewFs from "./review-fs-layer"
