@@ -120,7 +120,6 @@ export function RunFooterSubagentBody(props: {
 
   return (
     <box
-      id="run-direct-footer-subagent"
       width="100%"
       height="100%"
       flexDirection="column"
