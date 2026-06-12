@@ -27,7 +27,7 @@ import { ApplicationTools } from "../src/tool/application-tools"
 const applicationTools = ApplicationTools.layer
 const it = testEffect(
   Layer.merge(
-    applicationTools,
+    Layer.mergeAll(applicationTools, Database.defaultLayer, EventV2.defaultLayer),
     LocationServiceMap.layer.pipe(
       Layer.provide(applicationTools),
       Layer.provide(
@@ -135,4 +135,5 @@ describe("LocationServiceMap", () => {
       ),
     ),
   )
+
 })
