@@ -61,6 +61,11 @@ import { working } from "@/pages/session/session-working"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
+import {
+  collectSessionLayoutMetrics,
+  logSessionLayout,
+  type SessionLayoutMetrics,
+} from "@/pages/session/session-layout-debug"
 import { Identifier } from "@/utils/id"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
@@ -675,7 +680,19 @@ export default function Page() {
     })
   }
 
-  const debug = (_src: string, _el = scroller, _extra?: Record<string, unknown>) => {
+  const debug = (src: string, el = scroller, extra: SessionLayoutMetrics = {}) => {
+    const metrics = collectSessionLayoutMetrics({
+      root: el,
+      content,
+      sessionId: params.id,
+      directory: sdk.directory,
+      renderedCount: visibleUserMessages().length,
+      visibleCount: visibleUserMessages().length,
+      currentId: store.messageId,
+      seekingId: ui.seekingMessageId,
+      live: live(),
+    })
+    logSessionLayout(`page:${src}`, metrics, extra)
   }
 
   createEffect(
@@ -2007,6 +2024,7 @@ export default function Page() {
   const { clearMessageHash, scrollToMessage } = useSessionHashScroll({
     sessionKey,
     sessionID: () => params.id,
+    directory: () => sdk.directory,
     messagesReady,
     live,
     visibleUserMessages,

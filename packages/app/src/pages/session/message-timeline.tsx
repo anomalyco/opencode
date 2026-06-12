@@ -41,6 +41,11 @@ import {
   timelineVirtualizationEnabled,
   visibleMarkdownRenderReady,
 } from "@/pages/session/message-timeline-utils"
+import {
+  collectSessionLayoutMetrics,
+  logSessionLayout,
+  sessionLayoutDebugEnabled,
+} from "@/pages/session/session-layout-debug"
 import { resolveLinkedPath } from "@/pages/session/message-link-path"
 import { parseCommentNote, readCommentMetadata } from "@/utils/comment-note"
 import { messageAgentColor } from "@/utils/agent"
@@ -408,6 +413,9 @@ export function MessageTimeline(props: {
   let pinFrame: number | undefined
   let pinSource = "unknown"
   let blank: number | undefined
+  let layoutFrame: number | undefined
+  let layoutSource = "unknown"
+  let layoutLastAt = 0
   let lagAt = 0
   let lagMax = 0
   let mdWasDebug = false
@@ -905,6 +913,56 @@ export function MessageTimeline(props: {
     )
   })
 
+  const layoutVisibleCount = () => {
+    const ids = rendered()
+    if (!canWindow()) return ids.length
+    const end = Math.min(ids.length, windowed.end)
+    return Math.max(0, end - windowed.start)
+  }
+
+  const collectLayout = () =>
+    collectSessionLayoutMetrics({
+      root: viewport,
+      content: contentRef,
+      sessionId: params.id,
+      directory: sdk.directory,
+      renderedCount: rendered().length,
+      visibleCount: layoutVisibleCount(),
+      canWindow: canWindow(),
+      windowStart: windowed.start,
+      windowEnd: Number.isFinite(windowed.end) ? windowed.end : rendered().length,
+      windowTop: windowed.top,
+      windowBottom: windowed.bottom,
+      totalHeight: totalHeight(),
+      measuredCount: turnHeights.size,
+      currentId: props.currentMessageId,
+      seekingId: props.seekingMessageId,
+      live: props.live,
+    })
+
+  const probeLayout = (source: string, force = false) => {
+    const root = viewport
+    if (!root) return
+    const max = Math.max(0, root.scrollHeight - root.clientHeight)
+    const nearBottom = max - root.scrollTop <= 80
+    if (!force && !sessionLayoutDebugEnabled() && !nearBottom) return
+
+    const now = performance.now()
+    if (!force && now - layoutLastAt < 250) return
+    layoutSource = source
+    if (layoutFrame !== undefined) {
+      if (!force) return
+      cancelAnimationFrame(layoutFrame)
+      layoutFrame = undefined
+    }
+
+    layoutFrame = requestAnimationFrame(() => {
+      layoutFrame = undefined
+      layoutLastAt = performance.now()
+      logSessionLayout(layoutSource, collectLayout(), { mode: props.live ? "live" : "history" }, { force })
+    })
+  }
+
   const [renderOverlayStatus, setRenderOverlayStatus] = createSignal<SessionRenderOverlayStatus>("hidden")
   let renderOverlayStartedAt = 0
   let renderOverlayToken = 0
@@ -1301,7 +1359,7 @@ export function MessageTimeline(props: {
         : props.currentMessageId
           ? targetAnchor
           : viewportAnchor
-    const base = props.seekingMessageId ? buildTargetWindow(props.seekingMessageId) : buildWindow()
+    const base = props.seekingMessageId && canWindow() ? buildTargetWindow(props.seekingMessageId) : buildWindow()
     const next = syncWindow(base, (pinned || jumping) ? undefined : targetId)
     const same = sameWindow(next)
     if (seek) {
@@ -1310,6 +1368,9 @@ export function MessageTimeline(props: {
         seek,
         `base=[${base.start},${base.end}] baseTop=${Math.round(base.top)} baseBottom=${Math.round(base.bottom)} next=[${next.start},${next.end}] nextTop=${Math.round(next.top)} nextBottom=${Math.round(next.bottom)} same=${same} pinned=${pinned} target=${targetId || "none"} anchor=${scrollAnchor?.id || "none"}`,
       )
+      probeLayout("apply-window:seek", true)
+    } else {
+      probeLayout("apply-window")
     }
     if (same && !seek) {
       if ((pinned || jumping) && root) {
@@ -1463,6 +1524,7 @@ export function MessageTimeline(props: {
       if (hit.length > 0) return
 
       if (props.seekingMessageId) {
+        probeLayout("blank-audit", true)
         trace(
           "blank",
           props.seekingMessageId,
@@ -1607,6 +1669,7 @@ export function MessageTimeline(props: {
     if (bottomFrame !== undefined) cancelAnimationFrame(bottomFrame)
     if (mutationFrame !== undefined) cancelAnimationFrame(mutationFrame)
     if (pinFrame !== undefined) cancelAnimationFrame(pinFrame)
+    if (layoutFrame !== undefined) cancelAnimationFrame(layoutFrame)
     if (blank !== undefined) cancelAnimationFrame(blank)
     clearRenderOverlayTimers()
     props.onRenderOverlayStatusChange?.("hidden")
@@ -1619,6 +1682,7 @@ export function MessageTimeline(props: {
     if (!body) return
 
     const sync = () => {
+      probeLayout("content-resize")
       schedulePin("content-resize")
     }
 
@@ -2084,6 +2148,7 @@ export function MessageTimeline(props: {
 
   const jumpTo = (message: UserMessage) => {
     trace("click", message.id, `bottom=${props.scroll.bottom} live=${props.live}`)
+    probeLayout("jump-click", true)
     setJump(false)
     props.onJumpToMessage(message)
   }
@@ -2438,6 +2503,7 @@ export function MessageTimeline(props: {
             console.warn(
               `[flash-debug] MessageTimeline:viewportRef mounted scrollHeight=${el.scrollHeight} clientHeight=${el.clientHeight} scrollTop=${el.scrollTop} time=${performance.now().toFixed(1)}`,
             )
+            probeLayout("viewport-mounted", true)
             scheduleWindow()
           }}
           onWheel={(e) => {
@@ -2478,8 +2544,9 @@ export function MessageTimeline(props: {
           onScroll={(e) => {
             const root = e.currentTarget
             const shouldWin = shouldWindow()
-            props.onScheduleScrollState(e.currentTarget)
+            props.onScheduleScrollState(root)
             audit("scroll")
+            probeLayout("scroll")
             const gesture = props.hasScrollGesture()
             // Programmatic scroll corrections also emit scroll events. Only let
             // real user gestures drive the auto-scroll state machine, otherwise
@@ -2535,7 +2602,7 @@ export function MessageTimeline(props: {
                   </Button>
                 </div>
               </Show>
-              <Show when={windowed.top > 0}>
+              <Show when={canWindow() && windowed.top > 0}>
                 <div class="w-full shrink-0" style={{ height: `${windowed.top}px` }} aria-hidden="true" />
               </Show>
               <div class="w-full contents">
@@ -2543,7 +2610,7 @@ export function MessageTimeline(props: {
                   {(messageID) => <TimelineItem index={renderedIndex().get(messageID) ?? 0} messageID={messageID} />}
                 </For>
               </div>
-              <Show when={windowed.bottom > 0}>
+              <Show when={canWindow() && windowed.bottom > 0}>
                 <div class="w-full shrink-0" style={{ height: `${windowed.bottom}px` }} aria-hidden="true" />
               </Show>
             </div>

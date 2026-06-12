@@ -2,11 +2,13 @@ import type { UserMessage } from "@opencode-ai/sdk/v2"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
 import { messageIdFromHash } from "./message-id-from-hash"
+import { collectSessionLayoutMetrics, logSessionLayout, type SessionLayoutMetrics } from "./session-layout-debug"
 import { targetTop } from "./use-session-scroll-utils"
 
 export const useSessionHashScroll = (input: {
   sessionKey: () => string
   sessionID: () => string | undefined
+  directory?: () => string
   messagesReady: () => boolean
   live: () => boolean
   visibleUserMessages: () => UserMessage[]
@@ -55,6 +57,20 @@ export const useSessionHashScroll = (input: {
     console.debug(
       `[jump] stage=${stage} id=${id || "none"} current=${input.currentMessageId() || "none"} scrollTop=${data?.top ?? "none"} scrollHeight=${data?.height ?? "none"} clientHeight=${data?.client ?? "none"} max=${data?.max ?? "none"} gap=${data?.gap ?? "none"} visible=${visibleUserMessages().length}${extra ? ` ${extra}` : ""}`,
     )
+  }
+
+  const traceLayout = (stage: string, id?: string, extra: SessionLayoutMetrics = {}, force = false) => {
+    const metrics = collectSessionLayoutMetrics({
+      root: input.scroller(),
+      sessionId: input.sessionID(),
+      directory: input.directory?.(),
+      renderedCount: visibleUserMessages().length,
+      visibleCount: visibleUserMessages().length,
+      currentId: input.currentMessageId(),
+      seekingId: id,
+      live: input.live(),
+    })
+    logSessionLayout(`hash:${stage}`, metrics, { id: id ?? "none", ...extra }, { force })
   }
 
   createEffect(() => {
@@ -122,9 +138,26 @@ export const useSessionHashScroll = (input: {
       id,
       `behavior=${behavior} targetTop=${Math.round(top)} itemTop=${Math.round(a.top - b.top)} itemBottom=${Math.round(a.bottom - b.top)} itemHeight=${Math.round(a.height)} inset=${Math.round(inset)} beforeTop=${before?.top ?? "none"} beforeHeight=${before?.height ?? "none"}`,
     )
+    traceLayout(
+      "scroll-before",
+      id,
+      {
+        behavior,
+        targetTop: Math.round(top),
+        itemTop: Math.round(a.top - b.top),
+        itemBottom: Math.round(a.bottom - b.top),
+        itemHeight: Math.round(a.height),
+        inset: Math.round(inset),
+        beforeTop: before?.top,
+        beforeHeight: before?.height,
+      },
+      true,
+    )
     root.scrollTo({ top, behavior })
     const after = snap(root)
     trace("scroll-after", id, `behavior=${behavior} afterTop=${after?.top ?? "none"} afterHeight=${after?.height ?? "none"}`)
+    traceLayout("scroll-after", id, { behavior, afterTop: after?.top, afterHeight: after?.height }, true)
+    queue(() => traceLayout("scroll-after-raf", id, { behavior }, true))
     return true
   }
 
@@ -204,6 +237,7 @@ export const useSessionHashScroll = (input: {
 
   const scrollToMessage = (message: UserMessage, behavior: ScrollBehavior = "smooth") => {
     trace("message-start", message.id, `behavior=${behavior}`)
+    traceLayout("message-start", message.id, { behavior }, true)
     cancel()
     input.setSeekingMessage(message.id)
     input.enterAnchored()
