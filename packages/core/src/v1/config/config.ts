@@ -179,6 +179,10 @@ export const Info = Schema.Struct({
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),
+      read_screenshots: Schema.optional(Schema.Boolean).annotate({
+        description:
+          "Return read tool results as syntax-highlighted PNG screenshots instead of text for vision-capable models (currently GPT-5.5 and Claude Fable 5). Experimental token-cost reduction.",
+      }),
       policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
         description: "Policy statements applied to supported resources, such as provider access",
       }),

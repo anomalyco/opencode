@@ -9,6 +9,9 @@ import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { Config } from "@/config/config"
+import { ReadScreenshot } from "./read-screenshot/read-screenshot"
+import type { Provider } from "@/provider/provider"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -64,13 +67,14 @@ type Metadata = {
 export const ReadTool = Tool.define<
   typeof Parameters,
   Metadata,
-  FSUtil.Service | Instruction.Service | LSP.Service | Scope.Scope
+  FSUtil.Service | Instruction.Service | LSP.Service | Config.Service | Scope.Scope
 >(
   "read",
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const instruction = yield* Instruction.Service
     const lsp = yield* LSP.Service
+    const config = yield* Config.Service
     const scope = yield* Scope.Scope
 
     const miss = Effect.fn("ReadTool.miss")(function* (filepath: string) {
@@ -335,19 +339,41 @@ export const ReadTool = Tool.define<
         )
       }
 
-      let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>\n"].join("\n")
-      output += file.raw.map((line, i) => `${i + file.offset}: ${line}`).join("\n")
-
       const last = file.offset + file.raw.length - 1
       const next = last + 1
       const truncated = file.more || file.cut
-      if (file.cut) {
-        output += `\n\n(Output capped at ${MAX_BYTES_LABEL}. Showing lines ${file.offset}-${last}. Use offset=${next} to continue.)`
-      } else if (file.more) {
-        output += `\n\n(Showing lines ${file.offset}-${last} of ${file.count}. Use offset=${next} to continue.)`
-      } else {
-        output += `\n\n(End of file - total ${file.count} lines)`
-      }
+      const status = file.cut
+        ? `(Output capped at ${MAX_BYTES_LABEL}. Showing lines ${file.offset}-${last}. Use offset=${next} to continue.)`
+        : file.more
+          ? `(Showing lines ${file.offset}-${last} of ${file.count}. Use offset=${next} to continue.)`
+          : `(End of file - total ${file.count} lines)`
+
+      const model = ctx.extra?.["model"] as Provider.Model | undefined
+      const screenshots =
+        (yield* config.get()).experimental?.read_screenshots &&
+        file.raw.length > 0 &&
+        model &&
+        ReadScreenshot.supports(model.api.id)
+          ? yield* ReadScreenshot.render({
+              path: title,
+              filepath,
+              lines: file.raw,
+              offset: file.offset,
+              total: file.cut ? undefined : file.count,
+            }).pipe(
+              Effect.catch((error) =>
+                Effect.logWarning("screenshot rendering failed, falling back to text", { error }).pipe(
+                  Effect.as(undefined),
+                ),
+              ),
+            )
+          : undefined
+
+      let output = [`<path>${filepath}</path>`, `<type>file</type>`, "<content>\n"].join("\n")
+      output += screenshots
+        ? `(File content attached as ${screenshots.length} screenshot image${screenshots.length === 1 ? "" : "s"} covering lines ${file.offset}-${last}. The gutter shows real file line numbers; lines wider than ${ReadScreenshot.COLUMNS} columns wrap onto unnumbered rows.)`
+        : file.raw.map((line, i) => `${i + file.offset}: ${line}`).join("\n")
+      output += `\n\n${status}`
       output += "\n</content>"
 
       yield* warm(filepath)
@@ -373,6 +399,13 @@ export const ReadTool = Tool.define<
             truncated,
           },
         },
+        ...(screenshots && {
+          attachments: screenshots.map((page) => ({
+            type: "file" as const,
+            mime: "image/png",
+            url: page.url,
+          })),
+        }),
       }
     })
 
