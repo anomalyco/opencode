@@ -325,10 +325,7 @@ export const locationLayer = Layer.effect(
       finalize: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
     })
 
-    const connections = (
-      entry: Entry,
-      saved: readonly Credential.Stored[],
-    ): IntegrationConnection.Info[] => {
+    const connections = (entry: Entry, saved: readonly Credential.Stored[]): IntegrationConnection.Info[] => {
       const connected = saved.map(
         (credential) =>
           new IntegrationConnection.CredentialInfo({ type: "credential", id: credential.id, label: credential.label }),
