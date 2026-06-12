@@ -11184,10 +11184,10 @@
         ]
       }
     },
-    "/api/connector": {
+    "/api/integration": {
       "get": {
-        "tags": ["connectors"],
-        "operationId": "v2.connector.list",
+        "tags": ["integrations"],
+        "operationId": "v2.integration.list",
         "parameters": [
           {
             "name": "location",
@@ -11224,7 +11224,7 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/ConnectorInfo"
+                        "$ref": "#/components/schemas/IntegrationInfo"
                       }
                     }
                   },
@@ -11255,23 +11255,23 @@
             }
           }
         },
-        "description": "Retrieve available connectors and their authentication methods.",
-        "summary": "List connectors",
+        "description": "Retrieve available integrations and their authentication methods.",
+        "summary": "List integrations",
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.connector.list({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.list({\n  ...\n})"
           }
         ]
       }
     },
-    "/api/connector/{connectorID}": {
+    "/api/integration/{integrationID}": {
       "get": {
-        "tags": ["connectors"],
-        "operationId": "v2.connector.get",
+        "tags": ["integrations"],
+        "operationId": "v2.integration.get",
         "parameters": [
           {
-            "name": "connectorID",
+            "name": "integrationID",
             "in": "path",
             "schema": {
               "type": "string"
@@ -11311,7 +11311,7 @@
                       "$ref": "#/components/schemas/LocationInfo"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/ConnectorInfo"
+                      "$ref": "#/components/schemas/IntegrationInfo"
                     }
                   },
                   "required": ["location", "data"],
@@ -11341,23 +11341,23 @@
             }
           }
         },
-        "description": "Retrieve one connector and its authentication methods.",
-        "summary": "Get connector",
+        "description": "Retrieve one integration and its authentication methods.",
+        "summary": "Get integration",
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.connector.get({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.get({\n  ...\n})"
           }
         ]
       }
     },
-    "/api/connector/{connectorID}/connect/key": {
+    "/api/integration/{integrationID}/connect/key": {
       "post": {
-        "tags": ["connectors"],
-        "operationId": "v2.connector.connect.key",
+        "tags": ["integrations"],
+        "operationId": "v2.integration.connect.key",
         "parameters": [
           {
-            "name": "connectorID",
+            "name": "integrationID",
             "in": "path",
             "schema": {
               "type": "string"
@@ -11425,23 +11425,14 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "methodID": {
-                    "type": "string"
-                  },
                   "key": {
                     "type": "string"
-                  },
-                  "inputs": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    }
                   },
                   "label": {
                     "type": "string"
                   }
                 },
-                "required": ["methodID", "key", "inputs"],
+                "required": ["key"],
                 "additionalProperties": false
               }
             }
@@ -11451,18 +11442,18 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.connector.connect.key({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.connect.key({\n  ...\n})"
           }
         ]
       }
     },
-    "/api/connector/{connectorID}/connect/oauth": {
+    "/api/integration/{integrationID}/connect/oauth": {
       "post": {
-        "tags": ["connectors"],
-        "operationId": "v2.connector.connect.oauth.begin",
+        "tags": ["integrations"],
+        "operationId": "v2.integration.connect.oauth",
         "parameters": [
           {
-            "name": "connectorID",
+            "name": "integrationID",
             "in": "path",
             "schema": {
               "type": "string"
@@ -11502,7 +11493,7 @@
                       "$ref": "#/components/schemas/LocationInfo"
                     },
                     "data": {
-                      "$ref": "#/components/schemas/ConnectorAttempt"
+                      "$ref": "#/components/schemas/IntegrationAttempt"
                     }
                   },
                   "required": ["location", "data"],
@@ -11570,15 +11561,15 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.connector.connect.oauth.begin({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.connect.oauth({\n  ...\n})"
           }
         ]
       }
     },
-    "/api/connector/oauth/{attemptID}": {
+    "/api/integration/attempt/{attemptID}": {
       "get": {
-        "tags": ["connectors"],
-        "operationId": "v2.connector.connect.oauth.status",
+        "tags": ["integrations"],
+        "operationId": "v2.integration.attempt.status",
         "parameters": [
           {
             "name": "attemptID",
@@ -11916,13 +11907,13 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.connector.connect.oauth.status({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.attempt.status({\n  ...\n})"
           }
         ]
       },
       "delete": {
-        "tags": ["connectors"],
-        "operationId": "v2.connector.connect.oauth.cancel",
+        "tags": ["integrations"],
+        "operationId": "v2.integration.attempt.cancel",
         "parameters": [
           {
             "name": "attemptID",
@@ -11983,15 +11974,15 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.connector.connect.oauth.cancel({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.attempt.cancel({\n  ...\n})"
           }
         ]
       }
     },
-    "/api/connector/oauth/{attemptID}/complete": {
+    "/api/integration/attempt/{attemptID}/complete": {
       "post": {
-        "tags": ["connectors"],
-        "operationId": "v2.connector.connect.oauth.complete",
+        "tags": ["integrations"],
+        "operationId": "v2.integration.attempt.complete",
         "parameters": [
           {
             "name": "attemptID",
@@ -12075,7 +12066,122 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.connector.connect.oauth.complete({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.attempt.complete({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/credential/{credentialID}": {
+      "patch": {
+        "tags": ["opencode HttpApi"],
+        "operationId": "v2.credential.update",
+        "parameters": [
+          {
+            "name": "credentialID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update a stored credential label.",
+        "summary": "Update credential",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": ["label"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.credential.update({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["opencode HttpApi"],
+        "operationId": "v2.credential.remove",
+        "parameters": [
+          {
+            "name": "credentialID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Remove a stored integration credential.",
+        "summary": "Remove credential",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.credential.remove({\n  ...\n})"
           }
         ]
       }
@@ -13469,15 +13575,6 @@
             "$ref": "#/components/schemas/EventModels-devRefreshed"
           },
           {
-            "$ref": "#/components/schemas/EventCredentialAdded"
-          },
-          {
-            "$ref": "#/components/schemas/EventCredentialRemoved"
-          },
-          {
-            "$ref": "#/components/schemas/EventCredentialSwitched"
-          },
-          {
             "$ref": "#/components/schemas/EventPluginAdded"
           },
           {
@@ -13616,7 +13713,7 @@
             "$ref": "#/components/schemas/EventFileEdited"
           },
           {
-            "$ref": "#/components/schemas/EventConnectorUpdated"
+            "$ref": "#/components/schemas/EventIntegrationUpdated"
           },
           {
             "$ref": "#/components/schemas/EventPermissionV2Asked"
@@ -15646,87 +15743,6 @@
                   },
                   "type": {
                     "type": "string",
-                    "enum": ["credential.added"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "credential": {
-                        "$ref": "#/components/schemas/CredentialInfo"
-                      }
-                    },
-                    "required": ["credential"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["credential.removed"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "credential": {
-                        "$ref": "#/components/schemas/CredentialInfo"
-                      }
-                    },
-                    "required": ["credential"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["credential.switched"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "connectorID": {
-                        "type": "string"
-                      },
-                      "from": {
-                        "type": "string"
-                      },
-                      "to": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["connectorID"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
                     "enum": ["plugin.added"]
                   },
                   "properties": {
@@ -17522,7 +17538,7 @@
                   },
                   "type": {
                     "type": "string",
-                    "enum": ["connector.updated"]
+                    "enum": ["integration.updated"]
                   },
                   "properties": {
                     "type": "object",
@@ -22150,85 +22166,6 @@
         "required": ["directory"],
         "additionalProperties": false
       },
-      "CredentialOAuth": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["oauth"]
-          },
-          "refresh": {
-            "type": "string"
-          },
-          "access": {
-            "type": "string"
-          },
-          "expires": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          }
-        },
-        "required": ["type", "refresh", "access", "expires"],
-        "additionalProperties": false
-      },
-      "CredentialKey": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["key"]
-          },
-          "key": {
-            "type": "string"
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          }
-        },
-        "required": ["type", "key"],
-        "additionalProperties": false
-      },
-      "CredentialValue": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/CredentialOAuth"
-          },
-          {
-            "$ref": "#/components/schemas/CredentialKey"
-          }
-        ]
-      },
-      "CredentialInfo": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "connectorID": {
-            "type": "string"
-          },
-          "methodID": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "value": {
-            "$ref": "#/components/schemas/CredentialValue"
-          }
-        },
-        "required": ["id", "connectorID", "methodID", "label", "value"],
-        "additionalProperties": false
-      },
       "ModelV2Info": {
         "type": "object",
         "properties": {
@@ -26280,7 +26217,7 @@
         "required": ["id", "name", "enabled", "env", "api", "request"],
         "additionalProperties": false
       },
-      "ConnectorWhen": {
+      "IntegrationWhen": {
         "type": "object",
         "properties": {
           "key": {
@@ -26297,7 +26234,7 @@
         "required": ["key", "op", "value"],
         "additionalProperties": false
       },
-      "ConnectorTextPrompt": {
+      "IntegrationTextPrompt": {
         "type": "object",
         "properties": {
           "type": {
@@ -26314,13 +26251,13 @@
             "type": "string"
           },
           "when": {
-            "$ref": "#/components/schemas/ConnectorWhen"
+            "$ref": "#/components/schemas/IntegrationWhen"
           }
         },
         "required": ["type", "key", "message"],
         "additionalProperties": false
       },
-      "ConnectorSelectPrompt": {
+      "IntegrationSelectPrompt": {
         "type": "object",
         "properties": {
           "type": {
@@ -26353,13 +26290,13 @@
             }
           },
           "when": {
-            "$ref": "#/components/schemas/ConnectorWhen"
+            "$ref": "#/components/schemas/IntegrationWhen"
           }
         },
         "required": ["type", "key", "message", "options"],
         "additionalProperties": false
       },
-      "ConnectorOAuthMethod": {
+      "IntegrationOAuthMethod": {
         "type": "object",
         "properties": {
           "id": {
@@ -26377,10 +26314,10 @@
             "items": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/ConnectorTextPrompt"
+                  "$ref": "#/components/schemas/IntegrationTextPrompt"
                 },
                 {
-                  "$ref": "#/components/schemas/ConnectorSelectPrompt"
+                  "$ref": "#/components/schemas/IntegrationSelectPrompt"
                 }
               ]
             }
@@ -26389,37 +26326,79 @@
         "required": ["id", "type", "label"],
         "additionalProperties": false
       },
-      "ConnectorKeyMethod": {
+      "IntegrationKeyMethod": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
           "type": {
             "type": "string",
             "enum": ["key"]
           },
           "label": {
             "type": "string"
+          }
+        },
+        "required": ["type"],
+        "additionalProperties": false
+      },
+      "IntegrationEnvMethod": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["env"]
           },
-          "prompts": {
+          "names": {
             "type": "array",
             "items": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/ConnectorTextPrompt"
-                },
-                {
-                  "$ref": "#/components/schemas/ConnectorSelectPrompt"
-                }
-              ]
+              "type": "string"
             }
           }
         },
-        "required": ["id", "type", "label"],
+        "required": ["type", "names"],
         "additionalProperties": false
       },
-      "ConnectorInfo": {
+      "ConnectionCredentialInfo": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["credential"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "id", "label"],
+        "additionalProperties": false
+      },
+      "ConnectionEnvInfo": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["env"]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "name"],
+        "additionalProperties": false
+      },
+      "ConnectionInfo": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ConnectionCredentialInfo"
+          },
+          {
+            "$ref": "#/components/schemas/ConnectionEnvInfo"
+          }
+        ]
+      },
+      "IntegrationInfo": {
         "type": "object",
         "properties": {
           "id": {
@@ -26433,19 +26412,28 @@
             "items": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/ConnectorOAuthMethod"
+                  "$ref": "#/components/schemas/IntegrationOAuthMethod"
                 },
                 {
-                  "$ref": "#/components/schemas/ConnectorKeyMethod"
+                  "$ref": "#/components/schemas/IntegrationKeyMethod"
+                },
+                {
+                  "$ref": "#/components/schemas/IntegrationEnvMethod"
                 }
               ]
             }
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionInfo"
+            }
           }
         },
-        "required": ["id", "name", "methods"],
+        "required": ["id", "name", "methods", "connections"],
         "additionalProperties": false
       },
-      "ConnectorAttempt": {
+      "IntegrationAttempt": {
         "type": "object",
         "properties": {
           "attemptID": {
@@ -26775,87 +26763,6 @@
           "properties": {
             "type": "object",
             "properties": {}
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventCredentialAdded": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["credential.added"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "credential": {
-                "$ref": "#/components/schemas/CredentialInfo"
-              }
-            },
-            "required": ["credential"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventCredentialRemoved": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["credential.removed"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "credential": {
-                "$ref": "#/components/schemas/CredentialInfo"
-              }
-            },
-            "required": ["credential"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventCredentialSwitched": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["credential.switched"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "connectorID": {
-                "type": "string"
-              },
-              "from": {
-                "type": "string"
-              },
-              "to": {
-                "type": "string"
-              }
-            },
-            "required": ["connectorID"],
-            "additionalProperties": false
           }
         },
         "required": ["id", "type", "properties"],
@@ -29178,7 +29085,7 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
-      "EventConnectorUpdated": {
+      "EventIntegrationUpdated": {
         "type": "object",
         "properties": {
           "id": {
@@ -29187,7 +29094,7 @@
           },
           "type": {
             "type": "string",
-            "enum": ["connector.updated"]
+            "enum": ["integration.updated"]
           },
           "properties": {
             "type": "object",
@@ -30400,8 +30307,12 @@
       "description": "Experimental provider routes."
     },
     {
-      "name": "connectors",
-      "description": "Connector discovery and authentication routes."
+      "name": "integrations",
+      "description": "Integration discovery and authentication routes."
+    },
+    {
+      "name": "opencode HttpApi",
+      "description": "Experimental HttpApi surface for selected instance routes."
     },
     {
       "name": "permissions",
