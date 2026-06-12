@@ -50,7 +50,9 @@ const CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION =
 // disk seeding, no version skew between binary and manual).
 const SECURECODE_MANUAL_SKILL_NAME = "securecode-manual"
 const SECURECODE_MANUAL_SKILL_DESCRIPTION =
-  "Use this skill when the user asks how to install, configure, run, or troubleshoot Acompany SecureCode itself (the CLI they are currently talking through). Covers installation, first-run setup, subcommands, configuration files, sandbox behavior, API key handling, and common errors."
+  "End-user manual for Acompany SecureCode itself (the CLI currently running this session): installation, first-run, subcommands, configuration files (securecode.json / tui.json / sandbox.json), 2-layer sandbox + permission behavior, API key handling, and common errors. " +
+  "TRIGGER — load BEFORE answering, never answer from memory — whenever the prompt: names SecureCode / セキュアコード / the `securecode` binary; asks how to install / アップグレード / 初回起動 / API キーを設定; references a `securecode <subcommand>` (`serve` / `attach` / `agent` / `models` / `mcp` / `upgrade` / ...); mentions sandbox / サンドボックス / permission dialog / 許可ダイアログ / allowlist / 外部通信がブロックされる / fetch blocked; or reports an error such as 「動かない」「起動しない」/ 401 / 502 / upgrade failed. " +
+  "SKIP when the question is about the user's own application code, a third-party library, general programming concepts, or other CLI tools (`git`, `npm`, ...)."
 const SECURECODE_MANUAL_SKILL_BODY = [
   SECURECODE_MANUAL_OVERVIEW,
   SECURECODE_MANUAL_INSTALLATION,

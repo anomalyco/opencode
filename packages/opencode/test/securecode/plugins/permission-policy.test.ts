@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  EXEMPT_BUILTIN_SKILLS,
   EXEMPT_PERMISSIONS,
   PermissionPolicyPlugin,
   shouldEnforce,
@@ -115,6 +116,23 @@ describe("shouldEnforce", () => {
     expect(shouldEnforce("grep", "TODO", "allow", {})).toBe(false)
     expect(shouldEnforce("glob", "**/*.ts", "allow", {})).toBe(false)
   })
+
+  test("built-in skills bypass escalation even without user opt-in", () => {
+    for (const name of EXEMPT_BUILTIN_SKILLS) {
+      expect(shouldEnforce("skill", name, "allow", {})).toBe(false)
+    }
+  })
+
+  test("non-built-in skill loads still escalate when user has not opted in", () => {
+    expect(shouldEnforce("skill", "third-party-skill", "allow", {})).toBe(true)
+    expect(shouldEnforce("skill", "user-skill", "allow", {})).toBe(true)
+  })
+
+  test("built-in skill exemption does not leak to other permission keys with the same name", () => {
+    // Defense-in-depth: the exemption is keyed on (type=skill, pattern=name).
+    // A bash command literally named `securecode-manual` should still escalate.
+    expect(shouldEnforce("bash", "securecode-manual", "allow", {})).toBe(true)
+  })
 })
 
 describe("PermissionPolicyPlugin permission.ask hook", () => {
@@ -151,6 +169,16 @@ describe("PermissionPolicyPlugin permission.ask hook", () => {
     for (const tool of EXEMPT_PERMISSIONS) {
       expect(await runHook({}, tool, "*", "allow")).toBe("allow")
     }
+  })
+
+  test("leaves allow alone for built-in skill loads even when user has not opted in", async () => {
+    for (const name of EXEMPT_BUILTIN_SKILLS) {
+      expect(await runHook({}, "skill", name, "allow")).toBe("allow")
+    }
+  })
+
+  test("rewrites allow -> ask for non-built-in skills when user has not opted in", async () => {
+    expect(await runHook({}, "skill", "third-party-skill", "allow")).toBe("ask")
   })
 
   test("leaves deny untouched for any permission", async () => {
