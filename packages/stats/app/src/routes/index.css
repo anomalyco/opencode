@@ -1719,7 +1719,6 @@
 [data-page="stats"] [data-component="leaderboard"],
 [data-page="stats"] [data-slot="leaderboard-featured"],
 [data-page="stats"] [data-slot="leaderboard-compact"],
-[data-page="stats"] [data-slot="leaderboard-column"],
 [data-page="stats"] [data-slot="leaderboard-mobile"] {
   display: grid;
 }
@@ -1750,11 +1749,6 @@
   -webkit-mask-position: center top;
   -webkit-mask-repeat: repeat;
   -webkit-mask-size: 6px 6px;
-}
-
-[data-page="stats"] [data-slot="leaderboard-column"] {
-  gap: 8px;
-  align-content: start;
 }
 
 [data-page="stats"] [data-slot="leaderboard-mobile"] {
