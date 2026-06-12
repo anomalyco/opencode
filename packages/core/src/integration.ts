@@ -7,8 +7,8 @@ import { IntegrationSchema } from "./integration/schema"
 import { withStatics } from "./schema"
 import { State } from "./state"
 import { Identifier } from "./util/identifier"
-import { KeyedMutex } from "./effect/keyed-mutex"
 import { EventV2 } from "./event"
+import { IntegrationConnection } from "./integration/connection"
 
 export const ID = IntegrationSchema.ID
 export type ID = IntegrationSchema.ID
@@ -74,27 +74,11 @@ export class EnvMethod extends Schema.Class<EnvMethod>("Integration.EnvMethod")(
 export const Method = Schema.Union([OAuthMethod, KeyMethod, EnvMethod]).pipe(Schema.toTaggedUnion("type"))
 export type Method = typeof Method.Type
 
-export class CredentialConnection extends Schema.Class<CredentialConnection>("Integration.CredentialConnection")({
-  type: Schema.Literal("credential"),
-  id: Credential.ID,
-  label: Schema.String,
-  active: Schema.Boolean,
-}) {}
-
-export class EnvConnection extends Schema.Class<EnvConnection>("Integration.EnvConnection")({
-  type: Schema.Literal("env"),
-  name: Schema.String,
-  active: Schema.Boolean,
-}) {}
-
-export const Connection = Schema.Union([CredentialConnection, EnvConnection]).pipe(Schema.toTaggedUnion("type"))
-export type Connection = typeof Connection.Type
-
 export class Info extends Schema.Class<Info>("Integration.Info")({
   id: ID,
   name: Schema.String,
   methods: Schema.Array(Method),
-  connections: Schema.Array(Connection),
+  connections: Schema.Array(IntegrationConnection.Info),
 }) {}
 
 export type Inputs = Readonly<{ [key: string]: string }>
@@ -105,11 +89,11 @@ export type OAuthAuthorization = {
 } & (
   | {
       readonly mode: "auto"
-      readonly callback: Effect.Effect<Credential.Value, unknown>
+      readonly callback: Effect.Effect<Credential.Info, unknown>
     }
   | {
       readonly mode: "code"
-      readonly callback: (code: string) => Effect.Effect<Credential.Value, unknown>
+      readonly callback: (code: string) => Effect.Effect<Credential.Info, unknown>
     }
 )
 
@@ -213,8 +197,6 @@ export interface Interface {
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
   /** Returns all integrations with their methods and current connections. */
   readonly list: () => Effect.Effect<Info[]>
-  /** Refreshes an OAuth credential with its originating method. */
-  readonly refresh: (credentialID: Credential.ID) => Effect.Effect<void, AuthorizationError>
   readonly connect: {
     /** Runs a key method and stores the resulting credential. */
     readonly key: (input: {
@@ -225,30 +207,30 @@ export interface Interface {
       /** User-facing label for the stored credential. */
       readonly label?: string
     }) => Effect.Effect<void, AuthorizationError>
-    readonly oauth: {
-      /** Starts a stateful OAuth attempt. */
-      readonly begin: (input: {
-        /** Integration being authenticated. */
-        readonly integrationID: ID
-        /** OAuth method selected by the caller. */
-        readonly methodID: MethodID
-        /** Answers to the method's optional prompts. */
-        readonly inputs: Inputs
-        /** User-facing label for the credential created on completion. */
-        readonly label?: string
-      }) => Effect.Effect<Attempt, AuthorizationError>
-      /** Returns the current state of an OAuth attempt. */
-      readonly status: (attemptID: AttemptID) => Effect.Effect<AttemptStatus>
-      /** Completes the attempt and stores its credential. */
-      readonly complete: (input: {
-        /** Opaque handle returned by `begin`. */
-        readonly attemptID: AttemptID
-        /** Authorization code required by attempts in code mode. */
-        readonly code?: string
-      }) => Effect.Effect<void, CodeRequiredError | AuthorizationError>
-      /** Cancels an attempt and releases its resources. */
-      readonly cancel: (attemptID: AttemptID) => Effect.Effect<void>
-    }
+    /** Starts a stateful OAuth attempt. */
+    readonly oauth: (input: {
+      /** Integration being authenticated. */
+      readonly integrationID: ID
+      /** OAuth method selected by the caller. */
+      readonly methodID: MethodID
+      /** Answers to the method's optional prompts. */
+      readonly inputs: Inputs
+      /** User-facing label for the credential created on completion. */
+      readonly label?: string
+    }) => Effect.Effect<Attempt, AuthorizationError>
+  }
+  readonly attempt: {
+    /** Returns the current state of an OAuth attempt. */
+    readonly status: (attemptID: AttemptID) => Effect.Effect<AttemptStatus>
+    /** Completes the attempt and stores its credential. */
+    readonly complete: (input: {
+      /** Opaque handle returned by `oauth`. */
+      readonly attemptID: AttemptID
+      /** Authorization code required by attempts in code mode. */
+      readonly code?: string
+    }) => Effect.Effect<void, CodeRequiredError | AuthorizationError>
+    /** Cancels an attempt and releases its resources. */
+    readonly cancel: (attemptID: AttemptID) => Effect.Effect<void>
   }
 }
 
@@ -286,7 +268,6 @@ export const locationLayer = Layer.effect(
     const events = yield* EventV2.Service
     const scope = yield* Scope.Scope
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
-    const refreshLocks = KeyedMutex.makeUnsafe<Credential.ID>()
     const state = State.create<Data, Editor>({
       initial: () => ({ integrations: new Map<ID, Entry>() }),
       editor: (draft) => ({
@@ -302,8 +283,7 @@ export const locationLayer = Layer.effect(
         },
         remove: (id) => draft.integrations.delete(id),
         method: {
-          list: (integrationID) =>
-            (draft.integrations.get(integrationID)?.methods as Method[] | undefined) ?? [],
+          list: (integrationID) => (draft.integrations.get(integrationID)?.methods as Method[] | undefined) ?? [],
           update: (implementation) => {
             const current =
               draft.integrations.get(implementation.integrationID) ??
@@ -347,26 +327,31 @@ export const locationLayer = Layer.effect(
 
     const connections = (
       entry: Entry,
-      credentialRows: Credential.Info[],
-      activeID: Credential.ID | undefined,
-    ): Connection[] => {
-      const saved = credentialRows.map(
-        (row) =>
-          new CredentialConnection({ type: "credential", id: row.id, label: row.label, active: row.id === activeID }),
+      saved: readonly Credential.Stored[],
+    ): IntegrationConnection.Info[] => {
+      const connected = saved.map(
+        (credential) =>
+          new IntegrationConnection.CredentialInfo({ type: "credential", id: credential.id, label: credential.label }),
       )
       const detected = entry.methods
         .filter((method) => method.type === "env")
         .flatMap((method) => method.names.filter((name) => process.env[name]))
-        .map((name, index) => new EnvConnection({ type: "env", name, active: !activeID && index === 0 }))
-      return [...saved, ...detected]
+        .map(
+          (name, index) =>
+            new IntegrationConnection.EnvInfo({
+              type: "env",
+              name,
+            }),
+        )
+      return [...connected, ...detected]
     }
 
-    const project = (entry: Entry, credentialRows: Credential.Info[], activeID?: Credential.ID) =>
+    const project = (entry: Entry, saved: readonly Credential.Stored[]) =>
       new Info({
         id: entry.ref.id,
         name: entry.ref.name,
         methods: entry.methods,
-        connections: connections(entry, credentialRows, activeID),
+        connections: connections(entry, saved),
       })
 
     const authorize = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -380,7 +365,7 @@ export const locationLayer = Layer.effect(
       return error instanceof Error ? error.message : String(error)
     }
 
-    const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.Value, unknown>) {
+    const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.Info, unknown>) {
       const now = yield* Clock.currentTimeMillis
       const result = yield* SynchronizedRef.modify(attempts, (current) => {
         const attempt = current.get(attemptID)
@@ -394,9 +379,11 @@ export const locationLayer = Layer.effect(
       if (Exit.isSuccess(exit)) {
         yield* credentials.create({
           integrationID: result.integrationID,
-          methodID: result.methodID,
           label: result.label,
-          value: exit.value,
+          value:
+            exit.value.type === "oauth"
+              ? new Credential.OAuth({ ...exit.value, methodID: result.methodID })
+              : exit.value,
         })
       }
       yield* close(result.scope)
@@ -428,41 +415,14 @@ export const locationLayer = Layer.effect(
       get: Effect.fn("Integration.get")(function* (id) {
         const entry = state.get().integrations.get(id)
         if (!entry) return undefined
-        const rows = yield* credentials.forIntegration(id)
-        const active = yield* credentials.active(id)
-        return project(entry, rows, active?.id)
+        return project(entry, yield* credentials.list(id))
       }),
       list: Effect.fn("Integration.list")(function* () {
-        const rows = yield* credentials.all()
-        const active = yield* credentials.activeAll()
-        return Array.from(state.get().integrations.values(), (entry) =>
-          project(
-            entry,
-            rows.filter((row) => row.integrationID === entry.ref.id),
-            active.get(entry.ref.id)?.id,
-          ),
-        ).toSorted((a, b) => a.name.localeCompare(b.name))
-      }),
-      refresh: Effect.fn("Integration.refresh")(function* (credentialID) {
-        yield* refreshLocks.withLock(credentialID)(
+        return (yield* Effect.forEach(state.get().integrations.values(), (entry) =>
           Effect.gen(function* () {
-            const credential = yield* credentials.get(credentialID)
-            if (!credential || credential.value.type !== "oauth") {
-              return yield* Effect.die(`OAuth credential not found: ${credentialID}`)
-            }
-            const implementation = state
-              .get()
-              .integrations.get(credential.integrationID)
-              ?.implementations.get(credential.methodID)
-            if (!implementation?.refresh) {
-              return yield* Effect.die(
-                `OAuth refresh method not found: ${credential.integrationID}/${credential.methodID}`,
-              )
-            }
-            const value = yield* authorize(implementation.refresh(credential.value))
-            yield* credentials.update(credential.id, { value })
+            return project(entry, yield* credentials.list(entry.ref.id))
           }),
-        )
+        )).toSorted((a, b) => a.name.localeCompare(b.name))
       }),
       connect: {
         key: Effect.fn("Integration.connect.key")(function* (input) {
@@ -473,92 +433,91 @@ export const locationLayer = Layer.effect(
           if (!method) return yield* Effect.die(`Key method not found: ${input.integrationID}`)
           yield* credentials.create({
             integrationID: input.integrationID,
-            methodID: MethodID.make("api-key"),
             label: input.label,
             value: new Credential.Key({ type: "key", key: input.key }),
           })
         }),
-        oauth: {
-          begin: Effect.fn("Integration.connect.oauth.begin")(function* (input) {
-            const method = state.get().integrations.get(input.integrationID)?.implementations.get(input.methodID)
-            if (!method) {
-              return yield* Effect.die(`OAuth method not found: ${input.integrationID}/${input.methodID}`)
-            }
-            const attemptScope = yield* Scope.fork(scope)
-            const authorization = yield* authorize(method.authorize(input.inputs)).pipe(
-              Scope.provide(attemptScope),
-              Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(attemptScope, exit) : Effect.void)),
-            )
-            const id = AttemptID.create()
-            const created = yield* Clock.currentTimeMillis
-            const time = { created, expires: created + attemptLifetime }
-            yield* SynchronizedRef.update(attempts, (current) =>
-              new Map(current).set(id, {
-                status: "pending",
-                completing: authorization.mode === "auto",
-                authorization,
-                integrationID: input.integrationID,
-                methodID: input.methodID,
-                label: input.label,
-                scope: attemptScope,
-                time,
-              }),
-            )
-            if (authorization.mode === "auto") {
-              yield* authorization.callback.pipe(
-                Effect.exit,
-                Effect.flatMap((exit) => settle(id, exit)),
-                Effect.forkIn(attemptScope, { startImmediately: true }),
-              )
-            }
-            return new Attempt({
-              attemptID: id,
-              url: authorization.url,
-              instructions: authorization.instructions,
-              mode: authorization.mode,
+        oauth: Effect.fn("Integration.connect.oauth")(function* (input) {
+          const method = state.get().integrations.get(input.integrationID)?.implementations.get(input.methodID)
+          if (!method) {
+            return yield* Effect.die(`OAuth method not found: ${input.integrationID}/${input.methodID}`)
+          }
+          const attemptScope = yield* Scope.fork(scope)
+          const authorization = yield* authorize(method.authorize(input.inputs)).pipe(
+            Scope.provide(attemptScope),
+            Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(attemptScope, exit) : Effect.void)),
+          )
+          const id = AttemptID.create()
+          const created = yield* Clock.currentTimeMillis
+          const time = { created, expires: created + attemptLifetime }
+          yield* SynchronizedRef.update(attempts, (current) =>
+            new Map(current).set(id, {
+              status: "pending",
+              completing: authorization.mode === "auto",
+              authorization,
+              integrationID: input.integrationID,
+              methodID: input.methodID,
+              label: input.label,
+              scope: attemptScope,
               time,
-            })
-          }),
-          status: Effect.fn("Integration.connect.oauth.status")(function* (attemptID) {
-            const attempt = (yield* SynchronizedRef.get(attempts)).get(attemptID)
-            if (!attempt) return yield* Effect.die(`OAuth attempt not found: ${attemptID}`)
-            if (attempt.status === "failed") {
-              return { status: attempt.status, message: attempt.message ?? "Authorization failed", time: attempt.time }
-            }
-            return { status: attempt.status, time: attempt.time }
-          }),
-          complete: Effect.fn("Integration.connect.oauth.complete")(function* (input) {
-            const attempt = yield* SynchronizedRef.modify(attempts, (current) => {
-              const match = current.get(input.attemptID)
-              if (!match || match.status !== "pending" || match.completing) return [match, current]
-              if (match.authorization.mode === "code" && input.code === undefined) return [match, current]
-              return [match, new Map(current).set(input.attemptID, { ...match, completing: true })]
-            })
-            if (!attempt) return yield* Effect.die(`OAuth attempt not found: ${input.attemptID}`)
-            if (attempt.status !== "pending") return
-            if (attempt.authorization.mode === "code" && input.code === undefined) {
-              return yield* new CodeRequiredError({ attemptID: input.attemptID })
-            }
-            if (attempt.completing) return yield* Effect.die(`OAuth attempt already completing: ${input.attemptID}`)
-            const callback =
-              attempt.authorization.mode === "auto"
-                ? attempt.authorization.callback
-                : attempt.authorization.callback(input.code as string)
-            const exit = yield* authorize(callback).pipe(Effect.exit)
-            yield* settle(input.attemptID, exit)
-            if (Exit.isFailure(exit)) return yield* exit
-          }),
-          cancel: Effect.fn("Integration.connect.oauth.cancel")(function* (attemptID) {
-            const attempt = yield* SynchronizedRef.modify(attempts, (current) => {
-              const match = current.get(attemptID)
-              if (!match || match.status !== "pending") return [undefined, current]
-              const next = new Map(current)
-              next.delete(attemptID)
-              return [match, next]
-            })
-            if (attempt) yield* Scope.close(attempt.scope, Exit.void)
-          }),
-        },
+            }),
+          )
+          if (authorization.mode === "auto") {
+            yield* authorization.callback.pipe(
+              Effect.exit,
+              Effect.flatMap((exit) => settle(id, exit)),
+              Effect.forkIn(attemptScope, { startImmediately: true }),
+            )
+          }
+          return new Attempt({
+            attemptID: id,
+            url: authorization.url,
+            instructions: authorization.instructions,
+            mode: authorization.mode,
+            time,
+          })
+        }),
+      },
+      attempt: {
+        status: Effect.fn("Integration.attempt.status")(function* (attemptID) {
+          const attempt = (yield* SynchronizedRef.get(attempts)).get(attemptID)
+          if (!attempt) return yield* Effect.die(`OAuth attempt not found: ${attemptID}`)
+          if (attempt.status === "failed") {
+            return { status: attempt.status, message: attempt.message ?? "Authorization failed", time: attempt.time }
+          }
+          return { status: attempt.status, time: attempt.time }
+        }),
+        complete: Effect.fn("Integration.attempt.complete")(function* (input) {
+          const attempt = yield* SynchronizedRef.modify(attempts, (current) => {
+            const match = current.get(input.attemptID)
+            if (!match || match.status !== "pending" || match.completing) return [match, current]
+            if (match.authorization.mode === "code" && input.code === undefined) return [match, current]
+            return [match, new Map(current).set(input.attemptID, { ...match, completing: true })]
+          })
+          if (!attempt) return yield* Effect.die(`OAuth attempt not found: ${input.attemptID}`)
+          if (attempt.status !== "pending") return
+          if (attempt.authorization.mode === "code" && input.code === undefined) {
+            return yield* new CodeRequiredError({ attemptID: input.attemptID })
+          }
+          if (attempt.completing) return yield* Effect.die(`OAuth attempt already completing: ${input.attemptID}`)
+          const callback =
+            attempt.authorization.mode === "auto"
+              ? attempt.authorization.callback
+              : attempt.authorization.callback(input.code as string)
+          const exit = yield* authorize(callback).pipe(Effect.exit)
+          yield* settle(input.attemptID, exit)
+          if (Exit.isFailure(exit)) return yield* exit
+        }),
+        cancel: Effect.fn("Integration.attempt.cancel")(function* (attemptID) {
+          const attempt = yield* SynchronizedRef.modify(attempts, (current) => {
+            const match = current.get(attemptID)
+            if (!match || match.status !== "pending") return [undefined, current]
+            const next = new Map(current)
+            next.delete(attemptID)
+            return [match, next]
+          })
+          if (attempt) yield* Scope.close(attempt.scope, Exit.void)
+        }),
       },
     })
   }),

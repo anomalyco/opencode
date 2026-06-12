@@ -58,7 +58,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       ),
   )
   .add(
-    HttpApiEndpoint.post("integration.connect.oauth.begin", "/api/integration/:integrationID/connect/oauth", {
+    HttpApiEndpoint.post("integration.connect.oauth", "/api/integration/:integrationID/connect/oauth", {
       params: { integrationID: Integration.ID },
       query: LocationQuery,
       payload: Schema.Struct({
@@ -72,14 +72,14 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.connect.oauth.begin",
+          identifier: "v2.integration.connect.oauth",
           summary: "Begin OAuth connection",
           description: "Start an OAuth attempt and return the authorization details.",
         }),
       ),
   )
   .add(
-    HttpApiEndpoint.get("integration.connect.oauth.status", "/api/integration/oauth/:attemptID", {
+    HttpApiEndpoint.get("integration.attempt.status", "/api/integration/attempt/:attemptID", {
       params: { attemptID: Integration.AttemptID },
       query: LocationQuery,
       success: Location.response(Integration.AttemptStatus),
@@ -87,14 +87,14 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.connect.oauth.status",
+          identifier: "v2.integration.attempt.status",
           summary: "Get OAuth attempt status",
           description: "Poll the current status of an OAuth attempt.",
         }),
       ),
   )
   .add(
-    HttpApiEndpoint.post("integration.connect.oauth.complete", "/api/integration/oauth/:attemptID/complete", {
+    HttpApiEndpoint.post("integration.attempt.complete", "/api/integration/attempt/:attemptID/complete", {
       params: { attemptID: Integration.AttemptID },
       query: LocationQuery,
       payload: Schema.Struct({ code: Schema.optional(Schema.String) }),
@@ -104,14 +104,14 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.connect.oauth.complete",
+          identifier: "v2.integration.attempt.complete",
           summary: "Complete OAuth connection",
           description: "Complete a code-based OAuth attempt and store the resulting credential.",
         }),
       ),
   )
   .add(
-    HttpApiEndpoint.delete("integration.connect.oauth.cancel", "/api/integration/oauth/:attemptID", {
+    HttpApiEndpoint.delete("integration.attempt.cancel", "/api/integration/attempt/:attemptID", {
       params: { attemptID: Integration.AttemptID },
       query: LocationQuery,
       success: HttpApiSchema.NoContent,
@@ -119,7 +119,7 @@ export const IntegrationGroup = HttpApiGroup.make("server.integration")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.integration.connect.oauth.cancel",
+          identifier: "v2.integration.attempt.cancel",
           summary: "Cancel OAuth connection",
           description: "Cancel an OAuth attempt and release its resources.",
         }),

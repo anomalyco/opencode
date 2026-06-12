@@ -11425,23 +11425,14 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "methodID": {
-                    "type": "string"
-                  },
                   "key": {
                     "type": "string"
-                  },
-                  "inputs": {
-                    "type": "object",
-                    "additionalProperties": {
-                      "type": "string"
-                    }
                   },
                   "label": {
                     "type": "string"
                   }
                 },
-                "required": ["methodID", "key", "inputs"],
+                "required": ["key"],
                 "additionalProperties": false
               }
             }
@@ -11459,7 +11450,7 @@
     "/api/integration/{integrationID}/connect/oauth": {
       "post": {
         "tags": ["integrations"],
-        "operationId": "v2.integration.connect.oauth.begin",
+        "operationId": "v2.integration.connect.oauth",
         "parameters": [
           {
             "name": "integrationID",
@@ -11570,15 +11561,15 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.connect.oauth.begin({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.connect.oauth({\n  ...\n})"
           }
         ]
       }
     },
-    "/api/integration/oauth/{attemptID}": {
+    "/api/integration/attempt/{attemptID}": {
       "get": {
         "tags": ["integrations"],
-        "operationId": "v2.integration.connect.oauth.status",
+        "operationId": "v2.integration.attempt.status",
         "parameters": [
           {
             "name": "attemptID",
@@ -11916,13 +11907,13 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.connect.oauth.status({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.attempt.status({\n  ...\n})"
           }
         ]
       },
       "delete": {
         "tags": ["integrations"],
-        "operationId": "v2.integration.connect.oauth.cancel",
+        "operationId": "v2.integration.attempt.cancel",
         "parameters": [
           {
             "name": "attemptID",
@@ -11983,15 +11974,15 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.connect.oauth.cancel({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.attempt.cancel({\n  ...\n})"
           }
         ]
       }
     },
-    "/api/integration/oauth/{attemptID}/complete": {
+    "/api/integration/attempt/{attemptID}/complete": {
       "post": {
         "tags": ["integrations"],
-        "operationId": "v2.integration.connect.oauth.complete",
+        "operationId": "v2.integration.attempt.complete",
         "parameters": [
           {
             "name": "attemptID",
@@ -12075,7 +12066,122 @@
         "x-codeSamples": [
           {
             "lang": "js",
-            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.connect.oauth.complete({\n  ...\n})"
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.attempt.complete({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/credential/{credentialID}": {
+      "patch": {
+        "tags": ["opencode HttpApi"],
+        "operationId": "v2.credential.update",
+        "parameters": [
+          {
+            "name": "credentialID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update a stored credential label.",
+        "summary": "Update credential",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": ["label"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.credential.update({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["opencode HttpApi"],
+        "operationId": "v2.credential.remove",
+        "parameters": [
+          {
+            "name": "credentialID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Remove a stored integration credential.",
+        "summary": "Remove credential",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.credential.remove({\n  ...\n})"
           }
         ]
       }
@@ -13467,15 +13573,6 @@
         "anyOf": [
           {
             "$ref": "#/components/schemas/EventModels-devRefreshed"
-          },
-          {
-            "$ref": "#/components/schemas/EventCredentialAdded"
-          },
-          {
-            "$ref": "#/components/schemas/EventCredentialRemoved"
-          },
-          {
-            "$ref": "#/components/schemas/EventCredentialSwitched"
           },
           {
             "$ref": "#/components/schemas/EventPluginAdded"
@@ -15632,87 +15729,6 @@
                   "properties": {
                     "type": "object",
                     "properties": {}
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["credential.added"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "credential": {
-                        "$ref": "#/components/schemas/CredentialInfo"
-                      }
-                    },
-                    "required": ["credential"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["credential.removed"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "credential": {
-                        "$ref": "#/components/schemas/CredentialInfo"
-                      }
-                    },
-                    "required": ["credential"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["credential.switched"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "integrationID": {
-                        "type": "string"
-                      },
-                      "from": {
-                        "type": "string"
-                      },
-                      "to": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["integrationID"],
-                    "additionalProperties": false
                   }
                 },
                 "required": ["id", "type", "properties"],
@@ -22147,85 +22163,6 @@
         "required": ["directory"],
         "additionalProperties": false
       },
-      "CredentialOAuth": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["oauth"]
-          },
-          "refresh": {
-            "type": "string"
-          },
-          "access": {
-            "type": "string"
-          },
-          "expires": {
-            "type": "integer",
-            "minimum": 0
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          }
-        },
-        "required": ["type", "refresh", "access", "expires"],
-        "additionalProperties": false
-      },
-      "CredentialKey": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["key"]
-          },
-          "key": {
-            "type": "string"
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          }
-        },
-        "required": ["type", "key"],
-        "additionalProperties": false
-      },
-      "CredentialValue": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/CredentialOAuth"
-          },
-          {
-            "$ref": "#/components/schemas/CredentialKey"
-          }
-        ]
-      },
-      "CredentialInfo": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "integrationID": {
-            "type": "string"
-          },
-          "methodID": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "value": {
-            "$ref": "#/components/schemas/CredentialValue"
-          }
-        },
-        "required": ["id", "integrationID", "methodID", "label", "value"],
-        "additionalProperties": false
-      },
       "ModelV2Info": {
         "type": "object",
         "properties": {
@@ -26389,45 +26326,23 @@
       "IntegrationKeyMethod": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
           "type": {
             "type": "string",
             "enum": ["key"]
           },
           "label": {
             "type": "string"
-          },
-          "prompts": {
-            "type": "array",
-            "items": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/IntegrationTextPrompt"
-                },
-                {
-                  "$ref": "#/components/schemas/IntegrationSelectPrompt"
-                }
-              ]
-            }
           }
         },
-        "required": ["id", "type", "label"],
+        "required": ["type"],
         "additionalProperties": false
       },
       "IntegrationEnvMethod": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string"
-          },
           "type": {
             "type": "string",
             "enum": ["env"]
-          },
-          "label": {
-            "type": "string"
           },
           "names": {
             "type": "array",
@@ -26436,10 +26351,10 @@
             }
           }
         },
-        "required": ["id", "type", "label", "names"],
+        "required": ["type", "names"],
         "additionalProperties": false
       },
-      "IntegrationCredentialConnection": {
+      "ConnectionCredentialInfo": {
         "type": "object",
         "properties": {
           "type": {
@@ -26451,15 +26366,12 @@
           },
           "label": {
             "type": "string"
-          },
-          "active": {
-            "type": "boolean"
           }
         },
-        "required": ["type", "id", "label", "active"],
+        "required": ["type", "id", "label"],
         "additionalProperties": false
       },
-      "IntegrationEnvConnection": {
+      "ConnectionEnvInfo": {
         "type": "object",
         "properties": {
           "type": {
@@ -26468,13 +26380,20 @@
           },
           "name": {
             "type": "string"
-          },
-          "active": {
-            "type": "boolean"
           }
         },
-        "required": ["type", "name", "active"],
+        "required": ["type", "name"],
         "additionalProperties": false
+      },
+      "ConnectionInfo": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ConnectionCredentialInfo"
+          },
+          {
+            "$ref": "#/components/schemas/ConnectionEnvInfo"
+          }
+        ]
       },
       "IntegrationInfo": {
         "type": "object",
@@ -26504,14 +26423,7 @@
           "connections": {
             "type": "array",
             "items": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/IntegrationCredentialConnection"
-                },
-                {
-                  "$ref": "#/components/schemas/IntegrationEnvConnection"
-                }
-              ]
+              "$ref": "#/components/schemas/ConnectionInfo"
             }
           }
         },
@@ -26848,87 +26760,6 @@
           "properties": {
             "type": "object",
             "properties": {}
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventCredentialAdded": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["credential.added"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "credential": {
-                "$ref": "#/components/schemas/CredentialInfo"
-              }
-            },
-            "required": ["credential"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventCredentialRemoved": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["credential.removed"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "credential": {
-                "$ref": "#/components/schemas/CredentialInfo"
-              }
-            },
-            "required": ["credential"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventCredentialSwitched": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["credential.switched"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "integrationID": {
-                "type": "string"
-              },
-              "from": {
-                "type": "string"
-              },
-              "to": {
-                "type": "string"
-              }
-            },
-            "required": ["integrationID"],
-            "additionalProperties": false
           }
         },
         "required": ["id", "type", "properties"],
@@ -30475,6 +30306,10 @@
     {
       "name": "integrations",
       "description": "Integration discovery and authentication routes."
+    },
+    {
+      "name": "opencode HttpApi",
+      "description": "Experimental HttpApi surface for selected instance routes."
     },
     {
       "name": "permissions",

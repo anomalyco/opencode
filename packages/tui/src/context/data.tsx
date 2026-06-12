@@ -423,11 +423,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
         case "reference.updated":
           void result.location.reference.refresh()
           break
-        case "credential.switched": {
-          const location = { directory: metadata.directory, workspaceID: metadata.workspace }
-          void Promise.allSettled([result.location.model.refresh(location), result.location.provider.refresh(location)])
-          break
-        }
         case "integration.updated":
           void result.location.integration.refresh({ directory: metadata.directory, workspaceID: metadata.workspace })
           break
@@ -518,7 +513,10 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             return store.location[locationKey(location ?? defaultLocation())]?.integration
           },
           async refresh(ref?: LocationRef) {
-            const result = await sdk.client.v2.integration.list({ location: locationQuery(ref) }, { throwOnError: true })
+            const result = await sdk.client.v2.integration.list(
+              { location: locationQuery(ref) },
+              { throwOnError: true },
+            )
             const key = locationKey(result.data.location)
             setStore("location", key, "integration", result.data.data)
           },

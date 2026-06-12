@@ -22,35 +22,38 @@ const it = testEffect(
   Catalog.locationLayer.pipe(
     Layer.provideMerge(EventV2.defaultLayer),
     Layer.provideMerge(locationLayer),
-    Layer.provideMerge(Layer.mock(Credential.Service)({ activeAll: () => Effect.succeed(new Map()) })),
+    Layer.provideMerge(
+      Layer.mock(Credential.Service)({
+        all: () => Effect.succeed([]),
+      }),
+    ),
   ),
 )
 
 describe("CatalogV2", () => {
   it.effect("projects active credentials without rebuilding catalog state", () => {
     const integrationID = Integration.ID.make("test")
-    const methodID = Integration.MethodID.make("api-key")
-    const first = new Credential.Info({
+    const first = {
       id: Credential.ID.create(),
       integrationID,
-      methodID,
       label: "First",
       value: new Credential.Key({ type: "key", key: "first", metadata: { tenant: "one" } }),
-    })
-    const second = new Credential.Info({
+    }
+    const second = {
       id: Credential.ID.create(),
       integrationID,
-      methodID,
       label: "Second",
       value: new Credential.Key({ type: "key", key: "second", metadata: { tenant: "two" } }),
-    })
+    }
     let active = first
     const layer = Catalog.locationLayer.pipe(
       Layer.fresh,
       Layer.provideMerge(EventV2.defaultLayer),
       Layer.provideMerge(locationLayer),
       Layer.provideMerge(
-        Layer.mock(Credential.Service)({ activeAll: () => Effect.succeed(new Map([[integrationID, active]])) }),
+        Layer.mock(Credential.Service)({
+          all: () => Effect.sync(() => [active]),
+        }),
       ),
     )
 

@@ -48,12 +48,12 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
         }),
       )
       .handle(
-        "integration.connect.oauth.begin",
+        "integration.connect.oauth",
         Effect.fn(function* (ctx) {
           const service = yield* Integration.Service
           return yield* response(
             authorize(
-              service.connect.oauth.begin({
+              service.connect.oauth({
                 integrationID: ctx.params.integrationID,
                 methodID: ctx.payload.methodID,
                 inputs: ctx.payload.inputs,
@@ -64,17 +64,17 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
         }),
       )
       .handle(
-        "integration.connect.oauth.status",
+        "integration.attempt.status",
         Effect.fn(function* (ctx) {
           const service = yield* Integration.Service
-          return yield* response(service.connect.oauth.status(ctx.params.attemptID))
+          return yield* response(service.attempt.status(ctx.params.attemptID))
         }),
       )
       .handle(
-        "integration.connect.oauth.complete",
+        "integration.attempt.complete",
         Effect.fn(function* (ctx) {
           const service = yield* Integration.Service
-          yield* service.connect.oauth.complete({ attemptID: ctx.params.attemptID, code: ctx.payload.code }).pipe(
+          yield* service.attempt.complete({ attemptID: ctx.params.attemptID, code: ctx.payload.code }).pipe(
             Effect.mapError(
               (error) =>
                 new InvalidRequestError({
@@ -93,10 +93,10 @@ export const IntegrationHandler = HttpApiBuilder.group(Api, "server.integration"
         }),
       )
       .handle(
-        "integration.connect.oauth.cancel",
+        "integration.attempt.cancel",
         Effect.fn(function* (ctx) {
           const service = yield* Integration.Service
-          yield* service.connect.oauth.cancel(ctx.params.attemptID)
+          yield* service.attempt.cancel(ctx.params.attemptID)
           return HttpApiSchema.NoContent.make()
         }),
       )

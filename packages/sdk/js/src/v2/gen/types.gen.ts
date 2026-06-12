@@ -6,9 +6,6 @@ export type ClientOptions = {
 
 export type Event =
   | EventModelsDevRefreshed
-  | EventCredentialAdded
-  | EventCredentialRemoved
-  | EventCredentialSwitched
   | EventPluginAdded
   | EventCatalogModelUpdated
   | EventSessionCreated
@@ -737,29 +734,6 @@ export type GlobalEvent = {
         type: "models-dev.refreshed"
         properties: {
           [key: string]: unknown
-        }
-      }
-    | {
-        id: string
-        type: "credential.added"
-        properties: {
-          credential: CredentialInfo
-        }
-      }
-    | {
-        id: string
-        type: "credential.removed"
-        properties: {
-          credential: CredentialInfo
-        }
-      }
-    | {
-        id: string
-        type: "credential.switched"
-        properties: {
-          integrationID: string
-          from?: string
-          to?: string
         }
       }
     | {
@@ -2855,34 +2829,6 @@ export type MoveSessionDestination = {
   directory: string
 }
 
-export type CredentialOAuth = {
-  type: "oauth"
-  refresh: string
-  access: string
-  expires: number
-  metadata?: {
-    [key: string]: string
-  }
-}
-
-export type CredentialKey = {
-  type: "key"
-  key: string
-  metadata?: {
-    [key: string]: string
-  }
-}
-
-export type CredentialValue = CredentialOAuth | CredentialKey
-
-export type CredentialInfo = {
-  id: string
-  integrationID: string
-  methodID: string
-  label: string
-  value: CredentialValue
-}
-
 export type ModelV2Info = {
   id: string
   providerID: string
@@ -4162,24 +4108,24 @@ export type IntegrationEnvMethod = {
   names: Array<string>
 }
 
-export type IntegrationCredentialConnection = {
+export type ConnectionCredentialInfo = {
   type: "credential"
   id: string
   label: string
-  active: boolean
 }
 
-export type IntegrationEnvConnection = {
+export type ConnectionEnvInfo = {
   type: "env"
   name: string
-  active: boolean
 }
+
+export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
 
 export type IntegrationInfo = {
   id: string
   name: string
   methods: Array<IntegrationOAuthMethod | IntegrationKeyMethod | IntegrationEnvMethod>
-  connections: Array<IntegrationCredentialConnection | IntegrationEnvConnection>
+  connections: Array<ConnectionInfo>
 }
 
 export type IntegrationAttempt = {
@@ -4284,32 +4230,6 @@ export type EventModelsDevRefreshed = {
   type: "models-dev.refreshed"
   properties: {
     [key: string]: unknown
-  }
-}
-
-export type EventCredentialAdded = {
-  id: string
-  type: "credential.added"
-  properties: {
-    credential: CredentialInfo
-  }
-}
-
-export type EventCredentialRemoved = {
-  id: string
-  type: "credential.removed"
-  properties: {
-    credential: CredentialInfo
-  }
-}
-
-export type EventCredentialSwitched = {
-  id: string
-  type: "credential.switched"
-  properties: {
-    integrationID: string
-    from?: string
-    to?: string
   }
 }
 
@@ -10193,7 +10113,7 @@ export type V2IntegrationConnectKeyResponses = {
 
 export type V2IntegrationConnectKeyResponse = V2IntegrationConnectKeyResponses[keyof V2IntegrationConnectKeyResponses]
 
-export type V2IntegrationConnectOauthBeginData = {
+export type V2IntegrationConnectOauthData = {
   body: {
     methodID: string
     inputs: {
@@ -10213,7 +10133,7 @@ export type V2IntegrationConnectOauthBeginData = {
   url: "/api/integration/{integrationID}/connect/oauth"
 }
 
-export type V2IntegrationConnectOauthBeginErrors = {
+export type V2IntegrationConnectOauthErrors = {
   /**
    * InvalidRequestError
    */
@@ -10224,10 +10144,9 @@ export type V2IntegrationConnectOauthBeginErrors = {
   401: UnauthorizedError
 }
 
-export type V2IntegrationConnectOauthBeginError =
-  V2IntegrationConnectOauthBeginErrors[keyof V2IntegrationConnectOauthBeginErrors]
+export type V2IntegrationConnectOauthError = V2IntegrationConnectOauthErrors[keyof V2IntegrationConnectOauthErrors]
 
-export type V2IntegrationConnectOauthBeginResponses = {
+export type V2IntegrationConnectOauthResponses = {
   /**
    * Success
    */
@@ -10237,10 +10156,10 @@ export type V2IntegrationConnectOauthBeginResponses = {
   }
 }
 
-export type V2IntegrationConnectOauthBeginResponse =
-  V2IntegrationConnectOauthBeginResponses[keyof V2IntegrationConnectOauthBeginResponses]
+export type V2IntegrationConnectOauthResponse =
+  V2IntegrationConnectOauthResponses[keyof V2IntegrationConnectOauthResponses]
 
-export type V2IntegrationConnectOauthCancelData = {
+export type V2IntegrationAttemptCancelData = {
   body?: never
   path: {
     attemptID: string
@@ -10251,10 +10170,10 @@ export type V2IntegrationConnectOauthCancelData = {
       workspace?: string
     }
   }
-  url: "/api/integration/oauth/{attemptID}"
+  url: "/api/integration/attempt/{attemptID}"
 }
 
-export type V2IntegrationConnectOauthCancelErrors = {
+export type V2IntegrationAttemptCancelErrors = {
   /**
    * InvalidRequestError
    */
@@ -10265,20 +10184,19 @@ export type V2IntegrationConnectOauthCancelErrors = {
   401: UnauthorizedError
 }
 
-export type V2IntegrationConnectOauthCancelError =
-  V2IntegrationConnectOauthCancelErrors[keyof V2IntegrationConnectOauthCancelErrors]
+export type V2IntegrationAttemptCancelError = V2IntegrationAttemptCancelErrors[keyof V2IntegrationAttemptCancelErrors]
 
-export type V2IntegrationConnectOauthCancelResponses = {
+export type V2IntegrationAttemptCancelResponses = {
   /**
    * <No Content>
    */
   204: void
 }
 
-export type V2IntegrationConnectOauthCancelResponse =
-  V2IntegrationConnectOauthCancelResponses[keyof V2IntegrationConnectOauthCancelResponses]
+export type V2IntegrationAttemptCancelResponse =
+  V2IntegrationAttemptCancelResponses[keyof V2IntegrationAttemptCancelResponses]
 
-export type V2IntegrationConnectOauthStatusData = {
+export type V2IntegrationAttemptStatusData = {
   body?: never
   path: {
     attemptID: string
@@ -10289,10 +10207,10 @@ export type V2IntegrationConnectOauthStatusData = {
       workspace?: string
     }
   }
-  url: "/api/integration/oauth/{attemptID}"
+  url: "/api/integration/attempt/{attemptID}"
 }
 
-export type V2IntegrationConnectOauthStatusErrors = {
+export type V2IntegrationAttemptStatusErrors = {
   /**
    * InvalidRequestError
    */
@@ -10303,10 +10221,9 @@ export type V2IntegrationConnectOauthStatusErrors = {
   401: UnauthorizedError
 }
 
-export type V2IntegrationConnectOauthStatusError =
-  V2IntegrationConnectOauthStatusErrors[keyof V2IntegrationConnectOauthStatusErrors]
+export type V2IntegrationAttemptStatusError = V2IntegrationAttemptStatusErrors[keyof V2IntegrationAttemptStatusErrors]
 
-export type V2IntegrationConnectOauthStatusResponses = {
+export type V2IntegrationAttemptStatusResponses = {
   /**
    * Success
    */
@@ -10345,10 +10262,10 @@ export type V2IntegrationConnectOauthStatusResponses = {
   }
 }
 
-export type V2IntegrationConnectOauthStatusResponse =
-  V2IntegrationConnectOauthStatusResponses[keyof V2IntegrationConnectOauthStatusResponses]
+export type V2IntegrationAttemptStatusResponse =
+  V2IntegrationAttemptStatusResponses[keyof V2IntegrationAttemptStatusResponses]
 
-export type V2IntegrationConnectOauthCompleteData = {
+export type V2IntegrationAttemptCompleteData = {
   body: {
     code?: string
   }
@@ -10361,10 +10278,10 @@ export type V2IntegrationConnectOauthCompleteData = {
       workspace?: string
     }
   }
-  url: "/api/integration/oauth/{attemptID}/complete"
+  url: "/api/integration/attempt/{attemptID}/complete"
 }
 
-export type V2IntegrationConnectOauthCompleteErrors = {
+export type V2IntegrationAttemptCompleteErrors = {
   /**
    * InvalidRequestError
    */
@@ -10375,18 +10292,82 @@ export type V2IntegrationConnectOauthCompleteErrors = {
   401: UnauthorizedError
 }
 
-export type V2IntegrationConnectOauthCompleteError =
-  V2IntegrationConnectOauthCompleteErrors[keyof V2IntegrationConnectOauthCompleteErrors]
+export type V2IntegrationAttemptCompleteError =
+  V2IntegrationAttemptCompleteErrors[keyof V2IntegrationAttemptCompleteErrors]
 
-export type V2IntegrationConnectOauthCompleteResponses = {
+export type V2IntegrationAttemptCompleteResponses = {
   /**
    * <No Content>
    */
   204: void
 }
 
-export type V2IntegrationConnectOauthCompleteResponse =
-  V2IntegrationConnectOauthCompleteResponses[keyof V2IntegrationConnectOauthCompleteResponses]
+export type V2IntegrationAttemptCompleteResponse =
+  V2IntegrationAttemptCompleteResponses[keyof V2IntegrationAttemptCompleteResponses]
+
+export type V2CredentialRemoveData = {
+  body?: never
+  path: {
+    credentialID: string
+  }
+  query?: never
+  url: "/api/credential/{credentialID}"
+}
+
+export type V2CredentialRemoveErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2CredentialRemoveError = V2CredentialRemoveErrors[keyof V2CredentialRemoveErrors]
+
+export type V2CredentialRemoveResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2CredentialRemoveResponse = V2CredentialRemoveResponses[keyof V2CredentialRemoveResponses]
+
+export type V2CredentialUpdateData = {
+  body: {
+    label: string
+  }
+  path: {
+    credentialID: string
+  }
+  query?: never
+  url: "/api/credential/{credentialID}"
+}
+
+export type V2CredentialUpdateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2CredentialUpdateError = V2CredentialUpdateErrors[keyof V2CredentialUpdateErrors]
+
+export type V2CredentialUpdateResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2CredentialUpdateResponse = V2CredentialUpdateResponses[keyof V2CredentialUpdateResponses]
 
 export type V2PermissionRequestListData = {
   body?: never

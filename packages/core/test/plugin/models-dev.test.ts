@@ -23,14 +23,21 @@ const locationLayer = Layer.succeed(
 )
 const plugins = PluginV2.layer.pipe(Layer.provide(events))
 const policy = Policy.layer.pipe(Layer.provide(locationLayer))
-const credentials = Credential.layer.pipe(
+const connections = Credential.layer.pipe(
   Layer.fresh,
   Layer.provide(Database.layerFromPath(":memory:").pipe(Layer.fresh)),
   Layer.provide(events),
 )
-const catalog = Catalog.layer.pipe(Layer.provide(Layer.mergeAll(events, locationLayer, plugins, policy, credentials)))
-const integrations = Integration.locationLayer.pipe(Layer.provide(credentials), Layer.provide(events))
-const layer = Layer.mergeAll(catalog, integrations, credentials, events, locationLayer, plugins)
+const catalog = Catalog.layer.pipe(Layer.provide(Layer.mergeAll(events, locationLayer, plugins, policy, connections)))
+const integrations = Integration.locationLayer.pipe(Layer.provide(events), Layer.provide(connections))
+const layer = Layer.mergeAll(
+  catalog.pipe(Layer.provide(connections)),
+  integrations,
+  connections,
+  events,
+  locationLayer,
+  plugins,
+)
 const it = testEffect(layer)
 
 describe("ModelsDevPlugin", () => {

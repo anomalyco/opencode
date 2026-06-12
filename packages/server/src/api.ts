@@ -16,6 +16,7 @@ import { ReferenceGroup } from "./groups/reference"
 import { Authorization } from "./middleware/authorization"
 import { LocationGroup } from "./groups/location"
 import { IntegrationGroup } from "./groups/integration"
+import { CredentialGroup } from "./groups/credential"
 
 export const Api = HttpApi.make("server")
   .add(HealthGroup)
@@ -26,6 +27,7 @@ export const Api = HttpApi.make("server")
   .add(ModelGroup)
   .add(ProviderGroup)
   .add(IntegrationGroup)
+  .add(CredentialGroup)
   .add(PermissionGroup)
   .add(FileSystemGroup)
   .add(CommandGroup)

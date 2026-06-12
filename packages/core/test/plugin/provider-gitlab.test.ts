@@ -15,6 +15,12 @@ import { testEffect } from "../lib/effect"
 import { it, model, npmLayer, withEnv } from "./provider-helper"
 
 const gitlabSDKOptions: Record<string, unknown>[] = []
+const database = Database.layerFromPath(":memory:").pipe(Layer.fresh)
+const preferences = Credential.layer.pipe(Layer.provide(database))
+const accounts = Layer.merge(
+  Credential.layer.pipe(Layer.provide(database), Layer.provide(preferences), Layer.provide(EventV2.defaultLayer)),
+  preferences,
+)
 
 void mock.module("gitlab-ai-provider", () => ({
   VERSION: "test-version",
@@ -31,12 +37,7 @@ void mock.module("gitlab-ai-provider", () => ({
 
 const itWithAccount = testEffect(
   Catalog.locationLayer.pipe(
-    Layer.provideMerge(
-      Credential.layer.pipe(
-        Layer.provide(Database.layerFromPath(":memory:").pipe(Layer.fresh)),
-        Layer.provide(EventV2.defaultLayer),
-      ),
-    ),
+    Layer.provideMerge(accounts),
     Layer.provideMerge(EventV2.defaultLayer),
     Layer.provideMerge(
       Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("/") }))),
@@ -175,7 +176,6 @@ describe("GitLabPlugin", () => {
           const catalog = yield* Catalog.Service
           yield* credentials.create({
             integrationID: Integration.ID.make("gitlab"),
-            methodID: Integration.MethodID.make("api-key"),
             value: new Credential.Key({ type: "key", key: "account-token" }),
           })
           yield* plugin.add(GitLabPlugin)
@@ -209,9 +209,9 @@ describe("GitLabPlugin", () => {
           const catalog = yield* Catalog.Service
           yield* credentials.create({
             integrationID: Integration.ID.make("gitlab"),
-            methodID: Integration.MethodID.make("oauth"),
             value: new Credential.OAuth({
               type: "oauth",
+              methodID: Integration.MethodID.make("oauth"),
               refresh: "refresh-token",
               access: "account-oauth-token",
               expires: 9999999999999,

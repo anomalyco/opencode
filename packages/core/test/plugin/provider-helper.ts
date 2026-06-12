@@ -53,10 +53,7 @@ const integrations = Integration.locationLayer.pipe(
   Layer.provide(
     Layer.mock(Credential.Service)({
       create: () => Effect.die("unexpected credential creation"),
-      all: () => Effect.succeed([]),
-      activeAll: () => Effect.succeed(new Map()),
-      active: () => Effect.succeed(undefined),
-      forIntegration: () => Effect.succeed([]),
+      list: () => Effect.succeed([]),
     }),
   ),
 )
@@ -64,7 +61,11 @@ const integrations = Integration.locationLayer.pipe(
 export const it = testEffect(
   Catalog.locationLayer.pipe(
     Layer.provideMerge(integrations),
-    Layer.provideMerge(Layer.mock(Credential.Service)({ activeAll: () => Effect.succeed(new Map()) })),
+    Layer.provideMerge(
+      Layer.mock(Credential.Service)({
+        all: () => Effect.succeed([]),
+      }),
+    ),
     Layer.provideMerge(EventV2.defaultLayer),
     Layer.provideMerge(locationLayer),
     Layer.provideMerge(npmLayer),

@@ -123,9 +123,11 @@ describe("PublicApi OpenAPI v2 errors", () => {
       ["get", "/api/integration/{integrationID}"],
       ["post", "/api/integration/{integrationID}/connect/key"],
       ["post", "/api/integration/{integrationID}/connect/oauth"],
-      ["get", "/api/integration/oauth/{attemptID}"],
-      ["post", "/api/integration/oauth/{attemptID}/complete"],
-      ["delete", "/api/integration/oauth/{attemptID}"],
+      ["get", "/api/integration/attempt/{attemptID}"],
+      ["post", "/api/integration/attempt/{attemptID}/complete"],
+      ["delete", "/api/integration/attempt/{attemptID}"],
+      ["delete", "/api/credential/{credentialID}"],
+      ["patch", "/api/credential/{credentialID}"],
     ] as const) {
       expect(spec.paths[path]?.[method], `${method.toUpperCase()} ${path}`).toBeDefined()
     }
@@ -133,7 +135,7 @@ describe("PublicApi OpenAPI v2 errors", () => {
     for (const path of [
       "/api/integration/{integrationID}/connect/key",
       "/api/integration/{integrationID}/connect/oauth",
-      "/api/integration/oauth/{attemptID}/complete",
+      "/api/integration/attempt/{attemptID}/complete",
     ]) {
       expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
     }
