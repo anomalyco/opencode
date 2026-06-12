@@ -30,7 +30,7 @@ export type ReasoningEffort = Schema.Schema.Type<typeof ReasoningEffort>
 export const TextVerbosity = Schema.Literals(["low", "medium", "high"])
 export type TextVerbosity = Schema.Schema.Type<typeof TextVerbosity>
 
-export const MessageRole = Schema.Literals(["user", "assistant", "tool"])
+export const MessageRole = Schema.Literals(["system", "user", "assistant", "tool"])
 export type MessageRole = Schema.Schema.Type<typeof MessageRole>
 
 export const FinishReason = Schema.Literals(["stop", "length", "tool-calls", "content-filter", "error", "unknown"])

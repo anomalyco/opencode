@@ -165,6 +165,42 @@ describe("acp permissions", () => {
     expect(harness.replies).toEqual([{ requestID: "perm_1", reply: "once", directory: "/workspace" }])
   })
 
+  it("forwards external_directory metadata and locations to requestPermission", async () => {
+    const harness = createHarness()
+    await createSession(harness.session, "ses_a")
+
+    harness.subscription.handle(
+      permissionAsked("ses_a", "perm_external", {
+        permission: "external_directory",
+        metadata: {
+          command: "mkdir -p /tmp/outside",
+          description: "Create external directory",
+          directories: ["/tmp/outside"],
+          patterns: ["/tmp/outside/*"],
+        },
+        tool: { messageID: "msg_1", callID: "call_1" },
+      }),
+    )
+
+    await pollUntil(() => harness.replies.length === 1, "external_directory permission was never replied")
+
+    expect(harness.requests[0]).toMatchObject({
+      sessionId: "ses_a",
+      toolCall: {
+        toolCallId: "call_1",
+        status: "pending",
+        title: "external_directory",
+        rawInput: {
+          command: "mkdir -p /tmp/outside",
+          description: "Create external directory",
+          directories: ["/tmp/outside"],
+          patterns: ["/tmp/outside/*"],
+        },
+        locations: [{ path: "/tmp/outside" }],
+      },
+    })
+  })
+
   it("rejects non-selected outcomes", async () => {
     const harness = createHarness(() => Promise.resolve({ outcome: { outcome: "cancelled" } }))
     await createSession(harness.session, "ses_a")

@@ -4,7 +4,7 @@ import path from "path"
 import fs from "fs/promises"
 import { WriteTool } from "../../src/tool/write"
 import { LSP } from "@/lsp/lsp"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Format } from "../../src/format"
 import { Truncate } from "@/tool/truncate"
@@ -33,7 +33,7 @@ afterEach(async () => {
 const it = testEffect(
   Layer.mergeAll(
     LSP.defaultLayer,
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
     EventV2Bridge.defaultLayer,
     Format.defaultLayer,
     CrossSpawnSpawner.defaultLayer,

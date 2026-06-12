@@ -7,9 +7,6 @@ import { createOpencodeClient } from "@opencode-ai/sdk"
 import { Server } from "../../src/server/server"
 import { tmpdir, disposeAllInstances } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
-import * as Log from "@opencode-ai/core/util/log"
-
-void Log.init({ print: false })
 
 afterEach(async () => {
   await disposeAllInstances()

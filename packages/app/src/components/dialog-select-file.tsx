@@ -386,6 +386,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
   return (
     <Dialog class="pt-3 pb-0 !max-h-[480px]" transition>
       <List
+        class="px-3"
         search={{
           placeholder: filesOnly()
             ? language.t("session.header.searchFiles")
@@ -398,6 +399,7 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
         items={items}
         key={(item) => item.id}
         filterKeys={["title", "description", "category"]}
+        skipFilter={(item) => item.type === "file"}
         groupBy={grouped() ? (item) => item.category : () => ""}
         onMove={handleMove}
         onSelect={handleSelect}

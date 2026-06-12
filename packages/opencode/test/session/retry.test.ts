@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError } from "ai"
 import { setTimeout as sleep } from "node:timers/promises"
@@ -17,9 +17,9 @@ const providerID = ProviderV2.ID.make("test")
 const retryProvider = "test"
 const it = testEffect(Layer.mergeAll(SessionStatus.defaultLayer, CrossSpawnSpawner.defaultLayer))
 
-function apiError(headers?: Record<string, string>): SessionLegacy.APIError {
-  return Schema.decodeUnknownSync(SessionLegacy.APIError.Schema)(
-    new SessionLegacy.APIError({
+function apiError(headers?: Record<string, string>): SessionV1.APIError {
+  return Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+    new SessionV1.APIError({
       message: "boom",
       isRetryable: true,
       responseHeaders: headers,
@@ -94,7 +94,7 @@ describe("session.retry.delay", () => {
       const step = yield* Schedule.toStepWithMetadata(
         SessionRetry.policy({
           provider: "test",
-          parse: Schema.decodeUnknownSync(SessionLegacy.APIError.Schema),
+          parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
           set: (info) =>
             status.set(sessionID, {
               type: "retry",
@@ -164,7 +164,7 @@ describe("session.retry.retryable", () => {
 
   test("retries transport timeout errors", () => {
     const request = MessageV2.fromError(new ProviderError.HeaderTimeoutError(10000), { providerID })
-    expect(SessionLegacy.APIError.isInstance(request)).toBe(true)
+    expect(SessionV1.APIError.isInstance(request)).toBe(true)
     expect(SessionRetry.retryable(request, retryProvider)).toEqual({
       message: "Provider response headers timed out after 10000ms",
     })
@@ -175,14 +175,14 @@ describe("session.retry.retryable", () => {
       new ProviderError.ResponseStreamError("WebSocket closed before response.completed (code 1006: Connection ended)"),
       { providerID },
     )
-    expect(SessionLegacy.APIError.isInstance(request)).toBe(true)
+    expect(SessionV1.APIError.isInstance(request)).toBe(true)
     expect(SessionRetry.retryable(request, retryProvider)).toEqual({
       message: "WebSocket closed before response.completed (code 1006: Connection ended)",
     })
   })
 
   test("does not retry context overflow errors", () => {
-    const error = new SessionLegacy.ContextOverflowError({
+    const error = new SessionV1.ContextOverflowError({
       message: "Input exceeds context window of this model",
       responseBody: '{"error":{"code":"context_length_exceeded"}}',
     }).toObject()
@@ -191,8 +191,8 @@ describe("session.retry.retryable", () => {
   })
 
   test("retries 500 errors even when isRetryable is false", () => {
-    const error = Schema.decodeUnknownSync(SessionLegacy.APIError.Schema)(
-      new SessionLegacy.APIError({
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
         message: "Internal server error",
         isRetryable: false,
         statusCode: 500,
@@ -204,8 +204,8 @@ describe("session.retry.retryable", () => {
   })
 
   test("retries 502 bad gateway errors", () => {
-    const error = Schema.decodeUnknownSync(SessionLegacy.APIError.Schema)(
-      new SessionLegacy.APIError({
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
         message: "Bad gateway",
         isRetryable: false,
         statusCode: 502,
@@ -216,8 +216,8 @@ describe("session.retry.retryable", () => {
   })
 
   test("retries 503 service unavailable errors", () => {
-    const error = Schema.decodeUnknownSync(SessionLegacy.APIError.Schema)(
-      new SessionLegacy.APIError({
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
         message: "Service unavailable",
         isRetryable: false,
         statusCode: 503,
@@ -228,8 +228,8 @@ describe("session.retry.retryable", () => {
   })
 
   test("does not retry 4xx errors when isRetryable is false", () => {
-    const error = Schema.decodeUnknownSync(SessionLegacy.APIError.Schema)(
-      new SessionLegacy.APIError({
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
         message: "Bad request",
         isRetryable: false,
         statusCode: 400,
@@ -240,8 +240,8 @@ describe("session.retry.retryable", () => {
   })
 
   test("retries ZlibError decompression failures", () => {
-    const error = Schema.decodeUnknownSync(SessionLegacy.APIError.Schema)(
-      new SessionLegacy.APIError({
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
         message: "Response decompression failed",
         isRetryable: true,
         metadata: { code: "ZlibError" },
@@ -254,8 +254,8 @@ describe("session.retry.retryable", () => {
   })
 
   test("maps free limits to Go upsell action", () => {
-    const error = Schema.decodeUnknownSync(SessionLegacy.APIError.Schema)(
-      new SessionLegacy.APIError({
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
         message: "Free usage exceeded",
         isRetryable: true,
         statusCode: 429,
@@ -280,8 +280,8 @@ describe("session.retry.retryable", () => {
   })
 
   test("maps Go subscription limits to workspace PAYG upsell", () => {
-    const error = Schema.decodeUnknownSync(SessionLegacy.APIError.Schema)(
-      new SessionLegacy.APIError({
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
         message: "Subscription quota exceeded. You can continue using free models.",
         isRetryable: true,
         statusCode: 429,
@@ -318,8 +318,8 @@ describe("session.retry.retryable", () => {
   })
 
   test("maps Go subscription limits without limit metadata", () => {
-    const error = Schema.decodeUnknownSync(SessionLegacy.APIError.Schema)(
-      new SessionLegacy.APIError({
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
         message: "Subscription quota exceeded. You can continue using free models.",
         isRetryable: true,
         statusCode: 429,
@@ -373,8 +373,8 @@ describe("session.message-v2.fromError", () => {
 
       const result = MessageV2.fromError(error, { providerID })
 
-      expect(SessionLegacy.APIError.isInstance(result)).toBe(true)
-      if (!SessionLegacy.APIError.isInstance(result)) throw new Error("expected APIError")
+      expect(SessionV1.APIError.isInstance(result)).toBe(true)
+      if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
       expect(result.data.isRetryable).toBe(true)
       expect(result.data.message).toBe("Connection reset by server")
       expect(result.data.metadata?.code).toBe("ECONNRESET")
@@ -384,8 +384,8 @@ describe("session.message-v2.fromError", () => {
   )
 
   test("ECONNRESET socket error is retryable", () => {
-    const error = Schema.decodeUnknownSync(SessionLegacy.APIError.Schema)(
-      new SessionLegacy.APIError({
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
         message: "Connection reset by server",
         isRetryable: true,
         metadata: { code: "ECONNRESET", message: "The socket connection was closed unexpectedly" },
@@ -408,7 +408,7 @@ describe("session.message-v2.fromError", () => {
       isRetryable: false,
     })
     const result = MessageV2.fromError(error, { providerID: ProviderV2.ID.make("openai") })
-    if (!SessionLegacy.APIError.isInstance(result)) throw new Error("expected APIError")
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
     expect(result.data.isRetryable).toBe(true)
   })
 
@@ -429,8 +429,8 @@ describe("session.message-v2.fromError", () => {
       { providerID: ProviderV2.ID.make("openai") },
     )
 
-    expect(SessionLegacy.APIError.isInstance(result)).toBe(true)
-    if (!SessionLegacy.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(SessionV1.APIError.isInstance(result)).toBe(true)
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
     expect(result.data.isRetryable).toBe(true)
     expect(SessionRetry.retryable(result, retryProvider)).toEqual({
       message: "An error occurred while processing your request.",

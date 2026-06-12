@@ -23,12 +23,12 @@ export const GithubCopilotPlugin = PluginV2.define({
       "aisdk.language": Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.githubCopilot) return
         if (evt.sdk.responses === undefined && evt.sdk.chat === undefined) {
-          evt.language = evt.sdk.languageModel(evt.model.apiID)
+          evt.language = evt.sdk.languageModel(evt.model.api.id)
           return
         }
-        evt.language = shouldUseResponses(evt.model.apiID)
-          ? evt.sdk.responses(evt.model.apiID)
-          : evt.sdk.chat(evt.model.apiID)
+        evt.language = shouldUseResponses(evt.model.api.id)
+          ? evt.sdk.responses(evt.model.api.id)
+          : evt.sdk.chat(evt.model.api.id)
       }),
       "catalog.transform": Effect.fn(function* (evt) {
         const item = evt.provider.get(ProviderV2.ID.githubCopilot)

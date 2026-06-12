@@ -1,14 +1,23 @@
+import path from "node:path"
 import { expect, mock, beforeEach } from "bun:test"
+import { ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Exit } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 import { testEffect } from "../lib/effect"
+import { TestInstance } from "../fixture/fixture"
 
 // --- Mock infrastructure ---
 
 // Per-client state for controlling mock behavior
 interface MockClientState {
+  capabilities: { tools?: object; prompts?: object; resources?: object }
+  capabilitiesShouldThrow: boolean
   tools: Array<{ name: string; description?: string; inputSchema: object; outputSchema?: object }>
   listToolsCalls: number
+  listPromptsCalls: number
+  listResourcesCalls: number
+  getPromptTimeout?: number
+  readResourceTimeout?: number
   requestCalls: number
   listToolsShouldFail: boolean
   listToolsError: string
@@ -16,6 +25,18 @@ interface MockClientState {
   listResourcesShouldFail: boolean
   prompts: Array<{ name: string; description?: string }>
   resources: Array<{ name: string; uri: string; description?: string }>
+  toolPages: Record<
+    string,
+    {
+      tools: Array<{ name: string; description?: string; inputSchema: object; outputSchema?: object }>
+      nextCursor?: string
+    }
+  >
+  promptPages: Record<string, { prompts: Array<{ name: string; description?: string }>; nextCursor?: string }>
+  resourcePages: Record<
+    string,
+    { resources: Array<{ name: string; uri: string; description?: string }>; nextCursor?: string }
+  >
   closed: boolean
   notificationHandlers: Map<unknown, (...args: any[]) => any>
 }
@@ -29,14 +50,20 @@ let connectError = "Mock transport cannot connect"
 let clientCreateCount = 0
 // Tracks how many times transport.close() is called across all mock transports
 let transportCloseCount = 0
+// Captures the opts passed to each MockStdioTransport, keyed by lastCreatedClientName
+const stdioOptsByName = new Map<string, any>()
 
 function getOrCreateClientState(name?: string): MockClientState {
   const key = name ?? "default"
   let state = clientStates.get(key)
   if (!state) {
     state = {
+      capabilities: { tools: {}, prompts: {}, resources: {} },
+      capabilitiesShouldThrow: false,
       tools: [{ name: "test_tool", description: "A test tool", inputSchema: { type: "object", properties: {} } }],
       listToolsCalls: 0,
+      listPromptsCalls: 0,
+      listResourcesCalls: 0,
       requestCalls: 0,
       listToolsShouldFail: false,
       listToolsError: "listTools failed",
@@ -44,6 +71,9 @@ function getOrCreateClientState(name?: string): MockClientState {
       listResourcesShouldFail: false,
       prompts: [],
       resources: [],
+      toolPages: {},
+      promptPages: {},
+      resourcePages: {},
       closed: false,
       notificationHandlers: new Map(),
     }
@@ -56,8 +86,9 @@ function getOrCreateClientState(name?: string): MockClientState {
 class MockStdioTransport {
   stderr: null = null
   pid = 12345
-  // oxlint-disable-next-line no-useless-constructor
-  constructor(_opts: any) {}
+  constructor(opts: any) {
+    if (lastCreatedClientName) stdioOptsByName.set(lastCreatedClientName, opts)
+  }
   async start() {
     if (connectShouldHang) return new Promise<void>(() => {}) // never resolves
     if (connectShouldFail) throw new Error(connectError)
@@ -133,32 +164,64 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       this._state?.notificationHandlers.set(schema, handler)
     }
 
-    async listTools() {
+    getServerCapabilities() {
+      if (this._state?.capabilitiesShouldThrow) throw new Error("capability discovery failed")
+      return this._state?.capabilities
+    }
+
+    async listTools(params?: { cursor?: string }) {
       if (this._state) this._state.listToolsCalls++
       if (this._state?.listToolsShouldFail) {
         throw new Error(this._state.listToolsError)
       }
+      const page = this._state?.toolPages[params === undefined ? "initial" : (params.cursor ?? "")]
+      if (page) return page
       return { tools: this._state?.tools ?? [] }
     }
 
-    async request(request: { method: string }, schema: { parse: (value: unknown) => unknown }) {
+    async request(
+      request: { method: string; params?: { cursor?: string } },
+      schema: { parse: (value: unknown) => unknown },
+    ) {
       if (this._state) this._state.requestCalls++
-      if (request.method === "tools/list") return schema.parse({ tools: this._state?.tools ?? [] })
+      if (request.method === "tools/list") {
+        return schema.parse(
+          this._state?.toolPages[request.params === undefined ? "initial" : (request.params.cursor ?? "")] ?? {
+            tools: this._state?.tools ?? [],
+          },
+        )
+      }
       throw new Error(`unsupported request: ${request.method}`)
     }
 
-    async listPrompts() {
+    async listPrompts(params?: { cursor?: string }) {
+      if (this._state) this._state.listPromptsCalls++
       if (this._state?.listPromptsShouldFail) {
         throw new Error("listPrompts failed")
       }
+      const page = this._state?.promptPages[params === undefined ? "initial" : (params.cursor ?? "")]
+      if (page) return page
       return { prompts: this._state?.prompts ?? [] }
     }
 
-    async listResources() {
+    async listResources(params?: { cursor?: string }) {
+      if (this._state) this._state.listResourcesCalls++
       if (this._state?.listResourcesShouldFail) {
         throw new Error("listResources failed")
       }
+      const page = this._state?.resourcePages[params === undefined ? "initial" : (params.cursor ?? "")]
+      if (page) return page
       return { resources: this._state?.resources ?? [] }
+    }
+
+    async getPrompt(_params: unknown, options?: { timeout?: number }) {
+      if (this._state) this._state.getPromptTimeout = options?.timeout
+      return { messages: [] }
+    }
+
+    async readResource(params: { uri: string }, options?: { timeout?: number }) {
+      if (this._state) this._state.readResourceTimeout = options?.timeout
+      return { contents: [{ uri: params.uri, text: "test" }] }
     }
 
     async close() {
@@ -187,6 +250,20 @@ function statusName(status: Record<string, MCPNS.Status> | MCPNS.Status, server:
   if ("status" in status) return status.status
   return status[server]?.status
 }
+
+it.instance(
+  "local mcp cwd resolves relative paths against instance directory",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        const { directory } = yield* TestInstance
+        lastCreatedClientName = "rel-cwd"
+        yield* mcp.add("rel-cwd", { type: "local", command: ["echo", "test"], cwd: "plugins/sub" })
+        expect(stdioOptsByName.get("rel-cwd")?.cwd).toBe(path.resolve(directory, "plugins/sub"))
+      }),
+    ),
+  { config: { mcp: {} } },
+)
 
 // ========================================================================
 // Test: tools() are cached after connect
@@ -222,6 +299,96 @@ it.instance(
   { config: { mcp: {} } },
 )
 
+it.instance(
+  "follows cursors when listing tools, prompts, and resources",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "paged-server"
+        const serverState = getOrCreateClientState("paged-server")
+        serverState.toolPages = {
+          initial: {
+            tools: [{ name: "tool-one", inputSchema: { type: "object", properties: {} } }],
+            nextCursor: "tools-2",
+          },
+          "tools-2": { tools: [{ name: "tool-two", inputSchema: { type: "object", properties: {} } }] },
+        }
+        serverState.promptPages = {
+          initial: { prompts: [{ name: "prompt-one" }], nextCursor: "prompts-2" },
+          "prompts-2": { prompts: [{ name: "prompt-two" }] },
+        }
+        serverState.resourcePages = {
+          initial: { resources: [{ name: "resource-one", uri: "test://one" }], nextCursor: "resources-2" },
+          "resources-2": { resources: [{ name: "resource-two", uri: "test://two" }] },
+        }
+
+        yield* mcp.add("paged-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(Object.keys(yield* mcp.tools())).toEqual(["paged-server_tool-one", "paged-server_tool-two"])
+        expect(Object.keys(yield* mcp.prompts())).toEqual(["paged-server:prompt-one", "paged-server:prompt-two"])
+        expect(Object.keys(yield* mcp.resources())).toEqual(["paged-server:resource-one", "paged-server:resource-two"])
+        expect(serverState.listToolsCalls).toBe(2)
+        expect(serverState.listPromptsCalls).toBe(2)
+        expect(serverState.listResourcesCalls).toBe(2)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "stops listing when a server repeats a cursor",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "looping-server"
+        const serverState = getOrCreateClientState("looping-server")
+        serverState.toolPages = {
+          initial: { tools: [], nextCursor: "repeat" },
+          repeat: { tools: [], nextCursor: "repeat" },
+        }
+
+        yield* mcp.add("looping-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(serverState.listToolsCalls).toBe(2)
+        expect(yield* mcp.tools()).toEqual({})
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "follows empty cursors",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "empty-cursor-server"
+        const serverState = getOrCreateClientState("empty-cursor-server")
+        serverState.promptPages = {
+          initial: { prompts: [{ name: "prompt-one" }], nextCursor: "" },
+          "": { prompts: [{ name: "prompt-two" }] },
+        }
+
+        yield* mcp.add("empty-cursor-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(Object.keys(yield* mcp.prompts())).toEqual([
+          "empty-cursor-server:prompt-one",
+          "empty-cursor-server:prompt-two",
+        ])
+        expect(serverState.listPromptsCalls).toBe(2)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
 // ========================================================================
 // Test: tool change notifications refresh the cache
 // ========================================================================
@@ -247,7 +414,7 @@ it.instance(
           { name: "next_tool", description: "next", inputSchema: { type: "object", properties: {} } },
         ]
 
-        const handler = Array.from(serverState.notificationHandlers.values())[0]
+        const handler = serverState.notificationHandlers.get(ToolListChangedNotificationSchema)
         expect(handler).toBeDefined()
         yield* Effect.promise(() => handler?.())
 
@@ -435,6 +602,31 @@ it.instance(
 )
 
 it.instance(
+  "returns failed and closes the client when SDK initialization throws",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "defective-server"
+        const serverState = getOrCreateClientState("defective-server")
+        serverState.capabilitiesShouldThrow = true
+
+        const result = yield* mcp.add("defective-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(statusName(result.status, "defective-server")).toBe("failed")
+        expect((yield* mcp.status())["defective-server"]).toEqual({
+          status: "failed",
+          error: "capability discovery failed",
+        })
+        expect(serverState.closed).toBe(true)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
   "falls back when MCP output schema refs fail SDK tool discovery",
   () =>
     MCP.Service.use((mcp: MCPNS.Interface) =>
@@ -596,6 +788,107 @@ it.instance(
       },
     },
   },
+)
+
+it.instance(
+  "uses per-server timeouts for prompt and resource requests",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "timeout-server"
+        const serverState = getOrCreateClientState("timeout-server")
+
+        yield* mcp.add("timeout-server", {
+          type: "local",
+          command: ["echo", "test"],
+          timeout: 2500,
+        })
+        yield* mcp.getPrompt("timeout-server", "test")
+        yield* mcp.readResource("timeout-server", "test://resource")
+
+        expect(serverState.getPromptTimeout).toBe(2500)
+        expect(serverState.readResourceTimeout).toBe(2500)
+      }),
+    ),
+  { config: { mcp: {}, experimental: { mcp_timeout: 5000 } } },
+)
+
+it.instance(
+  "resource-only servers connect without listing tools",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "resource-only-server"
+        const serverState = getOrCreateClientState("resource-only-server")
+        serverState.capabilities = { resources: {} }
+        serverState.resources = [{ name: "docs", uri: "docs://readme" }]
+
+        const result = yield* mcp.add("resource-only-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(statusName(result.status, "resource-only-server")).toBe("connected")
+        expect(serverState.listToolsCalls).toBe(0)
+        expect(Object.keys(yield* mcp.tools())).toHaveLength(0)
+        expect(Object.keys(yield* mcp.resources())).toEqual(["resource-only-server:docs"])
+        expect(serverState.listResourcesCalls).toBe(1)
+        expect(serverState.listPromptsCalls).toBe(0)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "prompt-only servers connect without listing tools",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "prompt-only-server"
+        const serverState = getOrCreateClientState("prompt-only-server")
+        serverState.capabilities = { prompts: {} }
+        serverState.prompts = [{ name: "review" }]
+
+        const result = yield* mcp.add("prompt-only-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(statusName(result.status, "prompt-only-server")).toBe("connected")
+        expect(serverState.listToolsCalls).toBe(0)
+        expect(Object.keys(yield* mcp.tools())).toHaveLength(0)
+        expect(Object.keys(yield* mcp.prompts())).toEqual(["prompt-only-server:review"])
+        expect(serverState.listPromptsCalls).toBe(1)
+        expect(serverState.listResourcesCalls).toBe(0)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "tools-only servers skip optional prompt and resource discovery",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "tools-only-server"
+        const serverState = getOrCreateClientState("tools-only-server")
+        serverState.capabilities = { tools: {} }
+
+        const result = yield* mcp.add("tools-only-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(statusName(result.status, "tools-only-server")).toBe("connected")
+        expect(serverState.listToolsCalls).toBe(1)
+        expect(Object.keys(yield* mcp.tools())).toEqual(["tools-only-server_test_tool"])
+        expect(yield* mcp.prompts()).toEqual({})
+        expect(yield* mcp.resources()).toEqual({})
+        expect(serverState.listPromptsCalls).toBe(0)
+        expect(serverState.listResourcesCalls).toBe(0)
+      }),
+    ),
+  { config: { mcp: {} } },
 )
 
 it.instance(
