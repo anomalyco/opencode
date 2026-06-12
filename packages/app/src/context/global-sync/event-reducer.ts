@@ -20,6 +20,7 @@ import {
   markQuestionProfileText,
   markQuestionProfileTool,
 } from "@/pages/session/composer/session-question-profile"
+import { markQuestionFlow, rememberQuestionFlow } from "@/pages/session/composer/session-question-flow-debug"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
@@ -263,6 +264,33 @@ export function applyDirectoryEvent(input: {
       if (SKIP_PARTS.has(part.type)) break
       markQuestionProfileText(part, "updated")
       markQuestionProfileTool(part, "updated")
+      if (part.type === "tool" && part.tool === "question") {
+        const state = part.state
+        const metadata =
+          "metadata" in state && state.metadata && typeof state.metadata === "object"
+            ? (state.metadata as Record<string, unknown>)
+            : undefined
+        const answers = metadata?.answers
+        const metadataRequest = metadata?.questionRequest
+        const metadataRequestID =
+          metadataRequest && typeof metadataRequest === "object" && "id" in metadataRequest
+            ? (metadataRequest as { id?: unknown }).id
+            : undefined
+        markQuestionFlow(
+          "sync-question-tool-part-updated",
+          {
+            message: part.messageID,
+            part: part.id,
+            call: part.callID,
+            status: state.status,
+            outputLength: "output" in state && typeof state.output === "string" ? state.output.length : "none",
+            metadataAnswers: Array.isArray(answers) ? answers.length : "none",
+            hasQuestionRequest: metadata?.questionRequest ? 1 : 0,
+            metadataRequest: typeof metadataRequestID === "string" ? metadataRequestID : "none",
+          },
+          { sessionID: part.sessionID },
+        )
+      }
       const parts = input.store.part[part.messageID]
       if (!parts) {
         input.setStore("part", part.messageID, [part])
@@ -417,6 +445,21 @@ export function applyDirectoryEvent(input: {
     case "question.asked": {
       const question = event.properties as QuestionRequest
       markQuestionProfileAsked(question, "event")
+      rememberQuestionFlow({
+        requestID: question.id,
+        sessionID: question.sessionID,
+        source: "sync-question-asked",
+      })
+      markQuestionFlow(
+        "sync-question-asked",
+        {
+          questions: question.questions.length,
+          hasTool: !!question.tool,
+          toolCall: question.tool?.callID ?? "none",
+          pendingBefore: input.store.question[question.sessionID]?.length ?? 0,
+        },
+        { sessionID: question.sessionID, requestID: question.id },
+      )
       const questions = input.store.question[question.sessionID]
       if (!questions) {
         input.setStore("question", question.sessionID, [question])
@@ -438,10 +481,36 @@ export function applyDirectoryEvent(input: {
     }
     case "question.replied":
     case "question.rejected": {
-      const props = event.properties as { sessionID: string; requestID: string }
+      const props = event.properties as { sessionID: string; requestID: string; answers?: unknown[] }
       const questions = input.store.question[props.sessionID]
-      if (!questions) break
+      rememberQuestionFlow({
+        requestID: props.requestID,
+        sessionID: props.sessionID,
+        source: `sync-${event.type}`,
+      })
+      if (!questions) {
+        markQuestionFlow(
+          `sync-${event.type}`,
+          {
+            pendingBefore: "none",
+            found: false,
+            answers: Array.isArray(props.answers) ? props.answers.length : "none",
+          },
+          { sessionID: props.sessionID, requestID: props.requestID },
+        )
+        break
+      }
       const result = Binary.search(questions, props.requestID, (q) => q.id)
+      markQuestionFlow(
+        `sync-${event.type}`,
+        {
+          pendingBefore: questions.length,
+          found: result.found,
+          index: result.found ? result.index : "none",
+          answers: Array.isArray(props.answers) ? props.answers.length : "none",
+        },
+        { sessionID: props.sessionID, requestID: props.requestID },
+      )
       if (!result.found) break
       input.setStore(
         "question",

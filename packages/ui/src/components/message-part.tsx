@@ -82,6 +82,41 @@ type QuestionProfileTextMark = {
   source: string
 }
 
+type QuestionFlowFields = Record<string, string | number | boolean | undefined>
+
+type QuestionFlowRecent = {
+  at: number
+  requestID: string
+  sessionID: string
+  source: string
+  submittedAt?: number
+}
+
+type QuestionFlowGlobal = {
+  seq: number
+  latest?: QuestionFlowRecent
+  recentBySession: Record<string, QuestionFlowRecent | undefined>
+}
+
+type QuestionHandoff = {
+  requestID: string
+  sessionID: string
+  messageID?: string
+  callID?: string
+  answers: QuestionAnswer[]
+  createdAt: number
+}
+
+type QuestionHandoffGlobal = {
+  latest?: QuestionHandoff
+  byRequest: Record<string, QuestionHandoff | undefined>
+  byTool?: Record<string, QuestionHandoff | undefined>
+}
+
+const QUESTION_FLOW_RECENT_MS = 12_000
+const QUESTION_HANDOFF_EVENT = "opencode:question-handoff"
+const QUESTION_HANDOFF_MAX_AGE_MS = 30_000
+
 function questionProfileEnabled() {
   if (typeof window === "undefined") return false
   try {
@@ -96,8 +131,52 @@ function questionProfileNow() {
   return performance.now()
 }
 
+function questionHandoffGlobal(): QuestionHandoffGlobal | undefined {
+  if (typeof window === "undefined") return undefined
+  const global = (window as Window & { __opencodeQuestionHandoff?: QuestionHandoffGlobal }).__opencodeQuestionHandoff
+  if (global) global.byTool ??= {}
+  return global
+}
+
+function questionHandoffToolKey(input: { sessionID: string; messageID?: string; callID?: string }): string | undefined {
+  if (!input.messageID && !input.callID) return undefined
+  return `${input.sessionID}\n${input.messageID ?? ""}\n${input.callID ?? ""}`
+}
+
+function cleanupQuestionHandoffs(global: QuestionHandoffGlobal): void {
+  const now = questionProfileNow()
+  for (const [requestID, handoff] of Object.entries(global.byRequest)) {
+    if (!handoff || now - handoff.createdAt <= QUESTION_HANDOFF_MAX_AGE_MS) continue
+    delete global.byRequest[requestID]
+    const key = questionHandoffToolKey(handoff)
+    if (key) delete global.byTool?.[key]
+    if (global.latest?.requestID === requestID) global.latest = undefined
+  }
+}
+
+function questionHandoffForPart(part: ToolPart): QuestionHandoff | undefined {
+  const global = questionHandoffGlobal()
+  if (!global) return undefined
+  cleanupQuestionHandoffs(global)
+
+  const key = questionHandoffToolKey(part)
+  const direct = key ? global.byTool?.[key] : undefined
+  if (direct) return direct
+
+  const candidates = Object.values(global.byRequest).filter((handoff): handoff is QuestionHandoff => {
+    if (!handoff) return false
+    if (!handoff.messageID && !handoff.callID) return false
+    if (handoff.sessionID !== part.sessionID) return false
+    if (handoff.messageID && handoff.messageID !== part.messageID) return false
+    if (handoff.callID && handoff.callID !== part.callID) return false
+    return true
+  })
+
+  return candidates.at(-1)
+}
+
 function questionProfileGlobal() {
-  if (typeof window === "undefined") return
+  if (typeof window === "undefined") return undefined
   return (
     window as Window & {
       __opencodeQuestionProfile?: {
@@ -136,6 +215,88 @@ function questionProfileEmit(
     .map(([name, value]) => `${name}=${String(value)}`)
     .join(" ")
   console.warn(`[question-profile] phase=ui:${phase} t=${questionProfileNow().toFixed(1)} ${line}`)
+}
+
+function questionFlowEnabled() {
+  if (typeof window === "undefined") return false
+  try {
+    return window.localStorage.getItem("opencode.question.flow") !== "0"
+  } catch {
+    return true
+  }
+}
+
+function questionFlowGlobal(): QuestionFlowGlobal | undefined {
+  if (typeof window === "undefined") return undefined
+  const target = window as Window & { __opencodeQuestionFlow?: QuestionFlowGlobal }
+  target.__opencodeQuestionFlow ??= {
+    seq: 0,
+    recentBySession: {},
+  }
+  return target.__opencodeQuestionFlow
+}
+
+function questionFlowElementMetrics(element: HTMLElement | undefined, prefix: string): QuestionFlowFields {
+  if (!element) return { [`${prefix}Rect`]: "none" }
+  const rect = element.getBoundingClientRect()
+  return {
+    [`${prefix}Top`]: Math.round(rect.top),
+    [`${prefix}Bottom`]: Math.round(rect.bottom),
+    [`${prefix}Height`]: Math.round(rect.height),
+    [`${prefix}Width`]: Math.round(rect.width),
+  }
+}
+
+function questionFlowToolMetrics(part: ToolPart, hidden: boolean): QuestionFlowFields {
+  const state = part.state
+  const metadata =
+    "metadata" in state && state.metadata && typeof state.metadata === "object"
+      ? (state.metadata as Record<string, unknown>)
+      : undefined
+  const answers = metadata?.answers
+  const metadataRequest = metadata?.questionRequest
+  const metadataRequestID =
+    metadataRequest && typeof metadataRequest === "object" && "id" in metadataRequest
+      ? (metadataRequest as { id?: unknown }).id
+      : undefined
+  const questions = Array.isArray(state.input.questions) ? state.input.questions.length : "none"
+  return {
+    hidden,
+    status: state.status,
+    questions,
+    outputLength: "output" in state && typeof state.output === "string" ? state.output.length : "none",
+    metadataAnswers: Array.isArray(answers) ? answers.length : "none",
+    hasQuestionRequest: metadata?.questionRequest ? 1 : 0,
+    metadataRequest: typeof metadataRequestID === "string" ? metadataRequestID : "none",
+  }
+}
+
+function questionFlowEmit(phase: string, part: ToolPart, fields: QuestionFlowFields = {}): void {
+  if (!questionFlowEnabled()) return
+  const global = questionFlowGlobal()
+  if (!global) return
+  const at = questionProfileNow()
+  const recent = global.recentBySession[part.sessionID] ?? global.latest
+  if (recent && at - recent.at > QUESTION_FLOW_RECENT_MS) return
+
+  global.seq += 1
+  const submittedAt = recent?.sessionID === part.sessionID ? recent.submittedAt : undefined
+  const values: QuestionFlowFields = {
+    seq: global.seq,
+    session: part.sessionID,
+    request: recent?.sessionID === part.sessionID ? recent.requestID : "none",
+    sinceSubmitMs: submittedAt === undefined ? "none" : Math.round(at - submittedAt),
+    message: part.messageID,
+    part: part.id,
+    call: part.callID,
+    ...fields,
+  }
+  const line = Object.entries(values)
+    .filter((entry): entry is [string, string | number | boolean] => entry[1] !== undefined)
+    .map(([name, value]) => `${name}=${String(value)}`)
+    .join(" ")
+
+  console.debug(`[question-flow] phase=ui:${phase} t=${at.toFixed(1)} ${line}`)
 }
 
 function providerByID(all: unknown, providerID: string): ProviderSummary | undefined {
@@ -1468,6 +1629,7 @@ export interface ToolProps {
   markdownViewport?: HTMLDivElement
   markdownStage?: MarkdownStage
   onMarkdownStage?: (key: string, stage: MarkdownStage | undefined) => void
+  questionHandoff?: QuestionHandoff
 }
 
 export type ToolComponent = Component<ToolProps>
@@ -1533,14 +1695,50 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const tool = toolName(part())
   if (tool === "todowrite" || tool === "todoread") return null
 
+  let toolWrapper: HTMLDivElement | undefined
+  const [handoffVersion, setHandoffVersion] = createSignal(0)
+  onMount(() => {
+    if (tool !== "question") return
+    const refresh = () => setHandoffVersion((value) => value + 1)
+    window.addEventListener(QUESTION_HANDOFF_EVENT, refresh)
+    onCleanup(() => window.removeEventListener(QUESTION_HANDOFF_EVENT, refresh))
+  })
   const hideQuestion = createMemo(() => tool === "question" && part().state.status === "pending")
+  const questionHandoff = createMemo(() => {
+    handoffVersion()
+    return tool === "question" ? questionHandoffForPart(part()) : undefined
+  })
   createEffect(() => {
     if (tool !== "question") return
     const current = part()
+    const hidden = hideQuestion()
     questionProfileEmit(hideQuestion() ? "tool-hidden" : "tool-visible", current, {
-      hidden: hideQuestion(),
+      hidden,
       hasQuestions: Array.isArray(current.state.input.questions),
       questions: Array.isArray(current.state.input.questions) ? current.state.input.questions.length : "none",
+    })
+    questionFlowEmit(hidden ? "tool-hidden" : "tool-visible", current, {
+      ...questionFlowToolMetrics(current, hidden),
+      handoffAnswers: questionHandoff()?.answers.length ?? "none",
+    })
+    queueMicrotask(() => {
+      const microtaskPart = part()
+      const microtaskHidden = hideQuestion()
+      questionFlowEmit("tool-dom-microtask", microtaskPart, {
+        ...questionFlowToolMetrics(microtaskPart, microtaskHidden),
+        handoffAnswers: questionHandoff()?.answers.length ?? "none",
+        ...questionFlowElementMetrics(toolWrapper, "wrapper"),
+      })
+      if (typeof requestAnimationFrame !== "function") return
+      requestAnimationFrame(() => {
+        const framePart = part()
+        const frameHidden = hideQuestion()
+        questionFlowEmit("tool-dom-raf", framePart, {
+          ...questionFlowToolMetrics(framePart, frameHidden),
+          handoffAnswers: questionHandoff()?.answers.length ?? "none",
+          ...questionFlowElementMetrics(toolWrapper, "wrapper"),
+        })
+      })
     })
   })
 
@@ -1573,7 +1771,14 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
 
   return (
     <Show when={!hideQuestion()}>
-      <div data-component="tool-part-wrapper">
+      <div
+        ref={(el) => (toolWrapper = el)}
+        data-component="tool-part-wrapper"
+        data-tool={tool}
+        data-tool-status={part().state.status}
+        data-session-id={part().sessionID}
+        data-question-handoff={questionHandoff() ? "answer" : undefined}
+      >
         <Switch>
           <Match when={part().state.status === "error"}>
             {(() => {
@@ -1620,6 +1825,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               markdownViewport={props.markdownViewport}
               markdownStage={props.markdownStage}
               onMarkdownStage={props.onMarkdownStage}
+              questionHandoff={questionHandoff()}
             />
           </Match>
         </Switch>
@@ -2857,7 +3063,10 @@ ToolRegistry.register({
     const i18n = useI18n()
     const dialog = useDialog()
     const questions = createMemo(() => (props.input.questions ?? []) as QuestionInfo[])
-    const answers = createMemo(() => (props.metadata.answers ?? []) as QuestionAnswer[])
+    const metadataAnswers = createMemo(() => (props.metadata.answers ?? []) as QuestionAnswer[])
+    const handoffAnswers = createMemo(() => props.questionHandoff?.answers ?? [])
+    const optimistic = createMemo(() => metadataAnswers().length === 0 && handoffAnswers().length > 0)
+    const answers = createMemo(() => (metadataAnswers().length > 0 ? metadataAnswers() : handoffAnswers()))
     const completed = createMemo(() => answers().length > 0)
 
     const subtitle = createMemo(() => {
@@ -2871,6 +3080,8 @@ ToolRegistry.register({
       <BasicTool
         {...props}
         defaultOpen={completed()}
+        showPendingDetails={optimistic()}
+        showPendingMeta={optimistic()}
         icon="bubble-5"
         trigger={{
           title: i18n.t("ui.tool.questions"),

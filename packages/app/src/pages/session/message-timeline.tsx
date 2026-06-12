@@ -52,6 +52,8 @@ import { messageAgentColor } from "@/utils/agent"
 import { makeTimer } from "@solid-primitives/timer"
 import { Persist, persisted } from "@/utils/persist"
 import { apps, editor, getOpenPlan, manager, type OpenApp, type OS } from "@/components/session/open-app"
+import { markQuestionFlow, questionFlowViewportMetrics } from "./composer/session-question-flow-debug"
+import { playPendingQuestionFlip } from "./composer/session-question-flip"
 import { markQuestionProfileTimeline } from "./composer/session-question-profile"
 import { sessionQuestionRequest } from "./composer/session-request-tree"
 import { active, working } from "./session-working"
@@ -221,6 +223,7 @@ type PendingShrink = {
 
 type RecentQuestionState = {
   id: string
+  sessionID: string
   at: number
 }
 
@@ -509,15 +512,33 @@ export function MessageTimeline(props: {
   createEffect(() => {
     const request = questionRequest()
     if (!request) {
+      if (recentQuestion) {
+        markQuestionFlow(
+          "timeline-question-close",
+          {
+            ageMs: Math.round(performance.now() - recentQuestion.at),
+            ...questionFlowViewportMetrics(viewport, "viewport"),
+          },
+          { sessionID: recentQuestion.sessionID, requestID: recentQuestion.id },
+        )
+      }
       recentQuestion = undefined
       return
     }
     if (recentQuestion?.id === request.id) return
-    recentQuestion = { id: request.id, at: performance.now() }
+    recentQuestion = { id: request.id, sessionID: request.sessionID, at: performance.now() }
     markQuestionProfileTimeline("question-open", {
       request: request.id,
       questions: request.questions.length,
     })
+    markQuestionFlow(
+      "timeline-question-open",
+      {
+        questions: request.questions.length,
+        ...questionFlowViewportMetrics(viewport, "viewport"),
+      },
+      { sessionID: request.sessionID, requestID: request.id },
+    )
   })
 
   const questionSettling = () => {
@@ -530,6 +551,7 @@ export function MessageTimeline(props: {
 
   const follow = (root: HTMLDivElement, src: string, mode: "smooth" | "auto" = "smooth") => {
     if (props.hasScrollGesture()) {
+      markQuestionFlow("timeline-follow-skip", { source: src, mode, reason: "scroll-gesture" })
       const now = Date.now()
       if (now - skipped > 300) {
         console.debug(`[timeline] follow held src=${src}`)
@@ -545,10 +567,37 @@ export function MessageTimeline(props: {
     const viewportShrank = clientDelta <= -VIEWPORT_SHRINK_SNAP
     const settlingForQuestion = questionSettling()
     const snapForQuestion = settlingForQuestion && mode === "smooth"
+    markQuestionFlow("timeline-follow-check", {
+      source: src,
+      mode,
+      dist: Math.round(dist),
+      top: Math.round(top),
+      clientDelta: Math.round(clientDelta),
+      viewportShrank,
+      settlingForQuestion,
+      snapForQuestion,
+      ...questionFlowViewportMetrics(root, "viewport"),
+    })
     if (Math.abs(dist) <= 1) {
       root.scrollTop = top
-      if (settlingForQuestion && src === "frame") return
+      if (settlingForQuestion && src === "frame") {
+        markQuestionFlow("timeline-follow-result", {
+          source: src,
+          mode,
+          result: "question-frame-settle-skip",
+          dist: Math.round(dist),
+          ...questionFlowViewportMetrics(root, "viewport"),
+        })
+        return
+      }
       props.onScheduleScrollState(root)
+      markQuestionFlow("timeline-follow-result", {
+        source: src,
+        mode,
+        result: "settle",
+        dist: Math.round(dist),
+        ...questionFlowViewportMetrics(root, "viewport"),
+      })
       markQuestionProfileTimeline("follow-settle", {
         source: src,
         mode,
@@ -564,6 +613,13 @@ export function MessageTimeline(props: {
     if (mode === "auto" || snapForQuestion || viewportShrank || Math.abs(dist) > FOLLOW_SNAP_DISTANCE) {
       root.scrollTop = top
       props.onScheduleScrollState(root)
+      markQuestionFlow("timeline-follow-result", {
+        source: src,
+        mode,
+        result: snapForQuestion ? "question-snap" : viewportShrank ? "viewport-shrink-snap" : "snap",
+        dist: Math.round(dist),
+        ...questionFlowViewportMetrics(root, "viewport"),
+      })
       markQuestionProfileTimeline(
         snapForQuestion ? "follow-question-snap" : viewportShrank ? "follow-snap-viewport-shrink" : "follow-snap",
         {
@@ -583,6 +639,14 @@ export function MessageTimeline(props: {
     const step = Math.sign(dist) * Math.min(Math.max(Math.abs(dist) * FOLLOW_EASE, 1), FOLLOW_MAX_STEP)
     root.scrollTop += step
     props.onScheduleScrollState(root)
+    markQuestionFlow("timeline-follow-result", {
+      source: src,
+      mode,
+      result: "step",
+      dist: Math.round(dist),
+      step: Math.round(step),
+      ...questionFlowViewportMetrics(root, "viewport"),
+    })
     markQuestionProfileTimeline("follow-step", {
       source: src,
       mode,
@@ -605,10 +669,34 @@ export function MessageTimeline(props: {
     }
     if (snappedQuestionId === request.id) return
     snappedQuestionId = request.id
+    markQuestionFlow(
+      "timeline-question-open-follow-schedule",
+      {},
+      { sessionID: request.sessionID, requestID: request.id },
+    )
     requestAnimationFrame(() => {
-      if (questionRequest()?.id !== request.id) return
+      if (questionRequest()?.id !== request.id) {
+        markQuestionFlow(
+          "timeline-question-open-follow-skip",
+          { reason: "request-changed", currentRequest: questionRequest()?.id ?? "none" },
+          { sessionID: request.sessionID, requestID: request.id },
+        )
+        return
+      }
       const root = viewport
-      if (!root) return
+      if (!root) {
+        markQuestionFlow(
+          "timeline-question-open-follow-skip",
+          { reason: "no-root" },
+          { sessionID: request.sessionID, requestID: request.id },
+        )
+        return
+      }
+      markQuestionFlow(
+        "timeline-question-open-follow-run",
+        questionFlowViewportMetrics(root, "viewport"),
+        { sessionID: request.sessionID, requestID: request.id },
+      )
       follow(root, "question-open", "auto")
     })
   })
@@ -1547,28 +1635,51 @@ export function MessageTimeline(props: {
   const pin = (source: string) => {
     const root = viewport
     if (!root) {
+      markQuestionFlow("timeline-pin-skip", { source, reason: "no-root" })
       return
     }
     if (props.seekingMessageId || props.currentMessageId) {
+      markQuestionFlow("timeline-pin-skip", {
+        source,
+        reason: props.seekingMessageId ? "seeking" : "current-message",
+      })
       return
     }
     if (!props.live) {
+      markQuestionFlow("timeline-pin-skip", { source, reason: "not-live" })
       return
     }
     if (props.hasScrollGesture()) {
+      markQuestionFlow("timeline-pin-skip", { source, reason: "scroll-gesture" })
       return
     }
     if (root.clientHeight <= 0 || root.scrollHeight <= 0) {
+      markQuestionFlow("timeline-pin-skip", {
+        source,
+        reason: "empty-viewport",
+        ...questionFlowViewportMetrics(root, "viewport"),
+      })
       return
     }
 
     const top = Math.max(0, root.scrollHeight - root.clientHeight)
     const dist = top - root.scrollTop
     if (Math.abs(dist) <= 1) {
+      markQuestionFlow("timeline-pin-skip", {
+        source,
+        reason: "already-bottom",
+        dist: Math.round(dist),
+        ...questionFlowViewportMetrics(root, "viewport"),
+      })
       return
     }
 
     follow(root, source, "smooth")
+    markQuestionFlow("timeline-pin-run", {
+      source,
+      dist: Math.round(dist),
+      ...questionFlowViewportMetrics(root, "viewport"),
+    })
     markQuestionProfileTimeline("pin", {
       source,
       dist: Math.round(dist),
@@ -1582,8 +1693,13 @@ export function MessageTimeline(props: {
   }
 
   const schedulePin = (source: string) => {
+    const previousSource = pinSource
     pinSource = source
-    if (pinFrame !== undefined) return
+    if (pinFrame !== undefined) {
+      markQuestionFlow("timeline-pin-schedule-skip", { source, activeSource: previousSource })
+      return
+    }
+    markQuestionFlow("timeline-pin-schedule", { source })
     pinFrame = requestAnimationFrame(() => {
       pinFrame = undefined
       pin(pinSource)
@@ -1683,6 +1799,16 @@ export function MessageTimeline(props: {
 
     const sync = () => {
       probeLayout("content-resize")
+      markQuestionFlow("timeline-content-resize", {
+        questionRequest: questionRequest()?.id ?? "none",
+        ...questionFlowViewportMetrics(viewport, "viewport"),
+      })
+      const flipped = playPendingQuestionFlip({ root: body, viewport })
+      markQuestionFlow("timeline-content-resize-after-flip", {
+        flipped,
+        questionRequest: questionRequest()?.id ?? "none",
+        ...questionFlowViewportMetrics(viewport, "viewport"),
+      })
       schedulePin("content-resize")
     }
 
