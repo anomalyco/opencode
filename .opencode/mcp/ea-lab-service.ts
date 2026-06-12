@@ -270,19 +270,25 @@ export function createEaLabService(defaults: { dbPath?: string; riskGatePath: st
         has_hard_max_loss?: boolean
         optimized_on_single_period_only?: boolean
       }
-      return checkRiskGates(await parseRiskGates(defaults.riskGatePath), {
+      const wantsLiveTrading =
+        readSafetyBoolean(
+          "wantsLiveTrading" in input ? input.wantsLiveTrading : undefined,
+          legacy.wants_live_trading,
+        ) || isLiveStageName(input.stage)
+      const metrics = normalizeRiskGateMetrics(input.metrics)
+      const result = checkRiskGates(await parseRiskGates(defaults.riskGatePath), {
         targetType,
         targetID,
         stage: input.stage,
         requestedAction,
-        metrics: input.metrics ?? {},
+        metrics,
         hasOutOfSample: "hasOutOfSample" in input ? (input.hasOutOfSample ?? false) : (legacy.has_out_of_sample ?? false),
         hasSpreadSensitivity:
           "hasSpreadSensitivity" in input
             ? (input.hasSpreadSensitivity ?? false)
             : (legacy.spread_slippage_documented ?? false),
         hasDemoForward: "hasDemoForward" in input ? (input.hasDemoForward ?? false) : (legacy.has_demo_forward ?? false),
-        wantsLiveTrading: "wantsLiveTrading" in input ? (input.wantsLiveTrading ?? false) : (legacy.wants_live_trading ?? false),
+        wantsLiveTrading,
         wantsLotIncrease: "wantsLotIncrease" in input ? (input.wantsLotIncrease ?? false) : (legacy.wants_lot_increase ?? false),
         wantsGateRelaxation:
           "wantsGateRelaxation" in input ? (input.wantsGateRelaxation ?? false) : (legacy.wants_gate_relaxation ?? false),
@@ -294,6 +300,14 @@ export function createEaLabService(defaults: { dbPath?: string; riskGatePath: st
             ? (input.optimizedOnSinglePeriod ?? false)
             : (legacy.optimized_on_single_period_only ?? false),
       })
+      const advisoryViolations = buildTransitionMetricViolations({
+        requestedAction,
+        stage: input.stage,
+        wantsLiveTrading,
+        metrics,
+      })
+      const violations = [...advisoryViolations, ...result.violations]
+      return { passed: violations.length === 0, violations }
     },
   }
 }
@@ -336,31 +350,20 @@ async function enforceExperimentRiskGates(input: {
   const promotionTransition = input.nextStatus === "promoted" && input.currentStatus !== "promoted"
   const liveTransition = isLiveStage(input.nextStage) && !isLiveStage(input.currentStage)
   if (!promotionTransition && !liveTransition) return
-  const nextMetrics = readMetricsJson(input.nextMetricsJSON) ?? readMetricsJson(input.currentMetricsJSON)
-  const tradeCount = readMetricNumber(nextMetrics?.trade_count)
-  const maxDrawdownPercent = readMetricNumber(nextMetrics?.max_drawdown_percent)
-  const violations = [
-    tradeCount === undefined
-      ? { name: "trade_count_required", severity: "hard" as const, reason: "promotion/live transition requires numeric trade_count" }
-      : undefined,
-    maxDrawdownPercent === undefined
-      ? {
-          name: "max_drawdown_percent_required",
-          severity: "hard" as const,
-          reason: "promotion/live transition requires numeric max_drawdown_percent",
-        }
-      : undefined,
-  ].filter((item): item is { name: string; severity: "hard"; reason: string } => item !== undefined)
+  const nextMetrics = normalizeRiskGateMetrics(readMetricsJson(input.nextMetricsJSON) ?? readMetricsJson(input.currentMetricsJSON))
+  const violations = buildTransitionMetricViolations({
+    requestedAction: promotionTransition || liveTransition ? "promote" : "update",
+    stage: input.nextStage,
+    wantsLiveTrading: liveTransition,
+    metrics: nextMetrics,
+  })
   const wantsLiveTrading = liveTransition || readSafetyBoolean(input.safetyInput.wantsLiveTrading, input.safetyInput.wants_live_trading)
   const result = checkRiskGates(await parseRiskGates(input.riskGatePath), {
     targetType: "promotion",
     targetID: "experiment",
     stage: input.nextStage,
     requestedAction: promotionTransition || liveTransition ? "promote" : "update",
-    metrics: {
-      trade_count: tradeCount,
-      max_drawdown_percent: maxDrawdownPercent,
-    },
+    metrics: nextMetrics,
     hasOutOfSample: readSafetyBoolean(input.safetyInput.hasOutOfSample, input.safetyInput.has_out_of_sample),
     hasSpreadSensitivity: readSafetyBoolean(input.safetyInput.hasSpreadSensitivity, input.safetyInput.spread_slippage_documented),
     hasDemoForward: readSafetyBoolean(input.safetyInput.hasDemoForward, input.safetyInput.has_demo_forward),
@@ -394,6 +397,39 @@ function readMetricsJson(input: string | undefined) {
   return decoded && typeof decoded === "object" && !Array.isArray(decoded) ? (decoded as Record<string, unknown>) : undefined
 }
 
+function normalizeRiskGateMetrics(input: { trade_count?: unknown; max_drawdown_percent?: unknown } | Record<string, unknown> | undefined) {
+  return {
+    trade_count: readMetricNumber(input?.trade_count),
+    max_drawdown_percent: readMetricNumber(input?.max_drawdown_percent),
+  }
+}
+
+function buildTransitionMetricViolations(input: {
+  requestedAction: string
+  stage: string
+  wantsLiveTrading: boolean
+  metrics: { trade_count?: number; max_drawdown_percent?: number }
+}) {
+  const requiresMetrics = input.requestedAction === "promote" || input.wantsLiveTrading || isLiveStageName(input.stage)
+  if (!requiresMetrics) return []
+  return [
+    input.metrics.trade_count === undefined
+      ? { name: "trade_count_required", severity: "hard" as const, reason: "promotion/live transition requires numeric trade_count" }
+      : undefined,
+    input.metrics.max_drawdown_percent === undefined
+      ? {
+          name: "max_drawdown_percent_required",
+          severity: "hard" as const,
+          reason: "promotion/live transition requires numeric max_drawdown_percent",
+        }
+      : undefined,
+  ].filter((item): item is { name: string; severity: "hard"; reason: string } => item !== undefined)
+}
+
 function readMetricNumber(input: unknown) {
   return typeof input === "number" && Number.isFinite(input) ? input : undefined
+}
+
+function isLiveStageName(stage: string | undefined) {
+  return stage === "micro_live" || stage === "limited_live"
 }

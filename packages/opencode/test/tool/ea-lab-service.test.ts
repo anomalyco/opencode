@@ -12,8 +12,8 @@ const baseEnv = {
 }
 
 afterEach(() => {
-  process.env.OPENCODE_EA_LAB_ALLOW_UNAUTH_LOCALHOST = baseEnv.allowUnauth
-  process.env.OPENCODE_EA_LAB_SERVICE_TOKEN = baseEnv.token
+  restoreEnv("OPENCODE_EA_LAB_ALLOW_UNAUTH_LOCALHOST", baseEnv.allowUnauth)
+  restoreEnv("OPENCODE_EA_LAB_SERVICE_TOKEN", baseEnv.token)
 })
 
 describe("ea-lab service", () => {
@@ -242,7 +242,54 @@ describe("ea-lab service", () => {
     expect(updated.result_status).toBe("failed")
     expect(updated.overfit_risk).toBe("high")
   })
+
+  test("advisory gate infers live intent from live stages", async () => {
+    await using tmp = await tmpdir()
+    const service = createEaLabService({
+      dbPath: path.join(tmp.path, "ea-lab.sqlite3"),
+      riskGatePath: path.resolve("../../risk/gates.yaml"),
+    })
+
+    const result = await service.checkRiskGates({
+      stage: "micro_live",
+      metrics: { trade_count: 40, max_drawdown_percent: 5 },
+      has_out_of_sample: true,
+      has_demo_forward: true,
+      spread_slippage_documented: true,
+    })
+
+    expect(result.passed).toBe(false)
+    expect(result.violations.map((item) => item.name)).toContain("live_trading_ai_can_enable")
+  })
+
+  test("advisory gate rejects non-numeric promotion metrics", async () => {
+    await using tmp = await tmpdir()
+    const service = createEaLabService({
+      dbPath: path.join(tmp.path, "ea-lab.sqlite3"),
+      riskGatePath: path.resolve("../../risk/gates.yaml"),
+    })
+
+    const result = await service.checkRiskGates({
+      stage: "backtest",
+      requestedAction: "promote",
+      metrics: { trade_count: "forty", max_drawdown_percent: "five" } as never,
+      has_out_of_sample: true,
+      spread_slippage_documented: true,
+    })
+
+    expect(result.passed).toBe(false)
+    expect(result.violations.map((item) => item.name)).toContain("trade_count_required")
+    expect(result.violations.map((item) => item.name)).toContain("max_drawdown_percent_required")
+  })
 })
+
+function restoreEnv(key: string, value: string | undefined) {
+  if (value === undefined) {
+    delete process.env[key]
+    return
+  }
+  process.env[key] = value
+}
 
 function readExperimentCount(dbPath: string) {
   const db = openEaLabDatabase(dbPath, true)
