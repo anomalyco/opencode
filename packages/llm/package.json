@@ -25,6 +25,7 @@
     "./providers/openai-compatible": "./src/providers/openai-compatible.ts",
     "./providers/openai-compatible-profile": "./src/providers/openai-compatible-profile.ts",
     "./providers/openrouter": "./src/providers/openrouter.ts",
+    "./providers/trustedrouter": "./src/providers/trustedrouter.ts",
     "./providers/xai": "./src/providers/xai.ts",
     "./protocols": "./src/protocols/index.ts",
     "./protocols/anthropic-messages": "./src/protocols/anthropic-messages.ts",

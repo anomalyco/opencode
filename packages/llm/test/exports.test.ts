@@ -8,6 +8,7 @@ import {
   OpenAI,
   OpenAICompatible,
   OpenRouter,
+  TrustedRouter,
   XAI,
 } from "@opencode-ai/llm/providers"
 import * as GitHubCopilot from "@opencode-ai/llm/providers/github-copilot"
@@ -41,6 +42,8 @@ describe("public exports", () => {
     expect(CloudflareWorkersAI.configure({ accountId: "fixture", apiKey: "fixture" }).model).toBeFunction()
     expect(OpenRouter.model).toBeFunction()
     expect(OpenRouter.provider.model).toBe(OpenRouter.model)
+    expect(TrustedRouter.model).toBeFunction()
+    expect(TrustedRouter.provider.model).toBe(TrustedRouter.model)
     expect(XAI.model).toBeFunction()
     expect(XAI.provider.model).toBe(XAI.model)
     expect(XAI.provider.responses).toBe(XAI.responses)

@@ -2247,6 +2247,55 @@ Use this when OpenCode is running somewhere a browser can't reach the loopback r
 
 ---
 
+### TrustedRouter
+
+TrustedRouter is OpenAI-compatible and can be configured as a custom provider.
+It uses `https://api.trustedrouter.com/v1` as the API base URL.
+
+1. Create a TrustedRouter API key from the [TrustedRouter console](https://trustedrouter.com/console/keys).
+
+2. Run the `/connect` command, choose **Other**, enter `trustedrouter` as the provider ID, and paste the API key.
+
+   ```txt
+   /connect
+   ```
+
+3. Add TrustedRouter to your `opencode.json`.
+
+   ```json title="opencode.json" ""trustedrouter""
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "trustedrouter": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "TrustedRouter",
+         "options": {
+           "baseURL": "https://api.trustedrouter.com/v1"
+         },
+         "models": {
+           "trustedrouter/auto": {
+             "name": "TrustedRouter Auto"
+           },
+           "trustedrouter/zdr": {
+             "name": "TrustedRouter ZDR"
+           },
+           "trustedrouter/e2e": {
+             "name": "TrustedRouter E2E"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+4. Run `/models` and select one of the TrustedRouter models.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ## Custom provider
 
 To add any **OpenAI-compatible** provider that's not listed in the `/connect` command:

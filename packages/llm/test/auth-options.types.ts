@@ -12,6 +12,7 @@ import * as Google from "../src/providers/google"
 import * as OpenAI from "../src/providers/openai"
 import * as OpenAICompatible from "../src/providers/openai-compatible"
 import * as OpenRouter from "../src/providers/openrouter"
+import * as TrustedRouter from "../src/providers/trustedrouter"
 import * as XAI from "../src/providers/xai"
 
 type BaseOptions = {
@@ -147,6 +148,10 @@ AmazonBedrock.configure({ apiKey: "bedrock-key" }).model("anthropic.claude", {})
 OpenRouter.configure({ apiKey: "openrouter-key" }).model("openai/gpt-4o-mini")
 // @ts-expect-error OpenRouter model selectors only accept model ids.
 OpenRouter.configure({ apiKey: "openrouter-key" }).model("openai/gpt-4o-mini", {})
+
+TrustedRouter.configure({ apiKey: "trustedrouter-key" }).model("trustedrouter/auto")
+// @ts-expect-error TrustedRouter model selectors only accept model ids.
+TrustedRouter.configure({ apiKey: "trustedrouter-key" }).model("trustedrouter/auto", {})
 
 XAI.configure({ apiKey: "xai-key" }).responses("grok-4")
 XAI.configure({ apiKey: "xai-key" }).chat("grok-4")
