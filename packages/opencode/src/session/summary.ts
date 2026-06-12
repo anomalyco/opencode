@@ -122,17 +122,38 @@ export const layer = Layer.effect(
       const target = messages.find((m) => m.info.id === input.messageID)
       if (!target || target.info.role !== "user") return
       const msgDiffs = yield* computeDiff({ messages })
-      target.info.summary = { ...target.info.summary, diffs: msgDiffs }
+      // Store only lightweight diff metadata (file/status/line counts), NOT the
+      // full per-file `patch` text. The patch text is the heavy part - on a long
+      // session that repeatedly edits the same large file it accumulated one
+      // full-file-content copy per turn in the in-memory message list (and in
+      // the synced session_diff state), driving multi-GB heap growth. The full
+      // patch is reconstructable on demand from the git-backed snapshots, which
+      // `diff()` below now does. Aggregate counts are preserved for the summary.
+      const summarized = msgDiffs.map(({ patch: _patch, ...rest }) => rest)
+      target.info.summary = {
+        ...target.info.summary,
+        additions: summarized.reduce((acc, d) => acc + d.additions, 0),
+        deletions: summarized.reduce((acc, d) => acc + d.deletions, 0),
+        files: summarized.length,
+        diffs: summarized,
+      }
       yield* sessions.updateMessage(target.info)
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
       if (!input.messageID) return []
-      const message = (yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)).find(
-        (item) => item.info.id === input.messageID,
-      )
+      const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
+      const message = all.find((item) => item.info.id === input.messageID)
       if (!message || message.info.role !== "user") return []
-      const diffs = message.info.summary?.diffs ?? []
+      // Recompute full diffs (with patch text) on demand so the heavy content is
+      // only materialized when a client actually requests it, not retained for
+      // the session's lifetime. Falls back to any stored diffs if recomputation
+      // yields nothing (e.g. legacy/imported sessions whose snapshots are gone).
+      const messages = all.filter(
+        (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
+      )
+      let diffs = yield* computeDiff({ messages })
+      if (diffs.length === 0) diffs = message.info.summary?.diffs ?? []
       return diffs.map((item) => {
         if (item.file === undefined) return item
         const file = unquoteGitPath(item.file)
