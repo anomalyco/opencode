@@ -143,9 +143,9 @@ describe("DatabaseMigration", () => {
         yield* db.run(
           sql`INSERT INTO credential (id, integration_id, label, value, time_created, time_updated) VALUES ('current', 'anthropic', 'Current', '{}', 2, 2)`,
         )
-        expect(
-          yield* db.get(sql`SELECT connector_id, method_id, active FROM credential WHERE id = 'current'`),
-        ).toEqual({ connector_id: null, method_id: null, active: null })
+        expect(yield* db.get(sql`SELECT connector_id, method_id, active FROM credential WHERE id = 'current'`)).toEqual(
+          { connector_id: null, method_id: null, active: null },
+        )
       }),
     )
   })
