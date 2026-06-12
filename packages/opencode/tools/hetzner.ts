@@ -3,15 +3,22 @@ import { existsSync, readFileSync } from "fs"
 import { homedir } from "os"
 import { join } from "path"
 
+function readJSON(filePath: string) {
+  try {
+    if (existsSync(filePath)) {
+      let raw = readFileSync(filePath, "utf-8")
+      if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1)
+      return JSON.parse(raw)
+    }
+  } catch { /* ignore */ }
+  return null
+}
+
 function getApiKey(): string {
   const envKey = process.env.HETZNER_API_TOKEN
   if (envKey) return envKey
-  try {
-    if (existsSync(CONFIG_FILE)) {
-      const cfg = JSON.parse(readFileSync(CONFIG_FILE, "utf-8"))
-      if (cfg.hetznerApiToken) return cfg.hetznerApiToken
-    }
-  } catch { /* ignore */ }
+  const cfg = readJSON(CONFIG_FILE)
+  if (cfg?.hetznerApiToken) return cfg.hetznerApiToken
   return ""
 }
 

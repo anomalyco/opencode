@@ -20,7 +20,11 @@ function ensureDir() {
 
 function read(): SatelliteConfig {
   try {
-    if (existsSync(CONFIG_FILE)) return JSON.parse(readFileSync(CONFIG_FILE, "utf-8"))
+    if (existsSync(CONFIG_FILE)) {
+      let raw = readFileSync(CONFIG_FILE, "utf-8")
+      if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1)
+      return JSON.parse(raw)
+    }
   } catch { /* ignore */ }
   return {}
 }

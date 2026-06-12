@@ -3,16 +3,23 @@ import { existsSync, readFileSync } from "fs"
 import { homedir } from "os"
 import { join } from "path"
 
+function readJSON(filePath: string) {
+  try {
+    if (existsSync(filePath)) {
+      let raw = readFileSync(filePath, "utf-8")
+      if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1)
+      return JSON.parse(raw)
+    }
+  } catch { /* ignore */ }
+  return null
+}
+
 function getConfig() {
   const token = process.env.CLOUDFLARE_API_TOKEN
   if (token) return { token, email: process.env.CLOUDFLARE_EMAIL || "" }
 
-  try {
-    if (existsSync(CONFIG_FILE)) {
-      const cfg = JSON.parse(readFileSync(CONFIG_FILE, "utf-8"))
-      if (cfg.cloudflareApiToken) return { token: cfg.cloudflareApiToken, email: cfg.cloudflareEmail || "" }
-    }
-  } catch { /* ignore */ }
+  const cfg = readJSON(CONFIG_FILE)
+  if (cfg?.cloudflareApiToken) return { token: cfg.cloudflareApiToken, email: cfg.cloudflareEmail || "" }
   return { token: "", email: "" }
 }
 

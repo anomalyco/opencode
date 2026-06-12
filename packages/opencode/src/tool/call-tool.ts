@@ -35,26 +35,17 @@ export const CallTool = Tool.define(
             }
           }
 
-          const tryExecute = () =>
-            runtime
-              .execute(params.name, parsed)
-              .pipe(
-                Effect.catchTag("ToolRuntimeError", (e: ToolRuntimeError) =>
-                  Effect.succeed({ _error: e.message } as any),
-                ),
-              )
+          yield* syncDynamic(runtime)
 
-          let result = yield* tryExecute()
+          const result = yield* runtime
+            .execute(params.name, parsed)
+            .pipe(
+              Effect.catchTag("ToolRuntimeError", (e: ToolRuntimeError) =>
+                Effect.succeed({ _error: e.message } as any),
+              ),
+            )
 
           if (result && typeof result === "object" && "_error" in result) {
-            const msg = (result as any)._error as string
-            if (msg.includes("not found")) {
-              yield* syncDynamic(runtime)
-              result = yield* tryExecute()
-            }
-          }
-
-          if ("_error" in result) {
             return {
               title: `Error calling "${params.name}"`,
               output: (result as any)._error,

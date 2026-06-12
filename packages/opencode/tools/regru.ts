@@ -3,18 +3,26 @@ import { existsSync, readFileSync } from "fs"
 import { homedir } from "os"
 import { join } from "path"
 
+function readJSON(filePath: string) {
+  try {
+    if (existsSync(filePath)) {
+      let raw = readFileSync(filePath, "utf-8")
+      if (raw.charCodeAt(0) === 0xFEFF) raw = raw.slice(1)
+      return JSON.parse(raw)
+    }
+  } catch { /* ignore */ }
+  return null
+}
+
 function getAuth() {
   const user = process.env.REGRU_USERNAME
   const pass = process.env.REGRU_PASSWORD
   if (user && pass) return { username: user, password: pass }
 
-  try {
-    if (existsSync(CONFIG_FILE)) {
-      const cfg = JSON.parse(readFileSync(CONFIG_FILE, "utf-8"))
-      if (cfg.regruUsername && cfg.regruPassword)
-        return { username: cfg.regruUsername, password: cfg.regruPassword }
-    }
-  } catch { /* ignore */ }
+  const cfg = readJSON(CONFIG_FILE)
+  if (cfg?.regruUsername && cfg?.regruPassword)
+    return { username: cfg.regruUsername, password: cfg.regruPassword }
+
   return { username: "", password: "" }
 }
 
@@ -32,7 +40,6 @@ async function api(method: string, inputData: Record<string, unknown> = {}) {
       ...Object.fromEntries(Object.entries(inputData).map(([k, v]) => [k, String(v)])),
       output_format: "json",
       lang: "ru",
-      show_input_params: "1",
     }
 
     const res = await fetch(`${API}/${method}`, {
@@ -78,7 +85,8 @@ export const tool = {
 async function call(method: string, params: Record<string, unknown> = {}) {
   const result = await api(method, params)
   if (!result.success) return result
-  return { success: true, data: JSON.stringify(result.data, null, 2) }
+  const data = result.data?.answer || result.data
+  return { success: true, data: JSON.stringify(data, null, 2) }
 }
 
 export default async function regru(input: {
@@ -98,44 +106,56 @@ export default async function regru(input: {
     }
 
     case "list_domains": {
-      const result = await api("domain/list")
+      const result = await api("service/get_list", { servtype: "domain" })
       if (!result.success) return result
-      const domains = result.data?.domains || result.data
-      return { success: true, data: JSON.stringify(domains, null, 2) }
-    }
-
-    case "register_domain": {
-      if (!input.domainName) return { success: false, error: "domainName required" }
-      return call("domain/create", { domain_name: input.domainName, period: input.period || 1 })
+      const services = result.data?.answer?.services || result.data?.services || []
+      return { success: true, data: JSON.stringify(services, null, 2) }
     }
 
     case "get_dns_records": {
       if (!input.domainName) return { success: false, error: "domainName required" }
-      return call("domain/dns/get_records", { domain_name: input.domainName })
+      return call("zone/get_resource_records", { domain_name: input.domainName })
     }
 
     case "add_dns_record": {
       if (!input.domainName) return { success: false, error: "domainName required" }
       if (!input.recordType || !input.recordContent)
         return { success: false, error: "recordType and recordContent required" }
-      return call("domain/dns/add_record", {
-        domain_name: input.domainName,
-        subdomain: input.subdomain || "@",
-        record_type: input.recordType.toUpperCase(),
-        record_value: input.recordContent,
-      })
+
+      const type = input.recordType.toUpperCase()
+      const subdomain = input.subdomain || "@"
+
+      switch (type) {
+        case "A":
+          return call("zone/add_alias", { domain_name: input.domainName, subdomain, ip_address: input.recordContent })
+        case "AAAA":
+          return call("zone/add_aaaa", { domain_name: input.domainName, subdomain, ip_address: input.recordContent })
+        case "CNAME":
+          return call("zone/add_cname", { domain_name: input.domainName, subdomain, canonical_name: input.recordContent })
+        case "TXT":
+          return call("zone/add_txt", { domain_name: input.domainName, subdomain, text: input.recordContent })
+        case "MX":
+          return call("zone/add_mx", { domain_name: input.domainName, subdomain, mail_server: input.recordContent, priority: 10 })
+        case "NS":
+          return call("zone/add_ns", { domain_name: input.domainName, subdomain, name_server: input.recordContent })
+        default:
+          return { success: false, error: `Unsupported record type: ${type}` }
+      }
     }
 
     case "delete_dns_record": {
       if (!input.domainName) return { success: false, error: "domainName required" }
-      if (!input.recordContent)
-        return { success: false, error: "recordContent required to identify the record" }
-      return call("domain/dns/delete_record", {
+      return call("zone/remove_record", {
         domain_name: input.domainName,
         subdomain: input.subdomain || "@",
-        record_type: input.recordType?.toUpperCase(),
-        record_value: input.recordContent,
+        record_type: input.recordType?.toUpperCase() || "A",
+        content: input.recordContent,
       })
+    }
+
+    case "clear_dns": {
+      if (!input.domainName) return { success: false, error: "domainName required" }
+      return call("zone/clear", { domain_name: input.domainName })
     }
 
     default:
