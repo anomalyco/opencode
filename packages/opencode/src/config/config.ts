@@ -324,6 +324,7 @@ type State = {
 export interface Interface {
   readonly get: () => Effect.Effect<Info>
   readonly getGlobal: () => Effect.Effect<Info>
+  readonly refreshGlobal: () => Effect.Effect<Info>
   readonly getConsoleState: () => Effect.Effect<ConsoleState>
   readonly update: (config: Info) => Effect.Effect<void>
   readonly updateGlobal: (config: Info) => Effect.Effect<{ info: Info; changed: boolean }>
@@ -486,6 +487,11 @@ export const layer = Layer.effect(
     )
 
     const getGlobal = Effect.fn("Config.getGlobal")(function* () {
+      return yield* cachedGlobal
+    })
+
+    const refreshGlobal = Effect.fn("Config.refreshGlobal")(function* () {
+      yield* invalidate()
       return yield* cachedGlobal
     })
 
@@ -855,6 +861,7 @@ export const layer = Layer.effect(
     return Service.of({
       get,
       getGlobal,
+      refreshGlobal,
       getConsoleState,
       update,
       updateGlobal,

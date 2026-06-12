@@ -37,6 +37,7 @@ export const GlobalPaths = {
   health: "/global/health",
   event: "/global/event",
   config: "/global/config",
+  configRefresh: "/global/config/refresh",
   dispose: "/global/dispose",
   upgrade: "/global/upgrade",
 } as const
@@ -80,6 +81,15 @@ export const GlobalApi = HttpApi.make("global").add(
           identifier: "global.config.update",
           summary: "Update global configuration",
           description: "Update global OpenCode configuration settings and preferences.",
+        }),
+      ),
+      HttpApiEndpoint.post("configRefresh", GlobalPaths.configRefresh, {
+        success: described(Config.Info, "Reloaded global config info"),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "global.config.refresh",
+          summary: "Refresh global configuration",
+          description: "Invalidate cached global configuration and reload it from disk.",
         }),
       ),
       HttpApiEndpoint.post("dispose", GlobalPaths.dispose, {

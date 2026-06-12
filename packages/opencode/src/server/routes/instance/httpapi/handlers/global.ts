@@ -96,6 +96,18 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       return result.info
     })
 
+    const configRefresh = Effect.fn("GlobalHttpApi.configRefresh")(function* () {
+      const result = yield* config.refreshGlobal()
+      GlobalBus.emit("event", {
+        directory: "global",
+        payload: {
+          type: Event.ConfigUpdated.type,
+          properties: result,
+        },
+      })
+      return result
+    })
+
     const dispose = Effect.fn("GlobalHttpApi.dispose")(function* () {
       yield* disposeAllInstancesAndEmitGlobalDisposed()
       return true
@@ -157,6 +169,7 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       .handleRaw("event", event)
       .handle("configGet", configGet)
       .handle("configUpdate", configUpdate)
+      .handle("configRefresh", configRefresh)
       .handle("dispose", dispose)
       .handleRaw("upgrade", upgradeRaw)
   }),
