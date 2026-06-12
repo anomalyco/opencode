@@ -5100,6 +5100,76 @@ export async function run() { return { ok: true } }
     }),
   )
 
+  // T6.3 (design-final §4.7 / Ü4): workflow agent sessions hang under the
+  // run's session, so the workflow tool is no ladder past the depth limit.
+  // With the kill switch (subagent_max_depth: 1) even the first agent dispatch
+  // would create a session at depth 2 > 1 — the guard fires BEFORE
+  // sessions.create and maps onto node `failed` (same path as
+  // AgentLimitError), so no session is created and no turn is wasted.
+  it.instance(
+    "agent dispatch fails the node with a depth error when the depth limit is exhausted",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* Effect.promise(() => writeWorkflow(test.directory, SINGLE_AGENT_FIXTURE, SINGLE_AGENT_WORKFLOW))
+        const workflow = yield* Workflow.Service
+        const { ops, inputs } = capturingPromptOps()
+
+        const run = yield* workflow.start({
+          name: SINGLE_AGENT_FIXTURE,
+          args: {},
+          prompt: ops,
+        })
+        const done = (yield* workflow.wait({ id: run.id })).run ?? (yield* Effect.fail(new Error("did not finish")))
+        expect(done.status).toBe("failed")
+        expect(done.error ?? "").toMatch(/nesting/i)
+        expect(done.agents).toHaveLength(1)
+        expect(done.agents[0]?.status).toBe("failed")
+        expect(done.agents[0]?.error ?? "").toMatch(/nesting/i)
+        // The guard fires BEFORE sessions.create: no child session, no prompt.
+        expect(done.agents[0]?.session_id).toBeUndefined()
+        expect(inputs).toHaveLength(0)
+      }),
+    { config: { experimental: { subagent_max_depth: 1 } } },
+  )
+
+  // T6.3 callsite regression: below the limit (childDepth 2 of 5 by default)
+  // the derived subagent ruleset carries NO task/workflow auto-deny anymore —
+  // the depth-gated derive applies to the workflow dispatch path too.
+  it.instance("workflow subagent below the limit gets no task/workflow auto-deny", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => writeWorkflow(test.directory, SINGLE_AGENT_FIXTURE, SINGLE_AGENT_WORKFLOW))
+      const workflow = yield* Workflow.Service
+      const sessions = yield* Session.Service
+
+      const caller = yield* sessions.create({ title: "Caller" })
+      const run = yield* workflow.start({
+        name: SINGLE_AGENT_FIXTURE,
+        args: {},
+        prompt: immediatePromptOps(),
+        caller: { sessionID: caller.id, agent: "build" },
+      })
+      const done = (yield* workflow.wait({ id: run.id })).run ?? (yield* Effect.fail(new Error("did not finish")))
+      expect(done.status).toBe("completed")
+
+      const childSessionID = done.agents[0]?.session_id
+      expect(childSessionID).toBeDefined()
+      const child = yield* pollWithTimeout(
+        sessions.get(SessionID.make(childSessionID!)).pipe(
+          Effect.map((s) => (s.permission ? s : undefined)),
+          Effect.catchCause(() => Effect.succeed(undefined)),
+        ),
+        "child session permission never populated",
+      )
+      const rules = child.permission ?? []
+      expect(rules.filter((rule) => rule.permission === "task")).toEqual([])
+      expect(rules.filter((rule) => rule.permission === "workflow")).toEqual([])
+      // The child session really hangs under the run's session (a real level).
+      expect(child.parentID).toBe(SessionID.make(done.session_id!))
+    }),
+  )
+
   // Fund 18 (medium): die drei Workflow-Zeitfelder (LogEntry.time,
   // AgentRun.started_at/completed_at) sind Epoch-Millis und damit IMMER endlich.
   // Als `Schema.Number` erzeugte der SDK-Generator für sie eine NaN/Infinity-

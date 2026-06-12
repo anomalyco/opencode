@@ -147,10 +147,14 @@ describe("SessionTools.resolve ask origin metadata", () => {
     }),
   )
 
-  it.instance("unrouted ask (no permissionSessionID) stays byte-identical: no origin fields, no walk", () =>
+  // Since T6.5 the lineage walk happens for EVERY resolve of a child session
+  // (the registry's depth filter needs it), so the stub must serve a chain —
+  // the pinned behavior is that an unrouted ask gains NO origin fields.
+  it.instance("unrouted ask (no permissionSessionID) stays byte-identical: no origin fields", () =>
     Effect.gen(function* () {
       const { asks, stub } = capturePermission()
-      yield* runProbe(resolveInput({ id: LEAF, parentID: MID }), stub, sessionStub())
+      const session = sessionStub(() => Effect.succeed(chainOf(LEAF, MID, ROOT)))
+      yield* runProbe(resolveInput({ id: LEAF, parentID: MID }), stub, session)
       expect(asks).toHaveLength(1)
       const ask = asks[0]!
       expect(ask.sessionID).toBe(LEAF)
@@ -161,7 +165,8 @@ describe("SessionTools.resolve ask origin metadata", () => {
   it.instance("permissionSessionID equal to the session id adds no origin fields", () =>
     Effect.gen(function* () {
       const { asks, stub } = capturePermission()
-      yield* runProbe(resolveInput({ id: LEAF, parentID: MID }, LEAF), stub, sessionStub())
+      const session = sessionStub(() => Effect.succeed(chainOf(LEAF, MID, ROOT)))
+      yield* runProbe(resolveInput({ id: LEAF, parentID: MID }, LEAF), stub, session)
       expect(asks).toHaveLength(1)
       expect(asks[0]!.sessionID).toBe(LEAF)
       expect(asks[0]!.metadata).toEqual({ base: "keep" })

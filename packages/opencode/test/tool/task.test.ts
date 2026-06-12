@@ -477,23 +477,18 @@ describe("tool.task", () => {
         const child = yield* sessions.get(result.metadata.sessionId)
         expect(child.parentID).toBe(chat.id)
         expect(child.agent).toBe("reviewer")
-        expect(child.permission).toEqual([
-          {
-            permission: "todowrite",
-            pattern: "*",
-            action: "deny",
-          },
-          {
-            permission: "bash",
-            pattern: "*",
-            action: "deny",
-          },
-          {
-            permission: "read",
-            pattern: "*",
-            action: "deny",
-          },
-        ])
+        expect(child.permission).toEqual(
+          expect.arrayContaining([
+            { permission: "todowrite", pattern: "*", action: "deny" },
+            { permission: "bash", pattern: "*", action: "deny" },
+            { permission: "read", pattern: "*", action: "deny" },
+          ]),
+        )
+        // T6 (design-final §4.2): below the depth limit (childDepth 2 of 5)
+        // there is NO task/workflow auto-deny anymore — spawn capability is
+        // governed by the agent permission via the runtime merge.
+        expect(child.permission!.filter((rule) => rule.permission === "task")).toEqual([])
+        expect(child.permission!.filter((rule) => rule.permission === "workflow")).toEqual([])
         expect(seen?.tools).toBeUndefined()
       }),
     {
@@ -511,6 +506,58 @@ describe("tool.task", () => {
         },
       },
     },
+  )
+
+  it.instance("a default-agent child below the limit gets no task deny and may spawn", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const promptOps = stubOps()
+
+      // `general` has no exact `task` rule — before T6 its child session got
+      // the pauschal task deny; now the child (depth 2 < 5) stays spawn-able.
+      const result = yield* def.execute(
+        taskParams,
+        taskCtx({ sessionID: chat.id, messageID: assistant.id, promptOps }),
+      )
+      const child = yield* sessions.get(result.metadata.sessionId)
+      expect(child.permission!.filter((rule) => rule.permission === "task")).toEqual([])
+      expect(child.permission!.filter((rule) => rule.permission === "workflow")).toEqual([])
+
+      // ...and the child can actually spawn the next level.
+      const childAssistant = yield* seedMessages(child.id)
+      const grandchild = yield* def.execute(
+        taskParams,
+        taskCtx({ sessionID: child.id, messageID: childAssistant.id, promptOps }),
+      )
+      expect((yield* sessions.get(grandchild.metadata.sessionId)).parentID).toBe(child.id)
+    }),
+  )
+
+  it.instance("a child spawned AT the depth limit carries task and workflow denies", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      // Spawner at depth 4 ⇒ child at depth 5 = maxDepth: the last level is a
+      // pure work level and its session ruleset denies task AND workflow.
+      const { deepest, assistant } = yield* seedChain(4)
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const result = yield* def.execute(
+        taskParams,
+        taskCtx({ sessionID: deepest.id, messageID: assistant.id, promptOps: stubOps() }),
+      )
+      const child = yield* sessions.get(result.metadata.sessionId)
+      expect(child.parentID).toBe(deepest.id)
+      expect(child.permission).toEqual(
+        expect.arrayContaining([
+          { permission: "task", pattern: "*", action: "deny" },
+          { permission: "workflow", pattern: "*", action: "deny" },
+        ]),
+      )
+    }),
   )
 
   it.instance("rejects background execution when the experiment is disabled", () =>

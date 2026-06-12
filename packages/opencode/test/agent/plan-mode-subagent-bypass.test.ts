@@ -42,6 +42,8 @@ it.instance("subagent permissions take precedence over parent agent restrictions
     const subagentSessionPermission = deriveSubagentSessionPermission({
       parentSessionPermission,
       subagent: generalAgent!,
+      childDepth: 2,
+      maxDepth: 5,
     })
 
     // Mirror the runtime evaluation in session/prompt.ts (~line 410, 639):
@@ -62,6 +64,8 @@ it.instance("subagent's own read-only restriction remains effective", () =>
     const subagentSessionPermission = deriveSubagentSessionPermission({
       parentSessionPermission,
       subagent: explore!,
+      childDepth: 2,
+      maxDepth: 5,
     })
     const effective = Permission.merge(explore!.permission, subagentSessionPermission)
 
@@ -82,6 +86,8 @@ it.instance(
       const subagentSessionPermission = deriveSubagentSessionPermission({
         parentSessionPermission,
         subagent: my!,
+        childDepth: 2,
+        maxDepth: 5,
       })
       const effective = Permission.merge(my!.permission, subagentSessionPermission)
 
@@ -126,6 +132,8 @@ it.effect("subagent self permissions are preserved", () =>
       deriveSubagentSessionPermission({
         parentSessionPermission: [],
         subagent: executor,
+        childDepth: 2,
+        maxDepth: 5,
       }),
     )
 
@@ -151,6 +159,8 @@ it.effect("subagent inherits parent session deny rules as hard runtime ceilings"
       deriveSubagentSessionPermission({
         parentSessionPermission: Permission.fromConfig({ bash: "deny" }),
         subagent: executor,
+        childDepth: 2,
+        maxDepth: 5,
       }),
     )
 

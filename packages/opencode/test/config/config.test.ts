@@ -1316,6 +1316,19 @@ it.instance("permission config preserves user key order", () =>
   }),
 )
 
+// T6.4: the single experimental knob for nested subagent spawning. The value
+// must round-trip the parser; non-positive values are rejected by PositiveInt
+// (clamping to 1..10 happens at read time via SubagentLimits.maxDepth).
+test("config parser accepts experimental.subagent_max_depth and rejects non-positive values", () => {
+  const config = ConfigParse.schema(ConfigV1.Info, { experimental: { subagent_max_depth: 5 } }, "test")
+  expect(config.experimental?.subagent_max_depth).toBe(5)
+
+  const legacy = ConfigParse.schema(ConfigV1.Info, { experimental: { subagent_max_depth: 2 } }, "test")
+  expect(legacy.experimental?.subagent_max_depth).toBe(2)
+
+  expect(() => ConfigParse.schema(ConfigV1.Info, { experimental: { subagent_max_depth: 0 } }, "test")).toThrow()
+})
+
 test("config parser preserves permission order while rejecting unknown top-level keys", () => {
   const config = ConfigParse.schema(
     ConfigV1.Info,

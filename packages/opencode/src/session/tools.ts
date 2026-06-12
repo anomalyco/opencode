@@ -57,27 +57,34 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const truncate = yield* Truncate.Service
   const sessions = yield* Session.Service
 
+  // Nesting depth of THIS session (root = 1, no walk), derived ONCE per
+  // resolve from the real parent chain and consumed twice: the registry
+  // filters task/workflow at depth >= maxDepth (design-final §4.1, defense
+  // line 2) and routed permission asks carry the depth as origin attribution.
+  // A failed walk (cyclic parents) yields Infinity — the safest reading: the
+  // session cannot spawn (tools filtered) and the ask omits originDepth, but
+  // neither the resolve nor the ask ever fails on it.
+  const depth =
+    input.session.parentID === undefined
+      ? 1
+      : yield* sessions.lineage(input.session.id).pipe(
+          Effect.map((chain) => chain.length),
+          Effect.catch(() => Effect.succeed(Number.POSITIVE_INFINITY)),
+        )
+
   // Nested subagents route their permission asks to the root session
   // (permissionSessionID); without attribution UIs and third-party clients
   // would lose WHO asked. Whenever the ask is routed away from this session,
   // attach the origin (asking session, its agent, its depth) to the request
-  // metadata. ONE lineage walk per resolve (roots skip it); a failed walk only
-  // omits originDepth — an ask must never fail on attribution.
-  const origin = yield* Effect.gen(function* () {
-    if (input.permissionSessionID === undefined || input.permissionSessionID === input.session.id) return undefined
-    const originDepth =
-      input.session.parentID === undefined
-        ? 1
-        : yield* sessions.lineage(input.session.id).pipe(
-            Effect.map((chain) => chain.length),
-            Effect.catch(() => Effect.succeed(undefined)),
-          )
-    return {
-      originSessionID: input.session.id,
-      originAgent: input.agent.name,
-      ...(originDepth !== undefined ? { originDepth } : {}),
-    }
-  })
+  // metadata.
+  const origin =
+    input.permissionSessionID === undefined || input.permissionSessionID === input.session.id
+      ? undefined
+      : {
+          originSessionID: input.session.id,
+          originAgent: input.agent.name,
+          ...(Number.isFinite(depth) ? { originDepth: depth } : {}),
+        }
 
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
     sessionID: input.session.id,
@@ -126,6 +133,9 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     // Item 13: ultracode sessions get the workflow tool with the standing
     // "quality over cost" gate instead of the anti-default sentence.
     ultracode: input.session.metadata?.["ultracode"] === true,
+    // Depth-aware tool list: task/workflow are filtered at the maximum
+    // nesting depth and the task description gains the mid-level depth hint.
+    depth,
   })) {
     const schema = ProviderTransform.schema(input.model, ToolJsonSchema.fromTool(item))
     tools[item.id] = tool({

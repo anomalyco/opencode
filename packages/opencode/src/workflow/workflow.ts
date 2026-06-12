@@ -12,6 +12,7 @@ import { Provider } from "@/provider/provider"
 import { Session } from "@/session/session"
 import type { SessionPrompt } from "@/session/prompt"
 import { SessionID } from "@/session/schema"
+import { SubagentLimits } from "@/session/subagent-limits"
 import { Database } from "@opencode-ai/core/database/database"
 import { Global } from "@opencode-ai/core/global"
 import { Permission } from "@/permission"
@@ -3172,6 +3173,28 @@ export const layer = Layer.effect(
                 }
               }
             }
+            // Nested subagents (design-final §4.7 / Ü4): the agent session is
+            // created with `parentID = run.session_id` below, so it occupies a
+            // REAL nesting level and the workflow tool is no ladder past the
+            // depth limit. The child's depth derives from the run session's
+            // actual parent chain; without a run session (purely programmatic
+            // start) the agent session is a root (depth 1). A failed walk
+            // (cyclic parents, SubagentLineageError) fails the step like a
+            // depth violation — node `failed`, the same error path as
+            // AgentLimitError. The guard sits BEFORE sessions.create (and
+            // before the worktree setup), so a refused dispatch creates
+            // nothing and wastes no turn.
+            const depthLimit = SubagentLimits.maxDepth(yield* config.get())
+            const runChain = active.run.session_id
+              ? yield* sessions.lineage(SessionID.make(active.run.session_id)).pipe(
+                  // An unknown run session is an orphan, and orphans are roots.
+                  Effect.catchTag("NotFoundError", () => Effect.succeed([])),
+                )
+              : []
+            const childDepth = runChain.length + 1
+            if (childDepth > depthLimit) {
+              return yield* SubagentLimits.depthError({ depth: runChain.length, limit: depthLimit })
+            }
             // Security (#26514 regression, Fund N9): a workflow subagent MUST
             // inherit the caller's deny/external_directory rules — exactly like
             // the task tool derives a subagent's ruleset (since #31696 parent
@@ -3179,18 +3202,21 @@ export const layer = Layer.effect(
             // own permissions determine its capabilities). Without the caller's
             // identity (a purely programmatic/HTTP start with no session) we fall
             // back to the prior behavior: no inherited ruleset (the engine still
-            // defaults task/todowrite denies for any non-permitting subagent via
+            // defaults the todowrite deny for any non-permitting subagent via
             // the normal session permission path).
             const callerSession = input.caller
               ? yield* sessions.get(input.caller.sessionID).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
               : undefined
             // The inherited subagent ruleset: parent session denies/external_directory,
-            // default task/todowrite denies. Absent a caller identity there is
+            // default todowrite deny, plus the depth-gated task/workflow denies
+            // for a child AT the limit. Absent a caller identity there is
             // nothing to inherit (prior fallback).
             const derivedPermission = callerSession
               ? deriveSubagentSessionPermission({
                   parentSessionPermission: callerSession.permission ?? [],
                   subagent: selected,
+                  childDepth,
+                  maxDepth: depthLimit,
                 })
               : undefined
             // Security (compose, never override): per-step tool scoping must NEVER
@@ -3643,7 +3669,12 @@ export const layer = Layer.effect(
             agentInput.onError === "null" &&
             !(error instanceof CancelledError) &&
             !(error instanceof BudgetExceededError) &&
-            !(error instanceof AgentLimitError)
+            !(error instanceof AgentLimitError) &&
+            // The depth gate is deterministic for the whole run (every
+            // dispatch from the same run session fails the same way), so
+            // nulling it inside a while-loop would spin forever — same
+            // rationale as the lifetime/budget gates above.
+            !(error instanceof SubagentLimits.SubagentDepthError)
           ) {
             return null
           }
