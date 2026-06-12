@@ -1,17 +1,17 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { Connector } from "@opencode-ai/core/connector"
+import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { OpenAIPlugin } from "@opencode-ai/core/plugin/provider/openai"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { fakeSelectorSdk, it, model, provider } from "./provider-helper"
 
-function add(plugin: PluginV2.Interface, connectors: Connector.Interface) {
+function add(plugin: PluginV2.Interface, integrations: Integration.Interface) {
   return plugin.add({
     ...OpenAIPlugin,
-    effect: OpenAIPlugin.effect.pipe(Effect.provideService(Connector.Service, connectors)),
+    effect: OpenAIPlugin.effect.pipe(Effect.provideService(Integration.Service, integrations)),
   })
 }
 
@@ -19,15 +19,15 @@ describe("OpenAIPlugin", () => {
   it.effect("registers browser and headless ChatGPT OAuth methods", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* add(plugin, yield* Connector.Service)
-      expect((yield* (yield* Connector.Service).get(Connector.ID.make("openai")))?.methods).toEqual([
-        new Connector.OAuthMethod({
-          id: Connector.MethodID.make("chatgpt-browser"),
+      yield* add(plugin, yield* Integration.Service)
+      expect((yield* (yield* Integration.Service).get(Integration.ID.make("openai")))?.methods).toEqual([
+        new Integration.OAuthMethod({
+          id: Integration.MethodID.make("chatgpt-browser"),
           type: "oauth",
           label: "ChatGPT Pro/Plus (browser)",
         }),
-        new Connector.OAuthMethod({
-          id: Connector.MethodID.make("chatgpt-headless"),
+        new Integration.OAuthMethod({
+          id: Integration.MethodID.make("chatgpt-headless"),
           type: "oauth",
           label: "ChatGPT Pro/Plus (headless)",
         }),
@@ -38,7 +38,7 @@ describe("OpenAIPlugin", () => {
   it.effect("creates an OpenAI SDK for @ai-sdk/openai using the provider ID as SDK name", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* add(plugin, yield* Connector.Service)
+      yield* add(plugin, yield* Integration.Service)
       const result = yield* plugin.trigger(
         "aisdk.sdk",
         {
@@ -55,7 +55,7 @@ describe("OpenAIPlugin", () => {
   it.effect("ignores non-OpenAI SDK packages", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* add(plugin, yield* Connector.Service)
+      yield* add(plugin, yield* Integration.Service)
       const result = yield* plugin.trigger(
         "aisdk.sdk",
         { model: model("openai", "gpt-5"), package: "@ai-sdk/openai-compatible", options: { name: "openai" } },
@@ -69,7 +69,7 @@ describe("OpenAIPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const calls: string[] = []
-      yield* add(plugin, yield* Connector.Service)
+      yield* add(plugin, yield* Integration.Service)
       const result = yield* plugin.trigger(
         "aisdk.language",
         {
@@ -90,7 +90,7 @@ describe("OpenAIPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const calls: string[] = []
-      yield* add(plugin, yield* Connector.Service)
+      yield* add(plugin, yield* Integration.Service)
       const result = yield* plugin.trigger(
         "aisdk.language",
         { model: model("anthropic", "gpt-5"), sdk: fakeSelectorSdk(calls), options: {} },
@@ -105,7 +105,7 @@ describe("OpenAIPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
-      yield* add(plugin, yield* Connector.Service)
+      yield* add(plugin, yield* Integration.Service)
       const transform = yield* catalog.transform()
       yield* transform((catalog) => {
         const item = provider("openai", { api: { type: "aisdk", package: "@ai-sdk/openai" } })
@@ -124,7 +124,7 @@ describe("OpenAIPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
-      yield* add(plugin, yield* Connector.Service)
+      yield* add(plugin, yield* Integration.Service)
       const transform = yield* catalog.transform()
       yield* transform((catalog) => {
         const item = provider("custom-openai")

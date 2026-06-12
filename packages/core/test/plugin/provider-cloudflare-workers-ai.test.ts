@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Credential } from "@opencode-ai/core/credential"
-import { Connector } from "@opencode-ai/core/connector"
+import { Integration } from "@opencode-ai/core/integration"
 import { Database } from "@opencode-ai/core/database/database"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Location } from "@opencode-ai/core/location"
@@ -15,14 +15,15 @@ import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { fakeSelectorSdk, it, model, npmLayer, withEnv } from "./provider-helper"
 
+const database = Database.layerFromPath(":memory:").pipe(Layer.fresh)
+const preferences = Credential.layer.pipe(Layer.provide(database))
+const accounts = Layer.merge(
+  Credential.layer.pipe(Layer.provide(database), Layer.provide(preferences), Layer.provide(EventV2.defaultLayer)),
+  preferences,
+)
 const itWithAccount = testEffect(
   Catalog.locationLayer.pipe(
-    Layer.provideMerge(
-      Credential.layer.pipe(
-        Layer.provide(Database.layerFromPath(":memory:").pipe(Layer.fresh)),
-        Layer.provide(EventV2.defaultLayer),
-      ),
-    ),
+    Layer.provideMerge(accounts),
     Layer.provideMerge(EventV2.defaultLayer),
     Layer.provideMerge(
       Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("test") }))),
@@ -137,8 +138,7 @@ describe("CloudflareWorkersAIPlugin", () => {
           const credentials = yield* Credential.Service
           const catalog = yield* Catalog.Service
           yield* credentials.create({
-            connectorID: Connector.ID.make("cloudflare-workers-ai"),
-            methodID: Connector.MethodID.make("api-key"),
+            integrationID: Integration.ID.make("cloudflare-workers-ai"),
             value: new Credential.Key({
               type: "key",
               key: "account-key",
