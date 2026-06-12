@@ -529,11 +529,12 @@ export const layer = Layer.effect(
       timeout?: number,
     ) {
       const bridge = yield* EffectBridge.make()
-      yield* closeClient(s, name)
+      const previous = s.clients[name]
       s.status[name] = { status: "connected" }
       s.clients[name] = client
       s.defs[name] = listed
       watch(s, name, client, bridge, timeout)
+      if (previous) yield* Effect.tryPromise(() => previous.close()).pipe(Effect.ignore)
       return s.status[name]
     })
 
