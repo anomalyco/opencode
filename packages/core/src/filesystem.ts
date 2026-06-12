@@ -1,146 +1,51 @@
 export * as FileSystem from "./filesystem"
 
 import path from "path"
-import { pathToFileURL } from "url"
-import fuzzysort from "fuzzysort"
-import ignore from "ignore"
-import { Context, Effect, Layer, Option, Schema, Stream } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { EventV2 } from "./event"
 import { FSUtil } from "./fs-util"
-import { Global } from "./global"
 import { Location } from "./location"
-import { ProjectReference } from "./project-reference"
-import { NonNegativeInt, PositiveInt, RelativePath } from "./schema"
-import { Protected } from "./filesystem/protected"
-import { Ripgrep } from "./filesystem/ripgrep"
+import { PositiveInt, RelativePath } from "./schema"
+import { FileSystemSearch } from "./filesystem/search"
+import { Entry, Match } from "./filesystem/schema"
+export { Entry, Match, Submatch } from "./filesystem/schema"
 
 export const ReadInput = Schema.Struct({
   path: RelativePath,
-  reference: Schema.NonEmptyString.pipe(Schema.optional),
 })
 export type ReadInput = typeof ReadInput.Type
 
-export const MAX_READ_LINES = 2_000
-export const MAX_READ_BYTES = 50 * 1024
-const MAX_LINE_LENGTH = 2_000
-const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
-
-export class TextContent extends Schema.Class<TextContent>("FileSystem.TextContent")({
-  type: Schema.Literal("text"),
+export const Content = Schema.Struct({
+  uri: Schema.String,
+  name: Schema.String.pipe(Schema.optional),
   content: Schema.String,
+  encoding: Schema.Literals(["utf8", "base64"]),
   mime: Schema.String,
-}) {}
-
-export class BinaryContent extends Schema.Class<BinaryContent>("FileSystem.BinaryContent")({
-  type: Schema.Literal("binary"),
-  content: Schema.String,
-  encoding: Schema.Literal("base64"),
-  mime: Schema.String,
-}) {}
-
-export const Content = Schema.Union([TextContent, BinaryContent]).pipe(Schema.toTaggedUnion("type"))
+}).annotate({ identifier: "FileSystem.Content" })
 export type Content = typeof Content.Type
-
-export const TextPageInput = Schema.Struct({
-  offset: PositiveInt.pipe(Schema.optional),
-  limit: PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_READ_LINES)).pipe(Schema.optional),
-})
-export type TextPageInput = typeof TextPageInput.Type
-
-export class TextPage extends Schema.Class<TextPage>("FileSystem.TextPage")({
-  type: Schema.Literal("text-page"),
-  content: Schema.String,
-  mime: Schema.String,
-  offset: PositiveInt,
-  truncated: Schema.Boolean,
-  next: PositiveInt.pipe(Schema.optional),
-}) {}
-
-export class ReadTarget extends Schema.Class<ReadTarget>("FileSystem.ReadTarget")({
-  real: Schema.String,
-  resource: Schema.String,
-  size: NonNegativeInt,
-  dev: Schema.Number,
-  ino: Schema.Number.pipe(Schema.optional),
-}) {}
 
 export const ListInput = Schema.Struct({
   path: RelativePath.pipe(Schema.optional),
-  reference: Schema.NonEmptyString.pipe(Schema.optional),
 })
 export type ListInput = typeof ListInput.Type
 
-export const ListPageInput = Schema.Struct({
-  ...ListInput.fields,
-  offset: PositiveInt.pipe(Schema.optional),
-  limit: PositiveInt.check(Schema.isLessThanOrEqualTo(2_000)).pipe(Schema.optional),
-})
-export type ListPageInput = typeof ListPageInput.Type
-
-export class ListTarget extends Schema.Class<ListTarget>("FileSystem.ListTarget")({
-  absolute: Schema.String,
-  real: Schema.String,
-  directory: Schema.String,
-  root: Schema.String,
-  resource: Schema.String,
-}) {}
-
-/** Canonical read authority for Location-scoped search and metadata leaves. */
-export class RootTarget extends Schema.Class<RootTarget>("FileSystem.RootTarget")({
-  absolute: Schema.String,
-  real: Schema.String,
-  directory: Schema.String,
-  root: Schema.String,
-  resource: Schema.String,
-  reference: Schema.NonEmptyString.pipe(Schema.optional),
-  type: Schema.Literals(["file", "directory"]),
-  dev: Schema.Number,
-  ino: Schema.Number.pipe(Schema.optional),
-}) {}
-
-export type ReadPathTarget =
-  | { readonly type: "file"; readonly target: ReadTarget }
-  | { readonly type: "directory"; readonly target: ListTarget }
-
-export class Entry extends Schema.Class<Entry>("FileSystem.Entry")({
-  path: RelativePath,
-  uri: Schema.String,
-  type: Schema.Literals(["file", "directory"]),
-  mime: Schema.String,
-}) {}
-
-export class ListPage extends Schema.Class<ListPage>("FileSystem.ListPage")({
-  entries: Schema.Array(Entry),
-  truncated: Schema.Boolean,
-  next: PositiveInt.pipe(Schema.optional),
-}) {}
-
-export const FindInput = Schema.Struct({
+export class FindInput extends Schema.Class<FindInput>("FileSystem.FindInput")({
   query: Schema.String,
   type: Schema.Literals(["file", "directory"]).pipe(Schema.optional),
   limit: PositiveInt.pipe(Schema.optional),
-})
-export type FindInput = typeof FindInput.Type
+}) {}
 
-export const GrepInput = Schema.Struct({
+export class GlobInput extends Schema.Class<GlobInput>("FileSystem.GlobInput")({
   pattern: Schema.String,
+  path: RelativePath.pipe(Schema.optional),
+  limit: PositiveInt.pipe(Schema.optional),
+}) {}
+
+export class GrepInput extends Schema.Class<GrepInput>("FileSystem.GrepInput")({
+  pattern: Schema.String,
+  path: RelativePath.pipe(Schema.optional),
   include: Schema.String.pipe(Schema.optional),
   limit: PositiveInt.pipe(Schema.optional),
-})
-export type GrepInput = typeof GrepInput.Type
-
-export class GrepMatch extends Schema.Class<GrepMatch>("FileSystem.GrepMatch")({
-  path: RelativePath,
-  lines: Schema.String,
-  line: PositiveInt,
-  offset: NonNegativeInt,
-  submatches: Schema.Array(
-    Schema.Struct({
-      text: Schema.String,
-      start: NonNegativeInt,
-      end: NonNegativeInt,
-    }),
-  ),
 }) {}
 
 export const Event = {
@@ -153,421 +58,71 @@ export const Event = {
 }
 
 export interface Interface {
-  readonly read: (input: ReadInput) => Effect.Effect<Content>
-  readonly resolveReadPath: (input: ReadInput) => Effect.Effect<ReadPathTarget>
-  readonly resolveRead: (input: ReadInput) => Effect.Effect<ReadTarget>
-  readonly readResolved: (target: ReadTarget, maximumBytes?: number) => Effect.Effect<Content>
-  readonly readTextPageResolved: (target: ReadTarget, page?: TextPageInput) => Effect.Effect<TextPage>
+  readonly read: (input: ReadInput) => Effect.Effect<{ readonly content: Uint8Array; readonly mime: string }>
   readonly list: (input?: ListInput) => Effect.Effect<Entry[]>
-  /** Select a contained canonical read root without asserting leaf policy. */
-  readonly resolveRoot: (input?: ListInput) => Effect.Effect<RootTarget>
-  readonly revalidateRoot: (target: RootTarget) => Effect.Effect<RootTarget>
-  readonly resolveList: (input?: ListInput) => Effect.Effect<ListTarget>
-  readonly listResolved: (target: ListTarget) => Effect.Effect<Entry[]>
-  readonly listPage: (input?: ListPageInput) => Effect.Effect<ListPage>
-  readonly listPageResolved: (
-    target: ListTarget,
-    page?: Pick<ListPageInput, "offset" | "limit">,
-  ) => Effect.Effect<ListPage>
   readonly find: (input: FindInput) => Effect.Effect<Entry[]>
-  readonly grep: (input: GrepInput) => Effect.Effect<GrepMatch[]>
-  readonly isIgnored: (path: RelativePath, type: "file" | "directory") => boolean
+  readonly glob: (input: GlobInput) => Effect.Effect<readonly Entry[]>
+  readonly grep: (input: GrepInput) => Effect.Effect<readonly Match[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/FileSystem") {}
 
-export const layer = Layer.effect(
+const baseLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
-    const references = yield* ProjectReference.Service
-    const ripgrep = yield* Ripgrep.Service
+    const search = yield* FileSystemSearch.Service
     const root = yield* fs.realPath(location.directory).pipe(Effect.orDie)
-    const ignored = ignore()
-    const gitignore = yield* fs
-      .readFileString(path.join(location.project.directory, ".gitignore"))
-      .pipe(Effect.catch(() => Effect.succeed("")))
-    if (gitignore) ignored.add(gitignore)
-    const ignorefile = yield* fs
-      .readFileString(path.join(location.project.directory, ".ignore"))
-      .pipe(Effect.catch(() => Effect.succeed("")))
-    if (ignorefile) ignored.add(ignorefile)
-    const select = Effect.fnUntraced(function* (reference?: string) {
-      if (!reference) return { directory: location.directory, root }
-      const resolved = yield* references.get(reference)
-      if (!resolved) return yield* Effect.die(new Error(`Unknown project reference: ${reference}`))
-      if (resolved.kind === "invalid") return yield* Effect.die(new Error(resolved.message))
-      if (resolved.kind === "git") yield* references.ensurePath(resolved.path).pipe(Effect.orDie)
-      return { directory: resolved.path, root: yield* fs.realPath(resolved.path).pipe(Effect.orDie) }
-    })
-    const resolve = Effect.fnUntraced(function* (input?: RelativePath, reference?: string) {
-      if (input && path.isAbsolute(input)) return yield* Effect.die(new Error("Path must be relative to the location"))
-      const selected = yield* select(reference)
-      const absolute = path.resolve(selected.directory, input ?? ".")
-      if (!FSUtil.contains(selected.directory, absolute))
+    const resolve = Effect.fnUntraced(function* (input?: RelativePath) {
+      const absolute = path.resolve(location.directory, input ?? ".")
+      if (!FSUtil.contains(location.directory, absolute))
         return yield* Effect.die(new Error("Path escapes the location"))
       const real = yield* fs.realPath(absolute).pipe(Effect.orDie)
-      if (!FSUtil.contains(selected.root, real)) return yield* Effect.die(new Error("Path escapes the location"))
-      return { absolute, real, ...selected }
+      if (!FSUtil.contains(root, real)) return yield* Effect.die(new Error("Path escapes the location"))
+      return { absolute, real, directory: location.directory, root }
     })
-    const entry = Effect.fnUntraced(function* (absolute: string, selected = { directory: location.directory, root }) {
-      const real = yield* fs.realPath(absolute).pipe(Effect.catch(() => Effect.void))
-      if (!real) return
-      if (!FSUtil.contains(selected.root, real)) return
-      const info = yield* fs.stat(real).pipe(Effect.catch(() => Effect.void))
-      if (!info) return
-      const type = info.type === "Directory" ? "directory" : info.type === "File" ? "file" : undefined
-      if (!type) return
-      return new Entry({
-        path: RelativePath.make(path.relative(selected.directory, absolute)),
-        uri: pathToFileURL(real).href,
-        type,
-        mime: type === "directory" ? "application/x-directory" : FSUtil.mimeType(real),
-      })
-    })
-
-    const scan = Effect.fnUntraced(function* () {
-      if (location.directory === Global.Path.home && location.project.id === "global") {
-        const protectedNames = Protected.names()
-        const nested = new Set(["node_modules", "dist", "build", "target", "vendor"])
-        return (yield* Effect.forEach(
-          yield* fs.readDirectoryEntries(location.directory).pipe(Effect.orElseSucceed(() => [])),
-          (item) =>
-            Effect.gen(function* () {
-              if (item.type !== "directory" || item.name.startsWith(".") || protectedNames.has(item.name)) return []
-              const directory = path.join(location.directory, item.name)
-              return [
-                item.name + "/",
-                ...(yield* fs.readDirectoryEntries(directory).pipe(Effect.orElseSucceed(() => []))).flatMap((child) =>
-                  child.type === "directory" && !child.name.startsWith(".") && !nested.has(child.name)
-                    ? [`${item.name}/${child.name}/`]
-                    : [],
-                ),
-              ]
-            }),
-        )).flat()
-      }
-
-      const files = Array.from(yield* ripgrep.files({ cwd: location.directory }).pipe(Stream.runCollect, Effect.orDie))
-      const dirs = new Set<string>()
-      for (const file of files) {
-        let current = file
-        while (true) {
-          const directory = path.dirname(current)
-          if (directory === "." || directory === current) break
-          current = directory
-          dirs.add(directory + "/")
-        }
-      }
-      return [...files, ...dirs]
-    })
-
-    const resolveReadPath = Effect.fn("FileSystem.resolveReadPath")(function* (input: ReadInput) {
-      const file = yield* resolve(input.path, input.reference)
-      const info = yield* fs.stat(file.real).pipe(Effect.orDie)
-      const relative = path.relative(file.root, file.real).replaceAll("\\", "/")
-      const resource = input.reference === undefined ? relative || "." : `${input.reference}:${relative || "."}`
-      if (info.type === "File") {
-        return {
-          type: "file" as const,
-          target: new ReadTarget({
-            real: file.real,
-            resource,
-            size: Number(info.size),
-            dev: info.dev,
-            ino: Option.getOrUndefined(info.ino),
-          }),
-        }
-      }
-      if (info.type === "Directory") {
-        return { type: "directory" as const, target: new ListTarget({ ...file, resource }) }
-      }
-      return yield* Effect.die(new Error("Path is not a file or directory"))
-    })
-    const resolveRead = Effect.fn("FileSystem.resolveRead")(function* (input: ReadInput) {
-      const resolved = yield* resolveReadPath(input)
-      if (resolved.type !== "file") return yield* Effect.die(new Error("Path is not a file"))
-      return resolved.target
-    })
-    const content = (target: ReadTarget, bytes: Uint8Array) =>
-      Effect.gen(function* () {
-        const mime = FSUtil.mimeType(target.real)
-        if (!bytes.includes(0)) {
-          const content = yield* Effect.sync(() => new TextDecoder("utf-8", { fatal: true }).decode(bytes)).pipe(
-            Effect.option,
-          )
-          if (content._tag === "Some") return new TextContent({ type: "text", content: content.value, mime })
-        }
-        return new BinaryContent({
-          type: "binary",
-          content: Buffer.from(bytes).toString("base64"),
-          encoding: "base64",
-          mime,
-        })
-      })
-    const readResolved = Effect.fn("FileSystem.readResolved")(function* (target: ReadTarget, maximumBytes?: number) {
-      if (maximumBytes === undefined) return yield* content(target, yield* fs.readFile(target.real).pipe(Effect.orDie))
-      return yield* Effect.scoped(
-        Effect.gen(function* () {
-          const file = yield* fs.open(target.real, { flag: "r" }).pipe(Effect.orDie)
-          const info = yield* file.stat.pipe(Effect.orDie)
-          if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
-          if (info.dev !== target.dev || Option.getOrUndefined(info.ino) !== target.ino)
-            return yield* Effect.die(new Error("File changed after permission approval"))
-          if (info.size > maximumBytes)
-            return yield* Effect.die(new Error(`File exceeds ${maximumBytes} byte read limit`))
-          const bytes = yield* file.readAlloc(maximumBytes + 1).pipe(Effect.orDie)
-          if (bytes._tag === "Some" && bytes.value.length > maximumBytes)
-            return yield* Effect.die(new Error(`File exceeds ${maximumBytes} byte read limit`))
-          return yield* content(target, bytes._tag === "Some" ? bytes.value : new Uint8Array())
-        }),
-      )
-    })
-    const readTextPageResolved = Effect.fn("FileSystem.readTextPageResolved")(function* (
-      target: ReadTarget,
-      page: TextPageInput = {},
-    ) {
-      return yield* Effect.scoped(
-        Effect.gen(function* () {
-          const file = yield* fs.open(target.real, { flag: "r" }).pipe(Effect.orDie)
-          const info = yield* file.stat.pipe(Effect.orDie)
-          if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
-          if (info.dev !== target.dev || Option.getOrUndefined(info.ino) !== target.ino)
-            return yield* Effect.die(new Error("File changed after permission approval"))
-
-          const offset = page.offset ?? 1
-          const limit = Math.min(page.limit ?? MAX_READ_LINES, MAX_READ_LINES)
-          const lines: string[] = []
-          const decoder = new TextDecoder("utf-8", { fatal: true })
-          let pending = ""
-          let discard = false
-          let line = 1
-          let bytes = 0
-          let found = false
-          let truncated = false
-          let next: number | undefined
-
-          const append = (input: string) => {
-            if (line < offset) {
-              line++
-              return true
-            }
-            if (lines.length >= limit) {
-              truncated = true
-              next = line
-              return false
-            }
-            found = true
-            const text = input.length > MAX_LINE_LENGTH ? input.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : input
-            const size = Buffer.byteLength(text, "utf-8") + (lines.length > 0 ? 1 : 0)
-            if (bytes + size > MAX_READ_BYTES) {
-              truncated = true
-              next = line
-              return false
-            }
-            lines.push(text)
-            bytes += size
-            line++
-            return true
-          }
-
-          let done = false
-          while (!done) {
-            const chunk = yield* file.readAlloc(64 * 1024).pipe(Effect.orDie)
-            if (Option.isNone(chunk)) break
-            if (chunk.value.includes(0)) return yield* Effect.die(new Error("Cannot page binary file"))
-            let text = decoder.decode(chunk.value, { stream: true })
-            while (true) {
-              const index = text.indexOf("\n")
-              if (index === -1) {
-                if (!discard) {
-                  pending += text
-                  if (pending.length > MAX_LINE_LENGTH) {
-                    pending = pending.slice(0, MAX_LINE_LENGTH + 1)
-                    discard = true
-                  }
-                }
-                break
-              }
-              const current = pending + (discard ? "" : text.slice(0, index))
-              pending = ""
-              discard = false
-              text = text.slice(index + 1)
-              if (!append(current.endsWith("\r") ? current.slice(0, -1) : current)) {
-                done = true
-                break
-              }
-            }
-          }
-          if (!done) {
-            const tail = decoder.decode()
-            if (!discard) pending += tail
-            if (pending && !append(pending.endsWith("\r") ? pending.slice(0, -1) : pending)) done = true
-          }
-          if (!done && !found && offset !== 1) return yield* Effect.die(new Error(`Offset ${offset} is out of range`))
-
-          return new TextPage({
-            type: "text-page",
-            content: lines.join("\n"),
-            mime: FSUtil.mimeType(target.real),
-            offset,
-            truncated,
-            ...(next === undefined ? {} : { next }),
-          })
-        }),
-      )
-    })
-    const resolveList = Effect.fn("FileSystem.resolveList")(function* (input: ListInput = {}) {
-      const directory = yield* resolve(input.path, input.reference)
-      const info = yield* fs.stat(directory.real).pipe(Effect.orDie)
-      if (info.type !== "Directory") return yield* Effect.die(new Error("Path is not a directory"))
-      const relative = path.relative(directory.root, directory.real).replaceAll("\\", "/") || "."
-      return new ListTarget({
-        ...directory,
-        resource: input.reference === undefined ? relative : `${input.reference}:${relative}`,
-      })
-    })
-    const resolveRoot = Effect.fn("FileSystem.resolveRoot")(function* (input: ListInput = {}) {
-      const target = yield* resolve(input.path, input.reference)
-      const info = yield* fs.stat(target.real).pipe(Effect.orDie)
-      const type = info.type === "File" ? "file" : info.type === "Directory" ? "directory" : undefined
-      if (!type) return yield* Effect.die(new Error("Path is not a file or directory"))
-      const relative = path.relative(target.root, target.real).replaceAll("\\", "/") || "."
-      return new RootTarget({
-        ...target,
-        resource: input.reference === undefined ? relative : `${input.reference}:${relative}`,
-        reference: input.reference,
-        type,
-        dev: info.dev,
-        ino: Option.getOrUndefined(info.ino),
-      })
-    })
-    const revalidateRoot = Effect.fn("FileSystem.revalidateRoot")(function* (target: RootTarget) {
-      const canonical = yield* fs.realPath(target.absolute).pipe(Effect.orDie)
-      if (canonical !== target.real) return yield* Effect.die(new Error("Search root changed after approval"))
-      const info = yield* fs.stat(canonical).pipe(Effect.orDie)
-      if (
-        info.type !== (target.type === "file" ? "File" : "Directory") ||
-        info.dev !== target.dev ||
-        Option.getOrUndefined(info.ino) !== target.ino
-      )
-        return yield* Effect.die(new Error("Search root identity changed after approval"))
-      return target
-    })
-    const listResolved = Effect.fn("FileSystem.listResolved")(function* (directory: ListTarget) {
-      return yield* fs.readDirectoryEntries(directory.real).pipe(
-        Effect.orDie,
-        Effect.flatMap((items) =>
-          Effect.forEach(items, (item) => entry(path.join(directory.absolute, item.name), directory), {
-            concurrency: "unbounded",
-          }),
-        ),
-        Effect.map((items) =>
-          items
-            .filter((item): item is Entry => item !== undefined)
-            .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1)),
-        ),
-      )
-    })
-    const listPageResolved = Effect.fn("FileSystem.listPageResolved")(function* (
-      target: ListTarget,
-      page: Pick<ListPageInput, "offset" | "limit"> = {},
-    ) {
-      type Candidate = Entry | { readonly name: string; readonly type: "file" | "directory" }
-      const offset = page.offset ?? 1
-      const limit = Math.min(page.limit ?? 2_000, 2_000)
-      const items = yield* fs.readDirectoryEntries(target.real).pipe(Effect.orDie)
-      const candidates = yield* Effect.forEach(
-        items,
-        (item): Effect.Effect<Candidate | undefined> => {
-          if (item.type === "other") return Effect.succeed(undefined)
-          if (item.type === "symlink") return entry(path.join(target.absolute, item.name), target)
-          return Effect.succeed({ name: item.name, type: item.type } as const)
-        },
-        { concurrency: 16 },
-      ).pipe(Effect.map((items) => items.filter((item): item is Candidate => item !== undefined)))
-      candidates.sort((a, b) => {
-        return a.type === b.type
-          ? (a instanceof Entry ? a.path : a.name).localeCompare(b instanceof Entry ? b.path : b.name)
-          : a.type === "directory"
-            ? -1
-            : 1
-      })
-      const selected = candidates.slice(offset - 1, offset - 1 + limit)
-      const entries = yield* Effect.forEach(
-        selected,
-        (item) => (item instanceof Entry ? Effect.succeed(item) : entry(path.join(target.absolute, item.name), target)),
-        {
-          concurrency: 16,
-        },
-      ).pipe(Effect.map((items) => items.filter((item): item is Entry => item !== undefined)))
-      const truncated = offset - 1 + selected.length < candidates.length
-      return new ListPage({ entries, truncated, ...(truncated ? { next: offset + selected.length } : {}) })
-    })
-
     return Service.of({
+      find: search.find,
+      glob: search.glob,
+      grep: search.grep,
       read: Effect.fn("FileSystem.read")(function* (input) {
-        return yield* readResolved(yield* resolveRead(input))
+        const target = yield* resolve(input.path)
+        const info = yield* fs.stat(target.real).pipe(Effect.orDie)
+        if (info.type !== "File") return yield* Effect.die(new Error("Path is not a file"))
+        return {
+          content: yield* fs.readFile(target.real).pipe(Effect.orDie),
+          mime: FSUtil.mimeType(target.real),
+        }
       }),
-      resolveReadPath,
-      resolveRead,
-      readResolved,
-      readTextPageResolved,
-      list: Effect.fn("FileSystem.list")(function* (input) {
-        return yield* listResolved(yield* resolveList(input))
-      }),
-      resolveRoot,
-      revalidateRoot,
-      resolveList,
-      listResolved,
-      listPage: Effect.fn("FileSystem.listPage")(function* (input) {
-        return yield* listPageResolved(yield* resolveList(input), input)
-      }),
-      listPageResolved,
-      find: Effect.fn("FileSystem.find")(function* (input) {
-        const items = (yield* scan()).filter((item) => input.type !== "file" || !item.endsWith("/"))
-        const filtered = items.filter((item) => input.type !== "directory" || item.endsWith("/"))
-        const sorted = input.query.trim()
-          ? fuzzysort.go(input.query.trim(), filtered, { limit: input.limit ?? 100 }).map((item) => item.target)
-          : filtered.slice(0, input.limit)
-        return yield* Effect.forEach(sorted, (item) => entry(path.join(location.directory, item))).pipe(
-          Effect.map((items) => items.filter((item): item is Entry => item !== undefined)),
+      list: Effect.fn("FileSystem.list")(function* (input = {}) {
+        const target = yield* resolve(input.path)
+        const info = yield* fs.stat(target.real).pipe(Effect.orDie)
+        if (info.type !== "Directory") return yield* Effect.die(new Error("Path is not a directory"))
+        return yield* fs.readDirectoryEntries(target.real).pipe(
+          Effect.orDie,
+          Effect.map((items) =>
+            items
+              .flatMap((item) => {
+                if (item.type !== "file" && item.type !== "directory") return []
+                const absolute = path.join(target.absolute, item.name)
+                const relative = path.relative(target.directory, absolute)
+                return [
+                  new Entry({
+                    path: RelativePath.make(relative + (item.type === "directory" ? path.sep : "")),
+                    type: item.type,
+                    mime: item.type === "directory" ? "application/x-directory" : FSUtil.mimeType(absolute),
+                  }),
+                ]
+              })
+              .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1)),
+          ),
         )
       }),
-      grep: Effect.fn("FileSystem.grep")(function* (input) {
-        return (yield* ripgrep
-          .search({
-            cwd: location.directory,
-            pattern: input.pattern,
-            glob: input.include ? [input.include] : undefined,
-            limit: input.limit,
-          })
-          .pipe(Effect.orDie)).items.map(
-          (item) =>
-            new GrepMatch({
-              path: RelativePath.make(item.path.text),
-              lines: item.lines.text,
-              line: item.line_number,
-              offset: item.absolute_offset,
-              submatches: item.submatches.map((submatch) => ({
-                text: submatch.match.text,
-                start: submatch.start,
-                end: submatch.end,
-              })),
-            }),
-        )
-      }),
-      isIgnored: (input, type) =>
-        ignored.ignores(
-          path.relative(location.project.directory, path.join(location.directory, input)) +
-            (type === "directory" ? "/" : ""),
-        ),
     })
   }),
 )
 
-export const locationLayer = layer.pipe(
-  Layer.provide(Ripgrep.defaultLayer),
-  Layer.provideMerge(ProjectReference.locationLayer),
-)
+export const layer = baseLayer.pipe(Layer.provide(FileSystemSearch.defaultLayer), Layer.provide(FSUtil.defaultLayer))
+
+export const locationLayer = layer

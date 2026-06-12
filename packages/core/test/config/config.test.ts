@@ -52,11 +52,27 @@ const provider = {
 }
 
 describe("Config", () => {
+  it.effect("returns the latest defined scalar from priority-ordered documents", () =>
+    Effect.sync(() => {
+      const entries = [
+        new Config.Document({ type: "document", info: new Config.Info({ model: "openrouter/openai/gpt-5" }) }),
+        new Config.Directory({ type: "directory", path: AbsolutePath.make("/skills") }),
+        new Config.Document({ type: "document", info: new Config.Info({}) }),
+        new Config.Document({ type: "document", info: new Config.Info({ model: "openrouter/openai/gpt-5.5" }) }),
+      ]
+
+      expect(Config.latest(entries, "model")).toBe("openrouter/openai/gpt-5.5")
+      expect(Config.latest(entries, "default_agent")).toBeUndefined()
+    }),
+  )
+
   it.effect("detects v1 configuration from any v1-only top-level key", () =>
     Effect.sync(() => {
       expect(ConfigMigrateV1.isV1({ snapshot: false })).toBe(true)
       expect(ConfigMigrateV1.isV1({ snapshot: false, agents: {} })).toBe(true)
+      expect(ConfigMigrateV1.isV1({ reference: {} })).toBe(true)
       expect(ConfigMigrateV1.isV1({ shell: "/bin/zsh", model: "anthropic/claude" })).toBe(false)
+      expect(ConfigMigrateV1.isV1({ references: {} })).toBe(false)
     }),
   )
 
@@ -244,6 +260,7 @@ describe("Config", () => {
               JSON.stringify({
                 shell: "/bin/bash",
                 model: "anthropic/claude",
+                default_agent: "reviewer",
                 autoupdate: "notify",
                 share: "disabled",
                 enterprise: { url: "https://share.example.com" },
@@ -303,7 +320,7 @@ describe("Config", () => {
                 compaction: {
                   auto: true,
                   prune: false,
-                  keep: { turns: 3, tokens: 2000 },
+                  keep: { tokens: 2000 },
                   buffer: 10000,
                 },
                 skills: ["./skills", "~/shared-skills", "https://example.com/.well-known/skills/"],
@@ -328,6 +345,7 @@ describe("Config", () => {
             expect(documents).toHaveLength(1)
             expect(documents[0]?.info.shell).toBe("/bin/bash")
             expect(documents[0]?.info.model).toBe("anthropic/claude")
+            expect(documents[0]?.info.default_agent).toBe("reviewer")
             expect(documents[0]?.info.autoupdate).toBe("notify")
             expect(documents[0]?.info.share).toBe("disabled")
             expect(documents[0]?.info.enterprise).toEqual({ url: "https://share.example.com" })
@@ -387,7 +405,7 @@ describe("Config", () => {
             expect(documents[0]?.info.compaction).toEqual({
               auto: true,
               prune: false,
-              keep: { turns: 3, tokens: 2000 },
+              keep: { tokens: 2000 },
               buffer: 10000,
             })
             expect(documents[0]?.info.skills).toEqual([
@@ -415,6 +433,42 @@ describe("Config", () => {
     ),
   )
 
+  it.live("migrates the deprecated reference key into references", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(tmp.path, "opencode.json"),
+              JSON.stringify({
+                reference: {
+                  local: { path: "../library" },
+                  sdk: { repository: "github.com/example/sdk", branch: "main" },
+                  shorthand: "github.com/example/docs",
+                },
+              }),
+            ),
+          )
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
+
+            expect(documents).toHaveLength(1)
+            expect(documents[0]?.info.references).toEqual({
+              local: { path: "../library" },
+              sdk: { repository: "github.com/example/sdk", branch: "main" },
+              shorthand: "github.com/example/docs",
+            })
+          }).pipe(Effect.provide(testLayer(tmp.path)))
+        }),
+      ),
+    ),
+  )
+
   it.live("migrates v1 configuration when a v1-only key is present", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -427,11 +481,13 @@ describe("Config", () => {
               path.join(tmp.path, "opencode.json"),
               JSON.stringify({
                 shell: "/bin/zsh",
+                default_agent: "reviewer",
                 snapshot: false,
                 autoshare: true,
                 permission: {
                   bash: "ask",
                   edit: { "*.md": "allow", "*": "deny" },
+                  question: "deny",
                 },
                 agent: {
                   reviewer: {
@@ -446,7 +502,9 @@ describe("Config", () => {
                   ["@my-org/audit-plugin", { endpoint: "https://audit.example.com" }],
                 ],
                 skills: { paths: ["./skills"], urls: ["https://example.com/.well-known/skills/"] },
-                reference: { docs: { path: "../docs" } },
+                references: {
+                  docs: { path: "../docs", description: "Use for product documentation", hidden: true },
+                },
                 attachment: { image: { auto_resize: false, max_width: 1200 } },
                 provider: {
                   custom: {
@@ -462,7 +520,22 @@ describe("Config", () => {
                     npm: "@ai-sdk/openai",
                     options: { apiKey: "secret", organization: "org" },
                     models: {
-                      model: { options: { reasoningEffort: "high", serviceTier: "priority" } },
+                      model: {
+                        options: { temperature: 0.3, reasoningEffort: "high", serviceTier: "priority" },
+                        variants: { high: { reasoningEffort: "high", reasoningSummary: "auto" } },
+                      },
+                    },
+                  },
+                  anthropic: {
+                    npm: "@ai-sdk/anthropic",
+                    models: {
+                      model: {
+                        options: {
+                          effort: "high",
+                          taskBudget: 4096,
+                          metadata: { userId: "user-1" },
+                        },
+                      },
                     },
                   },
                 },
@@ -487,12 +560,14 @@ describe("Config", () => {
             expect(documents).toHaveLength(1)
             expect(documents[0]?.info).toBeInstanceOf(Config.Info)
             expect(documents[0]?.info.shell).toBe("/bin/zsh")
+            expect(documents[0]?.info.default_agent).toBe("reviewer")
             expect(documents[0]?.info.snapshots).toBe(false)
             expect(documents[0]?.info.share).toBe("auto")
             expect(documents[0]?.info.permissions).toEqual([
               { action: "bash", resource: "*", effect: "ask" },
               { action: "edit", resource: "*.md", effect: "allow" },
               { action: "edit", resource: "*", effect: "deny" },
+              { action: "question", resource: "*", effect: "deny" },
             ])
             expect(documents[0]?.info.agents?.reviewer).toMatchObject({
               system: "Review changes.",
@@ -505,7 +580,9 @@ describe("Config", () => {
               { package: "@my-org/audit-plugin", options: { endpoint: "https://audit.example.com" } },
             ])
             expect(documents[0]?.info.skills).toEqual(["./skills", "https://example.com/.well-known/skills/"])
-            expect(documents[0]?.info.references).toEqual({ docs: { path: "../docs" } })
+            expect(documents[0]?.info.references).toEqual({
+              docs: { path: "../docs", description: "Use for product documentation", hidden: true },
+            })
             expect(documents[0]?.info.attachments).toEqual({ image: { auto_resize: false, max_width: 1200 } })
             expect(documents[0]?.info.providers?.custom).toMatchObject({
               request: { body: { apiKey: "secret" } },
@@ -519,12 +596,31 @@ describe("Config", () => {
             expect(documents[0]?.info.providers?.openai).toMatchObject({
               api: { settings: {} },
               request: { headers: { Authorization: "Bearer secret", "OpenAI-Organization": "org" } },
-              models: { model: { request: { body: { reasoning_effort: "high", service_tier: "priority" } } } },
+              models: {
+                model: {
+                  request: {
+                    body: { temperature: 0.3, reasoningEffort: "high", serviceTier: "priority" },
+                  },
+                  variants: [{ id: "high", body: { reasoningEffort: "high", reasoningSummary: "auto" } }],
+                },
+              },
+            })
+            expect(documents[0]?.info.providers?.anthropic).toMatchObject({
+              models: {
+                model: {
+                  request: {
+                    body: {
+                      output_config: { effort: "high", task_budget: 4096 },
+                      metadata: { user_id: "user-1" },
+                    },
+                  },
+                },
+              },
             })
             expect(documents[0]?.info.compaction).toEqual({
               auto: true,
               prune: undefined,
-              keep: { turns: 3, tokens: 2000 },
+              keep: { tokens: 2000 },
               buffer: 10000,
             })
             expect(documents[0]?.info.mcp).toMatchObject({

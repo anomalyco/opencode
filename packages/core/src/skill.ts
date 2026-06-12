@@ -54,6 +54,9 @@ export class Info extends Schema.Class<Info>("SkillV2.Info")({
   content: Schema.String,
 }) {}
 
+export const available = (skills: ReadonlyArray<Info>, agent: AgentV2.Info) =>
+  skills.filter((skill) => PermissionV2.evaluate("skill", skill.name, agent.permissions).effect !== "deny")
+
 const Frontmatter = Schema.Struct({
   name: Schema.String.pipe(Schema.optional),
   description: Schema.String.pipe(Schema.optional),
@@ -74,7 +77,6 @@ export interface Interface {
   readonly transform: State.Interface<Data, Editor>["transform"]
   readonly sources: () => Effect.Effect<Source[]>
   readonly list: () => Effect.Effect<Info[]>
-  readonly forAgent: (agent: AgentV2.ID) => Effect.Effect<Info[]>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Skill") {}
@@ -82,7 +84,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const agent = yield* AgentV2.Service
     const discovery = yield* SkillDiscovery.Service
     const fs = yield* FSUtil.Service
 
@@ -153,18 +154,8 @@ export const layer = Layer.effect(
         return state.get().sources
       }),
       list,
-      forAgent: Effect.fn("SkillV2.forAgent")(function* (id) {
-        const current = yield* agent.get(id)
-        if (!current) return []
-        return (yield* list()).filter(
-          (skill) => PermissionV2.evaluate("skill", skill.name, current.permissions).effect !== "deny",
-        )
-      }),
     })
   }),
 )
 
-export const locationLayer = layer.pipe(
-  Layer.provide(SkillDiscovery.defaultLayer),
-  Layer.provideMerge(AgentV2.locationLayer),
-)
+export const locationLayer = layer.pipe(Layer.provide(SkillDiscovery.defaultLayer))

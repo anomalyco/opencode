@@ -7,12 +7,9 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 
 import { NotFoundError } from "@/storage/storage"
-import * as Log from "@opencode-ai/core/util/log"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-
-void Log.init({ print: false })
 
 const it = testEffect(Layer.mergeAll(SessionNs.defaultLayer, Database.defaultLayer))
 

@@ -6,6 +6,7 @@ import { ConfigMCPV1 } from "./mcp"
 import { ConfigPermissionV1 } from "./permission"
 import { ConfigProviderV1 } from "./provider"
 import { ConfigProviderOptionsV1 } from "./provider-options"
+import { ModelRequest } from "../../model-request"
 
 const keys = new Set([
   "logLevel",
@@ -18,7 +19,6 @@ const keys = new Set([
   "disabled_providers",
   "enabled_providers",
   "small_model",
-  "default_agent",
   "mode",
   "agent",
   "provider",
@@ -38,6 +38,7 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
     $schema: info.$schema,
     shell: info.shell,
     model: info.model,
+    default_agent: info.default_agent,
     autoupdate: info.autoupdate,
     share: info.share ?? (info.autoshare ? "auto" : undefined),
     enterprise: info.enterprise,
@@ -55,7 +56,6 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
       auto: info.compaction.auto,
       prune: info.compaction.prune,
       keep: {
-        turns: info.compaction.tail_turns,
         tokens: info.compaction.preserve_recent_tokens,
       },
       buffer: info.compaction.reserved,
@@ -63,7 +63,7 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
     skills: info.skills && [...(info.skills.paths ?? []), ...(info.skills.urls ?? [])],
     commands: info.command,
     instructions: info.instructions,
-    references: info.reference,
+    references: info.references ?? info.reference,
     plugins: info.plugin?.map((plugin) =>
       typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] },
     ),
@@ -139,7 +139,14 @@ function mcp(info: typeof ConfigV1.Info.Type) {
 function migrateMcp(info: ConfigMCPV1.Info) {
   const disabled = info.enabled === undefined ? undefined : !info.enabled
   if (info.type === "local")
-    return { type: info.type, command: info.command, environment: info.environment, disabled, timeout: info.timeout }
+    return {
+      type: info.type,
+      command: info.command,
+      cwd: info.cwd,
+      environment: info.environment,
+      disabled,
+      timeout: info.timeout,
+    }
   return {
     type: info.type,
     url: info.url,
@@ -183,6 +190,13 @@ function migrateProvider(info: ConfigProviderV1.Info) {
 }
 
 function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: string) {
+  const packageID = info.provider?.npm ?? packageName
+  const lowerer = ConfigProviderOptionsV1.get(packageID)
+  const ingest = (options: Readonly<Record<string, unknown>>) => {
+    const request = ModelRequest.normalizeAiSdkOptions(packageID, options)
+    return { ...lowerer.request(request.body), ...request.generation, ...request.options }
+  }
+  const request = info.options && ingest(info.options)
   const costs = info.cost && [
     {
       input: info.cost.input,
@@ -204,7 +218,6 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: st
     info.tool_call !== undefined || info.modalities?.input !== undefined || info.modalities?.output !== undefined
       ? { tools: info.tool_call ?? false, input: info.modalities?.input ?? [], output: info.modalities?.output ?? [] }
       : undefined
-  const lowerer = ConfigProviderOptionsV1.get(info.provider?.npm ?? packageName)
   return {
     family: info.family,
     name: info.name,
@@ -220,12 +233,16 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: st
         ? undefined
         : { id: info.id },
     capabilities,
-    request: (info.headers || info.options) && {
+    request: (info.headers || request) && {
       headers: info.headers,
-      body: info.options && lowerer.request(info.options),
+      body: request,
     },
     variants:
-      info.variants && Object.entries(info.variants).map(([id, options]) => ({ id, body: lowerer.request(options) })),
+      info.variants &&
+      Object.entries(info.variants).map(([id, options]) => ({
+        id,
+        body: ingest(options),
+      })),
     cost: costs,
     disabled: info.status === "deprecated" ? true : undefined,
     limit: info.limit && {

@@ -1,10 +1,11 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient, path } from "@opencode-ai/core/effect/layer-node-platform"
 import { NodePath } from "@effect/platform-node"
 import { Effect, Layer, Path, Schema, Context } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
-import * as Log from "@opencode-ai/core/util/log"
 
 const skillConcurrency = 4
 const fileConcurrency = 8
@@ -27,7 +28,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Sk
 export const layer: Layer.Layer<Service, never, FSUtil.Service | Path.Path | HttpClient.HttpClient> = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const log = Log.create({ service: "skill-discovery" })
     const fs = yield* FSUtil.Service
     const path = yield* Path.Path
     const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
@@ -41,12 +41,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Path.Path | Htt
         Effect.flatMap((res) => res.arrayBuffer),
         Effect.flatMap((body) => fs.writeWithDirs(dest, new Uint8Array(body))),
         Effect.as(true),
-        Effect.catch((err) =>
-          Effect.sync(() => {
-            log.error("failed to download", { url, err })
-            return false
-          }),
-        ),
+        Effect.catch((err) => Effect.logError("failed to download", { url: url, error: err }).pipe(Effect.as(false))),
       )
     })
 
@@ -55,29 +50,26 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Path.Path | Htt
       const index = new URL("index.json", base).href
       const host = base.slice(0, -1)
 
-      log.info("fetching index", { url: index })
+      yield* Effect.logInfo("fetching index", { url: index })
 
       const data = yield* HttpClientRequest.get(index).pipe(
         HttpClientRequest.acceptJson,
         http.execute,
         Effect.flatMap(HttpClientResponse.schemaBodyJson(Index)),
         Effect.catch((err) =>
-          Effect.sync(() => {
-            log.error("failed to fetch index", { url: index, err })
-            return null
-          }),
+          Effect.logError("failed to fetch index", { url: index, error: err }).pipe(Effect.as(null)),
         ),
       )
 
       if (!data) return []
 
-      const list = data.skills.filter((skill) => {
-        if (!skill.files.includes("SKILL.md")) {
-          log.warn("skill entry missing SKILL.md", { url: index, skill: skill.name })
-          return false
-        }
-        return true
-      })
+      const missing = data.skills.filter((skill) => !skill.files.includes("SKILL.md"))
+      yield* Effect.forEach(
+        missing,
+        (skill) => Effect.logWarning("skill entry missing SKILL.md", { url: index, skill: skill.name }),
+        { discard: true },
+      )
+      const list = data.skills.filter((skill) => skill.files.includes("SKILL.md"))
 
       const dirs = yield* Effect.forEach(
         list,
@@ -111,5 +103,7 @@ export const defaultLayer: Layer.Layer<Service> = layer.pipe(
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(NodePath.layer),
 )
+
+export const node = LayerNode.make(layer, [FSUtil.node, path, httpClient])
 
 export * as Discovery from "./discovery"

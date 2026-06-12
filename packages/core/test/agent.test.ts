@@ -59,7 +59,7 @@ describe("AgentV2", () => {
     }),
   )
 
-  it.effect("removes a transform contribution when its scope closes", () =>
+  it.effect("removes a transform when its scope closes", () =>
     Effect.gen(function* () {
       const agent = yield* AgentV2.Service
       const id = AgentV2.ID.make("scoped")
