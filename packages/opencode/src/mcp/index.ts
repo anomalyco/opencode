@@ -398,6 +398,19 @@ export const layer = Layer.effect(
     )
 
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
+      client.onclose = () => {
+        if (s.clients[name] !== client) return
+        delete s.clients[name]
+        delete s.defs[name]
+        s.status[name] = { status: "failed", error: "Connection closed" }
+        bridge.fork(
+          Effect.logWarning("MCP connection closed", { server: name }).pipe(
+            Effect.andThen(events.publish(ToolsChanged, { server: name })),
+            Effect.ignore,
+          ),
+        )
+      }
+
       client.setNotificationHandler(LoggingMessageNotificationSchema, (notification) =>
         bridge.promise(serverLog(name, notification.params)),
       )
@@ -472,8 +485,11 @@ export const layer = Layer.effect(
 
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
+            const clients = Object.values(s.clients)
+            s.clients = {}
+            s.defs = {}
             yield* Effect.forEach(
-              Object.values(s.clients),
+              clients,
               (client) =>
                 Effect.gen(function* () {
                   const pid = client.transport instanceof StdioClientTransport ? client.transport.pid : null
@@ -499,6 +515,7 @@ export const layer = Layer.effect(
 
     function closeClient(s: State, name: string) {
       const client = s.clients[name]
+      delete s.clients[name]
       delete s.defs[name]
       if (!client) return Effect.void
       return Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
