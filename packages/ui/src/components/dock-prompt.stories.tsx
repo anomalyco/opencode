@@ -9,7 +9,7 @@ Use with form controls or confirmation buttons in the footer.
 
 ### API
 - Required: \`kind\` (question | permission), \`header\`, \`children\`, \`footer\`.
-- Optional: \`ref\` for measuring or focus management.
+- Optional: \`expandLabel\` / \`collapseLabel\` for visible toggle text, \`ref\` for measuring or focus management.
 
 ### Variants and states
 - Question and permission layouts (data attributes).

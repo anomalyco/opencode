@@ -658,6 +658,8 @@ export const dict = {
   "session.todo.collapse": "Collapse",
   "session.todo.expand": "Expand",
   "session.todo.progress": "{{done}} of {{total}} todos completed",
+  "session.question.collapse": "Collapse",
+  "session.question.expand": "Expand",
   "session.question.progress": "{{current}} of {{total}} questions",
   "session.question.skipped.button": "{{count}} skipped question(s)",
   "session.question.skipped.title": "Skipped questions",

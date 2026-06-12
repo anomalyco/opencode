@@ -7,10 +7,14 @@ export function DockPrompt(props: {
   header: JSX.Element
   children: JSX.Element
   footer: JSX.Element
+  expandLabel?: string
+  collapseLabel?: string
   ref?: (el: HTMLDivElement) => void
 }) {
   const slot = (name: string) => `${props.kind}-${name}`
   const [collapsed, setCollapsed] = createSignal(false)
+  const toggleLabel = () => (collapsed() ? props.expandLabel : props.collapseLabel)
+  const fallbackLabel = () => (collapsed() ? "Expand" : "Collapse")
 
   return (
     <div data-component="dock-prompt" data-kind={props.kind} data-collapsed={collapsed()} ref={props.ref}>
@@ -20,11 +24,13 @@ export function DockPrompt(props: {
           <button
             type="button"
             data-slot="question-collapse"
+            data-label={toggleLabel() ? "true" : "false"}
             onClick={() => setCollapsed((v) => !v)}
             aria-expanded={!collapsed()}
-            aria-label={collapsed() ? "Expand" : "Collapse"}
+            aria-label={toggleLabel() ?? fallbackLabel()}
           >
             <Icon name="chevron-grabber-vertical" size="small" />
+            <Show when={toggleLabel()}>{(label) => <span data-slot="question-collapse-label">{label()}</span>}</Show>
           </button>
         </div>
         <Show when={!collapsed()}>

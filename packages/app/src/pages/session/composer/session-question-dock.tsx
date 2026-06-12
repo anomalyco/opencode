@@ -483,6 +483,8 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     <DockPrompt
       kind="question"
       ref={(el) => (root = el)}
+      expandLabel={language.t("session.question.expand")}
+      collapseLabel={language.t("session.question.collapse")}
       header={
         <>
           <div data-slot="question-header-title">{summary()}</div>

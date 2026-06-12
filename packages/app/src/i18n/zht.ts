@@ -891,6 +891,8 @@ export const dict = {
   "session.review.noVcs.createGit.actionLoading": "正在建立 Git 儲存庫...",
   "session.review.noVcs.createGit.action": "建立 Git 儲存庫",
   "session.todo.progress": "已完成 {{done}} 個待辦事項（共 {{total}} 個）",
+  "session.question.collapse": "折疊",
+  "session.question.expand": "展開",
   "session.question.progress": "{{current}}/{{total}} 個問題",
   "session.question.skipped.button": "{{count}} 個已跳過問題",
   "session.question.skipped.title": "已跳過的問題",

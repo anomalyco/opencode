@@ -1032,6 +1032,8 @@ export const dict = {
   "session.review.noVcs.createGit.actionLoading": "正在创建 Git 仓库...",
   "session.review.noVcs.createGit.action": "创建 Git 仓库",
   "session.todo.progress": "已完成 {{done}} 个任务（共 {{total}} 个）",
+  "session.question.collapse": "折叠",
+  "session.question.expand": "展开",
   "session.question.progress": "{{current}}/{{total}} 个问题",
   "session.question.skipped.button": "{{count}} 个已跳过问题",
   "session.question.skipped.title": "已跳过的问题",

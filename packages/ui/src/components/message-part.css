@@ -1100,6 +1100,20 @@
       background-color 0.15s ease,
       color 0.15s ease;
 
+    &[data-label="true"] {
+      width: auto;
+      min-width: 56px;
+      padding: 0 8px;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1;
+    }
+
+    [data-slot="question-collapse-label"] {
+      white-space: nowrap;
+    }
+
     &:hover {
       background-color: var(--surface-base-hover);
       color: var(--text-base);
@@ -1258,6 +1272,20 @@
     transition:
       background-color 0.15s ease,
       color 0.15s ease;
+
+    &[data-label="true"] {
+      width: auto;
+      min-width: 56px;
+      padding: 0 8px;
+      gap: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      line-height: 1;
+    }
+
+    [data-slot="question-collapse-label"] {
+      white-space: nowrap;
+    }
 
     &:hover {
       background-color: var(--surface-base-hover);
