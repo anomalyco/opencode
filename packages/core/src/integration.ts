@@ -374,13 +374,36 @@ export const locationLayer = Layer.effect(
       })
       if (!result) return
       if (Exit.isSuccess(exit)) {
+        let value = exit.value
+        if ((value as any).type === "success") {
+          if ("access" in value) {
+            value = new Credential.OAuth({
+              type: "oauth",
+              access: (value as any).access,
+              refresh: (value as any).refresh || "",
+              expires: (value as any).expires || 0,
+              metadata: {
+                ...((value as any).accountId ? { clientId: (value as any).accountId } : {}),
+                ...((value as any).enterpriseUrl ? { clientSecret: (value as any).enterpriseUrl } : {}),
+                ...((value as any).metadata ?? {}),
+              },
+            })
+          } else {
+            value = new Credential.Key({
+              type: "key",
+              key: (value as any).key,
+              metadata: (value as any).metadata,
+            })
+          }
+        }
+
         yield* credentials.create({
           integrationID: result.integrationID,
           label: result.label,
           value:
-            exit.value.type === "oauth"
-              ? new Credential.OAuth({ ...exit.value, methodID: result.methodID })
-              : exit.value,
+            value.type === "oauth"
+              ? new Credential.OAuth({ ...value, methodID: result.methodID })
+              : value,
         })
       }
       yield* close(result.scope)
