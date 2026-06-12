@@ -45,7 +45,6 @@
     "@blocksuite/presets": "0.0.0-canary-20250316001624",
     "@blocksuite/store": "0.0.0-canary-20250316001624",
     "@blocksuite/sync": "0.0.0-canary-20250316001624",
-    "y-protocols": "1.0.7",
     "@kobalte/core": "catalog:",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
@@ -72,6 +71,7 @@
     "effect": "catalog:",
     "fuzzysort": "catalog:",
     "ghostty-web": "github:anomalyco/ghostty-web#main",
+    "konva": "10.3.0",
     "lit": "3.3.3",
     "luxon": "catalog:",
     "marked": "catalog:",
@@ -82,6 +82,7 @@
     "solid-list": "catalog:",
     "tailwindcss": "catalog:",
     "virtua": "catalog:",
+    "y-protocols": "1.0.7",
     "zod": "catalog:"
   }
 }
