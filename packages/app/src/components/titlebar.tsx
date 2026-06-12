@@ -5,6 +5,7 @@ import {
   createSignal,
   For,
   Match,
+  onCleanup,
   onMount,
   Show,
   startTransition,
@@ -407,11 +408,23 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             })
 
             const [tabsAreOverflowing, setTabsAreOverflowing] = createSignal(false)
+            const [tabsFadeLeft, setTabsFadeLeft] = createSignal(false)
+            const [tabsFadeRight, setTabsFadeRight] = createSignal(false)
             let tabScrollRef!: HTMLDivElement
 
-            function refreshTabsAreOverflowing() {
-              setTabsAreOverflowing(tabScrollRef.scrollWidth > tabScrollRef.clientWidth)
+            function refreshTabsScrollState() {
+              const el = tabScrollRef
+              if (!el) return
+              const overflowing = el.scrollWidth > el.clientWidth
+              setTabsAreOverflowing(overflowing)
+              setTabsFadeLeft(overflowing && el.scrollLeft > 0)
+              setTabsFadeRight(overflowing && el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
             }
+
+            createEffect(() => {
+              tabsStore.length
+              queueMicrotask(refreshTabsScrollState)
+            })
 
             return (
               <div
@@ -435,18 +448,22 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   state={!!homeMatch() ? "pressed" : undefined}
                 />
 
-                <div
-                  class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
-                  ref={tabScrollRef}
-                >
-                  <div class="flex min-w-0 flex-row items-center gap-1.5">
-                    <For each={tabsStore}>
-                      {(tab, i) => {
-                        let ref!: HTMLDivElement
-
-                        onMount(() => {
-                          refreshTabsAreOverflowing()
-                        })
+                <div class="relative min-w-0">
+                  <div
+                    class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
+                    ref={(el) => {
+                      tabScrollRef = el
+                      const observer = new ResizeObserver(refreshTabsScrollState)
+                      observer.observe(el)
+                      onCleanup(() => observer.disconnect())
+                      refreshTabsScrollState()
+                    }}
+                    onScroll={refreshTabsScrollState}
+                  >
+                    <div class="flex min-w-0 flex-row items-center gap-1.5">
+                      <For each={tabsStore}>
+                        {(tab, i) => {
+                          let ref!: HTMLDivElement
 
                         const divider = () =>
                           i() !== 0 && (
@@ -520,7 +537,20 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                         )
                       }}
                     </Show>
+                    </div>
                   </div>
+                  <Show when={tabsFadeLeft()}>
+                    <div
+                      aria-hidden="true"
+                      class="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-[linear-gradient(to_right,var(--v2-background-bg-deep),transparent)]"
+                    />
+                  </Show>
+                  <Show when={tabsFadeRight()}>
+                    <div
+                      aria-hidden="true"
+                      class="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-deep),transparent)]"
+                    />
+                  </Show>
                 </div>
                 <Show when={!(creating() && params.dir)}>
                   <IconButtonV2
