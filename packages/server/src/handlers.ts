@@ -18,14 +18,21 @@ import { HealthHandler } from "./handlers/health"
 import { QuestionHandler } from "./handlers/question"
 import { ReferenceHandler } from "./handlers/reference"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
+import { LocationHandler } from "./handlers/location"
+import { IntegrationHandler } from "./handlers/integration"
+import { CredentialHandler } from "./handlers/credential"
+import { Credential } from "@opencode-ai/core/credential"
 
 export const handlers = Layer.mergeAll(
   HealthHandler,
+  LocationHandler,
   AgentHandler,
   SessionHandler,
   MessageHandler,
   ModelHandler,
   ProviderHandler,
+  IntegrationHandler,
+  CredentialHandler,
   PermissionHandler,
   FileSystemHandler,
   CommandHandler,
@@ -40,4 +47,5 @@ export const handlers = Layer.mergeAll(
   Layer.provide(SessionExecutionLocal.defaultLayer),
   Layer.provide(PermissionSaved.defaultLayer),
   Layer.provide(LocationServiceMap.layer),
+  Layer.provide(Credential.defaultLayer),
 )
