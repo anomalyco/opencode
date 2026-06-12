@@ -868,9 +868,7 @@ function Leaderboard(props: {
   onActiveModelChange: (model: string | undefined) => void
 }) {
   const featured = createMemo(() => props.data.slice(0, 3))
-  const columns = createMemo(() =>
-    [0, 1, 2].map((index) => props.data.slice(3 + index * 5, 8 + index * 5)).filter((column) => column.length > 0),
-  )
+  const compact = createMemo(() => props.data.slice(3))
 
   return (
     <div id="leaderboard" data-component="leaderboard" role="list" aria-label="Model token leaderboard">
@@ -888,20 +886,14 @@ function Leaderboard(props: {
       </div>
       <div data-slot="leaderboard-pattern" aria-hidden="true" />
       <div data-slot="leaderboard-compact">
-        <For each={columns()}>
-          {(column) => (
-            <div data-slot="leaderboard-column">
-              <For each={column}>
-                {(entry) => (
-                  <LeaderboardCard
-                    entry={entry}
-                    size="compact"
-                    active={props.activeModel === entry.model}
-                    onActiveModelChange={props.onActiveModelChange}
-                  />
-                )}
-              </For>
-            </div>
+        <For each={compact()}>
+          {(entry) => (
+            <LeaderboardCard
+              entry={entry}
+              size="compact"
+              active={props.activeModel === entry.model}
+              onActiveModelChange={props.onActiveModelChange}
+            />
           )}
         </For>
       </div>
