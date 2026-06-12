@@ -1,15 +1,15 @@
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { describe, expect } from "bun:test"
 import { Config, Context, Effect, FileSystem, Layer, Path } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
-import { WorkspaceID } from "../../src/control-plane/schema"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { ControlPaths } from "../../src/server/routes/instance/httpapi/groups/control"
 import { InstancePaths } from "../../src/server/routes/instance/httpapi/groups/instance"
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
-import { PermissionID } from "../../src/permission/schema"
-import { ProjectID } from "../../src/project/schema"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { QuestionID } from "../../src/question/schema"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { HEADER as FenceHeader } from "../../src/server/shared/fence"
@@ -17,7 +17,7 @@ import { resetDatabase } from "../fixture/db"
 import { tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-// Flip the experimental workspaces flag so SyncEvent.run actually writes to
+// Flip the experimental workspaces flag so EventV2.run actually writes to
 // EventSequenceTable (the source of truth the fence middleware reads). Reset
 // the database around the test so per-instance state does not leak between
 // runs. resetDatabase() already calls disposeAllInstances(), so we don't
@@ -76,7 +76,7 @@ describe("instance HttpApi", () => {
   it.live("emits a sync fence header for fixed-workspace mutations", () =>
     Effect.gen(function* () {
       const originalWorkspaceID = Flag.OPENCODE_WORKSPACE_ID
-      Flag.OPENCODE_WORKSPACE_ID = WorkspaceID.ascending()
+      Flag.OPENCODE_WORKSPACE_ID = WorkspaceV2.ID.ascending()
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
           Flag.OPENCODE_WORKSPACE_ID = originalWorkspaceID
@@ -98,7 +98,7 @@ describe("instance HttpApi", () => {
   it.live("does not emit sync fence headers for fixed-workspace reads or no-op mutations", () =>
     Effect.gen(function* () {
       const originalWorkspaceID = Flag.OPENCODE_WORKSPACE_ID
-      Flag.OPENCODE_WORKSPACE_ID = WorkspaceID.ascending()
+      Flag.OPENCODE_WORKSPACE_ID = WorkspaceV2.ID.ascending()
       yield* Effect.addFinalizer(() =>
         Effect.sync(() => {
           Flag.OPENCODE_WORKSPACE_ID = originalWorkspaceID
@@ -167,7 +167,7 @@ describe("instance HttpApi", () => {
             handlerContext,
           ),
         )
-      const permissionID = PermissionID.ascending()
+      const permissionID = PermissionV1.ID.ascending()
       const questionReplyID = QuestionID.ascending()
       const questionRejectID = QuestionID.ascending()
       const [permission, questionReply, questionReject] = yield* Effect.all(
@@ -209,7 +209,7 @@ describe("instance HttpApi", () => {
   it.live("returns typed not found bodies for missing projects", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
-      const projectID = ProjectID.make("project_missing")
+      const projectID = ProjectV2.ID.make("project_missing")
       const response = yield* Effect.promise(() =>
         HttpApiApp.webHandler().handler(
           new Request(`http://localhost/project/${projectID}`, {

@@ -294,6 +294,7 @@ export interface Hooks {
       system: string[]
     },
   ) => Promise<void>
+  "experimental.provider.small_model"?: (input: { provider: ProviderV2 }, output: { model?: ModelV2 }) => Promise<void>
   /**
    * Called before session compaction starts. Allows plugins to customize
    * the compaction prompt.

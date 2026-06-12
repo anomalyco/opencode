@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import type {
   Hooks,
   PluginInput,
@@ -6,8 +7,6 @@ import type {
   WorkspaceAdapter as PluginWorkspaceAdapter,
 } from "@opencode-ai/plugin"
 import { Config } from "@/config/config"
-import { Bus } from "../bus"
-import * as Log from "@opencode-ai/core/util/log"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { ServerAuth } from "@/server/auth"
 import { CodexAuthPlugin } from "./openai/codex"
@@ -20,7 +19,7 @@ import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cl
 import { AzureAuthPlugin } from "./azure"
 import { DigitalOceanAuthPlugin } from "./digitalocean"
 import { XaiAuthPlugin } from "./xai"
-import { Effect, Layer, Context, Stream } from "effect"
+import { Effect, Layer, Context } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { errorMessage } from "@/util/error"
@@ -29,9 +28,8 @@ import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } fro
 import { registerAdapter } from "@/control-plane/adapters"
 import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
-
-const log = Log.create({ service: "plugin" })
 
 type State = {
   hooks: Hooks[]
@@ -123,7 +121,7 @@ async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks:
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
     const flags = yield* RuntimeFlags.Service
 
@@ -133,7 +131,7 @@ export const layer = Layer.effect(
         const bridge = yield* EffectBridge.make()
 
         function publishPluginError(message: string) {
-          bridge.fork(bus.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
+          bridge.fork(events.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
         }
 
         const { Server } = yield* Effect.promise(() => import("../server/server"))
@@ -163,19 +161,18 @@ export const layer = Layer.effect(
         }
 
         for (const plugin of flags.disableDefaultPlugins ? [] : internalPlugins(flags)) {
-          log.info("loading internal plugin", { name: plugin.name })
           const init = yield* Effect.tryPromise({
             try: () => plugin(input),
-            catch: (err) => {
-              log.error("failed to load internal plugin", { name: plugin.name, error: err })
-            },
-          }).pipe(Effect.option)
+            catch: errorMessage,
+          }).pipe(
+            Effect.tapError((error) => Effect.logError("failed to load internal plugin", { name: plugin.name, error })),
+            Effect.option,
+          )
           if (init._tag === "Some") hooks.push(init.value)
         }
 
         const plugins = flags.pure ? [] : (cfg.plugin_origins ?? [])
         if (flags.pure && cfg.plugin_origins?.length) {
-          log.info("skipping external plugins in pure mode", { count: cfg.plugin_origins.length })
         }
         if (plugins.length) yield* config.waitForDependencies()
 
@@ -184,12 +181,8 @@ export const layer = Layer.effect(
             items: plugins,
             kind: "server",
             report: {
-              start(candidate) {
-                log.info("loading plugin", { path: candidate.plan.spec })
-              },
-              missing(candidate, _retry, message) {
-                log.warn("plugin has no server entrypoint", { path: candidate.plan.spec, message })
-              },
+              start(candidate) {},
+              missing(candidate, _retry, message) {},
               error(candidate, _retry, stage, error, resolved) {
                 const spec = candidate.plan.spec
                 const cause = error instanceof Error ? (error.cause ?? error) : error
@@ -197,24 +190,20 @@ export const layer = Layer.effect(
 
                 if (stage === "install") {
                   const parsed = parsePluginSpecifier(spec)
-                  log.error("failed to install plugin", { pkg: parsed.pkg, version: parsed.version, error: message })
                   publishPluginError(`Failed to install plugin ${parsed.pkg}@${parsed.version}: ${message}`)
                   return
                 }
 
                 if (stage === "compatibility") {
-                  log.warn("plugin incompatible", { path: spec, error: message })
                   publishPluginError(`Plugin ${spec} skipped: ${message}`)
                   return
                 }
 
                 if (stage === "entry") {
-                  log.error("failed to resolve plugin server entry", { path: spec, error: message })
                   publishPluginError(`Failed to load plugin ${spec}: ${message}`)
                   return
                 }
 
-                log.error("failed to load plugin", { path: spec, target: resolved?.entry, error: message })
                 publishPluginError(`Failed to load plugin ${spec}: ${message}`)
               },
             },
@@ -229,13 +218,13 @@ export const layer = Layer.effect(
             try: () => applyPlugin(load, input, hooks),
             catch: (err) => {
               const message = errorMessage(err)
-              log.error("failed to load plugin", { path: load.spec, error: message })
               return message
             },
           }).pipe(
+            Effect.tapError((error) => Effect.logError("failed to load plugin", { path: load.spec, error })),
             Effect.catch(() => {
               // TODO: make proper events for this
-              // bus.publish(Session.Event.Error, {
+              // events.publish(Session.Event.Error, {
               //   error: new NamedError.Unknown({
               //     message: `Failed to load plugin ${load.spec}: ${message}`,
               //   }).toObject(),
@@ -249,11 +238,22 @@ export const layer = Layer.effect(
         for (const hook of hooks) {
           yield* Effect.tryPromise({
             try: () => Promise.resolve((hook as any).config?.(cfg)),
-            catch: (err) => {
-              log.error("plugin config hook failed", { error: err })
-            },
-          }).pipe(Effect.ignore)
+            catch: errorMessage,
+          }).pipe(
+            Effect.tapError((error) => Effect.logError("plugin config hook failed", { error })),
+            Effect.ignore,
+          )
         }
+
+        const unsubscribe = yield* events.listen((event) => {
+          if (event.location?.directory !== ctx.directory) return Effect.void
+          return Effect.sync(() => {
+            for (const hook of hooks) {
+              void hook["event"]?.({ event: { id: event.id, type: event.type, properties: event.data } as any })
+            }
+          })
+        })
+        yield* Effect.addFinalizer(() => unsubscribe)
 
         yield* Effect.addFinalizer(() =>
           Effect.forEach(
@@ -261,24 +261,13 @@ export const layer = Layer.effect(
             (hook) =>
               Effect.tryPromise({
                 try: () => Promise.resolve(hook.dispose?.()),
-                catch: (error) => {
-                  log.error("plugin dispose hook failed", { error })
-                },
-              }).pipe(Effect.ignore),
+                catch: errorMessage,
+              }).pipe(
+                Effect.tapError((error) => Effect.logError("plugin dispose hook failed", { error })),
+                Effect.ignore,
+              ),
             { discard: true },
           ),
-        )
-
-        // Subscribe to bus events, fiber interrupted when scope closes
-        yield* (yield* bus.subscribeAll()).pipe(
-          Stream.runForEach((input) =>
-            Effect.sync(() => {
-              for (const hook of hooks) {
-                void hook["event"]?.({ event: input as any })
-              }
-            }),
-          ),
-          Effect.forkScoped,
         )
 
         return { hooks }
@@ -314,9 +303,11 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(Bus.layer),
+  Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(Config.defaultLayer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )
+
+export const node = LayerNode.make(layer, [EventV2Bridge.node, Config.node, RuntimeFlags.node])
 
 export * as Plugin from "."

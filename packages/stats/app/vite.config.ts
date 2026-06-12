@@ -3,6 +3,7 @@ import { nitro } from "nitro/vite"
 import { defineConfig, type PluginOption } from "vite"
 
 export default defineConfig({
+  base: "/data/",
   plugins: [
     solidStart() as PluginOption,
     nitro({

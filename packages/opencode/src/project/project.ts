@@ -1,28 +1,26 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { and, eq, sql } from "drizzle-orm"
-import { Database } from "@/storage/db"
-import { ProjectTable } from "./project.sql"
-import { PermissionTable, SessionTable } from "../session/session.sql"
-import { WorkspaceTable } from "../control-plane/workspace.sql"
-import * as Log from "@opencode-ai/core/util/log"
+import { Database } from "@opencode-ai/core/database/database"
+import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { BusEvent } from "@/bus/bus-event"
 import { GlobalBus } from "@/bus/global"
-import { which } from "../util/which"
-import { ProjectID } from "./schema"
-import { Bus } from "@/bus"
+import { which } from "@opencode-ai/core/util/which"
 import { Command } from "@/command"
 import { InstanceState } from "@/effect/instance-state"
 import { Effect, Layer, Scope, Context, Stream, Types, Schema } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
-import { Project as ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AbsolutePath, NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-
-const log = Log.create({ service: "project" })
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventV2 } from "@opencode-ai/core/event"
 
 const ProjectVcs = Schema.Literal("git")
 
@@ -45,7 +43,7 @@ const ProjectTime = Schema.Struct({
 })
 
 export const Info = Schema.Struct({
-  id: ProjectID,
+  id: ProjectV2.ID,
   worktree: Schema.String,
   vcs: optionalOmitUndefined(ProjectVcs),
   name: optionalOmitUndefined(Schema.String),
@@ -57,7 +55,7 @@ export const Info = Schema.Struct({
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
 
 export const Event = {
-  Updated: BusEvent.define("project.updated", Info),
+  Updated: EventV2.define({ type: "project.updated", schema: Info.fields }),
 }
 
 type Row = typeof ProjectTable.$inferSelect
@@ -87,12 +85,8 @@ export function fromRow(row: Row): Info {
   }
 }
 
-function mergePermissionRules<T extends readonly unknown[]>(oldRules: T, newRules: T): T {
-  return [...new Map([...oldRules, ...newRules].map((rule) => [JSON.stringify(rule), rule])).values()] as unknown as T
-}
-
 export const UpdateInput = Schema.Struct({
-  projectID: ProjectID,
+  projectID: ProjectV2.ID,
   name: Schema.optional(Schema.String),
   icon: Schema.optional(ProjectIcon),
   commands: Schema.optional(ProjectCommands),
@@ -107,7 +101,7 @@ export const UpdatePayload = Schema.Struct({
 export type UpdatePayload = Types.DeepMutable<Schema.Schema.Type<typeof UpdatePayload>>
 
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Project.NotFoundError", {
-  projectID: ProjectID,
+  projectID: ProjectV2.ID,
 }) {}
 
 // ---------------------------------------------------------------------------
@@ -124,13 +118,13 @@ export interface Interface {
   readonly fromDirectory: (directory: string) => Effect.Effect<{ project: Info; sandbox: string }>
   readonly discover: (input: Info) => Effect.Effect<void>
   readonly list: () => Effect.Effect<Info[]>
-  readonly get: (id: ProjectID) => Effect.Effect<Info | undefined>
+  readonly get: (id: ProjectV2.ID) => Effect.Effect<Info | undefined>
   readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
   readonly initGit: (input: { directory: string; project: Info }) => Effect.Effect<Info>
-  readonly setInitialized: (id: ProjectID) => Effect.Effect<void>
-  readonly sandboxes: (id: ProjectID) => Effect.Effect<string[]>
-  readonly addSandbox: (id: ProjectID, directory: string) => Effect.Effect<void>
-  readonly removeSandbox: (id: ProjectID, directory: string) => Effect.Effect<void>
+  readonly setInitialized: (id: ProjectV2.ID) => Effect.Effect<void>
+  readonly sandboxes: (id: ProjectV2.ID) => Effect.Effect<string[]>
+  readonly addSandbox: (id: ProjectV2.ID, directory: string) => Effect.Effect<void>
+  readonly removeSandbox: (id: ProjectV2.ID, directory: string) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Project") {}
@@ -140,12 +134,14 @@ type GitResult = { code: number; text: string; stderr: string }
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
     const proc = yield* AppProcess.Service
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const projectV2 = yield* ProjectV2.Service
-    const bus = yield* Bus.Service
+    const projectCopy = yield* ProjectCopy.Service
+    const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const { db } = yield* Database.Service
 
     const git = Effect.fnUntraced(
       function* (args: string[], opts?: { cwd?: string }) {
@@ -163,9 +159,6 @@ export const layer = Layer.effect(
       Effect.catch(() => Effect.succeed({ code: 1, text: "", stderr: "" } satisfies GitResult)),
     )
 
-    const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
-      Effect.sync(() => Database.use(fn))
-
     const emitUpdated = (data: Info) =>
       Effect.sync(() =>
         GlobalBus.emit("event", {
@@ -180,68 +173,92 @@ export const layer = Layer.effect(
     const scope = yield* Scope.Scope
 
     const migrateProjectId = Effect.fn("Project.migrateProjectId")(function* (
-      oldID: ProjectID | undefined,
-      newID: ProjectID,
+      oldID: ProjectV2.ID | undefined,
+      newID: ProjectV2.ID,
     ) {
       if (!oldID) return
-      if (oldID === ProjectID.global) return
+      if (oldID === ProjectV2.ID.global) return
       if (oldID === newID) return
 
-      yield* Effect.sync(() =>
-        Database.transaction(
-          (d) => {
-            const oldProject = d.select().from(ProjectTable).where(eq(ProjectTable.id, oldID)).get()
-            const newProject = d.select().from(ProjectTable).where(eq(ProjectTable.id, newID)).get()
-            if (oldProject && !newProject) {
-              d.insert(ProjectTable)
-                .values({
-                  ...oldProject,
-                  id: newID,
-                  time_updated: Date.now(),
-                })
+      yield* db
+        .transaction(
+          (d) =>
+            Effect.gen(function* () {
+              const oldProject = yield* d.select().from(ProjectTable).where(eq(ProjectTable.id, oldID)).get()
+              const newProject = yield* d.select().from(ProjectTable).where(eq(ProjectTable.id, newID)).get()
+              if (oldProject && !newProject) {
+                yield* d
+                  .insert(ProjectTable)
+                  .values({
+                    ...oldProject,
+                    id: newID,
+                    time_updated: Date.now(),
+                  })
+                  .run()
+              }
+
+              yield* d
+                .update(SessionTable)
+                .set({ project_id: newID, time_updated: sql`${SessionTable.time_updated}` })
+                .where(eq(SessionTable.project_id, oldID))
                 .run()
-            }
-
-            const oldPermission = d.select().from(PermissionTable).where(eq(PermissionTable.project_id, oldID)).get()
-            const newPermission = d.select().from(PermissionTable).where(eq(PermissionTable.project_id, newID)).get()
-            if (oldPermission && newPermission) {
-              d.update(PermissionTable)
-                .set({
-                  data: mergePermissionRules(oldPermission.data, newPermission.data),
-                  time_created: Math.min(oldPermission.time_created, newPermission.time_created),
-                  time_updated: Date.now(),
-                })
-                .where(eq(PermissionTable.project_id, newID))
+              yield* d
+                .update(WorkspaceTable)
+                .set({ project_id: newID })
+                .where(eq(WorkspaceTable.project_id, oldID))
                 .run()
-              d.delete(PermissionTable).where(eq(PermissionTable.project_id, oldID)).run()
-            }
-            if (oldPermission && !newPermission) {
-              d.update(PermissionTable).set({ project_id: newID }).where(eq(PermissionTable.project_id, oldID)).run()
-            }
 
-            d.update(SessionTable)
-              .set({ project_id: newID, time_updated: sql`${SessionTable.time_updated}` })
-              .where(eq(SessionTable.project_id, oldID))
-              .run()
-            d.update(WorkspaceTable).set({ project_id: newID }).where(eq(WorkspaceTable.project_id, oldID)).run()
-
-            if (oldProject) d.delete(ProjectTable).where(eq(ProjectTable.id, oldID)).run()
-          },
+              if (oldProject) yield* d.delete(ProjectTable).where(eq(ProjectTable.id, oldID)).run()
+            }),
           { behavior: "immediate" },
-        ),
-      )
+        )
+        .pipe(Effect.orDie)
+    })
+
+    const saveProjectDirectory = Effect.fn("Project.saveProjectDirectory")(function* (input: {
+      projectID: ProjectV2.ID
+      directory: string
+    }) {
+      if (input.projectID === ProjectV2.ID.global) return
+      const opened = AbsolutePath.make(FSUtil.resolve(input.directory))
+      const type = yield* projectCopy.detect({ directory: opened })
+
+      yield* db
+        .transaction(
+          (d) =>
+            Effect.gen(function* () {
+              const hasMain = yield* d
+                .select({ directory: ProjectDirectoryTable.directory })
+                .from(ProjectDirectoryTable)
+                .where(
+                  and(eq(ProjectDirectoryTable.project_id, input.projectID), eq(ProjectDirectoryTable.type, "main")),
+                )
+                .get()
+              yield* d
+                .insert(ProjectDirectoryTable)
+                .values({ directory: opened, project_id: input.projectID, type: type ?? (hasMain ? "root" : "main") })
+                .onConflictDoNothing()
+                .run()
+            }),
+          { behavior: "immediate" },
+        )
+        .pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("project directory persistence failed", { projectID: input.projectID, cause }),
+          ),
+        )
     })
 
     const fromDirectory = Effect.fn("Project.fromDirectory")(function* (directory: string) {
-      log.info("fromDirectory", { directory })
+      yield* Effect.logInfo("fromDirectory", { directory })
 
       const data = yield* projectV2.resolve(AbsolutePath.make(directory))
       const worktree = data.id === ProjectV2.ID.make("global") && !data.vcs ? "/" : data.directory
 
       // Phase 2: upsert
-      const projectID = ProjectID.make(data.id)
-      yield* migrateProjectId(data.previous ? ProjectID.make(data.previous) : undefined, projectID)
-      const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get())
+      const projectID = ProjectV2.ID.make(data.id)
+      yield* migrateProjectId(data.previous ? ProjectV2.ID.make(data.previous) : undefined, projectID)
+      const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get().pipe(Effect.orDie)
       const existing = row
         ? fromRow(row)
         : {
@@ -256,12 +273,12 @@ export const layer = Layer.effect(
 
       const result: Info = {
         ...existing,
-        worktree: projectID === ProjectID.global ? worktree : existing.worktree,
+        worktree: projectID === ProjectV2.ID.global ? worktree : existing.worktree,
         vcs: data.vcs?.type ?? fakeVcs,
         time: { ...existing.time, updated: Date.now() },
       }
       if (
-        projectID !== ProjectID.global &&
+        projectID !== ProjectV2.ID.global &&
         data.directory !== result.worktree &&
         !result.sandboxes.includes(data.directory)
       )
@@ -276,53 +293,56 @@ export const layer = Layer.effect(
         { concurrency: "unbounded" },
       ).pipe(Effect.map((arr) => arr.filter((x): x is string => x !== undefined)))
 
-      yield* db((d) =>
-        d
-          .insert(ProjectTable)
-          .values({
-            id: result.id,
-            worktree: result.worktree,
+      yield* db
+        .insert(ProjectTable)
+        .values({
+          id: result.id,
+          worktree: AbsolutePath.make(result.worktree),
+          vcs: result.vcs ?? null,
+          name: result.name,
+          icon_url: result.icon?.url,
+          icon_url_override: result.icon?.override,
+          icon_color: result.icon?.color,
+          time_created: result.time.created,
+          time_updated: result.time.updated,
+          time_initialized: result.time.initialized,
+          sandboxes: result.sandboxes.map((sandbox) => AbsolutePath.make(sandbox)),
+          commands: result.commands,
+        })
+        .onConflictDoUpdate({
+          target: ProjectTable.id,
+          set: {
+            worktree: AbsolutePath.make(result.worktree),
             vcs: result.vcs ?? null,
             name: result.name,
             icon_url: result.icon?.url,
             icon_url_override: result.icon?.override,
             icon_color: result.icon?.color,
-            time_created: result.time.created,
             time_updated: result.time.updated,
             time_initialized: result.time.initialized,
-            sandboxes: result.sandboxes,
+            sandboxes: result.sandboxes.map((sandbox) => AbsolutePath.make(sandbox)),
             commands: result.commands,
-          })
-          .onConflictDoUpdate({
-            target: ProjectTable.id,
-            set: {
-              worktree: result.worktree,
-              vcs: result.vcs ?? null,
-              name: result.name,
-              icon_url: result.icon?.url,
-              icon_url_override: result.icon?.override,
-              icon_color: result.icon?.color,
-              time_updated: result.time.updated,
-              time_initialized: result.time.initialized,
-              sandboxes: result.sandboxes,
-              commands: result.commands,
-            },
-          })
-          .run(),
-      )
+          },
+        })
+        .run()
+        .pipe(Effect.orDie)
 
-      if (projectID !== ProjectID.global) {
-        yield* db((d) =>
-          d
-            .update(SessionTable)
-            .set({ project_id: projectID })
-            .where(and(eq(SessionTable.project_id, ProjectID.global), eq(SessionTable.directory, data.directory)))
-            .run(),
-        )
+      if (projectID !== ProjectV2.ID.global) {
+        yield* db
+          .update(SessionTable)
+          .set({ project_id: projectID })
+          .where(and(eq(SessionTable.project_id, ProjectV2.ID.global), eq(SessionTable.directory, data.directory)))
+          .run()
+          .pipe(Effect.orDie)
       }
 
+      yield* saveProjectDirectory({
+        projectID,
+        directory: data.directory,
+      })
+
       yield* emitUpdated(result)
-      if (projectID !== ProjectID.global && data.vcs?.type === "git") {
+      if (projectID !== ProjectV2.ID.global && data.vcs?.type === "git") {
         yield* projectV2.commit({ store: data.vcs.store, id: data.id })
       }
       return { project: result, sandbox: data.vcs ? data.directory : worktree }
@@ -345,7 +365,7 @@ export const layer = Layer.effect(
 
       const buffer = yield* fs.readFile(shortest).pipe(Effect.orDie)
       const base64 = Buffer.from(buffer).toString("base64")
-      const mime = AppFileSystem.mimeType(shortest)
+      const mime = FSUtil.mimeType(shortest)
       const url = `data:${mime};base64,${base64}`
       yield* update({ projectID: input.id, icon: { url } }).pipe(
         Effect.catchTag("Project.NotFoundError", () => Effect.void),
@@ -353,30 +373,29 @@ export const layer = Layer.effect(
     })
 
     const list = Effect.fn("Project.list")(function* () {
-      return yield* db((d) => d.select().from(ProjectTable).all().map(fromRow))
+      return (yield* db.select().from(ProjectTable).all().pipe(Effect.orDie)).map(fromRow)
     })
 
-    const get = Effect.fn("Project.get")(function* (id: ProjectID) {
-      const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+    const get = Effect.fn("Project.get")(function* (id: ProjectV2.ID) {
+      const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get().pipe(Effect.orDie)
       return row ? fromRow(row) : undefined
     })
 
     const update = Effect.fn("Project.update")(function* (input: UpdateInput) {
-      const result = yield* db((d) =>
-        d
-          .update(ProjectTable)
-          .set({
-            name: input.name,
-            icon_url: input.icon?.url,
-            icon_url_override: input.icon?.override,
-            icon_color: input.icon?.color,
-            commands: input.commands,
-            time_updated: Date.now(),
-          })
-          .where(eq(ProjectTable.id, input.projectID))
-          .returning()
-          .get(),
-      )
+      const result = yield* db
+        .update(ProjectTable)
+        .set({
+          name: input.name,
+          icon_url: input.icon?.url,
+          icon_url_override: input.icon?.override,
+          icon_color: input.icon?.color,
+          commands: input.commands,
+          time_updated: Date.now(),
+        })
+        .where(eq(ProjectTable.id, input.projectID))
+        .returning()
+        .get()
+        .pipe(Effect.orDie)
       if (!result) return yield* new NotFoundError({ projectID: input.projectID })
       const data = fromRow(result)
       yield* emitUpdated(data)
@@ -394,20 +413,24 @@ export const layer = Layer.effect(
       return project
     })
 
-    const setInitialized = Effect.fn("Project.setInitialized")(function* (id: ProjectID) {
-      yield* db((d) =>
-        d.update(ProjectTable).set({ time_initialized: Date.now() }).where(eq(ProjectTable.id, id)).run(),
-      )
+    const setInitialized = Effect.fn("Project.setInitialized")(function* (id: ProjectV2.ID) {
+      yield* db
+        .update(ProjectTable)
+        .set({ time_initialized: Date.now() })
+        .where(eq(ProjectTable.id, id))
+        .run()
+        .pipe(Effect.orDie)
     })
 
     const initState = yield* InstanceState.make(
       Effect.fn("Project.initState")(function* (ctx) {
-        yield* (yield* bus.subscribe(Command.Event.Executed)).pipe(
-          Stream.runForEach((payload) =>
-            payload.properties.name === Command.Default.INIT ? setInitialized(ctx.project.id) : Effect.void,
-          ),
-          Effect.forkScoped,
-        )
+        const unsubscribe = yield* events.listen((event) => {
+          if (event.type !== Command.Event.Executed.type || event.location?.directory !== ctx.directory)
+            return Effect.void
+          const data = event.data as EventV2.Data<typeof Command.Event.Executed>
+          return data.name === Command.Default.INIT ? setInitialized(ctx.project.id) : Effect.void
+        })
+        yield* Effect.addFinalizer(() => unsubscribe)
       }),
     )
 
@@ -415,8 +438,8 @@ export const layer = Layer.effect(
       yield* InstanceState.get(initState)
     })
 
-    const sandboxes = Effect.fn("Project.sandboxes")(function* (id: ProjectID) {
-      const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+    const sandboxes = Effect.fn("Project.sandboxes")(function* (id: ProjectV2.ID) {
+      const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get().pipe(Effect.orDie)
       if (!row) return []
       const data = fromRow(row)
       return yield* Effect.forEach(
@@ -430,35 +453,35 @@ export const layer = Layer.effect(
       ).pipe(Effect.map((arr) => arr.filter((x): x is string => x !== undefined)))
     })
 
-    const addSandbox = Effect.fn("Project.addSandbox")(function* (id: ProjectID, directory: string) {
-      const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+    const addSandbox = Effect.fn("Project.addSandbox")(function* (id: ProjectV2.ID, directory: string) {
+      const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get().pipe(Effect.orDie)
       if (!row) throw new Error(`Project not found: ${id}`)
+      const sandbox = AbsolutePath.make(directory)
       const sboxes = [...row.sandboxes]
-      if (!sboxes.includes(directory)) sboxes.push(directory)
-      const result = yield* db((d) =>
-        d
-          .update(ProjectTable)
-          .set({ sandboxes: sboxes, time_updated: Date.now() })
-          .where(eq(ProjectTable.id, id))
-          .returning()
-          .get(),
-      )
+      if (!sboxes.includes(sandbox)) sboxes.push(sandbox)
+      const result = yield* db
+        .update(ProjectTable)
+        .set({ sandboxes: sboxes, time_updated: Date.now() })
+        .where(eq(ProjectTable.id, id))
+        .returning()
+        .get()
+        .pipe(Effect.orDie)
       if (!result) throw new Error(`Project not found: ${id}`)
       yield* emitUpdated(fromRow(result))
     })
 
-    const removeSandbox = Effect.fn("Project.removeSandbox")(function* (id: ProjectID, directory: string) {
-      const row = yield* db((d) => d.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
+    const removeSandbox = Effect.fn("Project.removeSandbox")(function* (id: ProjectV2.ID, directory: string) {
+      const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get().pipe(Effect.orDie)
       if (!row) throw new Error(`Project not found: ${id}`)
-      const sboxes = row.sandboxes.filter((s) => s !== directory)
-      const result = yield* db((d) =>
-        d
-          .update(ProjectTable)
-          .set({ sandboxes: sboxes, time_updated: Date.now() })
-          .where(eq(ProjectTable.id, id))
-          .returning()
-          .get(),
-      )
+      const sandbox = AbsolutePath.make(directory)
+      const sboxes = row.sandboxes.filter((s) => s !== sandbox)
+      const result = yield* db
+        .update(ProjectTable)
+        .set({ sandboxes: sboxes, time_updated: Date.now() })
+        .where(eq(ProjectTable.id, id))
+        .returning()
+        .get()
+        .pipe(Effect.orDie)
       if (!result) throw new Error(`Project not found: ${id}`)
       yield* emitUpdated(fromRow(result))
     })
@@ -480,36 +503,27 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(Bus.defaultLayer),
+  Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(ProjectV2.defaultLayer),
+  Layer.provide(ProjectCopy.defaultLayer),
   Layer.provide(AppProcess.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
-  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(FSUtil.defaultLayer),
+  Layer.provide(Database.defaultLayer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )
 
 export const use = serviceUse(Service)
 
-export function list() {
-  return Database.use((db) =>
-    db
-      .select()
-      .from(ProjectTable)
-      .all()
-      .map((row) => fromRow(row)),
-  )
-}
-
-export function get(id: ProjectID): Info | undefined {
-  const row = Database.use((db) => db.select().from(ProjectTable).where(eq(ProjectTable.id, id)).get())
-  if (!row) return undefined
-  return fromRow(row)
-}
-
-export function setInitialized(id: ProjectID) {
-  Database.use((db) =>
-    db.update(ProjectTable).set({ time_initialized: Date.now() }).where(eq(ProjectTable.id, id)).run(),
-  )
-}
+export const node = LayerNode.make(layer, [
+  FSUtil.node,
+  AppProcess.node,
+  CrossSpawnSpawner.node,
+  ProjectV2.node,
+  ProjectCopy.node,
+  EventV2Bridge.node,
+  RuntimeFlags.node,
+  Database.node,
+])
 
 export * as Project from "./project"

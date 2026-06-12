@@ -3,18 +3,34 @@ import { OpenApi } from "effect/unstable/httpapi"
 import { PublicApi } from "../../src/server/routes/instance/httpapi/public"
 
 type Method = "get" | "post" | "put" | "delete" | "patch"
-type OpenApiSchema = { readonly $ref?: string }
+type OpenApiSchema = {
+  readonly $ref?: string
+  readonly anyOf?: ReadonlyArray<OpenApiSchema>
+  readonly type?: string
+  readonly enum?: readonly unknown[]
+  readonly properties?: Record<string, OpenApiSchema>
+  readonly required?: readonly string[]
+}
 type OpenApiResponse = {
   readonly description?: string
   readonly content?: Record<string, { readonly schema?: OpenApiSchema }>
 }
 type OpenApiOperation = {
-  readonly parameters?: ReadonlyArray<{ readonly name: string; readonly in: string }>
+  readonly parameters?: ReadonlyArray<{
+    readonly name: string
+    readonly in: string
+    readonly required?: boolean
+    readonly schema?: { readonly type?: string }
+  }>
   readonly responses?: Record<string, OpenApiResponse>
+  readonly requestBody?: { readonly required?: boolean }
   readonly security?: unknown
 }
 type OpenApiPathItem = Partial<Record<Method, OpenApiOperation>>
-type OpenApiSpec = { readonly paths: Record<string, OpenApiPathItem> }
+type OpenApiSpec = {
+  readonly paths: Record<string, OpenApiPathItem>
+  readonly components: { readonly schemas: Record<string, OpenApiSchema> }
+}
 
 const methods = ["get", "post", "put", "delete", "patch"] as const
 
@@ -39,17 +55,87 @@ function componentName(ref: string) {
   return ref.replace("#/components/schemas/", "")
 }
 
+function componentNames(response: OpenApiResponse | undefined) {
+  const schema = response?.content?.["application/json"]?.schema
+  if (!schema) return []
+  return [
+    ...new Set([schema, ...(schema.anyOf ?? [])].flatMap((item) => (item.$ref ? [componentName(item.$ref)] : []))),
+  ]
+}
+
 function isBuiltInEndpointError(name: string) {
   return name.startsWith("EffectHttpApiError") || name.startsWith("effect_HttpApiError_")
 }
 
 describe("PublicApi OpenAPI v2 errors", () => {
+  test("documents nested legacy global sync events", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+    const schema = spec.components.schemas.SyncEventSessionCreated
+
+    expect(schema?.required).toEqual(["type", "id", "syncEvent"])
+    expect(schema?.properties?.type?.enum).toEqual(["sync"])
+    expect(schema?.properties?.syncEvent).toMatchObject({
+      required: ["type", "id", "seq", "aggregateID", "data"],
+      properties: {
+        type: { enum: ["session.created.1"] },
+        id: { type: "string" },
+        seq: { type: "number" },
+        aggregateID: { type: "string" },
+      },
+    })
+  })
+
   test("preserves /api auth responses", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
     for (const route of v2Operations(spec)) {
       expect(route.operation.responses?.["401"], `${route.method.toUpperCase()} ${route.path}`).toBeDefined()
       expect(route.operation.security, `${route.method.toUpperCase()} ${route.path}`).toEqual([])
+    }
+  })
+
+  test("documents references separately from filesystem routes", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const path of ["/api/fs/read/*", "/api/fs/list"]) {
+      expect(spec.paths[path]?.get?.parameters, path).not.toContainEqual(expect.objectContaining({ name: "reference" }))
+    }
+    expect(spec.paths["/api/reference"]?.get).toBeDefined()
+  })
+
+  test("preserves required request bodies for v2 mutations", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const path of [
+      "/api/session/{sessionID}/prompt",
+      "/api/session/{sessionID}/permission/{requestID}/reply",
+      "/api/session/{sessionID}/question/{requestID}/reply",
+    ]) {
+      expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
+    }
+  })
+
+  test("documents connector discovery and connection routes", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const [method, path] of [
+      ["get", "/api/connector"],
+      ["get", "/api/connector/{connectorID}"],
+      ["post", "/api/connector/{connectorID}/connect/key"],
+      ["post", "/api/connector/{connectorID}/connect/oauth"],
+      ["get", "/api/connector/oauth/{attemptID}"],
+      ["post", "/api/connector/oauth/{attemptID}/complete"],
+      ["delete", "/api/connector/oauth/{attemptID}"],
+    ] as const) {
+      expect(spec.paths[path]?.[method], `${method.toUpperCase()} ${path}`).toBeDefined()
+    }
+
+    for (const path of [
+      "/api/connector/{connectorID}/connect/key",
+      "/api/connector/{connectorID}/connect/oauth",
+      "/api/connector/oauth/{attemptID}/complete",
+    ]) {
+      expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
     }
   })
 
@@ -111,9 +197,7 @@ describe("PublicApi OpenAPI v2 errors", () => {
       ["get", "/api/session/{sessionID}/context"],
       ["get", "/api/session/{sessionID}/message"],
     ] as const) {
-      expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["404"]) ?? "")).toBe(
-        "SessionNotFoundError",
-      )
+      expect(componentNames(spec.paths[route[1]]?.[route[0]]?.responses?.["404"])).toContain("SessionNotFoundError")
     }
   })
 
@@ -121,7 +205,6 @@ describe("PublicApi OpenAPI v2 errors", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
     for (const route of [
-      ["post", "/api/session/{sessionID}/prompt"],
       ["post", "/api/session/{sessionID}/compact"],
       ["post", "/api/session/{sessionID}/wait"],
     ] as const) {
@@ -172,6 +255,15 @@ describe("PublicApi OpenAPI v2 errors", () => {
       expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["404"]) ?? "")).toBe(
         "QuestionNotFoundError",
       )
+    }
+    for (const route of [
+      ["post", "/api/session/{sessionID}/question/{requestID}/reply"],
+      ["post", "/api/session/{sessionID}/question/{requestID}/reject"],
+    ] as const) {
+      expect(componentNames(spec.paths[route[1]]?.[route[0]]?.responses?.["404"])).toEqual([
+        "QuestionNotFoundError",
+        "SessionNotFoundError",
+      ])
     }
   })
 

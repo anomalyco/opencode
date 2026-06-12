@@ -1,44 +1,36 @@
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { describe, expect } from "bun:test"
 import path from "path"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { GlobTool } from "../../src/tool/glob"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Ripgrep } from "../../src/file/ripgrep"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Truncate } from "@/tool/truncate"
 import { Agent } from "../../src/agent/agent"
 import { TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { Reference } from "@/reference/reference"
-import { RepositoryCache } from "@/reference/repository-cache"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Git } from "@/git"
+import { Filesystem } from "@/util/filesystem"
 import { Permission } from "../../src/permission"
 import type * as Tool from "../../src/tool/tool"
-
-const referenceLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
-  Reference.layer.pipe(
-    Layer.provide(Config.defaultLayer),
-    Layer.provide(RepositoryCache.defaultLayer),
-    Layer.provide(RuntimeFlags.layer(flags)),
-  )
 
 const toolLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Layer.mergeAll(
     CrossSpawnSpawner.defaultLayer,
-    AppFileSystem.defaultLayer,
+    FSUtil.defaultLayer,
     Ripgrep.defaultLayer,
     Truncate.defaultLayer,
     Agent.defaultLayer,
     Git.defaultLayer,
-    referenceLayer(flags),
   )
 
 const it = testEffect(toolLayer())
-const scout = testEffect(toolLayer({ experimentalScout: true }))
+const full = (p: string) => (process.platform === "win32" ? Filesystem.normalizePath(p) : p)
 
 const ctx = {
   sessionID: SessionID.make("ses_test"),
@@ -52,12 +44,12 @@ const ctx = {
 }
 
 const asks = () => {
-  const items: Array<Omit<Permission.Request, "id" | "sessionID" | "tool">> = []
+  const items: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
   return {
     items,
     next: {
       ...ctx,
-      ask: (req: Omit<Permission.Request, "id" | "sessionID" | "tool">) =>
+      ask: (req: Omit<PermissionV1.Request, "id" | "sessionID" | "tool">) =>
         Effect.sync(() => {
           items.push(req)
         }),
@@ -140,46 +132,5 @@ describe("tool.glob", () => {
         expect(err instanceof Error ? err.message : String(err)).toContain("glob path must be a directory")
       }
     }),
-  )
-
-  scout.instance(
-    "does not ask for external_directory permission inside configured git references",
-    () =>
-      Effect.gen(function* () {
-        yield* TestInstance
-        const fs = yield* AppFileSystem.Service
-        const cache = path.join(Global.Path.repos, "github.com", "opencode-glob-reference", "repo")
-        yield* fs.remove(cache, { recursive: true }).pipe(Effect.ignore)
-        yield* Effect.addFinalizer(() => fs.remove(cache, { recursive: true }).pipe(Effect.ignore))
-
-        const source = yield* tmpdirScoped({ git: true })
-        const remoteRoot = yield* tmpdirScoped()
-        const remoteDir = path.join(remoteRoot, "opencode-glob-reference")
-        const remoteRepo = path.join(remoteDir, "repo.git")
-        yield* fs.writeWithDirs(path.join(source, "src", "index.ts"), "export const value = 1\n")
-        yield* git(source, ["add", "."])
-        yield* git(source, ["commit", "-m", "add source"])
-        yield* fs.makeDirectory(remoteDir, { recursive: true }).pipe(Effect.orDie)
-        yield* git(remoteRoot, ["clone", "--bare", source, remoteRepo])
-
-        const { items, next } = asks()
-        const info = yield* GlobTool
-        const glob = yield* info.init()
-        const result = yield* githubBase(
-          `file://${remoteRoot}/`,
-          glob.execute({ pattern: "*.ts", path: path.join(cache, "src") }, next),
-        )
-
-        expect(result.metadata.count).toBe(1)
-        expect(result.output).toContain(path.join(cache, "src", "index.ts"))
-        expect(items.find((item) => item.permission === "external_directory")).toBeUndefined()
-      }),
-    {
-      config: {
-        reference: {
-          docs: "opencode-glob-reference/repo",
-        },
-      },
-    },
   )
 })

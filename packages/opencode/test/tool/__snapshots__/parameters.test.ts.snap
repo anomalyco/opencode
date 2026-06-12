@@ -320,7 +320,7 @@ exports[`tool parameters JSON Schema (wire shape) task 1`] = `
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "background": {
-      "description": "Run the agent in the background. You will be notified when it completes.",
+      "description": "Run the agent in the background. You will be notified when it completes. DO NOT sleep, poll, or proactively check on its progress",
       "type": "boolean",
     },
     "command": {
@@ -396,21 +396,14 @@ exports[`tool parameters JSON Schema (wire shape) webfetch 1`] = `
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "properties": {
     "format": {
-      "anyOf": [
-        {
-          "default": "markdown",
-          "description": "The format to return the content in (text, markdown, or html). Defaults to markdown.",
-          "enum": [
-            "text",
-            "markdown",
-            "html",
-          ],
-          "type": "string",
-        },
-        {
-          "type": "null",
-        },
+      "default": "markdown",
+      "description": "The format to return the content in (text, markdown, or html). Defaults to markdown.",
+      "enum": [
+        "text",
+        "markdown",
+        "html",
       ],
+      "type": "string",
     },
     "timeout": {
       "description": "Optional timeout in seconds (max 120)",

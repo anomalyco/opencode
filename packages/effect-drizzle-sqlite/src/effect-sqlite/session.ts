@@ -139,8 +139,8 @@ export class EffectSQLiteSession<TRelations extends AnyRelations> extends SQLite
         const id = connectionOption._tag === "Some" ? connectionOption.value[1] + 1 : 0
 
         return connection.pipe(
-          Effect.flatMap(([scope, connection]) =>
-            this.executeTransactionStatement(
+          Effect.flatMap(([scope, connection]) => {
+            const transaction = this.executeTransactionStatement(
               connection,
               id === 0 ? `begin ${config?.behavior ?? "deferred"}` : `savepoint effect_sql_${id}`,
             ).pipe(
@@ -148,35 +148,39 @@ export class EffectSQLiteSession<TRelations extends AnyRelations> extends SQLite
                 Effect.provideContext(
                   restore(effect),
                   Context.add(services, this.client.transactionService, [connection, id]),
+                ).pipe(
+                  Effect.exit,
+                  Effect.flatMap((exit) => {
+                    const finalize = Exit.isSuccess(exit)
+                      ? id === 0
+                        ? this.executeTransactionStatement(connection, "commit").pipe(
+                            // SQLite keeps the transaction open after deferred constraint commit failures.
+                            Effect.catch((error) =>
+                              this.executeTransactionStatement(connection, "rollback").pipe(
+                                Effect.catch(() => Effect.void),
+                                Effect.andThen(Effect.fail(error)),
+                              ),
+                            ),
+                          )
+                        : this.executeTransactionStatement(connection, `release savepoint effect_sql_${id}`)
+                      : id === 0
+                        ? this.executeTransactionStatement(connection, "rollback")
+                        : this.executeTransactionStatement(connection, `rollback to savepoint effect_sql_${id}`).pipe(
+                            Effect.andThen(
+                              this.executeTransactionStatement(connection, `release savepoint effect_sql_${id}`),
+                            ),
+                          )
+
+                    return finalize.pipe(Effect.flatMap(() => exit))
+                  }),
                 ),
               ),
-              Effect.exit,
-              Effect.flatMap((exit) => {
-                const finalize = Exit.isSuccess(exit)
-                  ? id === 0
-                    ? this.executeTransactionStatement(connection, "commit").pipe(
-                        // SQLite keeps the transaction open after deferred constraint commit failures.
-                        Effect.catch((error) =>
-                          this.executeTransactionStatement(connection, "rollback").pipe(
-                            Effect.catch(() => Effect.void),
-                            Effect.andThen(Effect.fail(error)),
-                          ),
-                        ),
-                      )
-                    : this.executeTransactionStatement(connection, `release savepoint effect_sql_${id}`)
-                  : id === 0
-                    ? this.executeTransactionStatement(connection, "rollback")
-                    : this.executeTransactionStatement(connection, `rollback to savepoint effect_sql_${id}`).pipe(
-                        Effect.andThen(
-                          this.executeTransactionStatement(connection, `release savepoint effect_sql_${id}`),
-                        ),
-                      )
-                const scoped = scope === undefined ? finalize : Effect.ensuring(finalize, Scope.close(scope, exit))
+            )
 
-                return scoped.pipe(Effect.flatMap(() => exit))
-              }),
-            ),
-          ),
+            return scope === undefined
+              ? transaction
+              : transaction.pipe(Effect.onExit((exit) => Scope.close(scope, exit)))
+          }),
         )
       }),
     )

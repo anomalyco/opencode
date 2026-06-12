@@ -1,22 +1,31 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { AccountV2 } from "@opencode-ai/core/account"
+import { Credential } from "@opencode-ai/core/credential"
+import { Connector } from "@opencode-ai/core/connector"
+import { Database } from "@opencode-ai/core/database/database"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { PluginV2 } from "@opencode-ai/core/plugin"
-import { AccountPlugin } from "@opencode-ai/core/plugin/account"
 import { AzurePlugin } from "@opencode-ai/core/plugin/provider/azure"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { fakeSelectorSdk, it, model, npmLayer, provider, withEnv } from "./provider-helper"
 
 const itWithAccount = testEffect(
-  Catalog.layer.pipe(
-    Layer.provideMerge(PluginV2.defaultLayer),
-    Layer.provideMerge(AccountV2.defaultLayer),
+  Catalog.locationLayer.pipe(
+    Layer.provideMerge(
+      Credential.layer.pipe(
+        Layer.provide(Database.layerFromPath(":memory:").pipe(Layer.fresh)),
+        Layer.provide(EventV2.defaultLayer),
+      ),
+    ),
     Layer.provideMerge(EventV2.defaultLayer),
-    Layer.provideMerge(Layer.succeed(Location.Service, Location.Service.of({ directory: "test" }))),
+    Layer.provideMerge(
+      Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("test") }))),
+    ),
     Layer.provideMerge(npmLayer),
   ),
 )
@@ -28,13 +37,13 @@ describe("AzurePlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(AzurePlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           catalog.provider.update(ProviderV2.ID.azure, (item) => {
-            item.endpoint = { type: "aisdk", package: "@ai-sdk/azure" }
+            item.api = { type: "aisdk", package: "@ai-sdk/azure" }
           })
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.azure)).options.aisdk.provider.resourceName).toBe("from-env")
+        expect((yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe("from-env")
       }),
     ),
   )
@@ -45,22 +54,20 @@ describe("AzurePlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(AzurePlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           const azure = provider("azure", {
-            endpoint: { type: "aisdk", package: "@ai-sdk/azure" },
-            options: { headers: {}, body: {}, aisdk: { provider: { resourceName: "from-config" }, request: {} } },
+            api: { type: "aisdk", package: "@ai-sdk/azure" },
+            request: { headers: {}, body: { resourceName: "from-config" } },
           })
           catalog.provider.update(azure.id, (item) => {
-            item.endpoint = azure.endpoint
-            item.options = azure.options
+            item.api = azure.api
+            item.request = azure.request
           })
           catalog.provider.update(ProviderV2.ID.openai, () => {})
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.azure)).options.aisdk.provider.resourceName).toBe(
-          "from-config",
-        )
-        expect((yield* catalog.provider.get(ProviderV2.ID.openai)).options.aisdk.provider.resourceName).toBeUndefined()
+        expect((yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe("from-config")
+        expect((yield* catalog.provider.get(ProviderV2.ID.openai)).request.body.resourceName).toBeUndefined()
       }),
     ),
   )
@@ -73,36 +80,25 @@ describe("AzurePlugin", () => {
       () =>
         Effect.gen(function* () {
           const plugin = yield* PluginV2.Service
-          const accounts = yield* AccountV2.Service
+          const credentials = yield* Credential.Service
           const catalog = yield* Catalog.Service
-          const events = yield* EventV2.Service
-          yield* accounts.create({
-            serviceID: AccountV2.ServiceID.make("azure"),
-            credential: new AccountV2.ApiKeyCredential({
-              type: "api",
+          yield* credentials.create({
+            connectorID: Connector.ID.make("azure"),
+            methodID: Connector.MethodID.make("api-key"),
+            value: new Credential.Key({
+              type: "key",
               key: "key",
               metadata: { resourceName: "from-account" },
             }),
           })
-          yield* plugin.add({
-            ...AccountPlugin,
-            effect: AccountPlugin.effect.pipe(
-              Effect.provideService(AccountV2.Service, accounts),
-              Effect.provideService(Catalog.Service, catalog),
-              Effect.provideService(EventV2.Service, events),
-              Effect.provideService(PluginV2.Service, plugin),
-            ),
-          })
           yield* plugin.add(AzurePlugin)
-          const load = yield* catalog.loader()
-          yield* load((catalog) => {
+          const transform = yield* catalog.transform()
+          yield* transform((catalog) => {
             catalog.provider.update(ProviderV2.ID.azure, (item) => {
-              item.endpoint = { type: "aisdk", package: "@ai-sdk/azure" }
+              item.api = { type: "aisdk", package: "@ai-sdk/azure" }
             })
           })
-          expect((yield* catalog.provider.get(ProviderV2.ID.azure)).options.aisdk.provider.resourceName).toBe(
-            "from-account",
-          )
+          expect((yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe("from-account")
         }),
     ),
   )
@@ -113,18 +109,18 @@ describe("AzurePlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(AzurePlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           const azure = provider("azure", {
-            endpoint: { type: "aisdk", package: "@ai-sdk/azure" },
-            options: { headers: {}, body: {}, aisdk: { provider: { resourceName: "" }, request: {} } },
+            api: { type: "aisdk", package: "@ai-sdk/azure" },
+            request: { headers: {}, body: { resourceName: "" } },
           })
           catalog.provider.update(azure.id, (item) => {
-            item.endpoint = azure.endpoint
-            item.options = azure.options
+            item.api = azure.api
+            item.request = azure.request
           })
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.azure)).options.aisdk.provider.resourceName).toBe("from-env")
+        expect((yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe("from-env")
       }),
     ),
   )
@@ -135,18 +131,18 @@ describe("AzurePlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(AzurePlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           const azure = provider("azure", {
-            endpoint: { type: "aisdk", package: "@ai-sdk/azure" },
-            options: { headers: {}, body: {}, aisdk: { provider: { resourceName: "   " }, request: {} } },
+            api: { type: "aisdk", package: "@ai-sdk/azure" },
+            request: { headers: {}, body: { resourceName: "   " } },
           })
           catalog.provider.update(azure.id, (item) => {
-            item.endpoint = azure.endpoint
-            item.options = azure.options
+            item.api = azure.api
+            item.request = azure.request
           })
         })
-        expect((yield* catalog.provider.get(ProviderV2.ID.azure)).options.aisdk.provider.resourceName).toBe("from-env")
+        expect((yield* catalog.provider.get(ProviderV2.ID.azure)).request.body.resourceName).toBe("from-env")
       }),
     ),
   )
@@ -224,7 +220,7 @@ describe("AzurePlugin", () => {
         "aisdk.language",
         {
           model: model("azure", "deployment", {
-            options: { headers: {}, body: {}, aisdk: { provider: {}, request: { useCompletionUrls: true } } },
+            request: { headers: {}, body: { useCompletionUrls: true } },
           }),
           sdk: fakeSelectorSdk(calls),
           options: {},
