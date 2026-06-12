@@ -98,7 +98,8 @@ export function decodeStringArray(input: string) {
 
 export function truncate(input: string, length: number) {
   if (input.length <= length) return input
-  return `${input.slice(0, length - 1)}...`
+  if (length <= 3) return input.slice(0, length)
+  return `${input.slice(0, length - 3)}...`
 }
 
 function decodeJson(input: string) {

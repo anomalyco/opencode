@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite"
+import { redactEaLabText } from "./redaction"
 import { EvidenceTypes, type EvidenceRow, type EvidenceType } from "./types"
 
 export type StoreEvidenceInput = {
@@ -24,14 +25,14 @@ export function storeEvidence(db: Database, input: StoreEvidenceInput) {
   ).run(
     id,
     input.evidence_type,
-    normalize(input.uri),
-    normalize(input.file_path),
-    normalize(input.commit_hash),
-    normalize(input.message_id),
-    normalize(input.experiment_id),
-    requireText(input.description, "description"),
+    normalizeRedacted(input.uri),
+    normalizeRedacted(input.file_path),
+    normalizeRedacted(input.commit_hash),
+    normalizeRedacted(input.message_id),
+    normalizeRedacted(input.experiment_id),
+    redactEaLabText(requireText(input.description, "description")).text,
     createdAt,
-    normalize(input.checksum),
+    normalizeRedacted(input.checksum),
   )
   return db.query<EvidenceRow, [string]>("select * from evidence where id = ? limit 1").get(id)!
 }
@@ -45,9 +46,9 @@ export function searchEvidence(db: Database, query: string, limit: number) {
   return { rows }
 }
 
-function normalize(input: string | undefined) {
+function normalizeRedacted(input: string | undefined) {
   const value = input?.trim()
-  return value ? value : null
+  return value ? redactEaLabText(value).text : null
 }
 
 function requireText(input: string, field: string) {

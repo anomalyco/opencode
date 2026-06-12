@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { redactEaLabText } from "../../../../.opencode/ea-lab-core/redaction"
+import { redactEaLabJson, redactEaLabText } from "../../../../.opencode/ea-lab-core/redaction"
 
 describe("ea-lab redaction", () => {
   test("redacts common secret-like values", () => {
@@ -24,5 +24,28 @@ describe("ea-lab redaction", () => {
     const result = redactEaLabText("XAUUSD breakout pullback failed OOS with low trade count")
     expect(result.text).toBe("XAUUSD breakout pullback failed OOS with low trade count")
     expect(result.redactions).toEqual([])
+  })
+
+  test("redacts lowercase secret query parameters in arbitrary text", () => {
+    const result = redactEaLabText(
+      "https://example.test/report?token=raw-token-1234567890&api_key=raw-api-key-1234567890&symbol=XAUUSD#refresh_token=raw-refresh-1234567890",
+    )
+    expect(result.text).not.toContain("raw-token-1234567890")
+    expect(result.text).not.toContain("raw-api-key-1234567890")
+    expect(result.text).not.toContain("raw-refresh-1234567890")
+    expect(result.text).toContain("token=[REDACTED_SECRET]")
+    expect(result.text).toContain("api_key=[REDACTED_SECRET]")
+    expect(result.text).toContain("refresh_token=[REDACTED_SECRET]")
+    expect(result.text).toContain("symbol=XAUUSD")
+  })
+
+  test("redacts JSON values for sensitive keys", () => {
+    const result = redactEaLabJson(
+      JSON.stringify({ token: "raw-token-1234567890", nested: { api_key: "raw-api-key-1234567890" }, ok: "XAUUSD" }),
+      "payload_json",
+    )
+    expect(result).toContain('"token":"[REDACTED_SECRET]"')
+    expect(result).toContain('"api_key":"[REDACTED_SECRET]"')
+    expect(result).toContain('"ok":"XAUUSD"')
   })
 })

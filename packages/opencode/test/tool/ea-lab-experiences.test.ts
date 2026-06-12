@@ -83,4 +83,29 @@ describe("ea-lab experiences", () => {
       db.close(false)
     }
   })
+
+  test("redacts secret-like experience text before indexing", async () => {
+    await using tmp = await tmpdir()
+    const db = openEaLabDatabase(path.join(tmp.path, "ea-lab.sqlite3"), true)
+
+    try {
+      ensureEaLabSchema(db)
+      const stored = storeExperience(db, {
+        type: "risk",
+        situation: "Authorization: Bearer abcdef1234567890 leaked during review",
+        trigger_conditions_json: JSON.stringify({ note: "OPENAI_API_KEY=sk-test-secret" }),
+        action_taken: "removed the secret",
+        outcome: "safe storage restored",
+        lesson: "never persist raw tokens",
+        reuse_rule: "redact before storing",
+        anti_rule: "do not keep raw secrets in notes",
+        confidence: "high",
+        status: "active",
+      })
+      expect(stored.situation).toContain("[REDACTED_TOKEN]")
+      expect(searchSimilarExperiences(db, { query: "REDACTED_TOKEN", limit: 3 }).rows[0]?.id).toBe(stored.id)
+    } finally {
+      db.close(false)
+    }
+  })
 })

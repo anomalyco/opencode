@@ -9,6 +9,8 @@ type Rule = {
   replace: (input: string) => string
 }
 
+const SENSITIVE_KEYS = new Set(["token", "api_key", "secret", "password", "access_token", "refresh_token", "client_secret"])
+
 const RULES: Rule[] = [
   {
     name: "bearer-token",
@@ -17,8 +19,19 @@ const RULES: Rule[] = [
   },
   {
     name: "env-secret",
-    pattern: /\b[A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD)\s*=\s*[^\s]+/g,
-    replace: (input) => `${input.split("=")[0]}=[REDACTED_SECRET]`,
+    pattern: /(^|[\s,(])([A-Z0-9_]*(?:API_KEY|TOKEN|SECRET|PASSWORD)\s*=\s*[^\s]+)/gim,
+    replace: (input) => {
+      const prefix = input.match(/^[\s,(]*/)?.[0] ?? ""
+      const secret = input.slice(prefix.length)
+      return `${prefix}${secret.split("=")[0]}=[REDACTED_SECRET]`
+    },
+  },
+  {
+    name: "query-secret",
+    pattern: /([?&#;])(token|api_key|api-key|secret|password|access_token|refresh_token|client_secret)=([^&#\s;]+)/gi,
+    replace: (input) => input.replace(/([?&#;])([A-Za-z0-9_-]+)=([^&#\s;]+)/i, (_, prefix: string, key: string) => {
+      return `${prefix}${key}=[REDACTED_SECRET]`
+    }),
   },
   {
     name: "password-field",
@@ -44,4 +57,25 @@ export function redactEaLabText(input: string): RedactionResult {
     },
     { text: input, redactions: [] as string[] },
   )
+}
+
+export function redactEaLabJson(input: string, field: string) {
+  const value = input.trim()
+  if (!value) throw new Error(`${field} must not be empty`)
+  const decoded = JSON.parse(value) as unknown
+  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) throw new Error(`${field} must be a JSON object`)
+  return JSON.stringify(redactJsonValue(decoded))
+}
+
+function redactJsonValue(input: unknown): unknown {
+  if (typeof input === "string") return redactEaLabText(input).text
+  if (Array.isArray(input)) return input.map(redactJsonValue)
+  if (!input || typeof input !== "object") return input
+  return Object.fromEntries(
+    Object.entries(input).map(([key, value]) => [key, isSensitiveKey(key) ? "[REDACTED_SECRET]" : redactJsonValue(value)]),
+  )
+}
+
+function isSensitiveKey(input: string) {
+  return SENSITIVE_KEYS.has(input.trim().toLowerCase().replaceAll("-", "_"))
 }

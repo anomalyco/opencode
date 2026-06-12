@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite"
+import { redactEaLabJson, redactEaLabText } from "./redaction"
 import {
   ConfidenceLevels,
   ExperienceTypes,
@@ -49,13 +50,13 @@ export function storeExperience(db: Database, input: StoreExperienceInput) {
   ).run(
     id,
     input.type,
-    requireText(input.situation, "situation"),
-    requireJsonObject(input.trigger_conditions_json, "trigger_conditions_json"),
-    requireText(input.action_taken, "action_taken"),
-    requireText(input.outcome, "outcome"),
-    requireText(input.lesson, "lesson"),
-    reuseRule,
-    antiRule,
+    redactEaLabText(requireText(input.situation, "situation")).text,
+    redactEaLabJson(input.trigger_conditions_json, "trigger_conditions_json"),
+    redactEaLabText(requireText(input.action_taken, "action_taken")).text,
+    redactEaLabText(requireText(input.outcome, "outcome")).text,
+    redactEaLabText(requireText(input.lesson, "lesson")).text,
+    redactEaLabText(reuseRule).text,
+    redactEaLabText(antiRule).text,
     input.confidence,
     input.status,
     input.last_verified_at ?? null,
@@ -105,13 +106,5 @@ function buildFtsQuery(input: SimilarExperienceInput) {
 function requireText(input: string, field: string) {
   const value = input.trim()
   if (!value) throw new Error(`${field} must not be empty`)
-  return value
-}
-
-function requireJsonObject(input: string, field: string) {
-  const value = input.trim()
-  if (!value) throw new Error(`${field} must not be empty`)
-  const decoded = JSON.parse(value)
-  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) throw new Error(`${field} must be a JSON object`)
   return value
 }

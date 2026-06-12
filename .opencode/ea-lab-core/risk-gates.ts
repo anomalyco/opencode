@@ -25,6 +25,14 @@ export type RiskGateCheckInput = {
   }
   hasOutOfSample: boolean
   hasSpreadSensitivity: boolean
+  hasDemoForward?: boolean
+  wantsLiveTrading?: boolean
+  wantsLotIncrease?: boolean
+  wantsGateRelaxation?: boolean
+  usesMartingale?: boolean
+  usesGrid?: boolean
+  hasHardMaxLoss?: boolean
+  optimizedOnSinglePeriod?: boolean
 }
 
 export type RiskGateViolation = {
@@ -66,6 +74,62 @@ export function checkRiskGates(gates: RiskGates, input: RiskGateCheckInput) {
           name: "promote_without_spread_sensitivity_test",
           severity: "hard" as const,
           reason: "promotion requires spread sensitivity evidence",
+        }
+      : undefined,
+    input.wantsLiveTrading && !gates.live_trading.ai_can_enable
+      ? {
+          name: "live_trading_ai_can_enable",
+          severity: "hard" as const,
+          reason: "AI cannot enable live trading",
+        }
+      : undefined,
+    input.wantsLiveTrading && gates.live_trading.requires_human_approval
+      ? {
+          name: "live_trading_requires_human_approval",
+          severity: "hard" as const,
+          reason: "live trading requires human approval",
+        }
+      : undefined,
+    input.usesMartingale && gates.hard_blocks.includes("martingale")
+      ? {
+          name: "martingale",
+          severity: "hard" as const,
+          reason: "martingale is hard blocked",
+        }
+      : undefined,
+    input.usesGrid && !input.hasHardMaxLoss && gates.hard_blocks.includes("grid_without_max_loss")
+      ? {
+          name: "grid_without_max_loss",
+          severity: "hard" as const,
+          reason: "grid strategies require a hard max loss",
+        }
+      : undefined,
+    input.wantsLotIncrease && gates.hard_blocks.includes("increase_lot_after_loss")
+      ? {
+          name: "increase_lot_after_loss",
+          severity: "hard" as const,
+          reason: "lot increases after loss are hard blocked",
+        }
+      : undefined,
+    input.wantsLiveTrading && !input.hasDemoForward && gates.hard_blocks.includes("live_deploy_without_demo_forward")
+      ? {
+          name: "live_deploy_without_demo_forward",
+          severity: "hard" as const,
+          reason: "live deployment requires demo forward evidence",
+        }
+      : undefined,
+    input.optimizedOnSinglePeriod && gates.hard_blocks.includes("optimize_on_single_period_only")
+      ? {
+          name: "optimize_on_single_period_only",
+          severity: "hard" as const,
+          reason: "single-period-only optimization is hard blocked",
+        }
+      : undefined,
+    input.wantsGateRelaxation
+      ? {
+          name: "risk_gate_relaxation_requires_human_review",
+          severity: "hard" as const,
+          reason: "risk gate relaxation requires explicit human review",
         }
       : undefined,
   ].filter((item): item is RiskGateViolation => item !== undefined)

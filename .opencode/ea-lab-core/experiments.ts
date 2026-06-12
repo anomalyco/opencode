@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite"
+import { redactEaLabJson, redactEaLabText } from "./redaction"
 import {
   ExperimentStages,
   ExperimentStatuses,
@@ -38,14 +39,14 @@ export function storeExperiment(db: Database, input: StoreExperimentInput) {
     "insert into experiment (id, title, symbol, timeframe, strategy, hypothesis, implementation_summary, test_conditions_json, metrics_json, result_status, stage, overfit_risk, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
   ).run(
     id,
-    requireText(input.title, "title"),
-    requireText(input.symbol, "symbol"),
-    requireText(input.timeframe, "timeframe"),
-    requireText(input.strategy, "strategy"),
-    requireText(input.hypothesis, "hypothesis"),
-    requireText(input.implementation_summary, "implementation_summary"),
-    requireJsonObject(input.test_conditions_json, "test_conditions_json"),
-    requireJsonObject(input.metrics_json, "metrics_json"),
+    redactEaLabText(requireText(input.title, "title")).text,
+    redactEaLabText(requireText(input.symbol, "symbol")).text,
+    redactEaLabText(requireText(input.timeframe, "timeframe")).text,
+    redactEaLabText(requireText(input.strategy, "strategy")).text,
+    redactEaLabText(requireText(input.hypothesis, "hypothesis")).text,
+    redactEaLabText(requireText(input.implementation_summary, "implementation_summary")).text,
+    redactEaLabJson(input.test_conditions_json, "test_conditions_json"),
+    redactEaLabJson(input.metrics_json, "metrics_json"),
     input.result_status,
     input.stage,
     input.overfit_risk,
@@ -60,7 +61,7 @@ export function updateExperimentResult(db: Database, id: string, input: UpdateEx
   if (!OverfitRisks.includes(input.overfit_risk)) throw new Error("invalid overfit_risk")
   if (input.stage !== undefined && !ExperimentStages.includes(input.stage)) throw new Error("invalid stage")
   db.query("update experiment set metrics_json = ?, result_status = ?, stage = coalesce(?, stage), overfit_risk = ?, updated_at = ? where id = ?").run(
-    requireJsonObject(input.metrics_json, "metrics_json"),
+    redactEaLabJson(input.metrics_json, "metrics_json"),
     input.result_status,
     input.stage ?? null,
     input.overfit_risk,
@@ -85,13 +86,5 @@ function validateExperimentEnums(input: StoreExperimentInput) {
 function requireText(input: string, field: string) {
   const value = input.trim()
   if (!value) throw new Error(`${field} must not be empty`)
-  return value
-}
-
-function requireJsonObject(input: string, field: string) {
-  const value = input.trim()
-  if (!value) throw new Error(`${field} must not be empty`)
-  const decoded = JSON.parse(value)
-  if (!decoded || typeof decoded !== "object" || Array.isArray(decoded)) throw new Error(`${field} must be a JSON object`)
   return value
 }
