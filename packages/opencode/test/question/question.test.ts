@@ -8,6 +8,7 @@ import { disposeAllInstances, provideInstance, reloadTestInstance, tmpdirScoped 
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { Session } from "../../src/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 import { pollWithTimeout, testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Bus } from "../../src/bus"
@@ -105,6 +106,71 @@ const createQuestionToolPart = Effect.fn("QuestionTest.createQuestionToolPart")(
   } satisfies MessageV2.ToolPart)
 
   return { sessionID: info.id, messageID, partID, callID }
+})
+
+const createAssistantQuestionToolPart = Effect.fn("QuestionTest.createAssistantQuestionToolPart")(function* (input: {
+  requestID: QuestionID
+  questions: ReadonlyArray<Question.Info>
+}) {
+  const session = yield* Session.Service
+  const info = yield* session.create({})
+  const userID = MessageID.ascending()
+  const messageID = MessageID.ascending()
+  const partID = PartID.ascending()
+  const callID = "test-recover-call"
+  const request: Question.Request = {
+    id: input.requestID,
+    sessionID: info.id,
+    questions: input.questions,
+    tool: { messageID, callID },
+  }
+
+  yield* session.updateMessage({
+    id: userID,
+    sessionID: info.id,
+    role: "user",
+    time: { created: Date.now() },
+    agent: "test",
+    model: { providerID: ProviderID.make("test-provider"), modelID: ModelID.make("test-model") },
+    tools: {},
+  } satisfies MessageV2.User)
+
+  yield* session.updateMessage({
+    id: messageID,
+    sessionID: info.id,
+    role: "assistant",
+    time: { created: Date.now() },
+    parentID: userID,
+    modelID: ModelID.make("test-model"),
+    providerID: ProviderID.make("test-provider"),
+    mode: "agentic",
+    agent: "test",
+    path: { cwd: "/", root: "/" },
+    cost: 0,
+    tokens: {
+      input: 0,
+      output: 0,
+      reasoning: 0,
+      cache: { read: 0, write: 0 },
+    },
+  } satisfies MessageV2.Assistant)
+
+  yield* session.updatePart({
+    id: partID,
+    sessionID: info.id,
+    messageID,
+    type: "tool",
+    tool: "question",
+    callID,
+    state: {
+      status: "running",
+      input: { questions: input.questions },
+      metadata: { questionRequest: request },
+      time: { start: Date.now() },
+    },
+  } satisfies MessageV2.ToolPart)
+
+  return { sessionID: info.id, messageID, partID, callID, request }
 })
 
 const questionRequestMetadata = Effect.fn("QuestionTest.questionRequestMetadata")(function* (input: {
@@ -562,10 +628,8 @@ persistentIt.instance(
     Effect.gen(function* () {
       const question = yield* Question.Service
       const session = yield* Session.Service
-      const messageID = MessageID.ascending()
-      const request: Question.Request = {
-        id: QuestionID.make("que_persisted_recovery"),
-        sessionID: SessionID.make("ses_placeholder"),
+      const tool = yield* createAssistantQuestionToolPart({
+        requestID: QuestionID.make("que_persisted_recovery"),
         questions: [
           {
             question: "Recover me?",
@@ -573,26 +637,8 @@ persistentIt.instance(
             options: [{ label: "Yes", description: "Yes" }],
           },
         ],
-        tool: { messageID, callID: "test-recover-call" },
-      }
-      const tool = yield* createQuestionToolPart({ request: { ...request, sessionID: request.sessionID } })
-      const persistedRequest = { ...request, sessionID: tool.sessionID, tool: { messageID: tool.messageID, callID: tool.callID } }
-      const part = yield* session.getPart({
-        sessionID: tool.sessionID,
-        messageID: tool.messageID,
-        partID: tool.partID,
       })
-      if (part?.type !== "tool" || part.state.status !== "running") {
-        return yield* Effect.die(new Error("missing persisted question tool part"))
-      }
-      yield* session.updatePart({
-        ...part,
-        state: {
-          ...part.state,
-          input: { questions: persistedRequest.questions },
-          metadata: { questionRequest: persistedRequest },
-        },
-      })
+      const persistedRequest = tool.request
 
       const listed = yield* question.list()
       expect(listed.map((item) => item.id)).toContain(persistedRequest.id)
@@ -608,10 +654,21 @@ persistentIt.instance(
       if (completed?.type === "tool") {
         expect(completed.state.status).toBe("completed")
         if (completed.state.status === "completed") {
+          expect(completed.state.title).toBe("Session ended after 1 question")
           expect(completed.state.metadata.answers).toEqual([["Yes"]])
           expect(completed.state.metadata.questionRequest).toBeUndefined()
+          expect(completed.state.metadata.sessionEnded).toBe(true)
           expect(completed.state.output).toContain(`"Recover me?"="Yes"`)
+          expect(completed.state.output).toContain("Session has ended")
         }
+      }
+      const messages = yield* session.messages({ sessionID: tool.sessionID })
+      const assistant = messages.find((message) => message.info.id === tool.messageID)
+      expect(assistant?.info.role).toBe("assistant")
+      if (assistant?.info.role === "assistant") {
+        expect(typeof assistant.info.time.completed).toBe("number")
+        expect(assistant.info.error?.name).toBe("MessageAbortedError")
+        expect(assistant.info.error?.data.message).toContain("Session has ended")
       }
       expect(yield* question.list()).toHaveLength(0)
     }),

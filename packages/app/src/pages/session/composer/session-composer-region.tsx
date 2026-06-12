@@ -123,6 +123,8 @@ export function SessionComposerRegion(props: {
     dialog.show(() => (
       <SessionSkippedQuestionsDialog
         requests={props.state.skippedQuestionRequests}
+        invalidation={props.state.skippedQuestionInvalidation}
+        sessionEnded={props.state.skippedQuestionSessionEnded}
         onClear={props.state.clearSkippedQuestions}
       />
     ))
@@ -282,7 +284,12 @@ export function SessionComposerRegion(props: {
               <Show when={skippedQuestionCount() > 0}>
                 <div class="mb-2 flex justify-end">
                   <Button variant="ghost" size="small" onClick={openSkippedQuestions}>
-                    {language.t("session.question.skipped.button", { count: skippedQuestionCount() })}
+                    {language.t(
+                      props.state.skippedQuestionSessionEnded()
+                        ? "session.question.skipped.ended.button"
+                        : "session.question.skipped.button",
+                      { count: skippedQuestionCount() },
+                    )}
                   </Button>
                 </div>
               </Show>

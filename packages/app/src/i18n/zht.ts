@@ -895,9 +895,11 @@ export const dict = {
   "session.question.expand": "展開",
   "session.question.progress": "{{current}}/{{total}} 個問題",
   "session.question.skipped.button": "{{count}} 個已跳過問題",
+  "session.question.skipped.ended.button": "工作階段已經結束：{{count}} 個已跳過問題",
+  "session.question.skipped.ended.badge": "工作階段已經結束",
+  "session.question.skipped.ended.description":
+    "這個問題屬於已經結束的 assistant 回合。答案可以儲存，但原回合無法自動繼續；請傳送一則新訊息繼續。",
   "session.question.skipped.title": "已跳過的問題",
-  "session.question.skipped.description": "這些 question 提示已被後續工作階段訊息取代，不再是目前作用中的問題。",
-  "session.question.skipped.options": "選項：{{options}}",
   "session.question.skipped.clear": "清除已跳過問題",
   "session.header.open.finder": "Finder",
   "session.header.open.fileExplorer": "檔案總管",

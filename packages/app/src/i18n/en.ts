@@ -662,10 +662,11 @@ export const dict = {
   "session.question.expand": "Expand",
   "session.question.progress": "{{current}} of {{total}} questions",
   "session.question.skipped.button": "{{count}} skipped question(s)",
+  "session.question.skipped.ended.button": "Session ended: {{count}} skipped question(s)",
+  "session.question.skipped.ended.badge": "Session ended",
+  "session.question.skipped.ended.description":
+    "This question belongs to an assistant turn that has already ended. The answer can be saved, but the old turn cannot continue automatically; send a new message to continue.",
   "session.question.skipped.title": "Skipped questions",
-  "session.question.skipped.description":
-    "These question prompts were superseded by newer session messages and are no longer active.",
-  "session.question.skipped.options": "Options: {{options}}",
   "session.question.skipped.clear": "Clear skipped questions",
   "session.read": "Read mode",
   "session.followupDock.summary.one": "{{count}} queued message",

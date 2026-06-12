@@ -65,7 +65,7 @@ export function questionReply(
 }
 
 export type QuestionInvalidation =
-  | { type: "source-error"; messageID: string }
+  | { type: "session-ended"; messageID: string }
   | { type: "superseded"; messageID: string }
 
 export function questionInvalidation(
@@ -79,7 +79,7 @@ export function questionInvalidation(
   if (index === -1) return undefined
 
   const source = messages[index]
-  if (source?.role === "assistant" && source.error) return { type: "source-error", messageID }
+  if (source?.role === "assistant" && source.error) return { type: "session-ended", messageID }
 
   const newer = messages[index + 1]
   if (!newer) return undefined

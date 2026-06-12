@@ -27,8 +27,12 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
   const language = useLanguage()
   const permission = usePermission()
 
+  const questionInvalidationFor = (request: QuestionRequest) => {
+    return questionInvalidation(request, sync.data.message[request.sessionID] ?? [])
+  }
+
   const isSkippedQuestion = (request: QuestionRequest): boolean => {
-    return questionInvalidation(request, sync.data.message[request.sessionID] ?? []) !== undefined
+    return questionInvalidationFor(request) !== undefined
   }
 
   const questionRequest = createMemo((): QuestionRequest | undefined => {
@@ -42,6 +46,10 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
 
   const skippedQuestionRequests = createMemo((): QuestionRequest[] => {
     return sessionQuestionRequests(sync.data.session, sync.data.question, params.id, isSkippedQuestion)
+  })
+
+  const skippedQuestionSessionEnded = createMemo((): boolean => {
+    return skippedQuestionRequests().some((request) => questionInvalidationFor(request)?.type === "session-ended")
   })
 
   const clearSkippedQuestions = () => {
@@ -300,6 +308,8 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     blocked,
     questionRequest,
     skippedQuestionRequests,
+    skippedQuestionInvalidation: questionInvalidationFor,
+    skippedQuestionSessionEnded,
     clearSkippedQuestions,
     permissionRequest,
     permissionResponding,

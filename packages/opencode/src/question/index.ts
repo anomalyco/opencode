@@ -5,6 +5,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { SessionID, MessageID, PartID } from "@/session/schema"
 import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
+import { SessionStatus } from "@/session/status"
 import * as Log from "@opencode-ai/core/util/log"
 import { QuestionID } from "./schema"
 
@@ -121,6 +122,8 @@ interface State {
 }
 
 const QUESTION_REQUEST_METADATA = "questionRequest"
+const RECOVERED_SESSION_ENDED_MESSAGE =
+  "Session has ended. Your answer was saved, but the original assistant run is no longer active. Send a new message to continue."
 
 type QuestionToolPart = {
   request: Request
@@ -169,8 +172,8 @@ const formatAnsweredOutput = (request: Request, answers: ReadonlyArray<Answer>) 
     .join(", ")
 
   return {
-    title: `Asked ${request.questions.length} question${request.questions.length > 1 ? "s" : ""}`,
-    output: `User has answered your questions: ${formatted}. You can now continue with the user's answers in mind.`,
+    title: `Session ended after ${request.questions.length} question${request.questions.length > 1 ? "s" : ""}`,
+    output: `User has answered your questions: ${formatted}. ${RECOVERED_SESSION_ENDED_MESSAGE}`,
   }
 }
 
@@ -416,11 +419,71 @@ export const layer = Layer.effect(
           metadata: {
             ...withoutQuestionRequest(stateMetadata(item.part)),
             answers: cloneAnswers(answers),
+            sessionEnded: true,
           },
           time,
           attachments: attachments.length ? attachments : undefined,
         },
       })
+    })
+
+    const finalizeRecoveredAssistant = Effect.fn("Question.finalizeRecoveredAssistant")(function* (
+      item: QuestionToolPart,
+    ) {
+      const session = EffectOption.getOrUndefined(yield* Effect.serviceOption(Session.Service))
+      if (!session) return false
+      const status = EffectOption.getOrUndefined(yield* Effect.serviceOption(SessionStatus.Service))
+      const match = yield* session
+        .findMessage(item.part.sessionID, (message) => message.info.id === item.part.messageID)
+        .pipe(Effect.catchTag("NotFoundError", () => Effect.succeed(EffectOption.none<MessageV2.WithParts>())))
+      const message = EffectOption.getOrUndefined(match)
+      if (!message) {
+        log.warn("recovered question owner message not found", {
+          requestID: item.request.id,
+          sessionID: item.part.sessionID,
+          messageID: item.part.messageID,
+        })
+        return false
+      }
+      if (message.info.role !== "assistant") return false
+      if (typeof message.info.time.completed === "number") return false
+
+      const now = Date.now()
+      for (const part of message.parts) {
+        if (part.type !== "tool") continue
+        if (part.id === item.part.id) continue
+        if (part.state.status !== "running" && part.state.status !== "pending") continue
+        const metadata = part.state.status === "running" ? part.state.metadata : undefined
+        yield* session.updatePart({
+          ...part,
+          state: {
+            status: "error",
+            input: part.state.input,
+            error: "Tool execution aborted because the session ended",
+            ...(metadata ? { metadata } : {}),
+            time: {
+              start: part.state.status === "running" ? part.state.time.start : now,
+              end: now,
+            },
+          },
+        })
+      }
+
+      yield* session.updateMessage({
+        ...message.info,
+        error:
+          message.info.error ??
+          MessageV2.fromError(new DOMException(RECOVERED_SESSION_ENDED_MESSAGE, "AbortError"), {
+            providerID: message.info.providerID,
+            aborted: true,
+          }),
+        time: {
+          ...message.info.time,
+          completed: now,
+        },
+      })
+      if (status) yield* status.set(item.part.sessionID, { type: "idle" })
+      return true
     })
 
     const rejectPersisted = Effect.fn("Question.rejectPersisted")(function* (item: QuestionToolPart) {
@@ -486,7 +549,12 @@ export const layer = Layer.effect(
           return yield* new NotFoundError({ requestID: input.requestID })
         }
         yield* completePersisted(recovered, input.answers)
-        log.info("replied recovered question", { requestID: input.requestID, answers: input.answers })
+        const finalized = yield* finalizeRecoveredAssistant(recovered)
+        log.info("replied recovered question", {
+          requestID: input.requestID,
+          answers: input.answers,
+          finalizedAssistant: finalized,
+        })
         yield* bus.publish(Event.Replied, {
           sessionID: recovered.request.sessionID,
           requestID: recovered.request.id,

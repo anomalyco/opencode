@@ -170,9 +170,9 @@ describe("session question dock helpers", () => {
     })
   })
 
-  test("invalidates a question when the source assistant message has an error", () => {
+  test("invalidates a question when the source assistant session ended", () => {
     expect(questionInvalidation(request("msg_1"), [message({ id: "msg_1", error: true })])).toEqual({
-      type: "source-error",
+      type: "session-ended",
       messageID: "msg_1",
     })
   })

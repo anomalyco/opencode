@@ -1036,9 +1036,11 @@ export const dict = {
   "session.question.expand": "展开",
   "session.question.progress": "{{current}}/{{total}} 个问题",
   "session.question.skipped.button": "{{count}} 个已跳过问题",
+  "session.question.skipped.ended.button": "会话已经结束：{{count}} 个已跳过问题",
+  "session.question.skipped.ended.badge": "会话已经结束",
+  "session.question.skipped.ended.description":
+    "这个问题属于已经结束的 assistant 回合。答案可以保存，但原回合无法自动继续；请发送一条新消息继续。",
   "session.question.skipped.title": "已跳过的问题",
-  "session.question.skipped.description": "这些 question 提示已被后续会话消息覆盖，不再是当前活跃问题。",
-  "session.question.skipped.options": "选项：{{options}}",
   "session.question.skipped.clear": "清除已跳过问题",
   "session.read": "阅读模式",
   "session.header.open.finder": "访达",
