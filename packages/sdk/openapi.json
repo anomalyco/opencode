@@ -19312,6 +19312,9 @@
             },
             "description": "Command and arguments to run the MCP server"
           },
+          "cwd": {
+            "type": "string"
+          },
           "environment": {
             "type": "object",
             "additionalProperties": {

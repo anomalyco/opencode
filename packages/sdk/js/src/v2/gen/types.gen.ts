@@ -1849,6 +1849,7 @@ export type McpLocalConfig = {
    * Command and arguments to run the MCP server
    */
   command: Array<string>
+  cwd?: string
   environment?: {
     [key: string]: string
   }
