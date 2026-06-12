@@ -29,11 +29,17 @@ mistakes as they type.
 
 ## Applying changes
 
-Config is loaded once when opencode starts and is not hot-reloaded. After
-saving changes to `opencode.json`, an agent file, a skill, a plugin, or any
-other config-time file, **tell the user to quit and restart opencode** for
-the changes to take effect. The running session will keep using the
-already-loaded config until then.
+Config is loaded once when opencode starts. After saving changes to
+`opencode.json`, an agent file, a plugin, or any other config-time file,
+**tell the user to quit and restart opencode** for the changes to take
+effect. The running session will keep using the already-loaded config until
+then.
+
+**Exception — local skills:** skills loaded from directories (via
+`skills.paths` or the default `.opencode/skill(s)/` locations) are
+**hot-reloaded automatically**. When a `SKILL.md` file in a watched
+directory is created, modified, or deleted, the skill cache is invalidated
+and the next request picks up the new content without a restart.
 
 ## Where files live
 
@@ -420,5 +426,6 @@ When a user's config is broken and opencode won't start, these env vars help:
 - If the user's existing config is malformed, point them at the env-var escape
   hatches above so they can edit from inside opencode without breaking their
   session.
-- After saving any config change, remind the user to quit and restart opencode
-  — running sessions keep using the already-loaded config.
+- After saving any config change (except skills in local directories), remind
+  the user to quit and restart opencode — running sessions keep using the
+  already-loaded config. Local directory skills are hot-reloaded automatically.
