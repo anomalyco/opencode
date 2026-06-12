@@ -91,6 +91,9 @@ export const layer = Layer.effect(
     const eventsOpt = yield* Effect.serviceOption(EventV2.Service)
     const watcherOpt = yield* Effect.serviceOption(Watcher.Service)
     const watcher = Option.getOrElse(watcherOpt, (): Watcher.Interface => ({ watch: () => Effect.void }))
+    // Capture the layer's scope so watch fibers can be forked into it from list()
+    // without adding Scope to list()'s own requirements.
+    const layerScope = yield* Effect.scope
 
     const state = State.create<Data, Editor>({
       initial: () => ({ sources: [] }),
@@ -145,18 +148,32 @@ export const layer = Layer.effect(
       return skills
     })
 
-    // QUESTION(Dax): Should local skill sources invalidate on filesystem watch
-    // events, following the reload policy chosen for other context sources?
     const invalidated = new Set<string>()
     const cache = new Map<string, Info[]>()
+    // HIGH-H1/H2: track which directories are already subscribed to prevent
+    // O(N) subscription growth when cache entries are repeatedly invalidated.
+    const watched = new Set<string>()
     const list = Effect.fn("SkillV2.list")(function* () {
       const skills = new Map<string, Info>()
       for (const source of state.get().sources) {
         const key = Source.key(source)
-        if (source.type === "directory" && !cache.has(key)) {
-          yield* Effect.forkDetach(watcher.watch(source.path))
+        // Subscribe exactly once per directory source — guard on `watched`, not `cache`,
+        // so re-subscriptions are not triggered after each cache invalidation.
+        // forkIn(layerScope): fiber is tied to the layer scope (cleaned up on close)
+        // without adding Scope to list()'s own requirements.
+        if (source.type === "directory" && !watched.has(key)) {
+          watched.add(key)
+          yield* Effect.forkIn(watcher.watch(source.path), layerScope)
         }
-        const loaded = cache.get(key) ?? (yield* load(source))
+        let loaded = cache.get(key)
+        if (!loaded) {
+          loaded = yield* load(source)
+          // MEDIUM-M1: if the cache was cleared during load (race with a watcher event),
+          // reload once more so the caller receives up-to-date content.
+          if (!cache.has(key)) {
+            loaded = yield* load(source)
+          }
+        }
         for (const skill of loaded) skills.set(skill.name, skill)
       }
       return Array.from(skills.values())
@@ -180,6 +197,10 @@ export const layer = Layer.effect(
                 }
               }
             }),
+          ),
+          // MEDIUM-M3: log fiber failures so hot-reload doesn't die silently.
+          Effect.catchCause((cause) =>
+            Effect.logError("SkillV2 hot-reload fiber failed", cause),
           ),
         ),
       )

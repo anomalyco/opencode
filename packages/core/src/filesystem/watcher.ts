@@ -103,17 +103,16 @@ export const layer = Layer.effect(
       }
     }
 
-    const subscribe = (directory: string, ignore: string[]) => {
-      const pending = w.subscribe(directory, callback, { ignore, backend })
-      return Effect.promise(() => pending).pipe(
+    // MEDIUM-M2: wrap w.subscribe() inside Effect.promise so the OS-level
+    // subscription is created during Effect execution, not at construction time.
+    const subscribe = (directory: string, ignore: string[]) =>
+      Effect.promise(() => w.subscribe(directory, callback, { ignore, backend })).pipe(
         Effect.tap((subscription) => Effect.sync(() => subscriptions.push(subscription))),
         Effect.timeout(SUBSCRIBE_TIMEOUT_MS),
-        Effect.catchCause((cause) => {
-          pending.then((subscription) => subscription.unsubscribe()).catch(() => {})
-          return Effect.logError("failed to subscribe", { directory, cause: Cause.pretty(cause) })
-        }),
+        Effect.catchCause((cause) =>
+          Effect.logError("failed to subscribe", { directory, cause: Cause.pretty(cause) }),
+        ),
       )
-    }
 
     const config = (yield* (yield* Config.Service).entries())
       .filter((entry): entry is Config.Document => entry.type === "document")
@@ -145,4 +144,9 @@ export const layer = Layer.effect(
   ),
 )
 
-export const locationLayer = layer.pipe(Layer.provide(Config.locationLayer), Layer.provide(Git.defaultLayer))
+// Watcher.layer hard-deps EventV2.Service (line: `const events = yield* EventV2.Service`)
+export const locationLayer = layer.pipe(
+  Layer.provide(Config.locationLayer),
+  Layer.provide(Git.defaultLayer),
+  Layer.provide(EventV2.defaultLayer),
+)
