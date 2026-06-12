@@ -8,7 +8,7 @@ import { Plugin } from "@/plugin"
 import type { Provider } from "@/provider/provider"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
-import type { Session } from "@/session/session"
+import { Session } from "@/session/session"
 import type { SessionProcessor } from "@/session/processor"
 import type { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { TaskPromptOps } from "@/tool/task"
@@ -72,6 +72,12 @@ const truncateStub = Truncate.Service.of({
   limits: () => Effect.succeed({ maxLines: 2000, maxBytes: 51200 }),
 } as unknown as Truncate.Interface)
 
+// resolve() walks the session lineage only for ROUTED permission asks; these
+// tests never route, so the stub dying on access doubles as a guard.
+const sessionStub = Session.Service.of({
+  lineage: () => Effect.die(new Error("lineage must not be walked in the lazy-MCP tests")),
+} as unknown as Session.Interface)
+
 const fakeModel = { providerID: "test", api: { id: "test-model" } } as Provider.Model
 
 function resolveInput(sessionID: SessionID, mcpMode?: "eager" | "lazy") {
@@ -100,6 +106,7 @@ const provideStubs =
       Effect.provideService(ToolRegistry.Service, registryStub),
       Effect.provideService(MCP.Service, mcpStub(tools)),
       Effect.provideService(Truncate.Service, truncateStub),
+      Effect.provideService(Session.Service, sessionStub),
     )
 
 const callOptions = { toolCallId: "call_lazy_test", messages: [] } as unknown as ToolExecutionOptions

@@ -55,6 +55,29 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const registry = yield* ToolRegistry.Service
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
+  const sessions = yield* Session.Service
+
+  // Nested subagents route their permission asks to the root session
+  // (permissionSessionID); without attribution UIs and third-party clients
+  // would lose WHO asked. Whenever the ask is routed away from this session,
+  // attach the origin (asking session, its agent, its depth) to the request
+  // metadata. ONE lineage walk per resolve (roots skip it); a failed walk only
+  // omits originDepth — an ask must never fail on attribution.
+  const origin = yield* Effect.gen(function* () {
+    if (input.permissionSessionID === undefined || input.permissionSessionID === input.session.id) return undefined
+    const originDepth =
+      input.session.parentID === undefined
+        ? 1
+        : yield* sessions.lineage(input.session.id).pipe(
+            Effect.map((chain) => chain.length),
+            Effect.catch(() => Effect.succeed(undefined)),
+          )
+    return {
+      originSessionID: input.session.id,
+      originAgent: input.agent.name,
+      ...(originDepth !== undefined ? { originDepth } : {}),
+    }
+  })
 
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
     sessionID: input.session.id,
@@ -88,6 +111,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       permission
         .ask({
           ...req,
+          ...(origin ? { metadata: { ...req.metadata, ...origin } } : {}),
           sessionID: input.permissionSessionID ?? input.session.id,
           tool: { messageID: input.processor.message.id, callID: options.toolCallId },
           ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
