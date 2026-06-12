@@ -1,7 +1,7 @@
 import { afterEach, describe, expect } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
-import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -13,13 +13,15 @@ import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
+import { SubagentLimits } from "@/session/subagent-limits"
+import { TurnBudget } from "@/session/turn-budget"
 
 import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { disposeAllInstances } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
@@ -59,13 +61,12 @@ function defer<T>() {
   return { promise, resolve }
 }
 
-const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
+const seedMessages = Effect.fn("TaskToolTest.seedMessages")(function* (sessionID: SessionID) {
   const session = yield* Session.Service
-  const chat = yield* session.create({ title })
   const user = yield* session.updateMessage({
     id: MessageID.ascending(),
     role: "user",
-    sessionID: chat.id,
+    sessionID,
     agent: "build",
     model: ref,
     time: { created: Date.now() },
@@ -74,7 +75,7 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
     id: MessageID.ascending(),
     role: "assistant",
     parentID: user.id,
-    sessionID: chat.id,
+    sessionID,
     mode: "build",
     agent: "build",
     cost: 0,
@@ -86,8 +87,71 @@ const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
     time: { created: Date.now() },
   }
   yield* session.updateMessage(assistant)
+  return assistant
+})
+
+const seed = Effect.fn("TaskToolTest.seed")(function* (title = "Pinned") {
+  const session = yield* Session.Service
+  const chat = yield* session.create({ title })
+  const assistant = yield* seedMessages(chat.id)
   return { chat, assistant }
 })
+
+/**
+ * Seeds a parent chain of `depth` sessions (root → deepest) and puts a
+ * user/assistant message pair on the deepest one so the task tool can run
+ * from it. Depth = chain.length, matching Session.lineage.
+ */
+const seedChain = Effect.fn("TaskToolTest.seedChain")(function* (depth: number) {
+  const session = yield* Session.Service
+  const chain: Session.Info[] = []
+  for (let i = 0; i < depth; i++) {
+    chain.push(
+      yield* session.create({
+        parentID: chain.at(-1)?.id,
+        title: i === 0 ? "root" : `level ${i + 1}`,
+      }),
+    )
+  }
+  const deepest = chain.at(-1)!
+  const assistant = yield* seedMessages(deepest.id)
+  return { chain, deepest, assistant }
+})
+
+const taskParams = {
+  description: "inspect bug",
+  prompt: "look into the cache key path",
+  subagent_type: "general",
+}
+
+function taskCtx(input: {
+  sessionID: SessionID
+  messageID: MessageID
+  promptOps: TaskPromptOps
+  extra?: Record<string, unknown>
+  ask?: (req?: unknown) => Effect.Effect<void>
+}) {
+  return {
+    sessionID: input.sessionID,
+    messageID: input.messageID,
+    agent: "build",
+    abort: new AbortController().signal,
+    extra: { promptOps: input.promptOps, ...input.extra },
+    messages: [],
+    metadata: () => Effect.void,
+    ask: input.ask ?? (() => Effect.void),
+  }
+}
+
+/**
+ * The typed subagent-limit errors fail inside the tool body and surface as
+ * defects through the execute boundary's `Effect.orDie` (same path as the
+ * existing untyped tool errors); tests match on the defect instance.
+ */
+function defectOf(exit: Exit.Exit<unknown, unknown>): unknown {
+  if (!Exit.isFailure(exit)) return undefined
+  return exit.cause.reasons.find(Cause.isDieReason)?.defect
+}
 
 function stubOps(opts?: { onPrompt?: (input: SessionPrompt.PromptInput) => void; text?: string }): TaskPromptOps {
   return {
@@ -893,6 +957,312 @@ describe("tool.task", () => {
 
       expect((yield* jobs.get(child.id))?.status).toBe("cancelled")
       expect((yield* jobs.get(grandchild.id))?.status).toBe("cancelled")
+    }),
+  )
+})
+
+describe("tool.task depth guard", () => {
+  it.instance("refuses to spawn from a session at the maximum nesting depth before asking", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { deepest, assistant } = yield* seedChain(5)
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const asks: unknown[] = []
+      const promptOps = stubOps()
+
+      const exit = yield* def
+        .execute(
+          taskParams,
+          taskCtx({
+            sessionID: deepest.id,
+            messageID: assistant.id,
+            promptOps,
+            ask: (req) => Effect.sync(() => void asks.push(req)),
+          }),
+        )
+        .pipe(Effect.exit)
+
+      const error = defectOf(exit)
+      expect(error).toBeInstanceOf(SubagentLimits.SubagentDepthError)
+      const depthError = error as SubagentLimits.SubagentDepthError
+      expect(depthError.depth).toBe(5)
+      expect(depthError.limit).toBe(5)
+      // The guard sits BEFORE the ask and before any session is created.
+      expect(asks).toHaveLength(0)
+      expect(yield* sessions.children(deepest.id)).toHaveLength(0)
+    }),
+  )
+
+  it.instance("depth guard also fires for the bypassAgentCheck subtask path", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { deepest, assistant } = yield* seedChain(5)
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const exit = yield* def
+        .execute(
+          taskParams,
+          taskCtx({
+            sessionID: deepest.id,
+            messageID: assistant.id,
+            promptOps: stubOps(),
+            extra: { bypassAgentCheck: true },
+          }),
+        )
+        .pipe(Effect.exit)
+
+      expect(defectOf(exit)).toBeInstanceOf(SubagentLimits.SubagentDepthError)
+      expect(yield* sessions.children(deepest.id)).toHaveLength(0)
+    }),
+  )
+
+  it.instance("spawns from depths 2 through 4 and parents the child correctly", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      for (const depth of [2, 3, 4]) {
+        const { deepest, assistant } = yield* seedChain(depth)
+        const result = yield* def.execute(
+          taskParams,
+          taskCtx({ sessionID: deepest.id, messageID: assistant.id, promptOps: stubOps() }),
+        )
+        const child = yield* sessions.get(result.metadata.sessionId)
+        expect(child.parentID).toBe(deepest.id)
+        expect(result.output).toContain(`state="completed"`)
+      }
+    }),
+  )
+})
+
+describe("tool.task resume validation", () => {
+  it.instance("refuses task_id resumes that are not direct children", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chain, deepest, assistant } = yield* seedChain(3)
+      const foreign = yield* sessions.create({ title: "foreign tree" })
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      // Self, root ancestor, direct parent (= ancestor), and a foreign tree:
+      // all are refused with a typed error instead of being silently adopted
+      // (the pre-fix behavior deadlocked on ancestor resumes).
+      for (const target of [deepest.id, chain[0]!.id, chain[1]!.id, foreign.id]) {
+        const exit = yield* awaitWithTimeout(
+          def
+            .execute(
+              { ...taskParams, task_id: target },
+              taskCtx({ sessionID: deepest.id, messageID: assistant.id, promptOps: stubOps() }),
+            )
+            .pipe(Effect.exit),
+          `resume of ${target} hung`,
+        )
+        const error = defectOf(exit)
+        expect(error).toBeInstanceOf(SubagentLimits.SubagentResumeError)
+        expect((error as SubagentLimits.SubagentResumeError).taskID).toBe(target)
+      }
+    }),
+  )
+})
+
+describe("tool.task tree cap", () => {
+  it.instance("caps lifetime spawns per session tree via the test seam", () =>
+    Effect.gen(function* () {
+      SubagentLimits.__testHooks.treeLimit = 2
+      const sessions = yield* Session.Service
+      const { chain, deepest, assistant } = yield* seedChain(2)
+      const root = chain[0]!
+      const rootAssistant = yield* seedMessages(root.id)
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      // Spawn #1 from level 2, spawn #2 from the root: both count against the
+      // SAME tree because the counter keys on the root session.
+      const first = yield* def.execute(
+        taskParams,
+        taskCtx({ sessionID: deepest.id, messageID: assistant.id, promptOps: stubOps() }),
+      )
+      yield* def.execute(taskParams, taskCtx({ sessionID: root.id, messageID: rootAssistant.id, promptOps: stubOps() }))
+
+      const exit = yield* def
+        .execute(taskParams, taskCtx({ sessionID: root.id, messageID: rootAssistant.id, promptOps: stubOps() }))
+        .pipe(Effect.exit)
+      const error = defectOf(exit)
+      expect(error).toBeInstanceOf(SubagentLimits.SubagentTreeLimitError)
+      const limitError = error as SubagentLimits.SubagentTreeLimitError
+      expect(limitError.started).toBe(2)
+      expect(limitError.limit).toBe(2)
+
+      // The mid-tree session hits the same tree-wide cap.
+      const midExit = yield* def
+        .execute(taskParams, taskCtx({ sessionID: deepest.id, messageID: assistant.id, promptOps: stubOps() }))
+        .pipe(Effect.exit)
+      expect(defectOf(midExit)).toBeInstanceOf(SubagentLimits.SubagentTreeLimitError)
+
+      // Resuming an existing child is not a new spawn and passes the gate.
+      const resumed = yield* def.execute(
+        { ...taskParams, task_id: first.metadata.sessionId },
+        taskCtx({ sessionID: deepest.id, messageID: assistant.id, promptOps: stubOps() }),
+      )
+      expect(resumed.metadata.sessionId).toBe(first.metadata.sessionId)
+
+      // A second tree (different root) keeps its own counter.
+      const { chat: otherRoot, assistant: otherAssistant } = yield* seed("Other tree")
+      const other = yield* def.execute(
+        taskParams,
+        taskCtx({ sessionID: otherRoot.id, messageID: otherAssistant.id, promptOps: stubOps() }),
+      )
+      expect((yield* sessions.get(other.metadata.sessionId)).parentID).toBe(otherRoot.id)
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          SubagentLimits.__testHooks.treeLimit = undefined
+        }),
+      ),
+    ),
+  )
+})
+
+describe("tool.task root routing", () => {
+  it.instance("stamps the tree root into job metadata and routes permissions to it", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const { chain, deepest, assistant } = yield* seedChain(3)
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      const result = yield* def.execute(
+        taskParams,
+        taskCtx({ sessionID: deepest.id, messageID: assistant.id, promptOps }),
+      )
+
+      // T4.1: permission asks bubble to the ROOT of the tree, not the spawner.
+      expect(seen?.permissionSessionID).toBe(chain[0]!.id)
+      // T2.4: the job metadata carries the root id next to the parent id.
+      expect(result.metadata.rootSessionId).toBe(chain[0]!.id)
+      expect(result.metadata.parentSessionId).toBe(deepest.id)
+      const job = yield* jobs.get(result.metadata.sessionId)
+      expect(job?.metadata?.rootSessionId).toBe(chain[0]!.id)
+      expect(job?.metadata?.parentSessionId).toBe(deepest.id)
+    }),
+  )
+
+  it.instance("keeps root spawns byte-compatible: root id equals the caller id", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      const result = yield* def.execute(taskParams, taskCtx({ sessionID: chat.id, messageID: assistant.id, promptOps }))
+
+      expect(seen?.permissionSessionID).toBe(chat.id)
+      expect(result.metadata.rootSessionId).toBe(chat.id)
+      expect((yield* jobs.get(result.metadata.sessionId))?.metadata?.rootSessionId).toBe(chat.id)
+    }),
+  )
+})
+
+describe("tool.task turn budget", () => {
+  it.instance("threads the shared turn budget pool by reference into the child prompt", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const pool = TurnBudget.make({ usd: 5 })
+      let seen: Parameters<TaskPromptOps["prompt"]>[0] | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      yield* def.execute(
+        taskParams,
+        taskCtx({ sessionID: chat.id, messageID: assistant.id, promptOps, extra: { turnBudget: pool } }),
+      )
+
+      // Reference identity, not a copy: every level charges the same pool.
+      expect(seen?.turnBudgetPool).toBe(pool)
+    }),
+  )
+
+  it.instance("leaves the pool unset when the turn has no budget", () =>
+    Effect.gen(function* () {
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: Parameters<TaskPromptOps["prompt"]>[0] | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      yield* def.execute(taskParams, taskCtx({ sessionID: chat.id, messageID: assistant.id, promptOps }))
+
+      expect(seen?.turnBudgetPool).toBeUndefined()
+    }),
+  )
+
+  it.instance("refuses NEW spawns when the pool is exhausted but still resumes children", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const child = yield* sessions.create({ parentID: chat.id, title: "existing child" })
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const usdPool = TurnBudget.make({ usd: 1 })
+      TurnBudget.chargeDirect(usdPool, { usd: 1 })
+      const exit = yield* def
+        .execute(
+          taskParams,
+          taskCtx({ sessionID: chat.id, messageID: assistant.id, promptOps: stubOps(), extra: { turnBudget: usdPool } }),
+        )
+        .pipe(Effect.exit)
+      expect(defectOf(exit)).toBeInstanceOf(SubagentLimits.SubagentBudgetError)
+
+      const tokenPool = TurnBudget.make({ tokens: 100 })
+      TurnBudget.chargeDirect(tokenPool, { usd: 0, tokens: 100 })
+      const tokenExit = yield* def
+        .execute(
+          taskParams,
+          taskCtx({
+            sessionID: chat.id,
+            messageID: assistant.id,
+            promptOps: stubOps(),
+            extra: { turnBudget: tokenPool },
+          }),
+        )
+        .pipe(Effect.exit)
+      expect(defectOf(tokenExit)).toBeInstanceOf(SubagentLimits.SubagentBudgetError)
+
+      // No new session was created by the gated attempts.
+      expect(yield* sessions.children(chat.id)).toHaveLength(1)
+
+      // Soft cap: resuming the running child is still allowed.
+      const resumed = yield* def.execute(
+        { ...taskParams, task_id: child.id },
+        taskCtx({ sessionID: chat.id, messageID: assistant.id, promptOps: stubOps(), extra: { turnBudget: usdPool } }),
+      )
+      expect(resumed.metadata.sessionId).toBe(child.id)
+    }),
+  )
+
+  it.instance("spawns while the pool still has headroom", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const pool = TurnBudget.make({ usd: 2 })
+      TurnBudget.chargeDirect(pool, { usd: 1 })
+
+      const result = yield* def.execute(
+        taskParams,
+        taskCtx({ sessionID: chat.id, messageID: assistant.id, promptOps: stubOps(), extra: { turnBudget: pool } }),
+      )
+      expect((yield* sessions.get(result.metadata.sessionId)).parentID).toBe(chat.id)
     }),
   )
 })
