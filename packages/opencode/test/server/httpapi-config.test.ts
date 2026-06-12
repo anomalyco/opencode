@@ -120,7 +120,7 @@ describe("config HttpApi", () => {
   )
 
   it.live(
-    "refreshes cached global config after an unchanged patch",
+    "refreshes cached global config from disk",
     Effect.gen(function* () {
       const tmp = yield* tmpdirEffect({})
       const previousConfigPath = Global.Path.config
@@ -139,12 +139,8 @@ describe("config HttpApi", () => {
 
         const refresh = yield* Effect.promise(() =>
           Promise.resolve(
-            app().request("/global/config", {
-              method: "PATCH",
-              headers: {
-                "content-type": "application/json",
-              },
-              body: JSON.stringify({}),
+            app().request("/global/config/refresh", {
+              method: "POST",
             }),
           ),
         )
@@ -165,7 +161,7 @@ describe("config HttpApi", () => {
   )
 
   it.live(
-    "refreshes provider list after global provider config changes",
+    "refreshes provider list after manual global provider config changes",
     Effect.gen(function* () {
       const tmp = yield* tmpdirEffect({})
       const previousConfigPath = Global.Path.config
@@ -187,18 +183,18 @@ describe("config HttpApi", () => {
         expect(typeof providerID).toBe("string")
         if (!providerID) throw new Error("expected at least one provider")
 
-        const update = yield* Effect.promise(() =>
+        yield* Effect.promise(() =>
+          Bun.write(path.join(tmp.path, "opencode.jsonc"), JSON.stringify({ disabled_providers: [providerID] })),
+        )
+
+        const refresh = yield* Effect.promise(() =>
           Promise.resolve(
-            app().request("/global/config", {
-              method: "PATCH",
-              headers: {
-                "content-type": "application/json",
-              },
-              body: JSON.stringify({ disabled_providers: [providerID] }),
+            app().request("/global/config/refresh", {
+              method: "POST",
             }),
           ),
         )
-        expect(update.status).toBe(200)
+        expect(refresh.status).toBe(200)
 
         const second = yield* Effect.promise(() =>
           Promise.resolve(

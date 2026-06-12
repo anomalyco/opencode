@@ -70,6 +70,8 @@ import type {
   FormatterStatusResponses,
   GlobalConfigGetErrors,
   GlobalConfigGetResponses,
+  GlobalConfigRefreshErrors,
+  GlobalConfigRefreshResponses,
   GlobalConfigUpdateErrors,
   GlobalConfigUpdateResponses,
   GlobalDisposeErrors,
@@ -527,6 +529,18 @@ export class Config extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+
+  /**
+   * Refresh global configuration
+   *
+   * Invalidate cached global configuration and reload it from disk.
+   */
+  public refresh<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+    return (options?.client ?? this.client).post<GlobalConfigRefreshResponses, GlobalConfigRefreshErrors, ThrowOnError>({
+      url: "/global/config/refresh",
+      ...options,
     })
   }
 }

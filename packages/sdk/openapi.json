@@ -386,6 +386,43 @@
         ]
       }
     },
+    "/global/config/refresh": {
+      "post": {
+        "tags": ["global"],
+        "operationId": "global.config.refresh",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Reloaded global config info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Config"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Invalidate cached global configuration and reload it from disk.",
+        "summary": "Refresh global configuration",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.global.config.refresh({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/global/dispose": {
       "post": {
         "tags": ["global"],

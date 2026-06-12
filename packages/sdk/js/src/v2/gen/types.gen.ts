@@ -4053,6 +4053,31 @@ export type GlobalConfigUpdateResponses = {
 
 export type GlobalConfigUpdateResponse = GlobalConfigUpdateResponses[keyof GlobalConfigUpdateResponses]
 
+export type GlobalConfigRefreshData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/config/refresh"
+}
+
+export type GlobalConfigRefreshErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type GlobalConfigRefreshError = GlobalConfigRefreshErrors[keyof GlobalConfigRefreshErrors]
+
+export type GlobalConfigRefreshResponses = {
+  /**
+   * Reloaded global config info
+   */
+  200: Config
+}
+
+export type GlobalConfigRefreshResponse = GlobalConfigRefreshResponses[keyof GlobalConfigRefreshResponses]
+
 export type GlobalDisposeData = {
   body?: never
   path?: never

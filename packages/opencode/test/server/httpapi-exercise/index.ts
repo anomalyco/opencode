@@ -90,6 +90,21 @@ const scenarios: Scenario[] = [
       "status",
     ),
   http.protected
+    .post("/global/config/refresh", "global.config.refresh")
+    .global()
+    .seeded(() =>
+      Effect.promise(() =>
+        Bun.write(
+          path.join(exerciseConfigDirectory, "opencode.jsonc"),
+          JSON.stringify({ username: "httpapi-refreshed" }, null, 2),
+        ),
+      ),
+    )
+    .json(200, (body) => {
+      object(body)
+      check(body.username === "httpapi-refreshed", "global config refresh should return disk config")
+    }),
+  http.protected
     .post("/global/dispose", "global.dispose")
     .global()
     .mutating()
