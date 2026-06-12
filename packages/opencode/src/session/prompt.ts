@@ -1558,7 +1558,9 @@ export const layer = Layer.effect(
       }
 
       const templateParts = yield* resolvePromptParts(template)
-      const inputFiles = new Set(input.parts?.map((part) => fileURLToPath(part.url)))
+      const inputFiles = new Set(
+        input.parts?.filter((part) => new URL(part.url).protocol === "file:").map((part) => fileURLToPath(part.url)),
+      )
       const uniqueTemplateParts = templateParts.filter(
         (part) => part.type !== "file" || !inputFiles.has(fileURLToPath(part.url)),
       )
