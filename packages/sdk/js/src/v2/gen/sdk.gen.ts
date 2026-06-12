@@ -36,12 +36,8 @@ import type {
   ExperimentalConsoleSwitchOrgResponses,
   ExperimentalControlPlaneMoveSessionErrors,
   ExperimentalControlPlaneMoveSessionResponses,
-  ExperimentalProjectCopyCreateErrors,
-  ExperimentalProjectCopyCreateResponses,
-  ExperimentalProjectCopyRefreshErrors,
-  ExperimentalProjectCopyRefreshResponses,
-  ExperimentalProjectCopyRemoveErrors,
-  ExperimentalProjectCopyRemoveResponses,
+  ExperimentalProjectCopyGenerateNameErrors,
+  ExperimentalProjectCopyGenerateNameResponses,
   ExperimentalResourceListErrors,
   ExperimentalResourceListResponses,
   ExperimentalSessionBackgroundErrors,
@@ -303,6 +299,12 @@ import type {
   V2PermissionSavedListResponses,
   V2PermissionSavedRemoveErrors,
   V2PermissionSavedRemoveResponses,
+  V2ProjectCopyCreateErrors,
+  V2ProjectCopyCreateResponses,
+  V2ProjectCopyRefreshErrors,
+  V2ProjectCopyRefreshResponses,
+  V2ProjectCopyRemoveErrors,
+  V2ProjectCopyRemoveResponses,
   V2ProviderGetErrors,
   V2ProviderGetResponses,
   V2ProviderListErrors,
@@ -842,105 +844,16 @@ export class Resource extends HeyApiClient {
 
 export class ProjectCopy extends HeyApiClient {
   /**
-   * Remove project copy
+   * Generate project copy name
    *
-   * Remove a local physical copy of a project using the selected strategy.
+   * Generate a short name for a project copy from task context.
    */
-  public remove<ThrowOnError extends boolean = false>(
+  public generateName<ThrowOnError extends boolean = false>(
     parameters: {
       projectID: string
-      workspace?: string
       directory?: string
-      force?: boolean
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "projectID" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "directory" },
-            { in: "body", key: "force" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).delete<
-      ExperimentalProjectCopyRemoveResponses,
-      ExperimentalProjectCopyRemoveErrors,
-      ThrowOnError
-    >({
-      url: "/experimental/project/{projectID}/copy",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Create project copy
-   *
-   * Create a local physical copy of a project using the selected strategy.
-   */
-  public create<ThrowOnError extends boolean = false>(
-    parameters: {
-      projectID: string
       workspace?: string
-      strategy?: "git_worktree"
-      directory?: string
-      name?: string
       context?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "projectID" },
-            { in: "query", key: "workspace" },
-            { in: "body", key: "strategy" },
-            { in: "body", key: "directory" },
-            { in: "body", key: "name" },
-            { in: "body", key: "context" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<
-      ExperimentalProjectCopyCreateResponses,
-      ExperimentalProjectCopyCreateErrors,
-      ThrowOnError
-    >({
-      url: "/experimental/project/{projectID}/copy",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Refresh project copies
-   *
-   * Discover local project copies using one or all configured strategies.
-   */
-  public refresh<ThrowOnError extends boolean = false>(
-    parameters: {
-      projectID: string
-      directory?: string
-      workspace?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -952,18 +865,24 @@ export class ProjectCopy extends HeyApiClient {
             { in: "path", key: "projectID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "context" },
           ],
         },
       ],
     )
     return (options?.client ?? this.client).post<
-      ExperimentalProjectCopyRefreshResponses,
-      ExperimentalProjectCopyRefreshErrors,
+      ExperimentalProjectCopyGenerateNameResponses,
+      ExperimentalProjectCopyGenerateNameErrors,
       ThrowOnError
     >({
-      url: "/experimental/project/{projectID}/copy/refresh",
+      url: "/experimental/project/{projectID}/copy/generate-name",
       ...options,
       ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }
@@ -6241,6 +6160,122 @@ export class Reference extends HeyApiClient {
   }
 }
 
+export class ProjectCopy2 extends HeyApiClient {
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      directory?: string
+      force?: boolean
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "location" },
+            { in: "body", key: "directory" },
+            { in: "body", key: "force" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      V2ProjectCopyRemoveResponses,
+      V2ProjectCopyRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/project/{projectID}/copy",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  public create<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+      strategy?: string
+      directory?: string
+      name?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "location" },
+            { in: "body", key: "strategy" },
+            { in: "body", key: "directory" },
+            { in: "body", key: "name" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2ProjectCopyCreateResponses, V2ProjectCopyCreateErrors, ThrowOnError>(
+      {
+        url: "/experimental/project/{projectID}/copy",
+        ...options,
+        ...params,
+        headers: {
+          "Content-Type": "application/json",
+          ...options?.headers,
+          ...params.headers,
+        },
+      },
+    )
+  }
+
+  public refresh<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      V2ProjectCopyRefreshResponses,
+      V2ProjectCopyRefreshErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/project/{projectID}/copy/refresh",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class V2 extends HeyApiClient {
   private _health?: Health
   get health(): Health {
@@ -6315,6 +6350,11 @@ export class V2 extends HeyApiClient {
   private _reference?: Reference
   get reference(): Reference {
     return (this._reference ??= new Reference({ client: this.client }))
+  }
+
+  private _projectCopy?: ProjectCopy2
+  get projectCopy(): ProjectCopy2 {
+    return (this._projectCopy ??= new ProjectCopy2({ client: this.client }))
   }
 }
 
