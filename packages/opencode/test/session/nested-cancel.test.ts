@@ -159,6 +159,42 @@ describe("session.nested-cancel cancelBackgroundJobs", () => {
       expect((yield* jobs.get(otherChild.id))?.status).toBe("running")
     }),
   )
+
+  it.instance("cancel cascade converges on jobs started detached during the cascade", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const runState = yield* SessionRunState.Service
+      const { root, child, grandchild } = yield* seedTree()
+
+      // The escape window: cancelling the child's job starts a fresh detached
+      // job under the tree from its interrupt finalizer — i.e. after the
+      // cascade took its list() snapshot. BackgroundJob.cancel closes the job
+      // scope and awaits the finalizer, so the late job deterministically
+      // exists (and runs) before the cascade's next step.
+      yield* jobs.start({
+        id: child.id,
+        type: "task",
+        metadata: { parentSessionId: root.id, sessionId: child.id },
+        run: Effect.never.pipe(
+          Effect.onInterrupt(() =>
+            jobs.start({
+              id: grandchild.id,
+              type: "task",
+              metadata: { parentSessionId: child.id, sessionId: grandchild.id },
+              run: Effect.never,
+            }),
+          ),
+        ),
+      })
+
+      yield* runState.cancel(root.id)
+
+      expect((yield* jobs.get(child.id))?.status).toBe("cancelled")
+      // A one-shot snapshot lets the late job escape; the cascade must
+      // re-list to convergence.
+      expect((yield* jobs.get(grandchild.id))?.status).toBe("cancelled")
+    }),
+  )
 })
 
 describe("session.nested-cancel SessionPrompt.cancel", () => {
@@ -229,6 +265,43 @@ describe("session.nested-cancel remove", () => {
       }
       const after = yield* db.select().from(MessageTable).where(inArray(MessageTable.session_id, ids)).all()
       expect(after.length).toBe(0)
+    }),
+  )
+
+  it.instance("remove converges on children spawned inside the deletion window", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const sessions = yield* Session.Service
+      const { root, child } = yield* seedTree()
+
+      // The deletion window: the cascade's recursive remove(child) cancels the
+      // child's job, whose interrupt finalizer creates a NEW child under the
+      // root — after the root's children() snapshot was already taken.
+      // BackgroundJob.cancel awaits the finalizer, so the late child
+      // deterministically exists before the cascade returns to the root.
+      const late: { id?: SessionID } = {}
+      yield* jobs.start({
+        id: child.id,
+        type: "task",
+        metadata: { sessionId: child.id },
+        run: Effect.never.pipe(
+          Effect.onInterrupt(() =>
+            Effect.gen(function* () {
+              const info = yield* sessions.create({ parentID: root.id, title: "late child" })
+              late.id = info.id
+            }),
+          ),
+        ),
+      })
+
+      yield* sessions.remove(root.id)
+
+      // The late child must have been created inside the window…
+      expect(late.id).toBeDefined()
+      // …and the cascade must not leave it behind as an orphan that would
+      // become a new root (resetting depth/tree limits for its subtree).
+      expect(Option.isNone(yield* sessions.get(late.id!).pipe(Effect.option))).toBe(true)
+      expect(yield* sessions.children(root.id)).toEqual([])
     }),
   )
 })

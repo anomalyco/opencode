@@ -706,6 +706,9 @@ export const layer: Layer.Layer<
     // below it (HARD_MAX_DEPTH levels × the per-tree spawn cap).
     const DESCENDANTS_CAP = 10_000
 
+    // Convergence cap for remove's children re-listing; see remove below.
+    const REMOVE_CHILDREN_PASS_CAP = 5
+
     const descendants: Interface["descendants"] = Effect.fn("Session.descendants")(function* (sessionID: SessionID) {
       const seen = new Set<SessionID>([sessionID])
       const result: Info[] = []
@@ -734,9 +737,17 @@ export const layer: Layer.Layer<
         )
 
         if (hasInstance) yield* cancelBackgroundJobs(background, sessionID)
-        const kids = yield* children(sessionID)
-        for (const child of kids) {
-          yield* remove(child.id)
+        // Children are re-listed to convergence: a spawn racing the remove
+        // cascade can insert a child after a one-shot children() snapshot,
+        // leaving it behind as an orphan — and orphans count as roots, so
+        // depth/tree limits would reset relative to the leaked subtree. The
+        // cap bounds a pathological spawn loop fighting the removal.
+        for (let pass = 0; pass < REMOVE_CHILDREN_PASS_CAP; pass++) {
+          const kids = yield* children(sessionID)
+          if (kids.length === 0) break
+          for (const child of kids) {
+            yield* remove(child.id)
+          }
         }
 
         yield* events.publish(SessionV1.Event.Deleted, { sessionID, info: session })
