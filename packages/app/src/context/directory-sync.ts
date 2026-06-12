@@ -354,7 +354,7 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
         })
       })
       .catch((error) => {
-        if (isNotFound(error) && !tracked(input.directory, input.sessionID)) return
+        if (isNotFound(error)) return
         throw error
       })
       .finally(() => {
@@ -486,7 +486,7 @@ export const createDirSyncContext = (directory: string, serverSync: ReturnType<t
                     )
                   })
                   .catch((error) => {
-                    if (isNotFound(error) && !tracked(directory, sessionID)) return
+                    if (isNotFound(error)) return
                     throw error
                   })
 
