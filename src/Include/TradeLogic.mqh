@@ -289,25 +289,37 @@ public:
      }
    
    void UpdateIndicators()
-     {
+      {
       // H4 EMA
       int h4_handle = iMA(_Symbol, PERIOD_H4, 50, 0, MODE_EMA, PRICE_CLOSE);
-      double h4_vals[];
-      ArraySetAsSeries(h4_vals, true);
-      if(CopyBuffer(h4_handle, 0, 0, 1, h4_vals) > 0) m_ema_h4 = h4_vals[0];
+      if(h4_handle != INVALID_HANDLE)
+         {
+         double h4_vals[];
+         ArraySetAsSeries(h4_vals, true);
+         if(CopyBuffer(h4_handle, 0, 0, 1, h4_vals) == 1) m_ema_h4 = h4_vals[0];
+         IndicatorRelease(h4_handle);
+         }
       
       // D1 EMA
       int d1_handle = iMA(_Symbol, PERIOD_D1, 50, 0, MODE_EMA, PRICE_CLOSE);
-      double d1_vals[];
-      ArraySetAsSeries(d1_vals, true);
-      if(CopyBuffer(d1_handle, 0, 0, 1, d1_vals) > 0) m_ema_d1 = d1_vals[0];
+      if(d1_handle != INVALID_HANDLE)
+         {
+         double d1_vals[];
+         ArraySetAsSeries(d1_vals, true);
+         if(CopyBuffer(d1_handle, 0, 0, 1, d1_vals) == 1) m_ema_d1 = d1_vals[0];
+         IndicatorRelease(d1_handle);
+         }
       
       // M15 RSI
       int rsi_handle = iRSI(_Symbol, PERIOD_M15, 14, PRICE_CLOSE);
-      double rsi_vals[];
-      ArraySetAsSeries(rsi_vals, true);
-      if(CopyBuffer(rsi_handle, 0, 0, 1, rsi_vals) > 0) m_rsi_m15 = rsi_vals[0];
-     }
+      if(rsi_handle != INVALID_HANDLE)
+         {
+         double rsi_vals[];
+         ArraySetAsSeries(rsi_vals, true);
+         if(CopyBuffer(rsi_handle, 0, 0, 1, rsi_vals) == 1) m_rsi_m15 = rsi_vals[0];
+         IndicatorRelease(rsi_handle);
+         }
+      }
    
    double Evaluate()
      {
@@ -334,10 +346,17 @@ public:
          entry = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
          // Dynamic SL based on ATR or fixed points
          int atr = iATR(_Symbol, PERIOD_M15, 14);
-         double atr_val[];
-         ArraySetAsSeries(atr_val, true);
-         CopyBuffer(atr, 0, 0, 1, atr_val);
-         double risk_dist = atr_val[0] * 2.0;
+         if(atr == INVALID_HANDLE)
+            return false;
+
+          double atr_val[];
+          ArraySetAsSeries(atr_val, true);
+         bool ok = CopyBuffer(atr, 0, 0, 1, atr_val) == 1;
+         IndicatorRelease(atr);
+         if(!ok || atr_val[0] <= 0.0)
+            return false;
+
+          double risk_dist = atr_val[0] * 2.0;
          
          sl = entry - risk_dist;
          tp = entry + risk_dist * 2.0; // 1:2 RR
@@ -380,8 +399,8 @@ public:
       
       // ONNX inference
       float output[];
-      if(OnnxRun(m_model_handle, ONNX_NO_CONVERSION, features, output))
-        {
+      if(m_model_handle != INVALID_HANDLE && OnnxRun(m_model_handle, ONNX_NO_CONVERSION, features, output) && ArraySize(output) >= 2)
+         {
          // Output: [BUY_PROB, SELL_PROB, HOLD_PROB]
          double buy_prob = output[0];
          double sell_prob = output[1];
@@ -403,10 +422,17 @@ public:
         {
          entry = SymbolInfoDouble(_Symbol, (signal > 0) ? SYMBOL_ASK : SYMBOL_BID);
          int atr = iATR(_Symbol, PERIOD_M1, 14);
-         double atr_val[];
-         ArraySetAsSeries(atr_val, true);
-         CopyBuffer(atr, 0, 0, 1, atr_val);
-         double dist = atr_val[0] * 2.0;
+         if(atr == INVALID_HANDLE)
+            return false;
+
+          double atr_val[];
+          ArraySetAsSeries(atr_val, true);
+         bool ok = CopyBuffer(atr, 0, 0, 1, atr_val) == 1;
+         IndicatorRelease(atr);
+         if(!ok || atr_val[0] <= 0.0)
+            return false;
+
+          double dist = atr_val[0] * 2.0;
           
          sl = (signal > 0) ? entry - dist : entry + dist;
          tp = (signal > 0) ? entry + dist * 2.0 : entry - dist * 2.0;
@@ -417,21 +443,45 @@ public:
 
 private:
    double GetRSI() 
-     { 
-      int h = iRSI(_Symbol, PERIOD_M1, 14, PRICE_CLOSE); 
-      double v[]; ArraySetAsSeries(v, true); 
-      CopyBuffer(h, 0, 0, 1, v); return v[0]; 
-     }
+      { 
+      int h = iRSI(_Symbol, PERIOD_M1, 14, PRICE_CLOSE);
+      if(h == INVALID_HANDLE)
+         return 50.0;
+
+      double v[];
+      ArraySetAsSeries(v, true);
+      bool ok = CopyBuffer(h, 0, 0, 1, v) == 1;
+      IndicatorRelease(h);
+      if(!ok)
+         return 50.0;
+      return v[0];
+      }
    double GetATR() 
-     { 
-      int h = iATR(_Symbol, PERIOD_M1, 14); 
-      double v[]; ArraySetAsSeries(v, true); 
-      CopyBuffer(h, 0, 0, 1, v); return v[0]; 
-     }
+      { 
+      int h = iATR(_Symbol, PERIOD_M1, 14);
+      if(h == INVALID_HANDLE)
+         return 0.0;
+
+      double v[];
+      ArraySetAsSeries(v, true);
+      bool ok = CopyBuffer(h, 0, 0, 1, v) == 1;
+      IndicatorRelease(h);
+      if(!ok)
+         return 0.0;
+      return v[0];
+      }
    double GetMACD() 
-     { 
-      int h = iMACD(_Symbol, PERIOD_M1, 12, 26, 9, PRICE_CLOSE); 
-      double v[]; ArraySetAsSeries(v, true); 
-      CopyBuffer(h, 0, 0, 1, v); return v[0]; 
-     }
+      { 
+      int h = iMACD(_Symbol, PERIOD_M1, 12, 26, 9, PRICE_CLOSE);
+      if(h == INVALID_HANDLE)
+         return 0.0;
+
+      double v[];
+      ArraySetAsSeries(v, true);
+      bool ok = CopyBuffer(h, 0, 0, 1, v) == 1;
+      IndicatorRelease(h);
+      if(!ok)
+         return 0.0;
+      return v[0];
+      }
   };

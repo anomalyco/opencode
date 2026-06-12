@@ -68,52 +68,72 @@ public:
    
    //--- Technical indicators
    double CalculateRSI(int period = 14, int shift = 0)
-     {
+      {
       int handle = iRSI(_Symbol, PERIOD_M1, period, PRICE_CLOSE);
+      if(handle == INVALID_HANDLE)
+         return 50.0;
+
       double values[];
       ArraySetAsSeries(values, true);
-      
-      if(CopyBuffer(handle, 0, shift, 1, values) > 0)
+
+      bool ok = CopyBuffer(handle, 0, shift, 1, values) == 1;
+      IndicatorRelease(handle);
+      if(ok)
          return values[0];
-      
+
       return 50.0;  // Default
-     }
+      }
    
    double CalculateATR(int period = 14, int shift = 0)
-     {
+      {
       int handle = iATR(_Symbol, PERIOD_M1, period);
+      if(handle == INVALID_HANDLE)
+         return 0.0;
+
       double values[];
       ArraySetAsSeries(values, true);
-      
-      if(CopyBuffer(handle, 0, shift, 1, values) > 0)
+
+      bool ok = CopyBuffer(handle, 0, shift, 1, values) == 1;
+      IndicatorRelease(handle);
+      if(ok)
          return values[0];
-      
+
       return 0.0;
-     }
+      }
    
    double CalculateMACD(int fast_period = 12, int slow_period = 26, int signal_period = 9, int shift = 0)
-     {
+      {
       int handle = iMACD(_Symbol, PERIOD_M1, fast_period, slow_period, signal_period, PRICE_CLOSE);
+      if(handle == INVALID_HANDLE)
+         return 0.0;
+
       double values[];
       ArraySetAsSeries(values, true);
-      
-      if(CopyBuffer(handle, 0, shift, 1, values) > 0)
+
+      bool ok = CopyBuffer(handle, 0, shift, 1, values) == 1;
+      IndicatorRelease(handle);
+      if(ok)
          return values[0];
-      
+
       return 0.0;
-     }
+      }
    
    double CalculateEMA(int period, int shift = 0)
-     {
+      {
       int handle = iMA(_Symbol, PERIOD_M1, period, 0, MODE_EMA, PRICE_CLOSE);
+      if(handle == INVALID_HANDLE)
+         return 0.0;
+
       double values[];
       ArraySetAsSeries(values, true);
-      
-      if(CopyBuffer(handle, 0, shift, 1, values) > 0)
+
+      bool ok = CopyBuffer(handle, 0, shift, 1, values) == 1;
+      IndicatorRelease(handle);
+      if(ok)
          return values[0];
-      
+
       return 0.0;
-     }
+      }
    
    //--- CSV export for backtesting
    bool ExportToCSV(string filename, int bars = 10000)
@@ -127,11 +147,13 @@ public:
       ArraySetAsSeries(close, true);
       ArraySetAsSeries(time, true);
       
-      CopyOpen(_Symbol, PERIOD_M1, 0, bars, open);
-      CopyHigh(_Symbol, PERIOD_M1, 0, bars, high);
-      CopyLow(_Symbol, PERIOD_M1, 0, bars, low);
-      CopyClose(_Symbol, PERIOD_M1, 0, bars, close);
-      CopyTime(_Symbol, PERIOD_M1, 0, bars, time);
+      int open_count = CopyOpen(_Symbol, PERIOD_M1, 0, bars, open);
+      int high_count = CopyHigh(_Symbol, PERIOD_M1, 0, bars, high);
+      int low_count = CopyLow(_Symbol, PERIOD_M1, 0, bars, low);
+      int close_count = CopyClose(_Symbol, PERIOD_M1, 0, bars, close);
+      int time_count = CopyTime(_Symbol, PERIOD_M1, 0, bars, time);
+      if(open_count != bars || high_count != bars || low_count != bars || close_count != bars || time_count != bars)
+         return false;
       
       int handle = FileOpen(filename, FILE_WRITE | FILE_CSV | FILE_ANSI);
       if(handle == INVALID_HANDLE) return false;
