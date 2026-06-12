@@ -56,4 +56,82 @@ describe("trimSessions", () => {
       "root-2",
     ])
   })
+
+  test("keeps descendants of a kept root transitively", () => {
+    const now = 1_000_000
+    const old = now - 20_000_000
+    const list = [
+      session({ id: "root-1", created: now - 1000 }),
+      session({ id: "child", parentID: "root-1", created: old }),
+      session({ id: "grandchild", parentID: "child", created: old }),
+      session({ id: "great-grandchild", parentID: "grandchild", created: old }),
+    ]
+
+    const result = trimSessions(list, { limit: 2, permission: {}, now })
+    expect(result.map((x) => x.id)).toEqual(["child", "grandchild", "great-grandchild", "root-1"])
+  })
+
+  test("trims descendants of a trimmed root transitively", () => {
+    const now = 1_000_000
+    const old = now - 20_000_000
+    const list = [
+      session({ id: "root-1", created: now - 1000 }),
+      session({ id: "root-2", created: now - 2000 }),
+      session({ id: "z-root", created: now - 30_000_000 }),
+      session({ id: "z-child", parentID: "z-root", created: old }),
+      session({ id: "z-grandchild", parentID: "z-child", created: old }),
+    ]
+
+    const result = trimSessions(list, { limit: 2, permission: {}, now })
+    expect(result.map((x) => x.id)).toEqual(["root-1", "root-2"])
+  })
+
+  test("permission and recency still keep deep children of a trimmed root", () => {
+    const now = 1_000_000
+    const old = now - 20_000_000
+    const list = [
+      session({ id: "root-1", created: now - 1000 }),
+      session({ id: "root-2", created: now - 2000 }),
+      session({ id: "z-root", created: now - 30_000_000 }),
+      session({ id: "z-child", parentID: "z-root", created: old }),
+      session({ id: "z-grandchild-permission", parentID: "z-child", created: old }),
+      session({ id: "z-grandchild-recent", parentID: "z-child", created: now - 500 }),
+      session({ id: "z-grandchild-trimmed", parentID: "z-child", created: old }),
+    ]
+
+    const result = trimSessions(list, {
+      limit: 2,
+      permission: {
+        "z-grandchild-permission": [{ id: "perm-1" } as PermissionRequest],
+      },
+      now,
+    })
+    expect(result.map((x) => x.id)).toEqual(["root-1", "root-2", "z-grandchild-permission", "z-grandchild-recent"])
+  })
+
+  test("drops old orphan children whose parent chain never reaches a kept root", () => {
+    const now = 1_000_000
+    const old = now - 20_000_000
+    const list = [
+      session({ id: "root-1", created: now - 1000 }),
+      session({ id: "orphan", parentID: "missing-parent", created: old }),
+      session({ id: "orphan-child", parentID: "orphan", created: old }),
+    ]
+
+    const result = trimSessions(list, { limit: 2, permission: {}, now })
+    expect(result.map((x) => x.id)).toEqual(["root-1"])
+  })
+
+  test("does not hang on a parentID cycle", () => {
+    const now = 1_000_000
+    const old = now - 20_000_000
+    const list = [
+      session({ id: "root-1", created: now - 1000 }),
+      session({ id: "cycle-a", parentID: "cycle-b", created: old }),
+      session({ id: "cycle-b", parentID: "cycle-a", created: old }),
+    ]
+
+    const result = trimSessions(list, { limit: 2, permission: {}, now })
+    expect(result.map((x) => x.id)).toEqual(["root-1"])
+  })
 })
