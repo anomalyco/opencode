@@ -33,3 +33,11 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# OpenCode local/auth config
+.opencode/opencode.json
+.opencode/opencode.jsonc
+.opencode/tui.json
+.opencode/auth.json
+.opencode/*.local.json
+.opencode/*.local.jsonc
