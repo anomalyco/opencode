@@ -1171,6 +1171,98 @@ describe("tool.task tree cap", () => {
       ),
     ),
   )
+
+  it.instance("enforces the cap atomically under parallel spawns (lost-update race)", () =>
+    Effect.gen(function* () {
+      SubagentLimits.__testHooks.treeLimit = 3
+      const sessions = yield* Session.Service
+      // Production session creation does real async I/O; the in-process test
+      // create is effectively synchronous, so the racers would never yield
+      // inside the gate window here. Reinstate the async boundary
+      // deterministically: every racer reaches `create` (and thus passed the
+      // gate) before any create completes — the exact lost-update window.
+      const wrapped: typeof sessions = {
+        ...sessions,
+        create: (input) => Effect.yieldNow.pipe(Effect.andThen(sessions.create(input))),
+      }
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool.pipe(Effect.provideService(Session.Service, wrapped))
+      const def = yield* tool.init()
+      const promptOps = stubOps()
+
+      // 5 spawns race through the gate: the reservation must be a synchronous
+      // check-and-set so EXACTLY treeLimit succeed. The pre-fix sequence
+      // (read started → async sessions.create → set started+1) let every
+      // racer read the same stale count and systematically undercount.
+      const exits = yield* Effect.all(
+        Array.from({ length: 5 }, () =>
+          def
+            .execute(taskParams, taskCtx({ sessionID: chat.id, messageID: assistant.id, promptOps }))
+            .pipe(Effect.exit),
+        ),
+        { concurrency: "unbounded" },
+      )
+
+      const refused = exits.filter((exit) => defectOf(exit) instanceof SubagentLimits.SubagentTreeLimitError)
+      expect(exits.filter(Exit.isSuccess)).toHaveLength(3)
+      expect(refused).toHaveLength(2)
+      // Exactly the cap's worth of child sessions exist...
+      expect(yield* sessions.children(chat.id)).toHaveLength(3)
+      // ...and the counter settled AT the limit: the next spawn reports 3/3.
+      const followUp = yield* def
+        .execute(taskParams, taskCtx({ sessionID: chat.id, messageID: assistant.id, promptOps }))
+        .pipe(Effect.exit)
+      const error = defectOf(followUp)
+      expect(error).toBeInstanceOf(SubagentLimits.SubagentTreeLimitError)
+      expect((error as SubagentLimits.SubagentTreeLimitError).started).toBe(3)
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          SubagentLimits.__testHooks.treeLimit = undefined
+        }),
+      ),
+    ),
+  )
+
+  it.instance("releases the reserved slot again when session creation fails", () =>
+    Effect.gen(function* () {
+      SubagentLimits.__testHooks.treeLimit = 1
+      const real = yield* Session.Service
+      let explode = false
+      const wrapped: typeof real = {
+        ...real,
+        create: (input) => (explode ? Effect.die(new Error("injected create failure")) : real.create(input)),
+      }
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool.pipe(Effect.provideService(Session.Service, wrapped))
+      const def = yield* tool.init()
+      const promptOps = stubOps()
+
+      // The reservation happens BEFORE sessions.create; when create dies the
+      // slot must be released again or the failed attempt eats the cap.
+      explode = true
+      const failed = yield* def
+        .execute(taskParams, taskCtx({ sessionID: chat.id, messageID: assistant.id, promptOps }))
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(failed)).toBe(true)
+      expect(defectOf(failed)).not.toBeInstanceOf(SubagentLimits.SubagentTreeLimitError)
+      expect(yield* real.children(chat.id)).toHaveLength(0)
+
+      // The tree's single slot is still available after the failed create.
+      explode = false
+      const result = yield* def.execute(
+        taskParams,
+        taskCtx({ sessionID: chat.id, messageID: assistant.id, promptOps }),
+      )
+      expect((yield* real.get(result.metadata.sessionId)).parentID).toBe(chat.id)
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          SubagentLimits.__testHooks.treeLimit = undefined
+        }),
+      ),
+    ),
+  )
 })
 
 describe("tool.task root routing", () => {

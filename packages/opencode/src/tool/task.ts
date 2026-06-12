@@ -204,24 +204,43 @@ export const TaskTool = Tool.define(
               return yield* Effect.fail(SubagentLimits.budgetError())
             }
           }
-          const created = yield* sessions.create({
-            parentID: ctx.sessionID,
-            title: params.description + ` (@${next.name} subagent)`,
-            agent: next.name,
-            permission: [
-              ...childPermission,
-              ...childToolDenies.filter(
-                (deny) =>
-                  !childPermission.some(
-                    (rule) =>
-                      rule.permission === deny.permission &&
-                      rule.pattern === deny.pattern &&
-                      rule.action === deny.action,
-                  ),
-              ),
-            ],
-          })
+          // Reserve the slot SYNCHRONOUSLY before the async create (the
+          // TurnBudget.reserve pattern): Bun is single-threaded and there is
+          // no yield between the `started` read above and this set, so N
+          // parallel spawns each observe the updated count. Setting AFTER
+          // `sessions.create` (the pre-fix order) was a lost-update race —
+          // every racer wrote back its stale `started + 1` and the cap was
+          // systematically undercounted. Released again on create failure or
+          // interrupt so a session that never existed cannot eat the cap.
           treeSpawnCounts.set(rootID, started + 1)
+          const created = yield* sessions
+            .create({
+              parentID: ctx.sessionID,
+              title: params.description + ` (@${next.name} subagent)`,
+              agent: next.name,
+              permission: [
+                ...childPermission,
+                ...childToolDenies.filter(
+                  (deny) =>
+                    !childPermission.some(
+                      (rule) =>
+                        rule.permission === deny.permission &&
+                        rule.pattern === deny.pattern &&
+                        rule.action === deny.action,
+                    ),
+                ),
+              ],
+            })
+            .pipe(
+              Effect.onExit((exit) =>
+                Exit.isSuccess(exit)
+                  ? Effect.void
+                  : Effect.sync(() => {
+                      const current = treeSpawnCounts.get(rootID) ?? 0
+                      treeSpawnCounts.set(rootID, Math.max(0, current - 1))
+                    }),
+              ),
+            )
           return created
         }))
 
