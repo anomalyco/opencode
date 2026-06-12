@@ -472,9 +472,7 @@ function ModelEfficiencySection(props: { data: StatsModelData | null; catalog: M
             <MetricCard
               label="Cost / 1M"
               value={
-                props.catalog?.cost
-                  ? formatCatalogPrice(props.catalog.cost)
-                  : formatMoney(data().totals.costPerMillion)
+                props.catalog?.cost ? formatCatalogPrice(props.catalog.cost) : formatMoney(data().totals.costPerMillion)
               }
               detail={props.catalog?.cost ? "input / output" : "observed all tokens"}
             />
