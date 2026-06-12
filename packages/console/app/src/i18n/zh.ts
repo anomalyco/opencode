@@ -240,6 +240,7 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下例外情况除外",
 
   "go.title": "OpenCode Go | 人人可用的低成本编程模型",
+  "go.banner.text": "MiniMax M3 限时享受 3 倍使用额度",
   "go.meta.description":
     "Go 首月 $5，之后 $10/月，提供对 GLM-5.1、GLM-5、Kimi K2.5、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.5、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro 和 DeepSeek V4 Flash 的 5 小时充裕请求额度。",
   "go.hero.title": "人人可用的低成本编程模型",
