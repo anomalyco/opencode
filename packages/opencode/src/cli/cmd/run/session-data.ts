@@ -52,8 +52,8 @@ type LiveUsageSample = {
 type LiveUsage = {
   enabled: boolean
   started: number
-  // Count committed assistant/reasoning progress chunks as a provider-neutral live fallback.
-  outputChunks: number
+  responseLength: number
+  smoothedResponseLength: number
   samples: LiveUsageSample[]
 }
 
@@ -63,6 +63,8 @@ type Dict = Record<string, unknown>
 type SessionCommit = StreamCommit
 
 const LIVE_USAGE_WINDOW = 10_000
+const LIVE_USAGE_CHARS_PER_TOKEN = 4
+const LIVE_USAGE_SMOOTHING = 0.35
 
 // Mutable accumulator for the reducer. Each field tracks a different aspect
 // of the stream so we can produce correct incremental output:
@@ -150,7 +152,8 @@ function createLiveUsage(enabled = true): LiveUsage {
   return {
     enabled,
     started: Date.now(),
-    outputChunks: 0,
+    responseLength: 0,
+    smoothedResponseLength: 0,
     samples: [],
   }
 }
@@ -164,7 +167,11 @@ export function setSessionUsageTracking(data: SessionData, enabled: boolean) {
 }
 
 function outputEstimate(live: LiveUsage): number {
-  return live.outputChunks
+  if (live.smoothedResponseLength <= 0) {
+    return 0
+  }
+
+  return Math.max(1, Math.round(live.smoothedResponseLength / LIVE_USAGE_CHARS_PER_TOKEN))
 }
 
 function recordLiveUsage(live: LiveUsage, text: string) {
@@ -172,7 +179,12 @@ function recordLiveUsage(live: LiveUsage, text: string) {
     return false
   }
 
-  live.outputChunks++
+  live.responseLength += text.length
+  live.smoothedResponseLength =
+    live.smoothedResponseLength <= 0
+      ? live.responseLength
+      : live.smoothedResponseLength + (live.responseLength - live.smoothedResponseLength) * LIVE_USAGE_SMOOTHING
+
   const now = Date.now()
   const output = outputEstimate(live)
   live.samples.push({ time: now, output })
