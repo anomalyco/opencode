@@ -27,6 +27,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, 
 import { getRequestEvent } from "solid-js/web"
 import type { FeatureCollection, GeometryObject, GeoJsonProperties } from "geojson"
 import type { GeometryCollection, Topology } from "topojson-specification"
+import { findModelCatalogEntry, getModelCatalog, type ModelCatalog } from "./model-catalog"
 import {
   applyThemePreference,
   Footer,
@@ -118,6 +119,7 @@ export default function StatsHome() {
   )
   const statsUnfurlUrl = new URL(statsUnfurlPath, statsHomeUrl).toString()
   const data = createAsync(() => getData())
+  const catalog = createAsync(() => getModelCatalog())
   const githubStars = createAsync(() => getGitHubStars())
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const updateThemePreference = (preference: ThemePreference) => {
@@ -168,7 +170,7 @@ export default function StatsHome() {
                 <Hero updatedAt={stats().updatedAt} />
                 <TopModelsSection data={stats().usage} leaderboard={stats().leaderboard} />
                 <SessionCostSection data={stats().sessionCost} />
-                <TokenCostSection data={stats().tokenCost} />
+                <TokenCostSection data={stats().tokenCost} catalog={catalog() ?? null} />
                 <CacheRatioSection data={stats().cacheRatio} />
                 <MarketShareSection data={stats().market} />
                 <GeoBreakdownSection data={stats().country} />
@@ -1446,10 +1448,10 @@ function marketDateParts(label: string) {
   return { start: start ?? label, end: end ?? start ?? label }
 }
 
-function TokenCostSection(props: { data: StatsHomeData["tokenCost"] }) {
+function TokenCostSection(props: { data: StatsHomeData["tokenCost"]; catalog: ModelCatalog | null }) {
   const [product, setProduct] = createSignal<TokenProduct>("Go")
   const [activeIndex, setActiveIndex] = createSignal(2)
-  const data = createMemo(() => props.data[product()])
+  const data = createMemo(() => priceTokenCostFromCatalog(props.data[product()], props.catalog))
   const visible = createMemo(() => data().slice(0, 13))
   const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(visible().length - 1, 0)))
 
@@ -1634,7 +1636,7 @@ function formatRatio(value: number) {
 }
 
 function formatDollars(value: number) {
-  return `$${value.toFixed(2)}`
+  return `$${value.toFixed(value > 0 && value < 0.01 ? 4 : 2)}`
 }
 
 function MetricBar(props: { value: number; max: number; active: boolean }) {
@@ -1750,6 +1752,29 @@ function LiveIndicator() {
 function formatTokenCount(value: number) {
   if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}M`
   return `${Math.round(value / 1_000)}K`
+}
+
+function priceTokenCostFromCatalog(data: TokenCostEntry[], catalog: ModelCatalog | null) {
+  if (!catalog) return data
+  return data
+    .flatMap((item) => {
+      const cost = catalogModelCost(catalog, item.model)
+      if (!cost) return []
+      return [
+        {
+          ...item,
+          total: cost.output,
+          input: cost.input,
+          output: cost.output,
+          cached: cost.cacheRead ?? cost.input,
+        },
+      ]
+    })
+    .toSorted((a, b) => a.total - b.total || a.model.localeCompare(b.model))
+}
+
+function catalogModelCost(catalog: ModelCatalog, model: string) {
+  return findModelCatalogEntry(catalog, model)?.cost
 }
 
 function formatSessionCost(value: number) {

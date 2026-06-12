@@ -3843,6 +3843,7 @@
     width: calc(100% + 48px);
     margin-inline: -24px;
     padding-inline: 24px;
+    padding-block-start: 2px;
     overflow-x: auto;
     overscroll-behavior-x: contain;
     scroll-padding-inline: 24px;
