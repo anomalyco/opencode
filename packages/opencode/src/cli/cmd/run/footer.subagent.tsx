@@ -119,12 +119,7 @@ export function RunFooterSubagentBody(props: {
   })
 
   return (
-    <box
-      width="100%"
-      height="100%"
-      flexDirection="column"
-      backgroundColor={footer().surface}
-    >
+    <box width="100%" height="100%" flexDirection="column" backgroundColor={footer().surface}>
       <box paddingTop={1} paddingLeft={1} paddingRight={3} paddingBottom={1} flexDirection="column" flexGrow={1}>
         <Show when={tab()}>
           {(current) => (

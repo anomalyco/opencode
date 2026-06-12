@@ -821,12 +821,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                 flexShrink={0}
                 backgroundColor={statuslineBackground()}
               >
-                <box
-                  paddingLeft={1}
-                  paddingRight={1}
-                  backgroundColor={theme().statusAccent}
-                  flexShrink={0}
-                >
+                <box paddingLeft={1} paddingRight={1} backgroundColor={theme().statusAccent} flexShrink={0}>
                   <text wrapMode="none" truncate>
                     <span style={{ fg: modeColor(), bold: true }}>{modeLabel()}</span>
                   </text>
@@ -848,13 +843,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                     </box>
                   </Show>
 
-                  <text
-                    fg={statusColor()}
-                    wrapMode="none"
-                    truncate
-                    flexGrow={1}
-                    flexShrink={1}
-                  >
+                  <text fg={statusColor()} wrapMode="none" truncate flexGrow={1} flexShrink={1}>
                     <Show when={busy() && !exiting()} fallback={statusText()}>
                       <Show when={interruptLabel()}>
                         {(label) => <span style={{ fg: armed() ? statusColor() : theme().muted }}>{label()} </span>}
@@ -865,11 +854,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                 </box>
 
                 <Show when={activityMeta().length > 0}>
-                  <box
-                    paddingRight={1}
-                    backgroundColor="transparent"
-                    flexShrink={1}
-                  >
+                  <box paddingRight={1} backgroundColor="transparent" flexShrink={1}>
                     <text fg={theme().muted} wrapMode="none" truncate>
                       {activityMeta()}
                     </text>
@@ -878,11 +863,7 @@ export function RunFooterView(props: RunFooterViewProps) {
 
                 <Show when={responsive().statusline.showModel && modelStatus()}>
                   {(info) => (
-                    <box
-                      paddingRight={1}
-                      backgroundColor="transparent"
-                      flexShrink={0}
-                    >
+                    <box paddingRight={1} backgroundColor="transparent" flexShrink={0}>
                       <text fg={theme().text} wrapMode="none">
                         {info().model}
                         <Show when={info().provider}>
@@ -902,12 +883,7 @@ export function RunFooterView(props: RunFooterViewProps) {
 
                 <For each={contextHints()}>
                   {(hint, index) => (
-                    <box
-                      paddingRight={1}
-                      backgroundColor="transparent"
-                      flexShrink={0}
-                      maxWidth={24}
-                    >
+                    <box paddingRight={1} backgroundColor="transparent" flexShrink={0} maxWidth={24}>
                       <text fg={theme().text} wrapMode="none" truncate>
                         <Show when={index() > 0 || ((hasActivityMeta() || hasModelStatus()) && index() === 0)}>
                           {sectionSeparator()}
@@ -921,12 +897,7 @@ export function RunFooterView(props: RunFooterViewProps) {
 
                 <Show when={commandHint()}>
                   {(hint) => (
-                    <box
-                      paddingRight={1}
-                      backgroundColor="transparent"
-                      flexShrink={0}
-                      maxWidth={18}
-                    >
+                    <box paddingRight={1} backgroundColor="transparent" flexShrink={0} maxWidth={18}>
                       <text fg={theme().text} wrapMode="none" truncate>
                         <Show when={hasActivityMeta() || hasModelStatus() || hasContextHints()}>
                           {sectionSeparator()}
