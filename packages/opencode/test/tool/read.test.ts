@@ -8,7 +8,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { Search } from "@opencode-ai/core/filesystem/search"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { LSP } from "@/lsp/lsp"
 import { Permission } from "../../src/permission"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -50,7 +50,7 @@ const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     CrossSpawnSpawner.defaultLayer,
     Instruction.defaultLayer,
     LSP.defaultLayer,
-    Search.defaultLayer,
+    Ripgrep.defaultLayer,
     Truncate.defaultLayer,
   )
 

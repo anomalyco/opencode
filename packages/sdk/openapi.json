@@ -9958,6 +9958,74 @@
         ]
       }
     },
+    "/api/location": {
+      "get": {
+        "tags": ["opencode HttpApi"],
+        "operationId": "v2.location.get",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Location.Info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationInfo"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Resolve the requested location or the server default location.",
+        "summary": "Get location",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.location.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/agent": {
       "get": {
         "tags": ["opencode HttpApi"],
@@ -10161,6 +10229,180 @@
           {
             "lang": "js",
             "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.list({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "tags": ["sessions"],
+        "operationId": "v2.session.create",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SessionV2Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a session at the requested location.",
+        "summary": "Create session",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "agent": {
+                    "type": "string"
+                  },
+                  "model": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "providerID": {
+                        "type": "string"
+                      },
+                      "variant": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["id", "providerID"],
+                    "additionalProperties": false
+                  },
+                  "location": {
+                    "$ref": "#/components/schemas/LocationRef"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.create({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/session/{sessionID}": {
+      "get": {
+        "tags": ["sessions"],
+        "operationId": "v2.session.get",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/SessionV2Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve a session by ID.",
+        "summary": "Get session",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.get({\n  ...\n})"
           }
         ]
       }
@@ -10942,6 +11184,1008 @@
         ]
       }
     },
+    "/api/integration": {
+      "get": {
+        "tags": ["integrations"],
+        "operationId": "v2.integration.list",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/LocationInfo"
+                    },
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/IntegrationInfo"
+                      }
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve available integrations and their authentication methods.",
+        "summary": "List integrations",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/integration/{integrationID}": {
+      "get": {
+        "tags": ["integrations"],
+        "operationId": "v2.integration.get",
+        "parameters": [
+          {
+            "name": "integrationID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/LocationInfo"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/IntegrationInfo"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve one integration and its authentication methods.",
+        "summary": "Get integration",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/integration/{integrationID}/connect/key": {
+      "post": {
+        "tags": ["integrations"],
+        "operationId": "v2.integration.connect.key",
+        "parameters": [
+          {
+            "name": "integrationID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Run a key authentication method and store the resulting credential.",
+        "summary": "Connect with key",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": ["key"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.connect.key({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/integration/{integrationID}/connect/oauth": {
+      "post": {
+        "tags": ["integrations"],
+        "operationId": "v2.integration.connect.oauth",
+        "parameters": [
+          {
+            "name": "integrationID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/LocationInfo"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/IntegrationAttempt"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Start an OAuth attempt and return the authorization details.",
+        "summary": "Begin OAuth connection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "methodID": {
+                    "type": "string"
+                  },
+                  "inputs": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "string"
+                    }
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": ["methodID", "inputs"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.connect.oauth({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/integration/attempt/{attemptID}": {
+      "get": {
+        "tags": ["integrations"],
+        "operationId": "v2.integration.attempt.status",
+        "parameters": [
+          {
+            "name": "attemptID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/LocationInfo"
+                    },
+                    "data": {
+                      "anyOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": ["pending"]
+                            },
+                            "time": {
+                              "type": "object",
+                              "properties": {
+                                "created": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "expires": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["created", "expires"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["status", "time"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": ["complete"]
+                            },
+                            "time": {
+                              "type": "object",
+                              "properties": {
+                                "created": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "expires": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["created", "expires"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["status", "time"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": ["failed"]
+                            },
+                            "message": {
+                              "type": "string"
+                            },
+                            "time": {
+                              "type": "object",
+                              "properties": {
+                                "created": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "expires": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["created", "expires"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["status", "message", "time"],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "status": {
+                              "type": "string",
+                              "enum": ["expired"]
+                            },
+                            "time": {
+                              "type": "object",
+                              "properties": {
+                                "created": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                },
+                                "expires": {
+                                  "anyOf": [
+                                    {
+                                      "type": "number"
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["NaN"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["-Infinity"]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "enum": ["Infinity", "-Infinity", "NaN"]
+                                    }
+                                  ]
+                                }
+                              },
+                              "required": ["created", "expires"],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": ["status", "time"],
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Poll the current status of an OAuth attempt.",
+        "summary": "Get OAuth attempt status",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.attempt.status({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["integrations"],
+        "operationId": "v2.integration.attempt.cancel",
+        "parameters": [
+          {
+            "name": "attemptID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Cancel an OAuth attempt and release its resources.",
+        "summary": "Cancel OAuth connection",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.attempt.cancel({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/integration/attempt/{attemptID}/complete": {
+      "post": {
+        "tags": ["integrations"],
+        "operationId": "v2.integration.attempt.complete",
+        "parameters": [
+          {
+            "name": "attemptID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "type": "string"
+                },
+                "workspace": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestError"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Complete a code-based OAuth attempt and store the resulting credential.",
+        "summary": "Complete OAuth connection",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.integration.attempt.complete({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/api/credential/{credentialID}": {
+      "patch": {
+        "tags": ["opencode HttpApi"],
+        "operationId": "v2.credential.update",
+        "parameters": [
+          {
+            "name": "credentialID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Update a stored credential label.",
+        "summary": "Update credential",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": ["label"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.credential.update({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "tags": ["opencode HttpApi"],
+        "operationId": "v2.credential.remove",
+        "parameters": [
+          {
+            "name": "credentialID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Remove a stored integration credential.",
+        "summary": "Remove credential",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.credential.remove({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/permission/request": {
       "get": {
         "tags": ["permissions"],
@@ -11325,7 +12569,7 @@
         ]
       }
     },
-    "/api/fs/read": {
+    "/api/fs/read/*": {
       "get": {
         "tags": ["filesystem"],
         "operationId": "v2.fs.read",
@@ -11348,14 +12592,6 @@
             "required": false,
             "style": "deepObject",
             "explode": true
-          },
-          {
-            "name": "path",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
           }
         ],
         "security": [],
@@ -11363,19 +12599,10 @@
           "200": {
             "description": "Success",
             "content": {
-              "application/json": {
+              "application/octet-stream": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "location": {
-                      "$ref": "#/components/schemas/LocationInfo"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/FileSystemContent"
-                    }
-                  },
-                  "required": ["location", "data"],
-                  "additionalProperties": false
+                  "type": "string",
+                  "format": "binary"
                 }
               }
             }
@@ -11401,7 +12628,7 @@
             }
           }
         },
-        "description": "Read one file relative to the requested location.",
+        "description": "Serve one file relative to the requested location.",
         "summary": "Read file",
         "x-codeSamples": [
           {
@@ -11917,6 +13144,91 @@
         ]
       }
     },
+    "/api/session/{sessionID}/question": {
+      "get": {
+        "tags": ["session questions"],
+        "operationId": "v2.session.question.list",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^ses"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/QuestionV2Request"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestError"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundError"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve pending question requests owned by a session.",
+        "summary": "List session question requests",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.v2.session.question.list({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/api/session/{sessionID}/question/{requestID}/reply": {
       "post": {
         "tags": ["session questions"],
@@ -12401,13 +13713,7 @@
             "$ref": "#/components/schemas/EventFileEdited"
           },
           {
-            "$ref": "#/components/schemas/EventAccountAdded"
-          },
-          {
-            "$ref": "#/components/schemas/EventAccountRemoved"
-          },
-          {
-            "$ref": "#/components/schemas/EventAccountSwitched"
+            "$ref": "#/components/schemas/EventIntegrationUpdated"
           },
           {
             "$ref": "#/components/schemas/EventPermissionV2Asked"
@@ -13166,6 +14472,27 @@
         "required": ["name", "data"],
         "additionalProperties": false
       },
+      "ContentFilterError": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "enum": ["ContentFilterError"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["name", "data"],
+        "additionalProperties": false
+      },
       "APIError": {
         "type": "object",
         "properties": {
@@ -13258,6 +14585,9 @@
               },
               {
                 "$ref": "#/components/schemas/ContextOverflowError"
+              },
+              {
+                "$ref": "#/components/schemas/ContentFilterError"
               },
               {
                 "$ref": "#/components/schemas/APIError"
@@ -16110,6 +17440,9 @@
                             "$ref": "#/components/schemas/ContextOverflowError"
                           },
                           {
+                            "$ref": "#/components/schemas/ContentFilterError"
+                          },
+                          {
                             "$ref": "#/components/schemas/APIError"
                           }
                         ]
@@ -16205,73 +17538,11 @@
                   },
                   "type": {
                     "type": "string",
-                    "enum": ["account.added"]
+                    "enum": ["integration.updated"]
                   },
                   "properties": {
                     "type": "object",
-                    "properties": {
-                      "account": {
-                        "$ref": "#/components/schemas/AuthInfo"
-                      }
-                    },
-                    "required": ["account"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["account.removed"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "account": {
-                        "$ref": "#/components/schemas/AuthInfo"
-                      }
-                    },
-                    "required": ["account"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
-                    "enum": ["account.switched"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "serviceID": {
-                        "type": "string"
-                      },
-                      "from": {
-                        "type": "string"
-                      },
-                      "to": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["serviceID"],
-                    "additionalProperties": false
+                    "properties": {}
                   }
                 },
                 "required": ["id", "type", "properties"],
@@ -17628,44 +18899,6 @@
         "additionalProperties": false,
         "description": "Server configuration for opencode serve and web commands"
       },
-      "ReferenceConfigEntry": {
-        "anyOf": [
-          {
-            "type": "string"
-          },
-          {
-            "type": "object",
-            "properties": {
-              "repository": {
-                "type": "string",
-                "description": "Git repository URL, host/path reference, or GitHub owner/repo shorthand"
-              },
-              "branch": {
-                "type": "string"
-              }
-            },
-            "required": ["repository"],
-            "additionalProperties": false
-          },
-          {
-            "type": "object",
-            "properties": {
-              "path": {
-                "type": "string",
-                "description": "Absolute path, ~/ path, or workspace-relative path to a local reference directory"
-              }
-            },
-            "required": ["path"],
-            "additionalProperties": false
-          }
-        ]
-      },
-      "ReferenceConfig": {
-        "type": "object",
-        "additionalProperties": {
-          "$ref": "#/components/schemas/ReferenceConfigEntry"
-        }
-      },
       "PermissionActionConfig": {
         "type": "string",
         "enum": ["ask", "allow", "deny"]
@@ -18079,6 +19312,9 @@
             },
             "description": "Command and arguments to run the MCP server"
           },
+          "cwd": {
+            "type": "string"
+          },
           "environment": {
             "type": "object",
             "additionalProperties": {
@@ -18256,8 +19492,37 @@
             },
             "additionalProperties": false
           },
+          "references": {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/components/schemas/ConfigV2ReferenceGit"
+                },
+                {
+                  "$ref": "#/components/schemas/ConfigV2ReferenceLocal"
+                }
+              ]
+            }
+          },
           "reference": {
-            "$ref": "#/components/schemas/ReferenceConfig"
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "#/components/schemas/ConfigV2ReferenceGit"
+                },
+                {
+                  "$ref": "#/components/schemas/ConfigV2ReferenceLocal"
+                }
+              ]
+            }
           },
           "watcher": {
             "type": "object",
@@ -20632,23 +21897,6 @@
         "required": ["_tag", "message"],
         "additionalProperties": false
       },
-      "ConflictError": {
-        "type": "object",
-        "properties": {
-          "_tag": {
-            "type": "string",
-            "enum": ["ConflictError"]
-          },
-          "message": {
-            "type": "string"
-          },
-          "resource": {
-            "type": "string"
-          }
-        },
-        "required": ["_tag", "message"],
-        "additionalProperties": false
-      },
       "SessionNotFoundError": {
         "type": "object",
         "properties": {
@@ -20664,6 +21912,23 @@
           }
         },
         "required": ["_tag", "sessionID", "message"],
+        "additionalProperties": false
+      },
+      "ConflictError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["ConflictError"]
+          },
+          "message": {
+            "type": "string"
+          },
+          "resource": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
         "additionalProperties": false
       },
       "ServiceUnavailableError": {
@@ -21633,76 +22898,6 @@
           }
         },
         "required": ["message", "isRetryable"],
-        "additionalProperties": false
-      },
-      "AuthOAuthCredential": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["oauth"]
-          },
-          "refresh": {
-            "type": "string"
-          },
-          "access": {
-            "type": "string"
-          },
-          "expires": {
-            "type": "integer",
-            "minimum": 0
-          }
-        },
-        "required": ["type", "refresh", "access", "expires"],
-        "additionalProperties": false
-      },
-      "AuthApiKeyCredential": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["api"]
-          },
-          "key": {
-            "type": "string"
-          },
-          "metadata": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            }
-          }
-        },
-        "required": ["type", "key"],
-        "additionalProperties": false
-      },
-      "AuthCredential": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/AuthOAuthCredential"
-          },
-          {
-            "$ref": "#/components/schemas/AuthApiKeyCredential"
-          }
-        ]
-      },
-      "AuthInfo": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "serviceID": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "credential": {
-            "$ref": "#/components/schemas/AuthCredential"
-          }
-        },
-        "required": ["id", "serviceID", "description", "credential"],
         "additionalProperties": false
       },
       "PermissionV2Source": {
@@ -23918,6 +25113,41 @@
         "required": ["type", "id", "syncEvent"],
         "additionalProperties": false
       },
+      "ConfigV2ReferenceGit": {
+        "type": "object",
+        "properties": {
+          "repository": {
+            "type": "string"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "required": ["repository"],
+        "additionalProperties": false
+      },
+      "ConfigV2ReferenceLocal": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      },
       "PolicyEffect": {
         "type": "string",
         "enum": ["allow", "deny"]
@@ -24895,13 +26125,13 @@
                 "properties": {
                   "via": {
                     "type": "string",
-                    "enum": ["account"]
+                    "enum": ["credential"]
                   },
-                  "service": {
+                  "credentialID": {
                     "type": "string"
                   }
                 },
-                "required": ["via", "service"],
+                "required": ["via", "credentialID"],
                 "additionalProperties": false
               },
               {
@@ -24987,6 +26217,295 @@
         "required": ["id", "name", "enabled", "env", "api", "request"],
         "additionalProperties": false
       },
+      "IntegrationWhen": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "op": {
+            "type": "string",
+            "enum": ["eq", "neq"]
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": ["key", "op", "value"],
+        "additionalProperties": false
+      },
+      "IntegrationTextPrompt": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["text"]
+          },
+          "key": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "placeholder": {
+            "type": "string"
+          },
+          "when": {
+            "$ref": "#/components/schemas/IntegrationWhen"
+          }
+        },
+        "required": ["type", "key", "message"],
+        "additionalProperties": false
+      },
+      "IntegrationSelectPrompt": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["select"]
+          },
+          "key": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                },
+                "hint": {
+                  "type": "string"
+                }
+              },
+              "required": ["label", "value"],
+              "additionalProperties": false
+            }
+          },
+          "when": {
+            "$ref": "#/components/schemas/IntegrationWhen"
+          }
+        },
+        "required": ["type", "key", "message", "options"],
+        "additionalProperties": false
+      },
+      "IntegrationOAuthMethod": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["oauth"]
+          },
+          "label": {
+            "type": "string"
+          },
+          "prompts": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/IntegrationTextPrompt"
+                },
+                {
+                  "$ref": "#/components/schemas/IntegrationSelectPrompt"
+                }
+              ]
+            }
+          }
+        },
+        "required": ["id", "type", "label"],
+        "additionalProperties": false
+      },
+      "IntegrationKeyMethod": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["key"]
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": ["type"],
+        "additionalProperties": false
+      },
+      "IntegrationEnvMethod": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["env"]
+          },
+          "names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": ["type", "names"],
+        "additionalProperties": false
+      },
+      "ConnectionCredentialInfo": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["credential"]
+          },
+          "id": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "id", "label"],
+        "additionalProperties": false
+      },
+      "ConnectionEnvInfo": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["env"]
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": ["type", "name"],
+        "additionalProperties": false
+      },
+      "ConnectionInfo": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/ConnectionCredentialInfo"
+          },
+          {
+            "$ref": "#/components/schemas/ConnectionEnvInfo"
+          }
+        ]
+      },
+      "IntegrationInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "methods": {
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/IntegrationOAuthMethod"
+                },
+                {
+                  "$ref": "#/components/schemas/IntegrationKeyMethod"
+                },
+                {
+                  "$ref": "#/components/schemas/IntegrationEnvMethod"
+                }
+              ]
+            }
+          },
+          "connections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ConnectionInfo"
+            }
+          }
+        },
+        "required": ["id", "name", "methods", "connections"],
+        "additionalProperties": false
+      },
+      "IntegrationAttempt": {
+        "type": "object",
+        "properties": {
+          "attemptID": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "instructions": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string",
+            "enum": ["auto", "code"]
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              },
+              "expires": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["NaN"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["-Infinity"]
+                  },
+                  {
+                    "type": "string",
+                    "enum": ["Infinity", "-Infinity", "NaN"]
+                  }
+                ]
+              }
+            },
+            "required": ["created", "expires"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["attemptID", "url", "instructions", "mode", "time"],
+        "additionalProperties": false
+      },
       "PermissionV2Request": {
         "type": "object",
         "properties": {
@@ -25042,36 +26561,10 @@
         "required": ["id", "projectID", "action", "resource"],
         "additionalProperties": false
       },
-      "FileSystemContent": {
-        "type": "object",
-        "properties": {
-          "uri": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "content": {
-            "type": "string"
-          },
-          "encoding": {
-            "type": "string",
-            "enum": ["utf8", "base64"]
-          },
-          "mime": {
-            "type": "string"
-          }
-        },
-        "required": ["uri", "content", "encoding", "mime"],
-        "additionalProperties": false
-      },
       "FileSystemEntry": {
         "type": "object",
         "properties": {
           "path": {
-            "type": "string"
-          },
-          "uri": {
             "type": "string"
           },
           "type": {
@@ -25082,7 +26575,7 @@
             "type": "string"
           }
         },
-        "required": ["path", "uri", "type", "mime"],
+        "required": ["path", "type", "mime"],
         "additionalProperties": false
       },
       "CommandV2Info": {
@@ -25193,6 +26686,12 @@
           },
           "path": {
             "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
           }
         },
         "required": ["type", "path"],
@@ -25210,6 +26709,12 @@
           },
           "branch": {
             "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
           }
         },
         "required": ["type", "repository"],
@@ -25223,6 +26728,12 @@
           },
           "path": {
             "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "hidden": {
+            "type": "boolean"
           },
           "source": {
             "anyOf": [
@@ -27485,6 +28996,9 @@
                     "$ref": "#/components/schemas/ContextOverflowError"
                   },
                   {
+                    "$ref": "#/components/schemas/ContentFilterError"
+                  },
+                  {
                     "$ref": "#/components/schemas/APIError"
                   }
                 ]
@@ -27571,7 +29085,7 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
-      "EventAccountAdded": {
+      "EventIntegrationUpdated": {
         "type": "object",
         "properties": {
           "id": {
@@ -27580,73 +29094,11 @@
           },
           "type": {
             "type": "string",
-            "enum": ["account.added"]
+            "enum": ["integration.updated"]
           },
           "properties": {
             "type": "object",
-            "properties": {
-              "account": {
-                "$ref": "#/components/schemas/AuthInfo"
-              }
-            },
-            "required": ["account"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventAccountRemoved": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["account.removed"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "account": {
-                "$ref": "#/components/schemas/AuthInfo"
-              }
-            },
-            "required": ["account"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventAccountSwitched": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["account.switched"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "serviceID": {
-                "type": "string"
-              },
-              "from": {
-                "type": "string"
-              },
-              "to": {
-                "type": "string"
-              }
-            },
-            "required": ["serviceID"],
-            "additionalProperties": false
+            "properties": {}
           }
         },
         "required": ["id", "type", "properties"],
@@ -28835,6 +30287,10 @@
       "description": "Experimental HttpApi surface for selected instance routes."
     },
     {
+      "name": "opencode HttpApi",
+      "description": "Experimental HttpApi surface for selected instance routes."
+    },
+    {
       "name": "sessions",
       "description": "Experimental session routes."
     },
@@ -28849,6 +30305,14 @@
     {
       "name": "providers",
       "description": "Experimental provider routes."
+    },
+    {
+      "name": "integrations",
+      "description": "Integration discovery and authentication routes."
+    },
+    {
+      "name": "opencode HttpApi",
+      "description": "Experimental HttpApi surface for selected instance routes."
     },
     {
       "name": "permissions",
