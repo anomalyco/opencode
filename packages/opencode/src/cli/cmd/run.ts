@@ -127,6 +127,84 @@ async function toolError(part: ToolPart) {
   }
 }
 
+/**
+ * Iteration cap for the client-side parent-chain walk. Mirrors the server's
+ * `SubagentLimits.LINEAGE_ITERATION_CAP`: legitimate chains are at most the
+ * hard max depth long; anything longer means corrupt or cyclic parent data and
+ * must terminate instead of looping forever.
+ */
+const LINEAGE_WALK_CAP = 32
+
+/**
+ * Walks a session's parent chain via `get` and returns the lineage as ids,
+ * starting at the session itself and ending at its tree root. Lookup failures
+ * and cycles end the walk with the chain collected so far — resolving lineage
+ * must never throw or hang inside the headless event loop.
+ */
+export async function sessionLineage(
+  get: (sessionID: string) => Promise<{ parentID?: string } | undefined>,
+  sessionID: string,
+): Promise<string[]> {
+  const chain: string[] = []
+  let cursor: string | undefined = sessionID
+  while (cursor !== undefined && chain.length < LINEAGE_WALK_CAP) {
+    if (chain.includes(cursor)) break
+    chain.push(cursor)
+    const info: { parentID?: string } | undefined = await get(cursor).catch(() => undefined)
+    cursor = info?.parentID
+  }
+  return chain
+}
+
+/**
+ * Tree-aware filter for headless `permission.asked` events. Nested subagents
+ * route their asks to the tree ROOT (design-final §4.3): the event's
+ * `sessionID` is the root session and the asking session travels in
+ * `metadata.originSessionID`. The previous `sessionID !== <driven session>`
+ * check therefore dropped every routed ask when `--session` pointed at a
+ * non-root (subagent) session — the server kept waiting on the unanswered ask
+ * and the run hung forever.
+ *
+ * Accept rules for driven session S with tree root R (resolved lazily, once):
+ *   1. ask.sessionID === S         → accept: S's own unrouted asks; when S is
+ *                                    the root this is byte-identical to the
+ *                                    old behavior and needs no lookups.
+ *   2. ask.sessionID !== R         → ignore: another session or another tree.
+ *   3. no metadata.originSessionID → accept: routed but unattributed; dropping
+ *                                    it would hang the run, so fail open.
+ *   4. otherwise                   → accept iff S is in the origin's parent
+ *                                    chain, i.e. the asker is in S's subtree.
+ *                                    Asks from foreign subtrees of the same
+ *                                    root belong to whoever drives them.
+ *
+ * Lineage walks are memoized per session id — sessions never re-parent, so a
+ * resolved chain stays valid for the lifetime of the run.
+ */
+export function createHeadlessPermissionFilter(input: {
+  sessionID: string
+  lineage: (sessionID: string) => Promise<string[]>
+}): (permission: { sessionID: string; metadata?: Record<string, unknown> }) => Promise<boolean> {
+  const cache = new Map<string, Promise<string[]>>()
+  const lineage = (sessionID: string) => {
+    let chain = cache.get(sessionID)
+    if (chain === undefined) {
+      chain = input.lineage(sessionID)
+      cache.set(sessionID, chain)
+    }
+    return chain
+  }
+  let root: Promise<string> | undefined
+  return async (permission) => {
+    if (permission.sessionID === input.sessionID) return true
+    root ??= lineage(input.sessionID).then((chain) => chain.at(-1) ?? input.sessionID)
+    if (permission.sessionID !== (await root)) return false
+    const origin = permission.metadata?.["originSessionID"]
+    if (typeof origin !== "string") return true
+    if (origin === input.sessionID) return true
+    return (await lineage(origin)).includes(input.sessionID)
+  }
+}
+
 export const RunCommand = effectCmd({
   command: "run [message..]",
   describe: "run opencode with a message",
@@ -738,6 +816,23 @@ export const RunCommand = effectCmd({
           const toggles = new Map<string, boolean>()
           let error: string | undefined
 
+          // Root routing (design-final §4.3) tags nested subagents' asks with
+          // the tree ROOT, not the driven session — match them tree-aware or a
+          // `--session <subagent-id>` run would drop its descendants' asks and
+          // hang on the server-side wait.
+          const permissionRelevant = createHeadlessPermissionFilter({
+            sessionID,
+            lineage: (id) =>
+              sessionLineage(
+                (target) =>
+                  client.session
+                    .get({ sessionID: target })
+                    .then((result) => result.data)
+                    .catch(() => undefined),
+                id,
+              ),
+          })
+
           for await (const event of events.stream) {
             if (
               event.type === "message.updated" &&
@@ -835,7 +930,7 @@ export const RunCommand = effectCmd({
 
             if (event.type === "permission.asked") {
               const permission = event.properties
-              if (permission.sessionID !== sessionID) continue
+              if (!(await permissionRelevant(permission))) continue
 
               if (args["dangerously-skip-permissions"]) {
                 await client.permission.reply({
