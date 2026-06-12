@@ -59,11 +59,9 @@ export default {
       yield* tx.run(`
         CREATE TABLE \`credential\` (
           \`id\` text PRIMARY KEY,
-          \`connector_id\` text NOT NULL,
-          \`method_id\` text NOT NULL,
+          \`integration_id\` text NOT NULL,
           \`label\` text NOT NULL,
           \`value\` text NOT NULL,
-          \`active\` integer DEFAULT false NOT NULL,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL
         );
@@ -237,7 +235,6 @@ export default {
           CONSTRAINT \`fk_session_share_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
         );
       `)
-      yield* tx.run(`CREATE UNIQUE INDEX \`credential_connector_active_idx\` ON \`credential\` (\`connector_id\`) WHERE "credential"."active" = 1;`)
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
       yield* tx.run(`CREATE UNIQUE INDEX \`permission_project_action_resource_idx\` ON \`permission\` (\`project_id\`,\`action\`,\`resource\`);`)
