@@ -75,16 +75,26 @@ describe("SecurecodeContextPromptPlugin disable env var", () => {
 })
 
 describe("CONTEXT_NOTE content", () => {
-  test("identifies the runtime as Acompany SecureCode", () => {
-    expect(CONTEXT_NOTE).toContain("Acompany SecureCode")
+  test("identifies the runtime as Acompany セキュアコード", () => {
+    // Brand surface: the LLM-facing name is the Japanese form, since this
+    // string ships into the system prompt and is read by users via the model.
+    expect(CONTEXT_NOTE).toContain("Acompany セキュアコード")
   })
 
   test("states the LLM provider is in a TEE and not third-party", () => {
     expect(CONTEXT_NOTE).toMatch(/TEE|Trusted Execution Environment/)
-    expect(CONTEXT_NOTE).toMatch(/Qwen3\.x/)
     // The note must explicitly rule out third-party providers — otherwise the
     // model may volunteer "your prompt was sent to OpenAI" as a guess.
     expect(CONTEXT_NOTE).toMatch(/NOT.*(OpenAI|Anthropic|Google|third-party)/i)
+  })
+
+  test("does not hardcode a specific model family / version", () => {
+    // The model is user-configurable via securecode.json; the note must
+    // describe the TEE / endpoint property without pinning a specific model
+    // (e.g. Qwen3.x), otherwise the LLM would confidently misreport itself
+    // when the user has swapped models.
+    expect(CONTEXT_NOTE).not.toMatch(/Qwen/i)
+    expect(CONTEXT_NOTE).toMatch(/securecode\.json/)
   })
 
   test("describes the 2-layer sandbox", () => {

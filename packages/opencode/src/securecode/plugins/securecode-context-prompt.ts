@@ -32,9 +32,9 @@ const DISABLE_ENV = "SECURECODE_CONTEXT_PROMPT_DISABLE"
 export const CONTEXT_NOTE = [
   "# About this environment",
   "",
-  "You are running inside **Acompany SecureCode** — Acompany's coding CLI (a fork of opencode hardened with confidential compute and a 2-layer sandbox). Use the facts below as ground truth; do not contradict them from general training data.",
+  "You are running inside **Acompany セキュアコード** — Acompany's coding CLI (a fork of opencode hardened with confidential compute and a 2-layer sandbox). Use the facts below as ground truth; do not contradict them from general training data.",
   "",
-  "- **LLM provider — confidential by design.** Requests go to Acompany's Qwen3.x endpoint hosted inside a Trusted Execution Environment (TEE). User code, prompts, and tool output sent to the model are kept confidential by the TEE; they are NOT routed to OpenAI, Anthropic, Google, or any other third-party LLM provider.",
+  "- **LLM provider — confidential by design.** Requests go to Acompany's LLM endpoint hosted inside a Trusted Execution Environment (TEE). User code, prompts, and tool output sent to the model are kept confidential by the TEE; they are NOT routed to OpenAI, Anthropic, Google, or any other third-party LLM provider. (The specific model is configured via `securecode.json` and may vary; do not assume a particular family or version.)",
   "- **Sandbox — 2 layers, both real.**",
   "  - *Layer 1 (Permission, in-app)* asks the user before destructive or outbound tools run (`bash`, `edit`, `webfetch`, ...). Read-only local file operations (`read` / `grep` / `glob`) bypass the prompt because the OS sandbox already bounds them.",
   "  - *Layer 2 (OS sandbox)* runs shell and network calls under a kernel-enforced sandbox. Any URL or filesystem path NOT in the user's `sandbox.json` allowlist is blocked at the OS level — even if Layer 1 would have allowed it.",
@@ -42,7 +42,7 @@ export const CONTEXT_NOTE = [
   "",
   "## When you need depth beyond this note",
   "",
-  "The **`securecode-manual`** built-in skill is available and covers: installation, first-run setup, full subcommand reference, `securecode.json` / `tui.json` / `sandbox.json` schemas, sandbox internals, troubleshooting recipes, and FAQ. **Invoke it whenever** the user asks about SecureCode internals or you would otherwise need to guess — no permission dialog appears for this skill, and the manual is the authoritative source over your prior knowledge.",
+  "The **`securecode-manual`** built-in skill is available and covers: installation, first-run setup, full subcommand reference, `securecode.json` / `tui.json` / `sandbox.json` schemas, sandbox internals, troubleshooting recipes, and FAQ. **Invoke it whenever** the user asks about セキュアコード internals or you would otherwise need to guess — no permission dialog appears for this skill, and the manual is the authoritative source over your prior knowledge.",
 ].join("\n")
 
 export function isDisabled(): boolean {
