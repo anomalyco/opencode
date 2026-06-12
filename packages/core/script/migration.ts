@@ -8,8 +8,7 @@ import { pathToFileURL } from "url"
 import { parseArgs } from "util"
 
 const root = path.resolve(import.meta.dirname, "../../..")
-const drizzleDir = path.join(root, "packages/core/migration")
-const baselineDir = path.join(drizzleDir, "baseline")
+const snapshot = path.join(root, "packages/core/schema.json")
 const tsDir = path.join(root, "packages/core/src/database/migration")
 const registry = path.join(root, "packages/core/src/database/migration.gen.ts")
 const schema = path.join(root, "packages/core/src/database/schema.gen.ts")
@@ -34,7 +33,8 @@ async function generate() {
   const full = path.join(temporary, "full")
   try {
     await fs.mkdir(incremental)
-    await fs.cp(baselineDir, path.join(incremental, "baseline"), { recursive: true })
+    await fs.mkdir(path.join(incremental, "baseline"))
+    await fs.copyFile(snapshot, path.join(incremental, "baseline/snapshot.json"))
     await drizzle(temporary, incremental, args.values.name)
 
     const generated = await generatedMigrations(incremental)
@@ -47,7 +47,7 @@ async function generate() {
         target,
         renderMigration(name, await Bun.file(path.join(incremental, name, "migration.sql")).text()),
       )
-      await fs.copyFile(path.join(incremental, name, "snapshot.json"), path.join(baselineDir, "snapshot.json"))
+      await fs.copyFile(path.join(incremental, name, "snapshot.json"), snapshot)
     }
 
     await fs.mkdir(full)
@@ -65,7 +65,8 @@ async function check() {
   const full = path.join(temporary, "full")
   try {
     await fs.mkdir(incremental)
-    await fs.cp(baselineDir, path.join(incremental, "baseline"), { recursive: true })
+    await fs.mkdir(path.join(incremental, "baseline"))
+    await fs.copyFile(snapshot, path.join(incremental, "baseline/snapshot.json"))
     await drizzle(temporary, incremental)
     if ((await generatedMigrations(incremental)).length > 0) {
       throw new Error(
