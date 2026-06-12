@@ -17,6 +17,7 @@ import {
 import { Dynamic } from "solid-js/web"
 import path from "node:path"
 import { mkdir, writeFile } from "node:fs/promises"
+import { appendFileSync } from "node:fs"
 import { useRoute, useRouteData } from "../../context/route"
 import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
@@ -1487,15 +1488,213 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
   const childShortcut = useCommandShortcut("session.child.first")
   const backgroundShortcut = useCommandShortcut("session.background")
 
+  // Collapse all reasoning parts into a single block (regardless of whether
+  // they were adjacent in the part stream) so models that fragment extended
+  // thinking across reasoning/text/reasoning boundaries don't render
+  // scattered "Thought" boxes. Some models (e.g. MiniMax-M3) also echo the
+  // thinking content into the text part inside `<think>`/`</think>` tags
+  // (sometimes split across the reasoning/text boundary, sometimes already
+  // opened inside reasoning and closed inside text) — strip those so the
+  // response text stays clean. While merging, drop duplicate reasoning
+  // chunks that streaming models occasionally emit. We compare on a
+  // normalized fingerprint (lowercased, no whitespace, no Unicode
+  // punctuation) so "friendlyhello back" matches "friendly hello back" and
+  // use SUBSTRING `includes` (not prefix/suffix only) so we catch duplicates
+  // even when the model interleaves new content between re-sends of the
+  // same chunk (e.g. 4-part stream: A B A B where the second A and B are
+  // near-duplicates of the first). After merging, we also strip the
+  // reasoning echo from any text part whose content STARTS with the
+  // reasoning (the model often streams "thinking aloud" into the text
+  // part, then appends the actual response — we keep only the response).
+  // The sync store keeps every part; this only changes what the TUI shows.
+  //
+  // DEBUG: when reasoning dedup misses a case, set DEBUG_DEDUP_LOG = true
+  // and check C:/Users/user/Downloads/opencode_work/displayparts.log
+  // for the part sequence, fingerprints, and merge decisions.
+  const DEBUG_DEDUP_LOG = false
+  const DEDUP_LOG_PATH = "C:/Users/user/Downloads/opencode_work/displayparts.log"
+  const dedupLog = (msg: string) => {
+    if (!DEBUG_DEDUP_LOG) return
+    try {
+      appendFileSync(DEDUP_LOG_PATH, `${new Date().toISOString().slice(11, 23)} ${msg}\n`)
+    } catch {}
+  }
+  // Find the position in `text` after the content equivalent to `reasoning`
+  // (modulo whitespace / Unicode punctuation / case). Returns -1 if `text`
+  // does not start with the reasoning in fingerprint space. Used to strip
+  // the reasoning echo from a text part that begins with the same content
+  // the model streamed into the ReasoningPart, so the tail (the actual
+  // response) is preserved verbatim.
+  const findReasoningEndInText = (reasoning: string, text: string): number => {
+    let rIdx = 0
+    let tIdx = 0
+    const rLower = reasoning.toLowerCase()
+    while (rIdx < rLower.length && tIdx < text.length) {
+      const rChar = rLower[rIdx]
+      const tChar = text[tIdx].toLowerCase()
+      if (rChar === tChar) {
+        rIdx++
+        tIdx++
+      } else if (/[\s\p{P}]/u.test(rChar)) {
+        rIdx++
+      } else if (/[\s\p{P}]/u.test(tChar)) {
+        tIdx++
+      } else {
+        return -1
+      }
+    }
+    if (rIdx < rLower.length) return -1
+    while (tIdx < text.length && /[\s\p{P}]/u.test(text[tIdx])) tIdx++
+    return tIdx
+  }
+  const displayParts = createMemo(() => {
+    const stripThink = (s: string) => s.replace(/<\/?think>/g, "").trim()
+    // For dedup comparison only — strips whitespace, punctuation, and case
+    // so "friendlyhello back." matches "friendly hello back." Display keeps
+    // the original whitespace.
+    const fingerprint = (s: string) => s.toLowerCase().replace(/[\s\p{P}]/gu, "")
+    const truncate = (s: string, n: number) => (s.length > n ? s.slice(0, n) + "…" : s)
+    dedupLog(`--- memo run: ${props.parts.length} parts, msg=${props.message.id} ---`)
+    const reasoningParts: ReasoningPart[] = []
+    const otherParts: Part[] = []
+    for (let i = 0; i < props.parts.length; i++) {
+      const part = props.parts[i]
+      if (part.type === "reasoning") {
+        const cleaned = stripThink(part.text)
+        dedupLog(
+          `  in[${i}] reasoning rawLen=${part.text.length} cleanLen=${cleaned.length} fp=${truncate(fingerprint(cleaned), 60)} text=${truncate(JSON.stringify(cleaned), 120)}`,
+        )
+        if (cleaned) reasoningParts.push({ ...part, text: cleaned })
+      } else if (part.type === "text") {
+        const cleaned = stripThink(part.text)
+        dedupLog(
+          `  in[${i}] text     rawLen=${part.text.length} cleanLen=${cleaned.length} fp=${truncate(fingerprint(cleaned), 60)} text=${truncate(JSON.stringify(cleaned), 120)}`,
+        )
+        if (cleaned) otherParts.push({ ...part, text: cleaned })
+      } else {
+        dedupLog(`  in[${i}] ${part.type} (passthrough)`)
+        otherParts.push(part)
+      }
+    }
+    if (reasoningParts.length === 0) {
+      dedupLog(`--- result: 0 reasoning parts, ${otherParts.length} other parts ---`)
+      return otherParts
+    }
+    dedupLog(`  >> reducing ${reasoningParts.length} reasoning parts`)
+    const merged: ReasoningPart = reasoningParts.reduce(
+      (acc, curr) => {
+        const accFp = fingerprint(acc.text)
+        const currFp = fingerprint(curr.text)
+        const accEnd = curr.time.end ?? acc.time.end
+        let action: string
+        let next: ReasoningPart
+        if (accFp.length > 0) {
+          if (accFp.includes(currFp) && currFp.length > 0) {
+            // curr is fully covered by acc (anywhere in acc's text, modulo
+            // whitespace/punct/case). Drop curr — it's a re-sent chunk.
+            action = "DROP curr (acc.includes(curr))"
+            next = { ...acc, time: { start: acc.time.start, end: accEnd } }
+            dedupLog(
+              `     merge: ${action}  accFpLen=${accFp.length} currFpLen=${currFp.length} accFpTail=${truncate(accFp, 30)} currFpHead=${truncate(currFp, 30)}`,
+            )
+            return next
+          }
+          if (currFp.includes(accFp) && accFp.length > 0) {
+            // acc is fully covered by curr (curr is a strict rewrite of acc
+            // with extra trailing content). Replace acc with curr.
+            action = "REPLACE acc with curr (curr.includes(acc))"
+            next = { ...acc, text: curr.text, time: { start: acc.time.start, end: accEnd } }
+            dedupLog(
+              `     merge: ${action}  accFpLen=${accFp.length} currFpLen=${currFp.length} accFpTail=${truncate(accFp, 30)} currFpHead=${truncate(currFp, 30)}`,
+            )
+            return next
+          }
+          // No full containment — fall back to plain concat. (Earlier we had
+          // strict prefix/suffix checks here; they missed the 4-part
+          // alternating case A B A B where the second A is contained in
+          // acc (A+B) but neither at the start nor at the end. The
+          // substring-includes checks above cover those.)
+          action = "CONCAT (no overlap detected)"
+        } else {
+          action = "CONCAT (acc was empty)"
+        }
+        next = {
+          ...acc,
+          text: acc.text + curr.text,
+          time: { start: acc.time.start, end: accEnd },
+        }
+        dedupLog(
+          `     merge: ${action}  accFpLen=${accFp.length} currFpLen=${currFp.length} accFpTail=${truncate(accFp, 30)} currFpHead=${truncate(currFp, 30)}`,
+        )
+        return next
+      },
+    )
+    // Second pass: handle text parts that echo the merged reasoning.
+    //   (a) exact equal to reasoning → drop (no new content)
+    //   (b) subset of reasoning → drop (text is just a fragment of reasoning)
+    //   (c) starts with reasoning → STRIP the echo, keep the tail (the
+    //       actual response, e.g. "Привет! Чем могу помочь?")
+    //   (d) superset of reasoning (reasoning inside, text wraps it) → keep
+    //   (e) no overlap → keep
+    // Stripping (c) uses a character-level diff that skips whitespace and
+    // Unicode punctuation on both sides, so reasoning "askwhat they need."
+    // and text "ask what they need." still align correctly and the response
+    // after the echo is preserved verbatim (with its original whitespace).
+    const reasoningFp = fingerprint(merged.text)
+    const transformedOtherParts = otherParts
+      .map((part) => {
+        if (part.type !== "text" || reasoningFp.length === 0) return part
+        const partFp = fingerprint(part.text)
+        if (partFp.length === 0) return part
+        if (reasoningFp === partFp) {
+          dedupLog(
+            `     text-dedup: DROP (exact equal to reasoning)  reasoningFpLen=${reasoningFp.length} partFp=${truncate(partFp, 50)}`,
+          )
+          return null
+        }
+        if (reasoningFp.includes(partFp)) {
+          dedupLog(
+            `     text-dedup: DROP (subset of reasoning)  reasoningFpLen=${reasoningFp.length} partFp=${truncate(partFp, 50)}`,
+          )
+          return null
+        }
+        if (partFp.startsWith(reasoningFp)) {
+          // Text begins with the reasoning content. Walk the original
+          // (non-normalized) text and find the position right after the
+          // reasoning ends, then keep only the tail.
+          const endPos = findReasoningEndInText(merged.text, part.text)
+          if (endPos > 0 && endPos < part.text.length) {
+            const remaining = part.text.slice(endPos).trim()
+            if (remaining.length > 0) {
+              dedupLog(
+                `     text-strip: stripped reasoning echo at pos=${endPos}, kept ${remaining.length} chars: ${truncate(JSON.stringify(remaining), 80)}`,
+              )
+              return { ...part, text: remaining }
+            }
+          }
+          dedupLog(
+            `     text-dedup: DROP (text started with reasoning echo, nothing left after strip)  partFp=${truncate(partFp, 50)}`,
+          )
+          return null
+        }
+        return part
+      })
+      .filter((p): p is Part => p !== null)
+    dedupLog(
+      `--- result: merged reasoning len=${merged.text.length} text=${truncate(JSON.stringify(merged.text), 200)}; otherParts ${otherParts.length}→${transformedOtherParts.length} after text-dedup ---`,
+    )
+    return [merged, ...transformedOtherParts]
+  })
+
   return (
     <>
-      <For each={props.parts}>
+      <For each={displayParts()}>
         {(part, index) => {
           const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
           return (
             <Show when={component()}>
               <Dynamic
-                last={index() === props.parts.length - 1}
+                last={index() === displayParts().length - 1}
                 component={component()}
                 part={part as any}
                 message={props.message}
