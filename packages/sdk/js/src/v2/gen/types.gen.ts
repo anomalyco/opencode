@@ -308,6 +308,13 @@ export type ContextOverflowError = {
   }
 }
 
+export type ContentFilterError = {
+  name: "ContentFilterError"
+  data: {
+    message: string
+  }
+}
+
 export type ApiError = {
   name: "APIError"
   data: {
@@ -339,6 +346,7 @@ export type AssistantMessage = {
     | MessageAbortedError
     | StructuredOutputError
     | ContextOverflowError
+    | ContentFilterError
     | ApiError
   parentID: string
   modelID: string
@@ -1249,6 +1257,7 @@ export type GlobalEvent = {
             | MessageAbortedError
             | StructuredOutputError
             | ContextOverflowError
+            | ContentFilterError
             | ApiError
         }
       }
@@ -1866,6 +1875,7 @@ export type McpLocalConfig = {
    * Command and arguments to run the MCP server
    */
   command: Array<string>
+  cwd?: string
   environment?: {
     [key: string]: string
   }
@@ -4186,14 +4196,6 @@ export type PermissionSavedInfo = {
   resource: string
 }
 
-export type FileSystemContent = {
-  uri: string
-  name?: string
-  content: string
-  encoding: "utf8" | "base64"
-  mime: string
-}
-
 export type FileSystemEntry = {
   path: string
   type: "file" | "directory"
@@ -4928,6 +4930,7 @@ export type EventSessionError = {
       | MessageAbortedError
       | StructuredOutputError
       | ContextOverflowError
+      | ContentFilterError
       | ApiError
   }
 }
@@ -10554,14 +10557,13 @@ export type V2SessionPermissionReplyResponse =
 export type V2FsReadData = {
   body?: never
   path?: never
-  query: {
+  query?: {
     location?: {
       directory?: string
       workspace?: string
     }
-    path: string
   }
-  url: "/api/fs/read"
+  url: "/api/fs/read/*"
 }
 
 export type V2FsReadErrors = {
@@ -10581,10 +10583,7 @@ export type V2FsReadResponses = {
   /**
    * Success
    */
-  200: {
-    location: LocationInfo
-    data: FileSystemContent
-  }
+  200: Blob | File
 }
 
 export type V2FsReadResponse = V2FsReadResponses[keyof V2FsReadResponses]
