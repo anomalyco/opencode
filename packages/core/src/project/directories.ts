@@ -77,10 +77,7 @@ export const layer = Layer.effect(
             })
           : insert.onConflictDoNothing()
       return (
-        (yield* query
-          .returning({ directory: ProjectDirectoryTable.directory })
-          .get()
-          .pipe(Effect.orDie)) !== undefined
+        (yield* query.returning({ directory: ProjectDirectoryTable.directory }).get().pipe(Effect.orDie)) !== undefined
       )
     })
 

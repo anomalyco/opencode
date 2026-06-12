@@ -106,7 +106,7 @@ describe("project directories and copies endpoints", () => {
           test.directory,
           `/experimental/project/${projectID}/copy/refresh?location%5Bdirectory%5D=${encodeURIComponent(test.directory)}`,
           {
-          method: "POST",
+            method: "POST",
           },
         )
         expect(refresh.status).toBe(204)

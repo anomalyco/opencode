@@ -171,9 +171,7 @@ describe("Project directory persistence", () => {
 
       yield* project.fromDirectory(tmp)
 
-      expect(yield* directories(remoteID)).toEqual([
-        { directory: AbsolutePath.make(tmp), strategy: undefined },
-      ])
+      expect(yield* directories(remoteID)).toEqual([{ directory: AbsolutePath.make(tmp), strategy: undefined }])
     }),
   )
 
@@ -197,9 +195,7 @@ describe("Project directory persistence", () => {
       yield* project.fromDirectory(tmp)
 
       expect(yield* directories(original.project.id)).toEqual([])
-      expect(yield* directories(remoteID)).toEqual([
-        { directory: AbsolutePath.make(tmp), strategy: undefined },
-      ])
+      expect(yield* directories(remoteID)).toEqual([{ directory: AbsolutePath.make(tmp), strategy: undefined }])
     }),
   )
 })

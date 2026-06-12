@@ -33,7 +33,6 @@ export function makeGitWorktreeStrategy(input: {
           Effect.catchTag("ProjectCopy.DirectoryUnavailableError", () => Effect.succeed(undefined)),
         ),
       ).pipe(Effect.map((items) => items.filter((item): item is ListEntry => item !== undefined)))
-
     }),
   } satisfies Strategy
 }
