@@ -35,9 +35,7 @@ const it = testEffect(
           Project.defaultLayer,
           EventV2.defaultLayer,
           Credential.defaultLayer,
-          Credential.layer.pipe(
-            Layer.provide(Database.layerFromPath(":memory:").pipe(Layer.fresh)),
-          ),
+          Credential.layer.pipe(Layer.provide(Database.layerFromPath(":memory:").pipe(Layer.fresh))),
           Npm.defaultLayer,
           ModelsDev.defaultLayer,
           FSUtil.defaultLayer,
