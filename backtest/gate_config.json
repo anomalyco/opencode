@@ -27,6 +27,40 @@
     "reject_orders_after_global_stop": true,
     "warn_largest_lot_above": 1.0
   },
+  "step2_operational_stop_daily": {
+    "require_report_metrics": false,
+    "log_window_start_pattern": "XAUUSD,M15: testing of Experts\\\\opencode-trade\\\\Expert_Main\\.ex5 .* started with inputs:",
+    "required_log_markers": [
+      "RISK_V3_ORDER_CALC_PROFIT",
+      "InpDailyDDLimit=-0.001",
+      "CAUTION: Daily Drawdown limit reached",
+      "Test passed"
+    ],
+    "forbidden_log_patterns": [
+      "CRITICAL: Global Drawdown limit reached",
+      "GLOBAL STOP:"
+    ],
+    "reject_no_money": true,
+    "reject_margin_error": true,
+    "warn_largest_lot_above": 1.0
+  },
+  "step2_operational_stop_monthly": {
+    "require_report_metrics": false,
+    "log_window_start_pattern": "XAUUSD,M15: testing of Experts\\\\opencode-trade\\\\Expert_Main\\.ex5 .* started with inputs:",
+    "required_log_markers": [
+      "RISK_V3_ORDER_CALC_PROFIT",
+      "InpMonthlyDDLimit=-0.001",
+      "WARNING: Monthly Drawdown limit reached",
+      "Test passed"
+    ],
+    "forbidden_log_patterns": [
+      "CRITICAL: Global Drawdown limit reached",
+      "GLOBAL STOP:"
+    ],
+    "reject_no_money": true,
+    "reject_margin_error": true,
+    "warn_largest_lot_above": 1.0
+  },
   "sentinel_xauusd_m15": {
     "required_log_markers": ["RISK_V3_ORDER_CALC_PROFIT"],
     "required_log_patterns": [

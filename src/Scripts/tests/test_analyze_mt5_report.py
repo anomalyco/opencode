@@ -83,6 +83,24 @@ STEP2_OLD_ERROR_LOG = """CS\t2\t12:10:00.027\tTrades\t2024.12.24 22:00:00   fail
 CS\t0\t12:10:00.027\tExpert_Main (XAUUSD,M15)\t2024.12.24 22:00:00   Order failed (attempt 1): 10016 - Invalid stops
 """
 
+STEP2_DAILY_LOG = """CS\t0\t12:52:42.438\tTester\tXAUUSD,M15: testing of Experts\\opencode-trade\\Expert_Main.ex5 from 2024.06.01 00:00 to 2024.12.31 00:00 started with inputs:
+CS\t0\t12:52:42.438\tTester\t  InpGlobalDDLimit=-0.25
+CS\t0\t12:52:42.438\tTester\t  InpDailyDDLimit=-0.001
+CS\t0\t12:52:42.524\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:45:00   RiskManager Version: RISK_V3_ORDER_CALC_PROFIT
+CS\t0\t12:52:42.524\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:45:20   CAUTION: Daily Drawdown limit reached: -0.15%
+CS\t0\t12:52:42.796\tTester\tXAUUSD,M15: 823720 ticks, 13756 bars generated. Test passed in 0:00:00.392 (including ticks preprocessing 0:00:00.031).
+CS\t0\t12:52:42.796\tTester\ttest Experts\\opencode-trade\\Expert_Main.ex5 on XAUUSD,M15 thread finished
+"""
+
+STEP2_MONTHLY_LOG = """CS\t0\t12:52:42.438\tTester\tXAUUSD,M15: testing of Experts\\opencode-trade\\Expert_Main.ex5 from 2024.06.01 00:00 to 2024.12.31 00:00 started with inputs:
+CS\t0\t12:52:42.438\tTester\t  InpGlobalDDLimit=-0.25
+CS\t0\t12:52:42.438\tTester\t  InpMonthlyDDLimit=-0.001
+CS\t0\t12:52:42.524\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:45:00   RiskManager Version: RISK_V3_ORDER_CALC_PROFIT
+CS\t0\t12:52:42.524\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:45:20   WARNING: Monthly Drawdown limit reached: -0.15%
+CS\t0\t12:52:42.796\tTester\tXAUUSD,M15: 823720 ticks, 13756 bars generated. Test passed in 0:00:00.392 (including ticks preprocessing 0:00:00.031).
+CS\t0\t12:52:42.796\tTester\ttest Experts\\opencode-trade\\Expert_Main.ex5 on XAUUSD,M15 thread finished
+"""
+
 NO_MONEY_LOG = """No money
 """
 
@@ -148,6 +166,40 @@ def default_config() -> dict:
             "reject_no_money": True,
             "reject_margin_error": True,
             "reject_orders_after_global_stop": True,
+            "warn_largest_lot_above": 1.0,
+        },
+        "step2_operational_stop_daily": {
+            "require_report_metrics": False,
+            "log_window_start_pattern": r"XAUUSD,M15: testing of Experts\\opencode-trade\\Expert_Main\.ex5 .* started with inputs:",
+            "required_log_markers": [
+                "RISK_V3_ORDER_CALC_PROFIT",
+                "InpDailyDDLimit=-0.001",
+                "CAUTION: Daily Drawdown limit reached",
+                "Test passed",
+            ],
+            "forbidden_log_patterns": [
+                r"CRITICAL: Global Drawdown limit reached",
+                r"GLOBAL STOP:",
+            ],
+            "reject_no_money": True,
+            "reject_margin_error": True,
+            "warn_largest_lot_above": 1.0,
+        },
+        "step2_operational_stop_monthly": {
+            "require_report_metrics": False,
+            "log_window_start_pattern": r"XAUUSD,M15: testing of Experts\\opencode-trade\\Expert_Main\.ex5 .* started with inputs:",
+            "required_log_markers": [
+                "RISK_V3_ORDER_CALC_PROFIT",
+                "InpMonthlyDDLimit=-0.001",
+                "WARNING: Monthly Drawdown limit reached",
+                "Test passed",
+            ],
+            "forbidden_log_patterns": [
+                r"CRITICAL: Global Drawdown limit reached",
+                r"GLOBAL STOP:",
+            ],
+            "reject_no_money": True,
+            "reject_margin_error": True,
             "warn_largest_lot_above": 1.0,
         },
         "sentinel_xauusd_m15": {
@@ -302,6 +354,85 @@ class AnalyzeMt5ReportTest(unittest.TestCase):
         self.assertEqual(payload["metrics"]["global_stop_count"], 1)
         self.assertEqual(payload["metrics"]["global_close_count"], 1)
         self.assertEqual(payload["metrics"]["orders_after_global_stop_count"], 0)
+
+    def test_step2_global_fails_when_forced_global_input_marker_is_wrong(self):
+        result, payload = self.run_parser(
+            None,
+            STEP2_LOG.replace("InpGlobalDDLimit=-0.0005", "InpGlobalDDLimit=-0.25"),
+            "step2_operational_stop",
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing log marker: InpGlobalDDLimit=-0.0005", payload["failed_rules"])
+
+    def test_step2_daily_log_only_passes_with_daily_stop_markers(self):
+        result, payload = self.run_parser(None, STEP2_DAILY_LOG, "step2_operational_stop_daily")
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(payload["passed"])
+        self.assertTrue(payload["metrics"]["log_window_selected"])
+        self.assertEqual(payload["metrics"]["global_stop_count"], 0)
+        self.assertEqual(payload["metrics"]["global_close_count"], 0)
+
+    def test_step2_daily_log_only_passes_without_thread_marker(self):
+        result, payload = self.run_parser(
+            None,
+            STEP2_DAILY_LOG.replace("CS\t0\t12:52:42.796\tTester\ttest Experts\\opencode-trade\\Expert_Main.ex5 on XAUUSD,M15 thread finished\n", ""),
+            "step2_operational_stop_daily",
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(payload["passed"])
+
+    def test_step2_daily_fails_when_daily_marker_missing(self):
+        result, payload = self.run_parser(
+            None,
+            STEP2_DAILY_LOG.replace("CS\t0\t12:52:42.524\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:45:20   CAUTION: Daily Drawdown limit reached: -0.15%\n", ""),
+            "step2_operational_stop_daily",
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing log marker: CAUTION: Daily Drawdown limit reached", payload["failed_rules"])
+
+    def test_step2_daily_fails_when_global_stop_markers_are_present(self):
+        result, payload = self.run_parser(
+            None,
+            STEP2_DAILY_LOG + "CS\t0\t12:52:42.900\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:46:00   CRITICAL: Global Drawdown limit reached: -0.20%\n",
+            "step2_operational_stop_daily",
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("forbidden log pattern matched: CRITICAL: Global Drawdown limit reached", payload["failed_rules"])
+
+    def test_step2_daily_fails_when_forced_daily_input_marker_is_wrong(self):
+        result, payload = self.run_parser(
+            None,
+            STEP2_DAILY_LOG.replace("InpDailyDDLimit=-0.001", "InpDailyDDLimit=-0.03"),
+            "step2_operational_stop_daily",
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing log marker: InpDailyDDLimit=-0.001", payload["failed_rules"])
+
+    def test_step2_monthly_log_only_passes_with_monthly_stop_markers(self):
+        result, payload = self.run_parser(None, STEP2_MONTHLY_LOG, "step2_operational_stop_monthly")
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(payload["passed"])
+        self.assertTrue(payload["metrics"]["log_window_selected"])
+        self.assertEqual(payload["metrics"]["global_stop_count"], 0)
+        self.assertEqual(payload["metrics"]["global_close_count"], 0)
+
+    def test_step2_monthly_fails_when_monthly_marker_missing(self):
+        result, payload = self.run_parser(
+            None,
+            STEP2_MONTHLY_LOG.replace("CS\t0\t12:52:42.524\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:45:20   WARNING: Monthly Drawdown limit reached: -0.15%\n", ""),
+            "step2_operational_stop_monthly",
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("missing log marker: WARNING: Monthly Drawdown limit reached", payload["failed_rules"])
+
+    def test_step2_monthly_fails_when_global_stop_markers_are_present(self):
+        result, payload = self.run_parser(
+            None,
+            STEP2_MONTHLY_LOG + "CS\t0\t12:52:42.900\tExpert_Main (XAUUSD,M15)\t2024.06.03 13:46:00   GLOBAL STOP: closed position 2 on XAUUSD\n",
+            "step2_operational_stop_monthly",
+        )
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("forbidden log pattern matched: GLOBAL STOP:", payload["failed_rules"])
 
     def test_step2_ignores_old_errors_outside_selected_window(self):
         result, payload = self.run_parser(None, STEP2_OLD_ERROR_LOG + STEP2_LOG, "step2_operational_stop")
