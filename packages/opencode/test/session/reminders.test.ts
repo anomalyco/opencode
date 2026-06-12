@@ -86,6 +86,27 @@ describe("SessionReminders", () => {
     }),
     { git: true },
   )
+
+  it.instance("includes no-plan guidance in custom build switch reminders", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const session = sessionInfo(test.directory)
+
+      const result = yield* SessionReminders.apply({
+        messages: [userMessage(session.id), assistantMessage(session.id, "plan")],
+        agent: buildAgent({ buildSwitchReminder: "Custom build reminder\n${planInfo}" }),
+        session,
+      }).pipe(Effect.provide(RuntimeFlags.layer({ experimentalPlanMode: true })))
+
+      expect(textPart(result)).toBe(
+        [
+          "Custom build reminder",
+          "No plan file exists yet. There is no saved plan to execute from.",
+        ].join("\n"),
+      )
+    }),
+    { git: true },
+  )
 })
 
 function sessionInfo(directory: string): Session.Info {

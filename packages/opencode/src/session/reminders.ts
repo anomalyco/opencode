@@ -107,7 +107,9 @@ function planState(session: Session.Info, fsys: FSUtil.Interface) {
       planReminder: exists
         ? `A plan file already exists at ${filepath}. You can read it and make incremental edits using the edit tool.`
         : `No plan file exists yet. You should create your plan at ${filepath} using the write tool.`,
-      buildSwitch: exists ? `A plan file exists at ${filepath}. You should execute on the plan defined within it` : "",
+      buildSwitch: exists
+        ? `A plan file exists at ${filepath}. You should execute on the plan defined within it`
+        : `No plan file exists yet. There is no saved plan to execute from.`,
     }
   })
 }
