@@ -878,7 +878,7 @@ Use `experimental.subagent_max_depth` to control how deep subagents can [nest](/
 }
 ```
 
-The default is `5`. Set it to `2` to restore the previous behavior (the main session spawns subagents, subagents do not), or to `1` to disable the task tool entirely.
+The default is `5`. Setting it to `2` restores the previous spawn behavior (the main session spawns subagents, subagents do not); additionally, the `workflow` tool is removed at the limit (a security fix), and custom agents that previously nested without limit are now bounded. Setting it to `1` is the kill switch: the `task` and `workflow` tools are removed everywhere, including from the main session.
 
 ---
 

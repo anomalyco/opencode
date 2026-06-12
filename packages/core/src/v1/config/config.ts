@@ -216,7 +216,7 @@ export const Info = Schema.Struct({
       }),
       subagent_max_depth: Schema.optional(PositiveInt).annotate({
         description:
-          "Maximum subagent nesting depth (the root session is depth 1; clamped to 1..10). Default 5. Set 2 to restore the pre-nesting behavior (the root spawns, subagents do not); 1 is the kill switch that removes the task tool entirely.",
+          "Maximum subagent nesting depth (the root session is depth 1; clamped to 1..10). Default 5. Set 2 to restore the previous spawn behavior (the root spawns, subagents do not) — additionally the workflow tool is removed at the limit (security fix) and custom agents that previously nested without limit are bounded; 1 is the kill switch that removes the task and workflow tools entirely.",
       }),
       policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
         description: "Policy statements applied to supported resources, such as provider access",

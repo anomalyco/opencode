@@ -127,7 +127,7 @@ for await (const event of events.stream) {
 }
 ```
 
-Respond via `postSessionByIdPermissionsByPermissionId` using the root `sessionID`. An `always` response sticks to the root session and applies to the entire session tree.
+Respond via `postSessionByIdPermissionsByPermissionId` using the root `sessionID`. An `always` response applies instance-wide for the rest of the OpenCode process — it covers the entire session tree, and also any other sessions served by the same instance.
 
 ---
 
