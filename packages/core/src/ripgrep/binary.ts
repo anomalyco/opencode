@@ -4,6 +4,8 @@ import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "../cross-spawn-spawner"
+import { LayerNode } from "../effect/layer-node"
+import { httpClient } from "../effect/layer-node-platform"
 import { FSUtil } from "../fs-util"
 import { Global } from "../global"
 import { which } from "../util/which"
@@ -127,4 +129,6 @@ export namespace RipgrepBinary {
     Layer.provide(FSUtil.defaultLayer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
   )
+
+  export const node = LayerNode.make(layer, [FSUtil.node, httpClient, CrossSpawnSpawner.node])
 }
