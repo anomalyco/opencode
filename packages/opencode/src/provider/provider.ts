@@ -1544,6 +1544,56 @@ export const layer = Layer.effect(
           })
         }
 
+        // auto-discover models for user-configured OpenAI-compatible providers (e.g. LM Studio)
+        for (const [id, provider] of Object.entries(providers)) {
+          const providerID = ProviderV2.ID.make(id)
+          if (disabled.has(providerID)) continue
+          if (provider.source !== "config") continue
+          const baseURL = provider.options?.baseURL
+          if (!baseURL) continue
+          const hasOpenAICompatible = Object.values(provider.models).some(m => m.api.npm === "@ai-sdk/openai-compatible")
+          if (!hasOpenAICompatible) continue
+          yield* Effect.promise(async () => {
+            try {
+              const cleanURL = baseURL.replace(/\/+$/, "")
+              const headers: Record<string, string> = {}
+              if (provider.key) headers["Authorization"] = `Bearer ${provider.key}`
+              const response = await fetch(`${cleanURL}/models`, { headers, signal: AbortSignal.timeout(5000) })
+              if (!response.ok) return
+              const data = await response.json() as { data?: Array<{ id: string }> }
+              if (!data?.data) return
+              for (const item of data.data) {
+                const modelID = item.id
+                if (!provider.models[modelID]) {
+                  provider.models[modelID] = {
+                    id: ModelV2.ID.make(modelID),
+                    providerID,
+                    name: modelID,
+                    family: "",
+                    api: { id: modelID, url: cleanURL, npm: "@ai-sdk/openai-compatible" },
+                    status: "active",
+                    headers: {},
+                    options: {},
+                    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                    limit: { context: 0, output: 0 },
+                    capabilities: {
+                      temperature: false,
+                      reasoning: false,
+                      attachment: false,
+                      toolcall: true,
+                      input: { text: true, audio: false, image: false, video: false, pdf: false },
+                      output: { text: true, audio: false, image: false, video: false, pdf: false },
+                      interleaved: false,
+                    },
+                    release_date: "",
+                    variants: {},
+                  }
+                }
+              }
+            } catch (e) {}
+          })
+        }
+
         for (const [id, provider] of Object.entries(providers)) {
           const providerID = ProviderV2.ID.make(id)
           if (!isProviderAllowed(providerID)) {
