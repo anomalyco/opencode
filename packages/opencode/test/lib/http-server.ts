@@ -15,5 +15,10 @@ export function startTestHttpServer(start: (port: number) => ReturnType<typeof B
 }
 
 function isAddressInUse(error: unknown) {
-  return error instanceof Error && error.message.includes("EADDRINUSE")
+  if (error instanceof Error && error.message.includes("EADDRINUSE")) return true
+  return hasErrorCode(error) && error.code === "EADDRINUSE"
+}
+
+function hasErrorCode(error: unknown): error is { code: string } {
+  return typeof error === "object" && error !== null && "code" in error && typeof error.code === "string"
 }
