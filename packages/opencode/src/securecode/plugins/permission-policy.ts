@@ -90,12 +90,31 @@ export const EXEMPT_PERMISSIONS: ReadonlySet<string> = new Set([
 ])
 
 /**
+ * Built-in skill names that bypass the "user must explicitly allow" rule
+ * for the `skill` permission key.
+ *
+ * These skills are inlined into the binary at build time (see
+ * packages/opencode/src/skill/index.ts) and therefore share the same trust
+ * boundary as securecode itself — prompting the user for permission to load
+ * them would just be noise. User-installed third-party skills (under
+ * `.claude/skills/`, `.opencode/skills/`, `~/.config/opencode/skills/`, ...)
+ * still go through the normal opt-in flow because their source is not
+ * vetted at release time.
+ *
+ * Exported for unit testing.
+ */
+export const EXEMPT_BUILTIN_SKILLS: ReadonlySet<string> = new Set([
+  "securecode-manual",
+])
+
+/**
  * Decide whether to raise `output.status` from `allow` to `ask`.
  *
  * Returns true when ALL of the following hold:
  *   1. The agent/session ruleset resolved this (type, pattern) to `allow`.
  *   2. `type` is NOT in `EXEMPT_PERMISSIONS`.
- *   3. The USER's own config does not explicitly allow this (type, pattern).
+ *   3. (type, pattern) is NOT an exempt built-in skill load.
+ *   4. The USER's own config does not explicitly allow this (type, pattern).
  *
  * Exported for unit testing.
  */
@@ -107,6 +126,7 @@ export function shouldEnforce(
 ): boolean {
   if (configStatus !== "allow") return false
   if (EXEMPT_PERMISSIONS.has(type)) return false
+  if (type === "skill" && EXEMPT_BUILTIN_SKILLS.has(pattern)) return false
   const userRuleset = Permission.fromConfig(userPermission)
   const userAction = Permission.evaluate(type, pattern, userRuleset).action
   return userAction !== "allow"
