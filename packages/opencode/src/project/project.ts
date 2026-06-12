@@ -1,3 +1,4 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { and, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
@@ -513,5 +514,16 @@ export const defaultLayer = layer.pipe(
 )
 
 export const use = serviceUse(Service)
+
+export const node = LayerNode.make(layer, [
+  FSUtil.node,
+  AppProcess.node,
+  CrossSpawnSpawner.node,
+  ProjectV2.node,
+  ProjectCopy.node,
+  EventV2Bridge.node,
+  RuntimeFlags.node,
+  Database.node,
+])
 
 export * as Project from "./project"

@@ -1,3 +1,5 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
 import path from "path"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Effect, Layer, Context } from "effect"
@@ -233,5 +235,7 @@ export const defaultLayer = layer.pipe(
 export function loaded(messages: SessionV1.WithParts[]) {
   return extract(messages)
 }
+
+export const node = LayerNode.make(layer, [Config.node, FSUtil.node, Global.node, RuntimeFlags.node, httpClient])
 
 export * as Instruction from "./instruction"

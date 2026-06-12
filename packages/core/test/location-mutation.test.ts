@@ -171,7 +171,7 @@ describe("LocationMutation", () => {
     ),
   )
 
-  test("keeps project references outside the mutation input API", () => {
+  test("ignores unknown mutation input fields", () => {
     expect(Object.keys(LocationMutation.ResolveInput.fields)).toEqual(["path", "kind"])
     expect(Schema.decodeUnknownSync(LocationMutation.ResolveInput)({ path: "README.md", reference: "docs" })).toEqual({
       path: "README.md",
