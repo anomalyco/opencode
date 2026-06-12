@@ -59,6 +59,7 @@ import { monoFontFamily, useSettings } from "@/context/settings"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useGlobalSync } from "@/context/global-sync"
 import { normalizeProviderList } from "@/context/global-sync/utils"
+import { providerDisplaySdk } from "./config-provider-display"
 import { ServerConnection, useServer } from "@/context/server"
 import { extraAgentById, extraAgents, isExtraAgentDirectory, mainDomain } from "@/pages/layout/extra-agents"
 import {
@@ -3327,16 +3328,15 @@ export default function ConfigPage() {
             ? item.source
             : undefined
         const cfgItem = entries[item.id] as ProviderCfg | undefined
-        const sdk = cfgItem?.npm
-        const custom = typeof sdk === "string" && sdk.startsWith("@ai-sdk/")
+        const display = providerDisplaySdk({ config: cfgItem, models: item.models })
         return {
           id: item.id,
           name: item.name,
           connected: on.has(item.id),
           allowed: !off.has(item.id),
-          custom,
+          custom: display.custom,
           source,
-          sdk,
+          sdk: display.sdk,
           key: "key" in item && typeof item.key === "string" ? item.key : undefined,
           env: Array.isArray(item.env) ? item.env : cfgItem?.env,
           models: Object.keys(item.models).sort(),
@@ -4260,8 +4260,11 @@ export default function ConfigPage() {
     if (refreshing()) return
     setRefreshing(true)
     try {
+      await globalSync.refreshConfig(mainDomain)
       const result = await globalSDK.forDomain(mainDomain).client.provider.list()
-      setMainProviders(normalizeProviderList(result.data!))
+      const data = result.data
+      if (!data) throw new Error(t("common.requestFailed"))
+      setMainProviders(normalizeProviderList(data))
       showToast({
         variant: "success",
         icon: "circle-check",

@@ -371,6 +371,16 @@ function createGlobalSync() {
     return sdk
   }
 
+  async function refreshConfig(domain = currentDomain()): Promise<Config> {
+    const refreshed = await runtime(domain).client.global.config.refresh()
+    if (!refreshed.data) throw new Error(language.t("common.requestFailed"))
+    const result = await runtime(domain).client.config.get()
+    const next = result.data
+    if (!next) throw new Error(language.t("common.requestFailed"))
+    updateGlobalConfig(domain, next)
+    return next
+  }
+
   async function loadSessions(
     directory: string,
     opts?: { silent?: boolean; force?: boolean },
@@ -752,6 +762,7 @@ function createGlobalSync() {
     child: children.child,
     peek: children.peek,
     bootstrap,
+    refreshConfig,
     updateConfig,
     provider: providerApi,
     project: projectApi,
