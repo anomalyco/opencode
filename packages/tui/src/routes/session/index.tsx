@@ -1527,6 +1527,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       </Show>
       <Show when={props.message.error && props.message.error.name !== "MessageAbortedError"}>
         <box
+          id={`assistant-error-${props.message.id}`}
           border={["left"]}
           paddingTop={1}
           paddingBottom={1}
@@ -1541,7 +1542,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       </Show>
       <Switch>
         <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
-          <box paddingLeft={3}>
+          <box id={`assistant-summary-${props.message.id}`} paddingLeft={3}>
             <text marginTop={1}>
               <span
                 style={{
@@ -1939,6 +1940,8 @@ export function InlineToolRow(props: {
           const previousSubagent = previous?.id.startsWith("tool-inline-subagent-") ?? false
           return previous?.id.startsWith("text-") ||
             previous?.id.startsWith("tool-block-") ||
+            previous?.id.startsWith("assistant-error-") ||
+            previous?.id.startsWith("assistant-summary-") ||
             (previousInline && previousSubagent !== Boolean(props.subagent)) ||
             props.separateAfter?.(previous?.id)
             ? 1
