@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { APP_PATH_CACHE_LIMIT } from "../app-path-cache"
 import { createOpenPath } from "./open-path"
 
 function api(opts?: {
@@ -129,7 +130,7 @@ describe("renderer openPath", () => {
     const current = api()
     const openPath = createOpenPath(current.api, "windows")
 
-    for (const index of Array.from({ length: 33 }, (_, index) => index)) {
+    for (const index of Array.from({ length: APP_PATH_CACHE_LIMIT + 1 }, (_, index) => index)) {
       await openPath("C:\\repo", `bounded-code-${index}`)
     }
     await openPath("C:\\repo", "bounded-code-0")

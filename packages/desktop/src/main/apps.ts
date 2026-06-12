@@ -1,6 +1,6 @@
 import { access, readFile, readdir } from "node:fs/promises"
 import { dirname, extname, join } from "node:path"
-import { createAppPathCache, forgetAppPath, getAppPath, rememberAppPath } from "../app-path-cache"
+import { APP_PATH_CACHE_LIMIT, createAppPathCache, forgetAppPath, getAppPath, rememberAppPath } from "../app-path-cache"
 import { execFileHidden } from "./child-process"
 
 const exists = (path: string) =>
@@ -10,12 +10,23 @@ const exists = (path: string) =>
 
 const windowsAppPathCache = createAppPathCache()
 
+// This scan runs after direct executable and command shim resolution, so keep it at app path cache size.
+const WINDOWS_APP_FALLBACK_DIR_LIMIT = APP_PATH_CACHE_LIMIT
+
 const searchKey = (value: string) =>
   value
     .split("")
     .filter((value: string) => /[a-z0-9]/i.test(value))
     .map((value: string) => value.toLowerCase())
     .join("")
+
+export function getWindowsFallbackSearchDirs(paths: string[]) {
+  return Array.from(
+    new Set(paths.flatMap((path) => [dirname(path), dirname(dirname(path)), dirname(dirname(dirname(path)))])),
+  )
+    .filter((dir) => dir !== ".")
+    .slice(0, WINDOWS_APP_FALLBACK_DIR_LIMIT)
+}
 
 export function checkAppExists(appName: string) {
   if (process.platform === "win32") return true
@@ -133,20 +144,17 @@ async function resolveWindowsAppPath(appName: string): Promise<string | null> {
   const key = searchKey(appName)
 
   if (key) {
-    for (const path of paths) {
-      const dirs = [dirname(path), dirname(dirname(path)), dirname(dirname(dirname(path)))]
-      for (const dir of dirs) {
-        try {
-          for (const entry of await readdir(dir)) {
-            const candidate = join(dir, entry)
-            if (!hasExt(candidate, "exe")) continue
-            const stem = entry.replace(/\.exe$/i, "")
-            const name = searchKey(stem)
-            if (name.includes(key) || key.includes(name)) return remember(candidate)
-          }
-        } catch {
-          continue
+    for (const dir of getWindowsFallbackSearchDirs(paths)) {
+      try {
+        for (const entry of await readdir(dir)) {
+          const candidate = join(dir, entry)
+          if (!hasExt(candidate, "exe")) continue
+          const stem = entry.replace(/\.exe$/i, "")
+          const name = searchKey(stem)
+          if (name.includes(key) || key.includes(name)) return remember(candidate)
         }
+      } catch {
+        continue
       }
     }
   }

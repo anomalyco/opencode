@@ -1,4 +1,4 @@
-const APP_PATH_CACHE_LIMIT = 32
+export const APP_PATH_CACHE_LIMIT = 32
 
 // Keep storage flat under high churn; this cache is small enough that linear lookup is cheaper than Map retention.
 type AppPathCache = {

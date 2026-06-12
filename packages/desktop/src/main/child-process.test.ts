@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
+import { APP_PATH_CACHE_LIMIT } from "../app-path-cache"
 
 type ExecFileOptions = {
   windowsHide?: boolean
@@ -330,7 +331,7 @@ describe("child process helpers", () => {
     const restore = platform("win32")
 
     try {
-      for (const index of Array.from({ length: 33 }, (_, index) => index)) {
+      for (const index of Array.from({ length: APP_PATH_CACHE_LIMIT + 1 }, (_, index) => index)) {
         const file = path.join(dir, `Code-${index}.exe`)
         await fs.writeFile(file, "")
         output = `${file}\r\n`
