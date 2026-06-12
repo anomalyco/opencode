@@ -25,6 +25,21 @@ export const QuestionGroup = HttpApiGroup.make("server.question")
   .annotateMerge(OpenApi.annotations({ title: "questions", description: "Experimental question routes." }))
   .middleware(LocationMiddleware)
   .add(
+    HttpApiEndpoint.get("session.question.list", "/api/session/:sessionID/question", {
+      params: { sessionID: SessionV2.ID },
+      success: Schema.Struct({ data: Schema.Array(QuestionV2.Request) }),
+      error: SessionNotFoundError,
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.question.list",
+          summary: "List session question requests",
+          description: "Retrieve pending question requests owned by a session.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.post("session.question.reply", "/api/session/:sessionID/question/:requestID/reply", {
       params: { sessionID: SessionV2.ID, requestID: QuestionV2.ID },
       payload: QuestionV2.Reply,

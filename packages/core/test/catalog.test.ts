@@ -1,6 +1,8 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Layer, Option } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Integration } from "@opencode-ai/core/integration"
+import { Credential } from "@opencode-ai/core/credential"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -17,10 +19,61 @@ const locationLayer = Layer.succeed(
   Location.Service.of(location({ directory: AbsolutePath.make("test") })),
 )
 const it = testEffect(
-  Catalog.locationLayer.pipe(Layer.provideMerge(EventV2.defaultLayer), Layer.provideMerge(locationLayer)),
+  Catalog.locationLayer.pipe(
+    Layer.provideMerge(EventV2.defaultLayer),
+    Layer.provideMerge(locationLayer),
+    Layer.provideMerge(
+      Layer.mock(Credential.Service)({
+        all: () => Effect.succeed([]),
+      }),
+    ),
+  ),
 )
 
 describe("CatalogV2", () => {
+  it.effect("projects active credentials without rebuilding catalog state", () => {
+    const integrationID = Integration.ID.make("test")
+    const first = {
+      id: Credential.ID.create(),
+      integrationID,
+      label: "First",
+      value: new Credential.Key({ type: "key", key: "first", metadata: { tenant: "one" } }),
+    }
+    const second = {
+      id: Credential.ID.create(),
+      integrationID,
+      label: "Second",
+      value: new Credential.Key({ type: "key", key: "second", metadata: { tenant: "two" } }),
+    }
+    let active = first
+    const layer = Catalog.locationLayer.pipe(
+      Layer.fresh,
+      Layer.provideMerge(EventV2.defaultLayer),
+      Layer.provideMerge(locationLayer),
+      Layer.provideMerge(
+        Layer.mock(Credential.Service)({
+          all: () => Effect.sync(() => [active]),
+        }),
+      ),
+    )
+
+    return Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const transform = yield* catalog.transform()
+      yield* transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
+
+      expect(yield* catalog.provider.get(ProviderV2.ID.make("test"))).toMatchObject({
+        enabled: { via: "credential", credentialID: first.id },
+        request: { body: { apiKey: "first", tenant: "one" } },
+      })
+      active = second
+      expect(yield* catalog.provider.get(ProviderV2.ID.make("test"))).toMatchObject({
+        enabled: { via: "credential", credentialID: second.id },
+        request: { body: { apiKey: "second", tenant: "two" } },
+      })
+    }).pipe(Effect.provide(layer))
+  })
+
   it.effect("normalizes provider baseURL into api url", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
