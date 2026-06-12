@@ -2716,7 +2716,22 @@ export const layer = Layer.effect(
         ? yield* sessions.get(input.caller.sessionID).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
       const shellRuleset = Permission.merge(shellCallerSession?.permission ?? [], [])
-      const session = yield* sessions.create({ title: `Workflow: ${module.meta.name}` })
+      // Nested subagents (design-final §2.1, Finding A): the run session hangs
+      // UNDER the caller session, so `lineage(run.session_id)` (the dispatch
+      // depth guard below) carries the caller's REAL chain — a depth-4 session
+      // can no longer reset the depth count to 2 by routing through the
+      // workflow tool, and the tree-lifetime cap (keyed on the lineage root)
+      // keeps counting against the true root. Starts WITHOUT a caller identity
+      // (CLI/dashboard/HTTP without a session) keep creating a ROOT run
+      // session — the prior behavior. An unknown caller id is recorded as-is:
+      // the lineage walk treats a vanished parent as a root (orphan), so a
+      // stale caller degrades to the old root behavior instead of failing the
+      // start. Legitimate chains stay far below Session.createNext's
+      // HARD_MAX_DEPTH (10): a depth-5 caller + run (6) + agent (7) fits.
+      const session = yield* sessions.create({
+        parentID: input.caller?.sessionID,
+        title: `Workflow: ${module.meta.name}`,
+      })
       const done = yield* Deferred.make<Run>()
       // Per-run scope forked from the instance scope. ALL agent/parallel/pipeline
       // work and all progress writes are forked into it (not into a detached
@@ -3177,8 +3192,12 @@ export const layer = Layer.effect(
             // created with `parentID = run.session_id` below, so it occupies a
             // REAL nesting level and the workflow tool is no ladder past the
             // depth limit. The child's depth derives from the run session's
-            // actual parent chain; without a run session (purely programmatic
-            // start) the agent session is a root (depth 1). A failed walk
+            // actual parent chain — and since the run session itself hangs
+            // under the CALLER session (Finding A, see start()), that chain
+            // includes the caller's full lineage: a depth-4 caller yields
+            // childDepth 6, not a reset count of 2. Without a run session
+            // (purely programmatic start) the agent session is a root
+            // (depth 1). A failed walk
             // (cyclic parents, SubagentLineageError) fails the step like a
             // depth violation — node `failed`, the same error path as
             // AgentLimitError. The guard sits BEFORE sessions.create (and

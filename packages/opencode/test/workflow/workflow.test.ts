@@ -5170,6 +5170,111 @@ export async function run() { return { ok: true } }
     }),
   )
 
+  // Finding A (CRITICAL, depth bypass): the run session must hang UNDER the
+  // caller session, so `lineage(run.session_id)` carries the caller's real
+  // chain. Before the fix the run session was always a root — a depth-4
+  // session could route through the workflow tool and reset the depth count
+  // to 2, nesting indefinitely past the limit. With the fix, a depth-4 caller
+  // (default maxDepth 5) puts the run session at depth 5, so the agent
+  // dispatch (childDepth 6 > 5) is refused with a SubagentDepthError BEFORE
+  // sessions.create — node failed, run failed, no prompt dispatched.
+  it.instance("a depth-4 caller cannot reset the depth count through a workflow start", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => writeWorkflow(test.directory, SINGLE_AGENT_FIXTURE, SINGLE_AGENT_WORKFLOW))
+      const workflow = yield* Workflow.Service
+      const sessions = yield* Session.Service
+      const { ops, inputs } = capturingPromptOps()
+
+      // Seed a REAL depth-4 caller chain (root → … → depth 4).
+      const s1 = yield* sessions.create({ title: "L1" })
+      const s2 = yield* sessions.create({ title: "L2", parentID: s1.id })
+      const s3 = yield* sessions.create({ title: "L3", parentID: s2.id })
+      const s4 = yield* sessions.create({ title: "L4", parentID: s3.id })
+      expect((yield* sessions.lineage(s4.id)).length).toBe(4)
+
+      const run = yield* workflow.start({
+        name: SINGLE_AGENT_FIXTURE,
+        args: {},
+        prompt: ops,
+        caller: { sessionID: s4.id, agent: "build" },
+      })
+      const done = (yield* workflow.wait({ id: run.id })).run ?? (yield* Effect.fail(new Error("did not finish")))
+      expect(done.status).toBe("failed")
+      expect(done.error ?? "").toMatch(/nesting/i)
+      expect(done.agents).toHaveLength(1)
+      expect(done.agents[0]?.status).toBe("failed")
+      expect(done.agents[0]?.error ?? "").toMatch(/nesting/i)
+      // The guard fires BEFORE sessions.create: no child session, no prompt.
+      expect(done.agents[0]?.session_id).toBeUndefined()
+      expect(inputs).toHaveLength(0)
+    }),
+  )
+
+  // Finding A (true depth accounting): under a depth-1 caller the run session
+  // is a real level 2 and the agent session a real level 3 — the lineage walk
+  // sees caller → run → agent, so every depth-derived guard (task tool,
+  // registry filter, tree cap keyed on the root) counts the workflow hop.
+  it.instance("a workflow agent session sits at real depth 3 under a depth-1 caller", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => writeWorkflow(test.directory, SINGLE_AGENT_FIXTURE, SINGLE_AGENT_WORKFLOW))
+      const workflow = yield* Workflow.Service
+      const sessions = yield* Session.Service
+
+      const caller = yield* sessions.create({ title: "Caller" })
+      const run = yield* workflow.start({
+        name: SINGLE_AGENT_FIXTURE,
+        args: {},
+        prompt: immediatePromptOps(),
+        caller: { sessionID: caller.id, agent: "build" },
+      })
+      const done = (yield* workflow.wait({ id: run.id })).run ?? (yield* Effect.fail(new Error("did not finish")))
+      // Below the limit, agents stay fully functional.
+      expect(done.status).toBe("completed")
+
+      // The run session is a CHILD of the caller, not a root.
+      const runSession = yield* pollWithTimeout(
+        sessions.get(SessionID.make(done.session_id!)).pipe(Effect.catchCause(() => Effect.succeed(undefined))),
+        "run session never created",
+      )
+      expect(runSession.parentID).toBe(caller.id)
+
+      // The agent session's REAL lineage: agent → run → caller (depth 3).
+      const childSessionID = done.agents[0]?.session_id
+      expect(childSessionID).toBeDefined()
+      const chain = yield* pollWithTimeout(
+        sessions
+          .lineage(SessionID.make(childSessionID!))
+          .pipe(Effect.catchCause(() => Effect.succeed(undefined))),
+        "agent session never created",
+      )
+      expect(chain.map((info) => info.id)).toEqual([SessionID.make(childSessionID!), runSession.id, caller.id])
+    }),
+  )
+
+  // Finding A (back-compat pin): a start WITHOUT a caller identity (CLI/
+  // dashboard/HTTP without a session) keeps creating a ROOT run session —
+  // the prior behavior, byte-identical.
+  it.instance("a start without caller keeps the run session a root", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => writeWorkflow(test.directory, SINGLE_AGENT_FIXTURE, SINGLE_AGENT_WORKFLOW))
+      const workflow = yield* Workflow.Service
+      const sessions = yield* Session.Service
+
+      const run = yield* workflow.start({ name: SINGLE_AGENT_FIXTURE, args: {}, prompt: immediatePromptOps() })
+      const done = (yield* workflow.wait({ id: run.id })).run ?? (yield* Effect.fail(new Error("did not finish")))
+      expect(done.status).toBe("completed")
+
+      const runSession = yield* pollWithTimeout(
+        sessions.get(SessionID.make(done.session_id!)).pipe(Effect.catchCause(() => Effect.succeed(undefined))),
+        "run session never created",
+      )
+      expect(runSession.parentID).toBeUndefined()
+    }),
+  )
+
   // Fund 18 (medium): die drei Workflow-Zeitfelder (LogEntry.time,
   // AgentRun.started_at/completed_at) sind Epoch-Millis und damit IMMER endlich.
   // Als `Schema.Number` erzeugte der SDK-Generator für sie eine NaN/Infinity-
