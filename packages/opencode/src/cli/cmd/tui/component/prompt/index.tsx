@@ -1487,6 +1487,7 @@ export function Prompt(props: PromptProps) {
               focusedTextColor={leader() ? theme.textMuted : theme.text}
               minHeight={1}
               maxHeight={6}
+              wrapMode="char"
               onContentChange={() => {
                 const value = input.plainText
                 setStore("prompt", "input", value)
