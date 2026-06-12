@@ -92,6 +92,18 @@ describe("DatabaseMigration", () => {
     )
   })
 
+  test("rejects a non-empty database without a session table", async () => {
+    await expect(
+      run(
+        Effect.gen(function* () {
+          const db = yield* makeDb
+          yield* db.run(sql`CREATE TABLE unrelated (id text PRIMARY KEY)`)
+          yield* DatabaseMigration.apply(db)
+        }),
+      ),
+    ).rejects.toThrow("Database is not empty and has no session table")
+  })
+
   test("backfills existing Context Epoch rows to the build agent", async () => {
     await run(
       Effect.gen(function* () {

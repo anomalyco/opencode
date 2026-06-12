@@ -34,9 +34,9 @@ const it = testEffect(
         Layer.mergeAll(
           Project.defaultLayer,
           EventV2.defaultLayer,
+          Credential.defaultLayer,
           Credential.layer.pipe(
             Layer.provide(Database.layerFromPath(":memory:").pipe(Layer.fresh)),
-            Layer.provide(EventV2.defaultLayer),
           ),
           Npm.defaultLayer,
           ModelsDev.defaultLayer,
