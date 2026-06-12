@@ -1,12 +1,12 @@
 import { afterEach, expect, test } from "bun:test"
-import { mkdir, unlink } from "fs/promises"
+import { mkdir, rm, unlink } from "fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Global } from "@opencode-ai/core/global"
-import { disposeAllInstances, provideInstanceEffect, tmpdirScoped, TestInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideInstanceEffect, provideTmpdirInstance, tmpdirScoped, TestInstance } from "../fixture/fixture"
 import { markPluginDependenciesReady } from "../fixture/plugin"
 import { Auth } from "@/auth"
 import { Config } from "@/config/config"
@@ -20,6 +20,7 @@ import { InstanceLayer } from "@/project/instance-layer"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Npm } from "@opencode-ai/core/npm"
 
 const originalEnv = new Map<string, string | undefined>()
 
@@ -216,6 +217,73 @@ it.instance(
       },
     },
   },
+)
+
+it.effect("configured custom ESM npm provider loads through package exports", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped()
+    const dir = path.join(root, "provider package [one] & chars", "fixture-provider")
+    yield* Effect.promise(() => mkdir(path.join(dir, "dist"), { recursive: true }))
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(dir, "package.json"),
+        JSON.stringify({
+          name: "@scope/fixture-provider",
+          version: "1.0.0",
+          type: "module",
+          exports: "./dist/index.js",
+        }),
+      ),
+    )
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(dir, "dist", "index.js"),
+        [
+          "export function createFixtureProvider(options) {",
+          "  return {",
+          "    languageModel(modelID) {",
+          "      return { modelID, providerName: options.name }",
+          "    },",
+          "  }",
+          "}",
+          "",
+        ].join("\n"),
+      ),
+    )
+
+    const spec = `@scope/fixture-provider@file:${dir}`
+    yield* Effect.addFinalizer(() =>
+      Effect.promise(() => rm(path.join(Global.Path.cache, "packages", Npm.sanitize(spec)), { recursive: true, force: true })),
+    )
+
+    yield* provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const provider = yield* Provider.Service
+          const model = yield* provider.getModel(ProviderV2.ID.make("custom-provider"), ModelV2.ID.make("my-model"))
+          const language = yield* provider.getLanguage(model)
+          const loaded = language as unknown as { modelID: string; providerName: string }
+          expect(loaded.modelID).toBe("my-model")
+          expect(loaded.providerName).toBe("custom-provider")
+        }),
+      {
+        config: {
+          provider: {
+            "custom-provider": {
+              name: "Custom Provider",
+              npm: spec,
+              api: "https://example.com/v1",
+              models: {
+                "my-model": {
+                  name: "My Model",
+                },
+              },
+            },
+          },
+        },
+      },
+    )
+  }).pipe(Effect.provide(CrossSpawnSpawner.defaultLayer)),
 )
 
 it.instance(

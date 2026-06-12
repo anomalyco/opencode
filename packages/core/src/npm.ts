@@ -11,17 +11,16 @@ import { LayerNode } from "./effect/layer-node"
 import { filesystem } from "./effect/layer-node-platform"
 import { makeRuntime } from "./effect/runtime"
 import { NpmConfig } from "./npm-config"
+import type { EntryPoint } from "./npm-entrypoint"
+import { NpmEntrypoint } from "./npm-entrypoint"
+
+export type { EntryPoint } from "./npm-entrypoint"
 
 export class InstallFailedError extends Schema.TaggedErrorClass<InstallFailedError>()("NpmInstallFailedError", {
   add: Schema.Array(Schema.String).pipe(Schema.optional),
   dir: Schema.String,
   cause: Schema.optional(Schema.Defect),
 }) {}
-
-export interface EntryPoint {
-  readonly directory: string
-  readonly entrypoint: Option.Option<string>
-}
 
 export interface Interface {
   readonly add: (pkg: string) => Effect.Effect<EntryPoint, InstallFailedError | EffectFlock.LockError>
@@ -44,20 +43,6 @@ const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|",
 export function sanitize(pkg: string) {
   if (!illegal) return pkg
   return Array.from(pkg, (char) => (illegal.has(char) || char.charCodeAt(0) < 32 ? "_" : char)).join("")
-}
-
-const resolveEntryPoint = (name: string, dir: string): EntryPoint => {
-  let entrypoint: Option.Option<string>
-  try {
-    const resolved = typeof Bun !== "undefined" ? import.meta.resolve(name, dir) : import.meta.resolve(dir)
-    entrypoint = Option.some(resolved)
-  } catch {
-    entrypoint = Option.none()
-  }
-  return {
-    directory: dir,
-    entrypoint,
-  }
 }
 
 interface ArboristNode {
@@ -123,17 +108,17 @@ export const layer = Layer.effect(
       })()
 
       if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
-        return resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        return NpmEntrypoint.resolve(name, path.join(dir, "node_modules", name))
       }
 
       const tree = yield* reify({ dir, add: [pkg] })
       const first = tree.edgesOut.values().next().value?.to
       if (!first) {
-        const result = resolveEntryPoint(name, path.join(dir, "node_modules", name))
+        const result = NpmEntrypoint.resolve(name, path.join(dir, "node_modules", name))
         if (Option.isSome(result.entrypoint)) return result
         return yield* new InstallFailedError({ add: [pkg], dir })
       }
-      return resolveEntryPoint(first.name, first.path)
+      return NpmEntrypoint.resolve(first.name, first.path)
     }, Effect.scoped)
 
     const install: Interface["install"] = Effect.fn("Npm.install")(function* (dir, input) {
