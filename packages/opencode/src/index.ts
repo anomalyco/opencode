@@ -32,6 +32,10 @@ import { Heap } from "./cli/heap"
 
 const args = hideBin(process.argv)
 
+if (args.includes("--pure")) {
+  process.env.OPENCODE_PURE = "1"
+}
+
 function show(out: string) {
   const text = out.trimStart()
   if (!text.startsWith("opencode ")) {
