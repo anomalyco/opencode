@@ -2,6 +2,8 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Auth } from "../../src/auth"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Credential } from "@opencode-ai/core/credential"
+import { IntegrationSchema } from "@opencode-ai/core/integration/schema"
 import { testEffect } from "../lib/effect"
 
 const node = CrossSpawnSpawner.defaultLayer
@@ -72,6 +74,33 @@ describe("Auth", () => {
       yield* auth.remove("anthropic")
       const after = yield* auth.all()
       expect(after["anthropic"]).toBeUndefined()
+    }),
+  )
+
+  it.instance("set and remove synchronize with SQLite Credential.Service in real-time", () =>
+    Effect.gen(function* () {
+      const auth = yield* Auth.Service
+      const credentials = yield* Credential.Service
+
+      // 1. Verify that 'set' on Auth also creates the credential in SQLite
+      yield* auth.set("anthropic-test", {
+        type: "api",
+        key: "sk-test-sqlite",
+        metadata: { customField: "test" },
+      })
+
+      const list = yield* credentials.list(IntegrationSchema.ID.make("anthropic-test"))
+      expect(list.length).toBe(1)
+      expect(list[0].value.type).toBe("key")
+      if (list[0].value.type === "key") {
+        expect(list[0].value.key).toBe("sk-test-sqlite")
+        expect(list[0].value.metadata?.customField).toBe("test")
+      }
+
+      // 2. Verify that 'remove' on Auth also deletes the credential from SQLite
+      yield* auth.remove("anthropic-test")
+      const listAfter = yield* credentials.list(IntegrationSchema.ID.make("anthropic-test"))
+      expect(listAfter.length).toBe(0)
     }),
   )
 })
