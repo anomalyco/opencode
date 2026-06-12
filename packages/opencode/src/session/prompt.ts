@@ -1558,15 +1558,9 @@ export const layer = Layer.effect(
       }
 
       const templateParts = yield* resolvePromptParts(template)
-      const normalizeFileURL = (value: string) => {
-        const url = new URL(value)
-        url.search = ""
-        url.hash = ""
-        return url.href
-      }
-      const inputFileURLs = new Set(input.parts?.map((part) => normalizeFileURL(part.url)))
+      const inputFiles = new Set(input.parts?.map((part) => fileURLToPath(part.url)))
       const uniqueTemplateParts = templateParts.filter(
-        (part) => part.type !== "file" || !inputFileURLs.has(normalizeFileURL(part.url)),
+        (part) => part.type !== "file" || !inputFiles.has(fileURLToPath(part.url)),
       )
       const isSubtask = (agent.mode === "subagent" && cmd.subtask !== false) || cmd.subtask === true
       const parts = isSubtask
