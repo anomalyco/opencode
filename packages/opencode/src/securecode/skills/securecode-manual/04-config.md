@@ -62,7 +62,7 @@ TUI の表示まわり。`setup/tui.json.example` がそのままテンプレ。
 
 `sandbox.json` の編集後は **securecode を再起動** してください（実行中は読まれません）。
 
-> このファイル自体は **AI から読み取れない場所** に設計されています。AI に「sandbox.json を見せて」と頼んでも内容は返りません（設定改ざん防止のため）。詳細は `05-sandbox.md`。
+> このファイル自体は **AI からは読みも書きも一切できません**。`sandbox.json` 自身が OS サンドボックスの `denyRead` + `denyWrite` に常時固定されているため、AI に「中身を見せて」「書き換えて」「消して作り直して」と頼んでも、OS (Seatbelt / bubblewrap) が物理的にブロックします。AI が自分の檻を広げる方向の改ざんは構造上不可能です。詳細は `05-sandbox.md`。
 
 ## 設定の優先順位
 

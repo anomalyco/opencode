@@ -37,7 +37,7 @@ Windows ネイティブは配布対象外です。WSL2 上で Linux 版を使っ
 
 - **HTTPS / SOCKS5 outbound** は許可ドメイン (`conf-ai.acompany-az.com` 既定) 以外をすべて遮断
 - **ファイルアクセス** はワーキングディレクトリ配下と最小限の OS パスのみ
-- **`sandbox.json` 自体** は AI から読めない（設定改ざん防止）
+- **`sandbox.json` 自体** は AI から **読みも書きも一切できない** (`denyRead` + `denyWrite` を常に sandbox.json 自身に固定。unlink + 再作成も Seatbelt / bubblewrap が阻止するので、AI が「自分の檻を広げるよう設定を書き換える」改ざんは構造上不可能)
 - サンドボックスが起動できない環境では **fail-closed** = セキュアコード は起動を拒否
 
 ## 許可ドメインを増やす
