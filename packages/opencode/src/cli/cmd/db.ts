@@ -8,6 +8,9 @@ import { cmd } from "./cmd"
 import { JsonMigration } from "@/storage/json-migration"
 import { EOL } from "os"
 import { errorMessage } from "../../util/error"
+import { Effect } from "effect"
+import { effectCmd, fail } from "../effect-cmd"
+import { runDoctorCommand, runRepairCommand } from "./db-runner"
 
 const QueryCommand = cmd({
   command: "$0 [query]",
@@ -31,20 +34,18 @@ const QueryCommand = cmd({
       const db = new BunDatabase(Database.Path, { readonly: true })
       try {
         const result = db.query(query).all() as Record<string, unknown>[]
-        if (args.format === "json") {
-          console.log(JSON.stringify(result, null, 2))
-        } else if (result.length > 0) {
+        if (args.format === "json") console.log(JSON.stringify(result, null, 2))
+        else if (result.length > 0) {
           const keys = Object.keys(result[0])
           console.log(keys.join("\t"))
-          for (const row of result) {
-            console.log(keys.map((k) => row[k]).join("\t"))
-          }
+          for (const row of result) console.log(keys.map((key) => row[key]).join("\t"))
         }
       } catch (err) {
         UI.error(errorMessage(err))
         process.exit(1)
+      } finally {
+        db.close()
       }
-      db.close()
       return
     }
     const child = spawn("sqlite3", [Database.Path], {
@@ -60,6 +61,72 @@ const PathCommand = cmd({
   handler: () => {
     console.log(Database.Path)
   },
+})
+
+const DoctorCommand = effectCmd({
+  command: "doctor",
+  describe: "diagnose database health issues",
+  instance: false,
+  builder: (yargs: Argv) => {
+    return yargs.option("json", {
+      type: "boolean",
+      default: false,
+      describe: "Output in JSON format",
+    })
+  },
+  handler: Effect.fn("Cli.db.doctor")(function* (args: { json: boolean }) {
+    const result = yield* Effect.promise(() => runDoctorCommand(Database.Path, args))
+    if (result.exitCode !== 0) yield* fail(`Database doctor found ${result.issueCount} issue(s)`, result.exitCode)
+  }),
+})
+
+const RepairCommand = effectCmd({
+  command: "repair",
+  describe: "plan or apply database repairs",
+  instance: false,
+  builder: (yargs: Argv) => {
+    return yargs
+      .option("dry-run", {
+        type: "boolean",
+        default: false,
+        describe: "Generate repair plan without applying",
+      })
+      .option("apply", {
+        type: "boolean",
+        default: false,
+        describe: "Apply repairs (creates backup first)",
+      })
+      .option("json", {
+        type: "boolean",
+        default: false,
+        describe: "Output in JSON format",
+      })
+      .option("mode", {
+        type: "string",
+        choices: ["safe", "aggressive"],
+        default: "safe",
+        describe: "Repair mode (aggressive includes directory mismatch repair)",
+      })
+      .check((argv) => {
+        if (argv.dryRun && argv.apply) {
+          throw new Error("Cannot use both --dry-run and --apply")
+        }
+        if (!argv.dryRun && !argv.apply) {
+          throw new Error("Must specify either --dry-run or --apply")
+        }
+        return true
+      })
+  },
+  handler: Effect.fn("Cli.db.repair")(function* (args: {
+    dryRun?: boolean
+    "dry-run"?: boolean
+    apply: boolean
+    json: boolean
+    mode: string
+  }) {
+    const result = yield* Effect.promise(() => runRepairCommand(Database.Path, args))
+    if (result.exitCode !== 0) yield* fail(result.message, result.exitCode)
+  }),
 })
 
 const MigrateCommand = cmd({
@@ -114,7 +181,13 @@ export const DbCommand = cmd({
   command: "db",
   describe: "database tools",
   builder: (yargs: Argv) => {
-    return yargs.command(QueryCommand).command(PathCommand).command(MigrateCommand).demandCommand()
+    return yargs
+      .command(QueryCommand)
+      .command(PathCommand)
+      .command(DoctorCommand)
+      .command(RepairCommand)
+      .command(MigrateCommand)
+      .demandCommand()
   },
   handler: () => {},
 })
