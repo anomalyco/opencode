@@ -30,6 +30,21 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
     void sync.session.sync(id)
   })
 
+  // 디렉토리 로드 시 직전(가장 최근) 세션으로 자동 복원한다. session 목록은 id 오름차순,
+  // session id 는 descending 으로 발급되므로 첫 root 세션이 가장 최근 세션이다.
+  let autoResumed = false
+  createEffect(() => {
+    if (autoResumed) return
+    if (params.id) {
+      autoResumed = true
+      return
+    }
+    const recent = sync.data.session.find((s) => !s.parentID)
+    if (!recent) return
+    autoResumed = true
+    navigate(`/${slug()}/session/${recent.id}`, { replace: true })
+  })
+
   return (
     <DataProvider
       data={sync.data}
