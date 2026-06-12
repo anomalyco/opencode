@@ -293,6 +293,7 @@ function normalizeMessages(
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
         const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
         const reasoningText = reasoningParts.map((part: any) => part.text).join("")
+        const hasToolCalls = msg.content.some((part: any) => part.type === "tool-call")
 
         // Filter out reasoning parts from content
         const filteredContent = msg.content.filter((part: any) => part.type !== "reasoning")
@@ -300,6 +301,9 @@ function normalizeMessages(
         // Include reasoning_content | reasoning_details directly on the message for all assistant messages.
         // Always set the field even when empty — some providers (e.g. DeepSeek) may return empty
         // reasoning_content which still needs to be sent back in subsequent requests.
+        // Moonshot/Kimi requires a non-empty placeholder on assistant messages that carry tool calls
+        // when thinking is enabled, otherwise the API rejects the request.
+        const fieldValue = reasoningText === "" && hasToolCalls ? " " : reasoningText
         return {
           ...msg,
           content: filteredContent,
@@ -307,7 +311,7 @@ function normalizeMessages(
             ...msg.providerOptions,
             openaiCompatible: {
               ...msg.providerOptions?.openaiCompatible,
-              [field]: reasoningText,
+              [field]: fieldValue,
             },
           },
         }

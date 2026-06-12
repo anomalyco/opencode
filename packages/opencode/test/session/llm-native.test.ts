@@ -328,6 +328,26 @@ describe("session.llm-native.request", () => {
     ])
   })
 
+  test("maps message-level providerOptions to native message metadata", () => {
+    const request = LLMNative.request({
+      model: baseModel,
+      messages: [
+        {
+          role: "assistant",
+          content: [{ type: "tool-call", toolCallId: "call-1", toolName: "bash", input: { command: "ls" } }],
+          providerOptions: { openaiCompatible: { reasoning_content: " " } },
+        },
+      ],
+    })
+
+    expect(request.messages).toMatchObject([
+      {
+        role: "assistant",
+        native: { openaiCompatible: { reasoning_content: " " } },
+      },
+    ])
+  })
+
   test("selects native request routes for provider packages", () => {
     const openai = LLMNative.model({
       model: { ...baseModel, api: { ...baseModel.api, url: "", npm: "@ai-sdk/openai" } },

@@ -277,6 +277,32 @@ it.instance(
 )
 
 it.instance(
+  "custom Moonshot openai-compatible reasoning model defaults interleaved reasoning field",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const provider = providers[ProviderV2.ID.make("custom-moonshot-provider")]
+    expect(provider.models["kimi-k2.5"].capabilities.interleaved).toEqual({ field: "reasoning_content" })
+    expect(provider.models["kimi-k2-non-reasoning"].capabilities.interleaved).toBe(false)
+  }),
+  {
+    config: {
+      provider: {
+        "custom-moonshot-provider": {
+          name: "Custom Moonshot Provider",
+          npm: "@ai-sdk/openai-compatible",
+          api: "https://api.custom-moonshot.com/v1",
+          models: {
+            "kimi-k2.5": { name: "Kimi K2.5", reasoning: true },
+            "kimi-k2-non-reasoning": { name: "Kimi K2 Non-Reasoning", reasoning: false },
+          },
+          options: { apiKey: "custom-key" },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
   "env variable takes precedence, config merges options",
   Effect.gen(function* () {
     yield* setProcessEnv("ANTHROPIC_API_KEY", "env-api-key")
@@ -1308,6 +1334,40 @@ test("models.dev normalization fills required response fields", () => {
   expect(model.capabilities.attachment).toBe(false)
   expect(model.capabilities.toolcall).toBe(true)
   expect(model.release_date).toBe("")
+})
+
+test("models.dev Moonshot reasoning model defaults interleaved reasoning field", () => {
+  const provider = {
+    id: "moonshotai",
+    name: "Moonshot AI",
+    env: [],
+    npm: "@ai-sdk/openai-compatible",
+    api: "https://api.moonshot.ai/v1",
+    models: {
+      "kimi-k2.5": {
+        id: "kimi-k2.5",
+        name: "Kimi K2.5",
+        family: "kimi",
+        reasoning: true,
+        tool_call: true,
+        cost: { input: 0.6, output: 3 },
+        limit: { context: 262_144, output: 32_768 },
+      },
+      "kimi-v1": {
+        id: "kimi-v1",
+        name: "Kimi V1",
+        family: "kimi",
+        reasoning: false,
+        tool_call: true,
+        cost: { input: 0.6, output: 3 },
+        limit: { context: 262_144, output: 32_768 },
+      },
+    },
+  } as unknown as ModelsDev.Provider
+
+  const models = Provider.fromModelsDevProvider(provider).models
+  expect(models["kimi-k2.5"].capabilities.interleaved).toEqual({ field: "reasoning_content" })
+  expect(models["kimi-v1"].capabilities.interleaved).toBe(false)
 })
 
 it.instance("model variants are generated for reasoning models", () =>

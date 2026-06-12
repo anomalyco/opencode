@@ -107,6 +107,34 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("replays native openaiCompatible reasoning_content on assistant tool-call messages", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [
+            new Message({
+              role: "assistant",
+              content: [ToolCallPart.make({ id: "call_1", name: "bash", input: { command: "echo hello" } })],
+              native: { openaiCompatible: { reasoning_content: " " } },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            { id: "call_1", type: "function", function: { name: "bash", arguments: '{"command":"echo hello"}' } },
+          ],
+          reasoning_content: " ",
+        },
+      ])
+    }),
+  )
+
   it.effect("adds native query params to the Chat Completions URL", () =>
     LLMClient.generate(
       LLM.updateRequest(request, {

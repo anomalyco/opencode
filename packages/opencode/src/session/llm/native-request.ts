@@ -110,7 +110,7 @@ const messages = (input: readonly ModelMessage[]) => {
       Message.make({
         role: message.role,
         content: content(message.content),
-        native: isRecord(message.providerOptions) ? { providerOptions: message.providerOptions } : undefined,
+        native: isRecord(message.providerOptions) ? message.providerOptions : undefined,
       }),
     ]
   })
