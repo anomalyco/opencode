@@ -34,6 +34,24 @@ export const Info = Schema.Union([OAuth, Key])
   .annotate({ identifier: "Credential.Info" })
 export type Info = Schema.Schema.Type<typeof Info>
 
+export const LegacySuccessOAuth = Schema.Struct({
+  type: Schema.Literal("success"),
+  access: Schema.String,
+  refresh: Schema.optional(Schema.String),
+  expires: Schema.optional(Schema.Number),
+  accountId: Schema.optional(Schema.String),
+  enterpriseUrl: Schema.optional(Schema.String),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+})
+
+export const LegacySuccessKey = Schema.Struct({
+  type: Schema.Literal("success"),
+  key: Schema.String,
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+})
+
+export const LegacySuccessValue = Schema.Union([LegacySuccessOAuth, LegacySuccessKey])
+
 export class Stored extends Schema.Class<Stored>("Credential.Stored")({
   id: ID,
   integrationID: IntegrationSchema.ID,

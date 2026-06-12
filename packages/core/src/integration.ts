@@ -362,24 +362,7 @@ export const locationLayer = Layer.effect(
       return error instanceof Error ? error.message : String(error)
     }
 
-    const LegacySuccessOAuth = Schema.Struct({
-      type: Schema.Literal("success"),
-      access: Schema.String,
-      refresh: Schema.optional(Schema.String),
-      expires: Schema.optional(Schema.Number),
-      accountId: Schema.optional(Schema.String),
-      enterpriseUrl: Schema.optional(Schema.String),
-      metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-    })
-
-    const LegacySuccessKey = Schema.Struct({
-      type: Schema.Literal("success"),
-      key: Schema.String,
-      metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-    })
-
-    const LegacySuccessValue = Schema.Union([LegacySuccessOAuth, LegacySuccessKey])
-    const decodeLegacySuccess = Schema.decodeUnknownOption(LegacySuccessValue)
+    const decodeLegacySuccess = Schema.decodeUnknownOption(Credential.LegacySuccessValue)
 
     const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.Info, unknown>) {
       const now = yield* Clock.currentTimeMillis
