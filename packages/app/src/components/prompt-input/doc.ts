@@ -272,7 +272,7 @@ export function createPromptDoc(input: PromptDocInput) {
     live = undefined
     setActor(undefined)
     setDocID(undefined)
-    if (sessionID) clearActor(sessionID)
+    if (sessionID) clearActor(sessionID, input.user?.()?.id)
     setHistory({ undo: false, redo: false })
     setFilled(false)
     void serialize(async () => {

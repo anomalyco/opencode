@@ -41,25 +41,36 @@ export class OpencodeDocSource implements DocSource {
   ready = Promise.resolve()
   private ws?: WebSocket
   private unsub?: () => void
+  private _closed = false
 
   constructor(private opts: DocSyncOpts) {}
 
   async pull(docId: string, state: Uint8Array) {
-    const res = await this.opts.client.doc.sync.pull(
-      {
-        docID: this.opts.docID,
-        directory: this.opts.directory,
-        guid: docId,
-        ...(state.length > 0 ? { state: b64(state) } : {}),
-      },
-      { cache: "no-store" },
-    )
-    const json = res.data
-    if (!json) return null
-    return {
-      data: fromB64(json.data),
-      state: json.state ? fromB64(json.state) : undefined,
+    let delay = 500
+    while (!this._closed) {
+      try {
+        const res = await this.opts.client.doc.sync.pull(
+          {
+            docID: this.opts.docID,
+            directory: this.opts.directory,
+            guid: docId,
+            ...(state.length > 0 ? { state: b64(state) } : {}),
+          },
+          { cache: "no-store" },
+        )
+        const json = res.data
+        if (!json) return null
+        return {
+          data: fromB64(json.data),
+          state: json.state ? fromB64(json.state) : undefined,
+        }
+      } catch {
+        if (this._closed) return null
+        await new Promise<void>((r) => setTimeout(r, delay))
+        delay = Math.min(delay * 2, 8000)
+      }
     }
+    return null
   }
 
   async push(docId: string, data: Uint8Array) {
@@ -156,6 +167,7 @@ export class OpencodeDocSource implements DocSource {
   }
 
   close() {
+    this._closed = true
     this.unsub?.()
     this.unsub = undefined
     this.ws = undefined
