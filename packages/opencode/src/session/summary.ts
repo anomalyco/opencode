@@ -71,6 +71,9 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionSummary") {}
 
+const SESSION_DIFF_MAX_FILES = 500
+const SESSION_DIFF_MAX_PATCH_BYTES = 100_000
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -99,6 +102,45 @@ export const layer = Layer.effect(
       return []
     })
 
+    const computeSessionDiff = Effect.fn("SessionSummary.computeSessionDiff")(function* (input: {
+      messages: SessionV1.WithParts[]
+    }) {
+      let from: string | undefined
+      let to: string | undefined
+      for (const item of input.messages) {
+        if (!from) {
+          for (const part of item.parts) {
+            if (part.type === "step-start" && part.snapshot) {
+              from = part.snapshot
+              break
+            }
+          }
+        }
+        for (const part of item.parts) {
+          if (part.type === "step-finish" && part.snapshot) to = part.snapshot
+        }
+      }
+      if (!from || !to) return { available: false, diffs: [] as Snapshot.FileDiff[] }
+      return { available: true, diffs: yield* snapshot.diffFull(from, to) }
+    })
+
+    const normalizeDiffs = (items: Snapshot.FileDiff[]) =>
+      items.slice(0, SESSION_DIFF_MAX_FILES).map((item) => {
+        const normalized =
+          item.file === undefined
+            ? item
+            : (() => {
+                const file = unquoteGitPath(item.file)
+                if (file === item.file) return item
+                return { ...item, file }
+              })()
+        if (normalized.patch === undefined) return normalized
+        if (Buffer.byteLength(normalized.patch, "utf8") <= SESSION_DIFF_MAX_PATCH_BYTES) return normalized
+        const { patch, ...rest } = normalized
+        void patch
+        return rest
+      })
+
     const summarize = Effect.fn("SessionSummary.summarize")(function* (input: {
       sessionID: SessionID
       messageID: MessageID
@@ -111,7 +153,6 @@ export const layer = Layer.effect(
           files: 0,
         },
       })
-      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
       if ((yield* config.get()).snapshot === false) return
       const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
       if (!all.length) return
@@ -127,18 +168,21 @@ export const layer = Layer.effect(
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
-      if (!input.messageID) return []
-      const message = (yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)).find(
-        (item) => item.info.id === input.messageID,
-      )
+      const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
+      if (!input.messageID) {
+        const info = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+        const visible = info.revert?.messageID ? all.filter((item) => item.info.id < info.revert!.messageID) : all
+        const computed = yield* computeSessionDiff({ messages: visible })
+        const diffs = computed.available
+          ? computed.diffs
+          : visible.flatMap((item) => (item.info.role === "user" ? (item.info.summary?.diffs ?? []) : []))
+        return normalizeDiffs(diffs)
+      }
+
+      const message = all.find((item) => item.info.id === input.messageID)
       if (!message || message.info.role !== "user") return []
       const diffs = message.info.summary?.diffs ?? []
-      return diffs.map((item) => {
-        if (item.file === undefined) return item
-        const file = unquoteGitPath(item.file)
-        if (file === item.file) return item
-        return { ...item, file }
-      })
+      return normalizeDiffs(diffs)
     })
 
     return Service.of({ summarize, diff, computeDiff })

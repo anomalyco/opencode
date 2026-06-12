@@ -93,4 +93,83 @@ describe("session diff with missing patch (#26574)", () => {
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
+
+  it.instance(
+    "GET /session/<id>/diff returns all session turn diffs when no messageID is provided",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* withSession({ title: "session-diff" })
+        const firstMessageID = MessageID.ascending()
+        const secondMessageID = MessageID.ascending()
+
+        yield* Session.use.updateMessage({
+          id: firstMessageID,
+          sessionID: session.id,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "build",
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model") },
+          summary: {
+            diffs: [{ file: "first.ts", additions: 1, deletions: 0, status: "added" }],
+          },
+        } satisfies SessionV1.User)
+
+        yield* Session.use.updateMessage({
+          id: secondMessageID,
+          sessionID: session.id,
+          role: "user",
+          time: { created: Date.now() + 1 },
+          agent: "build",
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model") },
+          summary: {
+            diffs: [{ file: "second.ts", additions: 2, deletions: 1, status: "modified" }],
+          },
+        } satisfies SessionV1.User)
+
+        const response = yield* requestInDirectory(
+          pathFor(SessionPaths.diff, { sessionID: session.id }),
+          test.directory,
+        )
+
+        expect(response.status).toBe(200)
+        expect(yield* response.json).toEqual([
+          { file: "first.ts", additions: 1, deletions: 0, status: "added" },
+          { file: "second.ts", additions: 2, deletions: 1, status: "modified" },
+        ])
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "GET /session/<id>/diff omits oversized session patches",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const session = yield* withSession({ title: "large-session-diff" })
+        const messageID = MessageID.ascending()
+        const patch = `@@ -1 +1 @@\n-${"x".repeat(120_000)}\n+small\n`
+
+        yield* Session.use.updateMessage({
+          id: messageID,
+          sessionID: session.id,
+          role: "user",
+          time: { created: Date.now() },
+          agent: "build",
+          model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model") },
+          summary: {
+            diffs: [{ file: "large.ts", additions: 1, deletions: 1, status: "modified", patch }],
+          },
+        } satisfies SessionV1.User)
+
+        const response = yield* requestInDirectory(
+          pathFor(SessionPaths.diff, { sessionID: session.id }),
+          test.directory,
+        )
+
+        expect(response.status).toBe(200)
+        expect(yield* response.json).toEqual([{ file: "large.ts", additions: 1, deletions: 1, status: "modified" }])
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
 })

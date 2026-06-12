@@ -172,8 +172,9 @@ export const SessionApi = HttpApi.make("session")
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "session.diff",
-            summary: "Get message diff",
-            description: "Get the file changes (diff) that resulted from a specific user message in the session.",
+            summary: "Get session or message diff",
+            description:
+              "Get the file changes (diff) for the whole session, or for a specific user message when messageID is provided.",
           }),
         ),
         HttpApiEndpoint.get("messages", SessionPaths.messages, {
