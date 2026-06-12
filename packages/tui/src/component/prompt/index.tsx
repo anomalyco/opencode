@@ -1423,9 +1423,11 @@ export function Prompt(props: PromptProps) {
                 }
                 props.ref?.(ref)
                 setTimeout(() => {
-                  // setTimeout is a workaround and needs to be addressed properly
                   if (!input || input.isDestroyed) return
                   input.cursorColor = theme.text
+                  // Re-establish focus after remount so the managed textarea layer
+                  // (HOME/END and other input commands) recognizes the new instance.
+                  if (props.visible !== false && !input.focused) input.focus()
                 }, 0)
               }}
               onMouseDown={(r: MouseEvent) => r.target?.focus()}

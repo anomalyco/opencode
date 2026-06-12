@@ -939,6 +939,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     bindings: tuiConfig.keybinds.gather("app.global", appGlobalBindingCommands),
   }))
 
+  let lastExitKeybindTime: number | undefined
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
     enabled: () => {
@@ -946,7 +947,22 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       if (!current?.focused) return true
       return current.current.input === ""
     },
-    bindings: tuiConfig.keybinds.gather("app_exit", ["app.exit"]),
+    bindings: tuiConfig.keybinds.gather("app_exit", ["app.exit"]).map((b) => ({
+      ...b,
+      cmd: () => {
+        const now = Date.now()
+        if (lastExitKeybindTime && now - lastExitKeybindTime < 2000) {
+          exit()
+        } else {
+          lastExitKeybindTime = now
+          toast.show({
+            title: "Press again to exit",
+            variant: "info",
+            duration: 2000,
+          })
+        }
+      },
+    })),
   }))
 
   event.on("tui.command.execute", (evt, { workspace }) => {
