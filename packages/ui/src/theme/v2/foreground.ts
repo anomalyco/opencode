@@ -19,12 +19,7 @@ function resolveGreyRef(value: V2ColorValue, primitives: Record<string, V2ColorV
   return hex
 }
 
-function pickGrey(
-  primitives: Record<string, V2ColorValue>,
-  background: HexColor,
-  minContrast: number,
-  target: number,
-) {
+function pickGrey(primitives: Record<string, V2ColorValue>, background: HexColor, minContrast: number, target: number) {
   const matches = GREY_STEPS.filter((step) => {
     const hex = greyHex(primitives, step)
     return hex && contrastRatio(hex, background) >= minContrast
