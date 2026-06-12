@@ -180,10 +180,7 @@ const startRoute: TuiRouteCurrent = { name: "session", params: { sessionID: "ses
 
 function findScrollBox(root: Renderable): ScrollBoxRenderable | undefined {
   if (root instanceof ScrollBoxRenderable && containsDiff(root)) return root
-  return root
-    .getChildren()
-    .map(findScrollBox)
-    .find(Boolean)
+  return root.getChildren().map(findScrollBox).find(Boolean)
 }
 
 function containsDiff(root: Renderable): boolean {

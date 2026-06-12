@@ -297,13 +297,7 @@ function PanelShell(props: {
         </box>
       )}
       {minimal() ? (
-        <box
-          width="100%"
-          height={1}
-          border={false}
-          backgroundColor="transparent"
-          flexShrink={0}
-        >
+        <box width="100%" height={1} border={false} backgroundColor="transparent" flexShrink={0}>
           <box
             width="100%"
             height={1}

@@ -257,12 +257,7 @@ export function RunPermissionBody(props: {
   })
 
   return (
-    <box
-      width="100%"
-      height="100%"
-      flexDirection="column"
-      backgroundColor={props.theme.surface}
-    >
+    <box width="100%" height="100%" flexDirection="column" backgroundColor={props.theme.surface}>
       <box
         flexDirection="column"
         gap={1}
