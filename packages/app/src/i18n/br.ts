@@ -255,6 +255,7 @@ export const dict = {
   "prompt.context.removeActiveFile": "Remover arquivo ativo do contexto",
   "prompt.context.removeFile": "Remover arquivo do contexto",
   "prompt.action.attachFile": "Anexar arquivo",
+  "prompt.action.attachImage": "Anexar imagem",
   "prompt.attachment.remove": "Remover anexo",
   "prompt.action.send": "Enviar",
   "prompt.action.stop": "Parar",

@@ -261,6 +261,7 @@ export const dict = {
   "prompt.context.removeActiveFile": "컨텍스트에서 활성 파일 제거",
   "prompt.context.removeFile": "컨텍스트에서 파일 제거",
   "prompt.action.attachFile": "파일 첨부",
+  "prompt.action.attachImage": "이미지 첨부",
   "prompt.action.captureTab": "탭 캡처",
   "prompt.capture.editTitle": "캡처 편집",
   "prompt.capture.add": "추가",

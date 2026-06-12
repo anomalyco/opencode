@@ -1,10 +1,13 @@
 import { Component, createSignal, JSX, Show } from "solid-js"
+import { Portal } from "solid-js/web"
 import type { IconProps } from "@opencode-ai/ui/icon"
+import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useClientEnv } from "@/context/client-env"
 import { useLanguage } from "@/context/language"
 import { ACCEPTED_FILE_TYPES } from "./files"
+import { ACCEPTED_IMAGE_TYPES } from "@/constants/file-picker"
 import { PromptDocPanel } from "./doc-panel"
 import type { createPromptDoc } from "./doc"
 
@@ -35,7 +38,19 @@ export const PromptDocShell: Component<ShellProps> = (props) => {
   const env = useClientEnv()
   const language = useLanguage()
   let fileInputRef: HTMLInputElement | undefined
+  let imageInputRef: HTMLInputElement | undefined
+  let attachBtnRef: HTMLButtonElement | undefined
   const [copied, setCopied] = createSignal(false)
+  const [attachOpen, setAttachOpen] = createSignal(false)
+  const [attachPos, setAttachPos] = createSignal<{ left: number; bottom: number } | null>(null)
+
+  const openAttach = () => {
+    if (!attachBtnRef) return
+    const r = attachBtnRef.getBoundingClientRect()
+    setAttachPos({ left: r.left, bottom: window.innerHeight - r.top + 4 })
+    setAttachOpen(true)
+  }
+  const closeAttach = () => { setAttachOpen(false); setAttachPos(null) }
   const history = () => props.doc.history
   const undo = () => props.doc.undo()
   const redo = () => props.doc.redo()
@@ -60,11 +75,11 @@ export const PromptDocShell: Component<ShellProps> = (props) => {
   return (
     <div
       data-component="prompt-doc-shell"
-      class="flex min-h-0 w-full flex-1 flex-col overflow-hidden"
+      class="flex min-h-0 w-full flex-1 flex-col"
     >
       <div
         classList={{
-          "relative min-h-0 w-full": true,
+          "relative min-h-0 w-full overflow-hidden": true,
           "flex-1": true,
         }}
         onMouseDown={(e) => e.stopPropagation()}
@@ -98,6 +113,102 @@ export const PromptDocShell: Component<ShellProps> = (props) => {
       >
         <div class="flex items-center gap-0.5">
           {props.modes}
+
+          {/* + Attach — 클릭 시 이미지·파일 메뉴 팝오버 (캡처 미구현) */}
+          <div>
+            {/* file inputs — 포털 밖에 두어 doc.addFiles 클로저가 작동하도록 */}
+            <input
+              ref={imageInputRef}
+              type="file"
+              multiple
+              accept={ACCEPTED_IMAGE_TYPES.join(",")}
+              hidden
+              tabindex={-1}
+              aria-hidden="true"
+              onChange={(e) => {
+                const list = e.currentTarget.files
+                if (list?.length) void props.doc.addFiles(Array.from(list))
+                e.currentTarget.value = ""
+              }}
+            />
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept={ACCEPTED_FILE_TYPES.join(",")}
+              hidden
+              tabindex={-1}
+              aria-hidden="true"
+              onChange={(e) => {
+                const list = e.currentTarget.files
+                if (list?.length) void props.doc.addFiles(Array.from(list))
+                e.currentTarget.value = ""
+              }}
+            />
+            <Show when={attachOpen() && attachPos()}>
+              <Portal>
+                <div
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={closeAttach}
+                  class="fixed inset-0 z-[50]"
+                />
+                <div
+                  data-component="prompt-doc-attach-menu"
+                  class="oc-attach-menu"
+                  role="menu"
+                  style={{
+                    position: "fixed",
+                    left: `${attachPos()!.left}px`,
+                    bottom: `${attachPos()!.bottom}px`,
+                    "z-index": "51",
+                  }}
+                >
+                  <button
+                    class="oc-attach-item"
+                    role="menuitem"
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => { imageInputRef?.click(); closeAttach() }}
+                    aria-label={language.t("prompt.action.attachImage")}
+                  >
+                    <Icon name="photo" class="size-3.75 shrink-0 text-icon-base" />
+                    {language.t("prompt.action.attachImage")}
+                  </button>
+                  <button
+                    class="oc-attach-item"
+                    role="menuitem"
+                    type="button"
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => { fileInputRef?.click(); closeAttach() }}
+                    aria-label={language.t("prompt.action.attachFile")}
+                  >
+                    <Icon name="file" class="size-3.75 shrink-0 text-icon-base" />
+                    {language.t("prompt.action.attachFile")}
+                  </button>
+                </div>
+              </Portal>
+            </Show>
+            <IconButton
+              ref={(el) => { attachBtnRef = el }}
+              data-action="prompt-doc-attach"
+              type="button"
+              icon="plus"
+              variant="ghost"
+              class="size-7.5 oc-attach-btn"
+              classList={{ "is-open": attachOpen() }}
+              disabled={!props.doc.ready()}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => attachOpen() ? closeAttach() : openAttach()}
+              aria-label={language.t("prompt.action.attachFile")}
+              aria-haspopup="menu"
+              aria-expanded={attachOpen()}
+            />
+          </div>
+
+          {/* | 구분자 */}
+          <span class="mx-1 h-4 w-px shrink-0 bg-border-weaker-base" />
+
+          {/* ← → undo/redo */}
           <Tooltip placement="top" value={language.t("prompt.action.docUndo")}>
             <IconButton
               data-action="prompt-doc-undo"
@@ -122,46 +233,7 @@ export const PromptDocShell: Component<ShellProps> = (props) => {
               aria-label={language.t("prompt.action.docRedo")}
             />
           </Tooltip>
-          <input
-            ref={fileInputRef}
-            type="file"
-            multiple
-            accept={ACCEPTED_FILE_TYPES.join(",")}
-            hidden
-            tabindex={-1}
-            aria-hidden="true"
-            onChange={(e) => {
-              const list = e.currentTarget.files
-              if (list?.length) void props.doc.addFiles(Array.from(list))
-              e.currentTarget.value = ""
-            }}
-          />
-          <Tooltip placement="top" value={language.t("prompt.action.attachFile")}>
-            <IconButton
-              data-action="prompt-doc-attach"
-              type="button"
-              icon="plus"
-              variant="ghost"
-              class="size-7.5"
-              disabled={!props.doc.ready()}
-              onClick={() => fileInputRef?.click()}
-              aria-label={language.t("prompt.action.attachFile")}
-            />
-          </Tooltip>
-          <Show when={props.capture && !env.productionLayout()}>
-            <Tooltip placement="top" value={language.t("prompt.action.captureTab")}>
-              <IconButton
-                data-action="prompt-doc-capture-tab"
-                type="button"
-                icon="photo"
-                variant="ghost"
-                class="size-7.5"
-                disabled={!props.doc.ready() || props.capture!.active}
-                onClick={() => props.capture!.onCapture()}
-                aria-label={language.t("prompt.action.captureTab")}
-              />
-            </Tooltip>
-          </Show>
+
           <Show when={props.expand && !env.productionLayout()}>
             <Tooltip placement="top" value={expandLabel()}>
               <IconButton
@@ -188,9 +260,6 @@ export const PromptDocShell: Component<ShellProps> = (props) => {
                 aria-checked={props.autoExpand!.enabled}
                 aria-label={language.t("prompt.action.docAutoExpand")}
                 class="oc-auto-toggle"
-                // 토글은 메타 컨트롤이라 포커스를 가져가면 안 된다. 클릭 시 포커스가 옮겨지면
-                // focusWithin 이 켜져 자동 확대 효과가 발동(확대됐다가 곧 축소)하므로 mousedown 의
-                // 기본 포커스 이동을 막는다. (키보드 Tab 포커스는 영향 없음)
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => props.autoExpand!.onToggle()}
               >

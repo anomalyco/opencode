@@ -1163,6 +1163,62 @@
   width: 96px;
 }
 
+/* C-3 첨부(+) 버튼 — 원형 토글. 열리면 회전해 X 모양 강조 */
+.oc-attach-btn {
+  border-radius: 999px !important;
+  transition: background var(--duration-150) var(--ease-standard),
+              transform var(--duration-base) var(--ease-standard);
+}
+.oc-attach-btn.is-open {
+  background: var(--surface-base-active) !important;
+  transform: rotate(45deg);
+}
+
+/* 첨부 메뉴 — 버튼 위로 확장되는 팝오버 (이미지·파일) */
+.oc-attach-menu {
+  z-index: 51;
+  min-width: 130px;
+  padding: 5px;
+  background: var(--surface-raised-base);
+  border: 1px solid var(--border-base);
+  border-radius: 10px;
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transform-origin: bottom left;
+  animation: oc-attach-pop 120ms ease-out;
+}
+
+@keyframes oc-attach-pop {
+  from { opacity: 0; transform: translateY(4px) scale(0.97); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.oc-attach-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  border: none;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-base);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--duration-150) var(--ease-standard);
+}
+.oc-attach-item:hover {
+  background: var(--surface-base-hover);
+}
+.oc-attach-item:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: -1px;
+}
+
 /* C-3 '자동 확대' 토글 (.oc-auto-toggle) — 켜면 입력창 포커스 시 자동으로 커짐.
    디자인 어휘를 앱 토큰으로 매핑(다크 모드에서 track/thumb 대비 유지). */
 .oc-auto-toggle {
