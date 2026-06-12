@@ -1,6 +1,6 @@
 export * as Integration from "./integration"
 
-import { Cause, Clock, Context, Duration, Effect, Exit, Layer, Schedule, Schema, Scope, SynchronizedRef } from "effect"
+import { Cause, Clock, Context, Duration, Effect, Exit, Layer, Option, Schedule, Schema, Scope, SynchronizedRef } from "effect"
 import { castDraft, enableMapSet, type Draft } from "immer"
 import { Credential } from "./credential"
 import { IntegrationSchema } from "./integration/schema"
@@ -379,7 +379,7 @@ export const locationLayer = Layer.effect(
       if (Exit.isSuccess(exit)) {
         let value = exit.value
         const decodedOption = decodeLegacySuccess(value)
-        if (decodedOption._tag === "Some") {
+        if (Option.isSome(decodedOption)) {
           const legacy = decodedOption.value
           if ("access" in legacy) {
             value = new Credential.OAuth({
