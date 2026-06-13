@@ -2,6 +2,7 @@ export * as DatabaseHealth from "./health"
 
 import { Database as BunDatabase } from "bun:sqlite"
 import { InstallationVersion } from "../installation/version"
+import { migrations } from "./migration.gen"
 export type RepairMode = "safe"
 export type IssueSeverity = "info" | "warning" | "error"
 export type Confidence = "low" | "medium" | "high"
@@ -10,10 +11,10 @@ export interface SupportedRepair {
   code: string
   table: "session" | "session_message" | "part"
   repairable: boolean
-  sourceVersions: string
-  targetVersion: string
+  targetOpenCodeVersion: string
+  targetMigration?: string
   targetInvariant: string
-  introducedBy?: string
+  sourceEvidence: string
   description: string
   repair: string
   safety: string
@@ -21,6 +22,8 @@ export interface SupportedRepair {
 
 export interface CompatibilityContext {
   targetOpenCodeVersion: string
+  expectedMigrations: string[]
+  latestExpectedMigration?: string
   sessionVersions: { version: string; count: number }[]
   appliedMigrations: string[]
   latestAppliedMigration?: string
@@ -31,10 +34,10 @@ export const SUPPORTED_REPAIRS = [
     code: "part_legacy_id_prefix",
     table: "part",
     repairable: true,
-    sourceVersions: "Observed on affected session.version values 1.2.21 and 1.2.22; older part_ rows are matched by persisted shape, not by version guesswork.",
-    targetVersion: InstallationVersion,
+    targetOpenCodeVersion: InstallationVersion,
     targetInvariant: "Session message part IDs must satisfy PartID, which currently requires the prt_ prefix.",
-    description: "Legacy message part rows use part_ IDs, while current schemas validate message part IDs with the prt_ prefix.",
+    sourceEvidence: "Observed on affected session.version values 1.2.21 and 1.2.22. No exact SDK/OpenCode change boundary is asserted here; detection is based on violating the migrated target invariant.",
+    description: "Historical message part rows use part_ IDs, while the migrated target schema validates message part IDs with the prt_ prefix.",
     repair: "Rename part.id from part_<suffix> to prt_<suffix> when the target id does not already exist.",
     safety: "Primary-key update only; message/session foreign key columns and part data are unchanged; apply rechecks the source row and target-id absence.",
   },
@@ -42,10 +45,10 @@ export const SUPPORTED_REPAIRS = [
     code: "assistant_message_missing_agent",
     table: "session_message",
     repairable: true,
-    sourceVersions: "Observed on pre-session-metadata rows; matched by missing data.agent with non-empty data.mode.",
-    targetVersion: InstallationVersion,
+    targetOpenCodeVersion: InstallationVersion,
     targetInvariant: "Assistant session_message.data should carry agent, not only mode.",
-    description: "Legacy assistant session_message.data rows may have mode but no agent.",
+    sourceEvidence: "Matched by target-shape violation: missing data.agent with non-empty data.mode.",
+    description: "Assistant session_message.data rows may have mode but no agent after migration to the current target shape.",
     repair: "Copy data.mode to data.agent when mode is a single non-empty string and agent is missing.",
     safety: "JSON update only; apply rechecks the original JSON payload and mode before writing.",
   },
@@ -53,11 +56,11 @@ export const SUPPORTED_REPAIRS = [
     code: "session_agent_missing",
     table: "session",
     repairable: true,
-    sourceVersions: "Rows created before session metadata was denormalized onto session rows.",
-    targetVersion: InstallationVersion,
+    targetOpenCodeVersion: InstallationVersion,
+    targetMigration: "20260511173437_session-metadata",
     targetInvariant: "session.agent is present when a single unambiguous agent can be derived.",
-    introducedBy: "20260511173437_session-metadata",
-    description: "Legacy session rows may miss the denormalized session.agent field required by current callers.",
+    sourceEvidence: "Matched by target-shape violation after the session metadata migration: missing session.agent.",
+    description: "Session rows may miss the denormalized session.agent field required by the migrated target shape.",
     repair: "Set session.agent only when one unambiguous value can be derived from assistant or agent-switched messages.",
     safety: "Skipped when no single value is derivable; apply rederives the value before writing.",
   },
@@ -65,11 +68,11 @@ export const SUPPORTED_REPAIRS = [
     code: "session_model_missing",
     table: "session",
     repairable: true,
-    sourceVersions: "Rows created before session metadata was denormalized onto session rows.",
-    targetVersion: InstallationVersion,
+    targetOpenCodeVersion: InstallationVersion,
+    targetMigration: "20260511173437_session-metadata",
     targetInvariant: "session.model is present when a single unambiguous model can be derived.",
-    introducedBy: "20260511173437_session-metadata",
-    description: "Legacy session rows may miss the denormalized session.model field required by current callers.",
+    sourceEvidence: "Matched by target-shape violation after the session metadata migration: missing session.model.",
+    description: "Session rows may miss the denormalized session.model field required by the migrated target shape.",
     repair: "Set session.model only when one unambiguous model object can be derived from assistant or model-switched messages.",
     safety: "Skipped when no single value is derivable; apply rederives the value before writing.",
   },
@@ -77,11 +80,11 @@ export const SUPPORTED_REPAIRS = [
     code: "session_path_missing",
     table: "session",
     repairable: true,
-    sourceVersions: "Rows created before session.path was added or rows left null by earlier migrations.",
-    targetVersion: InstallationVersion,
+    targetOpenCodeVersion: InstallationVersion,
+    targetMigration: "20260428004200_add_session_path",
     targetInvariant: "session.path is present when session.directory is non-empty.",
-    introducedBy: "20260428004200_add_session_path",
-    description: "Legacy session rows may miss session.path after the current schema expects it.",
+    sourceEvidence: "Matched by target-shape violation after the session.path migration: missing session.path with non-empty session.directory.",
+    description: "Session rows may miss session.path after migration to the current target shape.",
     repair: "Set session.path from the same row's session.directory when directory is non-empty.",
     safety: "Does not rewrite directory/worktree semantics; apply rechecks the original empty path and derived directory value.",
   },
@@ -380,7 +383,16 @@ function tableColumns(db: BunDatabase, table: string) {
 }
 
 function readCompatibility(db: BunDatabase | undefined): CompatibilityContext {
-  if (!db) return { targetOpenCodeVersion: InstallationVersion, sessionVersions: [], appliedMigrations: [] }
+  const expectedMigrations = migrations.map((migration) => migration.id)
+  if (!db) {
+    return {
+      targetOpenCodeVersion: InstallationVersion,
+      expectedMigrations,
+      latestExpectedMigration: expectedMigrations.at(-1),
+      sessionVersions: [],
+      appliedMigrations: [],
+    }
+  }
   const sessionVersions = tableColumns(db, "session").has("version")
     ? (db.query("SELECT version, count(*) AS count FROM session GROUP BY version ORDER BY count DESC").all() as { version: string; count: number }[])
     : []
@@ -389,6 +401,8 @@ function readCompatibility(db: BunDatabase | undefined): CompatibilityContext {
     : []
   return {
     targetOpenCodeVersion: InstallationVersion,
+    expectedMigrations,
+    latestExpectedMigration: expectedMigrations.at(-1),
     sessionVersions,
     appliedMigrations,
     latestAppliedMigration: appliedMigrations.at(-1),

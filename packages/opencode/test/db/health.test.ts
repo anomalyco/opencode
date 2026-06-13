@@ -21,8 +21,9 @@ describe("database doctor and repair", () => {
       "session_model_missing",
       "session_path_missing",
     ])
-    expect(SUPPORTED_REPAIRS.find((repair) => repair.code === "part_legacy_id_prefix")?.sourceVersions).toContain("1.2.21")
-    expect(SUPPORTED_REPAIRS.every((repair) => repair.targetVersion.length > 0 && repair.targetInvariant.length > 0)).toBe(true)
+    expect(SUPPORTED_REPAIRS.find((repair) => repair.code === "part_legacy_id_prefix")?.sourceEvidence).toContain("1.2.21")
+    expect(SUPPORTED_REPAIRS.find((repair) => repair.code === "session_path_missing")?.targetMigration).toBe("20260428004200_add_session_path")
+    expect(SUPPORTED_REPAIRS.every((repair) => repair.targetOpenCodeVersion.length > 0 && repair.targetInvariant.length > 0)).toBe(true)
   })
 
   test("reports a missing database without creating it", async () => {
@@ -34,9 +35,11 @@ describe("database doctor and repair", () => {
 
     expect(report.exitCode).toBe(2)
     expect(report.compatibility.targetOpenCodeVersion.length).toBeGreaterThan(0)
+    expect(report.compatibility.latestExpectedMigration).toBe("20260612174303_project_dir_strategy")
     expect(report.supportedRepairs.some((repair) => repair.code === "part_legacy_id_prefix")).toBe(true)
     expect(plan.exitCode).toBe(2)
     expect(plan.compatibility.targetOpenCodeVersion.length).toBeGreaterThan(0)
+    expect(plan.compatibility.latestExpectedMigration).toBe("20260612174303_project_dir_strategy")
     expect(plan.supportedRepairs.some((repair) => repair.code === "part_legacy_id_prefix")).toBe(true)
     expect(existsSync(dbPath)).toBe(false)
   })
