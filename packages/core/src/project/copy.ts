@@ -245,6 +245,7 @@ export const layer = Layer.effect(
         (sourceDirectory) =>
           Effect.forEach(strategies(), (strategy) =>
             strategy.list(sourceDirectory).pipe(
+              Effect.catchTag("ProjectCopy.DirectoryUnavailableError", () => Effect.succeed([])),
               Effect.map((items) =>
                 items.map((item) => ({
                   directory: item.directory,
