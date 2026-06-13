@@ -5,6 +5,7 @@ import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import * as Log from "@opencode-ai/core/util/log"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
+import { ModelID, ProviderID } from "../../src/provider/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideInstance, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -28,6 +29,11 @@ const it = testEffect(
     CrossSpawnSpawner.defaultLayer,
   ),
 )
+
+const ref = {
+  providerID: ProviderID.make("test"),
+  modelID: ModelID.make("test-model"),
+}
 
 const awaitDeferred = <T>(deferred: Deferred.Deferred<T>, message: string) =>
   Effect.race(
@@ -167,6 +173,75 @@ describe("step-finish token propagation via Bus event", () => {
         yield* session.remove(info.id)
       }),
     { timeout: 30000 },
+  )
+})
+
+describe("orphaned assistant recovery", () => {
+  it.instance("finalizes incomplete assistant messages and aborts running tools", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const info = yield* session.create({})
+      const user = yield* session.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: info.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "build",
+        model: ref,
+      })
+      const assistant = yield* session.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: info.id,
+        parentID: user.id,
+        role: "assistant",
+        mode: "build",
+        agent: "build",
+        path: { cwd: "/tmp", root: "/tmp" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: Date.now() },
+      } satisfies MessageV2.Assistant)
+      const started = Date.now()
+      yield* session.updatePart({
+        id: PartID.ascending(),
+        messageID: assistant.id,
+        sessionID: info.id,
+        type: "tool",
+        callID: "call_orphaned_task",
+        tool: "task",
+        state: {
+          status: "running",
+          input: { description: "inspect bug" },
+          metadata: { sessionId: "ses_child" },
+          time: { start: started },
+        },
+      } satisfies MessageV2.ToolPart)
+
+      yield* session.finalizeOrphanedAssistant(info.id)
+
+      const messages = yield* session.messages({ sessionID: info.id })
+      const last = messages.at(-1)
+      expect(last?.info.role).toBe("assistant")
+      if (!last || last.info.role !== "assistant") return
+
+      expect(last.info.time.completed).toBeNumber()
+      expect(last.info.error?.name).toBe("MessageAbortedError")
+
+      const tool = last.parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+      expect(tool?.state.status).toBe("error")
+      if (!tool || tool.state.status !== "error") return
+
+      expect(tool.state.error).toBe("Tool execution aborted")
+      expect(tool.state.input).toEqual({ description: "inspect bug" })
+      expect(tool.state.metadata?.interrupted).toBe(true)
+      expect(tool.state.metadata?.sessionId).toBe("ses_child")
+      expect(tool.state.time.start).toBe(started)
+      expect(tool.state.time.end).toBeNumber()
+
+      yield* session.remove(info.id)
+    }),
   )
 })
 

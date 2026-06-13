@@ -1052,7 +1052,11 @@ noLLMServer.instance(
       expect(tool?.type).toBe("tool")
       if (!tool) return
 
-      expect(tool.state.status).not.toBe("running")
+      expect(tool.state.status).toBe("error")
+      if (tool.state.status === "error") {
+        expect(tool.state.error).toBe("Cancelled")
+        expect(tool.state.metadata?.interrupted).toBe(true)
+      }
       expect(taskMsg.info.time.completed).toBeDefined()
       expect(taskMsg.info.finish).toBeDefined()
     }),

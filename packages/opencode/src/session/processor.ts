@@ -839,7 +839,7 @@ export const layer = Layer.effect(
               }),
             ),
             Effect.catch(halt),
-            Effect.ensuring(cleanup()),
+            Effect.ensuring(Effect.uninterruptible(cleanup())),
           )
 
           if (ctx.needsCompaction) return "compact"

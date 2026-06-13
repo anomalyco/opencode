@@ -123,6 +123,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         })
       }
       yield* requireSession(ctx.params.sessionID)
+      if ((yield* statusSvc.get(ctx.params.sessionID)).type === "idle") {
+        yield* session.finalizeOrphanedAssistant(ctx.params.sessionID)
+      }
       if (ctx.query.limit === undefined || ctx.query.limit === 0) {
         return yield* SessionError.mapStorageNotFound(session.messages({ sessionID: ctx.params.sessionID }))
       }

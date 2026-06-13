@@ -494,6 +494,7 @@ export interface Interface {
   readonly setSummary: (input: { sessionID: SessionID; summary: Info["summary"] }) => Effect.Effect<void>
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<MessageV2.WithParts[], NotFound>
+  readonly finalizeOrphanedAssistant: (sessionID: SessionID) => Effect.Effect<void>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
   readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
   readonly updateMessage: <T extends MessageV2.Info>(msg: T) => Effect.Effect<T>
@@ -865,6 +866,53 @@ export const layer: Layer.Layer<
       return Option.none<MessageV2.WithParts>()
     })
 
+    const finalizeOrphanedAssistant: Interface["finalizeOrphanedAssistant"] = Effect.fn(
+      "Session.finalizeOrphanedAssistant",
+    )(function* (sessionID) {
+      const latest = yield* findMessage(sessionID, (item) => item.info.role === "assistant").pipe(
+        Effect.catchCause(() => Effect.succeed(Option.none<MessageV2.WithParts>())),
+      )
+      if (Option.isNone(latest)) return
+
+      const message = latest.value
+      if (message.info.role !== "assistant") return
+
+      const now = Date.now()
+      for (const part of message.parts) {
+        if (part.type !== "tool") continue
+        if (part.state.status !== "running" && part.state.status !== "pending") continue
+        const metadata = part.state.status === "running" ? part.state.metadata : undefined
+        yield* updatePart({
+          ...part,
+          state: {
+            status: "error",
+            input: part.state.input,
+            error: "Tool execution aborted",
+            metadata: { ...(metadata ?? {}), interrupted: true },
+            time: {
+              start: part.state.status === "running" ? part.state.time.start : now,
+              end: now,
+            },
+          },
+        })
+      }
+
+      if (message.info.time.completed) return
+      yield* updateMessage({
+        ...message.info,
+        error:
+          message.info.error ??
+          MessageV2.fromError(new DOMException("Aborted", "AbortError"), {
+            providerID: message.info.providerID,
+            aborted: true,
+          }),
+        time: {
+          ...message.info.time,
+          completed: now,
+        },
+      })
+    })
+
     return Service.of({
       list,
       create,
@@ -879,6 +927,7 @@ export const layer: Layer.Layer<
       setSummary,
       diff,
       messages,
+      finalizeOrphanedAssistant,
       children,
       remove,
       updateMessage,

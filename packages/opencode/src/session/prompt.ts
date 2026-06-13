@@ -132,53 +132,10 @@ export const layer = Layer.effect(
       } satisfies TaskPromptOps
     })
 
-    const finalizeOrphanedAssistant = Effect.fn("SessionPrompt.finalizeOrphanedAssistant")(function* (
-      sessionID: SessionID,
-    ) {
-      const messages = yield* sessions.messages({ sessionID }).pipe(Effect.catchCause(() => Effect.succeed([])))
-      const last = messages.at(-1)
-      if (!last || last.info.role !== "assistant") return
-      if (last.info.time.completed) return
-
-      const now = Date.now()
-      for (const part of last.parts) {
-        if (part.type !== "tool") continue
-        if (part.state.status !== "running" && part.state.status !== "pending") continue
-        const metadata = part.state.status === "running" ? part.state.metadata : undefined
-        yield* sessions.updatePart({
-          ...part,
-          state: {
-            status: "error",
-            input: part.state.input,
-            error: "Tool execution aborted",
-            ...(metadata ? { metadata } : {}),
-            time: {
-              start: part.state.status === "running" ? part.state.time.start : now,
-              end: now,
-            },
-          },
-        })
-      }
-
-      yield* sessions.updateMessage({
-        ...last.info,
-        error:
-          last.info.error ??
-          MessageV2.fromError(new DOMException("Aborted", "AbortError"), {
-            providerID: last.info.providerID,
-            aborted: true,
-          }),
-        time: {
-          ...last.info.time,
-          completed: now,
-        },
-      })
-    })
-
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
       yield* elog.info("cancel", { sessionID })
       yield* state.cancel(sessionID)
-      yield* finalizeOrphanedAssistant(sessionID)
+      yield* sessions.finalizeOrphanedAssistant(sessionID)
     })
 
     const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
@@ -447,24 +404,26 @@ export const layer = Layer.effect(
             return Effect.void
           }),
           Effect.onInterrupt(() =>
-            Effect.gen(function* () {
-              taskAbort.abort()
-              assistantMessage.finish = "tool-calls"
-              assistantMessage.time.completed = Date.now()
-              yield* sessions.updateMessage(assistantMessage)
-              if (part.state.status === "running") {
-                yield* sessions.updatePart({
-                  ...part,
-                  state: {
-                    status: "error",
-                    error: "Cancelled",
-                    time: { start: part.state.time.start, end: Date.now() },
-                    metadata: part.state.metadata,
-                    input: part.state.input,
-                  },
-                } satisfies MessageV2.ToolPart)
-              }
-            }),
+            Effect.uninterruptible(
+              Effect.gen(function* () {
+                taskAbort.abort()
+                assistantMessage.finish = "tool-calls"
+                assistantMessage.time.completed = Date.now()
+                yield* sessions.updateMessage(assistantMessage)
+                if (part.state.status === "running") {
+                  yield* sessions.updatePart({
+                    ...part,
+                    state: {
+                      status: "error",
+                      error: "Cancelled",
+                      time: { start: part.state.time.start, end: Date.now() },
+                      metadata: { ...(part.state.metadata ?? {}), interrupted: true },
+                      input: part.state.input,
+                    },
+                  } satisfies MessageV2.ToolPart)
+                }
+              }),
+            ),
           ),
         )
 
@@ -1260,6 +1219,8 @@ export const layer = Layer.effect(
       "SessionPrompt.prompt",
     )(function* (input: PromptInput) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+      const currentStatus = yield* status.get(input.sessionID)
+      if (currentStatus.type === "idle") yield* sessions.finalizeOrphanedAssistant(input.sessionID)
       yield* revert.cleanup(session)
       const message = yield* createUserMessage(input)
       yield* sessions.touch(input.sessionID)
@@ -1406,13 +1367,7 @@ export const layer = Layer.effect(
           yield* sessions.updateMessage(msg)
 
           const finalizeInterruptedAssistant = Effect.gen(function* () {
-            if (msg.time.completed) return
-            msg.error ??= MessageV2.fromError(new DOMException("Aborted", "AbortError"), {
-              providerID: msg.providerID,
-              aborted: true,
-            })
-            msg.time.completed = Date.now()
-            yield* sessions.updateMessage(msg)
+            yield* sessions.finalizeOrphanedAssistant(sessionID)
           })
 
           const handle = yield* processor
