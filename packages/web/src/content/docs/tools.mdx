@@ -5,7 +5,7 @@ description: Manage the tools an LLM can use.
 
 Tools allow the LLM to perform actions in your codebase. OpenCode comes with a set of built-in tools, but you can extend it with [custom tools](/docs/custom-tools) or [MCP servers](/docs/mcp-servers).
 
-By default, all tools are **enabled** and don't need permission to run. You can control tool behavior through [permissions](/docs/permissions).
+By default, non-experimental tools are **enabled** and don't need permission to run. Experimental tools may require their own feature flag, which is noted in the tool's section. You can control tool behavior through [permissions](/docs/permissions).
 
 ---
 
@@ -153,7 +153,7 @@ Search for files using glob patterns like `**/*.js` or `src/**/*.ts`. Returns ma
 
 ### lsp (experimental)
 
-Interact with your configured LSP servers to get code intelligence features like definitions, references, hover info, and call hierarchy.
+Interact with your configured LSP servers to get code intelligence features like definitions, references, hover info, and call hierarchy. This experimental tool is separate from the [`lsp` configuration](/docs/lsp), which enables LSP server integration and diagnostics.
 
 :::note
 This tool is only available when `OPENCODE_EXPERIMENTAL_LSP_TOOL=true` (or `OPENCODE_EXPERIMENTAL=true`).
