@@ -243,6 +243,169 @@ describe("orphaned assistant recovery", () => {
       yield* session.remove(info.id)
     }),
   )
+
+  it.instance("finalizes orphaned child sessions when task metadata was not persisted", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const parent = yield* session.create({})
+      const user = yield* session.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: parent.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "build",
+        model: ref,
+      })
+      const assistant = yield* session.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: parent.id,
+        parentID: user.id,
+        role: "assistant",
+        mode: "build",
+        agent: "build",
+        path: { cwd: "/tmp", root: "/tmp" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: Date.now() },
+      } satisfies MessageV2.Assistant)
+      const firstTask = yield* session.updatePart({
+        id: PartID.ascending(),
+        messageID: assistant.id,
+        sessionID: parent.id,
+        type: "tool",
+        callID: "call_orphaned_child_a",
+        tool: "task",
+        state: {
+          status: "running",
+          input: { description: "learn examples", subagent_type: "explore" },
+          time: { start: Date.now() },
+        },
+      } satisfies MessageV2.ToolPart)
+      const secondTask = yield* session.updatePart({
+        id: PartID.ascending(),
+        messageID: assistant.id,
+        sessionID: parent.id,
+        type: "tool",
+        callID: "call_orphaned_child_b",
+        tool: "task",
+        state: {
+          status: "running",
+          input: { description: "read draft", subagent_type: "explore" },
+          time: { start: Date.now() },
+        },
+      } satisfies MessageV2.ToolPart)
+
+      const childA = yield* session.create({
+        parentID: parent.id,
+        title: "learn examples (@Explorer - Search Specialist subagent)",
+      })
+      const childAUser = yield* session.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: childA.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "explore",
+        model: ref,
+      })
+      const childAAssistant = yield* session.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: childA.id,
+        parentID: childAUser.id,
+        role: "assistant",
+        mode: "explore",
+        agent: "explore",
+        path: { cwd: "/tmp", root: "/tmp" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: Date.now() },
+      } satisfies MessageV2.Assistant)
+      yield* session.updatePart({
+        id: PartID.ascending(),
+        messageID: childAAssistant.id,
+        sessionID: childA.id,
+        type: "tool",
+        callID: "call_child_glob",
+        tool: "glob",
+        state: {
+          status: "running",
+          input: { pattern: "*.wls" },
+          time: { start: Date.now() },
+        },
+      } satisfies MessageV2.ToolPart)
+
+      const childB = yield* session.create({
+        parentID: parent.id,
+        title: "read draft (@Explorer - Search Specialist subagent)",
+      })
+      const childBUser = yield* session.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: childB.id,
+        role: "user",
+        time: { created: Date.now() },
+        agent: "explore",
+        model: ref,
+      })
+      yield* session.updateMessage({
+        id: MessageID.ascending(),
+        sessionID: childB.id,
+        parentID: childBUser.id,
+        role: "assistant",
+        mode: "explore",
+        agent: "explore",
+        path: { cwd: "/tmp", root: "/tmp" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: Date.now() },
+      } satisfies MessageV2.Assistant)
+
+      yield* session.finalizeOrphanedAssistant(parent.id)
+
+      const parentMessages = yield* session.messages({ sessionID: parent.id })
+      const recoveredParent = parentMessages.find((item) => item.info.id === assistant.id)
+      expect(recoveredParent?.info.role).toBe("assistant")
+      if (!recoveredParent || recoveredParent.info.role !== "assistant") return
+      expect(recoveredParent.info.time.completed).toBeNumber()
+
+      const recoveredFirst = recoveredParent.parts.find(
+        (part): part is MessageV2.ToolPart => part.type === "tool" && part.id === firstTask.id,
+      )
+      const recoveredSecond = recoveredParent.parts.find(
+        (part): part is MessageV2.ToolPart => part.type === "tool" && part.id === secondTask.id,
+      )
+      expect(recoveredFirst?.state.status).toBe("error")
+      expect(recoveredSecond?.state.status).toBe("error")
+      if (!recoveredFirst || recoveredFirst.state.status !== "error") return
+      if (!recoveredSecond || recoveredSecond.state.status !== "error") return
+      expect(recoveredFirst.state.metadata?.interrupted).toBe(true)
+      expect(recoveredFirst.state.metadata?.sessionId).toBe(childA.id)
+      expect(recoveredSecond.state.metadata?.interrupted).toBe(true)
+      expect(recoveredSecond.state.metadata?.sessionId).toBe(childB.id)
+
+      const childAMessages = yield* session.messages({ sessionID: childA.id })
+      const recoveredChildA = childAMessages.find((item) => item.info.id === childAAssistant.id)
+      expect(recoveredChildA?.info.role).toBe("assistant")
+      if (!recoveredChildA || recoveredChildA.info.role !== "assistant") return
+      expect(recoveredChildA.info.time.completed).toBeNumber()
+      const childATool = recoveredChildA.parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+      expect(childATool?.state.status).toBe("error")
+      if (!childATool || childATool.state.status !== "error") return
+      expect(childATool.state.metadata?.interrupted).toBe(true)
+
+      const childBMessages = yield* session.messages({ sessionID: childB.id })
+      const recoveredChildB = childBMessages.find((item) => item.info.role === "assistant")
+      expect(recoveredChildB?.info.role).toBe("assistant")
+      if (!recoveredChildB || recoveredChildB.info.role !== "assistant") return
+      expect(recoveredChildB.info.time.completed).toBeNumber()
+
+      yield* session.remove(parent.id)
+    }),
+  )
 })
 
 describe("session archive state", () => {
