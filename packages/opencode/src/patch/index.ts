@@ -457,7 +457,7 @@ function tryMatch(lines: string[], pattern: string[], startIndex: number, compar
   return -1
 }
 
-function seekSequence(lines: string[], pattern: string[], startIndex: number, eof = false): number {
+export function seekSequence(lines: string[], pattern: string[], startIndex: number, eof = false): number {
   if (pattern.length === 0) return -1
 
   // Pass 1: exact match
@@ -480,7 +480,19 @@ function seekSequence(lines: string[], pattern: string[], startIndex: number, eo
     (a, b) => normalizeUnicode(a.trim()) === normalizeUnicode(b.trim()),
     eof,
   )
-  return normalized
+  if (normalized !== -1) return normalized
+
+  // Pass 5: NFC match (canonical equivalence — combining characters)
+  // Models emit NFC; files on disk may be NFD (macOS filesystems, Cyrillic
+  // content). NFC followed by exact equality only matches canonically-
+  // equivalent text, so this cannot introduce false positives.
+  return tryMatch(
+    lines,
+    pattern,
+    startIndex,
+    (a, b) => a.normalize("NFC").trim() === b.normalize("NFC").trim(),
+    eof,
+  )
 }
 
 function generateUnifiedDiff(oldContent: string, newContent: string): string {

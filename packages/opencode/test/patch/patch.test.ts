@@ -3,11 +3,36 @@ import { Effect } from "effect"
 import * as fs from "fs/promises"
 import * as path from "path"
 import { tmpdir } from "os"
-import { Patch } from "../../src/patch"
+import { Patch, seekSequence } from "../../src/patch"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(FSUtil.defaultLayer)
+
+describe("seekSequence", () => {
+  test("matches exact lines", () => {
+    expect(seekSequence(["a", "b", "c"], ["b"], 0)).toBe(1)
+  })
+
+  test("matches NFD file lines against an NFC pattern (canonical equivalence)", () => {
+    // Cyrillic й: NFC = U+0439 (precomposed), NFD = U+0438 + U+0306 (decomposed).
+    // Models emit NFC; files on disk (macOS filesystems, some editors) may be NFD.
+    const nfc = "й"
+    const nfd = nfc.normalize("NFD")
+    expect(nfc).not.toBe(nfd) // distinct byte sequences, identical glyph
+
+    const lines = ["header", nfd, "footer"]
+    const pattern = [nfc]
+
+    // Passes 1-4 (exact/rstrip/trim/punctuation) all miss NFD↔NFC;
+    // Pass 5 (NFC normalization) matches at index 1.
+    expect(seekSequence(lines, pattern, 0)).toBe(1)
+  })
+
+  test("returns -1 when no canonical-equivalent match exists", () => {
+    expect(seekSequence(["abc", "def"], ["й"], 0)).toBe(-1)
+  })
+})
 
 describe("Patch namespace", () => {
   let tempDir: string
