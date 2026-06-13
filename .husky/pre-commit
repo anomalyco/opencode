@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+# Fast pre-commit: format-check and lint staged JS/TS/JSON/MD. Heavier gates (typecheck on push, plus
+# tests and security in CI) run elsewhere, so keep this quick.
+staged=$(git diff --cached --name-only --diff-filter=ACM -- '*.ts' '*.tsx' '*.js' '*.mjs' '*.cjs' '*.json' '*.md')
+if [ -z "$staged" ]; then
+  exit 0
+fi
+echo "$staged" | xargs bun run prettier --check
+bun run lint
