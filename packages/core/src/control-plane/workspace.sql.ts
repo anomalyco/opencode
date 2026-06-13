@@ -1,11 +1,9 @@
-import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core"
+import { table, text, integer } from "../database/dialect"
 import { ProjectTable } from "../project/sql"
 import { ProjectV2 } from "../project"
 import { WorkspaceV2 } from "../workspace"
-import { DatabaseDialect } from "../database/dialect"
-import { PgWorkspaceTable } from "./workspace.sql.pg"
 
-const _SqliteWorkspaceTable = sqliteTable("workspace", {
+export const WorkspaceTable = table("workspace", {
   id: text().$type<WorkspaceV2.ID>().primaryKey(),
   type: text().notNull(),
   name: text().notNull().default(""),
@@ -20,7 +18,3 @@ const _SqliteWorkspaceTable = sqliteTable("workspace", {
     .notNull()
     .$default(() => Date.now()),
 })
-
-type SqliteWorkspaceTable = typeof _SqliteWorkspaceTable
-
-export const WorkspaceTable: SqliteWorkspaceTable = DatabaseDialect.isPostgres() ? PgWorkspaceTable as any : _SqliteWorkspaceTable

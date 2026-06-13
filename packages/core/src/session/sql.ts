@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index, primaryKey, real, uniqueIndex } from "drizzle-orm/sqlite-core"
+import { table, text, integer, index, primaryKey, real, uniqueIndex, Timestamps } from "../database/dialect"
 import * as DatabasePath from "../database/path"
 import { ProjectTable } from "../project/sql"
 import type { SessionMessage } from "./message"
@@ -10,8 +10,6 @@ import { ProjectV2 } from "../project"
 import type { SessionSchema } from "./schema"
 import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
-import { Timestamps } from "../database/schema.sql"
-import { DatabaseDialect } from "../database/dialect"
 import type { SystemContext } from "../system-context/index"
 import { AgentV2 } from "../agent"
 
@@ -19,7 +17,7 @@ type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type
 type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
 type V1PartData = Omit<SessionV1.Part, "id" | "sessionID" | "messageID">
 
-const _SqliteSessionTable = sqliteTable(
+const SessionTable = table(
   "session",
   {
     id: text().$type<SessionSchema.ID>().primaryKey(),
@@ -58,99 +56,93 @@ const _SqliteSessionTable = sqliteTable(
     time_compacting: integer(),
     time_archived: integer(),
   },
-  (table) => [
-    index("session_project_idx").on(table.project_id),
-    index("session_workspace_idx").on(table.workspace_id),
-    index("session_parent_idx").on(table.parent_id),
+  (t) => [
+    index("session_project_idx").on(t.project_id),
+    index("session_workspace_idx").on(t.workspace_id),
+    index("session_parent_idx").on(t.parent_id),
   ],
 )
 
-const _SqliteMessageTable = sqliteTable(
+const MessageTable = table(
   "message",
   {
     id: text().$type<MessageID>().primaryKey(),
     session_id: text()
       .$type<SessionSchema.ID>()
       .notNull()
-      .references(() => _SqliteSessionTable.id, { onDelete: "cascade" }),
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
     ...Timestamps,
     data: text({ mode: "json" }).notNull().$type<V1MessageData>(),
   },
-  (table) => [index("message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id)],
+  (t) => [index("message_session_time_created_id_idx").on(t.session_id, t.time_created, t.id)],
 )
 
-const _SqlitePartTable = sqliteTable(
+const PartTable = table(
   "part",
   {
     id: text().$type<PartID>().primaryKey(),
     message_id: text()
       .$type<MessageID>()
       .notNull()
-      .references(() => _SqliteMessageTable.id, { onDelete: "cascade" }),
+      .references(() => MessageTable.id, { onDelete: "cascade" }),
     session_id: text().$type<SessionSchema.ID>().notNull(),
     ...Timestamps,
     data: text({ mode: "json" }).notNull().$type<V1PartData>(),
   },
-  (table) => [
-    index("part_message_id_id_idx").on(table.message_id, table.id),
-    index("part_session_idx").on(table.session_id),
+  (t) => [
+    index("part_message_id_id_idx").on(t.message_id, t.id),
+    index("part_session_idx").on(t.session_id),
   ],
 )
 
-const _SqliteTodoTable = sqliteTable(
+const TodoTable = table(
   "todo",
   {
     session_id: text()
       .$type<SessionSchema.ID>()
       .notNull()
-      .references(() => _SqliteSessionTable.id, { onDelete: "cascade" }),
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
     content: text().notNull(),
     status: text().notNull(),
     priority: text().notNull(),
     position: integer().notNull(),
     ...Timestamps,
   },
-  (table) => [
-    primaryKey({ columns: [table.session_id, table.position] }),
-    index("todo_session_idx").on(table.session_id),
+  (t) => [
+    primaryKey({ columns: [t.session_id, t.position] }),
+    index("todo_session_idx").on(t.session_id),
   ],
 )
 
-const _SqliteSessionMessageTable = sqliteTable(
+const SessionMessageTable = table(
   "session_message",
   {
     id: text().$type<SessionMessage.ID>().primaryKey(),
     session_id: text()
       .$type<SessionSchema.ID>()
       .notNull()
-      .references(() => _SqliteSessionTable.id, { onDelete: "cascade" }),
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
     type: text().$type<SessionMessage.Type>().notNull(),
     seq: integer().notNull(),
     ...Timestamps,
     data: text({ mode: "json" }).notNull().$type<SessionMessageData>(),
   },
-  (table) => [
-    uniqueIndex("session_message_session_seq_idx").on(table.session_id, table.seq),
-    index("session_message_session_type_seq_idx").on(table.session_id, table.type, table.seq),
-    index("session_message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id),
-    index("session_message_time_created_idx").on(table.time_created),
+  (t) => [
+    uniqueIndex("session_message_session_seq_idx").on(t.session_id, t.seq),
+    index("session_message_session_type_seq_idx").on(t.session_id, t.type, t.seq),
+    index("session_message_session_time_created_id_idx").on(t.session_id, t.time_created, t.id),
+    index("session_message_time_created_idx").on(t.time_created),
   ],
 )
 
-type SqliteSessionTable = typeof _SqliteSessionTable
-type SqliteMessageTable = typeof _SqliteMessageTable
-type SqlitePartTable = typeof _SqlitePartTable
-type SqliteTodoTable = typeof _SqliteTodoTable
-type SqliteSessionMessageTable = typeof _SqliteSessionMessageTable
-
-const _SqliteSessionInputTable = sqliteTable(
+const SessionInputTable = table(
   "session_input",
   {
     id: text().$type<SessionMessage.ID>().primaryKey(),
     session_id: text()
       .$type<SessionSchema.ID>()
       .notNull()
-      .references(() => _SqliteSessionTable.id, { onDelete: "cascade" }),
+      .references(() => SessionTable.id, { onDelete: "cascade" }),
     prompt: text({ mode: "json" }).notNull().$type<Prompt>(),
     delivery: text().$type<SessionInput.Delivery>().notNull(),
     admitted_seq: integer().notNull(),
@@ -159,23 +151,23 @@ const _SqliteSessionInputTable = sqliteTable(
       .notNull()
       .$default(() => Date.now()),
   },
-  (table) => [
+  (t) => [
     index("session_input_session_pending_delivery_seq_idx").on(
-      table.session_id,
-      table.promoted_seq,
-      table.delivery,
-      table.admitted_seq,
+      t.session_id,
+      t.promoted_seq,
+      t.delivery,
+      t.admitted_seq,
     ),
-    uniqueIndex("session_input_session_admitted_seq_idx").on(table.session_id, table.admitted_seq),
-    uniqueIndex("session_input_session_promoted_seq_idx").on(table.session_id, table.promoted_seq),
+    uniqueIndex("session_input_session_admitted_seq_idx").on(t.session_id, t.admitted_seq),
+    uniqueIndex("session_input_session_promoted_seq_idx").on(t.session_id, t.promoted_seq),
   ],
 )
 
-const _SqliteSessionContextEpochTable = sqliteTable("session_context_epoch", {
+const SessionContextEpochTable = table("session_context_epoch", {
   session_id: text()
     .$type<SessionSchema.ID>()
     .primaryKey()
-    .references(() => _SqliteSessionTable.id, { onDelete: "cascade" }),
+    .references(() => SessionTable.id, { onDelete: "cascade" }),
   baseline: text().notNull(),
   agent: text().$type<AgentV2.ID>().notNull().default(AgentV2.defaultID),
   snapshot: text({ mode: "json" }).notNull().$type<SystemContext.Snapshot>(),
@@ -184,23 +176,4 @@ const _SqliteSessionContextEpochTable = sqliteTable("session_context_epoch", {
   revision: integer().notNull().default(0),
 })
 
-type SqliteSessionInputTable = typeof _SqliteSessionInputTable
-type SqliteSessionContextEpochTable = typeof _SqliteSessionContextEpochTable
-
-import {
-  PgSessionTable,
-  PgMessageTable,
-  PgPartTable,
-  PgTodoTable,
-  PgSessionMessageTable,
-  PgSessionInputTable,
-  PgSessionContextEpochTable,
-} from "./sql.pg"
-
-export const SessionTable: SqliteSessionTable = DatabaseDialect.isPostgres() ? PgSessionTable as any : _SqliteSessionTable
-export const MessageTable: SqliteMessageTable = DatabaseDialect.isPostgres() ? PgMessageTable as any : _SqliteMessageTable
-export const PartTable: SqlitePartTable = DatabaseDialect.isPostgres() ? PgPartTable as any : _SqlitePartTable
-export const TodoTable: SqliteTodoTable = DatabaseDialect.isPostgres() ? PgTodoTable as any : _SqliteTodoTable
-export const SessionMessageTable: SqliteSessionMessageTable = DatabaseDialect.isPostgres() ? PgSessionMessageTable as any : _SqliteSessionMessageTable
-export const SessionInputTable: SqliteSessionInputTable = DatabaseDialect.isPostgres() ? PgSessionInputTable as any : _SqliteSessionInputTable
-export const SessionContextEpochTable: SqliteSessionContextEpochTable = DatabaseDialect.isPostgres() ? PgSessionContextEpochTable as any : _SqliteSessionContextEpochTable
+export { SessionTable, MessageTable, PartTable, TodoTable, SessionMessageTable, SessionInputTable, SessionContextEpochTable }

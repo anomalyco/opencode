@@ -5,7 +5,6 @@ import { Effect } from "effect"
 import type { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import type { EffectDrizzlePg } from "@opencode-ai/effect-drizzle-pg"
 import { migrations } from "./migration.gen"
-import { bootstrapPg } from "./pg-bootstrap"
 
 type SqliteDatabase = EffectDrizzleSqlite.EffectSQLiteDatabase
 type SqliteTransaction = Parameters<Parameters<SqliteDatabase["transaction"]>[0]>[0]
@@ -71,14 +70,6 @@ export function applyPg(db: PgDatabase) {
     const completed = new Set(
       (yield* db.all<{ id: string }>(sql`SELECT id FROM "migration"`)).map((row: { id: string }) => row.id),
     )
-
-    if (completed.size === 0) {
-      yield* bootstrapPg(db)
-      for (const migration of migrations) {
-        yield* db.run(sql`INSERT INTO "migration" (id, time_completed) VALUES (${migration.id}, ${Date.now()})`)
-      }
-      return
-    }
 
     for (const migration of migrations as Migration[]) {
       if (completed.has(migration.id)) continue

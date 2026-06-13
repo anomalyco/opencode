@@ -1,10 +1,7 @@
-import { sqliteTable, text } from "drizzle-orm/sqlite-core"
+import { table, text, Timestamps } from "../database/dialect"
 import { SessionTable } from "../session/sql"
-import { Timestamps } from "../database/schema.sql"
-import { DatabaseDialect } from "../database/dialect"
-import { PgSessionShareTable } from "./sql.pg"
 
-const _SqliteSessionShareTable = sqliteTable("session_share", {
+export const SessionShareTable = table("session_share", {
   session_id: text()
     .primaryKey()
     .references(() => SessionTable.id, { onDelete: "cascade" }),
@@ -13,7 +10,3 @@ const _SqliteSessionShareTable = sqliteTable("session_share", {
   url: text().notNull(),
   ...Timestamps,
 })
-
-type SqliteSessionShareTable = typeof _SqliteSessionShareTable
-
-export const SessionShareTable: SqliteSessionShareTable = DatabaseDialect.isPostgres() ? PgSessionShareTable as any : _SqliteSessionShareTable

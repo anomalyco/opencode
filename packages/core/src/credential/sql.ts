@@ -1,9 +1,8 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
-import { Timestamps } from "../database/schema.sql"
+import { integer, table, text, Timestamps } from "../database/dialect"
 import type { IntegrationSchema } from "../integration/schema"
 import type { Credential } from "../credential"
 
-export const CredentialTable = sqliteTable("credential", {
+export const CredentialTable = table("credential", {
   id: text().$type<Credential.ID>().primaryKey(),
   integration_id: text().$type<IntegrationSchema.ID>(),
   label: text().notNull(),

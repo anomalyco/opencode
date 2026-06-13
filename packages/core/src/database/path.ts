@@ -1,5 +1,5 @@
 import nodePath from "path"
-import { customType } from "drizzle-orm/sqlite-core"
+import { customType } from "./dialect"
 import { AbsolutePath } from "../schema"
 
 function storagePath(input: string) {
