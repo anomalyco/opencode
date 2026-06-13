@@ -7,6 +7,8 @@ import { SessionID } from "../session/schema"
 import type { TaskPromptOps } from "./task"
 import DESCRIPTION from "./message.txt"
 
+const MAX_BODY_LENGTH = 16000
+
 export const Parameters = Schema.Struct({
   target: Schema.Literals(["parent", "subagent"]).annotate({
     description: "Who to message: 'parent' (the agent that spawned you) or 'subagent' (reply to one you spawned)",
@@ -43,6 +45,11 @@ export const MessageTool = Tool.define<
     ) {
       const expectReply = params.expect_reply ?? true
 
+      if (params.body.length > MAX_BODY_LENGTH)
+        return yield* Effect.fail(
+          new Error(`message body exceeds maximum length of ${MAX_BODY_LENGTH} characters (got ${params.body.length})`),
+        )
+
       if (params.target === "subagent") {
         if (!params.task_id)
           return yield* Effect.fail(new Error('message(target:"subagent") requires task_id'))
@@ -72,6 +79,9 @@ export const MessageTool = Tool.define<
           new Error('message(target:"parent") failed: this session has no parent agent to receive the message'),
         )
 
+      // Fail fast if the injection channel (Channel B) will be needed but ops is absent.
+      // Channel A (background.message) does not need ops; Channel B (inject) does.
+      // We check here so delivery setup failures surface via the outer orDie, not silently.
       const ops = ctx.extra?.promptOps as TaskPromptOps | undefined
 
       // Channel selection: wake the parked parent only for expect_reply while the
@@ -79,6 +89,10 @@ export const MessageTool = Tool.define<
       // everything else (fire-and-forget, or an already-backgrounded child) injects.
       const job = yield* background.get(ctx.sessionID)
       const parked = !!job && job.metadata?.messaged !== true && job.metadata?.background !== true
+      const useChannelB = !(expectReply && parked)
+
+      if (useChannelB && !ops)
+        return yield* Effect.fail(new Error("message tool requires promptOps in ctx.extra"))
 
       const payload = {
         childSessionID: ctx.sessionID,
@@ -87,10 +101,12 @@ export const MessageTool = Tool.define<
         expectReply,
       }
 
+      // inject() returns Effect<void>. The only async failure is the forked ops.prompt call,
+      // which is intentionally ignored (fire-and-forget injection). The ops-presence check is
+      // hoisted above so inject() itself cannot fail for that reason.
       const inject = Effect.fn("MessageTool.inject")(function* () {
-        if (!ops) return yield* Effect.fail(new Error("message tool requires promptOps in ctx.extra"))
         const parent = yield* sessions.get(parentID)
-        yield* ops
+        yield* ops!
           .prompt({
             sessionID: parentID,
             agent: parent.agent ?? ctx.agent,
@@ -105,9 +121,12 @@ export const MessageTool = Tool.define<
           .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
       })
 
-      const deliver = (
-        expectReply && parked ? background.message(ctx.sessionID, payload).pipe(Effect.asVoid) : inject()
-      ).pipe(Effect.ignore)
+      // deliver: Effect<void, never> — delivery setup failures die (surface via outer orDie).
+      // Channel A: background.message (synchronous wake, no ops needed).
+      // Channel B: inject() (async injection, ops already validated above).
+      const deliver: Effect.Effect<void> = expectReply && parked
+        ? background.message(ctx.sessionID, payload).pipe(Effect.asVoid)
+        : inject().pipe(Effect.orDie)
 
       return yield* messaging
         .send({
@@ -153,10 +172,16 @@ export const MessageTool = Tool.define<
   }),
 )
 
+// Escape untrusted subagent body to prevent XML tag breakout in rendered framing.
+// Parent must treat subagent message bodies as untrusted input.
+export function escapeBody(body: string) {
+  return body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
 function renderInbound(childSessionID: SessionID, body: string, expectReply: boolean) {
   return [
     `<agent_message from="${childSessionID}" expects_reply="${expectReply}">`,
-    body,
+    escapeBody(body),
     expectReply
       ? `</agent_message>\nReply with: message(target:"subagent", task_id:"${childSessionID}", body:"...")`
       : `</agent_message>`,
