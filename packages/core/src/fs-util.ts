@@ -56,7 +56,13 @@ export namespace FSUtil {
       const readFileStringSafe = Effect.fn("FileSystem.readFileStringSafe")(function* (path: string) {
         return yield* fs
           .readFileString(path)
-          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+          .pipe(
+            // NotFound = ENOENT; BadResource = EISDIR (and perms/IO). A "safe"
+            // read must not crash when the path is a directory — the legacy
+            // ConfigPaths.readFile silently skipped all non-ENOENT read errors.
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+            Effect.catchReason("PlatformError", "BadResource", () => Effect.succeed(undefined)),
+          )
       })
 
       const isDir = Effect.fn("FileSystem.isDir")(function* (path: string) {

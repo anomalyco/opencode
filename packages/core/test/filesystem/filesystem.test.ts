@@ -91,6 +91,18 @@ describe("FSUtil", () => {
         expect(result).toBeUndefined()
       }),
     )
+
+    it(
+      "returns undefined for a directory path (EISDIR/BadResource)",
+      Effect.gen(function* () {
+        const fs = yield* FSUtil.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+
+        const result = yield* fs.readFileStringSafe(tmp)
+        expect(result).toBeUndefined()
+      }),
+    )
   })
 
   describe("readJson / writeJson", () => {
