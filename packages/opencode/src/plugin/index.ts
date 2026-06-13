@@ -20,7 +20,7 @@ import { CloudflareAIGatewayAuthPlugin, CloudflareWorkersAuthPlugin } from "./cl
 import { AzureAuthPlugin } from "./azure"
 import { DigitalOceanAuthPlugin } from "./digitalocean"
 import { XaiAuthPlugin } from "./xai"
-import { Effect, Layer, Context, Stream } from "effect"
+import { Effect, Layer, Context, Schema, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { errorMessage } from "@/util/error"
@@ -30,12 +30,36 @@ import { registerAdapter } from "@/control-plane/adapters"
 import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Hash } from "@/util/hash"
+import { SessionID } from "@/session/schema"
 
 const log = Log.create({ service: "plugin" })
 
 type State = {
-  hooks: Hooks[]
+  hooks: HookEntry[]
+  controls: HookControl[]
 }
+
+type HookEntry = {
+  id: string
+  hooks: Hooks
+}
+
+export const HookControlInput = Schema.Struct({
+  plugin: Schema.optional(Schema.String),
+  hook: Schema.String,
+  event: Schema.optional(Schema.String),
+  enabled: Schema.Boolean,
+}).annotate({ identifier: "PluginHookControlInput" })
+export type HookControlInput = Schema.Schema.Type<typeof HookControlInput>
+
+export const HookControl = Schema.Struct({
+  sessionID: SessionID,
+  plugin: Schema.String,
+  hook: Schema.String,
+  event: Schema.optional(Schema.String),
+  enabled: Schema.Boolean,
+}).annotate({ identifier: "PluginHookControl" })
+export type HookControl = Schema.Schema.Type<typeof HookControl>
 
 // Hook names that follow the (input, output) => Promise<void> trigger pattern
 type TriggerName = {
@@ -53,6 +77,8 @@ export interface Interface {
     output: Output,
   ) => Effect.Effect<Output>
   readonly list: () => Effect.Effect<Hooks[]>
+  readonly listHookControls: (sessionID: SessionID) => Effect.Effect<HookControl[]>
+  readonly setHookControl: (input: HookControlInput & { sessionID: SessionID }) => Effect.Effect<HookControl[]>
   readonly init: () => Effect.Effect<void>
 }
 
@@ -97,16 +123,88 @@ function getLegacyPlugins(mod: Record<string, unknown>) {
   return result
 }
 
-async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[]) {
+function legacyPluginID(load: PluginLoader.Loaded, index: number) {
+  if (load.source === "npm" && load.pkg?.json.name && typeof load.pkg.json.name === "string") return load.pkg.json.name
+  if (load.source === "npm") return parsePluginSpecifier(load.spec).pkg
+  return index === 0 ? load.spec : `${load.spec}#${index + 1}`
+}
+
+function readRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== "object") return
+  return value as Record<string, unknown>
+}
+
+function sessionIDFrom(value: unknown): SessionID | undefined {
+  const record = readRecord(value)
+  if (!record) return
+
+  const direct = record.sessionID
+  if (typeof direct === "string") return direct as SessionID
+
+  const properties = readRecord(record.properties)
+  if (properties) {
+    const nested = sessionIDFrom(properties)
+    if (nested) return nested
+  }
+
+  const part = readRecord(record.part)
+  if (part) {
+    const nested = sessionIDFrom(part)
+    if (nested) return nested
+  }
+}
+
+function eventTypeFrom(value: unknown): string | undefined {
+  const record = readRecord(value)
+  const type = record?.type
+  return typeof type === "string" ? type : undefined
+}
+
+function controlKey(input: Omit<HookControl, "enabled">) {
+  return [input.sessionID, input.plugin, input.hook, input.event ?? ""].join("\0")
+}
+
+function normalizeHookControl(input: HookControlInput & { sessionID: SessionID }): HookControl {
+  return {
+    sessionID: input.sessionID,
+    plugin: input.plugin ?? "*",
+    hook: input.hook,
+    event: input.event,
+    enabled: input.enabled,
+  }
+}
+
+function hookControlApplies(
+  control: HookControl,
+  input: { sessionID: SessionID | undefined; plugin: string; hook: string; event?: string },
+) {
+  if (control.enabled) return false
+  if (!input.sessionID || control.sessionID !== input.sessionID) return false
+  if (control.plugin !== "*" && control.plugin !== input.plugin) return false
+  if (control.hook !== "*" && control.hook !== input.hook) return false
+  if (control.event !== undefined && control.event !== input.event) return false
+  return true
+}
+
+function disabledHookControl(
+  state: State,
+  input: { sessionID: SessionID | undefined; plugin: string; hook: string; event?: string },
+) {
+  return state.controls.find((control) => hookControlApplies(control, input))
+}
+
+async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: HookEntry[]) {
   const plugin = readV1Plugin(load.mod, load.spec, "server", "detect")
   if (plugin) {
-    await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec), load.pkg)
-    hooks.push(await (plugin as PluginModule).server(input, load.options))
+    const id = await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec), load.pkg)
+    hooks.push({ id, hooks: await (plugin as PluginModule).server(input, load.options) })
     return
   }
 
+  let index = 0
   for (const server of getLegacyPlugins(load.mod)) {
-    hooks.push(await server(input, load.options))
+    hooks.push({ id: legacyPluginID(load, index), hooks: await server(input, load.options) })
+    index++
   }
 }
 
@@ -119,7 +217,8 @@ export const layer = Layer.effect(
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Plugin.state")(function* (ctx) {
-        const hooks: Hooks[] = []
+        const hooks: HookEntry[] = []
+        const data: State = { hooks, controls: [] }
         const bridge = yield* EffectBridge.make()
 
         function publishPluginError(message: string) {
@@ -160,7 +259,7 @@ export const layer = Layer.effect(
               log.error("failed to load internal plugin", { name: plugin.name, error: err })
             },
           }).pipe(Effect.option)
-          if (init._tag === "Some") hooks.push(init.value)
+          if (init._tag === "Some") hooks.push({ id: `internal:${plugin.name || "anonymous"}`, hooks: init.value })
         }
 
         const plugins = flags.pure ? [] : (cfg.plugin_origins ?? [])
@@ -237,9 +336,9 @@ export const layer = Layer.effect(
         }
 
         // Notify plugins of current config
-        for (const hook of hooks) {
+        for (const entry of hooks) {
           yield* Effect.tryPromise({
-            try: () => Promise.resolve((hook as any).config?.(cfg)),
+            try: () => Promise.resolve((entry.hooks as any).config?.(cfg)),
             catch: (err) => {
               log.error("plugin config hook failed", { error: err })
             },
@@ -250,15 +349,18 @@ export const layer = Layer.effect(
         yield* (yield* bus.subscribeAll()).pipe(
           Stream.runForEach((input) =>
             Effect.sync(() => {
-              for (const hook of hooks) {
-                void hook["event"]?.({ event: input as any })
+              const sessionID = sessionIDFrom(input)
+              const event = eventTypeFrom(input)
+              for (const entry of hooks) {
+                if (disabledHookControl(data, { sessionID, plugin: entry.id, hook: "event", event })) continue
+                void entry.hooks["event"]?.({ event: input as any })
               }
             }),
           ),
           Effect.forkScoped,
         )
 
-        return { hooks }
+        return data
       }),
     )
 
@@ -269,8 +371,10 @@ export const layer = Layer.effect(
     >(name: Name, input: Input, output: Output) {
       if (!name) return output
       const s = yield* InstanceState.get(state)
-      for (const hook of s.hooks) {
-        const fn = hook[name] as any
+      const sessionID = sessionIDFrom(input)
+      for (const entry of s.hooks) {
+        if (disabledHookControl(s, { sessionID, plugin: entry.id, hook: name })) continue
+        const fn = entry.hooks[name] as any
         if (!fn) continue
         yield* Effect.promise(async () => fn(input, output))
       }
@@ -279,14 +383,30 @@ export const layer = Layer.effect(
 
     const list = Effect.fn("Plugin.list")(function* () {
       const s = yield* InstanceState.get(state)
-      return s.hooks
+      return s.hooks.map((entry) => entry.hooks)
+    })
+
+    const listHookControls = Effect.fn("Plugin.listHookControls")(function* (sessionID: SessionID) {
+      const s = yield* InstanceState.get(state)
+      return s.controls.filter((control) => control.sessionID === sessionID)
+    })
+
+    const setHookControl = Effect.fn("Plugin.setHookControl")(function* (
+      input: HookControlInput & { sessionID: SessionID },
+    ) {
+      const s = yield* InstanceState.get(state)
+      const next = normalizeHookControl(input)
+      const key = controlKey(next)
+      s.controls = s.controls.filter((control) => controlKey(control) !== key)
+      if (!next.enabled) s.controls.push(next)
+      return s.controls.filter((control) => control.sessionID === input.sessionID)
     })
 
     const init = Effect.fn("Plugin.init")(function* () {
       yield* InstanceState.get(state)
     })
 
-    return Service.of({ trigger, list, init })
+    return Service.of({ trigger, list, listHookControls, setHookControl, init })
   }),
 )
 

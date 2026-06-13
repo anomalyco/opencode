@@ -19,6 +19,7 @@ import { Worktree as WorktreeState } from "@/utils/worktree"
 import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
+import { sessionHookControlCommand, sessionHookControlInput } from "@/pages/session/session-hook-controls"
 
 type PendingPrompt = {
   abort: AbortController
@@ -381,6 +382,50 @@ export function createPromptSubmit(input: PromptSubmitInput) {
 
     if (text.trim().length === 0 && images.length === 0 && input.commentCount() === 0) {
       if (input.working()) abort()
+      return
+    }
+
+    const hookControlCommand = mode === "normal" ? sessionHookControlCommand(text) : undefined
+    if (hookControlCommand) {
+      const sessionID = params.id
+      if (!sessionID) {
+        showToast({
+          title: language.t("toast.session.hooks.failed.title"),
+          description: language.t("toast.session.hooks.failed.description"),
+        })
+        return
+      }
+
+      input.addToHistory(currentPrompt, mode)
+      input.resetHistoryNavigation()
+      prompt.reset()
+      input.resetInputUndo()
+      input.setPopover(null)
+
+      const enabled = hookControlCommand === "resume"
+      sdk.client.session
+        .hookControl({
+          sessionID,
+          pluginHookControlInput: sessionHookControlInput(enabled),
+        })
+        .then(() => {
+          showToast({
+            title: enabled
+              ? language.t("toast.session.hooks.enabled.title")
+              : language.t("toast.session.hooks.disabled.title"),
+            description: enabled
+              ? language.t("toast.session.hooks.enabled.description")
+              : language.t("toast.session.hooks.disabled.description"),
+          })
+        })
+        .catch(() => {
+          showToast({
+            title: language.t("toast.session.hooks.failed.title"),
+            description: language.t("toast.session.hooks.failed.description"),
+          })
+          prompt.set(currentPrompt, input.promptLength(currentPrompt))
+          input.resetInputUndo(currentPrompt, input.promptLength(currentPrompt))
+        })
       return
     }
 

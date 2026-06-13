@@ -124,6 +124,10 @@ export const dict = {
   "command.session.share.description": "Share this session and copy the URL to clipboard",
   "command.session.unshare": "Unshare session",
   "command.session.unshare.description": "Stop sharing this session",
+  "command.session.hooks.disable": "Stop session hooks",
+  "command.session.hooks.disable.description": "Temporarily disable all plugin hooks for this session",
+  "command.session.hooks.enable": "Resume session hooks",
+  "command.session.hooks.enable.description": "Re-enable plugin hooks for this session",
 
   "palette.search.placeholder": "Search files, commands, and sessions",
   "palette.search.commands": "Search commands",
@@ -530,6 +534,12 @@ export const dict = {
   "toast.session.unshare.success.description": "Session unshared successfully!",
   "toast.session.unshare.failed.title": "Failed to unshare session",
   "toast.session.unshare.failed.description": "An error occurred while unsharing the session",
+  "toast.session.hooks.disabled.title": "Session hooks stopped",
+  "toast.session.hooks.disabled.description": "All plugin hooks are temporarily disabled for this session.",
+  "toast.session.hooks.enabled.title": "Session hooks resumed",
+  "toast.session.hooks.enabled.description": "Plugin hooks are enabled for this session.",
+  "toast.session.hooks.failed.title": "Failed to update hook controls",
+  "toast.session.hooks.failed.description": "Could not update hook controls for this session.",
 
   "toast.session.generateTitle.success.title": "Title generated",
   "toast.session.generateTitle.failed.title": "Failed to generate title",

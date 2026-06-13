@@ -1,5 +1,6 @@
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
+import { Plugin } from "@/plugin"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
@@ -70,6 +71,7 @@ export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput
 export const PermissionResponsePayload = Schema.Struct({
   response: Permission.Reply,
 })
+export const HookControlPayload = Plugin.HookControlInput
 
 export const SessionPaths = {
   list: root,
@@ -85,6 +87,7 @@ export const SessionPaths = {
   update: `${root}/:sessionID`,
   fork: `${root}/:sessionID/fork`,
   abort: `${root}/:sessionID/abort`,
+  hooks: `${root}/:sessionID/hooks`,
   share: `${root}/:sessionID/share`,
   init: `${root}/:sessionID/init`,
   summarize: `${root}/:sessionID/summarize`,
@@ -256,6 +259,33 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.abort",
             summary: "Abort session",
             description: "Abort an active session and stop any ongoing AI processing or command execution.",
+          }),
+        ),
+        HttpApiEndpoint.get("hooks", SessionPaths.hooks, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Array(Plugin.HookControl), "List session hook controls"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.hooks",
+            summary: "List session hook controls",
+            description:
+              "List temporary hook controls for a session. Controls are in-memory and only affect the current server process.",
+          }),
+        ),
+        HttpApiEndpoint.post("hookControl", SessionPaths.hooks, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: HookControlPayload,
+          success: described(Schema.Array(Plugin.HookControl), "Updated session hook controls"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.hookControl",
+            summary: "Set session hook control",
+            description:
+              "Enable or disable a plugin hook for this session. Omitting plugin targets all plugins; event narrows event hooks to one event type.",
           }),
         ),
         HttpApiEndpoint.post("init", SessionPaths.init, {

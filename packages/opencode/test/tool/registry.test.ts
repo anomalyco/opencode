@@ -80,6 +80,8 @@ const brokenPluginLayer = Layer.succeed(
     init: () => Effect.void,
     trigger: ((_name: unknown, _input: unknown, output: unknown) =>
       Effect.succeed(output)) as Plugin.Interface["trigger"],
+    listHookControls: () => Effect.succeed([]),
+    setHookControl: () => Effect.succeed([]),
     list: () =>
       Effect.succeed([
         {

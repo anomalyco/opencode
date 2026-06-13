@@ -25,6 +25,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { decode64 } from "@/utils/base64"
 import { dict as enDict } from "@/i18n/en"
 import { working as sessionWorking } from "./session-working"
+import { SESSION_HOOK_CONTROL_COMMANDS, sessionHookControlInput } from "./session-hook-controls"
 
 export type SessionCommandContext = {
   navigateMessageByOffset: (offset: number) => void
@@ -132,6 +133,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (sessionID) return permission.isAutoAccepting(sessionID, sdk.directory)
     return permission.isAutoAcceptingDirectory(sdk.directory)
   }
+
+  const setSessionHookControls = async (enabled: boolean) => {
+    const sessionID = params.id
+    if (!sessionID) return
+
+    await sdk.client.session.hookControl({
+      sessionID,
+      pluginHookControlInput: sessionHookControlInput(enabled),
+    })
+  }
+
   command.register("session", () => {
     const share =
       sync.data.config.share === "disabled"
@@ -477,6 +489,50 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
               ? language.t("toast.permissions.autoaccept.on.description")
               : language.t("toast.permissions.autoaccept.off.description"),
           })
+        },
+      }),
+      sessionCommand({
+        id: "session.hooks.disable",
+        title: language.t("command.session.hooks.disable"),
+        description: language.t("command.session.hooks.disable.description"),
+        keywords: kw("command.session.hooks.disable", "command.session.hooks.disable.description"),
+        slash: SESSION_HOOK_CONTROL_COMMANDS.stop,
+        disabled: !params.id,
+        onSelect: async () => {
+          try {
+            await setSessionHookControls(false)
+            showToast({
+              title: language.t("toast.session.hooks.disabled.title"),
+              description: language.t("toast.session.hooks.disabled.description"),
+            })
+          } catch {
+            showToast({
+              title: language.t("toast.session.hooks.failed.title"),
+              description: language.t("toast.session.hooks.failed.description"),
+            })
+          }
+        },
+      }),
+      sessionCommand({
+        id: "session.hooks.enable",
+        title: language.t("command.session.hooks.enable"),
+        description: language.t("command.session.hooks.enable.description"),
+        keywords: kw("command.session.hooks.enable", "command.session.hooks.enable.description"),
+        slash: SESSION_HOOK_CONTROL_COMMANDS.resume,
+        disabled: !params.id,
+        onSelect: async () => {
+          try {
+            await setSessionHookControls(true)
+            showToast({
+              title: language.t("toast.session.hooks.enabled.title"),
+              description: language.t("toast.session.hooks.enabled.description"),
+            })
+          } catch {
+            showToast({
+              title: language.t("toast.session.hooks.failed.title"),
+              description: language.t("toast.session.hooks.failed.description"),
+            })
+          }
         },
       }),
       sessionCommand({

@@ -356,6 +356,8 @@ function plugin(ready: Deferred.Deferred<void>) {
       )
     },
     list: () => Effect.succeed([]),
+    listHookControls: () => Effect.succeed([]),
+    setHookControl: () => Effect.succeed([]),
     init: () => Effect.void,
   })
 }
@@ -370,6 +372,8 @@ function autocontinue(enabled: boolean) {
       })
     },
     list: () => Effect.succeed([]),
+    listHookControls: () => Effect.succeed([]),
+    setHookControl: () => Effect.succeed([]),
     init: () => Effect.void,
   })
 }

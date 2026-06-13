@@ -1812,6 +1812,21 @@ export type NotFoundError = {
   }
 }
 
+export type PluginHookControl = {
+  sessionID: string
+  plugin: string
+  hook: string
+  event?: string
+  enabled: boolean
+}
+
+export type PluginHookControlInput = {
+  plugin?: string
+  hook: string
+  event?: string
+  enabled: boolean
+}
+
 export type TextPartInput = {
   id?: string
   type: "text"
@@ -6615,6 +6630,74 @@ export type SessionAbortResponses = {
 }
 
 export type SessionAbortResponse = SessionAbortResponses[keyof SessionAbortResponses]
+
+export type SessionHooksData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/hooks"
+}
+
+export type SessionHooksErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionHooksError = SessionHooksErrors[keyof SessionHooksErrors]
+
+export type SessionHooksResponses = {
+  /**
+   * List session hook controls
+   */
+  200: Array<PluginHookControl>
+}
+
+export type SessionHooksResponse = SessionHooksResponses[keyof SessionHooksResponses]
+
+export type SessionHookControlData = {
+  body?: PluginHookControlInput
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/hooks"
+}
+
+export type SessionHookControlErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionHookControlError = SessionHookControlErrors[keyof SessionHookControlErrors]
+
+export type SessionHookControlResponses = {
+  /**
+   * Updated session hook controls
+   */
+  200: Array<PluginHookControl>
+}
+
+export type SessionHookControlResponse = SessionHookControlResponses[keyof SessionHookControlResponses]
 
 export type SessionInitData = {
   body?: {

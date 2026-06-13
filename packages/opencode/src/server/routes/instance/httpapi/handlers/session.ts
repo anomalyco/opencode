@@ -3,6 +3,7 @@ import { Bus } from "@/bus"
 import { Command } from "@/command"
 import { Permission } from "@/permission"
 import { PermissionID } from "@/permission/schema"
+import { Plugin } from "@/plugin"
 import { SessionShare } from "@/share/session"
 import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
@@ -24,6 +25,7 @@ import {
   CommandPayload,
   DiffQuery,
   ForkPayload,
+  HookControlPayload,
   InitPayload,
   ListQuery,
   MessagesQuery,
@@ -66,6 +68,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const statusSvc = yield* SessionStatus.Service
     const todoSvc = yield* Todo.Service
     const summary = yield* SessionSummary.Service
+    const pluginSvc = yield* Plugin.Service
     const bus = yield* Bus.Service
     const scope = yield* Scope.Scope
 
@@ -236,6 +239,19 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const abort = Effect.fn("SessionHttpApi.abort")(function* (ctx: { params: { sessionID: SessionID } }) {
       yield* promptSvc.cancel(ctx.params.sessionID)
       return true
+    })
+
+    const hooks = Effect.fn("SessionHttpApi.hooks")(function* (ctx: { params: { sessionID: SessionID } }) {
+      yield* requireSession(ctx.params.sessionID)
+      return yield* pluginSvc.listHookControls(ctx.params.sessionID)
+    })
+
+    const hookControl = Effect.fn("SessionHttpApi.hookControl")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof HookControlPayload.Type
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      return yield* pluginSvc.setHookControl({ ...ctx.payload, sessionID: ctx.params.sessionID })
     })
 
     const init = Effect.fn("SessionHttpApi.init")(function* (ctx: {
@@ -431,6 +447,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("update", update)
       .handleRaw("fork", forkRaw)
       .handle("abort", abort)
+      .handle("hooks", hooks)
+      .handle("hookControl", hookControl)
       .handle("init", init)
       .handle("share", share)
       .handle("unshare", unshare)

@@ -119,6 +119,7 @@ import type {
   PermissionRespondErrors,
   PermissionRespondResponses,
   PermissionRuleset,
+  PluginHookControlInput,
   ProjectCurrentErrors,
   ProjectCurrentResponses,
   ProjectInitGitErrors,
@@ -178,6 +179,10 @@ import type {
   SessionForkResponses,
   SessionGetErrors,
   SessionGetResponses,
+  SessionHookControlErrors,
+  SessionHookControlResponses,
+  SessionHooksErrors,
+  SessionHooksResponses,
   SessionInitErrors,
   SessionInitResponses,
   SessionListErrors,
@@ -3617,6 +3622,77 @@ export class Session2 extends HeyApiClient {
       url: "/session/{sessionID}/abort",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * List session hook controls
+   *
+   * List temporary hook controls for a session. Controls are in-memory and only affect the current server process.
+   */
+  public hooks<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionHooksResponses, SessionHooksErrors, ThrowOnError>({
+      url: "/session/{sessionID}/hooks",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Set session hook control
+   *
+   * Enable or disable a plugin hook for this session. Omitting plugin targets all plugins; event narrows event hooks to one event type.
+   */
+  public hookControl<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      pluginHookControlInput?: PluginHookControlInput
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "pluginHookControlInput", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionHookControlResponses, SessionHookControlErrors, ThrowOnError>({
+      url: "/session/{sessionID}/hooks",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
