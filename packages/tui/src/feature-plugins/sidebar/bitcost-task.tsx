@@ -9,7 +9,7 @@ import {
   rememberBitcostTasks,
 } from "../../component/bitcost-binding"
 import { fetchBitcostTasks } from "../../component/bitcost-api"
-import { lastTurnModel, rateSummary } from "../../component/bitcost-rate"
+import { lastTurnModel, localRate, rateSummary, type RateSummary } from "../../component/bitcost-rate"
 import { Link } from "../../ui/link"
 
 const id = "internal:sidebar-bitcost-task"
@@ -54,9 +54,17 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     const m = model()
     if (m) ensureBitcostPricing(m.provider, m.model)
   })
-  const rates = createMemo(() => {
+  const rates = createMemo<RateSummary | undefined>(() => {
     const m = model()
-    return m ? bitcostPricing(m.provider, m.model) : undefined
+    if (!m) return undefined
+    const bc = bitcostPricing(m.provider, m.model)
+    if (bc) return bc // bitcost-authoritative rate
+    if (bc === null) {
+      // Fetched, but bitcost has no row → fall back to the local model catalog.
+      const local = props.api.state.provider.find((p) => p.id === m.provider)?.models[m.model]
+      return localRate(local?.cost)
+    }
+    return undefined // not fetched yet
   })
 
   return (
