@@ -26,6 +26,7 @@ import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 
 import { WebSearchTool } from "./websearch"
+import { ManageContextTool } from "./manage_context"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
@@ -47,6 +48,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
+import { DTOC } from "../session/dtoc"
 import { Permission } from "@/permission"
 import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -105,6 +107,7 @@ export const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const manageContext = yield* ManageContextTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -212,6 +215,7 @@ export const layer = Layer.effect(
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          manage_context: Tool.init(manageContext),
         })
 
         return {
@@ -233,6 +237,7 @@ export const layer = Layer.effect(
             tool.patch,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
+            tool.manage_context,
           ],
           task: tool.task,
           read: tool.read,
@@ -336,7 +341,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(CrossSpawnSpawner.defaultLayer),
       Layer.provide(Truncate.defaultLayer),
     )
-    .pipe(Layer.provide(Database.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer)),
+    .pipe(Layer.provide(Database.defaultLayer), Layer.provide(Layer.mergeAll(RuntimeFlags.defaultLayer, DTOC.defaultLayer))),
 )
 
 function isZodType(value: unknown): value is z.ZodType {
@@ -416,6 +421,7 @@ function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
 }
 
 export const node = LayerNode.make(layer.pipe(Layer.provide(Ripgrep.defaultLayer)), [
+  DTOC.node,
   Config.node,
   Plugin.node,
   Question.node,

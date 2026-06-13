@@ -27,6 +27,7 @@ import { Vcs } from "@/project/vcs"
 import { ProviderAuth } from "@/provider/auth"
 import { Provider } from "@/provider/provider"
 import { Question } from "@/question"
+import { DTOC } from "@/session/dtoc"
 import { SessionCompaction } from "@/session/compaction"
 import { Instruction } from "@/session/instruction"
 import { LLM } from "@/session/llm"
@@ -239,6 +240,7 @@ const app = LayerNode.group([
   McpAuth.node,
   Command.node,
   Truncate.node,
+  DTOC.node,
   ToolRegistry.node,
   Format.node,
   Project.node,

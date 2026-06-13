@@ -54,6 +54,7 @@ import { TestInstance } from "../fixture/fixture"
 import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { DTOC } from "@/session/dtoc"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
@@ -193,6 +194,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Format.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provide(DTOC.defaultLayer),
     Layer.provideMerge(todo),
     Layer.provideMerge(question),
     Layer.provideMerge(deps),
@@ -224,6 +226,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(SystemPrompt.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provide(DTOC.defaultLayer),
     Layer.provideMerge(deps),
     Layer.provide(summary),
   )
@@ -2293,6 +2296,80 @@ noLLMServer.instance(
         }
       }
     }),
+  30_000,
+)
+
+it.instance(
+  "/dtoc enables dtoc for the current session",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "DTOC command",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      yield* llm.text("dtoc toggled")
+      yield* prompt.command({
+        sessionID: chat.id,
+        command: Command.Default.DTOC,
+        arguments: "",
+      })
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        noReply: true,
+        parts: [{ type: "text", text: "read this file" }],
+      })
+      yield* llm.tool("read", { filePath: __filename })
+      yield* llm.text("done")
+      yield* prompt.loop({ sessionID: chat.id })
+
+      expect(JSON.stringify((yield* llm.inputs).at(-1)?.messages)).toContain("tk_001")
+    }),
+  { git: true },
+  30_000,
+)
+
+it.instance(
+  "applies dtoc config default and lets /dtoc toggle it",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig((url) => ({ ...providerCfg(url), dtoc: true }))
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "DTOC config",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* llm.tool("read", { filePath: __filename })
+      yield* llm.text("done")
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* prompt.loop({ sessionID: chat.id })
+
+      let inputs = yield* llm.inputs
+      expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("tk_001")
+      yield* llm.text("dtoc toggled")
+      yield* prompt.command({
+        sessionID: chat.id,
+        command: Command.Default.DTOC,
+        arguments: "",
+      })
+      inputs = yield* llm.inputs
+      expect(JSON.stringify(inputs.at(-1)?.messages)).not.toContain("tk_001")
+    }),
+  { git: true },
   30_000,
 )
 

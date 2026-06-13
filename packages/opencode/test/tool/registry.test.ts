@@ -17,6 +17,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { MessageID, SessionID } from "@/session/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { DTOC } from "@/session/dtoc"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
@@ -54,11 +55,11 @@ const replacements = [
   LayerNode.replace(RuntimeFlags.node, RuntimeFlags.layer()),
 ]
 
-const it = testEffect(LayerNode.buildLayer(root, { replacements }))
+const it = testEffect(LayerNode.buildLayer(root, { replacements }).pipe(Layer.provide(DTOC.defaultLayer)))
 const withBrokenPlugin = testEffect(
   LayerNode.buildLayer(root, {
     replacements: [...replacements, LayerNode.replace(Plugin.node, brokenPluginLayer)],
-  }),
+  }).pipe(Layer.provide(DTOC.defaultLayer)),
 )
 
 afterEach(async () => {

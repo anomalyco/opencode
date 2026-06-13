@@ -143,6 +143,9 @@ export const Info = Schema.Struct({
     description:
       "Thresholds for truncating tool output. When output exceeds either limit, the full text is written to the truncation directory and a preview is returned.",
   }),
+  dtoc: Schema.optional(Schema.Boolean).annotate({
+    description: "Enable Dynamic Tool Output Compression by default for each session. Defaults to false.",
+  }),
   compaction: Schema.optional(
     Schema.Struct({
       auto: Schema.optional(Schema.Boolean).annotate({

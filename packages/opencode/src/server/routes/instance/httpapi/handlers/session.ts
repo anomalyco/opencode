@@ -1,3 +1,4 @@
+import { DTOC } from "@/session/dtoc"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Agent } from "@/agent/agent"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
@@ -357,6 +358,16 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* SessionError.mapBusy(revertSvc.unrevert({ sessionID: ctx.params.sessionID }))
     })
 
+    const dtocToggle = Effect.fn("SessionHttpApi.dtoc")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: { enabled: boolean }
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      const dtoc = yield* DTOC.Service
+      if (ctx.payload.enabled) dtoc.enable(ctx.params.sessionID)
+      else dtoc.disable(ctx.params.sessionID)
+    })
+
     const permissionRespond = Effect.fn("SessionHttpApi.permissionRespond")(function* (ctx: {
       params: { sessionID: SessionID; permissionID: PermissionV1.ID }
       payload: typeof PermissionResponsePayload.Type
@@ -432,6 +443,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("shell", shell)
       .handle("revert", revert)
       .handle("unrevert", unrevert)
+      .handle("dtoc", dtocToggle)
       .handle("permissionRespond", permissionRespond)
       .handle("deleteMessage", deleteMessage)
       .handle("deletePart", deletePart)

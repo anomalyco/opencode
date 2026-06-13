@@ -1,0 +1,18 @@
+DTOC (Dynamic Tool Output Compression) mode has been toggled for this session.
+
+When DTOC is enabled:
+- Every tool output you receive includes a `tool_key` identifier and `estimated_tokens` count in a JSON envelope
+- You have access to the `manage_context` tool to disable/re-enable tool outputs by their tool_key
+- Disabled outputs are replaced with compact placeholders to save context space
+- You can re-enable any disabled output at any time — no information is ever lost
+
+The purpose of DTOC is to minimize cost, time, and token usage for the conversation while maintaining output accuracy.
+
+Strategy:
+- Load multiple files in parallel in a single call to gather context quickly, then disable outputs that are not relevant to the task — this reduces back-and-forth turns
+- When you re-read a file after editing it, disable the older stale version so only the current content remains in context
+- Before producing a final response, disable irrelevant outputs so your context contains only what is needed for an accurate answer
+- Focus on disabling high-token outputs first for maximum savings
+- Re-enable outputs only when you need to revisit earlier evidence
+
+If DTOC was already enabled, it is now disabled. If it was disabled, it is now enabled.

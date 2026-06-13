@@ -34,6 +34,36 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     }
   })
 
+  const cumulative = createMemo(() => {
+    const msgs = msg()
+    let input = 0
+    let output = 0
+    let totalTime = 0
+    for (const m of msgs) {
+      if (m.role === "assistant") {
+        input += m.tokens.input + m.tokens.cache.read + m.tokens.cache.write
+        output += m.tokens.output + m.tokens.reasoning
+        if (m.time.completed) totalTime += m.time.completed - m.time.created
+      }
+    }
+    return { input, output, duration: totalTime }
+  })
+
+  const lastQueryTime = createMemo(() => {
+    const msgs = msg()
+    const lastAssistantIdx = msgs.findLastIndex((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
+    if (lastAssistantIdx === -1) return 0
+    const lastAssistant = msgs[lastAssistantIdx] as AssistantMessage
+    const prevUser = msgs.slice(0, lastAssistantIdx).findLast((item) => item.role === "user")
+    const start = prevUser ? prevUser.time.created : lastAssistant.time.created
+    return (lastAssistant.time.completed ?? lastAssistant.time.created) - start
+  })
+
+  const formatDuration = (ms: number) => {
+    if (ms < 1000) return `${ms}ms`
+    return `${(ms / 1000).toFixed(1)}s`
+  }
+
   return (
     <box>
       <text fg={theme().text}>
@@ -42,6 +72,13 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
       <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
       <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+      <text fg={theme().text}>
+        <b>Cumulative</b>
+      </text>
+      <text fg={theme().textMuted}>↑ {cumulative().input.toLocaleString()} in</text>
+      <text fg={theme().textMuted}>↓ {cumulative().output.toLocaleString()} out</text>
+      <text fg={theme().textMuted}>⏱ {formatDuration(lastQueryTime())} last query</text>
+      <text fg={theme().textMuted}>⏱ {formatDuration(cumulative().duration)} total</text>
     </box>
   )
 }

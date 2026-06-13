@@ -31,6 +31,7 @@ import { LSP } from "@/lsp/lsp"
 import { MCP } from "../../src/mcp"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { DTOC } from "@/session/dtoc"
 
 const mcp = Layer.succeed(
   MCP.Service,
@@ -91,7 +92,7 @@ const it = testEffect(
       LayerNode.replace(LSP.node, lsp),
       LayerNode.replace(RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true })),
     ],
-  }),
+  }).pipe(Layer.provide(DTOC.defaultLayer)),
 )
 
 const providerCfg = (url: string) => ({

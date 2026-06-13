@@ -36,7 +36,8 @@ import { errorMessage } from "@/util/error"
 import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
+import { DTOC } from "./dtoc"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {
@@ -142,8 +143,10 @@ function providerMeta(metadata: Record<string, any> | undefined) {
 export const toModelMessagesEffect = Effect.fnUntraced(function* (
   input: WithParts[],
   model: Provider.Model,
-  options?: { stripMedia?: boolean; toolOutputMaxChars?: number },
+  options?: { stripMedia?: boolean; toolOutputMaxChars?: number; dtocService?: DTOC.Interface },
 ) {
+  const dtoc = options?.dtocService ? Option.some(options.dtocService) : yield* Effect.serviceOption(DTOC.Service)
+  const sessionID = input[0]?.info.sessionID
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
   // Track media from tool results that need to be injected as user messages
@@ -301,37 +304,81 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         if (part.type === "tool") {
           toolNames.add(part.tool)
           if (part.state.status === "completed") {
-            const outputText = part.state.time.compacted
-              ? "[Old tool result content cleared]"
-              : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
-            const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
-
-            // For providers that don't support media in tool results, extract media files
-            // (images, PDFs) to be sent as a separate user message
-            const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
-            const extractedMedia = mediaAttachments.filter((a) => !supportsMediaInToolResult(a))
-            if (extractedMedia.length > 0) {
-              media.push(...extractedMedia)
+            // DTOC: check visibility and wrap output with tool_key envelope
+            const dtocService = Option.getOrUndefined(dtoc)
+            const dtocEnabled = dtocService && sessionID && dtocService.isEnabled(sessionID)
+            let dtocEntry: DTOC.ToolKeyEntry | undefined
+            if (dtocEnabled && part.callID) {
+              const tool_key = dtocService.registerOrGet(sessionID, {
+                callID: part.callID,
+                toolName: part.tool,
+                estimatedTokens: Math.ceil(part.state.output.length / 4),
+                timestamp: part.state.time.end,
+              })
+              dtocEntry = dtocService.getEntry(sessionID, tool_key)
             }
-            const finalAttachments = attachments.filter((a) => !isMedia(a.mime) || supportsMediaInToolResult(a))
 
-            const output =
-              finalAttachments.length > 0
-                ? {
-                    text: outputText,
-                    attachments: finalAttachments,
-                  }
+            // If DTOC hides this output, emit a compact placeholder
+            if (dtocEntry && !dtocEntry.visible) {
+              const placeholder = JSON.stringify({
+                tool_key: dtocEntry.tool_key,
+                tool: dtocEntry.toolName,
+                estimated_tokens: dtocEntry.estimatedTokens,
+                timestamp: dtocEntry.timestamp,
+                status: "hidden",
+              })
+              assistantMessage.parts.push({
+                type: ("tool-" + part.tool) as `tool-${string}`,
+                state: "output-available",
+                toolCallId: part.callID,
+                input: part.state.input,
+                output: placeholder,
+                ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
+                ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+              })
+            } else {
+              const outputText = part.state.time.compacted
+                ? "[Old tool result content cleared]"
+                : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
+              const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
+
+              // For providers that don't support media in tool results, extract media files
+              // (images, PDFs) to be sent as a separate user message
+              const mediaAttachments = attachments.filter((a) => isMedia(a.mime))
+              const extractedMedia = mediaAttachments.filter((a) => !supportsMediaInToolResult(a))
+              if (extractedMedia.length > 0) {
+                media.push(...extractedMedia)
+              }
+              const finalAttachments = attachments.filter((a) => !isMedia(a.mime) || supportsMediaInToolResult(a))
+
+              // If DTOC is enabled and visible, wrap with tool_key envelope
+              const wrappedOutput = dtocEntry
+                ? JSON.stringify({
+                    tool_key: dtocEntry.tool_key,
+                    tool: dtocEntry.toolName,
+                    estimated_tokens: dtocEntry.estimatedTokens,
+                    tool_result: outputText,
+                  })
                 : outputText
 
-            assistantMessage.parts.push({
-              type: ("tool-" + part.tool) as `tool-${string}`,
-              state: "output-available",
-              toolCallId: part.callID,
-              input: part.state.input,
-              output,
-              ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
-              ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
-            })
+              const output =
+                finalAttachments.length > 0
+                  ? {
+                      text: wrappedOutput,
+                      attachments: finalAttachments,
+                    }
+                  : wrappedOutput
+
+              assistantMessage.parts.push({
+                type: ("tool-" + part.tool) as `tool-${string}`,
+                state: "output-available",
+                toolCallId: part.callID,
+                input: part.state.input,
+                output,
+                ...(part.metadata?.providerExecuted ? { providerExecuted: true } : {}),
+                ...(differentModel ? {} : { callProviderMetadata: providerMeta(part.metadata) }),
+              })
+            }
           }
           if (part.state.status === "error") {
             const output = part.state.metadata?.interrupted === true ? part.state.metadata.output : undefined

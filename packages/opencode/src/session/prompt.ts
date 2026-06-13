@@ -46,6 +46,7 @@ import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Type
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
+import { DTOC } from "./dtoc"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
@@ -123,6 +124,7 @@ export const layer = Layer.effect(
     const llm = yield* LLM.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const dtoc = yield* DTOC.Service
     const database = yield* Database.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
@@ -1106,6 +1108,7 @@ export const layer = Layer.effect(
       "SessionPrompt.prompt",
     )(function* (input: PromptInput) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+      dtoc.setDefault(input.sessionID, (yield* config.get()).dtoc === true)
       yield* revert.cleanup(session)
       const message = yield* createUserMessage(input)
       yield* sessions.touch(input.sessionID)
@@ -1328,11 +1331,12 @@ export const layer = Layer.effect(
               sys.skills(agent),
               sys.environment(model),
               instruction.system().pipe(Effect.orDie),
-              MessageV2.toModelMessagesEffect(msgs, model),
+              MessageV2.toModelMessagesEffect(msgs, model, { dtocService: dtoc }),
             ])
             const system = [...env, ...instructions, ...(skills ? [skills] : [])]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
+
             const result = yield* handle.process({
               user: lastUser,
               agent,
@@ -1420,6 +1424,15 @@ export const layer = Layer.effect(
         command: input.command,
         agent: input.agent,
       })
+      dtoc.setDefault(input.sessionID, (yield* config.get()).dtoc === true)
+
+      // Handle /dtoc toggle before standard command flow
+      if (input.command === Command.Default.DTOC) {
+        const wasEnabled = dtoc.isEnabled(input.sessionID)
+        if (wasEnabled) dtoc.disable(input.sessionID)
+        else dtoc.enable(input.sessionID)
+      }
+
       const cmd = yield* commands.get(input.command)
       if (!cmd) {
         const available = (yield* commands.list()).map((c) => c.name)
@@ -1581,6 +1594,7 @@ export const defaultLayer = Layer.suspend(() =>
         LLM.defaultLayer,
         CrossSpawnSpawner.defaultLayer,
         RuntimeFlags.defaultLayer,
+        DTOC.defaultLayer,
         EventV2Bridge.defaultLayer,
       ),
     ),
@@ -1691,6 +1705,7 @@ const placeholderRegex = /\$(\d+)/g
 const quoteTrimRegex = /^["']|["']$/g
 
 export const node = LayerNode.make(layer, [
+  DTOC.node,
   SessionStatus.node,
   Session.node,
   Agent.node,

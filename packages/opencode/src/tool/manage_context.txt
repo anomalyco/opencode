@@ -1,0 +1,13 @@
+Use this tool to manage context visibility when DTOC (Dynamic Tool Output Compression) is enabled.
+
+You can disable tool outputs that are no longer relevant to your current reasoning step, freeing up context space. You can also re-enable previously disabled outputs if you need to reference them again.
+
+Each tool output is assigned a unique `tool_key` (e.g. "tk_001", "tk_002") shown in the tool result envelope. Use these keys to control visibility.
+
+When you disable a tool output, its full content is replaced with a compact placeholder showing only metadata (tool_key, tool name, estimated tokens, timestamp). The original content is preserved and can be restored at any time by re-enabling it.
+
+Guidelines:
+- Disable outputs that contain information you have already extracted or that is no longer relevant
+- Re-enable outputs when you need to revisit earlier evidence
+- Consider disabling large outputs (high token count) first for maximum context savings
+- You can see the estimated_tokens for each tool output to make informed decisions

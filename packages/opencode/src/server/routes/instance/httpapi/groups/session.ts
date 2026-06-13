@@ -97,6 +97,7 @@ export const SessionPaths = {
   command: `${root}/:sessionID/command`,
   shell: `${root}/:sessionID/shell`,
   revert: `${root}/:sessionID/revert`,
+  dtoc: `${root}/:sessionID/dtoc`,
   unrevert: `${root}/:sessionID/unrevert`,
   permissions: `${root}/:sessionID/permissions/:permissionID`,
   deleteMessage: `${root}/:sessionID/message/:messageID`,
@@ -390,6 +391,19 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.unrevert",
             summary: "Restore reverted messages",
             description: "Restore all previously reverted messages in a session.",
+          }),
+        ),
+        HttpApiEndpoint.post("dtoc", SessionPaths.dtoc, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: Schema.Struct({ enabled: Schema.Boolean }),
+          success: described(HttpApiSchema.NoContent, "DTOC state updated"),
+          error: [ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.dtoc",
+            summary: "Set DTOC state",
+            description: "Enable or disable DTOC for a session without triggering an LLM call.",
           }),
         ),
         HttpApiEndpoint.post("permissionRespond", SessionPaths.permissions, {
