@@ -68,6 +68,10 @@ const BaseParameterFields = {
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
+  timeout: Schema.optional(Schema.Number).annotate({
+    description:
+      "Optional timeout in milliseconds for this foreground task. When it elapses the subagent (and its whole subtree) is aborted and this call fails with a timeout error; do the work yourself or retry with a larger value. Overrides experimental.subagent_task_timeout. Ignored for background tasks.",
+  }),
 }
 
 const BaseParameters = Schema.Struct(BaseParameterFields)
@@ -408,6 +412,28 @@ export const TaskTool = Tool.define(
         runCancel.fork(cancel)
       }
 
+      // Per-task timeout (design-final §2.2 follow-up Issue 5): tool param wins
+      // over experimental.subagent_task_timeout; only foreground tasks are
+      // gated (background tasks are decoupled and notified out-of-band, so the
+      // param is ignored there). The timeout arm only SLEEPS then fails — it
+      // does NOT cancel inline: with raceFirst the loser is interrupted the
+      // moment the winner settles, so failing first interrupts the wait arm
+      // before background.cancel could flip the job to "cancelled" and let that
+      // branch win the race (which would surface "Task cancelled" instead of
+      // the typed timeout). The catchIf below runs the abort on the SAME cancel
+      // path as an explicit cancel — ops.cancel seeds Session.descendants into
+      // SessionRunState.cancel and background.cancel closes the job scope and
+      // awaits its interrupt finalizers, so the release race (5582da5a8) stays
+      // closed and no orphan job survives — then re-fails so the foreground
+      // parent loop surfaces the error in its transcript instead of hanging.
+      const timeoutMs = SubagentLimits.taskTimeout(cfg, params.timeout)
+      const timeoutArm: Effect.Effect<never, SubagentLimits.SubagentTimeoutError> =
+        timeoutMs === undefined
+          ? Effect.never
+          : Effect.sleep(`${timeoutMs} millis`).pipe(
+              Effect.andThen(Effect.fail(SubagentLimits.timeoutError({ timeout: timeoutMs }))),
+            )
+
       return yield* Effect.acquireUseRelease(
         Effect.sync(() => {
           ctx.abort.addEventListener("abort", onAbort)
@@ -415,8 +441,11 @@ export const TaskTool = Tool.define(
         () =>
           Effect.gen(function* () {
             const result = yield* Effect.raceFirst(
-              background.wait({ id: nextSession.id }).pipe(Effect.map((waited) => waited.info)),
-              background.waitForPromotion(nextSession.id),
+              Effect.raceFirst(
+                background.wait({ id: nextSession.id }).pipe(Effect.map((waited) => waited.info)),
+                background.waitForPromotion(nextSession.id),
+              ),
+              timeoutArm,
             )
             if (result?.metadata?.background === true) return backgroundResult()
             if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
@@ -426,7 +455,16 @@ export const TaskTool = Tool.define(
               metadata,
               output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.output ?? "" }),
             }
-          }),
+          }).pipe(
+            Effect.catchIf(
+              (error): error is SubagentLimits.SubagentTimeoutError =>
+                error instanceof SubagentLimits.SubagentTimeoutError,
+              (error) =>
+                Effect.all([cancel, background.cancel(nextSession.id)], { discard: true }).pipe(
+                  Effect.andThen(Effect.fail(error)),
+                ),
+            ),
+          ),
         (_, exit) =>
           Effect.gen(function* () {
             if (Exit.hasInterrupts(exit))

@@ -52,6 +52,27 @@ export function maxDepth(cfg: ConfigV1.Info): number {
 }
 
 /**
+ * Resolves the effective per-task timeout (milliseconds) for a spawn — the
+ * single source of truth for `experimental.subagent_task_timeout` and the
+ * optional `timeout` tool-param (design-final §2.2 follow-up Issue 5). The
+ * tool-param wins over the config default; only finite, positive integers
+ * count, so a `0`/negative/NaN override falls back to the config default and
+ * an absent or invalid config default means "no timeout" (unchanged behavior).
+ * Returns `undefined` when no timeout applies.
+ */
+export function taskTimeout(cfg: ConfigV1.Info, override?: number): number | undefined {
+  // The config key ships with the default-opening track; the cast keeps this
+  // helper typed against ConfigV1.Info before and after the schema gains it.
+  const fallback = (cfg.experimental as { subagent_task_timeout?: number } | undefined)?.subagent_task_timeout
+  for (const raw of [override, fallback]) {
+    if (typeof raw !== "number" || !Number.isFinite(raw)) continue
+    const ms = Math.trunc(raw)
+    if (ms > 0) return ms
+  }
+  return undefined
+}
+
+/**
  * Appended to the task tool description on levels 2..max−1 so subagents know
  * their remaining delegation budget instead of discovering it by failed calls.
  */
@@ -124,6 +145,23 @@ export const budgetError = () =>
   new SubagentBudgetError({
     message:
       "Turn budget exhausted: cannot start another subagent. Finish the remaining work directly within this session.",
+  })
+
+/**
+ * Raised when a foreground subagent task exceeds its per-task timeout (Issue
+ * 5). The subtree is aborted through the SAME cancel path as an explicit
+ * cancel before this error surfaces, so no orphan job survives; the foreground
+ * parent loop sees it as a task error in its transcript and continues.
+ */
+export class SubagentTimeoutError extends Schema.TaggedErrorClass<SubagentTimeoutError>()("SubagentTimeoutError", {
+  message: Schema.String,
+  timeout: Schema.Finite,
+}) {}
+
+export const timeoutError = (input: { timeout: number }) =>
+  new SubagentTimeoutError({
+    ...input,
+    message: `Subagent task timed out after ${input.timeout}ms and was aborted. The delegated work did not finish in time; do the remaining work directly in this session or retry with a larger timeout.`,
   })
 
 /**
