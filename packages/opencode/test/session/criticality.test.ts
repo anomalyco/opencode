@@ -1,5 +1,35 @@
 import { describe, expect, test } from "bun:test"
-import { computeKEff, computeDMax, decide } from "@/session/criticality"
+import { computeKEff, computeDMax, decide, DEFAULTS, readSettings } from "@/session/criticality"
+
+describe("config validation", () => {
+  test("rejects epsilon=0 (division by zero protection)", () => {
+    const cfg = readSettings({ criticality: { epsilon: 0 } })
+    expect(cfg.epsilon).toBe(DEFAULTS.epsilon)
+  })
+
+  test("rejects NaN and Infinity in numeric fields", () => {
+    expect(readSettings({ criticality: { k_upper: Number.NaN } }).kUpper).toBe(DEFAULTS.kUpper)
+    expect(readSettings({ criticality: { k_upper: Number.POSITIVE_INFINITY } }).kUpper).toBe(DEFAULTS.kUpper)
+    expect(readSettings({ criticality: { n_max: -5 } }).nMax).toBe(DEFAULTS.nMax)
+  })
+
+  test("rejects epsilon >= 1", () => {
+    expect(readSettings({ criticality: { epsilon: 1.5 } }).epsilon).toBe(DEFAULTS.epsilon)
+  })
+
+  test("accepts valid epsilon in [0, 1)", () => {
+    const cfg = readSettings({ criticality: { epsilon: 0.05 } })
+    expect(cfg.epsilon).toBe(0.05)
+  })
+
+  test("defaults to monitor mode on invalid mode", () => {
+    expect(readSettings({ criticality: { mode: "invalid" } }).mode).toBe("monitor")
+  })
+
+  test("rejects negative budgets", () => {
+    expect(readSettings({ criticality: { budget_usd: -10 } }).budgetUsd).toBeUndefined()
+  })
+})
 
 describe("ACE math", () => {
   test("k_eff regimes (paper eq. 2)", () => {
