@@ -1,6 +1,6 @@
 export * as Catalog from "./catalog"
 
-import { Context, Effect, Layer, Option, Order, pipe, Schema, Array, Scope, Stream } from "effect"
+import { Array, Context, Effect, Layer, Option, Order, pipe, Schema, Scope, Stream } from "effect"
 import { castDraft, enableMapSet, type Draft } from "immer"
 import { ModelV2 } from "./model"
 import { ModelRequest } from "./model-request"
@@ -11,7 +11,7 @@ import { EventV2 } from "./event"
 import { Policy } from "./policy"
 import { State } from "./state"
 import { Credential } from "./credential"
-import { ConnectorSchema } from "./connector/schema"
+import { IntegrationSchema } from "./integration/schema"
 
 export type ProviderRecord = {
   provider: ProviderV2.Info
@@ -99,8 +99,8 @@ export const layer = Layer.effect(
     const credentials = yield* Credential.Service
     const scope = yield* Scope.Scope
 
-    const project = (provider: ProviderV2.Info, active: Map<ConnectorSchema.ID, Credential.Info>) => {
-      const credential = active.get(ConnectorSchema.ID.make(provider.id))
+    const project = (provider: ProviderV2.Info, active: Map<IntegrationSchema.ID, Credential.Stored>) => {
+      const credential = active.get(IntegrationSchema.ID.make(provider.id))
       if (!credential) return provider
       const body = { ...provider.request.body }
       if (credential.value.type === "key") {
@@ -211,7 +211,9 @@ export const layer = Layer.effect(
         }
       }),
     })
-    const active = () => credentials.activeAll().pipe(Effect.orDie)
+    const active = Effect.fn("CatalogV2.active")(function* () {
+      return new Map((yield* credentials.all()).map((credential) => [credential.integrationID, credential]))
+    })
 
     yield* events.subscribe(PluginV2.Event.Added).pipe(
       // Plugin registries are location scoped even though the event bus is process scoped.

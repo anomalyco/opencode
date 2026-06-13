@@ -15,7 +15,9 @@ import { QuestionGroup } from "./groups/question"
 import { ReferenceGroup } from "./groups/reference"
 import { Authorization } from "./middleware/authorization"
 import { LocationGroup } from "./groups/location"
-import { ConnectorGroup } from "./groups/connector"
+import { IntegrationGroup } from "./groups/integration"
+import { CredentialGroup } from "./groups/credential"
+import { ProjectCopyGroup } from "./groups/project-copy"
 
 export const Api = HttpApi.make("server")
   .add(HealthGroup)
@@ -25,7 +27,8 @@ export const Api = HttpApi.make("server")
   .add(MessageGroup)
   .add(ModelGroup)
   .add(ProviderGroup)
-  .add(ConnectorGroup)
+  .add(IntegrationGroup)
+  .add(CredentialGroup)
   .add(PermissionGroup)
   .add(FileSystemGroup)
   .add(CommandGroup)
@@ -33,6 +36,7 @@ export const Api = HttpApi.make("server")
   .add(EventGroup)
   .add(QuestionGroup)
   .add(ReferenceGroup)
+  .add(ProjectCopyGroup)
   .annotateMerge(
     OpenApi.annotations({
       title: "opencode HttpApi",

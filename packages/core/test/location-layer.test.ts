@@ -27,17 +27,15 @@ import { ApplicationTools } from "../src/tool/application-tools"
 const applicationTools = ApplicationTools.layer
 const it = testEffect(
   Layer.merge(
-    applicationTools,
+    Layer.mergeAll(applicationTools, Database.defaultLayer, EventV2.defaultLayer),
     LocationServiceMap.layer.pipe(
       Layer.provide(applicationTools),
       Layer.provide(
         Layer.mergeAll(
           Project.defaultLayer,
           EventV2.defaultLayer,
-          Credential.layer.pipe(
-            Layer.provide(Database.layerFromPath(":memory:").pipe(Layer.fresh)),
-            Layer.provide(EventV2.defaultLayer),
-          ),
+          Credential.defaultLayer,
+          Credential.layer.pipe(Layer.provide(Database.layerFromPath(":memory:").pipe(Layer.fresh))),
           Npm.defaultLayer,
           ModelsDev.defaultLayer,
           FSUtil.defaultLayer,
