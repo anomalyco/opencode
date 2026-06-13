@@ -54,9 +54,13 @@ export namespace FSUtil {
       })
 
       const readFileStringSafe = Effect.fn("FileSystem.readFileStringSafe")(function* (path: string) {
-        return yield* fs
-          .readFileString(path)
-          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+        return yield* fs.readFileString(path).pipe(
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+          // A probed path that turns out to be a directory yields EISDIR, which the
+          // platform layer reports as BadResource. Treat it like a missing file so
+          // callers walking config locations don't crash on a directory match.
+          Effect.catchReason("PlatformError", "BadResource", () => Effect.succeed(undefined)),
+        )
       })
 
       const isDir = Effect.fn("FileSystem.isDir")(function* (path: string) {
