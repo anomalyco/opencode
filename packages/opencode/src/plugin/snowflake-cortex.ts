@@ -35,7 +35,11 @@ let pendingOAuth: PendingOAuth | undefined
 let oauthServerPort: number | undefined
 
 function normalizeAccount(input: string) {
-  return input.trim().replace(/^https?:\/\//, "").replace(/\.snowflakecomputing\.com\/?$/, "").replace(/\/+$/, "")
+  return input
+    .trim()
+    .replace(/^https?:\/\//, "")
+    .replace(/\.snowflakecomputing\.com\/?$/, "")
+    .replace(/\/+$/, "")
 }
 
 function generateRandomString(length: number) {
@@ -456,7 +460,9 @@ export async function SnowflakeCortexAuthPlugin(_input: PluginInput): Promise<Ho
             }
 
             const expiresSoon =
-              !currentOauth.expires || !currentOauth.access || currentOauth.expires - Date.now() <= ACCESS_TOKEN_REFRESH_SKEW_MS
+              !currentOauth.expires ||
+              !currentOauth.access ||
+              currentOauth.expires - Date.now() <= ACCESS_TOKEN_REFRESH_SKEW_MS
 
             if (expiresSoon) await refresh()
 

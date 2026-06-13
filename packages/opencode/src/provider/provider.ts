@@ -884,7 +884,8 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       // OAuth refresh + snowflake transformations in one place.
       // For env/config/API-key tokens, the provider fetch applies snowflake
       // transformations directly.
-      const useOAuthHandler = oauthToken !== undefined && envToken === undefined && apiKeyToken === undefined && configToken === undefined
+      const useOAuthHandler =
+        oauthToken !== undefined && envToken === undefined && apiKeyToken === undefined && configToken === undefined
       if (!useOAuthHandler) {
         options.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
           if (init?.body && typeof init.body === "string") {
