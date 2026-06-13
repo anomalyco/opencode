@@ -19,3 +19,5 @@ export const layer = Layer.unwrap(
     return Layer.merge(logs, yield* Effect.promise(Otlp.tracingLayer))
   }),
 )
+
+export { EventLog } from "./observability/event-log"
