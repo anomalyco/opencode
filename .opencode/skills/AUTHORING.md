@@ -42,6 +42,25 @@ Shared helpers live in [`.opencode/skills/lib`](./lib): `assertLocalSource` and 
 audit found missing everywhere. Import them instead of re-implementing — the audit's "7 near-identical
 wrappers" is exactly what this avoids.
 
+## Frontmatter by artifact type
+
+opencode has several extension types, each with its own frontmatter. Match the one you're adding
+(verified against the in-repo examples cited):
+
+| Type    | Path                               | Frontmatter / shape                                                                                            |
+| ------- | ---------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Command | `.opencode/command/<name>.md`      | `description`, `model?`, `subtask?` (see `command/commit.md`)                                                  |
+| Agent   | `.opencode/agent/<name>.md`        | `mode`, `hidden?`, `model?`, `color?`, `tools`, `permissions?` (see `agent/triage.md`)                         |
+| Tool    | `.opencode/tool/<name>.ts`         | `export default tool({ description, args, execute })` from `@opencode-ai/plugin` (see `tool/github-triage.ts`) |
+| Skill   | `.opencode/skills/<name>/SKILL.md` | `name`, `description?`, `slash?`                                                                               |
+| Plugin  | `.opencode/plugins/<name>.ts`      | a TS module exporting lifecycle hooks (see `packages/plugin`)                                                  |
+
+## Testing skills that do HTTP
+
+If a skill must talk to a real HTTP API (e.g. a future document/convert service), do **not** hand-mock
+and do **not** hit the live API in tests — record/replay with `packages/http-recorder` so the tests are
+deterministic. The `report-builder` pilot is local-only and needs none of this; it is the baseline.
+
 ## Before you ship
 
 ```sh

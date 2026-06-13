@@ -19,3 +19,6 @@ a complexity (Big-O), or a security result that the tools did not actually produ
   `/verify`. Never edit a test just to make it pass.
 - Tests run from the package directory, never from the repo root.
 - This is one tool cycle: do not spawn extra agents or model calls to "double-check" the result.
+- `subtask` isolates the model's context but is **not** a filesystem sandbox: `bun test` may write
+  artifacts (e.g. a `coverage/` directory) into the package. Run coverage off (`--coverage=false`) or
+  clean up afterwards so the gate doesn't leave stray changes behind.
