@@ -106,13 +106,14 @@ describe("plugin.snowflake-cortex", () => {
     try {
       const hooks = await SnowflakeCortexAuthPlugin(input)
       const options = await hooks.auth!.loader!(
-        async () => ({
-          type: "oauth",
-          access: "access-expired",
-          refresh: "refresh-old",
-          expires: 0,
-          accountId: "myorg-myaccount",
-        }) as any,
+        async () =>
+          ({
+            type: "oauth",
+            access: "access-expired",
+            refresh: "refresh-old",
+            expires: 0,
+            accountId: "myorg-myaccount",
+          }) as any,
         {} as any,
       )
 
@@ -139,13 +140,14 @@ describe("plugin.snowflake-cortex", () => {
     const { input, getAuth, setCalls } = makeInput()
     const hooks = await SnowflakeCortexAuthPlugin(input)
     const options = await hooks.auth!.loader!(
-      async () => ({
-        type: "oauth",
-        access: "access-stale",
-        refresh: "refresh-old",
-        expires: Date.now() + 60 * 60 * 1000,
-        accountId: "myorg-myaccount",
-      }) as any,
+      async () =>
+        ({
+          type: "oauth",
+          access: "access-stale",
+          refresh: "refresh-old",
+          expires: Date.now() + 60 * 60 * 1000,
+          accountId: "myorg-myaccount",
+        }) as any,
       {} as any,
     )
 
