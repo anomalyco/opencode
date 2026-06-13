@@ -4,6 +4,7 @@ import { ToolJsonSchema } from "./json-schema"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { BackgroundJob } from "@/background/job"
 import { Session } from "@/session/session"
+import { Criticality } from "@/session/criticality"
 import { SessionID, MessageID } from "../session/schema"
 import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
@@ -131,6 +132,7 @@ export const TaskTool = Tool.define<
     const background = yield* BackgroundJob.Service
     const config = yield* Config.Service
     const sessions = yield* Session.Service
+    const criticality = yield* Criticality.Service
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
@@ -209,6 +211,42 @@ export const TaskTool = Tool.define<
         }
       }
       const spawnTracked = spawn.tracked
+
+      // Fission-inspired Agent Criticality circuit breaker. Only fresh spawns
+      // (not task_id resumes) feed the branching-process estimate and are
+      // subject to the depth / k_eff / budget gate.
+      let criticalityMetrics: Criticality.Metrics | undefined
+      if (!session) {
+        criticalityMetrics = yield* criticality.evaluate(ctx.sessionID)
+        if (criticalityMetrics.decision !== "spawn") {
+          yield* criticality.recordAbsorption(ctx.sessionID)
+          return {
+            title: params.description,
+            metadata: {
+              parentSessionId: ctx.sessionID,
+              criticality: {
+                k_eff_agent: criticalityMetrics.kEff,
+                depth: criticalityMetrics.depth,
+                d_max: criticalityMetrics.dMax,
+                n_active: criticalityMetrics.nActive,
+                decision: criticalityMetrics.decision,
+              },
+            },
+            output: renderOutput({
+              sessionID: ctx.sessionID,
+              state: "error",
+              summary: `Sub-agent spawn blocked by criticality circuit breaker (${criticalityMetrics.reason})`,
+              text: [
+                `The orchestrator rejected this sub-agent spawn to keep the agent cascade bounded (reason: ${criticalityMetrics.reason}).`,
+                `Current criticality: k_eff=${criticalityMetrics.kEff.toFixed(2)}, depth=${criticalityMetrics.depth}, D_max=${criticalityMetrics.dMax}, active=${criticalityMetrics.nActive}.`,
+                "Do not retry the same spawn. Instead, do the work directly in this session, merge it with an existing sub-task, or reduce fan-out before delegating again.",
+              ].join("\n"),
+            }),
+          }
+        }
+        yield* criticality.recordSpawn(ctx.sessionID)
+      }
+
       const childPermission = deriveSubagentSessionPermission({
         parentSessionPermission: parent.permission ?? [],
         subagent: next,
@@ -249,6 +287,16 @@ export const TaskTool = Tool.define<
         sessionId: nextSession.id,
         model,
         ...(runInBackground ? { background: true } : {}),
+        ...(criticalityMetrics
+          ? {
+              criticality: {
+                k_eff_agent: criticalityMetrics.kEff,
+                depth: criticalityMetrics.depth,
+                d_max: criticalityMetrics.dMax,
+                n_active: criticalityMetrics.nActive,
+              },
+            }
+          : {}),
       }
 
       yield* ctx.metadata({
