@@ -25,7 +25,6 @@ import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { Switch as Toggle } from "@opencode-ai/ui/switch"
 import { showToast } from "@opencode-ai/ui/toast"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { applyEdits, modify } from "jsonc-parser"
 import { useNavigate, useParams, useSearchParams } from "@solidjs/router"
 import { paint } from "@/components/prompt-input/expand"
@@ -1110,7 +1109,7 @@ function ProviderListButton(props: {
     <div
       role="button"
       tabIndex={0}
-      class="group flex w-full cursor-pointer items-start justify-between gap-4 rounded-2xl border px-4 py-4 text-left transition-all duration-150 focus:outline-none focus-visible:border-border-strong focus-visible:bg-surface-base-hover"
+      class="group flex w-full cursor-pointer items-start justify-between gap-4 rounded-[14px] border px-4 py-4 text-left transition-all duration-150 focus:outline-none focus-visible:border-border-strong focus-visible:bg-surface-base-hover"
       classList={{
         "border-border-base bg-surface-base-active shadow-[inset_0_1px_0_color-mix(in_srgb,white_7%,transparent)]":
           props.active,
@@ -4680,20 +4679,19 @@ export default function ConfigPage() {
                     <div class="text-15-medium text-text-strong">{t("config.providers.title")}</div>
                     <div class="mt-1 text-12-regular text-text-weak">{t("config.providers.header")}</div>
                     <div class="mt-3 flex items-center gap-2">
-                      <Button size="small" variant="secondary" icon="plus-small" onClick={createCustomProvider}>
+                      <Button size="small" variant="ghost" icon="plus-small" onClick={createCustomProvider}>
                         {t("config.custom.new")}
                       </Button>
-                      <Tooltip placement="top" value={t("settings.providers.refresh")}>
-                        <IconButton
-                          icon="arrow-sync"
-                          variant="ghost"
-                          iconSize="normal"
-                          class="size-6"
-                          disabled={refreshing()}
-                          aria-label={t("settings.providers.refresh")}
-                          onClick={() => void refreshProviders()}
-                        />
-                      </Tooltip>
+                      <Button
+                        size="small"
+                        variant="ghost"
+                        icon="arrow-sync"
+                        disabled={refreshing()}
+                        aria-label={t("settings.providers.refresh")}
+                        onClick={() => void refreshProviders()}
+                      >
+                        {t("settings.providers.refresh")}
+                      </Button>
                     </div>
                     <div class="mt-3 rounded-xl border border-border-weak-base bg-background-base px-3 py-2.5">
                       <input

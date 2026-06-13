@@ -79,7 +79,7 @@ export function FetchProviderModels(props: Props) {
           type="button"
           size="small"
           variant="secondary"
-          icon={fetching() ? undefined : "download"}
+          icon={fetching() ? undefined : "arrow-sync"}
           onClick={() => void fetchModels()}
           disabled={!canFetch() || fetching()}
         >
