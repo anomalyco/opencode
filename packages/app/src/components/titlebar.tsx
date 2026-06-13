@@ -454,78 +454,78 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                         {(tab, i) => {
                           let ref!: HTMLDivElement
 
-                        const divider = () =>
-                          i() !== 0 && (
-                            <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
-                          )
+                          const divider = () =>
+                            i() !== 0 && (
+                              <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
+                            )
 
-                        if (tab.type === "draft") {
+                          if (tab.type === "draft") {
+                            return (
+                              <>
+                                {divider()}
+                                <DraftTabItem
+                                  ref={ref}
+                                  href={tabHref(tab)}
+                                  title={language.t("command.session.new")}
+                                  active={currentTab() === tab}
+                                  onNavigate={() => {
+                                    navigateTab(tab)
+                                    ref.scrollIntoView({ behavior: "instant" })
+                                  }}
+                                  onClose={() => tabsStoreActions.removeTab(i())}
+                                />
+                              </>
+                            )
+                          }
+
                           return (
                             <>
                               {divider()}
-                              <DraftTabItem
+                              <TabNavItem
                                 ref={ref}
                                 href={tabHref(tab)}
-                                title={language.t("command.session.new")}
-                                active={currentTab() === tab}
+                                server={tab.server}
+                                directory={decode64(tab.dirBase64)!}
+                                sessionId={tab.sessionId}
                                 onNavigate={() => {
                                   navigateTab(tab)
+
                                   ref.scrollIntoView({ behavior: "instant" })
                                 }}
                                 onClose={() => tabsStoreActions.removeTab(i())}
+                                active={currentTab() === tab}
+                                activeServer={tab.server === server.key}
+                                forceTruncate={tabsAreOverflowing()}
                               />
                             </>
                           )
-                        }
+                        }}
+                      </For>
+                      <Show when={creating() && params.dir}>
+                        {(_) => {
+                          let ref!: HTMLDivElement
 
-                        return (
-                          <>
-                            {divider()}
-                            <TabNavItem
-                              ref={ref}
-                              href={tabHref(tab)}
-                              server={tab.server}
-                              directory={decode64(tab.dirBase64)!}
-                              sessionId={tab.sessionId}
-                              onNavigate={() => {
-                                navigateTab(tab)
+                          onMount(() => {
+                            ref.scrollIntoView({ behavior: "instant" })
+                          })
 
-                                ref.scrollIntoView({ behavior: "instant" })
-                              }}
-                              onClose={() => tabsStoreActions.removeTab(i())}
-                              active={currentTab() === tab}
-                              activeServer={tab.server === server.key}
-                              forceTruncate={tabsAreOverflowing()}
-                            />
-                          </>
-                        )
-                      }}
-                    </For>
-                    <Show when={creating() && params.dir}>
-                      {(_) => {
-                        let ref!: HTMLDivElement
-
-                        onMount(() => {
-                          ref.scrollIntoView({ behavior: "instant" })
-                        })
-
-                        return (
-                          <>
-                            <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
-                            <NewSessionTabItem
-                              ref={ref}
-                              href={`/${params.dir}/session`}
-                              title={language.t("command.session.new")}
-                              onClose={() => {
-                                const tab = tabsStore.at(-1)
-                                if (tab) navigateTab(tab)
-                                else navigate("/")
-                              }}
-                            />
-                          </>
-                        )
-                      }}
-                    </Show>
+                          return (
+                            <>
+                              <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
+                              <NewSessionTabItem
+                                ref={ref}
+                                href={`/${params.dir}/session`}
+                                title={language.t("command.session.new")}
+                                onClose={() => {
+                                  const tab = tabsStore.at(-1)
+                                  if (tab) navigateTab(tab)
+                                  else navigate("/")
+                                }}
+                              />
+                            </>
+                          )
+                        }}
+                      </Show>
                     </div>
                   </div>
                   <div
