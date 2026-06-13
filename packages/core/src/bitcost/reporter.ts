@@ -1,7 +1,7 @@
 export * as BitcostReporter from "./reporter"
 
 import { eq } from "drizzle-orm"
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Layer } from "effect"
 import { Database } from "../database/database"
 import { LayerNode } from "../effect/layer-node"
 import { EventV2 } from "../event"
@@ -29,6 +29,11 @@ export const layer = Layer.effectDiscard(
         if (event.type !== SessionEvent.Step.Ended.type) return
         const data = event.data as StepEnded
 
+        // DIAGNOSTIC: confirms the listener actually receives Step.Ended.
+        yield* Effect.logInfo("bitcost.reporter: Step.Ended received").pipe(
+          Effect.annotateLogs({ sessionID: data.sessionID }),
+        )
+
         const row = yield* db
           .select({ taskID: SessionTable.bitcost_task_id, model: SessionTable.model })
           .from(SessionTable)
@@ -36,7 +41,13 @@ export const layer = Layer.effectDiscard(
           .get()
           .pipe(Effect.orElseSucceed(() => undefined))
 
-        if (!row?.taskID || !row.model) return
+        if (!row?.taskID || !row.model) {
+          // DIAGNOSTIC: explains why a turn produced no usage report.
+          yield* Effect.logInfo("bitcost.reporter: skipped (no bound task or model on session row)").pipe(
+            Effect.annotateLogs({ sessionID: data.sessionID, hasTask: !!row?.taskID, hasModel: !!row?.model }),
+          )
+          return
+        }
 
         const report: BitcostClient.UsageReport = {
           taskID: row.taskID,
@@ -48,8 +59,28 @@ export const layer = Layer.effectDiscard(
           tokens: data.tokens,
         }
 
-        // Fork so the publish path returns immediately; swallow failures.
-        yield* Effect.forkDetach(client.reportUsage(report).pipe(Effect.catchCause(() => Effect.void)))
+        // DIAGNOSTIC: about to POST. Logs the resolved task/model.
+        yield* Effect.logInfo("bitcost.reporter: reporting usage").pipe(
+          Effect.annotateLogs({ taskID: report.taskID, provider: report.provider, model: report.model }),
+        )
+
+        // Fork so the publish path returns immediately. Failures are best-effort
+        // telemetry but we now LOG them (status/cause) instead of swallowing, so a
+        // silently-failing POST is visible in the CLI log.
+        yield* Effect.forkDetach(
+          client.reportUsage(report).pipe(
+            Effect.tap(() =>
+              Effect.logInfo("bitcost.reporter: usage reported OK").pipe(
+                Effect.annotateLogs({ taskID: report.taskID, key: report.idempotencyKey }),
+              ),
+            ),
+            Effect.catchCause((cause) =>
+              Effect.logError("bitcost.reporter: reportUsage FAILED").pipe(
+                Effect.annotateLogs({ taskID: report.taskID, cause: Cause.pretty(cause) }),
+              ),
+            ),
+          ),
+        )
       }),
     )
   }),
