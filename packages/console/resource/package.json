@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode-ai/console-resource",
+  "license": "MIT",
+  "dependencies": {
+    "@cloudflare/workers-types": "catalog:"
+  },
+  "exports": {
+    ".": {
+      "production": {
+        "import": "./resource.cloudflare.ts"
+      },
+      "import": "./resource.node.ts"
+    }
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@tsconfig/node22": "22.0.2",
+    "@types/node": "catalog:",
+    "cloudflare": "5.2.0"
+  }
+}

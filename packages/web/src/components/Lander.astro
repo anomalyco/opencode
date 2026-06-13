@@ -1,0 +1,721 @@
+---
+import { Image } from 'astro:assets';
+import { getRelativeLocaleUrl } from 'astro:i18n';
+import config from "virtual:starlight/user-config";
+
+import CopyIcon from "../assets/lander/copy.svg";
+import CheckIcon from "../assets/lander/check.svg";
+import TuiScreenshot from "../assets/lander/screenshot-splash.png";
+import VscodeScreenshot from "../assets/lander/screenshot-vscode.png";
+import GithubScreenshot from "../assets/lander/screenshot-github.png";
+
+const { data } = Astro.locals.starlightRoute.entry;
+const { title = data.title, tagline, image, actions = [] } = data.hero || {};
+
+const imageAttrs = {
+    loading: 'eager' as const,
+    decoding: 'async' as const,
+    width: 400,
+    alt: image?.alt || '',
+};
+
+const github = (config.social || []).filter(s => s.icon === 'github')[0];
+const discord = (config.social || []).filter(s => s.icon === 'discord')[0];
+const locale = Astro.currentLocale || 'root';
+const t = Astro.locals.t as (key: string) => string;
+const docsHref = getRelativeLocaleUrl(locale, "")
+const docsCliHref = getRelativeLocaleUrl(locale, "cli")
+const docsIdeHref = getRelativeLocaleUrl(locale, "ide")
+const docsGithubHref = getRelativeLocaleUrl(locale, "github")
+
+const command = "curl -fsSL"
+const protocol = "https://"
+const url = "opencode.ai/install"
+const bash = "| bash"
+
+let darkImage: ImageMetadata | undefined;
+let lightImage: ImageMetadata | undefined;
+let rawHtml: string | undefined;
+if (image) {
+    if ('file' in image) {
+        darkImage = image.file;
+    } else if ('dark' in image) {
+        darkImage = image.dark;
+        lightImage = image.light;
+    } else {
+        rawHtml = image.html;
+  }
+}
+---
+<div class="hero">
+    <section class="top">
+      <div class="logo">
+        {darkImage && (
+          <Image
+            src={darkImage}
+            {...imageAttrs}
+            class:list={{ 'light:sl-hidden': Boolean(lightImage) }}
+          />
+        )}
+        {lightImage && <Image src={lightImage} {...imageAttrs} class="dark:sl-hidden" />}
+      </div>
+      <h1>{t('app.lander.hero.title')}</h1>
+    </section>
+
+    <section class="cta">
+      <div class="col1">
+        <a href={docsHref}>{t('app.lander.cta.getStarted')}</a>
+      </div>
+      <div class="col2">
+      <button class="command" data-command={`${command} ${protocol}${url} ${bash}`}>
+          <code>
+            <span>{command}&nbsp;</span><span class="protocol">{protocol}</span><span class="highlight">{url}</span>&nbsp;{bash}
+          </code>
+          <span class="copy">
+            <CopyIcon />
+            <CheckIcon />
+          </span>
+        </button>
+      </div>
+    </section>
+
+    <section class="content">
+      <ul>
+        <li><b>{t('app.lander.features.native_tui.title')}</b>: {t('app.lander.features.native_tui.description')}</li>
+        <li><b>{t('app.lander.features.lsp_enabled.title')}</b>: {t('app.lander.features.lsp_enabled.description')}</li>
+        <li><b>{t('app.lander.features.multi_session.title')}</b>: {t('app.lander.features.multi_session.description')}</li>
+        <li><b>{t('app.lander.features.shareable_links.title')}</b>: {t('app.lander.features.shareable_links.description')}</li>
+        <li><b>GitHub Copilot</b>: {t('app.lander.features.github_copilot.description')}</li>
+        <li><b>ChatGPT Plus/Pro</b>: {t('app.lander.features.chatgpt_plus_pro.description')}</li>
+        <li><b>{t('app.lander.features.use_any_model.title')}</b>: {t('app.lander.features.use_any_model.prefix')} <a href="https://models.dev">Models.dev</a>, {t('app.lander.features.use_any_model.suffix')}</li>
+      </ul>
+    </section>
+
+    <section class="alternatives">
+      <div class="col1">
+        <h3>npm</h3>
+        <button class="command" data-command="npm install -g opencode-ai">
+          <code>
+            <span>npm install -g</span> <span class="highlight">opencode-ai</span>
+          </code>
+          <span class="copy">
+            <CopyIcon />
+            <CheckIcon />
+          </span>
+        </button>
+      </div>
+      <div class="col2">
+        <h3>Bun</h3>
+        <button class="command" data-command="bun install -g opencode-ai">
+          <code>
+            <span>bun install -g</span> <span class="highlight">opencode-ai</span>
+          </code>
+          <span class="copy">
+            <CopyIcon />
+            <CheckIcon />
+          </span>
+        </button>
+      </div>
+      <div class="col3">
+        <h3>Homebrew</h3>
+        <button class="command" data-command="brew install opencode">
+          <code>
+            <span>brew install</span> <span class="highlight">opencode</span>
+          </code>
+          <span class="copy">
+            <CopyIcon />
+            <CheckIcon />
+          </span>
+        </button>
+      </div>
+      <div class="col4">
+        <h3>Paru</h3>
+        <button class="command" data-command="paru -S opencode-bin">
+          <code>
+            <span>paru -S</span> <span class="highlight">opencode-bin</span>
+          </code>
+          <span class="copy">
+            <CopyIcon />
+            <CheckIcon />
+          </span>
+        </button>
+      </div>
+      <div class="col4">
+        <h3>Mise</h3>
+        <button class="command" data-command="mise use -g github:anomalyco/opencode">
+          <code>
+            <span>mise use -g</span> <span class="highlight">github:anomalyco/opencode</span>
+          </code>
+          <span class="copy">
+            <CopyIcon />
+            <CheckIcon />
+          </span>
+        </button>
+      </div>
+    </section>
+
+    <section class="images">
+      <div class="left">
+        <figure>
+          <figcaption>{t('app.lander.images.tui.caption')}</figcaption>
+          <a href={docsCliHref}>
+            <Image src={TuiScreenshot} alt={t('app.lander.images.tui.alt')} />
+          </a>
+        </figure>
+      </div>
+      <div class="right">
+        <div class="row1">
+          <figure>
+            <figcaption>{t('app.lander.images.vscode.caption')}</figcaption>
+            <a href={docsIdeHref}>
+              <Image src={VscodeScreenshot} alt={t('app.lander.images.vscode.alt')} />
+            </a>
+          </figure>
+        </div>
+        <div class="row2">
+          <figure>
+            <figcaption>{t('app.lander.images.github.caption')}</figcaption>
+            <a href={docsGithubHref}>
+              <Image src={GithubScreenshot} alt={t('app.lander.images.github.alt')} />
+            </a>
+          </figure>
+        </div>
+      </div>
+    </section>
+
+    <section class="footer">
+      <div class="col1">
+        <a href={github.href} target="_blank" rel="noopener noreferrer">GitHub</a>
+      </div>
+      <div class="col2">
+        <a href={discord.href} target="_blank" rel="noopener noreferrer">Discord</a>
+      </div>
+      <div class="col3">
+      <span>&copy;2025 <a href="https://anoma.ly" target="_blank" rel="noopener noreferrer">Anomaly Innovations</a></span>
+      </div>
+    </section>
+</div>
+
+<style>
+.hero {
+  --padding: 3rem;
+  --vertical-padding: 1.5rem;
+  --heading-font-size: var(--sl-text-3xl);
+
+  margin: 1rem;
+  border: 2px solid var(--sl-color-border);
+}
+@media (max-width: 30rem) {
+  .hero {
+    --padding: 1rem;
+    --vertical-padding: 0.75rem;
+    --heading-font-size: var(--sl-text-2xl);
+
+    margin: 0.5rem;
+  }
+}
+
+section.top {
+  padding: var(--padding);
+
+  h1 {
+    margin-top: calc(var(--vertical-padding) / 8);
+    font-size: var(--heading-font-size);
+    line-height: 1.25;
+    text-transform: uppercase;
+  }
+
+  img {
+    height: auto;
+    width: clamp(200px, 70vw, 400px);
+  }
+}
+
+section.cta {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-start;
+  align-items: stretch;
+  border-top: 2px solid var(--sl-color-border);
+
+  @media (max-width: 50rem) {
+    flex-direction: column;
+  }
+
+  & > div {
+    line-height: 1.4;
+    padding: var(--vertical-padding) var(--padding);
+
+    a {
+      font-size: 1rem;
+    }
+  }
+  & > div.col1 {
+    flex: 0 0 auto;
+    text-align: center;
+    text-transform: uppercase;
+
+    @media (max-width: 50rem) {
+      padding-bottom: calc(var(--vertical-padding) + 4px);
+    }
+  }
+  & > div.col2 {
+    flex: 1;
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  & > div + div {
+    border-left: 2px solid var(--sl-color-border);
+
+    @media (max-width: 50rem) {
+      border-left: none;
+      border-top: 2px solid var(--sl-color-border);
+    }
+  }
+
+  .command {
+    all: unset;
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    justify-content: center;
+    cursor: pointer;
+    width: 100%;
+
+    code {
+      color: var(--sl-color-text-secondary);
+      font-size: 1.125rem;
+
+      @media (max-width: 24rem) {
+        font-size: 0.875rem;
+      }
+      @media (max-width: 30rem) {
+        span.protocol {
+          display: none;
+        }
+      }
+      @media (max-width: 43rem) {
+        text-align: center;
+        span:first-child {
+          display: block;
+        }
+      }
+    }
+    code .highlight {
+      color: var(--sl-color-text);
+      font-weight: 500;
+    }
+
+    .copy {
+      line-height: 1;
+      padding: 0;
+      @media (max-width: 43rem) {
+        display: none;
+      }
+    }
+    .copy svg {
+      width: 1rem;
+      height: 1rem;
+      vertical-align: middle;
+    }
+    .copy svg:first-child {
+      color: var(--sl-color-text-dimmed);
+    }
+    .copy svg:last-child {
+      color: var(--sl-color-text);
+      display: none;
+    }
+    &.success .copy {
+      pointer-events: none;
+    }
+    &.success .copy svg:first-child {
+      display: none;
+    }
+    &.success .copy svg:last-child {
+      display: inline;
+    }
+  }
+}
+
+section.content {
+  border-top: 2px solid var(--sl-color-border);
+  padding: var(--padding);
+
+  ul {
+    padding-left: 1rem;
+
+    li + li {
+      margin-top: calc(var(--vertical-padding) / 2);
+    }
+
+    li b {
+      text-transform: uppercase;
+    }
+  }
+}
+
+section.images {
+  --images-height: 600px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: var(--images-height);
+  border-top: 2px solid var(--sl-color-border);
+
+  & > div.left {
+    display: flex;
+    grid-row: 1;
+    grid-column: 1;
+  }
+
+  & > div.right {
+    display: grid;
+    grid-template-rows: 1fr 1fr;
+    grid-row: 1;
+    grid-column: 2;
+    border-left: 2px solid var(--sl-color-border);
+
+    & > div.row1 {
+      display: flex;
+      grid-row: 1;
+      border-bottom: 2px solid var(--sl-color-border);
+      height: calc(var(--images-height) / 2);
+    }
+
+    & > div.row2 {
+      display: flex;
+      grid-row: 2;
+      height: calc(var(--images-height) / 2);
+    }
+  }
+
+  figure {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--padding) / 4);
+    padding: calc(var(--padding) / 2);
+    border-width: 0;
+    border-style: solid;
+    border-color: var(--sl-color-border);
+    min-height: 0;
+    overflow: hidden;
+
+    & > div, figcaption {
+      display: flex;
+      align-items: center;
+    }
+
+    & > div {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    a {
+      display: flex;
+      flex: 1;
+      min-height: 0;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+    }
+
+    figcaption {
+      letter-spacing: -0.03125rem;
+      text-transform: uppercase;
+      color: var(--sl-color-text-dimmed);
+      flex-shrink: 0;
+
+      @media (max-width: 30rem) {
+        font-size: 0.75rem;
+      }
+    }
+  }
+
+  & > div.left figure {
+    height: var(--images-height);
+    box-sizing: border-box;
+  }
+
+  & > div.right figure {
+    height: calc(var(--images-height) / 2);
+    box-sizing: border-box;
+  }
+
+  & > div.left img {
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    object-fit: contain;
+  }
+
+  & > div.right img {
+    width: 100%;
+    height: calc(100% - 2rem);
+    object-fit: contain;
+    display: block;
+  }
+
+  @media (max-width: 30rem) {
+    & {
+      --images-height: auto;
+      grid-template-columns: 1fr;
+      grid-template-rows: auto auto;
+    }
+
+    & > div.left {
+      grid-row: 1;
+      grid-column: 1;
+    }
+
+    & > div.right {
+      grid-row: 2;
+      grid-column: 1;
+      border-left: none;
+      border-top: 2px solid var(--sl-color-border);
+
+      & > div.row1,
+      & > div.row2 {
+        height: auto;
+      }
+    }
+
+    & > div.left figure,
+    & > div.right figure {
+      height: auto;
+    }
+
+    & > div.left img,
+    & > div.right img {
+      width: 100%;
+      height: auto;
+      max-height: none;
+    }
+  }
+}
+
+section.alternatives {
+  border-top: 2px solid var(--sl-color-border);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+
+  @media (max-width: 40rem) {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto;
+  }
+
+  & > div {
+    display: flex;
+    flex-direction: column;
+    padding: calc(var(--vertical-padding) / 2) calc(var(--padding) / 2) calc(var(--vertical-padding) / 2 + 0.125rem);
+    text-align: left;
+    gap: 0.5rem;
+
+    @media (max-width: 30rem) {
+      gap: 0.3125rem;
+    }
+
+    @media (max-width: 40rem) {
+      text-align: left;
+    }
+  }
+
+  & > div.col1 {
+    border-bottom: 2px solid var(--sl-color-border);
+
+    @media (max-width: 40rem) {
+      border-bottom: none;
+    }
+  }
+
+  & > div.col2 {
+    border-left: 2px solid var(--sl-color-border);
+    border-bottom: 2px solid var(--sl-color-border);
+
+    @media (max-width: 40rem) {
+      border-left: none;
+      border-bottom: none;
+      border-top: 2px solid var(--sl-color-border);
+    }
+  }
+
+  & > div.col3 {
+    @media (max-width: 40rem) {
+      border-top: 2px solid var(--sl-color-border);
+    }
+  }
+
+  & > div.col4 {
+    border-left: 2px solid var(--sl-color-border);
+    @media (max-width: 40rem) {
+      border-left: none;
+      border-top: 2px solid var(--sl-color-border);
+    }
+  }
+
+  h3 {
+    letter-spacing: -0.03125rem;
+    text-transform: uppercase;
+    color: var(--sl-color-text-dimmed);
+    font-weight: normal;
+    font-size: 1rem;
+    flex-shrink: 0;
+
+    @media (max-width: 30rem) {
+      font-size: 0.75rem;
+    }
+  }
+
+  .command {
+    all: unset;
+    display: flex;
+    align-items: center;
+    gap: 0.625rem;
+    justify-content: flex-start;
+    cursor: pointer;
+    width: 100%;
+
+    @media (max-width: 40rem) {
+      justify-content: flex-start;
+    }
+
+    @media (max-width: 30rem) {
+      justify-content: center;
+    }
+
+    code {
+      color: var(--sl-color-text-secondary);
+      font-size: 1rem;
+
+      @media (max-width: 24rem) {
+        font-size: 0.875rem;
+      }
+    }
+
+    code .highlight {
+      color: var(--sl-color-text);
+      font-weight: 500;
+    }
+
+    .copy {
+      line-height: 1;
+      padding: 0;
+
+      @media (max-width: 40rem) {
+        display: none;
+      }
+    }
+
+    .copy svg {
+      width: 1rem;
+      height: 1rem;
+      vertical-align: middle;
+    }
+
+    .copy svg:first-child {
+      color: var(--sl-color-text-dimmed);
+    }
+
+    .copy svg:last-child {
+      color: var(--sl-color-text);
+      display: none;
+    }
+
+    &.success .copy {
+      pointer-events: none;
+    }
+
+    &.success .copy svg:first-child {
+      display: none;
+    }
+
+    &.success .copy svg:last-child {
+      display: inline;
+    }
+  }
+}
+
+section.footer {
+  border-top: 2px solid var(--sl-color-border);
+  display: flex;
+  flex-direction: row;
+
+  & > div {
+    flex: 1;
+    text-align: center;
+    text-transform: uppercase;
+    padding: var(--vertical-padding) 0.5rem;
+  }
+
+  & > div + div {
+    border-left: 2px solid var(--sl-color-border);
+  }
+
+  /* Below 800px: first two columns shrink to content, third expands */
+  @media (max-width: 50rem) {
+    & > div.col1,
+    & > div.col2 {
+      flex: 0 0 auto;
+      padding-left: calc(var(--padding) / 2);
+      padding-right: calc(var(--padding) / 2);
+    }
+
+    & > div.col3 {
+      flex: 1;
+    }
+  }
+
+  /* Mobile: third column on its own row */
+  @media (max-width: 30rem) {
+    flex-wrap: wrap;
+
+    & > div.col1,
+    & > div.col2 {
+      flex: 1;
+    }
+
+    & > div.col3 {
+      flex: 1 0 100%;
+      border-left: none;
+      border-top: 2px solid var(--sl-color-border);
+    }
+  }
+}
+</style>
+
+<style is:global>
+:root[data-has-hero] {
+  header.header {
+    display: none;
+  }
+  .main-frame {
+    padding-top: 0;
+
+    .main-pane > main {
+      padding: 0;
+    }
+  }
+  main > .content-panel .sl-markdown-content {
+    margin-top: 0;
+  }
+}
+</style>
+
+<script>
+  const buttons = document.querySelectorAll("button.command") as NodeListOf<HTMLButtonElement>
+
+  buttons.forEach(button => {
+    button.addEventListener("click", () => {
+      navigator.clipboard.writeText(button.dataset.command!)
+      button.classList.toggle("success")
+      setTimeout(() => {
+        button.classList.toggle("success");
+      }, 1500)
+    })
+  })
+</script>

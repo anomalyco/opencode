@@ -1,0 +1,7 @@
+preload = ["@opentui/solid/preload"]
+
+[test]
+preload = ["@opentui/solid/preload", "./test/preload.ts"]
+# timeout is not actually parsed from bunfig.toml (see src/bunfig.zig in oven-sh/bun)
+# using --timeout in package.json scripts instead
+# https://github.com/oven-sh/bun/issues/7789

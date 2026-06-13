@@ -1,0 +1,173 @@
+[data-slot="models-list"] {
+  display: flex;
+  flex-direction: column;
+}
+
+[data-slot="models-table"] {
+  overflow-x: auto;
+}
+
+[data-slot="models-table-element"] {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--font-size-sm);
+
+  thead {
+    border-bottom: 1px solid var(--color-border);
+  }
+
+  th {
+    padding: var(--space-3) var(--space-4);
+    text-align: left;
+    font-weight: normal;
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+  }
+
+  td {
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid var(--color-border-muted);
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+
+    &[data-slot="model-name"] {
+      color: var(--color-text);
+      font-family: var(--font-mono);
+      font-weight: 500;
+
+      div {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+    }
+
+    &[data-slot="training-data"] {
+      text-align: center;
+      color: var(--color-text);
+    }
+
+    &[data-slot="model-toggle"] {
+      text-align: left;
+      font-family: var(--font-sans);
+    }
+
+    [data-slot="model-toggle-label"] {
+      /* Toggle container */
+      position: relative;
+      display: inline-block;
+      width: 2.5rem;
+      height: 1.5rem;
+      cursor: pointer;
+
+      /* Hidden checkbox input */
+      input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      /* Toggle track (background) */
+      span {
+        position: absolute;
+        inset: 0;
+        background-color: #ccc;
+        border: 1px solid #bbb;
+        border-radius: 1.5rem;
+        transition: all 0.3s ease;
+        cursor: pointer;
+
+        /* Toggle handle (slider) */
+        &::before {
+          content: "";
+          position: absolute;
+          top: 50%;
+          left: 0.125rem;
+          width: 1.25rem;
+          height: 1.25rem;
+          background-color: white;
+          border: 1px solid #ddd;
+          border-radius: 50%;
+          transform: translateY(-50%);
+          transition: all 0.3s ease;
+        }
+      }
+
+      /* Checked state - track */
+      input:checked + span {
+        background-color: #21ad0e;
+        border-color: #148605;
+
+        /* Checked state - handle */
+        &::before {
+          transform: translateX(1rem) translateY(-50%);
+        }
+      }
+
+      /* Hover states */
+      &:hover span {
+        box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+      }
+
+      input:checked:hover + span {
+        box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.3);
+      }
+
+      /* Disabled state */
+      &:has(input:disabled) {
+        cursor: not-allowed;
+      }
+
+      input:disabled + span {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      input:disabled:checked + span {
+        opacity: 0.5;
+      }
+
+      input:disabled ~ span:hover {
+        box-shadow: none;
+      }
+    }
+  }
+
+  tbody tr {
+    &:last-child td {
+      border-bottom: none;
+    }
+
+    &[data-disabled="true"] {
+      td[data-slot="model-name"] {
+        color: var(--color-text-muted);
+      }
+    }
+  }
+}
+
+@media (max-width: 40rem) {
+  [data-slot="models-table-element"] {
+    th,
+    td {
+      padding: var(--space-2) var(--space-3);
+      font-size: var(--font-size-xs);
+    }
+
+    th {
+      &:nth-child(2)
+
+      /* Training Data */ {
+        display: none;
+      }
+    }
+
+    td {
+      &:nth-child(2)
+
+      /* Training Data */ {
+        display: none;
+      }
+    }
+  }
+}

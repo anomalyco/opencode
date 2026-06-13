@@ -1,0 +1,63 @@
+.root {
+  position: relative;
+  color: var(--sl-color-text);
+  background-color: var(--sl-color-bg-surface);
+  padding: 0.5rem calc(0.5rem + 3px);
+  padding-right: calc(1rem + 18px);
+  border-radius: 0.25rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1rem;
+  align-self: flex-start;
+  font-size: 0.875rem;
+
+  &[data-compact] {
+    font-size: 0.75rem;
+    color: var(--sl-color-text-dimmed);
+  }
+
+  [data-slot="text"] {
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    overflow: hidden;
+
+    [data-expanded] & {
+      display: block;
+    }
+  }
+
+  [data-slot="expand-button"] {
+    flex: 0 0 auto;
+    padding: 2px 0;
+    font-size: 0.75rem;
+  }
+
+  &[data-theme="invert"] {
+    background-color: var(--sl-color-blue-high);
+    color: var(--sl-color-text-invert);
+
+    [data-slot="expand-button"] {
+      opacity: 0.85;
+      color: var(--sl-color-text-invert);
+
+      &:hover {
+        opacity: 1;
+      }
+    }
+  }
+
+  &[data-theme="blue"] {
+    background-color: var(--sl-color-blue-low);
+  }
+
+  [data-component="copy-button"] {
+    top: 0.5rem;
+    right: calc(0.5rem - 1px);
+  }
+}

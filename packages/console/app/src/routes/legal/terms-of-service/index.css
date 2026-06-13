@@ -1,0 +1,254 @@
+[data-component="terms-of-service"] {
+  max-width: 800px;
+  margin: 0 auto;
+  line-height: 1.7;
+}
+
+[data-component="terms-of-service"] h1 {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--color-text-strong);
+  margin-bottom: 0.5rem;
+  margin-top: 0;
+}
+
+[data-component="terms-of-service"] .effective-date {
+  font-size: 0.95rem;
+  color: var(--color-text-weak);
+  margin-bottom: 2rem;
+}
+
+[data-component="terms-of-service"] h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: var(--color-text-strong);
+  margin-top: 3rem;
+  margin-bottom: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--color-border-weak);
+}
+
+[data-component="terms-of-service"] h2:first-of-type {
+  margin-top: 2rem;
+}
+
+[data-component="terms-of-service"] h3 {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text-strong);
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+}
+
+[data-component="terms-of-service"] h4 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--color-text-strong);
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+[data-component="terms-of-service"] p {
+  margin-bottom: 1rem;
+  color: var(--color-text);
+}
+
+[data-component="terms-of-service"] ul,
+[data-component="terms-of-service"] ol {
+  margin-bottom: 1rem;
+  padding-left: 1.5rem;
+  color: var(--color-text);
+}
+
+[data-component="terms-of-service"] li {
+  margin-bottom: 0.5rem;
+  line-height: 1.7;
+}
+
+[data-component="terms-of-service"] ul ul,
+[data-component="terms-of-service"] ul ol,
+[data-component="terms-of-service"] ol ul,
+[data-component="terms-of-service"] ol ol {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+[data-component="terms-of-service"] a {
+  color: var(--color-text-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+  word-break: break-word;
+}
+
+[data-component="terms-of-service"] a:hover {
+  text-decoration-thickness: 2px;
+}
+
+[data-component="terms-of-service"] strong {
+  font-weight: 600;
+  color: var(--color-text-strong);
+}
+
+@media (max-width: 60rem) {
+  [data-component="terms-of-service"] {
+    padding: 0;
+  }
+
+  [data-component="terms-of-service"] h1 {
+    font-size: 1.75rem;
+  }
+
+  [data-component="terms-of-service"] h2 {
+    font-size: 1.35rem;
+    margin-top: 2.5rem;
+  }
+
+  [data-component="terms-of-service"] h3 {
+    font-size: 1.15rem;
+  }
+
+  [data-component="terms-of-service"] h4 {
+    font-size: 1rem;
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+[data-component="terms-of-service"] [id] {
+  scroll-margin-top: 100px;
+}
+
+@media print {
+  @page {
+    margin: 2cm;
+    size: letter;
+  }
+
+  [data-component="top"],
+  [data-component="footer"],
+  [data-component="legal"] {
+    display: none !important;
+  }
+
+  [data-page="legal"] {
+    background: white !important;
+    padding: 0 !important;
+  }
+
+  [data-component="container"] {
+    max-width: none !important;
+    border: none !important;
+    margin: 0 !important;
+  }
+
+  [data-component="content"],
+  [data-component="brand-content"] {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  [data-component="terms-of-service"] {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  [data-component="terms-of-service"] * {
+    color: black !important;
+    background: transparent !important;
+  }
+
+  [data-component="terms-of-service"] h1 {
+    font-size: 24pt;
+    margin-top: 0;
+    margin-bottom: 12pt;
+    page-break-after: avoid;
+  }
+
+  [data-component="terms-of-service"] h2 {
+    font-size: 18pt;
+    border-top: 2pt solid black !important;
+    padding-top: 12pt;
+    margin-top: 24pt;
+    margin-bottom: 8pt;
+    page-break-after: avoid;
+    page-break-before: auto;
+  }
+
+  [data-component="terms-of-service"] h2:first-of-type {
+    margin-top: 16pt;
+  }
+
+  [data-component="terms-of-service"] h3 {
+    font-size: 14pt;
+    margin-top: 16pt;
+    margin-bottom: 8pt;
+    page-break-after: avoid;
+  }
+
+  [data-component="terms-of-service"] h4 {
+    font-size: 12pt;
+    margin-top: 12pt;
+    margin-bottom: 6pt;
+    page-break-after: avoid;
+  }
+
+  [data-component="terms-of-service"] p {
+    font-size: 11pt;
+    line-height: 1.5;
+    margin-bottom: 8pt;
+    orphans: 3;
+    widows: 3;
+  }
+
+  [data-component="terms-of-service"] .effective-date {
+    font-size: 10pt;
+    margin-bottom: 16pt;
+  }
+
+  [data-component="terms-of-service"] ul,
+  [data-component="terms-of-service"] ol {
+    margin-bottom: 8pt;
+    page-break-inside: auto;
+  }
+
+  [data-component="terms-of-service"] li {
+    font-size: 11pt;
+    line-height: 1.5;
+    margin-bottom: 4pt;
+    page-break-inside: avoid;
+  }
+
+  [data-component="terms-of-service"] a {
+    color: black !important;
+    text-decoration: underline;
+  }
+
+  [data-component="terms-of-service"] strong {
+    font-weight: bold;
+    color: black !important;
+  }
+
+  [data-component="terms-of-service"] h1,
+  [data-component="terms-of-service"] h2,
+  [data-component="terms-of-service"] h3,
+  [data-component="terms-of-service"] h4 {
+    page-break-inside: avoid;
+    page-break-after: avoid;
+  }
+
+  [data-component="terms-of-service"] h2 + p,
+  [data-component="terms-of-service"] h3 + p,
+  [data-component="terms-of-service"] h4 + p,
+  [data-component="terms-of-service"] h2 + ul,
+  [data-component="terms-of-service"] h3 + ul,
+  [data-component="terms-of-service"] h4 + ul,
+  [data-component="terms-of-service"] h2 + ol,
+  [data-component="terms-of-service"] h3 + ol,
+  [data-component="terms-of-service"] h4 + ol {
+    page-break-before: avoid;
+  }
+}

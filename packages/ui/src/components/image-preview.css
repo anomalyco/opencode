@@ -1,0 +1,63 @@
+[data-component="image-preview"] {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  [data-slot="image-preview-container"] {
+    position: relative;
+    z-index: 50;
+    width: min(calc(100vw - 32px), 90vw);
+    max-width: 1200px;
+    height: min(calc(100vh - 32px), 90vh);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    [data-slot="image-preview-content"] {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      width: 100%;
+      max-height: 100%;
+      border-radius: var(--radius-lg);
+      background: var(--surface-raised-stronger-non-alpha);
+      box-shadow:
+        0 15px 45px 0 rgba(19, 16, 16, 0.35),
+        0 3.35px 10.051px 0 rgba(19, 16, 16, 0.25),
+        0 0.998px 2.993px 0 rgba(19, 16, 16, 0.2);
+      overflow: hidden;
+
+      &:focus-visible {
+        outline: none;
+      }
+
+      [data-slot="image-preview-header"] {
+        display: flex;
+        padding: 8px 8px 0;
+        justify-content: flex-end;
+        align-items: center;
+        align-self: stretch;
+      }
+
+      [data-slot="image-preview-body"] {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 16px;
+        overflow: auto;
+      }
+
+      [data-slot="image-preview-image"] {
+        max-width: 100%;
+        max-height: calc(90vh - 100px);
+        object-fit: contain;
+        border-radius: var(--radius-md);
+      }
+    }
+  }
+}

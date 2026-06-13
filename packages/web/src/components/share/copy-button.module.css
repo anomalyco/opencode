@@ -1,0 +1,30 @@
+.root {
+  position: absolute;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease;
+
+  button {
+    cursor: pointer;
+    background: none;
+    border: none;
+    padding: 0.125rem;
+    color: var(--sl-color-text-secondary);
+
+    svg {
+      display: block;
+      width: 1rem;
+      height: 1rem;
+    }
+
+    &[data-copied="true"] {
+      color: var(--sl-color-green-high);
+    }
+  }
+}
+
+/* Show copy button when parent is hovered */
+*:hover > .root {
+  opacity: 1;
+  visibility: visible;
+}

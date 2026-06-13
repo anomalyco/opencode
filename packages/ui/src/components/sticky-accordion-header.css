@@ -1,0 +1,6 @@
+[data-component="sticky-accordion-header"] {
+  position: sticky;
+  top: calc(var(--sticky-accordion-top, 0px) + var(--sticky-accordion-offset, 0px));
+  z-index: 10;
+  background-color: var(--background-stronger);
+}

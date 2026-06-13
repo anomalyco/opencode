@@ -1,0 +1,93 @@
+.root {
+  [data-slot="payments-table"] {
+    overflow-x: auto;
+  }
+
+  [data-slot="payments-table-element"] {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+
+    thead {
+      border-bottom: 1px solid var(--color-border);
+    }
+
+    th {
+      padding: var(--space-3) var(--space-4);
+      text-align: left;
+      font-weight: normal;
+      color: var(--color-text-muted);
+      text-transform: uppercase;
+    }
+
+    td {
+      padding: var(--space-3) var(--space-4);
+      border-bottom: 1px solid var(--color-border-muted);
+      color: var(--color-text-muted);
+      font-family: var(--font-mono);
+
+      &[data-slot="payment-date"] {
+        color: var(--color-text);
+      }
+
+      &[data-slot="payment-id"] {
+        font-family: var(--font-mono);
+        font-weight: 400;
+        color: var(--color-text-muted);
+        max-width: 200px;
+        word-break: break-word;
+      }
+
+      &[data-slot="payment-amount"] {
+        color: var(--color-text);
+
+        &[data-refunded="true"] {
+          text-decoration: line-through;
+        }
+      }
+
+      &[data-slot="payment-receipt"] {
+        span {
+          display: inline-block;
+          padding: var(--space-3) var(--space-4);
+          font-size: var(--font-size-sm);
+          line-height: 1.5;
+        }
+
+        button {
+          font-size: var(--font-size-sm);
+        }
+      }
+    }
+
+    tbody tr {
+      &:last-child td {
+        border-bottom: none;
+      }
+    }
+
+    @media (max-width: 40rem) {
+      th,
+      td {
+        padding: var(--space-2) var(--space-3);
+        font-size: var(--font-size-xs);
+      }
+
+      th {
+        &:nth-child(2)
+
+        /* Payment ID */ {
+          display: none;
+        }
+      }
+
+      td {
+        &:nth-child(2)
+
+        /* Payment ID */ {
+          display: none;
+        }
+      }
+    }
+  }
+}

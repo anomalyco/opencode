@@ -1,0 +1,47 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Tokyonight",
+  "id": "tokyonight",
+  "light": {
+    "palette": {
+      "neutral": "#e1e2e7",
+      "ink": "#273153",
+      "primary": "#2e7de9",
+      "accent": "#b15c00",
+      "success": "#587539",
+      "warning": "#8c6c3e",
+      "error": "#c94060",
+      "info": "#007197",
+      "diffAdd": "#4f8f7b",
+      "diffDelete": "#d05f7c"
+    },
+    "overrides": {
+      "syntax-comment": "#6b6f7a",
+      "syntax-keyword": "#9854f1",
+      "syntax-primitive": "#1f6fd4",
+      "syntax-property": "#007197",
+      "syntax-constant": "#b15c00"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#1a1b26",
+      "ink": "#c0caf5",
+      "primary": "#7aa2f7",
+      "accent": "#ff9e64",
+      "success": "#9ece6a",
+      "warning": "#e0af68",
+      "error": "#f7768e",
+      "info": "#7dcfff",
+      "diffAdd": "#41a6b5",
+      "diffDelete": "#c34043"
+    },
+    "overrides": {
+      "syntax-comment": "#565f89",
+      "syntax-keyword": "#bb9af7",
+      "syntax-primitive": "#7aa2f7",
+      "syntax-property": "#7dcfff",
+      "syntax-constant": "#ff9e64"
+    }
+  }
+}
