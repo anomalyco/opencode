@@ -16,7 +16,7 @@ import type {
   TextPart,
   Config as SdkConfig,
 } from "@opencode-ai/sdk/v2"
-import type { CliRenderer, KeyEvent, RGBA, Renderable, SlotMode } from "@opentui/core"
+import type { CliRenderer, KeyEvent, RGBA, Renderable, SlotMode, TextareaRenderable } from "@opentui/core"
 import type { Binding, Keymap } from "@opentui/keymap"
 import {
   createBindingLookup as createKeymapBindingLookup,
@@ -206,6 +206,26 @@ export type TuiPromptRef = {
   blur(): void
   focus(): void
   submit(): void
+  readonly text: string
+  getTextRange(startOffset: number, endOffset: number): string
+  replaceRange(startOffset: number, endOffset: number, replacement: string): void
+  readonly extmarks: TextareaRenderable["extmarks"]
+  readonly cursorOffset: number
+}
+
+export type TuiPromptApi = {
+  /** The live prompt ref, or undefined before the prompt has mounted. Read
+   *  on demand (e.g. inside onChange) — the ref is replaced on route
+   *  changes. */
+  ref(): TuiPromptRef | undefined
+  /** Subscribe to prompt content changes (per keystroke / programmatic
+   *  edit). Survives prompt remounts. Returns a disposer. */
+  onChange(callback: () => void): () => void
+  /** Subscribe to prompt cursor moves (arrows, click positioning, drag,
+   *  word-moves, paste, delete, undo/redo). Deduplicated per offset — one
+   *  callback per logical move. Survives prompt remounts. Returns a
+   *  disposer. */
+  onCursorChange(callback: () => void): () => void
 }
 
 export type TuiPromptProps = {
@@ -356,6 +376,25 @@ export type TuiThemeCurrent = {
   readonly thinkingOpacity: number
 }
 
+export type TuiStyleDefinition = {
+  fg?: string
+  bg?: string
+  bold?: boolean
+  italic?: boolean
+  underline?: boolean
+  dim?: boolean
+}
+
+export type TuiSyntaxStyle = {
+  /** Register a named style. Re-registering the same name is idempotent
+   *  (returns the existing id and overwrites the previous definition) —
+   *  safe to call on plugin reload. Returns the style id (use with
+   *  extmark create({ styleId })). */
+  registerStyle(name: string, definition: TuiStyleDefinition): number
+  /** Look up a style id by name, or null if not registered. */
+  getStyleId(name: string): number | null
+}
+
 export type TuiTheme = {
   readonly current: TuiThemeCurrent
   readonly selected: string
@@ -364,6 +403,10 @@ export type TuiTheme = {
   install: (jsonPath: string) => Promise<void>
   mode: () => "dark" | "light"
   readonly ready: boolean
+  /** Register a named style and get back a style id. Use the id when
+   *  creating extmarks to render styled underlines/cursors on the
+   *  prompt. Re-registering the same name is idempotent. */
+  syntax(): TuiSyntaxStyle
 }
 
 export type TuiKV = {
@@ -591,6 +634,7 @@ export type TuiPluginApi = {
   keys: TuiKeys
   keymap: TuiKeymap
   mode: TuiModeApi
+  prompt: TuiPromptApi
   route: {
     register: (routes: TuiRouteDefinition[]) => () => void
     navigate: (name: string, params?: Record<string, unknown>) => void

@@ -609,6 +609,12 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
     },
   }
 
+  const prompt: TuiPluginApi["prompt"] = {
+    ref: () => api.prompt.ref(),
+    onChange: (callback) => scope.track(api.prompt.onChange(callback)),
+    onCursorChange: (callback) => scope.track(api.prompt.onCursorChange(callback)),
+  }
+
   return {
     app: api.app,
     attention: createScopedAttention(api.attention, scope, load.plugin_root),
@@ -617,6 +623,7 @@ function pluginApi(runtime: RuntimeState, plugin: PluginEntry, scope: PluginScop
     keys: api.keys,
     keymap,
     mode: createScopedMode(api.mode, scope),
+    prompt,
     route,
     ui: api.ui,
     tuiConfig: api.tuiConfig,

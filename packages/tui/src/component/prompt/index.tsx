@@ -28,7 +28,7 @@ import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
 import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
-import { promptOffsetWidth } from "../../prompt/display"
+import { planRangeReplace, promptOffsetWidth } from "../../prompt/display"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
@@ -51,6 +51,7 @@ import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "../../context/args"
+import { usePromptRef } from "../../context/prompt"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
 import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
@@ -94,6 +95,23 @@ export type PromptRef = {
   blur(): void
   focus(): void
   submit(): void
+  /** Live buffer text (includes paste/file placeholder tokens). */
+  readonly text: string
+  /** Substring by display-width offsets (the extmark/cursor offset model). */
+  getTextRange(startOffset: number, endOffset: number): string
+  /** Replace [startOffset, endOffset) (display-width offsets) with
+   *  `replacement`, preserving undo history AND the textarea's extmark
+   *  controller (uses setSelection+insertText+clearSelection for non-empty
+   *  ranges and cursor-set+insertText for empty ranges). Cursor lands at
+   *  the end of the replacement. */
+  replaceRange(startOffset: number, endOffset: number, replacement: string): void
+  /** The textarea's extmark controller — range decorations for plugins.
+   *  Offsets are display-width. Use registerType to namespace; never touch
+   *  the "prompt-part" type. */
+  readonly extmarks: TextareaRenderable["extmarks"]
+  /** Current cursor offset in display-width cells (0-based, same model as
+   *  getTextRange/replaceRange). 0 when the prompt has not mounted. */
+  readonly cursorOffset: number
 }
 
 const money = new Intl.NumberFormat("en-US", {
@@ -143,6 +161,7 @@ let stashed: { prompt: PromptInfo; cursor: number } | undefined
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
   let anchor: BoxRenderable
+  let lastEmittedCursorOffset: number | undefined
   const [inputTarget, setInputTarget] = createSignal<TextareaRenderable | undefined>()
 
   const leader = useLeaderActive()
@@ -171,6 +190,7 @@ export function Prompt(props: PromptProps) {
   const dimensions = useTerminalDimensions()
   const { theme, syntax } = useTheme()
   const kv = useKV()
+  const promptRefContext = usePromptRef()
   const animationsEnabled = createMemo(() => kv.get("animations_enabled", true))
   const list = createMemo(() => props.placeholders?.normal ?? [])
   const shell = createMemo(() => props.placeholders?.shell ?? [])
@@ -584,6 +604,27 @@ export function Prompt(props: PromptProps) {
     },
     get current() {
       return store.prompt
+    },
+    get text() {
+      return input.plainText
+    },
+    getTextRange(startOffset, endOffset) {
+      return input.getTextRange(startOffset, endOffset)
+    },
+    replaceRange(startOffset, endOffset, replacement) {
+      const plan = planRangeReplace(input.plainText, startOffset, endOffset, replacement)
+      for (const action of plan.actions) {
+        if (action.type === "setCursor") input.cursorOffset = action.offset
+        else if (action.type === "setSelection") input.setSelection(action.start, action.end)
+        else if (action.type === "insertText") input.insertText(action.value)
+        else if (action.type === "clearSelection") input.clearSelection()
+      }
+    },
+    get extmarks() {
+      return input.extmarks
+    },
+    get cursorOffset() {
+      return input?.cursorOffset ?? 0
     },
     focus() {
       input.focus()
@@ -1379,8 +1420,16 @@ export function Prompt(props: PromptProps) {
                 auto()?.onInput(value)
                 syncExtmarksWithPromptParts()
                 setCursorVersion((value) => value + 1)
+                promptRefContext.emitChange()
               }}
-              onCursorChange={() => setCursorVersion((value) => value + 1)}
+              onCursorChange={() => {
+                const offset = input?.cursorOffset ?? 0
+                setCursorVersion((value) => value + 1)
+                if (offset !== lastEmittedCursorOffset) {
+                  lastEmittedCursorOffset = offset
+                  promptRefContext.emitCursorChange()
+                }
+              }}
               onKeyDown={(e: { preventDefault(): void }) => {
                 if (props.disabled) {
                   e.preventDefault()
