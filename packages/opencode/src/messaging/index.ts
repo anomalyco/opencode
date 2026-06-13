@@ -113,14 +113,6 @@ export const layer = Layer.effect(
       }),
     )
 
-    const bump = (value: State, child: SessionID, expectReply: boolean) => {
-      const current = value.counters.get(child) ?? { inFlight: 0, roundTrips: 0 }
-      value.counters.set(child, {
-        inFlight: current.inFlight + (expectReply ? 1 : 0),
-        roundTrips: current.roundTrips + 1,
-      })
-    }
-
     const release = (value: State, child: SessionID) => {
       value.pending.delete(child)
       const current = value.counters.get(child)
@@ -135,7 +127,9 @@ export const layer = Layer.effect(
       if (counters.roundTrips >= ROUND_TRIP_CAP)
         return yield* new AbuseError({ detail: `Message round-trip cap (${ROUND_TRIP_CAP}) reached for this subagent` })
 
-      bump(value, input.childSessionID, input.expectReply)
+      // roundTrips is cumulative/monotonic and intentionally never released;
+      // leaking a +1 on interrupt is acceptable as anti-abuse.
+      value.counters.set(input.childSessionID, { ...counters, roundTrips: counters.roundTrips + 1 })
       yield* events.publish(Event.Sent, {
         childSessionID: input.childSessionID,
         parentSessionID: input.parentSessionID,
@@ -148,16 +142,18 @@ export const layer = Layer.effect(
         return Option.none()
       }
 
-      const deferred = yield* Deferred.make<string, RejectedError>()
-      value.pending.set(input.childSessionID, {
-        childSessionID: input.childSessionID,
-        parentSessionID: input.parentSessionID,
-        body: input.body,
-        deferred,
-      })
-
       return yield* Effect.ensuring(
         Effect.gen(function* () {
+          const current = value.counters.get(input.childSessionID) ?? { inFlight: 0, roundTrips: 0 }
+          value.counters.set(input.childSessionID, { ...current, inFlight: current.inFlight + 1 })
+          const deferred = yield* Deferred.make<string, RejectedError>()
+          value.pending.set(input.childSessionID, {
+            childSessionID: input.childSessionID,
+            parentSessionID: input.parentSessionID,
+            body: input.body,
+            deferred,
+          })
+
           yield* input.deliver
           const result = yield* Deferred.await(deferred).pipe(
             Effect.timeoutOption(input.timeout ?? DEFAULT_TIMEOUT),

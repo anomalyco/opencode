@@ -1,5 +1,5 @@
 import { afterEach, expect } from "bun:test"
-import { Effect, Fiber, Layer, Option } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Option } from "effect"
 import { Messaging } from "../../src/messaging"
 import { disposeAllInstances, testInstanceStoreLayer } from "../fixture/fixture"
 import { SessionID } from "../../src/session/schema"
@@ -81,6 +81,12 @@ it.instance(
         })
         .pipe(Effect.exit)
       expect(exit._tag).toBe("Failure")
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toMatchObject({
+          _tag: "Messaging.ReplyTimeoutError",
+          childSessionID: CHILD,
+        })
+      }
       expect((yield* messaging.list()).length).toBe(0)
     }),
   { git: true },
@@ -139,6 +145,38 @@ it.instance(
         })
         .pipe(Effect.exit)
       expect(exit._tag).toBe("Failure")
+    }),
+  { git: true },
+)
+
+it.instance(
+  "send - rejects when cumulative round-trip cap is reached",
+  () =>
+    Effect.gen(function* () {
+      const messaging = yield* Messaging.Service
+      for (let i = 0; i < 8; i++) {
+        const result = yield* messaging.send({
+          childSessionID: CHILD,
+          parentSessionID: PARENT,
+          body: `fyi-${i}`,
+          expectReply: false,
+          deliver: Effect.void,
+        })
+        expect(Option.isNone(result)).toBe(true)
+      }
+      const exit = yield* messaging
+        .send({
+          childSessionID: CHILD,
+          parentSessionID: PARENT,
+          body: "one too many",
+          expectReply: false,
+          deliver: Effect.void,
+        })
+        .pipe(Effect.exit)
+      expect(exit._tag).toBe("Failure")
+      if (Exit.isFailure(exit)) {
+        expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "Messaging.AbuseError" })
+      }
     }),
   { git: true },
 )

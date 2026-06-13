@@ -8,6 +8,7 @@ export {
   type ExtendInput,
   type Info,
   type Interface,
+  type MessagePayload,
   type StartInput,
   type Status,
   type WaitInput,

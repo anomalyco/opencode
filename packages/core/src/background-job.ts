@@ -325,24 +325,28 @@ export const make = Effect.gen(function* () {
   })
 
   const message: Interface["message"] = Effect.fn("BackgroundJob.message")(function* (id, payload) {
-    const result = yield* SynchronizedRef.modifyEffect(
-      state.jobs,
-      Effect.fnUntraced(function* (jobs) {
-        const job = jobs.get(id)
-        if (!job || job.info.status !== "running")
-          return [{} as MessageResult, jobs] as readonly [MessageResult, Map<string, Active>]
-        const next = {
-          ...job,
-          info: { ...job.info, metadata: { ...job.info.metadata, messaged: true } },
-        }
-        return [
-          { info: snapshot(next), messaged: job.messaged },
-          new Map(jobs).set(id, next),
-        ] as readonly [MessageResult, Map<string, Active>]
+    return yield* Effect.uninterruptible(
+      Effect.gen(function* () {
+        const result = yield* SynchronizedRef.modifyEffect(
+          state.jobs,
+          Effect.fnUntraced(function* (jobs) {
+            const job = jobs.get(id)
+            if (!job || job.info.status !== "running")
+              return [{} as MessageResult, jobs] as readonly [MessageResult, Map<string, Active>]
+            const next = {
+              ...job,
+              info: { ...job.info, metadata: { ...job.info.metadata, messaged: true } },
+            }
+            return [
+              { info: snapshot(next), messaged: job.messaged },
+              new Map(jobs).set(id, next),
+            ] as readonly [MessageResult, Map<string, Active>]
+          }),
+        )
+        if (result.info && result.messaged) yield* Deferred.succeed(result.messaged, payload).pipe(Effect.ignore)
+        return result.info
       }),
     )
-    if (result.info && result.messaged) yield* Deferred.succeed(result.messaged, payload).pipe(Effect.ignore)
-    return result.info
   })
 
   const waitForMessage: Interface["waitForMessage"] = Effect.fn("BackgroundJob.waitForMessage")(function* (id) {
