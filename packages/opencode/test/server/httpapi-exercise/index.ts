@@ -223,6 +223,18 @@ const scenarios: Scenario[] = [
     }))
     .json(200, array, "status"),
   http.protected
+    .post("/experimental/project/{projectID}/copy/generate-name", "experimental.projectCopy.generateName")
+    .seeded((ctx) => ctx.project())
+    .at((ctx) => ({
+      path: route("/experimental/project/{projectID}/copy/generate-name", { projectID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: {},
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(typeof body.name === "string" && body.name.length > 0, "generated copy name should be non-empty")
+    }),
+  http.protected
     .post("/experimental/project/{projectID}/copy", "experimental.projectCopy.create")
     .seeded((ctx) => ctx.project())
     .at((ctx) => ({
