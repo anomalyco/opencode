@@ -5,6 +5,7 @@ import { useDirectory } from "../../context/directory"
 import { useConnected } from "../../component/use-connected"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
+import { AceStatus } from "../../component/ace-status"
 
 export function Footer() {
   const { theme } = useTheme()
@@ -82,6 +83,7 @@ export function Footer() {
                 {mcp()} MCP
               </text>
             </Show>
+            <AceStatus />
             <text fg={theme.textMuted}>/status</text>
           </Match>
         </Switch>

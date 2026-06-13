@@ -1,4 +1,5 @@
 import { NonNegativeInt } from "@opencode-ai/core/schema"
+import { ConfigACEV1 } from "@opencode-ai/core/v1/config/ace"
 import { EventV2 } from "@opencode-ai/core/event"
 import { SessionID } from "@/session/schema"
 import { Schema } from "effect"
@@ -20,6 +21,38 @@ export const ReplayPayload = Schema.Struct({
   directory: Schema.String,
   events: Schema.NonEmptyArray(ReplayEvent),
 })
+export const AceAblationPolicyPayload = Schema.Struct({
+  name: Schema.String.pipe(Schema.optional),
+  arm: Schema.String.pipe(Schema.optional),
+  ace: ConfigACEV1.Info.pipe(Schema.optional),
+})
+export const AceAblationPayload = Schema.Struct({
+  directory: Schema.String,
+  events: Schema.NonEmptyArray(ReplayEvent),
+  policies: Schema.Array(AceAblationPolicyPayload).pipe(Schema.optional),
+})
+export const AceAblationSummary = Schema.Struct({
+  name: Schema.String,
+  arm: Schema.String.pipe(Schema.optional),
+  mode: Schema.Literals(["monitor", "fixed-cap", "reject-escalate"]),
+  toolCalls: NonNegativeInt,
+  spawns: NonNegativeInt,
+  wouldBlock: NonNegativeInt,
+  observed: NonNegativeInt,
+  blocked: NonNegativeInt,
+  escalated: NonNegativeInt,
+  completedTools: NonNegativeInt,
+  failedTools: NonNegativeInt,
+  stepEnds: NonNegativeInt,
+  byLimit: Schema.Record(Schema.String, NonNegativeInt),
+  firstBlockSeq: NonNegativeInt.pipe(Schema.optional),
+})
+export const AceAblationResponse = Schema.Struct({
+  directory: Schema.String,
+  sourceSessionID: Schema.String,
+  eventCount: NonNegativeInt,
+  arms: Schema.Array(AceAblationSummary),
+})
 export const ReplayResponse = Schema.Struct({
   sessionID: Schema.String,
 })
@@ -38,6 +71,7 @@ export const HistoryEvent = Schema.Struct({
 export const SyncPaths = {
   start: `${root}/start`,
   replay: `${root}/replay`,
+  aceAblation: `${root}/ace/ablation`,
   steal: `${root}/steal`,
   history: `${root}/history`,
 } as const
@@ -66,6 +100,19 @@ export const SyncApi = HttpApi.make("sync")
             identifier: "sync.replay",
             summary: "Replay sync events",
             description: "Validate and replay a complete sync event history.",
+          }),
+        ),
+        HttpApiEndpoint.post("aceAblation", SyncPaths.aceAblation, {
+          query: WorkspaceRoutingQuery,
+          payload: AceAblationPayload,
+          success: described(AceAblationResponse, "ACE ablation summary"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "sync.ace.ablation",
+            summary: "Replay ACE policy arms",
+            description:
+              "Replay a sync event history through ACE policy arms without invoking model providers or tools.",
           }),
         ),
         HttpApiEndpoint.post("steal", SyncPaths.steal, {

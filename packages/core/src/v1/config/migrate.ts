@@ -21,6 +21,7 @@ const keys = new Set([
   "small_model",
   "mode",
   "agent",
+  "ace",
   "provider",
   "permission",
   "tools",
@@ -45,6 +46,10 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
     username: info.username,
     permissions: permissions(info.permission, info.tools),
     agents: agents(info),
+    ace: info.ace && {
+      ...info.ace,
+      mode: info.ace.mode === "cap" ? "fixed-cap" : info.ace.mode === "reject" ? "reject-escalate" : info.ace.mode,
+    },
     snapshots: info.snapshot,
     watcher: info.watcher,
     formatter: info.formatter,
