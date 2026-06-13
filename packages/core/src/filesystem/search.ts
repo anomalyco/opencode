@@ -1,7 +1,7 @@
 export * as FileSystemSearch from "./search"
 
 import path from "path"
-import { Context, Effect, Layer, Scope } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { Fff } from "#fff"
 import fuzzysort from "fuzzysort"
 import { FileSystem } from "../filesystem"
@@ -25,7 +25,15 @@ export const ripgrepLayer = Layer.effect(
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const ripgrep = yield* Ripgrep.Service
-    const scope = yield* Scope.Scope
+    const root = yield* fs.realPath(location.directory).pipe(Effect.orDie)
+    const resolve = Effect.fnUntraced(function* (input?: RelativePath) {
+      const absolute = path.resolve(location.directory, input ?? ".")
+      if (!FSUtil.contains(location.directory, absolute))
+        return yield* Effect.die(new Error("Path escapes the location"))
+      const real = yield* fs.realPath(absolute).pipe(Effect.orDie)
+      if (!FSUtil.contains(root, real)) return yield* Effect.die(new Error("Path escapes the location"))
+      return { absolute, info: yield* fs.stat(real).pipe(Effect.orDie) }
+    })
     const state = {
       files: [] as string[],
       directories: [] as string[],
@@ -44,13 +52,12 @@ export const ripgrepLayer = Layer.effect(
             state.directories = Array.from(directories)
           }),
       })
-      .pipe(Effect.orDie, Effect.asVoid, Effect.forkIn(scope))
+      .pipe(Effect.orDie, Effect.asVoid)
     return Service.of({
       glob: (input) =>
         Effect.gen(function* () {
-          const target = path.resolve(location.directory, input.path ?? ".")
-          const info = yield* fs.stat(target).pipe(Effect.orDie)
-          const cwd = info.type === "File" ? path.dirname(target) : target
+          const target = yield* resolve(input.path)
+          const cwd = target.info.type === "File" ? path.dirname(target.absolute) : target.absolute
           return yield* ripgrep
             .glob({
               cwd,
@@ -62,8 +69,9 @@ export const ripgrepLayer = Layer.effect(
                 result.map(
                   (entry) =>
                     new FileSystem.Entry({
-                      ...entry,
                       path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, entry.path))),
+                      type: entry.type,
+                      mime: entry.mime,
                     }),
                 ),
               ),
@@ -72,14 +80,13 @@ export const ripgrepLayer = Layer.effect(
         }),
       grep: (input) =>
         Effect.gen(function* () {
-          const target = path.resolve(location.directory, input.path ?? ".")
-          const info = yield* fs.stat(target).pipe(Effect.orDie)
-          const cwd = info.type === "File" ? path.dirname(target) : target
+          const target = yield* resolve(input.path)
+          const cwd = target.info.type === "File" ? path.dirname(target.absolute) : target.absolute
           return yield* ripgrep
             .grep({
               cwd,
               pattern: input.pattern,
-              file: info.type === "File" ? path.basename(target) : undefined,
+              file: target.info.type === "File" ? path.basename(target.absolute) : undefined,
               include: input.include,
               limit: input.limit ?? Number.MAX_SAFE_INTEGER,
             })
@@ -88,11 +95,15 @@ export const ripgrepLayer = Layer.effect(
                 result.map(
                   (match) =>
                     new FileSystem.Match({
-                      ...match,
                       entry: new FileSystem.Entry({
-                        ...match.entry,
                         path: RelativePath.make(path.relative(location.directory, path.resolve(cwd, match.entry.path))),
+                        type: match.entry.type,
+                        mime: match.entry.mime,
                       }),
+                      line: match.line,
+                      offset: match.offset,
+                      text: match.text,
+                      submatches: match.submatches,
                     }),
                 ),
               ),
@@ -126,7 +137,17 @@ export const ripgrepLayer = Layer.effect(
 export const fffLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const fs = yield* FSUtil.Service
     const location = yield* Location.Service
+    const root = yield* fs.realPath(location.directory).pipe(Effect.orDie)
+    const resolve = Effect.fnUntraced(function* (input?: RelativePath) {
+      const absolute = path.resolve(location.directory, input ?? ".")
+      if (!FSUtil.contains(location.directory, absolute))
+        return yield* Effect.die(new Error("Path escapes the location"))
+      const real = yield* fs.realPath(absolute).pipe(Effect.orDie)
+      if (!FSUtil.contains(root, real)) return yield* Effect.die(new Error("Path escapes the location"))
+      return real
+    })
     const result = yield* Effect.try({
       try: () =>
         Fff.create({
@@ -141,48 +162,54 @@ export const fffLayer = Layer.effect(
     yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()).pipe(Effect.ignore))
     return Service.of({
       glob: (input) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          yield* resolve(input.path)
           const prefix = input.path?.replaceAll("\\", "/").replace(/\/$/, "")
-          const found = result.value.glob(prefix ? `${prefix}/${input.pattern}` : input.pattern, {
-            pageIndex: 0,
-            pageSize: input.limit,
-          })
-          if (!found.ok) throw found.error
-          return found.value.items.map((item) => {
-            const absolute = path.resolve(location.directory, item.relativePath)
-            return new FileSystem.Entry({
-              path: RelativePath.make(item.relativePath.replaceAll("\\", "/")),
-              type: "file",
-              mime: FSUtil.mimeType(absolute),
+          return yield* Effect.sync(() => {
+            const found = result.value.glob(prefix ? `${prefix}/${input.pattern}` : input.pattern, {
+              pageIndex: 0,
+              pageSize: input.limit,
+            })
+            if (!found.ok) throw found.error
+            return found.value.items.map((item) => {
+              const absolute = path.resolve(location.directory, item.relativePath)
+              return new FileSystem.Entry({
+                path: RelativePath.make(item.relativePath.replaceAll("\\", "/")),
+                type: "file",
+                mime: FSUtil.mimeType(absolute),
+              })
             })
           })
         }),
       grep: (input) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
+          yield* resolve(input.path)
           const prefix = input.path?.replaceAll("\\", "/").replace(/\/$/, "")
-          const found = result.value.grep(
-            [prefix ? `${prefix}/**` : undefined, input.include, input.pattern]
-              .filter((value) => value !== undefined)
-              .join(" "),
-            { mode: "regex", pageSize: input.limit, timeBudgetMs: 1_500 },
-          )
-          if (!found.ok) throw found.error
-          return found.value.items.map((match) => {
-            const bytes = Buffer.from(match.lineContent)
-            return new FileSystem.Match({
-              entry: new FileSystem.Entry({
-                path: RelativePath.make(match.relativePath.replaceAll("\\", "/")),
-                type: "file",
-                mime: FSUtil.mimeType(match.relativePath),
-              }),
-              line: match.lineNumber,
-              offset: match.byteOffset,
-              text: match.lineContent.length > 2_000 ? match.lineContent.slice(0, 2_000) + "..." : match.lineContent,
-              submatches: match.matchRanges.map(([start, end]) => ({
-                text: bytes.subarray(start, end).toString("utf8"),
-                start,
-                end,
-              })),
+          return yield* Effect.sync(() => {
+            const found = result.value.grep(
+              [prefix ? `${prefix}/**` : undefined, input.include, input.pattern]
+                .filter((value) => value !== undefined)
+                .join(" "),
+              { mode: "regex", pageSize: input.limit, timeBudgetMs: 1_500 },
+            )
+            if (!found.ok) throw found.error
+            return found.value.items.map((match) => {
+              const bytes = Buffer.from(match.lineContent)
+              return new FileSystem.Match({
+                entry: new FileSystem.Entry({
+                  path: RelativePath.make(match.relativePath.replaceAll("\\", "/")),
+                  type: "file",
+                  mime: FSUtil.mimeType(match.relativePath),
+                }),
+                line: match.lineNumber,
+                offset: match.byteOffset,
+                text: match.lineContent.length > 2_000 ? match.lineContent.slice(0, 2_000) + "..." : match.lineContent,
+                submatches: match.matchRanges.map(([start, end]) => ({
+                  text: bytes.subarray(start, end).toString("utf8"),
+                  start,
+                  end,
+                })),
+              })
             })
           })
         }),
