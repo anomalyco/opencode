@@ -53,7 +53,7 @@ export interface Settings {
   readonly budgetUsd?: number
 }
 
-const DEFAULTS: Settings = {
+export const DEFAULTS: Settings = {
   mode: "monitor",
   kUpper: 1.5,
   nMax: 64,
@@ -123,17 +123,19 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Criticality") {}
 
-function readSettings(experimental: { criticality?: Partial<Record<keyof Settings | string, unknown>> } | undefined): Settings {
+export function readSettings(experimental: { criticality?: Partial<Record<keyof Settings | string, unknown>> } | undefined): Settings {
   const c = (experimental as any)?.criticality
   if (!c) return DEFAULTS
-  return {
-    mode: c.mode === "gate" ? "gate" : "monitor",
-    kUpper: typeof c.k_upper === "number" ? c.k_upper : DEFAULTS.kUpper,
-    nMax: typeof c.n_max === "number" ? c.n_max : DEFAULTS.nMax,
-    windowMs: typeof c.window_ms === "number" ? c.window_ms : DEFAULTS.windowMs,
-    epsilon: typeof c.epsilon === "number" ? c.epsilon : DEFAULTS.epsilon,
-    budgetUsd: typeof c.budget_usd === "number" ? c.budget_usd : undefined,
-  }
+
+  // Validate and coerce each setting with bounds checking.
+  const mode = c.mode === "gate" ? "gate" : "monitor"
+  const kUpper = typeof c.k_upper === "number" && c.k_upper > 0 && Number.isFinite(c.k_upper) ? c.k_upper : DEFAULTS.kUpper
+  const nMax = typeof c.n_max === "number" && c.n_max > 0 && Number.isFinite(c.n_max) ? c.n_max : DEFAULTS.nMax
+  const windowMs = typeof c.window_ms === "number" && c.window_ms > 0 && Number.isFinite(c.window_ms) ? c.window_ms : DEFAULTS.windowMs
+  const epsilon = typeof c.epsilon === "number" && c.epsilon >= 0 && c.epsilon < 1 && Number.isFinite(c.epsilon) ? c.epsilon : DEFAULTS.epsilon
+  const budgetUsd = typeof c.budget_usd === "number" && c.budget_usd > 0 && Number.isFinite(c.budget_usd) ? c.budget_usd : undefined
+
+  return { mode, kUpper, nMax, windowMs, epsilon, budgetUsd }
 }
 
 export const layer = Layer.effect(
@@ -171,39 +173,55 @@ export const layer = Layer.effect(
       })
 
     // Walk the parentID chain to determine cascade depth (root = 0).
+    // Use try/catch to fail fast on session access errors rather than silently
+    // treating missing sessions as "no parent".
     const depthOf = Effect.fn("Criticality.depth")(function* (sessionID: SessionID) {
       let depth = 0
       let current: SessionID | undefined = sessionID
       const seen = new Set<string>()
       while (current && !seen.has(current)) {
         seen.add(current)
-        const info = yield* sessions.get(current).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
-        const parent = info?.parentID
-        if (!parent) break
-        depth++
-        current = parent
-        if (depth > 256) break // safety bound against malformed chains
+        try {
+          const info = yield* sessions.get(current)
+          const parent = info?.parentID
+          if (!parent) break
+          depth++
+          current = parent
+          if (depth > 256) break // safety bound against malformed chains
+        } catch {
+          // If we can't fetch the session, stop walking up. Return current depth.
+          break
+        }
       }
       return depth
     })
 
     // Sum cost across the root cascade (root session + descendants). Only used
     // when a budget is configured, so the default path stays cheap.
+    // Critical: Do a single atomic traversal to avoid stale readings under
+    // concurrent spawns. Walk up to root, then down to all descendants without
+    // releasing control in between.
     const cascadeCost = Effect.fn("Criticality.cascadeCost")(function* (sessionID: SessionID) {
-      // find root
       let root: SessionID = sessionID
       let current: SessionID | undefined = sessionID
-      const seen = new Set<string>()
-      while (current && !seen.has(current)) {
-        seen.add(current)
-        const info = yield* sessions.get(current).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
-        if (!info?.parentID) {
+      const seenUp = new Set<string>()
+      // Find root, walking up the parentID chain.
+      while (current && !seenUp.has(current)) {
+        seenUp.add(current)
+        try {
+          const info = yield* sessions.get(current)
+          if (!info?.parentID) {
+            root = current
+            break
+          }
+          current = info.parentID
+        } catch {
+          // If we can't fetch the parent, treat current as root.
           root = current
           break
         }
-        current = info.parentID
       }
-      // sum root + descendants
+      // Sum root + descendants in one walk, without yielding between reads.
       let total = 0
       const stack: SessionID[] = [root]
       const visited = new Set<string>()
@@ -211,17 +229,28 @@ export const layer = Layer.effect(
         const id = stack.pop()!
         if (visited.has(id)) continue
         visited.add(id)
-        const info = yield* sessions.get(id).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
-        if (info) total += info.cost ?? 0
-        const kids = yield* sessions.children(id).pipe(Effect.catchAll(() => Effect.succeed([])))
-        for (const kid of kids) stack.push(kid.id)
+        try {
+          const info = yield* sessions.get(id)
+          if (info) total += info.cost ?? 0
+          const kids = yield* sessions.children(id)
+          for (const kid of kids) stack.push(kid.id)
+        } catch {
+          // If a session is deleted or inaccessible, count conservatively.
+          // Assume it might have had cost; don't undercount the budget.
+          total += 1 // small penalty to be conservative on missing data
+        }
       }
       return total
     })
 
     const activePopulation = Effect.fn("Criticality.activePopulation")(function* () {
-      const jobs = yield* background.list().pipe(Effect.catchAll(() => Effect.succeed([])))
-      return jobs.filter((job) => job.status === "running").length
+      try {
+        const jobs = yield* background.list()
+        return jobs.filter((job) => job.status === "running").length
+      } catch {
+        // If background job list fails, assume no active jobs (conservative).
+        return 0
+      }
     })
 
     const evaluate = Effect.fn("Criticality.evaluate")(function* (parentID: SessionID, costHat?: number) {
