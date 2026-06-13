@@ -85,6 +85,9 @@ export type Event =
   | EventQuestionReplied
   | EventQuestionRejected
   | EventSessionCompacted
+  | EventMessagingSent
+  | EventMessagingReplied
+  | EventMessagingRejected
   | EventVcsBranchUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
@@ -1544,6 +1547,32 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "messaging.sent"
+        properties: {
+          childSessionID: string
+          parentSessionID: string
+          body: string
+          expectReply: boolean
+        }
+      }
+    | {
+        id: string
+        type: "messaging.replied"
+        properties: {
+          childSessionID: string
+          parentSessionID: string
+          body: string
+        }
+      }
+    | {
+        id: string
+        type: "messaging.rejected"
+        properties: {
+          childSessionID: string
+        }
+      }
+    | {
+        id: string
         type: "vcs.branch.updated"
         properties: {
           branch?: string
@@ -1675,6 +1704,7 @@ export type PermissionConfig =
       external_directory?: PermissionRuleConfig
       todowrite?: PermissionActionConfig
       question?: PermissionActionConfig
+      message?: PermissionActionConfig
       webfetch?: PermissionActionConfig
       websearch?: PermissionActionConfig
       lsp?: PermissionRuleConfig
@@ -6978,6 +7008,35 @@ export type EventSessionCompacted = {
   type: "session.compacted"
   properties: {
     sessionID: string
+  }
+}
+
+export type EventMessagingSent = {
+  id: string
+  type: "messaging.sent"
+  properties: {
+    childSessionID: string
+    parentSessionID: string
+    body: string
+    expectReply: boolean
+  }
+}
+
+export type EventMessagingReplied = {
+  id: string
+  type: "messaging.replied"
+  properties: {
+    childSessionID: string
+    parentSessionID: string
+    body: string
+  }
+}
+
+export type EventMessagingRejected = {
+  id: string
+  type: "messaging.rejected"
+  properties: {
+    childSessionID: string
   }
 }
 
