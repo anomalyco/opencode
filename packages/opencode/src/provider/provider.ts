@@ -713,6 +713,97 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
       }
     }),
+    omniroute: Effect.fnUntraced(function* (input: Info) {
+      const auth = yield* dep.auth(input.id)
+      const apiKey = auth?.type === "api" ? auth.key : undefined
+      const rawBaseURL = input.options?.baseURL || (auth?.type === "api" ? auth.metadata?.baseURL : undefined)
+      const baseURL = rawBaseURL?.replace(/\/+$/, "").replace(/\/v1$/, "")
+
+      if (!baseURL) {
+        return {
+          autoload: false,
+          async getModel() {
+            throw new Error("OmniRoute: base URL not configured. Set provider.omniroute.options.baseURL in opencode.json.")
+          },
+        }
+      }
+
+      return {
+        autoload: true,
+        options: {},
+        async discoverModels(): Promise<Record<string, Model>> {
+          try {
+            const headers: Record<string, string> = {}
+            if (apiKey) {
+              headers.Authorization = `Bearer ${apiKey}`
+            }
+            const response = await fetch(`${baseURL}/v1/models`, { headers })
+
+            if (!response.ok) {
+              return {}
+            }
+
+            const data = await response.json().catch(() => null)
+            if (!data || !Array.isArray(data.data)) {
+              return {}
+            }
+
+            const models: Record<string, Model> = {}
+            for (const entry of data.data) {
+              if (!entry.id) continue
+              if (models[entry.id]) continue
+
+              models[entry.id] = {
+                id: ModelV2.ID.make(entry.id),
+                providerID: ProviderV2.ID.make("omniroute"),
+                name: entry.name ?? entry.id,
+                family: "",
+                api: {
+                  id: entry.id,
+                  url: baseURL,
+                  npm: "@ai-sdk/openai-compatible",
+                },
+                status: "active",
+                headers: {},
+                options: {},
+                cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                limit: {
+                  context: entry.context_length ?? 128000,
+                  output: entry.max_output_tokens ?? 4096,
+                },
+                capabilities: {
+                  temperature: false,
+                  reasoning: entry.capabilities?.reasoning ?? entry.capabilities?.thinking ?? false,
+                  attachment: false,
+                  toolcall: entry.capabilities?.tool_calling ?? false,
+                  input: {
+                    text: true,
+                    audio: false,
+                    image: entry.capabilities?.vision ?? false,
+                    video: false,
+                    pdf: false,
+                  },
+                  output: {
+                    text: true,
+                    audio: false,
+                    image: false,
+                    video: false,
+                    pdf: false,
+                  },
+                  interleaved: false,
+                },
+                release_date: "",
+                variants: {},
+              }
+            }
+
+            return models
+          } catch {
+            return {}
+          }
+        },
+      }
+    }),
     "cloudflare-workers-ai": Effect.fnUntraced(function* (input: Info) {
       // When baseURL is already configured (e.g. corporate config routing through a proxy/gateway),
       // skip the account ID check because the URL is already fully specified.
@@ -1288,6 +1379,16 @@ export const layer = Layer.effect(
         const catalog = mapValues(modelsDev, fromModelsDevProvider)
         const database = mapValues(catalog, toPublicInfo)
 
+        // Add OmniRoute as a static custom provider entry
+        database[ProviderV2.ID.make("omniroute")] = {
+          id: ProviderV2.ID.make("omniroute"),
+          name: "OmniRoute",
+          source: "custom",
+          env: [],
+          options: {},
+          models: {},
+        }
+
         const providers: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>
         const languages = new Map<string, LanguageModelV3>()
         const modelLoaders: {
@@ -1538,6 +1639,22 @@ export const layer = Layer.effect(
               for (const [modelID, model] of Object.entries(discovered)) {
                 if (!providers[gitlab].models[modelID]) {
                   providers[gitlab].models[modelID] = model
+                }
+              }
+            } catch (e) {}
+          })
+        }
+
+        for (const [providerID, loader] of Object.entries(discoveryLoaders)) {
+          if (providerID === "gitlab") continue
+          const pid = ProviderV2.ID.make(providerID)
+          if (!providers[pid] || !isProviderAllowed(pid)) continue
+          yield* Effect.promise(async () => {
+            try {
+              const discovered = await loader()
+              for (const [modelID, model] of Object.entries(discovered)) {
+                if (!providers[pid].models[modelID]) {
+                  providers[pid].models[modelID] = model
                 }
               }
             } catch (e) {}
