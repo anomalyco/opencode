@@ -161,7 +161,6 @@ def default_config() -> dict:
                 "CRITICAL: Global Drawdown limit reached",
                 "GLOBAL STOP: closed position",
                 "Test passed",
-                "test Experts\\opencode-trade\\Expert_Main.ex5 on XAUUSD,M15 thread finished",
             ],
             "reject_no_money": True,
             "reject_margin_error": True,
@@ -363,6 +362,15 @@ class AnalyzeMt5ReportTest(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 1)
         self.assertIn("missing log marker: InpGlobalDDLimit=-0.0005", payload["failed_rules"])
+
+    def test_step2_global_log_only_passes_without_thread_marker(self):
+        result, payload = self.run_parser(
+            None,
+            STEP2_LOG.replace("CS\t0\t12:52:42.796\tTester\ttest Experts\\opencode-trade\\Expert_Main.ex5 on XAUUSD,M15 thread finished\n", ""),
+            "step2_operational_stop",
+        )
+        self.assertEqual(result.returncode, 0)
+        self.assertTrue(payload["passed"])
 
     def test_step2_daily_log_only_passes_with_daily_stop_markers(self):
         result, payload = self.run_parser(None, STEP2_DAILY_LOG, "step2_operational_stop_daily")

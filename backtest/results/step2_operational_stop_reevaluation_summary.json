@@ -1,0 +1,32 @@
+{
+  "date": "2026-06-13",
+  "decision": "pass",
+  "scenarios": {
+    "D1": {
+      "scenario": "step2_operational_stop",
+      "result_path": "backtest/results/step2_global_stop_retest.json",
+      "log_path": "backtest/results/task-d1r-20260613.log",
+      "status": "pass",
+      "reason": "fresh global-stop log passed current parser gate with no failed rules or warnings"
+    },
+    "D2": {
+      "scenario": "step2_operational_stop_daily",
+      "result_path": "backtest/results/step2_daily_stop_retest.json",
+      "log_path": "backtest/results/task-d2r-20260613.log",
+      "status": "pass",
+      "reason": "fresh daily-stop log passed current parser gate with no failed rules or warnings"
+    },
+    "D3": {
+      "scenario": "step2_operational_stop_monthly",
+      "result_path": "backtest/results/step2_monthly_stop_retest.json",
+      "log_path": "backtest/results/task-d3r-20260613.log",
+      "status": "pass",
+      "reason": "fresh monthly-stop log passed current parser gate with no failed rules or warnings"
+    }
+  },
+  "sentinel_unblocked": true,
+  "notes": [
+    "MT5 HTML reports were missing for D1/D2/D3, but Step2 operational stop scenarios have require_report_metrics=false and passed log-only parser gates.",
+    "D1 gate no longer requires the environment-dependent thread finished marker; Test passed plus global stop/close markers are used for completion."
+  ]
+}

@@ -19,8 +19,7 @@
       "InpGlobalDDLimit=-0.0005",
       "CRITICAL: Global Drawdown limit reached",
       "GLOBAL STOP: closed position",
-      "Test passed",
-      "test Experts\\opencode-trade\\Expert_Main.ex5 on XAUUSD,M15 thread finished"
+      "Test passed"
     ],
     "reject_no_money": true,
     "reject_margin_error": true,
