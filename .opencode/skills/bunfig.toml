@@ -1,0 +1,5 @@
+# Lets `cd .opencode/skills && bun test` run the shared-lib and skill tests. The repo root bunfig
+# intentionally blocks test discovery from the root (do-not-run-tests-from-root); packages override
+# it with their own bunfig, and this mirrors that for the skill tooling.
+[test]
+root = "."
