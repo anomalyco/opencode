@@ -6,6 +6,7 @@ import {
   panelBoundary,
   panelGap,
   panelHandleOffset,
+  panelItemStyle,
   panelPixels,
   panelTrackTemplate,
   resizePanelWeights,
@@ -41,6 +42,18 @@ describe("panel layout", () => {
 
   test("builds minmax tracks so panels can shrink without horizontal overflow", () => {
     expect(panelTrackTemplate([0.25, 0.75])).toBe("minmax(0, 0.25fr) minmax(0, 0.75fr)")
+  })
+
+  test("spans the right panel in three-panel desktop layouts", () => {
+    expect(panelItemStyle(0, 3, 2)).toEqual({ "grid-column": "1", "grid-row": "1" })
+    expect(panelItemStyle(1, 3, 2)).toEqual({ "grid-column": "2", "grid-row": "1 / span 2" })
+    expect(panelItemStyle(2, 3, 2)).toEqual({ "grid-column": "1", "grid-row": "2" })
+  })
+
+  test("keeps normal grid flow outside the three-panel desktop layout", () => {
+    expect(panelItemStyle(0, 2, 2)).toEqual({})
+    expect(panelItemStyle(2, 3, 1)).toEqual({})
+    expect(panelItemStyle(3, 4, 2)).toEqual({})
   })
 
   test("subtracts only visible gaps from available space", () => {

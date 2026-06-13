@@ -35,6 +35,12 @@ export function panelTrackTemplate(weights: readonly number[]) {
   return weights.map((weight) => `minmax(0, ${weight}fr)`).join(" ")
 }
 
+export function panelItemStyle(index: number, count: number, columns: number) {
+  if (count !== 3 || columns !== 2) return {}
+  if (index === 1) return { "grid-column": "2", "grid-row": "1 / span 2" }
+  return { "grid-column": "1", "grid-row": index === 2 ? "2" : "1" }
+}
+
 export function panelPixels(weights: readonly number[], available: number) {
   return weights.map((weight) => weight * available)
 }

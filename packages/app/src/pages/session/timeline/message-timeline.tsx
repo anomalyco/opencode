@@ -243,6 +243,7 @@ export function MessageTimeline(props: {
   onAutoScrollInteraction: (event: MouseEvent) => void
   shouldAnchorBottom: () => boolean
   centered: boolean
+  fullWidthHeader?: boolean
   setContentRef: (el: HTMLDivElement) => void
   userMessages: UserMessage[]
   anchor: (id: string) => string
@@ -1301,13 +1302,19 @@ export function MessageTimeline(props: {
                 !settings.general.newLayoutDesigns(),
               "w-full": true,
               "pb-4": true,
-              "pr-3": true,
-              "pl-4": settings.general.newLayoutDesigns(),
-              "pl-2 md:pl-4": !settings.general.newLayoutDesigns(),
-              "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
+              "pr-3": !props.fullWidthHeader,
+              "pl-4": settings.general.newLayoutDesigns() && !props.fullWidthHeader,
+              "pl-2 md:pl-4": !settings.general.newLayoutDesigns() && !props.fullWidthHeader,
+              "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered && !props.fullWidthHeader,
             }}
           >
-            <div class="h-12 w-full flex items-center justify-between gap-2">
+            <div
+              classList={{
+                "h-12 w-full flex items-center justify-between gap-2": true,
+                "pl-2 pr-3 md:pl-4 md:pr-3": !!props.fullWidthHeader,
+                "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered && !!props.fullWidthHeader,
+              }}
+            >
               <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
                 <div class="flex items-center min-w-0 grow-1">
                   <Show when={parentID()}>

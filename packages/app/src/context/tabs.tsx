@@ -10,6 +10,7 @@ import { uuid } from "@/utils/uuid"
 import { SessionTabsRemovedDetail } from "@/components/titlebar-session-events"
 import { sessionHref } from "@/utils/session-route"
 import { createTabMemory } from "./tab-memory"
+import { tabOrderKey } from "./tabs-order"
 
 export type SessionTab = {
   type: "session"
@@ -36,7 +37,7 @@ export const draftHref = (draftID: string) => `/new-session?draftId=${encodeURIC
 export const tabHref = (tab: Tab) =>
   tab.type === "draft" ? draftHref(tab.draftID) : sessionHref(tab.server, tab.sessionId)
 
-export const tabKey = (tab: Tab) => (tab.type === "draft" ? `draft:${tab.draftID}` : `${tab.server}\n${tabHref(tab)}`)
+export const tabKey = tabOrderKey
 
 export function sessionHasOpenTab(tabs: Tab[], server: ServerConnection.Key, session: Session) {
   return tabs.some((tab) => tab.type === "session" && tab.server === server && tab.sessionId === session.id)

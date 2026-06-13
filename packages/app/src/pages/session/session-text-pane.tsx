@@ -1,6 +1,7 @@
 import {
   createEffect,
   createMemo,
+  createResource,
   For,
   Index,
   Show,
@@ -26,15 +27,15 @@ import {
 } from "@opencode-ai/ui/message-part"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { useLanguage } from "@/context/language"
+import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useSettings } from "@/context/settings"
 import type { SessionTab } from "@/context/tabs"
-import { decode64 } from "@/utils/base64"
 import { same } from "@/utils/same"
 import { sessionTitle } from "@/utils/session-title"
 import { getFilename } from "@opencode-ai/core/util/path"
-import { MessageComment, Timeline, TimelineRow, type TimelineRowMap } from "./message-timeline.data"
-import { TimelineDiffSummaryRow } from "./message-timeline"
+import { MessageComment, Timeline, TimelineRow, type TimelineRowMap } from "./timeline/rows"
+import { TimelineDiffSummaryRow } from "./timeline/message-timeline"
 
 const emptyMessages: MessageType[] = []
 const emptyParts: PartType[] = []
@@ -42,19 +43,28 @@ const emptyTools: ToolPart[] = []
 const emptyAssistantMessages: AssistantMessage[] = []
 const idle = { type: "idle" as const }
 
-type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, { _tag: "BottomSpacer" }>
+type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, { _tag: "TurnGap" }>
 type TimelineRowByTag<T extends TimelineRow.TimelineRow["_tag"]> = Extract<TimelineRow.TimelineRow, { _tag: T }>
 
 export function SessionTextPane(props: { tab: SessionTab; centered?: boolean }) {
+  const serverSDK = useServerSDK()
   const serverSync = useServerSync()
   const language = useLanguage()
   const settings = useSettings()
   const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>({})
-  const directory = createMemo(() => decode64(props.tab.dirBase64))
+  const [session] = createResource(
+    () => props.tab.sessionId,
+    (sessionID) =>
+      serverSDK()
+        .client.session.get({ sessionID })
+        .then((result) => result.data)
+        .catch(() => undefined),
+  )
+  const directory = createMemo(() => session()?.directory)
   const sync = createMemo(() => {
     const dir = directory()
     if (!dir) return
-    return serverSync.createDirSyncContext(dir)
+    return serverSync().createDirSyncContext(dir)
   })
   const messages = createMemo(
     () => sync()?.data.message[props.tab.sessionId] ?? emptyMessages,
@@ -62,7 +72,7 @@ export function SessionTextPane(props: { tab: SessionTab; centered?: boolean }) 
     { equals: same },
   )
   const loaded = createMemo(() => sync()?.data.message[props.tab.sessionId] !== undefined)
-  const title = createMemo(() => sessionTitle(sync()?.session.get(props.tab.sessionId)?.title))
+  const title = createMemo(() => sessionTitle(session()?.title ?? sync()?.session.get(props.tab.sessionId)?.title))
   const sessionStatus = createMemo(() => sync()?.data.session_status[props.tab.sessionId] ?? idle)
   const userMessages = createMemo(
     () => messages().filter((message): message is UserMessage => message.role === "user"),
@@ -81,20 +91,17 @@ export function SessionTextPane(props: { tab: SessionTab; centered?: boolean }) 
   const getMsgPart = (messageID: string, partID: string) =>
     getMsgParts(messageID).find((part) => part.id === partID)
   const rows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) => {
-    const next = [
-      ...userMessages().flatMap((message, index) =>
-        Timeline.constructMessageRows(
-          message,
-          getMsgParts,
-          assistantMessagesByParent().get(message.id) ?? emptyAssistantMessages,
-          index,
-          settings.general.showReasoningSummaries(),
-          sessionStatus().type,
-          false,
-        ),
+    const next = userMessages().flatMap((message, index) =>
+      Timeline.constructMessageRows(
+        message,
+        getMsgParts,
+        assistantMessagesByParent().get(message.id) ?? emptyAssistantMessages,
+        index,
+        settings.general.showReasoningSummaries(),
+        sessionStatus().type,
+        false,
       ),
-      new TimelineRow.BottomSpacer(),
-    ]
+    )
     if (!previous || previous.length !== next.length) return next
     if (!previous.every((item, index) => TimelineRow.equals(item, next[index]!))) return next
     return previous
@@ -190,10 +197,6 @@ export function SessionTextPane(props: { tab: SessionTab; centered?: boolean }) 
       const row = input.row()
       return row._tag === "CommentStrip" || (row._tag === "UserMessage" && row.anchor)
     }
-    const previousUserMessage = () => {
-      const row = input.row()
-      return (row._tag === "CommentStrip" || row._tag === "UserMessage") && row.previousUserMessage
-    }
     const previousAssistantPart = () => {
       const row = input.row()
       return row._tag === "AssistantPart" && row.previousAssistantPart
@@ -207,7 +210,6 @@ export function SessionTextPane(props: { tab: SessionTab; centered?: boolean }) 
           "min-w-0 w-full max-w-full": true,
           "md:max-w-200 2xl:max-w-[1000px]": !!props.centered,
           "md:mx-auto": !!props.centered,
-          "pt-6": previousUserMessage(),
           "pt-3": previousAssistantPart(),
         }}
       >
@@ -220,6 +222,8 @@ export function SessionTextPane(props: { tab: SessionTab; centered?: boolean }) 
 
   const renderTimelineRow = (row: Accessor<TimelineRow.TimelineRow>) => {
     switch (row()._tag) {
+      case "TurnGap":
+        return <div data-timeline-row="TurnGap" aria-hidden="true" class="h-6" />
       case "CommentStrip": {
         const commentStripRow = row as Accessor<TimelineRowByTag<"CommentStrip">>
         const comments = createMemo(() =>
@@ -329,8 +333,6 @@ export function SessionTextPane(props: { tab: SessionTab; centered?: boolean }) 
       case "Thinking":
       case "Retry":
         return null
-      case "BottomSpacer":
-        return <div data-timeline-row="bottom-spacer" aria-hidden="true" class="h-16" />
     }
   }
 
@@ -351,11 +353,15 @@ export function SessionTextPane(props: { tab: SessionTab; centered?: boolean }) 
           data-session-title
           classList={{
             "sticky top-0 z-30 bg-[linear-gradient(to_bottom,var(--background-stronger)_48px,transparent)]": true,
-            "w-full pb-4 pl-2 pr-3 md:pl-4 md:pr-3": true,
-            "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": !!props.centered,
+            "w-full pb-4": true,
           }}
         >
-          <div class="h-12 w-full flex items-center justify-between gap-2">
+          <div
+            classList={{
+              "h-12 w-full flex items-center justify-between gap-2 pl-2 pr-3 md:pl-4 md:pr-3": true,
+              "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": !!props.centered,
+            }}
+          >
             <div class="flex items-center gap-1 min-w-0 flex-1 pr-3">
               <div class="flex items-center min-w-0 grow-1">
                 <h1 class="min-w-0 grow truncate text-14-medium text-text-strong">
@@ -370,6 +376,7 @@ export function SessionTextPane(props: { tab: SessionTab; centered?: boolean }) 
           fallback={<div class="px-4 py-3 text-12-regular text-text-weak">{language.t("common.loading")}...</div>}
         >
           <For each={rows()}>{(row) => <TimelineRowView row={row} />}</For>
+          <div aria-hidden="true" class="h-16" />
         </Show>
       </div>
     </div>

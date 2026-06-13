@@ -77,6 +77,7 @@ import {
   panelAvailableSize,
   panelBoundary,
   panelHandleOffset,
+  panelItemStyle,
   panelMinHeight,
   panelMinWidth,
   panelPixels,
@@ -91,7 +92,7 @@ import { formatServerError } from "@/utils/server-errors"
 import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 import { createSessionOwnership } from "./session/session-ownership"
-import { tabHref, useTabs as useOpenTabs, type SessionTab } from "@/context/tabs"
+import { tabHref, tabKey, useTabs as useOpenTabs, type SessionTab } from "@/context/tabs"
 import { SessionTextPane } from "@/pages/session/session-text-pane"
 
 type FollowupItem = FollowupDraft & { id: string }
@@ -163,6 +164,21 @@ export default function Page() {
     if (focusedPanel(tab)) return
     navigate(tabHref(tab))
   }
+  const panelKey = (tab: SessionTab) => tabKey(tab)
+  const clearPanelDrag = () => {
+    setStore("panelDragKey", undefined)
+    setStore("panelDropKey", undefined)
+  }
+  const startPanelDrag = (event: PointerEvent, tab: SessionTab) => {
+    if (event.button !== 0 || !event.isPrimary) return
+    event.preventDefault()
+    event.stopPropagation()
+    setStore("panelDragKey", panelKey(tab))
+    setStore("panelDropKey", undefined)
+  }
+  const panelKeyAt = (event: PointerEvent) =>
+    document.elementFromPoint(event.clientX, event.clientY)?.closest<HTMLElement>("[data-session-panel-key]")?.dataset
+      .sessionPanelKey
 
   createEffect(() => {
     if (!prompt.ready()) return
@@ -339,6 +355,35 @@ export default function Page() {
       columns: [] as number[],
       rows: [] as number[],
     },
+    panelDragKey: undefined as string | undefined,
+    panelDropKey: undefined as string | undefined,
+  })
+
+  makeEventListener(window, "pointermove", (event) => {
+    if (!store.panelDragKey) return
+    const key = panelKeyAt(event)
+    const next = key && key !== store.panelDragKey ? key : undefined
+    if (store.panelDropKey !== next) setStore("panelDropKey", next)
+  })
+
+  makeEventListener(window, "pointerup", (event) => {
+    const sourceKey = store.panelDragKey
+    if (!sourceKey) return
+    const targetKey = panelKeyAt(event)
+    clearPanelDrag()
+    if (!targetKey || sourceKey === targetKey) return
+
+    const source = panelTabs().find((tab) => panelKey(tab) === sourceKey)
+    const target = panelTabs().find((tab) => panelKey(tab) === targetKey)
+    if (!source || !target) return
+
+    const keys = openTabs.store.map(tabKey)
+    const sourceIndex = keys.indexOf(sourceKey)
+    const targetIndex = keys.indexOf(targetKey)
+    if (sourceIndex === -1 || targetIndex === -1) return
+    keys[sourceIndex] = targetKey
+    keys[targetIndex] = sourceKey
+    openTabs.reorder(keys)
   })
 
   const panelState = () => normalizePanelState(store.panel)
@@ -360,17 +405,41 @@ export default function Page() {
     "grid-template-columns": panelTrackTemplate(panelColumnWeights()),
     "grid-template-rows": panelTrackTemplate(panelRowWeights()),
   }))
+  const panelRowHandleStyle = (index: number) => {
+    const top = `${panelHandleOffset(panelRowPixels(), index)}px`
+    if (panelTabs().length === 3 && panelColumnCount() === 2) {
+      return { top, right: "auto", width: `${panelColumnPixels()[0]}px` }
+    }
+    return { top }
+  }
 
   let panelGrid: HTMLDivElement | undefined
+
+  const setPanelSize = (width: number, height: number) => {
+    const nextWidth = Math.round(width)
+    const nextHeight = Math.round(height)
+
+    if (nextWidth <= 0 || nextHeight <= 0) return
+    if (panelState().width === nextWidth && panelState().height === nextHeight) return
+    setStore("panel", { ...panelState(), width: nextWidth, height: nextHeight })
+  }
+
+  const measurePanelGrid = (el = panelGrid) => {
+    const rect = el?.getBoundingClientRect()
+    if (!rect) return
+    setPanelSize(rect.width, rect.height)
+  }
+
+  createEffect(() => {
+    if (!panelMode()) return
+    panelTabs().length
+    requestAnimationFrame(() => measurePanelGrid())
+  })
 
   createResizeObserver(
     () => panelGrid,
     ({ width, height }) => {
-      const nextWidth = Math.round(width)
-      const nextHeight = Math.round(height)
-
-      if (panelState().width === nextWidth && panelState().height === nextHeight) return
-      setStore("panel", { ...panelState(), width: nextWidth, height: nextHeight })
+      setPanelSize(width, height)
     },
   )
 
@@ -1811,6 +1880,7 @@ export default function Page() {
                 !location.hash && !store.messageId && !ui.pendingMessage && !autoScroll.userScrolled()
               }
               centered={centered()}
+              fullWidthHeader={panelMode()}
               setContentRef={(el) => {
                 content = el
                 autoScroll.contentRef(el)
@@ -1849,19 +1919,25 @@ export default function Page() {
           class="relative size-full min-h-0 overflow-hidden"
           ref={(el) => {
             panelGrid = el
+            requestAnimationFrame(() => measurePanelGrid(el))
           }}
         >
           <div class="size-full min-h-0 grid gap-2 overflow-hidden" style={panelGridStyle()}>
             <For each={panelTabs()}>
-              {(tab) => {
+              {(tab, index) => {
                 const active = () => focusedPanel(tab)
+                const style = () => panelItemStyle(index(), panelTabs().length, panelColumnCount())
                 return (
                   <section
                     data-session-panel
+                    data-session-panel-key={panelKey(tab)}
                     data-active={active()}
+                    data-dragging={store.panelDragKey === panelKey(tab)}
+                    data-drop-target={store.panelDropKey === panelKey(tab)}
                     role={active() ? undefined : "button"}
                     tabIndex={active() ? undefined : 0}
-                    class="min-h-0 min-w-0 max-w-full overflow-hidden rounded-[10px] border border-v2-border-border-base bg-v2-background-bg-layer-01 shadow-[var(--v2-elevation-raised)] outline-none transition-opacity focus-visible:border-v2-border-border-focus data-[active='false']:cursor-pointer data-[active='false']:opacity-70 data-[active='false']:hover:opacity-85"
+                    class="group/panel relative min-h-0 min-w-0 max-w-full overflow-hidden rounded-[10px] border border-v2-border-border-base bg-v2-background-bg-layer-01 shadow-[var(--v2-elevation-raised)] outline-none transition-[border-color,opacity] focus-visible:border-v2-border-border-focus data-[active='false']:cursor-pointer data-[active='false']:opacity-70 data-[active='false']:hover:opacity-85 data-[dragging='true']:opacity-40 data-[drop-target='true']:border-v2-border-border-focus data-[drop-target='true']:opacity-100"
+                    style={style()}
                     onClick={() => {
                       if (!active()) focusPanel(tab)
                     }}
@@ -1872,6 +1948,17 @@ export default function Page() {
                       focusPanel(tab)
                     }}
                   >
+                    <div
+                      data-session-panel-header-drag-region
+                      class="absolute left-0 right-14 top-0 z-40 h-12 cursor-grab active:cursor-grabbing [app-region:no-drag]"
+                      onClick={(event) => {
+                        event.preventDefault()
+                        event.stopPropagation()
+                        if (!active()) focusPanel(tab)
+                      }}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onPointerDown={(event) => startPanelDrag(event, tab)}
+                    />
                     <Show when={active()} fallback={<SessionTextPane tab={tab} centered={centered()} />}>
                       <div class="size-full min-w-0 max-w-full overflow-x-hidden">{sessionContent()}</div>
                     </Show>
@@ -1887,12 +1974,13 @@ export default function Page() {
                 const min = () => Math.min(panelMinWidth, panelAvailableWidth() / panelColumnCount())
                 return (
                   <ResizeHandle
+                    data-session-panel-resize-handle="column"
                     direction="horizontal"
                     size={panelBoundary(panelColumnPixels(), index)}
                     min={min() * (index + 1)}
                     max={panelAvailableWidth() - min() * (panelColumnCount() - index - 1)}
                     onResize={(size) => resizePanelColumn(index, size)}
-                    class="absolute top-0 bottom-0 z-30 w-3 -translate-x-1/2 cursor-col-resize [app-region:no-drag] after:absolute after:inset-y-4 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-v2-border-border-focus after:opacity-0 after:transition-opacity hover:after:opacity-100"
+                    class="absolute top-0 bottom-0 z-50 w-3 -translate-x-1/2 cursor-col-resize [app-region:no-drag] after:absolute after:inset-y-4 after:left-1/2 after:w-px after:-translate-x-1/2 after:bg-v2-border-border-focus after:opacity-0 after:transition-opacity hover:after:opacity-100"
                     style={{ left: `${panelHandleOffset(panelColumnPixels(), index)}px` }}
                   />
                 )
@@ -1903,14 +1991,15 @@ export default function Page() {
                 const min = () => Math.min(panelMinHeight, panelAvailableHeight() / panelRowCount())
                 return (
                   <ResizeHandle
+                    data-session-panel-resize-handle="row"
                     direction="vertical"
                     edge="end"
                     size={panelBoundary(panelRowPixels(), index)}
                     min={min() * (index + 1)}
                     max={panelAvailableHeight() - min() * (panelRowCount() - index - 1)}
                     onResize={(size) => resizePanelRow(index, size)}
-                    class="absolute left-0 right-0 z-30 h-3 -translate-y-1/2 cursor-row-resize [app-region:no-drag] after:absolute after:top-1/2 after:inset-x-4 after:h-px after:-translate-y-1/2 after:bg-v2-border-border-focus after:opacity-0 after:transition-opacity hover:after:opacity-100"
-                    style={{ top: `${panelHandleOffset(panelRowPixels(), index)}px` }}
+                    class="absolute left-0 right-0 z-50 h-3 -translate-y-1/2 cursor-row-resize [app-region:no-drag] after:absolute after:top-1/2 after:inset-x-4 after:h-px after:-translate-y-1/2 after:bg-v2-border-border-focus after:opacity-0 after:transition-opacity hover:after:opacity-100"
+                    style={panelRowHandleStyle(index)}
                   />
                 )
               }}
