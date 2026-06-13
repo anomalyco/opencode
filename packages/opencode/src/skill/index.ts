@@ -164,7 +164,7 @@ const scan = Effect.fnUntraced(function* (
     }),
   )
 
-  for (const match of matches) {
+  for (const match of matches.toSorted()) {
     state.matches.add(match)
     state.dirs.add(path.dirname(match))
   }
@@ -228,7 +228,7 @@ const discoverSkills = Effect.fnUntraced(function* (
 
   return {
     matches: Array.from(state.matches),
-    dirs: Array.from(state.dirs),
+    dirs: Array.from(state.dirs).toSorted(),
   }
 })
 
@@ -237,10 +237,9 @@ const loadSkills = Effect.fnUntraced(function* (
   discovered: DiscoveryState,
   events: EventV2Bridge.Service["Service"],
 ) {
-  yield* Effect.forEach(discovered.matches, (match) => add(state, match, events), {
-    concurrency: "unbounded",
-    discard: true,
-  })
+  for (const match of discovered.matches) {
+    yield* add(state, match, events)
+  }
 
   yield* Effect.logInfo("init", { count: Object.keys(state.skills).length })
 })

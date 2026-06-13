@@ -443,6 +443,44 @@ description: A skill in the .agents/skills directory.
     ),
   )
 
+  it.live("resolves duplicate skill names by source precedence", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              Bun.write(
+                path.join(dir, ".claude", "skills", "duplicate-skill", "SKILL.md"),
+                `---
+name: duplicate-skill
+description: Claude-compatible duplicate.
+---
+
+# Duplicate Skill
+`,
+              ),
+              Bun.write(
+                path.join(dir, ".opencode", "skills", "duplicate-skill", "SKILL.md"),
+                `---
+name: duplicate-skill
+description: OpenCode duplicate.
+---
+
+# Duplicate Skill
+`,
+              ),
+            ]),
+          )
+
+          const skill = yield* Skill.Service
+          const duplicate = yield* skill.require("duplicate-skill")
+          expect(duplicate.description).toBe("OpenCode duplicate.")
+          expect(duplicate.location).toContain(path.join(".opencode", "skills", "duplicate-skill", "SKILL.md"))
+        }),
+      { git: true },
+    ),
+  )
+
   itWithoutClaudeCodeSkills.live("skips Claude Code skills when disabled", () =>
     provideTmpdirInstance(
       (dir) =>
