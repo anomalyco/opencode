@@ -211,6 +211,13 @@ export type TuiPromptRef = {
   replaceRange(startOffset: number, endOffset: number, replacement: string): void
   readonly extmarks: TextareaRenderable["extmarks"]
   readonly cursorOffset: number
+  /** Move the cursor to a display-width offset (same model as cursorOffset). */
+  setCursorOffset(offset: number): void
+  /** Convert a display-width offset (same model as cursorOffset) to
+   *  absolute screen coordinates. Returns null when the prompt is
+   *  unmounted, the offset is out of range, or the textarea has not
+   *  been laid out yet. */
+  offsetToScreen(offset: number): { x: number; y: number } | null
 }
 
 export type TuiPromptApi = {

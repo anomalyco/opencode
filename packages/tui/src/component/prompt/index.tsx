@@ -112,6 +112,22 @@ export type PromptRef = {
   /** Current cursor offset in display-width cells (0-based, same model as
    *  getTextRange/replaceRange). 0 when the prompt has not mounted. */
   readonly cursorOffset: number
+  /** Move the cursor to a display-width offset (same model as cursorOffset).
+   *  Clamped to >= 0; the textarea handles the upper bound. No-op when the
+   *  prompt is not mounted. */
+  setCursorOffset(offset: number): void
+  /** Convert a display-width offset (same model as cursorOffset /
+   *  getTextRange) to absolute screen coordinates {x, y}. Returns null
+   *  when the prompt is unmounted, the offset is out of range, or the
+   *  textarea has not been laid out yet.
+   *
+   *  Implementation: maps offset → logical {row, col} via
+   *  editBuffer.offsetToPosition, then adjusts for the viewport's
+   *  scrollY and adds the textarea's screenX/screenY. Prompts rarely
+   *  wrap (wrapMode="none" is the default), so logical col ≈ visual col
+   *  for v1. If wrap is ever enabled, visual col may differ from logical
+   *  col for long lines. */
+  offsetToScreen(offset: number): { x: number; y: number } | null
 }
 
 const money = new Intl.NumberFormat("en-US", {
@@ -625,6 +641,29 @@ export function Prompt(props: PromptProps) {
     },
     get cursorOffset() {
       return input?.cursorOffset ?? 0
+    },
+    setCursorOffset(offset: number): void {
+      if (input) input.cursorOffset = Math.max(0, offset)
+    },
+    offsetToScreen(offset: number): { x: number; y: number } | null {
+      if (!input || input.isDestroyed) return null
+      // offsetToPosition returns logical {row, col} in the edit buffer.
+      // For a non-wrapping textarea (the default), logical col equals
+      // visual col. If wrap mode is ever enabled, visual col may differ
+      // from logical col for long lines — a future improvement would use
+      // editorView.getVisualCursor() after a temporary cursor move, but
+      // that mutates state. For v1, logical ≈ visual is acceptable.
+      const pos = input.editBuffer.offsetToPosition(offset)
+      if (!pos) return null
+      const viewport = input.editorView.getViewport()
+      const visualRow = pos.row - viewport.offsetY
+      const visualCol = pos.col
+      // Guard: if the row is scrolled out of view, don't render the overlay.
+      if (visualRow < 0 || visualRow >= viewport.height) return null
+      return {
+        x: input.screenX + visualCol,
+        y: input.screenY + visualRow,
+      }
     },
     focus() {
       input.focus()
@@ -1482,7 +1521,16 @@ export function Prompt(props: PromptProps) {
                   input.cursorColor = theme.text
                 }, 0)
               }}
-              onMouseDown={(r: MouseEvent) => r.target?.focus()}
+              onMouseDown={(r: MouseEvent) => {
+                r.target?.focus()
+                queueMicrotask(() => {
+                  const offset = input?.cursorOffset ?? 0
+                  if (offset !== lastEmittedCursorOffset) {
+                    lastEmittedCursorOffset = offset
+                    promptRefContext.emitCursorChange()
+                  }
+                })
+              }}
               focusedBackgroundColor={theme.backgroundElement}
               cursorColor={props.disabled ? theme.backgroundElement : theme.text}
               syntaxStyle={syntax()}
