@@ -27,6 +27,15 @@ function baseUrl() {
   return (process.env.BITCOST_URL ?? "https://bitcost.test").replace(/\/+$/, "")
 }
 
+/** True when bitcost credentials with an access token are stored on disk. */
+export function bitcostLoggedIn(): boolean {
+  try {
+    return typeof (JSON.parse(fs.readFileSync(AUTH_FILE, "utf8")) as { access_token?: string }).access_token === "string"
+  } catch {
+    return false
+  }
+}
+
 interface DeviceCodeResponse {
   device_code: string
   user_code: string

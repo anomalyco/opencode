@@ -100,7 +100,16 @@ export class PromptConflictError extends Schema.TaggedErrorClass<PromptConflictE
   messageID: SessionMessage.ID,
 }) {}
 
-export type Error = NotFoundError | MessageDecodeError | OperationUnavailableError | PromptConflictError
+export class CompletedError extends Schema.TaggedErrorClass<CompletedError>()("Session.CompletedError", {
+  sessionID: SessionSchema.ID,
+}) {}
+
+export type Error =
+  | NotFoundError
+  | MessageDecodeError
+  | OperationUnavailableError
+  | PromptConflictError
+  | CompletedError
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<SessionSchema.Info[]>
@@ -134,13 +143,18 @@ export interface Interface {
     sessionID: SessionSchema.ID
     model: ModelV2.Ref
   }) => Effect.Effect<void, NotFoundError>
+  readonly bindTask: (input: {
+    sessionID: SessionSchema.ID
+    taskID: string
+  }) => Effect.Effect<void, NotFoundError>
+  readonly complete: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
   readonly prompt: (input: {
     id?: SessionMessage.ID
     sessionID: SessionSchema.ID
     prompt: Prompt
     delivery?: SessionInput.Delivery
     resume?: boolean
-  }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
+  }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError | CompletedError>
   readonly shell: (input: {
     id?: EventV2.ID
     sessionID: SessionSchema.ID
@@ -155,7 +169,9 @@ export interface Interface {
   }) => Effect.Effect<void, OperationUnavailableError>
   readonly compact: (input: CompactInput) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
-  readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
+  readonly resume: (
+    sessionID: SessionSchema.ID,
+  ) => Effect.Effect<void, NotFoundError | CompletedError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
 }
 
@@ -348,7 +364,8 @@ export const layer = Layer.effect(
       prompt: Effect.fn("V2Session.prompt")((input) =>
         Effect.uninterruptible(
           Effect.gen(function* () {
-            yield* result.get(input.sessionID)
+            const session = yield* result.get(input.sessionID)
+            if (session.time.completed !== undefined) return yield* new CompletedError({ sessionID: input.sessionID })
             const returnPrompt = Effect.fnUntraced(function* (admitted: SessionInput.Admitted) {
               if (input.resume !== false) yield* enqueueWake(admitted)
               return admitted
@@ -392,6 +409,24 @@ export const layer = Layer.effect(
           model: input.model,
         })
       }),
+      bindTask: Effect.fn("V2Session.bindTask")(function* (input) {
+        yield* result.get(input.sessionID)
+        yield* events.publish(SessionEvent.TaskBound, {
+          sessionID: input.sessionID,
+          timestamp: yield* DateTime.now,
+          taskID: input.taskID,
+        })
+      }),
+      complete: Effect.fn("V2Session.complete")(function* (sessionID) {
+        const session = yield* result.get(sessionID)
+        if (session.time.completed !== undefined) return
+        // Stop any active turn before sealing the session so completion lands cleanly.
+        yield* result.interrupt(sessionID)
+        yield* events.publish(SessionEvent.Completed, {
+          sessionID,
+          timestamp: yield* DateTime.now,
+        })
+      }),
       compact: Effect.fn("V2Session.compact")(function* (input) {
         yield* result.get(input.sessionID)
         return yield* new OperationUnavailableError({ operation: "compact" })
@@ -401,7 +436,8 @@ export const layer = Layer.effect(
         return yield* new OperationUnavailableError({ operation: "wait" })
       }),
       resume: Effect.fn("V2Session.resume")(function* (sessionID) {
-        yield* result.get(sessionID)
+        const session = yield* result.get(sessionID)
+        if (session.time.completed !== undefined) return yield* new CompletedError({ sessionID })
         yield* execution.resume(sessionID)
       }),
       interrupt: Effect.fn("V2Session.interrupt")((sessionID) =>

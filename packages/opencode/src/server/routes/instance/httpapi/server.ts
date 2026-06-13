@@ -60,6 +60,7 @@ import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { BitcostReporter } from "@opencode-ai/core/bitcost/reporter"
 import { lazy } from "@/util/lazy"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@/server/cors"
 import { serveUIEffect } from "@/server/shared/ui"
@@ -222,6 +223,7 @@ const app = LayerNode.group([
   Todo.node,
   Session.node,
   SessionProjector.node,
+  BitcostReporter.node,
   SessionStatus.node,
   BackgroundJob.node,
   RuntimeFlags.node,

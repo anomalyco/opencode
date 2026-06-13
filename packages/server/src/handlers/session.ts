@@ -121,8 +121,50 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                     }),
                   ),
                 ),
+                Effect.catchTag("Session.CompletedError", (error) =>
+                  Effect.fail(
+                    new ConflictError({
+                      message: `Session is completed and cannot be prompted: ${error.sessionID}`,
+                      resource: error.sessionID,
+                    }),
+                  ),
+                ),
               ),
           }
+        }),
+      )
+      .handle(
+        "session.bindTask",
+        Effect.fn(function* (ctx) {
+          const notFound = (error: { sessionID: SessionV2.ID }) =>
+            new SessionNotFoundError({
+              sessionID: error.sessionID,
+              message: `Session not found: ${error.sessionID}`,
+            })
+          yield* session
+            .bindTask({ sessionID: ctx.params.sessionID, taskID: ctx.payload.taskID })
+            .pipe(Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(notFound(error))))
+          return {
+            data: yield* session
+              .get(ctx.params.sessionID)
+              .pipe(Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(notFound(error)))),
+          }
+        }),
+      )
+      .handle(
+        "session.complete",
+        Effect.fn(function* (ctx) {
+          yield* session.complete(ctx.params.sessionID).pipe(
+            Effect.catchTag("Session.NotFoundError", (error) =>
+              Effect.fail(
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+          )
+          return HttpApiSchema.NoContent.make()
         }),
       )
       .handle(

@@ -58,6 +58,7 @@ export function RunFooterSubagentBody(props: {
   const footer = createMemo(() => theme().footer)
   const tab = createMemo(() => props.tab())
   const commits = createMemo(() => props.detail()?.commits ?? [])
+  const usage = createMemo(() => props.detail()?.usage ?? "")
   const opts = createMemo(() => ({ diffStyle: props.diffStyle }))
   const scrollbar = createMemo(() => ({
     trackOptions: {
@@ -142,6 +143,11 @@ export function RunFooterSubagentBody(props: {
               <Show when={props.total() > 1 && props.index() > 0}>
                 <text fg={footer().muted} wrapMode="none" truncate flexShrink={0}>
                   {props.index()} of {props.total()}
+                </text>
+              </Show>
+              <Show when={usage().length > 0}>
+                <text fg={footer().muted} wrapMode="none" truncate flexShrink={0}>
+                  {usage()}
                 </text>
               </Show>
             </box>

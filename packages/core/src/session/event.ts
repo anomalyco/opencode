@@ -80,6 +80,23 @@ export const Moved = EventV2.define({
 })
 export type Moved = typeof Moved.Type
 
+export const TaskBound = EventV2.define({
+  type: "session.next.task.bound",
+  ...options,
+  schema: {
+    ...Base,
+    taskID: Schema.String,
+  },
+})
+export type TaskBound = typeof TaskBound.Type
+
+export const Completed = EventV2.define({
+  type: "session.next.completed",
+  ...options,
+  schema: Base,
+})
+export type Completed = typeof Completed.Type
+
 export const Prompted = EventV2.define({
   type: "session.next.prompted",
   ...options,
@@ -472,6 +489,8 @@ const DurableDefinitions = [
   AgentSwitched,
   ModelSwitched,
   Moved,
+  TaskBound,
+  Completed,
   Prompted,
   PromptLifecycle.Admitted,
   PromptLifecycle.Promoted,

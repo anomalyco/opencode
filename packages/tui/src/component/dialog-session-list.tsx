@@ -133,7 +133,7 @@ export function DialogSessionList() {
 
   function orderByRecency(sessionsList: NonNullable<ReturnType<typeof sessions>>) {
     return sessionsList
-      .filter((x) => x.parentID === undefined)
+      .filter((x) => x.parentID === undefined && !(x as { time: { completed?: number } }).time.completed)
       .toSorted((a, b) => b.time.updated - a.time.updated)
       .map((x) => x.id)
   }
@@ -155,7 +155,7 @@ export function DialogSessionList() {
     const today = new Date().toDateString()
     const sessionMap = new Map(
       sessions()
-        .filter((x) => x.parentID === undefined)
+        .filter((x) => x.parentID === undefined && !(x as { time: { completed?: number } }).time.completed)
         .map((x) => [x.id, x]),
     )
 

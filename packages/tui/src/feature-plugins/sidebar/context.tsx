@@ -1,7 +1,9 @@
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
-import { createMemo } from "solid-js"
+import { createEffect, createMemo, Show } from "solid-js"
+import { bitcostPricing, ensureBitcostPricing } from "../../component/bitcost-binding"
+import { lastTurnModel, rateSummary } from "../../component/bitcost-rate"
 
 const id = "internal:sidebar-context"
 
@@ -34,6 +36,17 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     }
   })
 
+  // bitcost-authoritative rate for the model of the latest turn (per 1M tokens).
+  const model = createMemo(() => lastTurnModel(msg()))
+  createEffect(() => {
+    const m = model()
+    if (m) ensureBitcostPricing(m.provider, m.model)
+  })
+  const rates = createMemo(() => {
+    const m = model()
+    return m ? bitcostPricing(m.provider, m.model) : undefined
+  })
+
   return (
     <box>
       <text fg={theme().text}>
@@ -42,6 +55,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
       <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
       <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+      <Show when={rates()}>{(p) => <text fg={theme().textMuted}>Rate/1M: {rateSummary(p())}</text>}</Show>
     </box>
   )
 }

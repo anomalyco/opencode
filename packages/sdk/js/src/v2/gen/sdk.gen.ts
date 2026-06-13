@@ -313,8 +313,12 @@ import type {
   V2QuestionRequestListResponses,
   V2ReferenceListErrors,
   V2ReferenceListResponses,
+  V2SessionBindTaskErrors,
+  V2SessionBindTaskResponses,
   V2SessionCompactErrors,
   V2SessionCompactResponses,
+  V2SessionCompleteErrors,
+  V2SessionCompleteResponses,
   V2SessionContextErrors,
   V2SessionContextResponses,
   V2SessionCreateErrors,
@@ -5354,6 +5358,60 @@ export class Session3 extends HeyApiClient {
     const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
     return (options?.client ?? this.client).post<V2SessionWaitResponses, V2SessionWaitErrors, ThrowOnError>({
       url: "/api/session/{sessionID}/wait",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Bind bitcost task
+   *
+   * Attribute this session to a bitcost Task so its usage is reported against it.
+   */
+  public bindTask<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      taskID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "body", key: "taskID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2SessionBindTaskResponses, V2SessionBindTaskErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/task",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Complete session
+   *
+   * Mark the session's task complete; the session can no longer be resumed or prompted.
+   */
+  public complete<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "sessionID" }] }])
+    return (options?.client ?? this.client).post<V2SessionCompleteResponses, V2SessionCompleteErrors, ThrowOnError>({
+      url: "/api/session/{sessionID}/complete",
       ...options,
       ...params,
     })

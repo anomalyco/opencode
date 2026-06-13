@@ -192,6 +192,37 @@ export const SessionGroup = HttpApiGroup.make("server.session")
       ),
   )
   .add(
+    HttpApiEndpoint.post("session.bindTask", "/api/session/:sessionID/task", {
+      params: { sessionID: SessionV2.ID },
+      payload: Schema.Struct({ taskID: Schema.String }),
+      success: Schema.Struct({ data: SessionV2.Info }),
+      error: SessionNotFoundError,
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.bindTask",
+          summary: "Bind bitcost task",
+          description: "Attribute this session to a bitcost Task so its usage is reported against it.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("session.complete", "/api/session/:sessionID/complete", {
+      params: { sessionID: SessionV2.ID },
+      success: HttpApiSchema.NoContent,
+      error: SessionNotFoundError,
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.complete",
+          summary: "Complete session",
+          description: "Mark the session's task complete; the session can no longer be resumed or prompted.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.get("session.context", "/api/session/:sessionID/context", {
       params: { sessionID: SessionV2.ID },
       success: Schema.Struct({ data: Schema.Array(SessionMessage.Message) }),

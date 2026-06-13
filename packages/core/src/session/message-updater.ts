@@ -123,6 +123,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
         )
       },
       "session.next.moved": () => Effect.void,
+      "session.next.task.bound": () => Effect.void,
+      "session.next.completed": () => Effect.void,
       "session.next.prompted": (event) => {
         return adapter.appendMessage(
           new SessionMessage.User({

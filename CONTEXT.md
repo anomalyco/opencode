@@ -119,6 +119,16 @@ Provider-neutral sampling and output controls, partitioned from provider semanti
 > **Dev:** "The date changed while the session was active. Should the **Mid-Conversation System Message** say what the old date was?"
 > **Domain expert:** "No. Emit the newly effective date so the agent can act on the current **System Context**."
 
+## Bitcost integration
+
+This fork reports per-model token usage to the **bitcost** Laravel app (`../bitcost`) for
+cost attribution. A **session is a Task** owned by bitcost: after a mandatory login the user
+selects/creates a Task, which binds `bitcost_task_id` onto the session (`TaskBound` event).
+Each `Step.Ended` turn is reported live by `BitcostReporter` (`core/bitcost/reporter.ts`, an
+`EventV2.listen` subscriber) via `BitcostClient` (`core/bitcost/client.ts`); bitcost prices
+the tokens. Marking a session **complete** (`Completed` event → `time.completed`) locks it:
+`prompt`/`resume` refuse with `Session.CompletedError` and it is hidden from the switcher.
+
 ## Flagged ambiguities
 
 - Legacy `experimental.chat.system.transform` can mutate the assembled baseline system prompt arbitrarily, but V2 plugins do not yet expose an equivalent hook. Decide separately whether to port it, replace dynamic uses with plugin-defined **Context Sources**, or narrow its semantics.

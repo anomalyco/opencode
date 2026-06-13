@@ -47,6 +47,8 @@ import { openEditor } from "../../editor"
 import { useDialog } from "../../ui/dialog"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { TodoItem } from "../../component/todo-item"
+import { rememberBitcostTasks } from "../../component/bitcost-binding"
+import { fetchBitcostTasks } from "../../component/bitcost-api"
 import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
@@ -267,6 +269,11 @@ export function Session() {
     if (sidebar() === "auto" && wide()) return true
     return false
   })
+  // esc should dismiss a sidebar the user explicitly opened (e.g. via /task-info or
+  // the toggle). It must NOT fire when the sidebar is only visible because it's the
+  // persistent wide-layout default (auto+wide) — there's nothing to "close" there,
+  // and esc should keep interrupting the session.
+  const escClosesSidebar = createMemo(() => sidebarOpen() && !(sidebar() === "auto" && wide()))
   const showTimestamps = createMemo(() => timestamps() === "show")
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
   const providers = createMemo(() => Model.index(sync.data.provider))
@@ -673,6 +680,24 @@ export function Session() {
           setSidebar(() => (isVisible ? "hide" : "auto"))
           setSidebarOpen(!isVisible)
         })
+        dialog.clear()
+      },
+    },
+    {
+      title: "Bitcost task info",
+      value: "bitcost.task-info",
+      category: "Session",
+      slash: {
+        name: "task-info",
+      },
+      run: () => {
+        // A session is always attributed to a Task (the bind gate enforces it before
+        // any turn), so there's no "no task" path here. Force the sidebar open (its
+        // Task panel renders the stats) without touching the persistent pref, so esc
+        // restores the prior layout. Refresh live totals; rememberBitcostTasks updates
+        // the reactive cache the panel reads.
+        setSidebarOpen(true)
+        void fetchBitcostTasks().then(rememberBitcostTasks).catch(() => {})
         dialog.clear()
       },
     },
@@ -1093,6 +1118,26 @@ export function Session() {
 
   useBindings(() => ({
     commands: sessionCommands(),
+  }))
+
+  // esc closes an explicitly-opened sidebar (e.g. /task-info) before falling through
+  // to session interrupt. Higher priority + the default preventDefault consume the
+  // key so interrupt does not also fire. Only enabled while escClosesSidebar() (so a
+  // persistent wide-layout sidebar is untouched and esc still interrupts there).
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
+    enabled: escClosesSidebar(),
+    priority: 10,
+    bindings: [
+      {
+        key: "escape",
+        desc: "Close sidebar",
+        group: "Session",
+        cmd: () => {
+          setSidebarOpen(false)
+        },
+      },
+    ],
   }))
 
   useBindings(() => ({

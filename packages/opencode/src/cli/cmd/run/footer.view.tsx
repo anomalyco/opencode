@@ -434,6 +434,18 @@ export function RunFooterView(props: RunFooterViewProps) {
       // Prefer without provider, but keep it on the shared width policy if we add it back.
     }
   })
+  const taskStatus = createMemo(() => {
+    if (!prompt() || shell()) {
+      return
+    }
+
+    const current = activeTabs().find((item) => !item.background) ?? activeTabs()[0]
+    if (!current) {
+      return
+    }
+
+    return current.description || current.title || current.label
+  })
   const statusColor = createMemo(() => {
     if (exiting()) {
       return theme().error
@@ -864,7 +876,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                 <Show when={responsive().statusline.showModel && modelStatus()}>
                   {(info) => (
                     <box paddingRight={1} backgroundColor="transparent" flexShrink={0}>
-                      <text fg={theme().text} wrapMode="none">
+                      <text fg={theme().text} wrapMode="none" truncate>
                         {info().model}
                         <Show when={info().provider}>
                           {(provider) => <span style={{ fg: theme().muted }}> {provider()}</span>}
@@ -873,6 +885,15 @@ export function RunFooterView(props: RunFooterViewProps) {
                           {(variant) => (
                             <>
                               <span style={{ fg: theme().warning, bold: true }}> {variant()}</span>
+                            </>
+                          )}
+                        </Show>
+                        <Show when={taskStatus()}>
+                          {(task) => (
+                            <>
+                              <span style={{ fg: theme().muted }}> · </span>
+                              <span style={{ fg: theme().muted }}>task:</span>
+                              <span> {task()}</span>
                             </>
                           )}
                         </Show>

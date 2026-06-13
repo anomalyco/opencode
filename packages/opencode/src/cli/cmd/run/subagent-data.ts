@@ -35,6 +35,7 @@ type DetailState = {
   sessionID: string
   data: SessionData
   frames: Frame[]
+  usage: string
 }
 
 export type SubagentData = {
@@ -57,7 +58,17 @@ function createDetail(sessionID: string): DetailState {
       includeUserText: true,
     }),
     frames: [],
+    usage: "",
   }
+}
+
+function patchDetail(detail: DetailState, usage: string | undefined) {
+  if (typeof usage !== "string" || detail.usage === usage) {
+    return false
+  }
+
+  detail.usage = usage
+  return true
 }
 
 function ensureDetail(data: SubagentData, sessionID: string) {
@@ -569,9 +580,10 @@ function applyChildEvent(input: {
     limits: input.limits,
   })
   const changed = appendCommits(input.detail, out.commits)
+  const patched = patchDetail(input.detail, out.footer?.patch?.usage)
   compactDetail(input.detail)
 
-  return changed || queueChanged(input.detail.data, before)
+  return changed || patched || queueChanged(input.detail.data, before)
 }
 
 function bootstrapChildEvent(input: {
@@ -587,6 +599,8 @@ function bootstrapChildEvent(input: {
     thinking: input.thinking,
     limits: input.limits,
   })
+
+  patchDetail(input.detail, out.footer?.patch?.usage)
 
   return appendCommits(input.detail, out.commits)
 }
@@ -661,6 +675,7 @@ function snapshotDetail(detail: DetailState) {
   return {
     sessionID: detail.sessionID,
     commits: detail.frames.map((item) => item.commit),
+    usage: detail.usage,
   }
 }
 

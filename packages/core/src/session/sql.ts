@@ -56,11 +56,14 @@ export const SessionTable = sqliteTable(
     ...Timestamps,
     time_compacting: integer(),
     time_archived: integer(),
+    time_completed: integer(),
+    bitcost_task_id: text(),
   },
   (table) => [
     index("session_project_idx").on(table.project_id),
     index("session_workspace_idx").on(table.workspace_id),
     index("session_parent_idx").on(table.parent_id),
+    index("session_bitcost_task_idx").on(table.bitcost_task_id),
   ],
 )
 

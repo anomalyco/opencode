@@ -46,7 +46,10 @@ import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
-import { DialogBitcostLogin } from "./component/dialog-bitcost-login"
+import { DialogBitcostLogin, bitcostLoggedIn } from "./component/dialog-bitcost-login"
+import { DialogBitcostTask } from "./component/dialog-bitcost-task"
+import { bitcostBoundLocally, bitcostTaskDetails, markBitcostBound, rememberBitcostTasks } from "./component/bitcost-binding"
+import { fetchBitcostTasks } from "./component/bitcost-api"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
 import { Session } from "./routes/session"
@@ -485,6 +488,33 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     })
   })
 
+  // Mandatory Bitcost task selection: once logged in, a session must be attributed
+  // to a Task. Proactively opens the picker on entering an unbound session. The
+  // sync session (V1) lacks bitcostTaskID, so binding is confirmed via the v2 SDK.
+  const bitcostGated = new Set<string>()
+  createEffect(() => {
+    if (route.data.type !== "session") return
+    const sessionID = route.data.sessionID
+    if (!bitcostLoggedIn()) return
+    if (bitcostGated.has(sessionID)) return
+    bitcostGated.add(sessionID)
+    if (bitcostBoundLocally(sessionID)) return
+    void sdk.client.v2.session
+      .get({ sessionID })
+      .then((r) => {
+        const taskID = r.data?.data?.bitcostTaskID
+        if (taskID) {
+          markBitcostBound(sessionID, taskID)
+          // Best-effort: resolve the task name so the prompt chip shows it (not
+          // just "#id") after a restart, before the picker is ever opened.
+          if (!bitcostTaskDetails(taskID)) void fetchBitcostTasks().then(rememberBitcostTasks).catch(() => {})
+          return
+        }
+        dialog.replace(() => <DialogBitcostTask sessionID={sessionID} />)
+      })
+      .catch(() => {})
+  })
+
   let continued = false
   createEffect(() => {
     // When using -c, session list is loaded in blocking phase, so we can navigate at "partial"
@@ -738,6 +768,39 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         slashName: "login",
         run: () => {
           dialog.replace(() => <DialogBitcostLogin />)
+        },
+        category: "Account",
+      },
+      {
+        name: "bitcost.task",
+        title: "Select Bitcost task",
+        slashName: "task",
+        run: () => {
+          if (!bitcostLoggedIn()) {
+            dialog.replace(() => <DialogBitcostLogin />)
+            return
+          }
+          // No session is created until a task is picked; the picker creates one
+          // bound to the task when invoked from home.
+          const sessionID = route.data.type === "session" ? route.data.sessionID : undefined
+          dialog.replace(() => <DialogBitcostTask sessionID={sessionID} />)
+        },
+        category: "Account",
+      },
+      {
+        name: "bitcost.complete",
+        title: "Complete task (lock session)",
+        slashName: "complete",
+        run: () => {
+          if (route.data.type !== "session") return
+          const sessionID = route.data.sessionID
+          void sdk.client.v2.session
+            .complete({ sessionID })
+            .then(() => {
+              toast.show({ variant: "success", message: "Task completed" })
+              route.navigate({ type: "home" })
+            })
+            .catch(() => toast.show({ variant: "error", message: "Failed to complete task" }))
         },
         category: "Account",
       },

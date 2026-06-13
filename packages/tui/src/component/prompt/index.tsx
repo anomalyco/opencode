@@ -46,6 +46,9 @@ import { useDialog } from "../../ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
 import { useToast } from "../../ui/toast"
+import { DialogBitcostTask } from "../dialog-bitcost-task"
+import { bitcostLoggedIn } from "../dialog-bitcost-login"
+import { bitcostBoundLocally, bitcostBoundTaskID, bitcostTaskDetails, markBitcostBound } from "../bitcost-binding"
 import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
@@ -207,6 +210,12 @@ export function Prompt(props: PromptProps) {
   const move = usePromptMove({ projectID: project.project, sessionID: () => props.sessionID })
   const [cursorVersion, setCursorVersion] = createSignal(0)
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
+  // The Bitcost Task this session is attributed to, for the prompt-area chip.
+  const boundTask = createMemo(() => {
+    const id = props.sessionID ? bitcostBoundTaskID(props.sessionID) : undefined
+    if (!id) return undefined
+    return bitcostTaskDetails(id)?.name ?? `#${id}`
+  })
   const hasRightContent = createMemo(() => Boolean(props.right))
 
   function promptModelWarning() {
@@ -965,6 +974,32 @@ export function Prompt(props: PromptProps) {
       return false
     }
 
+    // Bitcost gate: a session must be attributed to a Task before any model turn.
+    // Shell and slash commands pass so /task, /login work. Block BEFORE creating a
+    // session so we never leave an empty, unbound session behind.
+    const bitcostRaw = store.prompt.input.trim()
+    const bitcostSlash =
+      bitcostRaw.startsWith("/") &&
+      sync.data.command.some((x) => x.name === bitcostRaw.split("\n")[0].split(" ")[0].slice(1))
+    if (store.mode !== "shell" && !bitcostSlash && bitcostLoggedIn()) {
+      let taskBound = props.sessionID ? bitcostBoundLocally(props.sessionID) : false
+      if (props.sessionID && !taskBound) {
+        const remote = await sdk.client.v2.session
+          .get({ sessionID: props.sessionID })
+          .then((r) => r.data?.data?.bitcostTaskID)
+          .catch(() => undefined)
+        if (remote) {
+          markBitcostBound(props.sessionID, remote)
+          taskBound = true
+        }
+      }
+      if (!taskBound) {
+        dialog.replace(() => <DialogBitcostTask sessionID={props.sessionID} />)
+        toast.show({ variant: "warning", message: "Choose a Bitcost task to start" })
+        return false
+      }
+    }
+
     const workspaceSession = props.sessionID ? sync.session.get(props.sessionID) : undefined
     const workspaceID = workspaceSession?.workspaceID
     const workspaceStatus = workspaceID ? (project.workspace.status(workspaceID) ?? "error") : undefined
@@ -1458,6 +1493,19 @@ export function Prompt(props: PromptProps) {
                                 {local.model.variant.current()}
                               </span>
                             </text>
+                          </Show>
+                          <Show when={boundTask()}>
+                            {(task) => (
+                              <>
+                                <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                                <text flexShrink={0}>
+                                  <span style={{ fg: fadeColor(theme.accent, modelMetaAlpha()) }}>◇ </span>
+                                  <span style={{ fg: fadeColor(theme.textMuted, modelMetaAlpha()) }}>
+                                    {Locale.truncate(task(), 24)}
+                                  </span>
+                                </text>
+                              </>
+                            )}
                           </Show>
                         </box>
                       </Show>

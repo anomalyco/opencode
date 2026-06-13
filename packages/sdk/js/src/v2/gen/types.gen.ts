@@ -18,6 +18,8 @@ export type Event =
   | EventSessionNextAgentSwitched
   | EventSessionNextModelSwitched
   | EventSessionNextMoved
+  | EventSessionNextTaskBound
+  | EventSessionNextCompleted
   | EventSessionNextPrompted
   | EventSessionNextPromptAdmitted
   | EventSessionNextPromptPromoted
@@ -844,6 +846,23 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.next.task.bound"
+        properties: {
+          timestamp: number
+          sessionID: string
+          taskID: string
+        }
+      }
+    | {
+        id: string
+        type: "session.next.completed"
+        properties: {
+          timestamp: number
+          sessionID: string
+        }
+      }
+    | {
+        id: string
         type: "session.next.prompted"
         properties: {
           timestamp: number
@@ -1634,6 +1653,8 @@ export type GlobalEvent = {
     | SyncEventSessionNextAgentSwitched
     | SyncEventSessionNextModelSwitched
     | SyncEventSessionNextMoved
+    | SyncEventSessionNextTaskBound
+    | SyncEventSessionNextCompleted
     | SyncEventSessionNextPrompted
     | SyncEventSessionNextPromptAdmitted
     | SyncEventSessionNextPromptPromoted
@@ -3193,6 +3214,37 @@ export type SyncEventSessionNextMoved = {
   }
 }
 
+export type SyncEventSessionNextTaskBound = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.task.bound.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      taskID: string
+    }
+  }
+}
+
+export type SyncEventSessionNextCompleted = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.completed.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+    }
+  }
+}
+
 export type SyncEventSessionNextPrompted = {
   type: "sync"
   id: string
@@ -3769,10 +3821,12 @@ export type SessionV2Info = {
     created: number
     updated: number
     archived?: number
+    completed?: number
   }
   title: string
   location: LocationRef
   subpath?: string
+  bitcostTaskID?: string
 }
 
 export type SessionInputAdmitted = {
@@ -4445,6 +4499,25 @@ export type EventSessionNextMoved = {
     sessionID: string
     location: LocationRef
     subdirectory?: string
+  }
+}
+
+export type EventSessionNextTaskBound = {
+  id: string
+  type: "session.next.task.bound"
+  properties: {
+    timestamp: number
+    sessionID: string
+    taskID: string
+  }
+}
+
+export type EventSessionNextCompleted = {
+  id: string
+  type: "session.next.completed"
+  properties: {
+    timestamp: number
+    sessionID: string
   }
 }
 
@@ -9716,6 +9789,80 @@ export type V2SessionWaitResponses = {
 }
 
 export type V2SessionWaitResponse = V2SessionWaitResponses[keyof V2SessionWaitResponses]
+
+export type V2SessionBindTaskData = {
+  body: {
+    taskID: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/task"
+}
+
+export type V2SessionBindTaskErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionBindTaskError = V2SessionBindTaskErrors[keyof V2SessionBindTaskErrors]
+
+export type V2SessionBindTaskResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: SessionV2Info
+  }
+}
+
+export type V2SessionBindTaskResponse = V2SessionBindTaskResponses[keyof V2SessionBindTaskResponses]
+
+export type V2SessionCompleteData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: never
+  url: "/api/session/{sessionID}/complete"
+}
+
+export type V2SessionCompleteErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2SessionCompleteError = V2SessionCompleteErrors[keyof V2SessionCompleteErrors]
+
+export type V2SessionCompleteResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type V2SessionCompleteResponse = V2SessionCompleteResponses[keyof V2SessionCompleteResponses]
 
 export type V2SessionContextData = {
   body?: never

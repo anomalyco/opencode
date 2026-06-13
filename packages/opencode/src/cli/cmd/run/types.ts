@@ -201,6 +201,7 @@ export type FooterSubagentTab = {
 export type FooterSubagentDetail = {
   sessionID: string
   commits: StreamCommit[]
+  usage?: string
 }
 
 export type FooterSubagentState = {

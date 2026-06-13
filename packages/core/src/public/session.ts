@@ -44,6 +44,9 @@ export type NotFoundError = SessionV2.NotFoundError
 export const PromptConflictError = SessionV2.PromptConflictError
 export type PromptConflictError = SessionV2.PromptConflictError
 
+export const CompletedError = SessionV2.CompletedError
+export type CompletedError = SessionV2.CompletedError
+
 export class ModelUnavailableError extends Schema.TaggedErrorClass<ModelUnavailableError>()(
   "Session.ModelUnavailableError",
   {
@@ -106,7 +109,7 @@ export interface Interface {
   readonly create: (input: CreateInput) => Effect.Effect<Info>
   readonly get: (sessionID: ID) => Effect.Effect<Info, NotFoundError>
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
-  readonly prompt: (input: PromptInput) => Effect.Effect<Admission, NotFoundError | PromptConflictError>
+  readonly prompt: (input: PromptInput) => Effect.Effect<Admission, NotFoundError | PromptConflictError | CompletedError>
   readonly switchModel: (
     input: SwitchModelInput,
   ) => Effect.Effect<void, NotFoundError | ModelUnavailableError | VariantUnavailableError>

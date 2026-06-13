@@ -42,8 +42,11 @@ export class Info extends Schema.Class<Info>("SessionV2.Info")({
     created: V2Schema.DateTimeUtcFromMillis,
     updated: V2Schema.DateTimeUtcFromMillis,
     archived: V2Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
+    completed: V2Schema.DateTimeUtcFromMillis.pipe(Schema.optional),
   }),
   title: Schema.String,
   location: Location.Ref,
   subpath: RelativePath.pipe(Schema.optional),
+  // The bitcost Task this session is attributed to (declared via task selection).
+  bitcostTaskID: Schema.String.pipe(Schema.optional),
 }) {}

@@ -42,6 +42,8 @@ export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.In
       created: DateTime.makeUnsafe(row.time_created),
       updated: DateTime.makeUnsafe(row.time_updated),
       archived: row.time_archived ? DateTime.makeUnsafe(row.time_archived) : undefined,
+      completed: row.time_completed ? DateTime.makeUnsafe(row.time_completed) : undefined,
     },
+    bitcostTaskID: row.bitcost_task_id ?? undefined,
   })
 }
