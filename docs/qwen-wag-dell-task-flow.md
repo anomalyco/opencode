@@ -101,6 +101,8 @@
 - D3: `step2_operational_stop_monthly`
 - HTML report が取れなくても log-only parser が可能
 - ただし fresh log は必須
+- ただし 2026-06-13 再評価で `backtest/results/step2_operational_stop_reevaluation_summary.json` が `pass` なら、
+  D1/D2/D3 の最終状態はこの summary で `closed` と扱う。単体 task の hold は運用品質維持のための中間状態。
 
 ## parser scenario 名の固定
 
@@ -197,7 +199,7 @@
 ```bash
 python3 src/Scripts/analyze_mt5_report.py \
   --report "C:/Program Files/Axiory MetaTrader 5/reports/step2_baseline.htm" \
-  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/20260612.log" \
+  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/<TASK_LOG_PATH>" \
   --scenario step2_baseline_smoke \
   --config backtest/gate_config.json \
   --out backtest/results/step2_baseline.json
@@ -241,7 +243,7 @@ D1 parser あり（global-stop 型）:
 ```bash
 python3 src/Scripts/analyze_mt5_report.py \
   --report "C:/Program Files/Axiory MetaTrader 5/reports/step2_global_stop.htm" \
-  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/20260612.log" \
+  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/<TASK_LOG_PATH>" \
   --scenario step2_operational_stop \
   --config backtest/gate_config.json \
   --out backtest/results/step2_global_stop_retest.json
@@ -251,7 +253,7 @@ D1 report なしの log-only fallback:
 
 ```bash
 python3 src/Scripts/analyze_mt5_report.py \
-  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/20260612.log" \
+  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/<TASK_LOG_PATH>" \
   --scenario step2_operational_stop \
   --config backtest/gate_config.json \
   --out backtest/results/step2_global_stop_retest.json
@@ -262,7 +264,7 @@ D2 parser あり（daily-stop 型）:
 ```bash
 python3 src/Scripts/analyze_mt5_report.py \
   --report "C:/Program Files/Axiory MetaTrader 5/reports/step2_daily_stop.htm" \
-  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/20260612.log" \
+  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/<TASK_LOG_PATH>" \
   --scenario step2_operational_stop_daily \
   --config backtest/gate_config.json \
   --out backtest/results/step2_daily_stop_retest.json
@@ -272,7 +274,7 @@ D2 report なしの log-only fallback:
 
 ```bash
 python3 src/Scripts/analyze_mt5_report.py \
-  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/20260612.log" \
+  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/<TASK_LOG_PATH>" \
   --scenario step2_operational_stop_daily \
   --config backtest/gate_config.json \
   --out backtest/results/step2_daily_stop_retest.json
@@ -283,7 +285,7 @@ D3 parser あり（monthly-stop 型）:
 ```bash
 python3 src/Scripts/analyze_mt5_report.py \
   --report "C:/Program Files/Axiory MetaTrader 5/reports/step2_monthly_stop.htm" \
-  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/20260612.log" \
+  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/<TASK_LOG_PATH>" \
   --scenario step2_operational_stop_monthly \
   --config backtest/gate_config.json \
   --out backtest/results/step2_monthly_stop_retest.json
@@ -293,7 +295,7 @@ D3 report なしの log-only fallback:
 
 ```bash
 python3 src/Scripts/analyze_mt5_report.py \
-  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/20260612.log" \
+  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/<TASK_LOG_PATH>" \
   --scenario step2_operational_stop_monthly \
   --config backtest/gate_config.json \
   --out backtest/results/step2_monthly_stop_retest.json
@@ -338,10 +340,11 @@ python3 src/Scripts/analyze_mt5_report.py \
 - report 未生成でも log-only parser が通った場合、D系は evidence gathering を継続してよい
 - ただし出力 status は `hold` とし、notes に `log-only fallback` を必ず書く
 - その後 D2 / D3 へ進むことは許可する
-- D3 の場合は report 未生成が継続しても、再実行ごとに `before/after` log メタ情報と recovery 回数を記録し、
-  `log-only passed=true` を 2 回連続で受けた場合のみ次タスクへ進む。
+- D3 の場合は report 未生成が継続しても、再実行ごとに `before/after` log メタ情報と recovery 回数を記録する。
+- `log-only passed=true` を 2 回連続で受けた場合は hold を継続しつつ次タスクへ進む運用を許可する。
 - D3 で `log-only passed=false` が 2 回連続したら `Task D3` を即 `reject` とし、
   marker 要件見直し or parser 分岐の追加を blocker として引き継ぐ。
+- Step2 再評価が `pass` の場合は、`backtest/results/step2_operational_stop_reevaluation_summary.json` を参照して D1/D2/D3 を最終的に `closed` と扱う。
 
 ## 実行後に残す evidence
 

@@ -11,6 +11,8 @@
 - stale report の誤読を防ぐ
 - Task B / C の完了条件を機械的に確認できるようにする
 
+補足: Step2 closure の本フェーズでは `run_d3_recovery.ps1` の再導入は行わず、当該 recovery 運用は別タスクで分離して扱う。
+
 ## 監査結果
 
 blocking 問題はありません。採用してよい方針です。
@@ -133,18 +135,35 @@ baseline のように report metrics 必須の scenario は、必ず `--report` 
 ```bash
 python3 src/Scripts/analyze_mt5_report.py \
   --report "C:/Program Files/Axiory MetaTrader 5/reports/step2_baseline.htm" \
-  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/20260612.log" \
+  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/<TASK_LOG_PATH>" \
   --scenario default \
   --config backtest/gate_config.json \
   --out backtest/results/step2_baseline.json
 ```
 
-### 8. D3 recovery 追跡コマンド
+### 8. Step2 系 parser 実行（D1/D2/D3）
 
-月次タスクを再実行する場合は、`backtest/tester/run_d3_recovery.ps1` で同一フォーマットの証跡を残せる。
+Step2 の D1/D2/D3 は log-only fallback が許容されるため、`--report` は任意。
+report が取得できなくても、`--log` のみで parser を実行し、`require_report_metrics=false` 条件で pass を受け入れる。
 
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File 'C:\Users\wag\Downloads\run_d3_recovery.ps1'
+```bash
+python3 src/Scripts/analyze_mt5_report.py \
+  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/<TASK_LOG_PATH>" \
+  --scenario step2_operational_stop \
+  --config backtest/gate_config.json \
+  --out backtest/results/step2_global_stop_retest.json
+
+python3 src/Scripts/analyze_mt5_report.py \
+  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/<TASK_LOG_PATH>" \
+  --scenario step2_operational_stop_daily \
+  --config backtest/gate_config.json \
+  --out backtest/results/step2_daily_stop_retest.json
+
+python3 src/Scripts/analyze_mt5_report.py \
+  --log "C:/Users/wag/AppData/Roaming/MetaQuotes/Terminal/ED051E4A9BEE8A33BDDD0F947358B2B2/Tester/logs/<TASK_LOG_PATH>" \
+  --scenario step2_operational_stop_monthly \
+  --config backtest/gate_config.json \
+  --out backtest/results/step2_monthly_stop_retest.json
 ```
 
 ## 判定
@@ -186,7 +205,7 @@ log-only fallback でも、各 scenario 固有の forced input marker と stop m
   - 実行前後の `Tester\logs` 最新ファイルの `Name / Length / LastWriteTime`
   - report 存在確認（有無 / size / mtime）
   - parser 出力 JSON の `passed` / `failed_rules` / `metrics.log_window_selected`
-  - `step2_monthly_stop_retest` の再実行時刻と `20260612.log` の更新時刻を対応付け
+- `step2_monthly_stop_retest` の再実行時刻と該当ログファイルの更新時刻を対応付け
 - 月次タスクは `report=missing` が継続しても `passed=true` の log-only なら `hold` のまま記録し、
   `Notes` に「`log-only fallback`」と `report missing 回数`を明記する。
 - `report=missing` で log-only が `passed=false` のまま再実行しても 2 回続いたら、D3 を `reject` 化し再実行条件を明記する。
