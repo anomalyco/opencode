@@ -1,6 +1,7 @@
 import { afterEach, expect, test } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer, Option } from "effect"
 import { Messaging } from "../../src/messaging"
+import { BackgroundJob } from "../../src/background/job"
 import { disposeAllInstances, testInstanceStoreLayer } from "../fixture/fixture"
 import { SessionID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
@@ -9,7 +10,11 @@ import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { escapeBody } from "../../src/tool/message"
 
 const it = testEffect(
-  Layer.mergeAll(Messaging.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer)), CrossSpawnSpawner.defaultLayer),
+  Layer.mergeAll(
+    Messaging.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer)),
+    BackgroundJob.defaultLayer,
+    CrossSpawnSpawner.defaultLayer,
+  ),
 )
 
 const CHILD = SessionID.make("ses_child")
@@ -227,6 +232,49 @@ it.instance(
       if (Exit.isFailure(exit)) {
         expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "Messaging.AbuseError" })
       }
+    }),
+  { git: true },
+)
+
+it.instance(
+  "send/reply - composes with BackgroundJob message channel (tool/task seam)",
+  () =>
+    Effect.gen(function* () {
+      const messaging = yield* Messaging.Service
+      const background = yield* BackgroundJob.Service
+
+      yield* background.start({
+        id: "ses_child",
+        type: "test",
+        title: "child",
+        run: Effect.never,
+      })
+
+      const payload = {
+        childSessionID: "ses_child",
+        parentSessionID: "ses_parent",
+        body: "go left or right?",
+        expectReply: true,
+      }
+
+      const child = yield* messaging
+        .send({
+          childSessionID: CHILD,
+          parentSessionID: PARENT,
+          body: payload.body,
+          expectReply: true,
+          deliver: background.message("ses_child", payload).pipe(Effect.asVoid),
+        })
+        .pipe(Effect.forkScoped)
+
+      const observer = yield* background.waitForMessage("ses_child").pipe(Effect.forkScoped)
+
+      const observed = yield* Fiber.join(observer)
+      expect(observed).toEqual(payload)
+
+      yield* messaging.reply({ childSessionID: CHILD, body: "left", callerSessionID: PARENT })
+      const result = yield* Fiber.join(child)
+      expect(Option.getOrNull(result)).toBe("left")
     }),
   { git: true },
 )

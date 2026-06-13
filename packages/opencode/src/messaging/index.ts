@@ -131,14 +131,15 @@ export const layer = Layer.effect(
         roundTrips: counters.roundTrips + 1,
       })
 
-      yield* events.publish(Event.Sent, {
-        childSessionID: input.childSessionID,
-        parentSessionID: input.parentSessionID,
-        body: input.body,
-        expectReply: input.expectReply,
-      })
-
       if (!input.expectReply) {
+        // Fire-and-forget path: no inFlight reserved above, so an interrupt here
+        // can only leak the roundTrips +1 (acceptable as anti-abuse).
+        yield* events.publish(Event.Sent, {
+          childSessionID: input.childSessionID,
+          parentSessionID: input.parentSessionID,
+          body: input.body,
+          expectReply: input.expectReply,
+        })
         yield* input.deliver
         return Option.none()
       }
@@ -151,8 +152,17 @@ export const layer = Layer.effect(
         if (current) value.counters.set(input.childSessionID, { ...current, inFlight: Math.max(0, current.inFlight - 1) })
       })
 
+      // expect_reply path: the publish must run INSIDE the protected block so
+      // an interrupt during publish still triggers release and doesn't leak inFlight.
       return yield* Effect.ensuring(
         Effect.gen(function* () {
+          yield* events.publish(Event.Sent, {
+            childSessionID: input.childSessionID,
+            parentSessionID: input.parentSessionID,
+            body: input.body,
+            expectReply: input.expectReply,
+          })
+
           const deferred = yield* Deferred.make<string, RejectedError>()
           value.pending.set(input.childSessionID, {
             childSessionID: input.childSessionID,
