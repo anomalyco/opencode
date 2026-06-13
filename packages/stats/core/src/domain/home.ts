@@ -427,7 +427,6 @@ function buildTokenCost(rows: StatMetricRow[], product: TokenProduct, window: Da
   return topModelsByUsage(rows, product, window)
     .flatMap((item) => {
       const total = costPerMillion(item.totalCostMicrocents, item.totalTokens)
-      if (total === 0) return []
       return [
         {
           model: item.model,

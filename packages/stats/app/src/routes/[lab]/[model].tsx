@@ -5,7 +5,7 @@ import { geoEquirectangular, geoPath } from "d3-geo"
 import { scaleSqrt } from "d3-scale"
 import countryCodesSource from "i18n-iso-countries/codes.json?raw"
 import { feature, mesh } from "topojson-client"
-import countriesTopologySource from "world-atlas/countries-110m.json?raw"
+import countriesTopologySource from "world-atlas/countries-50m.json?raw"
 import {
   getStatsModelData,
   type CountryEntry,
@@ -20,7 +20,13 @@ import { createMemo, createSignal, For, onMount, Show, type JSX } from "solid-js
 import { getRequestEvent } from "solid-js/web"
 import type { FeatureCollection, GeometryObject, GeoJsonProperties } from "geojson"
 import type { GeometryCollection, Topology } from "topojson-specification"
-import { findModelCatalogEntry, formatCatalogLabName, getModelCatalog, type ModelCatalogEntry } from "../model-catalog"
+import {
+  findModelCatalogEntry,
+  formatCatalogLabName,
+  getModelCatalog,
+  type ModelCatalogCost,
+  type ModelCatalogEntry,
+} from "../model-catalog"
 import {
   applyThemePreference,
   Footer,
@@ -83,6 +89,7 @@ const worldPath = geoPath(worldProjection)
 const worldCountryPaths = worldCountries.features.map((country) => ({
   id: String(country.id ?? "").padStart(3, "0"),
   path: worldPath(country) ?? "",
+  marker: geoCountryMarker(country),
 }))
 const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a, b) => a !== b)) ?? ""
 
@@ -169,7 +176,7 @@ export default function StatsModel() {
                 <ModelHero data={stats() ?? null} catalog={catalogEntry() ?? null} labName={labName()} />
                 <ModelOverview data={stats() ?? null} />
                 <ModelUsageSection data={stats()?.usage ?? []} />
-                <ModelEfficiencySection data={stats() ?? null} />
+                <ModelEfficiencySection data={stats() ?? null} catalog={catalogEntry() ?? null} />
                 <ModelGeoBreakdownSection data={stats()?.country ?? emptyCountryRecord()} />
                 <ModelPeersSection data={stats() ?? null} />
               </>
@@ -449,7 +456,7 @@ function ModelUsageSection(props: { data: ModelUsagePoint[] }) {
   )
 }
 
-function ModelEfficiencySection(props: { data: StatsModelData | null }) {
+function ModelEfficiencySection(props: { data: StatsModelData | null; catalog: ModelCatalogEntry | null }) {
   return (
     <section id="efficiency" data-section="model-panel">
       <SectionTitle title="Efficiency" description="Cost, cache behavior, and average session shape." />
@@ -462,7 +469,13 @@ function ModelEfficiencySection(props: { data: StatsModelData | null }) {
         {(data) => (
           <div data-component="model-metric-grid" data-variant="dense">
             <MetricCard label="Cost" value={formatMoney(data().totals.cost)} detail="total spend" />
-            <MetricCard label="Cost / 1M" value={formatMoney(data().totals.costPerMillion)} detail="all tokens" />
+            <MetricCard
+              label="Cost / 1M"
+              value={
+                props.catalog?.cost ? formatCatalogPrice(props.catalog.cost) : formatMoney(data().totals.costPerMillion)
+              }
+              detail={props.catalog?.cost ? "input / output" : "observed all tokens"}
+            />
             <MetricCard
               label="Cost / Session"
               value={formatSessionCost(data().totals.costPerSession)}
@@ -573,6 +586,7 @@ function GeoWorldMap(props: {
             return (
               <path
                 d={country.path}
+                data-country-id={country.id}
                 data-has-data={entry() ? "true" : undefined}
                 data-active={entry()?.country === props.activeCountry ? "true" : undefined}
                 style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
@@ -588,6 +602,37 @@ function GeoWorldMap(props: {
                   props.onActiveCountryChange(item.country)
                 }}
               />
+            )
+          }}
+        </For>
+      </g>
+      <g data-slot="geo-country-markers">
+        <For each={worldCountryPaths}>
+          {(country) => {
+            const entry = () => props.countryById.get(country.id)
+            return (
+              <Show when={country.marker && entry() ? country.marker : undefined}>
+                {(marker) => (
+                  <circle
+                    cx={marker().x}
+                    cy={marker().y}
+                    r={entry()?.country === props.activeCountry ? 3.4 : 2.4}
+                    data-active={entry()?.country === props.activeCountry ? "true" : undefined}
+                    style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
+                    aria-hidden="true"
+                    onPointerEnter={() => {
+                      const item = entry()
+                      if (!item) return
+                      props.onActiveCountryChange(item.country)
+                    }}
+                    onClick={() => {
+                      const item = entry()
+                      if (!item) return
+                      props.onActiveCountryChange(item.country)
+                    }}
+                  />
+                )}
+              </Show>
             )
           }}
         </For>
@@ -720,6 +765,14 @@ function countryNumericId(country: string) {
   return countryNumericIds.get(country.toUpperCase())?.padStart(3, "0")
 }
 
+function geoCountryMarker(country: (typeof worldCountries.features)[number]) {
+  const bounds = worldPath.bounds(country)
+  const [x, y] = worldPath.centroid(country)
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined
+  if (bounds[1][0] - bounds[0][0] >= 3 && bounds[1][1] - bounds[0][1] >= 3) return undefined
+  return { x, y }
+}
+
 function formatCountryName(country: string) {
   const code = country.toUpperCase()
   if (code === "ZZ") return "Unknown"
@@ -782,6 +835,15 @@ function formatMoney(value: number) {
   if (value >= 1_000_000) return `$${trimNumber(value / 1_000_000, value >= 10_000_000 ? 0 : 1)}M`
   if (value >= 1_000) return `$${trimNumber(value / 1_000, value >= 10_000 ? 0 : 1)}K`
   return `$${value.toFixed(value >= 10 ? 0 : 2)}`
+}
+
+function formatCatalogPrice(value: ModelCatalogCost) {
+  return `${formatModelPrice(value.input)} / ${formatModelPrice(value.output)}`
+}
+
+function formatModelPrice(value: number) {
+  if (value > 0 && value < 0.01) return `$${value.toFixed(4)}`
+  return formatMoney(value)
 }
 
 function formatSessionCost(value: number) {
