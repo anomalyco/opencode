@@ -27,7 +27,8 @@ const loadPlugin = async (mode?: string, delegate?: string) => {
 
   try {
     const pluginModule = await import("../../../../.opencode/plugins/trade-context-mode")
-    return (await pluginModule.default()) as Partial<Hooks>
+    const pluginInput = {} as unknown as Parameters<typeof pluginModule.default>[0]
+    return (await pluginModule.default(pluginInput, undefined)) as Partial<Hooks>
   } finally {
     if (previous === undefined) delete process.env.OPENCODE_TRADE_CONTEXT_MODE
     else process.env.OPENCODE_TRADE_CONTEXT_MODE = previous

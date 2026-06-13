@@ -79,7 +79,12 @@ const shadowHooks = (mode: TradeContextMode, hooks: Hooks | undefined) => {
   if (typeof fromDelegate === "function") {
     return {
       "tool.execute.after": async (...args: unknown[]) => {
-        await runHookSafely(mode, "tool.execute.after", fromDelegate, args)
+        await runHookSafely(
+          mode,
+          "tool.execute.after",
+          fromDelegate as (...hookArgs: unknown[]) => Promise<void> | void,
+          args,
+        )
       },
     }
   }
