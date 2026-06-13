@@ -11,6 +11,8 @@ const info = {
   workspaceID: undefined,
   directory: "/tmp/opencode",
   parentID: undefined,
+  depth: 1,
+  rootID: undefined,
   summary: undefined,
   cost: 0,
   tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -31,9 +33,11 @@ describe("Session schema", () => {
   test("encodes undefined optional session fields as omitted keys", () => {
     const encoded = Schema.encodeUnknownSync(Session.Info)(info) as Record<string, unknown>
 
-    for (const key of ["workspaceID", "parentID", "summary", "share", "permission", "revert"]) {
+    for (const key of ["workspaceID", "parentID", "rootID", "summary", "share", "permission", "revert"]) {
       expect(Object.hasOwn(encoded, key)).toBe(false)
     }
+    // depth is always present (root = 1); rootID is omitted only when undefined.
+    expect(encoded.depth).toBe(1)
     expect(Object.hasOwn(encoded.time as Record<string, unknown>, "compacting")).toBe(false)
     expect(Object.hasOwn(encoded.time as Record<string, unknown>, "archived")).toBe(false)
     expect(JSON.stringify(encoded)).not.toContain("parentID")

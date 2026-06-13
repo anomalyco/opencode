@@ -48,6 +48,11 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
     project_id: info.projectID,
     workspace_id: info.workspaceID ?? null,
     parent_id: info.parentID,
+    // Derived wire fields (nested-agents Issue 3). depth falls back to the
+    // table default (1) when an older event omits it; root_id is null for
+    // roots/orphans.
+    depth: info.depth ?? 1,
+    root_id: info.rootID ?? null,
     slug: info.slug,
     directory: info.directory,
     path: info.path,

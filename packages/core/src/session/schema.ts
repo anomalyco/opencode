@@ -25,6 +25,12 @@ export type ID = typeof ID.Type
 export class Info extends Schema.Class<Info>("SessionV2.Info")({
   id: ID,
   parentID: ID.pipe(optionalOmitUndefined),
+  // Convenience wire fields derived from the parentID chain (nested-agents
+  // Issue 3, additive). `depth` is the 1-based nesting level (root = 1, always
+  // present); `rootID` is the topmost ancestor, omitted for roots/orphans
+  // (callers read `rootID ?? id`).
+  depth: Schema.Finite,
+  rootID: ID.pipe(optionalOmitUndefined),
   projectID: ProjectV2.ID,
   agent: AgentV2.ID.pipe(Schema.optional),
   model: ModelV2.Ref.pipe(Schema.optional),
