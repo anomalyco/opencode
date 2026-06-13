@@ -34,11 +34,13 @@ import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
 import { useGlobal } from "@/context/global"
 import { decode64 } from "@/utils/base64"
 import { ServerConnection, useServer } from "@/context/server"
 import { tabHref, useTabs, type Tab } from "@/context/tabs"
+import "./titlebar.css"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -435,18 +437,22 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   state={!!homeMatch() ? "pressed" : undefined}
                 />
 
-                <div
-                  class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
-                  ref={tabScrollRef}
-                >
-                  <div class="flex min-w-0 flex-row items-center gap-1.5">
-                    <For each={tabsStore}>
-                      {(tab, i) => {
-                        let ref!: HTMLDivElement
-
-                        onMount(() => {
-                          refreshTabsAreOverflowing()
-                        })
+                <div data-slot="titlebar-tabs" class="relative min-w-0">
+                  <div
+                    data-slot="titlebar-tabs-scroll"
+                    class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
+                    ref={(el) => {
+                      tabScrollRef = el
+                      createResizeObserver(el, refreshTabsAreOverflowing)
+                    }}
+                  >
+                    <div
+                      class="flex min-w-0 flex-row items-center gap-1.5"
+                      ref={(el) => createResizeObserver(el, refreshTabsAreOverflowing)}
+                    >
+                      <For each={tabsStore}>
+                        {(tab, i) => {
+                          let ref!: HTMLDivElement
 
                         const divider = () =>
                           i() !== 0 && (
@@ -520,7 +526,18 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                         )
                       }}
                     </Show>
+                    </div>
                   </div>
+                  <div
+                    data-slot="titlebar-tabs-fade-left"
+                    aria-hidden="true"
+                    class="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-[linear-gradient(to_right,var(--v2-background-bg-deep),transparent)]"
+                  />
+                  <div
+                    data-slot="titlebar-tabs-fade-right"
+                    aria-hidden="true"
+                    class="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-deep),transparent)]"
+                  />
                 </div>
                 <Show when={!(creating() && params.dir)}>
                   <IconButtonV2
