@@ -21,6 +21,8 @@ describe("database doctor and repair", () => {
       "session_model_missing",
       "session_path_missing",
     ])
+    expect(SUPPORTED_REPAIRS.find((repair) => repair.code === "part_legacy_id_prefix")?.sourceVersions).toContain("1.2.21")
+    expect(SUPPORTED_REPAIRS.every((repair) => repair.targetVersion.length > 0 && repair.targetInvariant.length > 0)).toBe(true)
   })
 
   test("reports a missing database without creating it", async () => {
@@ -31,8 +33,10 @@ describe("database doctor and repair", () => {
     const plan = await generateRepairPlan(dbPath)
 
     expect(report.exitCode).toBe(2)
+    expect(report.compatibility.targetOpenCodeVersion.length).toBeGreaterThan(0)
     expect(report.supportedRepairs.some((repair) => repair.code === "part_legacy_id_prefix")).toBe(true)
     expect(plan.exitCode).toBe(2)
+    expect(plan.compatibility.targetOpenCodeVersion.length).toBeGreaterThan(0)
     expect(plan.supportedRepairs.some((repair) => repair.code === "part_legacy_id_prefix")).toBe(true)
     expect(existsSync(dbPath)).toBe(false)
   })
@@ -149,6 +153,7 @@ describe("database doctor and repair", () => {
     db.close()
 
     expect(report.issues.some((issue) => issue.code === "part_legacy_id_prefix" && issue.repairable)).toBe(true)
+    expect(report.compatibility.sessionVersions).toEqual([{ version: "1", count: 1 }])
     expect(plan.operations.map((operation) => operation.issueCode)).toContain("part_legacy_id_prefix")
     expect(result.success).toBe(true)
     expect(rows.map((row) => row.id)).toEqual(["prt_ccf86b97b002MOqoKxDVMesjG9"])

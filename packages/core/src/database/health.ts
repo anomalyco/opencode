@@ -1,6 +1,7 @@
 export * as DatabaseHealth from "./health"
 
 import { Database as BunDatabase } from "bun:sqlite"
+import { InstallationVersion } from "../installation/version"
 export type RepairMode = "safe"
 export type IssueSeverity = "info" | "warning" | "error"
 export type Confidence = "low" | "medium" | "high"
@@ -9,9 +10,20 @@ export interface SupportedRepair {
   code: string
   table: "session" | "session_message" | "part"
   repairable: boolean
+  sourceVersions: string
+  targetVersion: string
+  targetInvariant: string
+  introducedBy?: string
   description: string
   repair: string
   safety: string
+}
+
+export interface CompatibilityContext {
+  targetOpenCodeVersion: string
+  sessionVersions: { version: string; count: number }[]
+  appliedMigrations: string[]
+  latestAppliedMigration?: string
 }
 
 export const SUPPORTED_REPAIRS = [
@@ -19,6 +31,9 @@ export const SUPPORTED_REPAIRS = [
     code: "part_legacy_id_prefix",
     table: "part",
     repairable: true,
+    sourceVersions: "Observed on affected session.version values 1.2.21 and 1.2.22; older part_ rows are matched by persisted shape, not by version guesswork.",
+    targetVersion: InstallationVersion,
+    targetInvariant: "Session message part IDs must satisfy PartID, which currently requires the prt_ prefix.",
     description: "Legacy message part rows use part_ IDs, while current schemas validate message part IDs with the prt_ prefix.",
     repair: "Rename part.id from part_<suffix> to prt_<suffix> when the target id does not already exist.",
     safety: "Primary-key update only; message/session foreign key columns and part data are unchanged; apply rechecks the source row and target-id absence.",
@@ -27,6 +42,9 @@ export const SUPPORTED_REPAIRS = [
     code: "assistant_message_missing_agent",
     table: "session_message",
     repairable: true,
+    sourceVersions: "Observed on pre-session-metadata rows; matched by missing data.agent with non-empty data.mode.",
+    targetVersion: InstallationVersion,
+    targetInvariant: "Assistant session_message.data should carry agent, not only mode.",
     description: "Legacy assistant session_message.data rows may have mode but no agent.",
     repair: "Copy data.mode to data.agent when mode is a single non-empty string and agent is missing.",
     safety: "JSON update only; apply rechecks the original JSON payload and mode before writing.",
@@ -35,6 +53,10 @@ export const SUPPORTED_REPAIRS = [
     code: "session_agent_missing",
     table: "session",
     repairable: true,
+    sourceVersions: "Rows created before session metadata was denormalized onto session rows.",
+    targetVersion: InstallationVersion,
+    targetInvariant: "session.agent is present when a single unambiguous agent can be derived.",
+    introducedBy: "20260511173437_session-metadata",
     description: "Legacy session rows may miss the denormalized session.agent field required by current callers.",
     repair: "Set session.agent only when one unambiguous value can be derived from assistant or agent-switched messages.",
     safety: "Skipped when no single value is derivable; apply rederives the value before writing.",
@@ -43,6 +65,10 @@ export const SUPPORTED_REPAIRS = [
     code: "session_model_missing",
     table: "session",
     repairable: true,
+    sourceVersions: "Rows created before session metadata was denormalized onto session rows.",
+    targetVersion: InstallationVersion,
+    targetInvariant: "session.model is present when a single unambiguous model can be derived.",
+    introducedBy: "20260511173437_session-metadata",
     description: "Legacy session rows may miss the denormalized session.model field required by current callers.",
     repair: "Set session.model only when one unambiguous model object can be derived from assistant or model-switched messages.",
     safety: "Skipped when no single value is derivable; apply rederives the value before writing.",
@@ -51,6 +77,10 @@ export const SUPPORTED_REPAIRS = [
     code: "session_path_missing",
     table: "session",
     repairable: true,
+    sourceVersions: "Rows created before session.path was added or rows left null by earlier migrations.",
+    targetVersion: InstallationVersion,
+    targetInvariant: "session.path is present when session.directory is non-empty.",
+    introducedBy: "20260428004200_add_session_path",
     description: "Legacy session rows may miss session.path after the current schema expects it.",
     repair: "Set session.path from the same row's session.directory when directory is non-empty.",
     safety: "Does not rewrite directory/worktree semantics; apply rechecks the original empty path and derived directory value.",
@@ -77,6 +107,7 @@ export interface DoctorReport {
   dbPath: string
   checkedAt: string
   schemaSupported: boolean
+  compatibility: CompatibilityContext
   supportedRepairs: SupportedRepair[]
   sessionCount?: number
   messageCount?: number
@@ -103,6 +134,7 @@ export interface RepairPlan {
   dbPath: string
   generatedAt: string
   mode: RepairMode
+  compatibility: CompatibilityContext
   supportedRepairs: SupportedRepair[]
   operations: RepairOperation[]
   warnings: string[]
@@ -151,13 +183,13 @@ export async function generateDoctorReport(dbPath: string): Promise<DoctorReport
     return withReadOnlyDatabase(dbPath, (db) => {
       const schema = analyzeSchema(db)
       if (!schema.supported) {
-        return buildReport(dbPath, schema, 0, 0, schema.issues)
+        return buildReport(dbPath, schema, readCompatibility(db), 0, 0, schema.issues)
       }
 
       const sessions = analyzeSessions(db, schema.columns.session)
       const messages = analyzeMessages(db)
       const parts = analyzeParts(db, schema.columns.part)
-      return buildReport(dbPath, schema, sessions.count, messages.count, [...schema.issues, ...sessions.issues, ...messages.issues, ...parts.issues])
+      return buildReport(dbPath, schema, readCompatibility(db), sessions.count, messages.count, [...schema.issues, ...sessions.issues, ...messages.issues, ...parts.issues])
     })
   } catch (error) {
     return unreadableDoctorReport(dbPath, "database_unreadable", `Database is unreadable: ${errorMessage(error)}`)
@@ -177,6 +209,7 @@ export async function generateRepairPlan(dbPath: string, mode: RepairMode = "saf
           dbPath,
           generatedAt: new Date().toISOString(),
           mode,
+          compatibility: readCompatibility(db),
           supportedRepairs: SUPPORTED_REPAIRS,
           operations: [],
           warnings: schema.issues.map((issue) => issue.reason),
@@ -193,6 +226,7 @@ export async function generateRepairPlan(dbPath: string, mode: RepairMode = "saf
         dbPath,
         generatedAt: new Date().toISOString(),
         mode,
+        compatibility: readCompatibility(db),
         supportedRepairs: SUPPORTED_REPAIRS,
         operations,
         warnings: operations.flatMap((operation) => (operation.warning ? [operation.warning] : [])),
@@ -278,11 +312,12 @@ export function analyzeParts(db: BunDatabase, columns?: Set<string>): { count: n
   }
 }
 
-function buildReport(dbPath: string, schema: SchemaStatus, sessionCount: number, messageCount: number, issues: Issue[]) {
+function buildReport(dbPath: string, schema: SchemaStatus, compatibility: CompatibilityContext, sessionCount: number, messageCount: number, issues: Issue[]) {
   return {
     dbPath,
     checkedAt: new Date().toISOString(),
     schemaSupported: schema.supported,
+    compatibility,
     supportedRepairs: SUPPORTED_REPAIRS,
     sessionCount,
     messageCount,
@@ -296,6 +331,7 @@ function unreadableDoctorReport(dbPath: string, code: string, reason: string) {
     dbPath,
     checkedAt: new Date().toISOString(),
     schemaSupported: false,
+    compatibility: readCompatibility(undefined),
     supportedRepairs: SUPPORTED_REPAIRS,
     issues: [
       {
@@ -314,6 +350,7 @@ function unreadableRepairPlan(dbPath: string, mode: RepairMode, reason: string) 
     dbPath,
     generatedAt: new Date().toISOString(),
     mode,
+    compatibility: readCompatibility(undefined),
     supportedRepairs: SUPPORTED_REPAIRS,
     operations: [],
     warnings: [reason],
@@ -340,6 +377,22 @@ function tableColumns(db: BunDatabase, table: string) {
     return new Set<string>()
   }
   return new Set(db.query(`PRAGMA table_info(${table})`).all().map((row) => (row as { name: string }).name))
+}
+
+function readCompatibility(db: BunDatabase | undefined): CompatibilityContext {
+  if (!db) return { targetOpenCodeVersion: InstallationVersion, sessionVersions: [], appliedMigrations: [] }
+  const sessionVersions = tableColumns(db, "session").has("version")
+    ? (db.query("SELECT version, count(*) AS count FROM session GROUP BY version ORDER BY count DESC").all() as { version: string; count: number }[])
+    : []
+  const appliedMigrations = tableColumns(db, "migration").has("id")
+    ? (db.query("SELECT id FROM migration ORDER BY id").all() as { id: string }[]).map((row) => row.id)
+    : []
+  return {
+    targetOpenCodeVersion: InstallationVersion,
+    sessionVersions,
+    appliedMigrations,
+    latestAppliedMigration: appliedMigrations.at(-1),
+  }
 }
 
 function missingTableIssues(table: string, columns: Set<string>): Issue[] {

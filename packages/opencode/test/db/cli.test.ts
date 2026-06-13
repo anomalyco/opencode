@@ -17,6 +17,7 @@ describe("opencode db CLI doctor and repair", () => {
     healthy.db.close()
     const healthyResult = await capture(() => runDoctorCommand(healthy.dbPath, { json: false }))
     expect(healthyResult.exitCode).toBe(0)
+    expect(healthyResult.stdout).toContain("Target OpenCode:")
     expect(healthyResult.stdout).toContain("Supported repairs:")
     expect(healthyResult.stdout).toContain("part_legacy_id_prefix")
     expect(healthyResult.stdout).toContain("No changes were made.")
@@ -44,6 +45,7 @@ describe("opencode db CLI doctor and repair", () => {
     const dryRunJson = await capture(() => runRepairCommand(fixture.dbPath, { dryRun: true, apply: false, json: true }))
 
     expect(dryRun.exitCode).toBe(1)
+    expect(dryRun.stdout).toContain("Target OpenCode:")
     expect(dryRun.stdout).toContain("No changes were made.")
     expect(dryRun.stdout).toContain("Supported repairs:")
     expect(dryRun.stdout).toContain("repair_assistant_agent_msg")
