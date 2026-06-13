@@ -12,6 +12,7 @@ const keys = new Set([
   "logLevel",
   "server",
   "command",
+  "reference",
   "snapshot",
   "plugin",
   "autoshare",
@@ -62,7 +63,7 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
     skills: info.skills && [...(info.skills.paths ?? []), ...(info.skills.urls ?? [])],
     commands: info.command,
     instructions: info.instructions,
-    references: info.references,
+    references: info.references ?? info.reference,
     plugins: info.plugin?.map((plugin) =>
       typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] },
     ),
@@ -138,7 +139,14 @@ function mcp(info: typeof ConfigV1.Info.Type) {
 function migrateMcp(info: ConfigMCPV1.Info) {
   const disabled = info.enabled === undefined ? undefined : !info.enabled
   if (info.type === "local")
-    return { type: info.type, command: info.command, environment: info.environment, disabled, timeout: info.timeout }
+    return {
+      type: info.type,
+      command: info.command,
+      cwd: info.cwd,
+      environment: info.environment,
+      disabled,
+      timeout: info.timeout,
+    }
   return {
     type: info.type,
     url: info.url,

@@ -3,6 +3,8 @@ import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Integration } from "@opencode-ai/core/integration"
+import { Credential } from "@opencode-ai/core/credential"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -46,8 +48,24 @@ export const catalogLayer = Layer.succeed(
   }),
 )
 
+const integrations = Integration.locationLayer.pipe(
+  Layer.provide(EventV2.defaultLayer),
+  Layer.provide(
+    Layer.mock(Credential.Service)({
+      create: () => Effect.die("unexpected credential creation"),
+      list: () => Effect.succeed([]),
+    }),
+  ),
+)
+
 export const it = testEffect(
   Catalog.locationLayer.pipe(
+    Layer.provideMerge(integrations),
+    Layer.provideMerge(
+      Layer.mock(Credential.Service)({
+        all: () => Effect.succeed([]),
+      }),
+    ),
     Layer.provideMerge(EventV2.defaultLayer),
     Layer.provideMerge(locationLayer),
     Layer.provideMerge(npmLayer),

@@ -51,18 +51,17 @@ Nur ein Mitglied pro Workspace kann OpenCode Go abonnieren.
 
 Die aktuelle Liste der Modelle umfasst:
 
-- **GLM-5**
 - **GLM-5.1**
-- **Kimi K2.5**
+- **GLM-5**
+- **Kimi K2.7 Code**
 - **Kimi K2.6**
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
-- **MiniMax M2.5**
-- **MiniMax M2.7**
 - **MiniMax M3**
-- **Qwen3.6 Plus**
-- **Qwen3.7 Plus**
+- **MiniMax M2.7**
 - **Qwen3.7 Max**
+- **Qwen3.7 Plus**
+- **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 
@@ -86,13 +85,12 @@ Die folgende Tabelle zeigt eine geschätzte Anzahl von Anfragen basierend auf ty
 | ----------------- | ---------------------- | ------------------ | ------------------ |
 | GLM-5.1           | 880                    | 2,150              | 4,300              |
 | GLM-5             | 1,150                  | 2,880              | 5,750              |
-| Kimi K2.5         | 1,850                  | 4,630              | 9,250              |
 | Kimi K2.6         | 1,150                  | 2,880              | 5,750              |
+| Kimi K2.7 Code    | 1,350                  | 4,630              | 9,250              |
 | MiMo-V2.5         | 30,100                 | 75,200             | 150,400            |
 | MiMo-V2.5-Pro     | 3,250                  | 8,150              | 16,300             |
 | MiniMax M3        | 3,200                  | 8,000              | 16,000             |
 | MiniMax M2.7      | 3,400                  | 8,500              | 17,000             |
-| MiniMax M2.5      | 6,300                  | 15,900             | 31,800             |
 | Qwen3.7 Max       | 950                    | 2,390              | 4,770              |
 | Qwen3.7 Plus      | 4,300                  | 10,800             | 21,600             |
 | Qwen3.6 Plus      | 3,300                  | 8,200              | 16,300             |
@@ -102,11 +100,11 @@ Die folgende Tabelle zeigt eine geschätzte Anzahl von Anfragen basierend auf ty
 Die Schätzungen basieren auf beobachteten durchschnittlichen Anfragemustern:
 
 - GLM-5/5.1 — 700 Input-, 52.000 Cached-, 150 Output-Tokens pro Anfrage
-- Kimi K2.5/K2.6 — 870 Input-, 55.000 Cached-, 200 Output-Tokens pro Anfrage
+- Kimi K2.7/K2.6 — 870 Input-, 55.000 Cached-, 200 Output-Tokens pro Anfrage
 - DeepSeek V4 Pro — 750 Input-, 82.000 Cached-, 290 Output-Tokens pro Anfrage
 - DeepSeek V4 Flash — 790 Input-, 68.000 Cached-, 280 Output-Tokens pro Anfrage
 - MiniMax M3 — 510 Input-, 56.000 Cached-, 190 Output-Tokens pro Anfrage
-- MiniMax M2.7/M2.5 — 300 Input-, 55.000 Cached-, 125 Output-Tokens pro Anfrage
+- MiniMax M2.7 — 300 Input-, 55.000 Cached-, 125 Output-Tokens pro Anfrage
 - Qwen3.7 Max — 420 Input-, 66.000 Cached-, 200 Output-Tokens pro Anfrage
 - Qwen3.7 Plus — 500 Input-, 57.000 Cached-, 190 Output-Tokens pro Anfrage
 - Qwen3.6 Plus — 500 Input-, 57.000 Cached-, 190 Output-Tokens pro Anfrage
@@ -119,8 +117,8 @@ Die Schätzungen basieren außerdem auf den folgenden Preisen pro 1M Tokens:
 | ---------------------------- | ----- | ------ | ----------- | ------------ |
 | GLM-5.1                      | $1.40 | $4.40  | $0.26       | -            |
 | GLM-5                        | $1.00 | $3.20  | $0.20       | -            |
+| Kimi K2.7 Code               | $0.95 | $4.00  | $0.19       | -            |
 | Kimi K2.6                    | $0.95 | $4.00  | $0.16       | -            |
-| Kimi K2.5                    | $0.60 | $3.00  | $0.10       | -            |
 | MiMo V2.5                    | $0.14 | $0.28  | $0.0028     | -            |
 | MiMo V2.5 Pro                | $1.74 | $3.48  | $0.0145     | -            |
 | MiniMax M3                   | $0.30 | $1.20  | $0.06       | -            |
@@ -158,7 +156,7 @@ Du kannst auf die Go-Modelle auch über die folgenden API-Endpunkte zugreifen.
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5             | glm-5             | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.5         | kimi-k2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.7         | kimi-k2.7         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.6         | kimi-k2.6         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -171,7 +169,7 @@ Du kannst auf die Go-Modelle auch über die folgenden API-Endpunkte zugreifen.
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
-Die [Modell-ID](/docs/config/#models) in deiner OpenCode Config verwendet das Format `opencode-go/<model-id>`. Für Kimi K2.6 würdest du beispielsweise `opencode-go/kimi-k2.6` in deiner Config verwenden.
+Die [Modell-ID](/docs/config/#models) in deiner OpenCode Config verwendet das Format `opencode-go/<model-id>`. Für Kimi K2.7 Code würdest du beispielsweise `opencode-go/kimi-k2.7-code` in deiner Config verwenden.
 
 ---
 
