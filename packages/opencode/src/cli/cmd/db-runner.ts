@@ -35,6 +35,9 @@ function printDoctorReport(report: Awaited<ReturnType<typeof generateDoctorRepor
   console.log(`Sessions: ${report.sessionCount ?? 0}`)
   console.log(`Messages: ${report.messageCount ?? 0}`)
   console.log("")
+  console.log("Supported repairs:")
+  report.supportedRepairs.forEach((repair) => console.log(`- ${repair.code}: ${repair.repair}`))
+  console.log("")
   if (report.issues.length === 0) console.log("Issues: None")
   report.issues.forEach((issue) => {
     console.log(`- [${issue.severity}] ${issue.code}: ${issue.reason}`)
@@ -52,6 +55,9 @@ function printRepairPlan(plan: RepairPlan) {
   console.log("============================")
   console.log(`Database: ${plan.dbPath}`)
   console.log(`Mode: ${plan.mode}`)
+  console.log("")
+  console.log("Supported repairs:")
+  plan.supportedRepairs.forEach((repair) => console.log(`- ${repair.code}: ${repair.repair}`))
   console.log("")
   if (plan.operations.length === 0) console.log("Repair plan: No repairs needed")
   plan.operations.forEach((operation) => {

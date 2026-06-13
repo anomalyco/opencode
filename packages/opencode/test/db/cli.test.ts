@@ -17,6 +17,8 @@ describe("opencode db CLI doctor and repair", () => {
     healthy.db.close()
     const healthyResult = await capture(() => runDoctorCommand(healthy.dbPath, { json: false }))
     expect(healthyResult.exitCode).toBe(0)
+    expect(healthyResult.stdout).toContain("Supported repairs:")
+    expect(healthyResult.stdout).toContain("part_legacy_id_prefix")
     expect(healthyResult.stdout).toContain("No changes were made.")
 
     const broken = createFixture("broken")
@@ -24,6 +26,7 @@ describe("opencode db CLI doctor and repair", () => {
     const brokenJson = await capture(() => runDoctorCommand(broken.dbPath, { json: true }))
     expect(brokenJson.exitCode).toBe(1)
     expect(JSON.parse(brokenJson.stdout).issues.some((issue: { code: string }) => issue.code === "assistant_message_missing_agent")).toBe(true)
+    expect(JSON.parse(brokenJson.stdout).supportedRepairs.some((repair: { code: string }) => repair.code === "part_legacy_id_prefix")).toBe(true)
 
     const missing = join(tempDir(), "missing.db")
     const missingResult = await capture(() => runDoctorCommand(missing, { json: true }))
@@ -42,8 +45,10 @@ describe("opencode db CLI doctor and repair", () => {
 
     expect(dryRun.exitCode).toBe(1)
     expect(dryRun.stdout).toContain("No changes were made.")
+    expect(dryRun.stdout).toContain("Supported repairs:")
     expect(dryRun.stdout).toContain("repair_assistant_agent_msg")
     expect(JSON.parse(dryRunJson.stdout).operations[0].issueCode).toBe("assistant_message_missing_agent")
+    expect(JSON.parse(dryRunJson.stdout).supportedRepairs.some((repair: { code: string }) => repair.code === "part_legacy_id_prefix")).toBe(true)
     expect(statSync(fixture.dbPath).mtimeMs).toBe(before)
     expect(await hasBackup(fixture.dbPath)).toBe(false)
 

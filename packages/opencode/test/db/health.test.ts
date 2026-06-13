@@ -3,7 +3,7 @@ import { Database as BunDatabase } from "bun:sqlite"
 import { mkdtempSync, rmSync, mkdirSync, existsSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import { generateDoctorReport, generateRepairPlan } from "@opencode-ai/core/database/health"
+import { SUPPORTED_REPAIRS, generateDoctorReport, generateRepairPlan } from "@opencode-ai/core/database/health"
 import { applyRepairPlan } from "@opencode-ai/core/database/repair"
 
 const cleanup: string[] = []
@@ -13,6 +13,16 @@ afterEach(() => {
 })
 
 describe("database doctor and repair", () => {
+  test("documents the supported repair catalog", () => {
+    expect(SUPPORTED_REPAIRS.map((repair) => repair.code).sort()).toEqual([
+      "assistant_message_missing_agent",
+      "part_legacy_id_prefix",
+      "session_agent_missing",
+      "session_model_missing",
+      "session_path_missing",
+    ])
+  })
+
   test("reports a missing database without creating it", async () => {
     const dir = tempDir()
     const dbPath = join(dir, "missing.db")
@@ -21,7 +31,9 @@ describe("database doctor and repair", () => {
     const plan = await generateRepairPlan(dbPath)
 
     expect(report.exitCode).toBe(2)
+    expect(report.supportedRepairs.some((repair) => repair.code === "part_legacy_id_prefix")).toBe(true)
     expect(plan.exitCode).toBe(2)
+    expect(plan.supportedRepairs.some((repair) => repair.code === "part_legacy_id_prefix")).toBe(true)
     expect(existsSync(dbPath)).toBe(false)
   })
 

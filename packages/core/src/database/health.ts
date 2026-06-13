@@ -5,6 +5,58 @@ export type RepairMode = "safe"
 export type IssueSeverity = "info" | "warning" | "error"
 export type Confidence = "low" | "medium" | "high"
 
+export interface SupportedRepair {
+  code: string
+  table: "session" | "session_message" | "part"
+  repairable: boolean
+  description: string
+  repair: string
+  safety: string
+}
+
+export const SUPPORTED_REPAIRS = [
+  {
+    code: "part_legacy_id_prefix",
+    table: "part",
+    repairable: true,
+    description: "Legacy message part rows use part_ IDs, while current schemas validate message part IDs with the prt_ prefix.",
+    repair: "Rename part.id from part_<suffix> to prt_<suffix> when the target id does not already exist.",
+    safety: "Primary-key update only; message/session foreign key columns and part data are unchanged; apply rechecks the source row and target-id absence.",
+  },
+  {
+    code: "assistant_message_missing_agent",
+    table: "session_message",
+    repairable: true,
+    description: "Legacy assistant session_message.data rows may have mode but no agent.",
+    repair: "Copy data.mode to data.agent when mode is a single non-empty string and agent is missing.",
+    safety: "JSON update only; apply rechecks the original JSON payload and mode before writing.",
+  },
+  {
+    code: "session_agent_missing",
+    table: "session",
+    repairable: true,
+    description: "Legacy session rows may miss the denormalized session.agent field required by current callers.",
+    repair: "Set session.agent only when one unambiguous value can be derived from assistant or agent-switched messages.",
+    safety: "Skipped when no single value is derivable; apply rederives the value before writing.",
+  },
+  {
+    code: "session_model_missing",
+    table: "session",
+    repairable: true,
+    description: "Legacy session rows may miss the denormalized session.model field required by current callers.",
+    repair: "Set session.model only when one unambiguous model object can be derived from assistant or model-switched messages.",
+    safety: "Skipped when no single value is derivable; apply rederives the value before writing.",
+  },
+  {
+    code: "session_path_missing",
+    table: "session",
+    repairable: true,
+    description: "Legacy session rows may miss session.path after the current schema expects it.",
+    repair: "Set session.path from the same row's session.directory when directory is non-empty.",
+    safety: "Does not rewrite directory/worktree semantics; apply rechecks the original empty path and derived directory value.",
+  },
+] satisfies SupportedRepair[]
+
 export interface Issue {
   code: string
   severity: IssueSeverity
@@ -25,6 +77,7 @@ export interface DoctorReport {
   dbPath: string
   checkedAt: string
   schemaSupported: boolean
+  supportedRepairs: SupportedRepair[]
   sessionCount?: number
   messageCount?: number
   issues: Issue[]
@@ -50,6 +103,7 @@ export interface RepairPlan {
   dbPath: string
   generatedAt: string
   mode: RepairMode
+  supportedRepairs: SupportedRepair[]
   operations: RepairOperation[]
   warnings: string[]
   exitCode: 0 | 1 | 2
@@ -123,6 +177,7 @@ export async function generateRepairPlan(dbPath: string, mode: RepairMode = "saf
           dbPath,
           generatedAt: new Date().toISOString(),
           mode,
+          supportedRepairs: SUPPORTED_REPAIRS,
           operations: [],
           warnings: schema.issues.map((issue) => issue.reason),
           exitCode: 2 as const,
@@ -138,6 +193,7 @@ export async function generateRepairPlan(dbPath: string, mode: RepairMode = "saf
         dbPath,
         generatedAt: new Date().toISOString(),
         mode,
+        supportedRepairs: SUPPORTED_REPAIRS,
         operations,
         warnings: operations.flatMap((operation) => (operation.warning ? [operation.warning] : [])),
         exitCode: operations.length > 0 ? 1 : 0,
@@ -227,6 +283,7 @@ function buildReport(dbPath: string, schema: SchemaStatus, sessionCount: number,
     dbPath,
     checkedAt: new Date().toISOString(),
     schemaSupported: schema.supported,
+    supportedRepairs: SUPPORTED_REPAIRS,
     sessionCount,
     messageCount,
     issues,
@@ -239,6 +296,7 @@ function unreadableDoctorReport(dbPath: string, code: string, reason: string) {
     dbPath,
     checkedAt: new Date().toISOString(),
     schemaSupported: false,
+    supportedRepairs: SUPPORTED_REPAIRS,
     issues: [
       {
         code,
@@ -256,6 +314,7 @@ function unreadableRepairPlan(dbPath: string, mode: RepairMode, reason: string) 
     dbPath,
     generatedAt: new Date().toISOString(),
     mode,
+    supportedRepairs: SUPPORTED_REPAIRS,
     operations: [],
     warnings: [reason],
     exitCode: 2 as const,
