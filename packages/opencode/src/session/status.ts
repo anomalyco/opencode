@@ -56,32 +56,49 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionStatus") {}
 
+const globalState = new Map<string, Map<SessionID, Info>>()
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
 
-    const state = yield* InstanceState.make(
-      Effect.fn("SessionStatus.state")(() => Effect.succeed(new Map<SessionID, Info>())),
-    )
+    const readState = Effect.fn("SessionStatus.readState")(function* () {
+      const directory = yield* InstanceState.directory
+      return { directory, data: globalState.get(directory) }
+    })
+
+    const ensureState = Effect.fn("SessionStatus.ensureState")(function* () {
+      const directory = yield* InstanceState.directory
+      let data = globalState.get(directory)
+      if (!data) {
+        data = new Map<SessionID, Info>()
+        globalState.set(directory, data)
+      }
+      return { directory, data }
+    })
 
     const get = Effect.fn("SessionStatus.get")(function* (sessionID: SessionID) {
-      const data = yield* InstanceState.get(state)
-      return data.get(sessionID) ?? { type: "idle" as const }
+      const { data } = yield* readState()
+      return data?.get(sessionID) ?? { type: "idle" as const }
     })
 
     const list = Effect.fn("SessionStatus.list")(function* () {
-      return new Map(yield* InstanceState.get(state))
+      const { data } = yield* readState()
+      return new Map(data ?? [])
     })
 
     const set = Effect.fn("SessionStatus.set")(function* (sessionID: SessionID, status: Info) {
-      const data = yield* InstanceState.get(state)
       yield* bus.publish(Event.Status, { sessionID, status })
       if (status.type === "idle") {
+        const { directory, data } = yield* readState()
         yield* bus.publish(Event.Idle, { sessionID })
+        if (!data) return
         data.delete(sessionID)
+        if (data.size === 0) globalState.delete(directory)
         return
       }
+      const { data } = yield* ensureState()
       data.set(sessionID, status)
     })
 
