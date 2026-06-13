@@ -255,7 +255,7 @@ export function Session() {
   const [timestamps, setTimestamps] = kv.signal<"hide" | "show">("timestamps", "hide")
   const [showDetails, setShowDetails] = kv.signal("tool_details_visibility", true)
   const [showAssistantMetadata, _setShowAssistantMetadata] = kv.signal("assistant_metadata_visibility", true)
-  const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", false)
+  const [showScrollbar, setShowScrollbar] = kv.signal("scrollbar_visible", true)
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
@@ -1175,8 +1175,8 @@ export function Session() {
                   paddingLeft: 1,
                   visible: showScrollbar(),
                   trackOptions: {
-                    backgroundColor: theme.backgroundElement,
-                    foregroundColor: theme.border,
+                    backgroundColor: theme.backgroundPanel,
+                    foregroundColor: theme.textMuted,
                   },
                 }}
                 stickyScroll={true}
