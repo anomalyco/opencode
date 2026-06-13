@@ -1,5 +1,8 @@
 export * as DatabaseDialect from "./dialect"
 
+import * as sqliteMod from "./dialect.sqlite"
+import * as pgMod from "./dialect.pg"
+
 export type Dialect = "sqlite" | "postgres"
 
 const POSTGRES_PREFIXES = ["postgres://", "postgresql://"]
@@ -31,4 +34,28 @@ export function sqlitePath(): string | undefined {
   if (!url) return process.env.OPENCODE_DB
   if (detectFromUrl(url) === "sqlite") return url
   return process.env.OPENCODE_DB
+}
+
+const mod = isPostgres() ? pgMod : sqliteMod
+
+type Mod = typeof sqliteMod
+const typed = mod as unknown as Mod
+
+export const table = typed.table
+export const text = typed.text
+export const integer = typed.integer
+export const real = typed.real
+export const primaryKey = typed.primaryKey
+export const index = typed.index
+export const uniqueIndex = typed.uniqueIndex
+export const foreignKey = typed.foreignKey
+export const customType = typed.customType
+
+export const Timestamps = {
+  time_created: integer()
+    .notNull()
+    .$default(() => Date.now()),
+  time_updated: integer()
+    .notNull()
+    .$onUpdate(() => Date.now()),
 }

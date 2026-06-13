@@ -1,0 +1,67 @@
+{
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.4",
+  "version": 1,
+  "components": [
+    {
+      "type": "library",
+      "name": "@aws-sdk/client-s3",
+      "version": "3.933.0",
+      "bomRef": "pkg:npm/@aws-sdk/client-s3@3.933.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/client-s3/-/client-s3-3.933.0.tgz"
+        }
+      ],
+      "repository": {
+        "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+      }
+    },
+    {
+      "type": "library",
+      "name": "@libsql/client",
+      "version": "0.17.3",
+      "bomRef": "pkg:npm/@libsql/client@0.17.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@libsql/client/-/client-0.17.3.tgz"
+        }
+      ],
+      "repository": {
+        "url": "git+https://github.com/tursodatabase/libsql-client-ts.git"
+      }
+    },
+    {
+      "type": "library",
+      "name": "heap-snapshot-toolkit",
+      "version": "1.1.3",
+      "bomRef": "pkg:npm/heap-snapshot-toolkit@1.1.3",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/heap-snapshot-toolkit/-/heap-snapshot-toolkit-1.1.3.tgz"
+        }
+      ],
+      "repository": {
+        "url": "git+https://github.com/nolanlawson/heap-snapshot-toolkit.git"
+      }
+    },
+    {
+      "type": "library",
+      "name": "pg",
+      "version": "8.21.0",
+      "bomRef": "pkg:npm/pg@8.21.0",
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/pg/-/pg-8.21.0.tgz"
+        }
+      ],
+      "repository": {
+        "url": "git://github.com/brianc/node-postgres.git"
+      }
+    }
+  ]
+}

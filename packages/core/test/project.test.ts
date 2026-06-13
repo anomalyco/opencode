@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { $ } from "bun"
+import fs from "fs"
 import path from "path"
 import { Effect, Layer, Schema } from "effect"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -7,6 +8,7 @@ import { Git } from "@opencode-ai/core/git"
 import { Database } from "@opencode-ai/core/database/database"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectTable, ProjectDirectoryTable } from "@opencode-ai/core/project/sql"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -33,7 +35,7 @@ function abs(value: string) {
 }
 
 function real(value: string) {
-  return Effect.promise(() => fs.realpath(value)).pipe(Effect.map((value) => AbsolutePath.make(value)))
+  return Effect.promise(() => fs.promises.realpath(value)).pipe(Effect.map((resolved) => AbsolutePath.make(resolved)))
 }
 
 async function initRepo(dir: string, opts?: { commit?: boolean; remote?: string }) {
@@ -163,9 +165,12 @@ describe("ProjectV2.DirectoriesInput", () => {
 })
 
 describe("ProjectV2.Directories", () => {
-  it.effect("decodes an array of absolute path strings", () =>
+  it.effect("decodes an array of directory objects", () =>
     Effect.gen(function* () {
-      const result = Schema.decodeUnknownSync(ProjectV2.Directories)(["/a/b", "/c/d"])
+      const result = Schema.decodeUnknownSync(ProjectV2.Directories)([
+        { directory: AbsolutePath.make("/a/b"), type: "main" },
+        { directory: AbsolutePath.make("/c/d"), type: "root" },
+      ])
       expect(result).toHaveLength(2)
     }),
   )
@@ -345,7 +350,7 @@ function withRepo<A, E, R>(
     Effect.promise(async () => {
       const tmp = await tmpdir()
       const repoPath = tmp.path
-      await initRepo(repoPath)
+      await initRepo(repoPath, { remote: "git@github.com:test/test.git" })
       const storePath = path.join(repoPath, ".git")
       return { tmp, repoPath, storePath }
     }),
