@@ -10,5 +10,72 @@
     "name": "Local",
     "env": [],
     "models": {}
+  },
+  "zai-coding-plan": {
+    "id": "zai-coding-plan",
+    "name": "Z.AI Coding Plan",
+    "env": [],
+    "npm": "@ai-sdk/openai-compatible",
+    "api": "https://api.z.ai/api/coding/paas/v4",
+    "models": {
+      "glm-5.2": {
+        "id": "glm-5.2",
+        "name": "GLM-5.2",
+        "family": "glm",
+        "release_date": "2026-06-13",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": ["high", "max"]
+          }
+        ],
+        "temperature": true,
+        "tool_call": true,
+        "limit": {
+          "context": 1000000,
+          "output": 131072
+        },
+        "modalities": {
+          "input": ["text"],
+          "output": ["text"]
+        }
+      },
+      "mode-priority": {
+        "id": "mode-priority",
+        "name": "Mode Priority",
+        "family": "glm",
+        "release_date": "2026-06-13",
+        "attachment": false,
+        "reasoning": true,
+        "reasoning_options": [
+          {
+            "type": "effort",
+            "values": ["high", "max"]
+          }
+        ],
+        "temperature": true,
+        "tool_call": true,
+        "experimental": {
+          "modes": {
+            "custom": {
+              "provider": {
+                "body": {
+                  "reasoningEffort": "high"
+                },
+                "headers": {
+                  "x-model-mode": "custom"
+                }
+              }
+            }
+          }
+        },
+        "limit": {
+          "context": 1000000,
+          "output": 131072
+        }
+      }
+    }
   }
 }

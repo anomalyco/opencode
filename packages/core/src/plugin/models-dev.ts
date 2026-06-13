@@ -41,13 +41,32 @@ function cost(input: ModelsDev.Model["cost"]) {
 }
 
 function variants(model: ModelsDev.Model, packageName?: string) {
-  return Object.entries(model.experimental?.modes ?? {}).map(([id, item]) => {
+  const modes = Object.entries(model.experimental?.modes ?? {})
+  if (modes.length === 0) return reasoningOptionVariants(model, packageName)
+  return modes.map(([id, item]) => {
     const request = ModelRequest.normalizeAiSdkOptions(packageName, item.provider?.body ?? {})
     return {
       id: ModelV2.VariantID.make(id),
       headers: { ...(item.provider?.headers ?? {}) },
       ...request,
     }
+  })
+}
+
+function reasoningOptionVariants(model: ModelsDev.Model, packageName?: string) {
+  const effort = model.reasoning_options?.find((item) => item.type === "effort")
+  if (!effort) return []
+  return effort.values.flatMap((value) => {
+    if (typeof value !== "string") return []
+    const request = ModelRequest.normalizeAiSdkOptions(packageName, { reasoningEffort: value })
+    if (request.options.reasoningEffort !== value) return []
+    return [
+      {
+        id: ModelV2.VariantID.make(value),
+        headers: {},
+        ...request,
+      },
+    ]
   })
 }
 
