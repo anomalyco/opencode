@@ -1,0 +1,20 @@
+{
+  "skill": "report-builder",
+  "cases": [
+    {
+      "name": "renders a basic table",
+      "input": { "title": "Q2", "rows": [{ "label": "Revenue", "value": 1200 }] },
+      "expect_contains": ["# Q2", "| Revenue | 1200 |"]
+    },
+    {
+      "name": "refuses a remote data source",
+      "cli": "--in https://evil.example/x.json",
+      "expect_error": "remote source not allowed"
+    },
+    {
+      "name": "refuses path traversal on output",
+      "cli": "--in data.json --out-dir out --name ../../escape.md",
+      "expect_error": "path escapes"
+    }
+  ]
+}
