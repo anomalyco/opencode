@@ -91,7 +91,7 @@ function printApplyResult(plan: RepairPlan, result: ApplyResult) {
   if (result.backup.path) console.log(`Backup created: ${result.backup.path}`)
   if (!result.success) {
     console.log(`Repair failed: ${result.error}`)
-    console.log("No changes were applied. Database transaction was rolled back.")
+    console.log(result.operationsApplied === 0 ? "No changes were applied. Database transaction was rolled back." : "Repairs were committed, but the post-check found remaining database errors. Review the backup before continuing.")
     console.log("Exit code: 2")
     return
   }

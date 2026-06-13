@@ -229,6 +229,7 @@ export interface RepairPlan {
   supportedRepairs: SupportedRepair[]
   operations: RepairOperation[]
   warnings: string[]
+  unrepairableErrors: string[]
   exitCode: 0 | 1 | 2
 }
 
@@ -315,6 +316,7 @@ export async function generateRepairPlan(dbPath: string, mode: RepairMode = "saf
           supportedRepairs: SUPPORTED_REPAIRS,
           operations: [],
           warnings: schema.issues.map((issue) => issue.reason),
+          unrepairableErrors: schema.issues.filter((issue) => issue.severity === "error").map((issue) => issue.reason),
           exitCode: 2 as const,
         } satisfies RepairPlan
       }
@@ -325,6 +327,7 @@ export async function generateRepairPlan(dbPath: string, mode: RepairMode = "saf
       const parts = analyzeParts(db, schema.columns.part)
       const issues = [...sessions.issues, ...sessionMessages.issues, ...messages.issues, ...parts.issues]
       const operations = issues.flatMap((issue) => operationForIssue(db, issue))
+      const unrepairableErrors = issues.filter((issue) => issue.severity === "error" && !issue.repairable).map((issue) => issue.reason)
       return {
         dbPath,
         generatedAt: new Date().toISOString(),
@@ -332,8 +335,12 @@ export async function generateRepairPlan(dbPath: string, mode: RepairMode = "saf
         compatibility: readCompatibility(db),
         supportedRepairs: SUPPORTED_REPAIRS,
         operations,
-        warnings: operations.flatMap((operation) => (operation.warning ? [operation.warning] : [])),
-        exitCode: operations.length > 0 ? 1 : 0,
+        unrepairableErrors,
+        warnings: [
+          ...issues.filter((issue) => !issue.repairable).map((issue) => issue.reason),
+          ...operations.flatMap((operation) => (operation.warning ? [operation.warning] : [])),
+        ],
+        exitCode: operations.length > 0 || issues.some((issue) => issue.severity === "error") ? 1 : 0,
       } satisfies RepairPlan
     })
   } catch (error) {
@@ -412,7 +419,7 @@ export function analyzeMessages(db: BunDatabase, columns?: Set<string>): { count
     count,
     issues: db
       .query(
-        "SELECT id, session_id, time_created, data FROM message WHERE (json_extract(data, '$.role') = 'assistant' AND json_extract(data, '$.parentID') IS NULL) OR (json_extract(data, '$.role') = 'user' AND (json_extract(data, '$.agent') IS NULL OR json_extract(data, '$.model') IS NULL))",
+        "SELECT id, session_id, time_created, data FROM message WHERE CASE WHEN json_valid(data) = 0 THEN 1 WHEN json_type(data) != 'object' THEN 1 ELSE ((json_extract(data, '$.role') = 'assistant' AND json_extract(data, '$.parentID') IS NULL) OR (json_extract(data, '$.role') = 'user' AND (json_extract(data, '$.agent') IS NULL OR json_extract(data, '$.model') IS NULL))) END",
       )
       .all()
       .flatMap((row) => messageIssues(db, row as MessageRow)),
@@ -428,7 +435,7 @@ export function analyzeParts(db: BunDatabase, columns?: Set<string>): { count: n
     count,
     issues: db
       .query(
-        "SELECT id, message_id, session_id, time_created, data FROM part WHERE id LIKE 'part\\_%' ESCAPE '\\' OR (json_extract(data, '$.type') = 'step-finish' AND json_extract(data, '$.reason') IS NULL) OR (json_extract(data, '$.type') = 'compaction' AND json_extract(data, '$.auto') IS NULL) OR (json_extract(data, '$.type') = 'tool' AND json_extract(data, '$.state.status') = 'completed' AND (json_extract(data, '$.state.metadata') IS NULL OR json_extract(data, '$.state.title') IS NULL OR json_extract(data, '$.state.time.start') IS NULL OR json_extract(data, '$.state.time.end') IS NULL))",
+        "SELECT id, message_id, session_id, time_created, data FROM part WHERE id LIKE 'part\\_%' ESCAPE '\\' OR CASE WHEN json_valid(data) = 0 THEN 1 WHEN json_type(data) != 'object' THEN 1 ELSE ((json_extract(data, '$.type') = 'step-finish' AND json_extract(data, '$.reason') IS NULL) OR (json_extract(data, '$.type') = 'compaction' AND json_extract(data, '$.auto') IS NULL) OR (json_extract(data, '$.type') = 'tool' AND json_extract(data, '$.state.status') = 'completed' AND (json_extract(data, '$.state.metadata') IS NULL OR json_extract(data, '$.state.title') IS NULL OR json_extract(data, '$.state.time.start') IS NULL OR json_extract(data, '$.state.time.end') IS NULL))) END",
       )
       .all()
       .flatMap((row) => partIssues(db, row as PartRow)),
@@ -477,6 +484,7 @@ function unreadableRepairPlan(dbPath: string, mode: RepairMode, reason: string) 
     supportedRepairs: SUPPORTED_REPAIRS,
     operations: [],
     warnings: [reason],
+    unrepairableErrors: [reason],
     exitCode: 2 as const,
   } satisfies RepairPlan
 }
@@ -640,7 +648,15 @@ function partDataIssues(row: PartRow): Issue[] {
     ...(data.state.title === undefined && nonEmptyString(data.tool) ? [jsonFieldIssue(row, "part_tool_completed_missing_title", "state.title", data.tool, "set_tool_state_title")] : []),
     ...(isRecord(data.state.time) && data.state.time.start !== undefined && data.state.time.end !== undefined
       ? []
-      : [jsonFieldIssue(row, "part_tool_completed_missing_time", "state.time", { start: row.time_created ?? 0, end: row.time_created ?? 0 }, "set_tool_state_time")]),
+      : [
+          jsonFieldIssue(
+            row,
+            "part_tool_completed_missing_time",
+            "state.time",
+            { start: isRecord(data.state.time) && data.state.time.start !== undefined ? data.state.time.start : (row.time_created ?? 0), end: isRecord(data.state.time) && data.state.time.end !== undefined ? data.state.time.end : (row.time_created ?? 0) },
+            "set_tool_state_time",
+          ),
+        ]),
   ]
 }
 
@@ -763,7 +779,7 @@ function deriveMessageAgent(db: BunDatabase, sessionID: string) {
   if (nonEmptyString(sessionAgent)) return sessionAgent
   return singleValue(
     db
-      .query("SELECT data FROM message WHERE session_id = ? AND json_extract(data, '$.role') = 'assistant'")
+      .query("SELECT data FROM message WHERE session_id = ? AND json_valid(data) = 1 AND json_extract(data, '$.role') = 'assistant'")
       .all(sessionID)
       .map((row) => parseObject((row as { data: string }).data)?.agent)
       .filter(nonEmptyString),
@@ -774,7 +790,7 @@ function deriveMessageModel(db: BunDatabase, sessionID: string) {
   const unique = [
     ...new Set(
       db
-        .query("SELECT data FROM message WHERE session_id = ? AND json_extract(data, '$.role') = 'assistant'")
+        .query("SELECT data FROM message WHERE session_id = ? AND json_valid(data) = 1 AND json_extract(data, '$.role') = 'assistant'")
         .all(sessionID)
         .map((row) => {
           const data = parseObject((row as { data: string }).data)

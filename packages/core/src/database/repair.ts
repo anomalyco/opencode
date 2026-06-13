@@ -41,7 +41,12 @@ export async function applyRepairPlan(plan: RepairPlan) {
     return failedResult(plan.dbPath, "Cannot apply repairs to an unsupported or unreadable database")
   }
 
+  if (plan.unrepairableErrors.length > 0) {
+    return failedResult(plan.dbPath, "Repair plan has database errors with no safe repair")
+  }
+
   if (plan.operations.length === 0) {
+    if (plan.exitCode !== 0) return failedResult(plan.dbPath, "Repair plan has database errors but no safe operations to apply")
     return {
       success: true,
       backup: { path: "", createdAt: "", originalPath: plan.dbPath },
@@ -85,12 +90,14 @@ export async function applyRepairPlan(plan: RepairPlan) {
     } satisfies ApplyResult
   }
 
+  const postCheckIssues = postCheck.issues.filter((issue) => issue.severity === "error").length
   return {
-    success: true,
+    success: postCheckIssues === 0,
     backup,
     operationsApplied: plan.operations.length,
-    operationsFailed: 0,
-    postCheckIssues: postCheck.issues.filter((issue) => issue.severity === "error").length,
+    operationsFailed: postCheckIssues === 0 ? 0 : 1,
+    postCheckIssues,
+    error: postCheckIssues === 0 ? undefined : "Post-check found remaining database errors after repair commit",
   } satisfies ApplyResult
 }
 
@@ -234,7 +241,7 @@ function deriveMessageRepairValue(db: BunDatabase, operation: RepairOperation) {
     if (nonEmptyString(sessionAgent)) return sessionAgent
     return singleValue(
       db
-        .query("SELECT data FROM message WHERE session_id = ? AND json_extract(data, '$.role') = 'assistant'")
+        .query("SELECT data FROM message WHERE session_id = ? AND json_valid(data) = 1 AND json_extract(data, '$.role') = 'assistant'")
         .all(row.session_id)
         .map((item) => parseObject((item as { data: string }).data)?.agent)
         .filter(nonEmptyString),
@@ -244,7 +251,7 @@ function deriveMessageRepairValue(db: BunDatabase, operation: RepairOperation) {
     const unique = [
       ...new Set(
         db
-          .query("SELECT data FROM message WHERE session_id = ? AND json_extract(data, '$.role') = 'assistant'")
+          .query("SELECT data FROM message WHERE session_id = ? AND json_valid(data) = 1 AND json_extract(data, '$.role') = 'assistant'")
           .all(row.session_id)
           .map((item) => {
             const data = parseObject((item as { data: string }).data)

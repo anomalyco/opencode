@@ -88,6 +88,50 @@ describe("database doctor and repair", () => {
     expect(plan.operations).toHaveLength(0)
   })
 
+  test("detects malformed message and part JSON without treating the database as unreadable", async () => {
+    const fixture = createFixture("malformed-v2")
+    fixture.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", fixture.worktree, "[]")
+    fixture.db
+      .query("INSERT INTO session (id, project_id, slug, directory, path, title, version, agent, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("ses", "proj", "slug", fixture.worktree, fixture.worktree, "title", "1", "build", JSON.stringify({ providerID: "p", modelID: "m" }))
+    fixture.db.query("INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)").run("msg", "ses", 1, 1, "{")
+    fixture.db.query("INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)").run("prt", "msg", "ses", 1, 1, "[]")
+    fixture.db.close()
+
+    const report = await generateDoctorReport(fixture.dbPath)
+    const plan = await generateRepairPlan(fixture.dbPath)
+
+    expect(report.exitCode).toBe(0)
+    expect(report.issues.some((issue) => issue.code === "message_malformed_json")).toBe(true)
+    expect(report.issues.some((issue) => issue.code === "part_malformed_json")).toBe(true)
+    expect(plan.exitCode).toBe(0)
+    expect(plan.operations).toHaveLength(0)
+    expect(plan.warnings).toContain("message.data contains malformed JSON")
+    expect(plan.warnings).toContain("part.data contains malformed JSON")
+  })
+
+  test("ignores malformed assistant messages while deriving user message repairs", async () => {
+    const fixture = createFixture("malformed-derive")
+    fixture.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", fixture.worktree, "[]")
+    fixture.db
+      .query("INSERT INTO session (id, project_id, slug, directory, path, title, version) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run("ses", "proj", "slug", fixture.worktree, fixture.worktree, "title", "1")
+    fixture.db.query("INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)").run("bad", "ses", 1, 1, "{")
+    fixture.db
+      .query("INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)")
+      .run("user", "ses", 2, 2, JSON.stringify({ role: "user", time: { created: 2 } }))
+    fixture.db.close()
+
+    const report = await generateDoctorReport(fixture.dbPath)
+    const plan = await generateRepairPlan(fixture.dbPath)
+
+    expect(report.exitCode).toBe(1)
+    expect(report.issues.some((issue) => issue.code === "message_malformed_json")).toBe(true)
+    expect(report.issues.some((issue) => issue.code === "message_user_missing_agent" && !issue.repairable)).toBe(true)
+    expect(plan.exitCode).toBe(1)
+    expect(plan.operations).toHaveLength(0)
+  })
+
   test("dry-run is read-only and plans assistant/session metadata repair", async () => {
     const fixture = createFixture("safe-plan")
     fixture.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", fixture.worktree, "[]")
@@ -145,8 +189,8 @@ describe("database doctor and repair", () => {
     const fixture = createFixture("part-prefix")
     fixture.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", fixture.worktree, "[]")
     fixture.db
-      .query("INSERT INTO session (id, project_id, slug, directory, path, title, version, agent, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
-      .run("ses", "proj", "slug", fixture.worktree, fixture.worktree, "title", "1", "build", JSON.stringify({ providerID: "p", modelID: "m" }))
+      .query("INSERT INTO session (id, project_id, slug, directory, title, version, agent, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("ses", "proj", "slug", fixture.worktree, "title", "1", "build", JSON.stringify({ providerID: "p", modelID: "m" }))
     fixture.db
       .query("INSERT INTO session_message (id, session_id, type, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)")
       .run("msg", "ses", "assistant", Date.now(), Date.now(), JSON.stringify({ agent: "build", model: { providerID: "p", modelID: "m" } }))
@@ -171,6 +215,37 @@ describe("database doctor and repair", () => {
     expect(second.operations).toHaveLength(0)
   })
 
+  test("reports non-repairable legacy part id collisions in repair dry-run", async () => {
+    const fixture = createFixture("part-prefix-collision")
+    fixture.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", fixture.worktree, "[]")
+    fixture.db
+      .query("INSERT INTO session (id, project_id, slug, directory, title, version, agent, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("ses", "proj", "slug", fixture.worktree, "title", "1", "build", JSON.stringify({ providerID: "p", modelID: "m" }))
+    fixture.db
+      .query("INSERT INTO session_message (id, session_id, type, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)")
+      .run("msg", "ses", "assistant", Date.now(), Date.now(), JSON.stringify({ agent: "build", model: { providerID: "p", modelID: "m" } }))
+    fixture.db
+      .query("INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)")
+      .run("part_same", "msg", "ses", 1, 1, JSON.stringify({ type: "text", text: "legacy" }))
+    fixture.db
+      .query("INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)")
+      .run("prt_same", "msg", "ses", 1, 1, JSON.stringify({ type: "text", text: "target" }))
+    fixture.db.close()
+
+    const report = await generateDoctorReport(fixture.dbPath)
+    const plan = await generateRepairPlan(fixture.dbPath)
+    const result = await applyRepairPlan(plan)
+
+    expect(report.exitCode).toBe(1)
+    expect(report.issues.some((issue) => issue.code === "part_legacy_id_prefix" && !issue.repairable)).toBe(true)
+    expect(plan.exitCode).toBe(1)
+    expect(plan.operations.map((operation) => operation.issueCode)).toEqual(["session_path_missing"])
+    expect(plan.unrepairableErrors).toContain("part.id uses the legacy part_ prefix, but the target prt_ id already exists")
+    expect(plan.warnings).toContain("part.id uses the legacy part_ prefix, but the target prt_ id already exists")
+    expect(result.success).toBe(false)
+    expect(result.backup.path).toBe("")
+  })
+
   test("repairs missing message and part fields required by current schemas", async () => {
     const fixture = createFixture("message-part-fields")
     fixture.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", fixture.worktree, "[]")
@@ -186,6 +261,9 @@ describe("database doctor and repair", () => {
     fixture.db
       .query("INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)")
       .run("prt_step", "msg_assistant", "ses", 3, 3, JSON.stringify({ type: "step-finish", cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } }))
+    fixture.db
+      .query("INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)")
+      .run("prt_tool", "msg_assistant", "ses", 5, 5, JSON.stringify({ type: "tool", tool: "bash", state: { status: "completed", time: { start: 4 } } }))
     fixture.db.close()
 
     const plan = await generateRepairPlan(fixture.dbPath)
@@ -194,6 +272,7 @@ describe("database doctor and repair", () => {
     const user = JSON.parse((db.query("SELECT data FROM message WHERE id = ?").get("msg_user") as { data: string }).data) as { agent: string; model: { providerID: string; modelID: string } }
     const assistant = JSON.parse((db.query("SELECT data FROM message WHERE id = ?").get("msg_assistant") as { data: string }).data) as { parentID: string }
     const part = JSON.parse((db.query("SELECT data FROM part WHERE id = ?").get("prt_step") as { data: string }).data) as { reason: string }
+    const tool = JSON.parse((db.query("SELECT data FROM part WHERE id = ?").get("prt_tool") as { data: string }).data) as { state: { metadata: Record<string, unknown>; title: string; time: { start: number; end: number } } }
     db.close()
 
     expect(plan.operations.map((operation) => operation.issueCode).sort()).toEqual([
@@ -201,12 +280,18 @@ describe("database doctor and repair", () => {
       "message_user_missing_agent",
       "message_user_missing_model",
       "part_step_finish_missing_reason",
+      "part_tool_completed_missing_metadata",
+      "part_tool_completed_missing_time",
+      "part_tool_completed_missing_title",
     ])
     expect(result.success).toBe(true)
     expect(user.agent).toBe("build")
     expect(user.model).toEqual({ providerID: "p", modelID: "m" })
     expect(assistant.parentID).toBe("msg_user")
     expect(part.reason).toBe("stop")
+    expect(tool.state.metadata).toEqual({})
+    expect(tool.state.title).toBe("bash")
+    expect(tool.state.time).toEqual({ start: 4, end: 5 })
     expect((await generateRepairPlan(fixture.dbPath)).operations).toHaveLength(0)
   })
 
