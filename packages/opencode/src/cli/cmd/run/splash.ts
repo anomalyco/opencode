@@ -194,7 +194,7 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
       })
     }
 
-    push(lines, body_left, top, "OpenCode", right, undefined, TextAttributes.BOLD)
+    push(lines, body_left, top, "Bitcost", right, undefined, TextAttributes.BOLD)
     if (input.detail) {
       push(
         lines,
@@ -234,7 +234,7 @@ function build(input: SplashWriterInput, kind: "entry" | "exit", ctx: Scrollback
       lines,
       body_left + label.length,
       top + 1,
-      `opencode run -i -s ${meta.session_id}`,
+      `bitcost run -i -s ${meta.session_id}`,
       right,
       undefined,
       TextAttributes.BOLD,

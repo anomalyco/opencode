@@ -1,0 +1,90 @@
+# POC release workflow for the Bitcost CLI.
+# Builds the CLI for the two targets we demo on and publishes them as GitHub
+# Release assets named exactly how the `install` script downloads them:
+#   bitcost-<os>-<arch>.tar.gz / .zip   (binary `bitcost` at archive root)
+#
+# Trigger: push a tag like `v0.1.0`, or run manually.
+# Add more targets later by adding matrix entries (e.g. darwin-x64, linux-arm64).
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to build and publish (e.g. v0.1.0)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: build ${{ matrix.target }}
+    runs-on: ${{ matrix.host }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: darwin-arm64
+            host: macos-14
+            archive: zip
+          - target: linux-x64
+            host: ubuntu-24.04
+            archive: tar.gz
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.3.14'
+
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y zip
+
+      - run: bun install
+
+      # `--single` builds only this runner's native target.
+      # Output: packages/opencode/dist/opencode-<target>/bin/opencode
+      - name: Build CLI
+        working-directory: packages/opencode
+        run: bun run build --single
+
+      - name: Package
+        shell: bash
+        run: |
+          set -euo pipefail
+          DIST="packages/opencode/dist/opencode-${{ matrix.target }}/bin"
+          mv "$DIST/opencode" "$DIST/bitcost"
+          chmod +x "$DIST/bitcost"
+          mkdir -p artifacts
+          if [ "${{ matrix.archive }}" = "tar.gz" ]; then
+            tar -czf "artifacts/bitcost-${{ matrix.target }}.tar.gz" -C "$DIST" bitcost
+          else
+            (cd "$DIST" && zip -q -X "$GITHUB_WORKSPACE/artifacts/bitcost-${{ matrix.target }}.zip" bitcost)
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bitcost-${{ matrix.target }}
+          path: artifacts/*
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          files: artifacts/*
+          generate_release_notes: true

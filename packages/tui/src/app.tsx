@@ -46,6 +46,7 @@ import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
+import { DialogBitcostLogin } from "./component/dialog-bitcost-login"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
 import { Session } from "./routes/session"
@@ -730,6 +731,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           dialog.replace(() => <DialogProviderList />)
         },
         category: "Provider",
+      },
+      {
+        name: "bitcost.login",
+        title: "Login to Bitcost",
+        slashName: "login",
+        run: () => {
+          dialog.replace(() => <DialogBitcostLogin />)
+        },
+        category: "Account",
       },
       ...(sync.data.console_state.switchableOrgCount > 1
         ? [
