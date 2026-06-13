@@ -26,7 +26,7 @@ export function normalizePromptContent(content: string) {
 export async function openEditor(input: { value: string; renderer: CliRenderer; cwd?: string; stdin?: EditorStdio }) {
   const editor = process.env.VISUAL || process.env.EDITOR
   if (!editor) return
-  const file = path.join(os.tmpdir(), `${Date.now()}.md`)
+  const file = path.join(os.tmpdir(), `opencode-prompt-${Date.now()}.md`)
   await writeFile(file, input.value)
   input.renderer.suspend()
   input.renderer.currentRenderBuffer.clear()
