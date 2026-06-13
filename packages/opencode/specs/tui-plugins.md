@@ -428,6 +428,7 @@ Current host slot names:
 - `home_prompt_right` with props `{ workspace_id? }`
 - `session_prompt` with props `{ session_id, visible?, disabled?, on_submit?, ref? }`
 - `session_prompt_right` with props `{ session_id }`
+- `session_prompt_spinner` with props `{ session_id }` — renders in the status row while the model is generating; hidden when status is idle
 - `home_bottom`
 - `home_footer`
 - `sidebar_title` with props `{ session_id, title, share_url? }`
@@ -441,7 +442,7 @@ Slot notes:
 - `api.slots.register(plugin)` does not return an unregister function.
 - Returned ids are `pluginId`, `pluginId:1`, `pluginId:2`, and so on.
 - Plugin-provided `id` is not allowed.
-- The current host renders `home_logo`, `home_prompt`, and `session_prompt` with `replace`, `home_footer`, `sidebar_title`, and `sidebar_footer` with `single_winner`, and `app`, `app_bottom`, `home_prompt_right`, `session_prompt_right`, `home_bottom`, and `sidebar_content` with the slot library default mode.
+- The current host renders `home_logo`, `home_prompt`, and `session_prompt` with `replace`, `home_footer`, `sidebar_title`, and `sidebar_footer` with `single_winner`, and `app`, `app_bottom`, `home_prompt_right`, `session_prompt_right`, `session_prompt_spinner`, `home_bottom`, and `sidebar_content` with the slot library default mode.
 - `app_bottom` is rendered in normal layout flow below the active route, while `app` is rendered afterward for global app-level UI.
 - Plugins can define custom slot names in `api.slots.register(...)` and render them from plugin UI with `ui.Slot`.
 
