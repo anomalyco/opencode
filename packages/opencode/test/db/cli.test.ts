@@ -37,8 +37,8 @@ describe("opencode db CLI doctor and repair", () => {
     insertRepairableAssistantIssue(fixture)
     const before = statSync(fixture.dbPath).mtimeMs
 
-    const dryRun = await capture(() => runRepairCommand(fixture.dbPath, { dryRun: true, apply: false, json: false, mode: "safe" }))
-    const dryRunJson = await capture(() => runRepairCommand(fixture.dbPath, { dryRun: true, apply: false, json: true, mode: "safe" }))
+    const dryRun = await capture(() => runRepairCommand(fixture.dbPath, { dryRun: true, apply: false, json: false }))
+    const dryRunJson = await capture(() => runRepairCommand(fixture.dbPath, { dryRun: true, apply: false, json: true }))
 
     expect(dryRun.exitCode).toBe(1)
     expect(dryRun.stdout).toContain("No changes were made.")
@@ -47,7 +47,7 @@ describe("opencode db CLI doctor and repair", () => {
     expect(statSync(fixture.dbPath).mtimeMs).toBe(before)
     expect(await hasBackup(fixture.dbPath)).toBe(false)
 
-    const apply = await capture(() => runRepairCommand(fixture.dbPath, { apply: true, json: false, mode: "safe" }))
+    const apply = await capture(() => runRepairCommand(fixture.dbPath, { apply: true, json: false }))
     const db = new BunDatabase(fixture.dbPath, { readonly: true })
     const data = JSON.parse((db.query("SELECT data FROM session_message WHERE id = ?").get("msg") as { data: string }).data) as { agent: string }
     db.close()
@@ -63,8 +63,8 @@ describe("opencode db CLI doctor and repair", () => {
     writeFileSync(dbPath, "not a sqlite database")
 
     const doctor = await capture(() => runDoctorCommand(dbPath, { json: true }))
-    const dryRun = await capture(() => runRepairCommand(dbPath, { dryRun: true, apply: false, json: true, mode: "safe" }))
-    const apply = await capture(() => runRepairCommand(dbPath, { apply: true, json: true, mode: "safe" }))
+    const dryRun = await capture(() => runRepairCommand(dbPath, { dryRun: true, apply: false, json: true }))
+    const apply = await capture(() => runRepairCommand(dbPath, { apply: true, json: true }))
 
     expect(doctor.exitCode).toBe(2)
     expect(JSON.parse(doctor.stdout).issues[0].code).toBe("database_unreadable")
@@ -75,29 +75,6 @@ describe("opencode db CLI doctor and repair", () => {
     expect(await hasBackup(dbPath)).toBe(false)
   })
 
-  test("aggressive directory repair CLI succeeds with warning", async () => {
-    const fixture = createFixture("aggressive")
-    const stale = join(fixture.dir, "stale")
-    fixture.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", fixture.worktree, "[]")
-    fixture.db
-      .query("INSERT INTO session (id, project_id, slug, directory, path, title, version) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run("ses", "proj", "slug", stale, stale, "title", "1")
-    fixture.db.close()
-
-    const safe = await capture(() => runRepairCommand(fixture.dbPath, { dryRun: true, apply: false, json: false, mode: "safe" }))
-    const dryRun = await capture(() => runRepairCommand(fixture.dbPath, { dryRun: true, apply: false, json: false, mode: "aggressive" }))
-    const apply = await capture(() => runRepairCommand(fixture.dbPath, { apply: true, json: false, mode: "aggressive" }))
-    const db = new BunDatabase(fixture.dbPath, { readonly: true })
-    const session = db.query("SELECT directory FROM session WHERE id = ?").get("ses") as { directory: string }
-    db.close()
-
-    expect(safe.exitCode).toBe(0)
-    expect(dryRun.exitCode).toBe(1)
-    expect(dryRun.stdout).toContain("WARNING")
-    expect(apply.exitCode).toBe(0)
-    expect(apply.stdout).toContain("WARNING")
-    expect(session.directory).toBe(fixture.worktree)
-  })
 })
 
 async function capture(run: () => Promise<{ exitCode: 0 | 1 | 2 }>) {

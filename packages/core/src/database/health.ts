@@ -1,10 +1,7 @@
 export * as DatabaseHealth from "./health"
 
 import { Database as BunDatabase } from "bun:sqlite"
-import { existsSync, lstatSync, realpathSync } from "node:fs"
-import path from "node:path"
-
-export type RepairMode = "safe" | "aggressive"
+export type RepairMode = "safe"
 export type IssueSeverity = "info" | "warning" | "error"
 export type Confidence = "low" | "medium" | "high"
 
@@ -84,20 +81,6 @@ interface SessionMessageRow {
   data: string
 }
 
-interface DirectoryRow {
-  session_id: string
-  session_directory: string
-  project_id: string | null
-  project_worktree: string | null
-  project_matches: number
-}
-
-const noColumns = {
-  session: new Set<string>(),
-  sessionMessage: new Set<string>(),
-  project: new Set<string>(),
-}
-
 export async function generateDoctorReport(dbPath: string): Promise<DoctorReport> {
   if (!(await Bun.file(dbPath).exists())) {
     return unreadableDoctorReport(dbPath, "database_not_found", "Database file does not exist")
@@ -112,12 +95,7 @@ export async function generateDoctorReport(dbPath: string): Promise<DoctorReport
 
       const sessions = analyzeSessions(db, schema.columns.session)
       const messages = analyzeMessages(db)
-      return buildReport(dbPath, schema, sessions.count, messages.count, [
-        ...schema.issues,
-        ...sessions.issues,
-        ...messages.issues,
-        ...analyzeDirectoryMismatch(db, "safe"),
-      ])
+      return buildReport(dbPath, schema, sessions.count, messages.count, [...schema.issues, ...sessions.issues, ...messages.issues])
     })
   } catch (error) {
     return unreadableDoctorReport(dbPath, "database_unreadable", `Database is unreadable: ${errorMessage(error)}`)
@@ -145,8 +123,8 @@ export async function generateRepairPlan(dbPath: string, mode: RepairMode = "saf
 
       const sessions = analyzeSessions(db, schema.columns.session)
       const messages = analyzeMessages(db)
-      const issues = [...sessions.issues, ...messages.issues, ...analyzeDirectoryMismatch(db, mode)]
-      const operations = issues.flatMap((issue) => operationForIssue(db, mode, issue))
+      const issues = [...sessions.issues, ...messages.issues]
+      const operations = issues.flatMap((issue) => operationForIssue(db, issue))
       return {
         dbPath,
         generatedAt: new Date().toISOString(),
@@ -217,17 +195,6 @@ export function analyzeMessages(db: BunDatabase): { count: number; issues: Issue
     count: readCount(db, "session_message"),
     issues: rows.flatMap((row) => assistantMessageIssues(row as SessionMessageRow)),
   }
-}
-
-export function analyzeDirectoryMismatch(db: BunDatabase, mode: RepairMode): Issue[] {
-  return db
-    .query(
-      `SELECT s.id AS session_id, s.directory AS session_directory, s.project_id, p.worktree AS project_worktree,
-        (SELECT count(*) FROM project p2 WHERE p2.id = s.project_id) AS project_matches
-      FROM session s LEFT JOIN project p ON p.id = s.project_id`,
-    )
-    .all()
-    .flatMap((row) => directoryMismatchIssue(row as DirectoryRow, mode))
 }
 
 function buildReport(dbPath: string, schema: SchemaStatus, sessionCount: number, messageCount: number, issues: Issue[]) {
@@ -407,63 +374,9 @@ function deriveSessionModel(db: BunDatabase, sessionID: string) {
   )
 }
 
-function directoryMismatchIssue(row: DirectoryRow, mode: RepairMode): Issue[] {
-  if (!nonEmptyString(row.session_directory) || row.session_directory === row.project_worktree) return []
-  if (!row.project_id || !row.project_worktree || row.project_matches !== 1) {
-    return [diagnosticDirectoryIssue(row, "Session project is missing or ambiguous")]
-  }
-
-  const eligibility = directoryEligibility(row.session_directory, row.project_worktree)
-  return [
-    {
-      code: eligibility.ok ? "directory_mismatch" : "directory_mismatch_unrepairable",
-      severity: "warning" as const,
-      table: "session",
-      rowId: row.session_id,
-      sessionId: row.session_id,
-      repairable: mode === "aggressive" && eligibility.ok,
-      reason: eligibility.ok
-        ? `Session directory does not match owning project worktree (${mode === "safe" ? "repairable only in aggressive mode" : "eligible for aggressive repair"})`
-        : eligibility.reason,
-      suggestedRepair: mode === "aggressive" && eligibility.ok ? "update_session_directory_to_project_worktree" : undefined,
-      confidence: eligibility.ok ? ("high" as const) : undefined,
-      before: row.session_directory,
-      after: mode === "aggressive" && eligibility.ok ? row.project_worktree : undefined,
-      warning: eligibility.ok ? "Aggressive directory repair rewrites session.directory to the owning project.worktree after exact row preconditions pass." : undefined,
-    },
-  ]
-}
-
-function diagnosticDirectoryIssue(row: DirectoryRow, reason: string): Issue {
-  return {
-    code: "directory_mismatch_unrepairable",
-    severity: "warning" as const,
-    table: "session",
-    rowId: row.session_id,
-    sessionId: row.session_id,
-    repairable: false,
-    reason,
-    before: row.session_directory,
-    after: row.project_worktree,
-  }
-}
-
-function directoryEligibility(currentDirectory: string, targetDirectory: string) {
-  if (looksWindowsPath(currentDirectory) !== looksWindowsPath(targetDirectory)) return { ok: false, reason: "Directory repair refuses cross-platform path conversion" }
-  if (!path.isAbsolute(currentDirectory) || !path.isAbsolute(targetDirectory)) return { ok: false, reason: "Directory repair requires absolute paths" }
-  if (!existsSync(targetDirectory)) return { ok: false, reason: "Project worktree target directory is missing" }
-  if (lstatSync(targetDirectory).isSymbolicLink()) return { ok: false, reason: "Project worktree target is symlink-sensitive" }
-  if (!lstatSync(targetDirectory).isDirectory()) return { ok: false, reason: "Project worktree target directory is missing" }
-  if (safeRealpath(targetDirectory) !== path.resolve(targetDirectory)) return { ok: false, reason: "Project worktree target is symlink-sensitive" }
-  if (existsSync(currentDirectory)) return { ok: false, reason: "Current session directory still exists; refusing moved-folder or worktree-intent inference" }
-  if (isSubpath(currentDirectory, targetDirectory) || isSubpath(targetDirectory, currentDirectory)) return { ok: false, reason: "Directory repair refuses subdirectory/worktree-intent inference" }
-  return { ok: true, reason: "Eligible" }
-}
-
-function operationForIssue(db: BunDatabase, mode: RepairMode, issue: Issue): RepairOperation[] {
+function operationForIssue(db: BunDatabase, issue: Issue): RepairOperation[] {
   if (issue.code === "assistant_message_missing_agent" && issue.rowId) return [assistantOperation(db, issue)]
   if (issue.code.startsWith("session_") && issue.code.endsWith("_missing") && issue.rowId && issue.repairable) return [sessionMetadataOperation(db, issue)]
-  if (issue.code === "directory_mismatch" && mode === "aggressive" && issue.rowId && issue.repairable) return [directoryOperation(db, issue)]
   return []
 }
 
@@ -504,27 +417,6 @@ function sessionMetadataOperation(db: BunDatabase, issue: Issue) {
   }
 }
 
-function directoryOperation(db: BunDatabase, issue: Issue) {
-  if (!issue.rowId) throw new Error("Missing directory repair row id")
-  const row = db
-    .query("SELECT s.id, s.project_id, s.directory, p.worktree FROM session s JOIN project p ON p.id = s.project_id WHERE s.id = ?")
-    .get(issue.rowId) as { id: string; project_id: string; directory: string; worktree: string }
-  return {
-    id: `repair_directory_mismatch_${row.id}`,
-    issueCode: issue.code,
-    table: "session" as const,
-    rowId: row.id,
-    before: row.directory,
-    after: row.worktree,
-    preconditions: { id: row.id, project_id: row.project_id, directory: row.directory, project_worktree: row.worktree },
-    reason: issue.reason,
-    confidence: "high" as const,
-    backupRequired: true,
-    mode: "aggressive" as const,
-    warning: issue.warning,
-  }
-}
-
 function parseObject(input: string) {
   try {
     const value: unknown = JSON.parse(input)
@@ -547,21 +439,4 @@ function singleValue(values: unknown[]) {
   const unique = [...new Set(values.map((value) => (typeof value === "string" ? value : JSON.stringify(value))))]
   if (unique.length !== 1) return undefined
   return unique[0]
-}
-
-function looksWindowsPath(value: string) {
-  return /^[a-zA-Z]:[\\/]/.test(value)
-}
-
-function safeRealpath(value: string) {
-  try {
-    return realpathSync.native(value)
-  } catch {
-    return ""
-  }
-}
-
-function isSubpath(parent: string, child: string) {
-  const relative = path.relative(path.resolve(parent), path.resolve(child))
-  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative)
 }

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { Database as BunDatabase } from "bun:sqlite"
-import { mkdtempSync, rmSync, mkdirSync, existsSync, statSync, symlinkSync, writeFileSync } from "node:fs"
+import { mkdtempSync, rmSync, mkdirSync, existsSync, statSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
 import { generateDoctorReport, generateRepairPlan } from "@opencode-ai/core/database/health"
@@ -165,83 +165,6 @@ describe("database doctor and repair", () => {
     expect(session.agent).toBeNull()
   })
 
-  test("directory mismatch is aggressive-only and refuses missing targets", async () => {
-    const fixture = createFixture("directory")
-    const stale = join(fixture.dir, "stale")
-    fixture.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", fixture.worktree, "[]")
-    fixture.db
-      .query("INSERT INTO session (id, project_id, slug, directory, path, title, version) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run("ses", "proj", "slug", stale, stale, "title", "1")
-    fixture.db.close()
-
-    expect((await generateRepairPlan(fixture.dbPath, "safe")).operations.some((operation) => operation.issueCode === "directory_mismatch")).toBe(false)
-    expect((await generateRepairPlan(fixture.dbPath, "aggressive")).operations.some((operation) => operation.issueCode === "directory_mismatch")).toBe(true)
-
-    rmSync(fixture.worktree, { recursive: true, force: true })
-    expect((await generateRepairPlan(fixture.dbPath, "aggressive")).operations.some((operation) => operation.issueCode === "directory_mismatch")).toBe(false)
-  })
-
-  test("aggressive directory repair applies, is idempotent, and fails on precondition drift", async () => {
-    const fixture = createFixture("directory-apply")
-    const stale = join(fixture.dir, "stale")
-    fixture.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", fixture.worktree, "[]")
-    fixture.db
-      .query("INSERT INTO session (id, project_id, slug, directory, path, title, version) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run("ses", "proj", "slug", stale, stale, "title", "1")
-    fixture.db.close()
-
-    const result = await applyRepairPlan(await generateRepairPlan(fixture.dbPath, "aggressive"))
-    const second = await generateRepairPlan(fixture.dbPath, "aggressive")
-    const db = new BunDatabase(fixture.dbPath, { readonly: true })
-    const session = db.query("SELECT directory FROM session WHERE id = ?").get("ses") as { directory: string }
-    db.close()
-
-    expect(result.success).toBe(true)
-    expect(session.directory).toBe(fixture.worktree)
-    expect(second.operations.some((operation) => operation.issueCode === "directory_mismatch")).toBe(false)
-
-    const drift = createFixture("directory-drift")
-    const driftStale = join(drift.dir, "stale")
-    drift.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", drift.worktree, "[]")
-    drift.db
-      .query("INSERT INTO session (id, project_id, slug, directory, path, title, version) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run("ses", "proj", "slug", driftStale, driftStale, "title", "1")
-    drift.db.close()
-    const plan = await generateRepairPlan(drift.dbPath, "aggressive")
-    const driftDb = new BunDatabase(drift.dbPath)
-    driftDb.query("UPDATE session SET directory = ? WHERE id = ?").run("changed", "ses")
-    driftDb.close()
-    expect((await applyRepairPlan(plan)).success).toBe(false)
-  })
-
-  test("directory mismatch refuses symlink, cross-platform, and subdirectory targets", async () => {
-    const symlinkFixture = createFixture("directory-symlink")
-    const link = join(symlinkFixture.dir, "link-worktree")
-    symlinkSync(symlinkFixture.worktree, link, "junction")
-    symlinkFixture.db.query("UPDATE project SET worktree = ? WHERE id = ?").run(link, "missing")
-    symlinkFixture.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", link, "[]")
-    symlinkFixture.db
-      .query("INSERT INTO session (id, project_id, slug, directory, path, title, version) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run("ses", "proj", "slug", join(symlinkFixture.dir, "stale"), join(symlinkFixture.dir, "stale"), "title", "1")
-    symlinkFixture.db.close()
-    expect((await generateRepairPlan(symlinkFixture.dbPath, "aggressive")).operations).toHaveLength(0)
-
-    const cross = createFixture("directory-cross")
-    cross.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", "/mnt/c/project", "[]")
-    cross.db
-      .query("INSERT INTO session (id, project_id, slug, directory, path, title, version) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run("ses", "proj", "slug", "C:\\project", "C:\\project", "title", "1")
-    cross.db.close()
-    expect((await generateRepairPlan(cross.dbPath, "aggressive")).operations).toHaveLength(0)
-
-    const sub = createFixture("directory-sub")
-    sub.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", sub.worktree, "[]")
-    sub.db
-      .query("INSERT INTO session (id, project_id, slug, directory, path, title, version) VALUES (?, ?, ?, ?, ?, ?, ?)")
-      .run("ses", "proj", "slug", join(sub.worktree, "nested"), join(sub.worktree, "nested"), "title", "1")
-    sub.db.close()
-    expect((await generateRepairPlan(sub.dbPath, "aggressive")).operations).toHaveLength(0)
-  })
 })
 
 function tempDir() {

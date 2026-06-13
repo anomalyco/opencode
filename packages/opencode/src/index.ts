@@ -115,7 +115,7 @@ const cli = yargs(args)
     })
 
     const marker = Database.Path
-    const skipDbCreation = args[0] === "db" && (args[1] === "doctor" || args[1] === "repair")
+    const skipDbCreation = isReadOnlyDbCommand(args)
     if (!skipDbCreation && !(await Filesystem.exists(marker))) {
       const tty = process.stderr.isTTY
       process.stderr.write("Performing one time database migration, may take a few minutes..." + EOL)
@@ -246,5 +246,15 @@ try {
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.
   // Explicitly exit to avoid any hanging subprocesses.
-  process.exit()
+  process.exit(process.exitCode ?? 0)
+}
+
+function isReadOnlyDbCommand(args: string[]) {
+  const dbIndex = args.findIndex((arg) => arg === "db")
+  if (dbIndex === -1) return false
+
+  const subcommand = args.slice(dbIndex + 1).find((arg) => !arg.startsWith("-"))
+  if (subcommand === "doctor") return true
+  if (subcommand !== "repair") return false
+  return !args.slice(dbIndex + 1).some((arg) => arg === "--apply" || arg === "--apply=true")
 }

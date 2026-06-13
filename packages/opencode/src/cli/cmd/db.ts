@@ -8,8 +8,6 @@ import { cmd } from "./cmd"
 import { JsonMigration } from "@/storage/json-migration"
 import { EOL } from "os"
 import { errorMessage } from "../../util/error"
-import { Effect } from "effect"
-import { effectCmd, fail } from "../effect-cmd"
 import { runDoctorCommand, runRepairCommand } from "./db-runner"
 
 const QueryCommand = cmd({
@@ -63,10 +61,9 @@ const PathCommand = cmd({
   },
 })
 
-const DoctorCommand = effectCmd({
+const DoctorCommand = cmd({
   command: "doctor",
   describe: "diagnose database health issues",
-  instance: false,
   builder: (yargs: Argv) => {
     return yargs.option("json", {
       type: "boolean",
@@ -74,16 +71,14 @@ const DoctorCommand = effectCmd({
       describe: "Output in JSON format",
     })
   },
-  handler: Effect.fn("Cli.db.doctor")(function* (args: { json: boolean }) {
-    const result = yield* Effect.promise(() => runDoctorCommand(Database.Path, args))
-    if (result.exitCode !== 0) yield* fail(`Database doctor found ${result.issueCount} issue(s)`, result.exitCode)
-  }),
+  handler: async (args: { json: boolean }) => {
+    process.exitCode = (await runDoctorCommand(Database.Path, args)).exitCode
+  },
 })
 
-const RepairCommand = effectCmd({
+const RepairCommand = cmd({
   command: "repair",
   describe: "plan or apply database repairs",
-  instance: false,
   builder: (yargs: Argv) => {
     return yargs
       .option("dry-run", {
@@ -101,12 +96,6 @@ const RepairCommand = effectCmd({
         default: false,
         describe: "Output in JSON format",
       })
-      .option("mode", {
-        type: "string",
-        choices: ["safe", "aggressive"],
-        default: "safe",
-        describe: "Repair mode (aggressive includes directory mismatch repair)",
-      })
       .check((argv) => {
         if (argv.dryRun && argv.apply) {
           throw new Error("Cannot use both --dry-run and --apply")
@@ -117,16 +106,14 @@ const RepairCommand = effectCmd({
         return true
       })
   },
-  handler: Effect.fn("Cli.db.repair")(function* (args: {
+  handler: async (args: {
     dryRun?: boolean
     "dry-run"?: boolean
     apply: boolean
     json: boolean
-    mode: string
-  }) {
-    const result = yield* Effect.promise(() => runRepairCommand(Database.Path, args))
-    if (result.exitCode !== 0) yield* fail(result.message, result.exitCode)
-  }),
+  }) => {
+    process.exitCode = (await runRepairCommand(Database.Path, args)).exitCode
+  },
 })
 
 const MigrateCommand = cmd({

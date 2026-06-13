@@ -12,10 +12,9 @@ export async function runDoctorCommand(dbPath: string, args: { json: boolean }):
 
 export async function runRepairCommand(
   dbPath: string,
-  args: { dryRun?: boolean; "dry-run"?: boolean; apply: boolean; json: boolean; mode: string },
+  args: { dryRun?: boolean; "dry-run"?: boolean; apply: boolean; json: boolean },
 ): Promise<{ exitCode: CommandExitCode; message: string }> {
-  const mode = args.mode === "aggressive" ? "aggressive" : "safe"
-  const plan = await generateRepairPlan(dbPath, mode)
+  const plan = await generateRepairPlan(dbPath)
   if (args.dryRun || args["dry-run"]) {
     if (args.json) console.log(JSON.stringify(plan, null, 2))
     else printRepairPlan(plan)

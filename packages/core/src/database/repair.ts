@@ -27,9 +27,12 @@ export async function createBackup(dbPath: string) {
     originalPath: dbPath,
   }
 
-  await Bun.write(backup.path, Bun.file(dbPath))
-  if (await Bun.file(`${dbPath}-wal`).exists()) await Bun.write(`${backup.path}-wal`, Bun.file(`${dbPath}-wal`))
-  if (await Bun.file(`${dbPath}-shm`).exists()) await Bun.write(`${backup.path}-shm`, Bun.file(`${dbPath}-shm`))
+  const db = new BunDatabase(dbPath)
+  try {
+    db.exec(`VACUUM main INTO '${backup.path.replaceAll("'", "''")}'`)
+  } finally {
+    db.close()
+  }
   return backup
 }
 
@@ -94,7 +97,6 @@ export async function applyRepairPlan(plan: RepairPlan) {
 function applyOperation(db: BunDatabase, operation: RepairOperation) {
   if (operation.issueCode === "assistant_message_missing_agent") return applyAssistantAgentRepair(db, operation)
   if (operation.issueCode.startsWith("session_") && operation.issueCode.endsWith("_missing")) return applySessionMetadataRepair(db, operation)
-  if (operation.issueCode === "directory_mismatch") return applyDirectoryRepair(db, operation)
   throw new Error(`Unsupported repair operation: ${operation.issueCode}`)
 }
 
@@ -129,28 +131,6 @@ function applySessionMetadataRepair(db: BunDatabase, operation: RepairOperation)
   if (field === "agent") db.query("UPDATE session SET agent = ? WHERE id = ? AND (agent IS NULL OR agent = '')").run(value, operation.rowId)
   if (field === "model") db.query("UPDATE session SET model = ? WHERE id = ? AND (model IS NULL OR model = '')").run(value, operation.rowId)
   if (field === "path") db.query("UPDATE session SET path = ? WHERE id = ? AND (path IS NULL OR path = '')").run(value, operation.rowId)
-}
-
-function applyDirectoryRepair(db: BunDatabase, operation: RepairOperation) {
-  if (operation.mode !== "aggressive") throw new Error(`Directory repair requires aggressive mode: ${operation.id}`)
-  const row = db
-    .query("SELECT s.project_id, s.directory, p.worktree FROM session s JOIN project p ON p.id = s.project_id WHERE s.id = ?")
-    .get(operation.rowId) as { project_id: string; directory: string; worktree: string } | null
-  if (
-    !row ||
-    row.project_id !== operation.preconditions.project_id ||
-    row.directory !== operation.preconditions.directory ||
-    row.worktree !== operation.preconditions.project_worktree
-  ) {
-    throw new Error(`Precondition failed for ${operation.id}`)
-  }
-  if (typeof operation.after !== "string") throw new Error(`Invalid directory repair value for ${operation.id}`)
-  db.query("UPDATE session SET directory = ? WHERE id = ? AND project_id = ? AND directory = ?").run(
-    operation.after,
-    operation.rowId,
-    row.project_id,
-    row.directory,
-  )
 }
 
 function sessionMetadataField(issueCode: string) {
