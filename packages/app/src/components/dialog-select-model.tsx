@@ -552,6 +552,7 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
   return (
     <Dialog
       title={language.t("dialog.model.select.title")}
+      containerStyle={{ height: "min(calc(100vh - 16px), 712px)" }}
       action={
         <Button
           class="h-7 -my-1 text-14-medium"

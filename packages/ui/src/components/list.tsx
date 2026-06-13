@@ -77,7 +77,7 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   const internalFilter = () => store.internalFilter
   const setInternalFilter = (value: string) => setStore("internalFilter", value)
 
-  const { setScrollRef, scrollRef, scrollToTop } = useScrollContainer()
+  const { setScrollRef, scrollRef, scrollToTop, scrollToElement, findByKey } = useScrollContainer()
   let virtualizerHandle: VirtualizerHandle | undefined
 
   const { filter, grouped, flat, active, setActive, onKeyDown, onInput, refetch } = useFilteredList<T>(props)
@@ -88,6 +88,12 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   const showAdd = () => !!addProps()
 
   const moved = (event: MouseEvent) => event.movementX !== 0 || event.movementY !== 0
+
+  const scrollNonVirtualToKey = (key: string, block: "center" | "nearest") => {
+    const element = findByKey(key)
+    if (!element) return
+    scrollToElement(element, { block, behavior: "auto" })
+  }
 
   const applyFilter = (value: string, options?: { ref?: boolean }) => {
     const prev = filter()
@@ -126,6 +132,10 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
   createEffect(() => {
     if (!props.current) return
     const key = props.key(props.current)
+    if (props.virtual === false) {
+      requestAnimationFrame(() => scrollNonVirtualToKey(key, "center"))
+      return
+    }
     const rows = virtualRows()
     const idx = rows.findIndex((r) => r.type === "item" && props.key(r.item) === key)
     if (idx === -1) return
@@ -143,6 +153,10 @@ export function List<T>(props: ListProps<T> & { ref?: (ref: ListRef) => void }) 
     }
     const key = active()
     if (!key) return
+    if (props.virtual === false) {
+      scrollNonVirtualToKey(key, "nearest")
+      return
+    }
     const rows = virtualRows()
     const idx = rows.findIndex((r) => r.type === "item" && props.key(r.item) === key)
     if (idx === -1) return
