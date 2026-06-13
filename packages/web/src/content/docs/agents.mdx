@@ -184,7 +184,7 @@ Values are clamped to the range 1–10.
 - Whether an agent below the depth limit can spawn is governed by its regular [task permissions](#task-permissions). The default wildcard `"*": "allow"` is enough — an exact `task` rule is no longer required.
 - A user-configured `task: deny` stays sticky: it blocks delegation for the entire subtree below it.
 - Permission prompts raised anywhere in the tree appear on the **root session**, so you can answer them without navigating into child sessions. Each prompt carries its origin in `metadata.originSessionID`, `metadata.originAgent`, and `metadata.originDepth`.
-- Answering a prompt with `always` applies **instance-wide** for the rest of the OpenCode process — it covers the whole session tree, and also any other sessions in the same instance.
+- Answering a prompt with `always` sticks to the **root session** and applies **tree-wide**: it covers every session in that tree (at any depth) for the rest of the OpenCode process, but it does not leak into other session trees in the same instance.
 
 :::note
 Child sessions created before nesting support keep their stored `task` deny — resuming one of these older subagent sessions leaves it unable to spawn. The same applies after **raising** `subagent_max_depth`: existing child sessions created at the old limit keep their stored deny. **Lowering** the limit takes effect immediately for all sessions.
