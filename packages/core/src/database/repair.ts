@@ -96,9 +96,74 @@ export async function applyRepairPlan(plan: RepairPlan) {
 
 function applyOperation(db: BunDatabase, operation: RepairOperation) {
   if (operation.issueCode === "part_legacy_id_prefix") return applyPartIDRepair(db, operation)
+  if (operation.issueCode.startsWith("message_")) return applyMessageDataRepair(db, operation)
+  if (operation.issueCode.startsWith("part_") && operation.issueCode !== "part_legacy_id_prefix") return applyPartDataRepair(db, operation)
   if (operation.issueCode === "assistant_message_missing_agent") return applyAssistantAgentRepair(db, operation)
   if (operation.issueCode.startsWith("session_") && operation.issueCode.endsWith("_missing")) return applySessionMetadataRepair(db, operation)
   throw new Error(`Unsupported repair operation: ${operation.issueCode}`)
+}
+
+function applyMessageDataRepair(db: BunDatabase, operation: RepairOperation) {
+  const row = db.query("SELECT session_id, time_created, data FROM message WHERE id = ?").get(operation.rowId) as { session_id: string; time_created: number; data: string } | null
+  if (!row || row.session_id !== operation.preconditions.session_id || row.time_created !== operation.preconditions.time_created) {
+    throw new Error(`Precondition failed for ${operation.id}`)
+  }
+  const data = parseObject(row.data)
+  if (!data) throw new Error(`Precondition failed for ${operation.id}: malformed JSON`)
+  const after = operation.after as Record<string, unknown>
+  if (operation.issueCode === "message_assistant_missing_parent") {
+    if (data.parentID !== undefined) throw new Error(`Precondition failed for ${operation.id}: parentID already set`)
+    if (!nonEmptyString(after.parentID)) throw new Error(`Invalid parentID repair value for ${operation.id}`)
+    if (deriveMessageRepairValue(db, operation) !== after.parentID) throw new Error(`Precondition failed for ${operation.id}: parentID derivation changed`)
+    data.parentID = after.parentID
+  } else if (operation.issueCode === "message_user_missing_agent") {
+    if (data.agent !== undefined) throw new Error(`Precondition failed for ${operation.id}: agent already set`)
+    if (!nonEmptyString(after.agent)) throw new Error(`Invalid agent repair value for ${operation.id}`)
+    if (deriveMessageRepairValue(db, operation) !== after.agent) throw new Error(`Precondition failed for ${operation.id}: agent derivation changed`)
+    data.agent = after.agent
+  } else if (operation.issueCode === "message_user_missing_model") {
+    if (data.model !== undefined) throw new Error(`Precondition failed for ${operation.id}: model already set`)
+    if (!isRecord(after.model)) throw new Error(`Invalid model repair value for ${operation.id}`)
+    if (JSON.stringify(deriveMessageRepairValue(db, operation)) !== JSON.stringify(after.model)) throw new Error(`Precondition failed for ${operation.id}: model derivation changed`)
+    data.model = after.model
+  } else {
+    throw new Error(`Unsupported message repair operation: ${operation.issueCode}`)
+  }
+  db.query("UPDATE message SET data = ? WHERE id = ?").run(JSON.stringify(data), operation.rowId)
+}
+
+function applyPartDataRepair(db: BunDatabase, operation: RepairOperation) {
+  const row = db.query("SELECT message_id, session_id, time_created, data FROM part WHERE id = ?").get(operation.rowId) as { message_id: string; session_id: string; time_created: number; data: string } | null
+  if (!row || row.message_id !== operation.preconditions.message_id || row.session_id !== operation.preconditions.session_id || row.time_created !== operation.preconditions.time_created) {
+    throw new Error(`Precondition failed for ${operation.id}`)
+  }
+  const data = parseObject(row.data)
+  if (!data) throw new Error(`Precondition failed for ${operation.id}: malformed JSON`)
+  const after = operation.after as Record<string, unknown>
+  if (operation.issueCode === "part_step_finish_missing_reason") {
+    if (data.reason !== undefined) throw new Error(`Precondition failed for ${operation.id}: reason already set`)
+    data.reason = after.reason
+  } else if (operation.issueCode === "part_compaction_missing_auto") {
+    if (data.auto !== undefined) throw new Error(`Precondition failed for ${operation.id}: auto already set`)
+    data.auto = after.auto
+  } else if (operation.issueCode.startsWith("part_tool_completed_")) {
+    if (!isRecord(data.state) || data.state.status !== "completed") throw new Error(`Precondition failed for ${operation.id}: tool state changed`)
+    if (operation.issueCode === "part_tool_completed_missing_metadata") {
+      if (data.state.metadata !== undefined) throw new Error(`Precondition failed for ${operation.id}: metadata already set`)
+      data.state.metadata = after["state.metadata"]
+    } else if (operation.issueCode === "part_tool_completed_missing_title") {
+      if (data.state.title !== undefined) throw new Error(`Precondition failed for ${operation.id}: title already set`)
+      data.state.title = after["state.title"]
+    } else if (operation.issueCode === "part_tool_completed_missing_time") {
+      if (isRecord(data.state.time) && data.state.time.start !== undefined && data.state.time.end !== undefined) throw new Error(`Precondition failed for ${operation.id}: time already set`)
+      data.state.time = after["state.time"]
+    } else {
+      throw new Error(`Unsupported part repair operation: ${operation.issueCode}`)
+    }
+  } else {
+    throw new Error(`Unsupported part repair operation: ${operation.issueCode}`)
+  }
+  db.query("UPDATE part SET data = ? WHERE id = ?").run(JSON.stringify(data), operation.rowId)
 }
 
 function applyPartIDRepair(db: BunDatabase, operation: RepairOperation) {
@@ -152,6 +217,47 @@ function sessionMetadataField(issueCode: string) {
   if (issueCode === "session_model_missing") return "model" as const
   if (issueCode === "session_path_missing") return "path" as const
   throw new Error(`Unsupported session metadata operation: ${issueCode}`)
+}
+
+function deriveMessageRepairValue(db: BunDatabase, operation: RepairOperation) {
+  const row = db.query("SELECT id, session_id, time_created FROM message WHERE id = ?").get(operation.rowId) as { id: string; session_id: string; time_created: number } | null
+  if (!row) return undefined
+  if (operation.issueCode === "message_assistant_missing_parent") {
+    return (
+      db
+        .query("SELECT id FROM message WHERE session_id = ? AND (time_created < ? OR (time_created = ? AND id < ?)) ORDER BY time_created DESC, id DESC LIMIT 1")
+        .get(row.session_id, row.time_created, row.time_created, row.id) as { id: string } | null
+    )?.id
+  }
+  if (operation.issueCode === "message_user_missing_agent") {
+    const sessionAgent = (db.query("SELECT agent FROM session WHERE id = ?").get(row.session_id) as { agent: string | null } | null)?.agent
+    if (nonEmptyString(sessionAgent)) return sessionAgent
+    return singleValue(
+      db
+        .query("SELECT data FROM message WHERE session_id = ? AND json_extract(data, '$.role') = 'assistant'")
+        .all(row.session_id)
+        .map((item) => parseObject((item as { data: string }).data)?.agent)
+        .filter(nonEmptyString),
+    )
+  }
+  if (operation.issueCode === "message_user_missing_model") {
+    const unique = [
+      ...new Set(
+        db
+          .query("SELECT data FROM message WHERE session_id = ? AND json_extract(data, '$.role') = 'assistant'")
+          .all(row.session_id)
+          .map((item) => {
+            const data = parseObject((item as { data: string }).data)
+            if (!nonEmptyString(data?.providerID) || !nonEmptyString(data?.modelID)) return undefined
+            return JSON.stringify({ providerID: data.providerID, modelID: data.modelID, ...(nonEmptyString(data.variant) ? { variant: data.variant } : {}) })
+          })
+          .filter(nonEmptyString),
+      ),
+    ]
+    if (unique.length !== 1) return undefined
+    return JSON.parse(unique[0]) as Record<string, unknown>
+  }
+  return undefined
 }
 
 function deriveSessionMetadataValue(db: BunDatabase, sessionID: string, field: "agent" | "model" | "path") {

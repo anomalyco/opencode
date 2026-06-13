@@ -16,7 +16,15 @@ describe("database doctor and repair", () => {
   test("documents the supported repair catalog", () => {
     expect(SUPPORTED_REPAIRS.map((repair) => repair.code).sort()).toEqual([
       "assistant_message_missing_agent",
+      "message_assistant_missing_parent",
+      "message_user_missing_agent",
+      "message_user_missing_model",
+      "part_compaction_missing_auto",
       "part_legacy_id_prefix",
+      "part_step_finish_missing_reason",
+      "part_tool_completed_missing_metadata",
+      "part_tool_completed_missing_time",
+      "part_tool_completed_missing_title",
       "session_agent_missing",
       "session_model_missing",
       "session_path_missing",
@@ -163,6 +171,45 @@ describe("database doctor and repair", () => {
     expect(second.operations).toHaveLength(0)
   })
 
+  test("repairs missing message and part fields required by current schemas", async () => {
+    const fixture = createFixture("message-part-fields")
+    fixture.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", fixture.worktree, "[]")
+    fixture.db
+      .query("INSERT INTO session (id, project_id, slug, directory, path, title, version, agent, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("ses", "proj", "slug", fixture.worktree, fixture.worktree, "title", "1", "build", JSON.stringify({ providerID: "p", modelID: "m" }))
+    fixture.db
+      .query("INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)")
+      .run("msg_user", "ses", 1, 1, JSON.stringify({ role: "user", time: { created: 1 } }))
+    fixture.db
+      .query("INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?)")
+      .run("msg_assistant", "ses", 2, 2, JSON.stringify({ role: "assistant", time: { created: 2 }, agent: "build", providerID: "p", modelID: "m" }))
+    fixture.db
+      .query("INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)")
+      .run("prt_step", "msg_assistant", "ses", 3, 3, JSON.stringify({ type: "step-finish", cost: 0, tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } } }))
+    fixture.db.close()
+
+    const plan = await generateRepairPlan(fixture.dbPath)
+    const result = await applyRepairPlan(plan)
+    const db = new BunDatabase(fixture.dbPath, { readonly: true })
+    const user = JSON.parse((db.query("SELECT data FROM message WHERE id = ?").get("msg_user") as { data: string }).data) as { agent: string; model: { providerID: string; modelID: string } }
+    const assistant = JSON.parse((db.query("SELECT data FROM message WHERE id = ?").get("msg_assistant") as { data: string }).data) as { parentID: string }
+    const part = JSON.parse((db.query("SELECT data FROM part WHERE id = ?").get("prt_step") as { data: string }).data) as { reason: string }
+    db.close()
+
+    expect(plan.operations.map((operation) => operation.issueCode).sort()).toEqual([
+      "message_assistant_missing_parent",
+      "message_user_missing_agent",
+      "message_user_missing_model",
+      "part_step_finish_missing_reason",
+    ])
+    expect(result.success).toBe(true)
+    expect(user.agent).toBe("build")
+    expect(user.model).toEqual({ providerID: "p", modelID: "m" })
+    expect(assistant.parentID).toBe("msg_user")
+    expect(part.reason).toBe("stop")
+    expect((await generateRepairPlan(fixture.dbPath)).operations).toHaveLength(0)
+  })
+
   test("rollback leaves rows unchanged when a precondition fails", async () => {
     const fixture = createFixture("rollback")
     fixture.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", fixture.worktree, "[]")
@@ -278,6 +325,13 @@ function createFixture(name: string) {
       id text PRIMARY KEY,
       session_id text NOT NULL,
       type text NOT NULL,
+      time_created integer NOT NULL,
+      time_updated integer NOT NULL,
+      data text NOT NULL
+    );
+    CREATE TABLE message (
+      id text PRIMARY KEY,
+      session_id text NOT NULL,
       time_created integer NOT NULL,
       time_updated integer NOT NULL,
       data text NOT NULL
