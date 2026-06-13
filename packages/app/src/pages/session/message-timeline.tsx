@@ -1822,7 +1822,7 @@ export function MessageTimeline(props: {
       const tab = file.tab(target)
       if (!view().reviewPanel.opened()) view().reviewPanel.open()
       layout.fileTree.setTab("all")
-      if (line) file.setSelectedLines(target, { start: line, end: line })
+      file.setSelectedLines(target, line !== undefined ? { start: line, end: line } : null)
       void tabs().open(tab)
       tabs().setActive(tab)
       requestAnimationFrame(() => {

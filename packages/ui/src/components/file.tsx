@@ -1116,7 +1116,12 @@ function TextViewer<T>(props: TextFileProps<T>) {
                   }
                 >
                   {/* Large markdown preview upgrades blocks incrementally after the initial HTML mount. */}
-                  <Markdown text={text()} cacheKey={props.file.name} highlight="defer" chunked={large()} />
+                  <Markdown
+                    text={text()}
+                    cacheKey={props.file.cacheKey ?? props.file.name}
+                    highlight="defer"
+                    chunked={large()}
+                  />
                 </Show>
               </Show>
             </div>

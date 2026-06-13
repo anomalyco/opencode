@@ -216,6 +216,20 @@ const [loading, setLoading] = createSignal(false);
 
 Use `createResource` for page-level async data that should participate in Suspense. Use `createSignal` plus explicit loading/error state for click-driven side panels, tabs, drawers, and other local UI regions.
 
+### Content-Derived Renderer Cache Keys
+
+When a component passes a `cacheKey` to markdown, syntax highlighting, or file rendering code, the key must include content identity, not only the file path. A file path is stable across reloads, but renderer/highlighter caches may store line arrays or highlighted AST for the previous contents. Reusing that cache for rewritten files can show stale previews or crash when the current file has more lines than the cached render result.
+
+```tsx
+// Bad: same path reuses stale highlighted output after the file changes.
+<File file={{ name: path, contents, cacheKey: path }} />
+
+// Good: same path gets a new render cache entry when contents change.
+<File file={{ name: path, contents, cacheKey: `${path}:${contents.length}:${checksum(contents) ?? "0"}` }} />
+```
+
+**Test point**: for file preview helpers, assert that identical path+contents keep the same key and the same path with changed contents produces a different key.
+
 ### Avoid Persistent Compositor Promotion in Repeated UI
 
 Long message lists, tables, trees, and markdown/code blocks can contain hundreds of repeated nodes. Do not add compositor-promoting CSS to every repeated item unless profiling proves it is necessary. Persistent promotion can exhaust Chromium tile memory and cause missing paint or hover flicker in Electron.

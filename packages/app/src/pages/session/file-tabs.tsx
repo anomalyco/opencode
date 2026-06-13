@@ -19,6 +19,7 @@ import { useSDK } from "@/context/sdk"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { fileContentCacheKey } from "@/pages/session/file-cache-key"
 
 function FileCommentMenu(props: {
   moreLabel: string
@@ -90,6 +91,7 @@ export function FileTabContent(props: { tab: string }) {
   const md = createMemo(() => /\.(md|markdown|mdx)$/i.test(path() ?? ""))
   const pdf = createMemo(() => /\.pdf$/i.test(path() ?? ""))
   const contents = createMemo(() => state()?.content?.content ?? "")
+  const cacheKey = createMemo(() => fileContentCacheKey(path() ?? "", contents()))
   const fullPath = createMemo(() => {
     const p = path()
     if (!p) return
@@ -432,7 +434,7 @@ export function FileTabContent(props: { tab: string }) {
         file={{
           name: path() ?? "",
           contents: source,
-          cacheKey: path() ?? "",
+          cacheKey: cacheKey(),
         }}
         enableLineSelection={!md()}
         enableHoverUtility={!md()}
