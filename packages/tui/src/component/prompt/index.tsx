@@ -65,6 +65,7 @@ export type PromptProps = {
   ref?: (ref: PromptRef | undefined) => void
   hint?: JSX.Element
   right?: JSX.Element
+  spinner?: JSX.Element
   showPlaceholder?: boolean
   placeholders?: {
     normal?: string[]
@@ -1573,6 +1574,11 @@ export function Prompt(props: PromptProps) {
                     })()}
                   </box>
                 </box>
+                <Show when={props.spinner}>
+                  <box flexDirection="row" gap={1} flexShrink={0}>
+                    {props.spinner}
+                  </box>
+                </Show>
                 <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
                   esc{" "}
                   <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
