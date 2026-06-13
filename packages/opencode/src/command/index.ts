@@ -45,7 +45,9 @@ export function hints(template: string) {
   const result: string[] = []
   const numbered = template.match(/\$\d+/g)
   if (numbered) {
-    for (const match of [...new Set(numbered)].sort()) result.push(match)
+    // Sort numerically, not lexicographically, so $2 comes before $10.
+    for (const match of [...new Set(numbered)].sort((a, b) => Number(a.slice(1)) - Number(b.slice(1))))
+      result.push(match)
   }
   if (template.includes("$ARGUMENTS")) result.push("$ARGUMENTS")
   return result
