@@ -1,0 +1,1 @@
+export { Timestamps } from "./dialect"
