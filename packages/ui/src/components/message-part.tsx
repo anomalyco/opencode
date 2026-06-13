@@ -74,30 +74,6 @@ type ProviderSummary = {
   models?: Record<string, { name?: string } | undefined>
 }
 
-type QuestionProfileTextMark = {
-  at: number
-  messageID: string
-  partID: string
-  length: number
-  source: string
-}
-
-type QuestionFlowFields = Record<string, string | number | boolean | undefined>
-
-type QuestionFlowRecent = {
-  at: number
-  requestID: string
-  sessionID: string
-  source: string
-  submittedAt?: number
-}
-
-type QuestionFlowGlobal = {
-  seq: number
-  latest?: QuestionFlowRecent
-  recentBySession: Record<string, QuestionFlowRecent | undefined>
-}
-
 type QuestionHandoff = {
   requestID: string
   sessionID: string
@@ -113,20 +89,10 @@ type QuestionHandoffGlobal = {
   byTool?: Record<string, QuestionHandoff | undefined>
 }
 
-const QUESTION_FLOW_RECENT_MS = 12_000
 const QUESTION_HANDOFF_EVENT = "opencode:question-handoff"
 const QUESTION_HANDOFF_MAX_AGE_MS = 30_000
 
-function questionProfileEnabled() {
-  if (typeof window === "undefined") return false
-  try {
-    return window.localStorage.getItem("opencode.question.profile") === "1"
-  } catch {
-    return false
-  }
-}
-
-function questionProfileNow() {
+function questionHandoffNow() {
   if (typeof performance === "undefined") return Date.now()
   return performance.now()
 }
@@ -144,7 +110,7 @@ function questionHandoffToolKey(input: { sessionID: string; messageID?: string; 
 }
 
 function cleanupQuestionHandoffs(global: QuestionHandoffGlobal): void {
-  const now = questionProfileNow()
+  const now = questionHandoffNow()
   for (const [requestID, handoff] of Object.entries(global.byRequest)) {
     if (!handoff || now - handoff.createdAt <= QUESTION_HANDOFF_MAX_AGE_MS) continue
     delete global.byRequest[requestID]
@@ -173,130 +139,6 @@ function questionHandoffForPart(part: ToolPart): QuestionHandoff | undefined {
   })
 
   return candidates.at(-1)
-}
-
-function questionProfileGlobal() {
-  if (typeof window === "undefined") return undefined
-  return (
-    window as Window & {
-      __opencodeQuestionProfile?: {
-        lastTextBySession?: Record<string, QuestionProfileTextMark | undefined>
-        seen?: Record<string, boolean | undefined>
-      }
-    }
-  ).__opencodeQuestionProfile
-}
-
-function questionProfileEmit(
-  phase: string,
-  part: ToolPart,
-  fields: Record<string, string | number | boolean | undefined> = {},
-) {
-  if (!questionProfileEnabled()) return
-  const global = questionProfileGlobal()
-  const text = global?.lastTextBySession?.[part.sessionID]
-  const key = `ui:${phase}:${part.id}:${part.state.status}`
-  if (global?.seen?.[key]) return
-  if (global?.seen) global.seen[key] = true
-  const line = Object.entries({
-    session: part.sessionID,
-    message: part.messageID,
-    part: part.id,
-    call: part.callID,
-    status: part.state.status,
-    sinceTextMs: text ? Math.round(questionProfileNow() - text.at) : "none",
-    textMsg: text?.messageID ?? "none",
-    textPart: text?.partID ?? "none",
-    textLen: text?.length ?? "none",
-    textSource: text?.source ?? "none",
-    ...fields,
-  })
-    .filter((entry) => entry[1] !== undefined)
-    .map(([name, value]) => `${name}=${String(value)}`)
-    .join(" ")
-  console.warn(`[question-profile] phase=ui:${phase} t=${questionProfileNow().toFixed(1)} ${line}`)
-}
-
-function questionFlowEnabled() {
-  if (typeof window === "undefined") return false
-  try {
-    return window.localStorage.getItem("opencode.question.flow") !== "0"
-  } catch {
-    return true
-  }
-}
-
-function questionFlowGlobal(): QuestionFlowGlobal | undefined {
-  if (typeof window === "undefined") return undefined
-  const target = window as Window & { __opencodeQuestionFlow?: QuestionFlowGlobal }
-  target.__opencodeQuestionFlow ??= {
-    seq: 0,
-    recentBySession: {},
-  }
-  return target.__opencodeQuestionFlow
-}
-
-function questionFlowElementMetrics(element: HTMLElement | undefined, prefix: string): QuestionFlowFields {
-  if (!element) return { [`${prefix}Rect`]: "none" }
-  const rect = element.getBoundingClientRect()
-  return {
-    [`${prefix}Top`]: Math.round(rect.top),
-    [`${prefix}Bottom`]: Math.round(rect.bottom),
-    [`${prefix}Height`]: Math.round(rect.height),
-    [`${prefix}Width`]: Math.round(rect.width),
-  }
-}
-
-function questionFlowToolMetrics(part: ToolPart, hidden: boolean): QuestionFlowFields {
-  const state = part.state
-  const metadata =
-    "metadata" in state && state.metadata && typeof state.metadata === "object"
-      ? (state.metadata as Record<string, unknown>)
-      : undefined
-  const answers = metadata?.answers
-  const metadataRequest = metadata?.questionRequest
-  const metadataRequestID =
-    metadataRequest && typeof metadataRequest === "object" && "id" in metadataRequest
-      ? (metadataRequest as { id?: unknown }).id
-      : undefined
-  const questions = Array.isArray(state.input.questions) ? state.input.questions.length : "none"
-  return {
-    hidden,
-    status: state.status,
-    questions,
-    outputLength: "output" in state && typeof state.output === "string" ? state.output.length : "none",
-    metadataAnswers: Array.isArray(answers) ? answers.length : "none",
-    hasQuestionRequest: metadata?.questionRequest ? 1 : 0,
-    metadataRequest: typeof metadataRequestID === "string" ? metadataRequestID : "none",
-  }
-}
-
-function questionFlowEmit(phase: string, part: ToolPart, fields: QuestionFlowFields = {}): void {
-  if (!questionFlowEnabled()) return
-  const global = questionFlowGlobal()
-  if (!global) return
-  const at = questionProfileNow()
-  const recent = global.recentBySession[part.sessionID] ?? global.latest
-  if (recent && at - recent.at > QUESTION_FLOW_RECENT_MS) return
-
-  global.seq += 1
-  const submittedAt = recent?.sessionID === part.sessionID ? recent.submittedAt : undefined
-  const values: QuestionFlowFields = {
-    seq: global.seq,
-    session: part.sessionID,
-    request: recent?.sessionID === part.sessionID ? recent.requestID : "none",
-    sinceSubmitMs: submittedAt === undefined ? "none" : Math.round(at - submittedAt),
-    message: part.messageID,
-    part: part.id,
-    call: part.callID,
-    ...fields,
-  }
-  const line = Object.entries(values)
-    .filter((entry): entry is [string, string | number | boolean] => entry[1] !== undefined)
-    .map(([name, value]) => `${name}=${String(value)}`)
-    .join(" ")
-
-  console.debug(`[question-flow] phase=ui:${phase} t=${at.toFixed(1)} ${line}`)
 }
 
 function providerByID(all: unknown, providerID: string): ProviderSummary | undefined {
@@ -1695,7 +1537,6 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const tool = toolName(part())
   if (tool === "todowrite" || tool === "todoread") return null
 
-  let toolWrapper: HTMLDivElement | undefined
   const [handoffVersion, setHandoffVersion] = createSignal(0)
   onMount(() => {
     if (tool !== "question") return
@@ -1707,39 +1548,6 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const questionHandoff = createMemo(() => {
     handoffVersion()
     return tool === "question" ? questionHandoffForPart(part()) : undefined
-  })
-  createEffect(() => {
-    if (tool !== "question") return
-    const current = part()
-    const hidden = hideQuestion()
-    questionProfileEmit(hideQuestion() ? "tool-hidden" : "tool-visible", current, {
-      hidden,
-      hasQuestions: Array.isArray(current.state.input.questions),
-      questions: Array.isArray(current.state.input.questions) ? current.state.input.questions.length : "none",
-    })
-    questionFlowEmit(hidden ? "tool-hidden" : "tool-visible", current, {
-      ...questionFlowToolMetrics(current, hidden),
-      handoffAnswers: questionHandoff()?.answers.length ?? "none",
-    })
-    queueMicrotask(() => {
-      const microtaskPart = part()
-      const microtaskHidden = hideQuestion()
-      questionFlowEmit("tool-dom-microtask", microtaskPart, {
-        ...questionFlowToolMetrics(microtaskPart, microtaskHidden),
-        handoffAnswers: questionHandoff()?.answers.length ?? "none",
-        ...questionFlowElementMetrics(toolWrapper, "wrapper"),
-      })
-      if (typeof requestAnimationFrame !== "function") return
-      requestAnimationFrame(() => {
-        const framePart = part()
-        const frameHidden = hideQuestion()
-        questionFlowEmit("tool-dom-raf", framePart, {
-          ...questionFlowToolMetrics(framePart, frameHidden),
-          handoffAnswers: questionHandoff()?.answers.length ?? "none",
-          ...questionFlowElementMetrics(toolWrapper, "wrapper"),
-        })
-      })
-    })
   })
 
   const emptyMetadata: Record<string, any> = {}
@@ -1772,7 +1580,6 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   return (
     <Show when={!hideQuestion()}>
       <div
-        ref={(el) => (toolWrapper = el)}
         data-component="tool-part-wrapper"
         data-tool={tool}
         data-tool-status={part().state.status}

@@ -1,5 +1,4 @@
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
-import { markQuestionFlow } from "./session-question-flow-debug"
 
 type QuestionHandoffPart = string | { type: "image"; mime: string; url: string; filename?: string }
 
@@ -108,16 +107,6 @@ export function rememberQuestionHandoff(input: {
   global.byRequest[handoff.requestID] = handoff
   const key = toolKey(handoff)
   if (key) global.byTool[key] = handoff
-  markQuestionFlow(
-    "handoff-remember",
-    {
-      message: handoff.messageID ?? "none",
-      call: handoff.callID ?? "none",
-      answers: handoff.answers.length,
-      toolKey: key ?? "none",
-    },
-    { sessionID: handoff.sessionID, requestID: handoff.requestID },
-  )
   dispatchHandoffEvent(handoff)
 }
 

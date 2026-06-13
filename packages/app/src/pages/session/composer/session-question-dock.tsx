@@ -17,12 +17,6 @@ import { ACCEPTED_IMAGE_TYPES } from "@/constants/file-picker"
 import { PromptImageAttachments } from "@/components/prompt-input/image-attachments"
 import { uuid } from "@/utils/uuid"
 import {
-  markQuestionFlow,
-  questionFlowElementMetrics,
-  questionFlowViewportMetrics,
-  rememberQuestionFlow,
-} from "./session-question-flow-debug"
-import {
   questionAnswered,
   questionAttachments,
   questionReply,
@@ -31,30 +25,9 @@ import {
 } from "./session-question-dock-helpers"
 import { captureQuestionFlipSource } from "./session-question-flip"
 import { clearQuestionHandoff, rememberQuestionHandoff } from "./session-question-handoff"
-import { markQuestionProfileUi } from "./session-question-profile"
 
 function textPart(part: QuestionAnswer[number]): part is string {
   return typeof part === "string"
-}
-
-function questionAnswerMetrics(answers: QuestionAnswer[]) {
-  let answerParts = 0
-  let textParts = 0
-  let imageParts = 0
-  for (const answer of answers) {
-    answerParts += answer.length
-    for (const part of answer) {
-      if (textPart(part)) textParts += 1
-      else imageParts += 1
-    }
-  }
-  return {
-    answers: answers.length,
-    answered: answers.filter((answer) => answer.length > 0).length,
-    answerParts,
-    textParts,
-    imageParts,
-  }
 }
 
 export const questionCache = new Map<
@@ -152,40 +125,6 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   onMount(() => {
-    const viewport = document.querySelector(".scroll-view__viewport") as HTMLElement | null
-    markQuestionProfileUi("question-dock-mount", props.request, {
-      questions: total(),
-      options: options().length,
-      cached: cached ? 1 : 0,
-      dockHeight: root ? Math.round(root.getBoundingClientRect().height) : "none",
-      viewportClient: viewport ? Math.round(viewport.clientHeight) : "none",
-      viewportScroll: viewport ? Math.round(viewport.scrollHeight) : "none",
-      viewportTop: viewport ? Math.round(viewport.scrollTop) : "none",
-    })
-    const mountAt = performance.now()
-    requestAnimationFrame(() => {
-      const nextViewport = document.querySelector(".scroll-view__viewport") as HTMLElement | null
-      markQuestionProfileUi("question-dock-raf1", props.request, {
-        mountToRafMs: Math.round(performance.now() - mountAt),
-        height: root ? Math.round(root.getBoundingClientRect().height) : "none",
-        dockHeight: root ? Math.round(root.getBoundingClientRect().height) : "none",
-        viewportClient: nextViewport ? Math.round(nextViewport.clientHeight) : "none",
-        viewportScroll: nextViewport ? Math.round(nextViewport.scrollHeight) : "none",
-        viewportTop: nextViewport ? Math.round(nextViewport.scrollTop) : "none",
-      })
-      requestAnimationFrame(() => {
-        const finalViewport = document.querySelector(".scroll-view__viewport") as HTMLElement | null
-        markQuestionProfileUi("question-dock-raf2", props.request, {
-          mountToRafMs: Math.round(performance.now() - mountAt),
-          height: root ? Math.round(root.getBoundingClientRect().height) : "none",
-          dockHeight: root ? Math.round(root.getBoundingClientRect().height) : "none",
-          viewportClient: finalViewport ? Math.round(finalViewport.clientHeight) : "none",
-          viewportScroll: finalViewport ? Math.round(finalViewport.scrollHeight) : "none",
-          viewportTop: finalViewport ? Math.round(finalViewport.scrollTop) : "none",
-        })
-      })
-    })
-
     let raf: number | undefined
     const update = () => {
       if (raf !== undefined) cancelAnimationFrame(raf)
@@ -261,17 +200,6 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   })
 
   onCleanup(() => {
-    markQuestionFlow(
-      "dock-cleanup",
-      {
-        replied,
-        sending: store.sending,
-        tab: store.tab,
-        total: total(),
-        ...questionFlowElementMetrics(root, "dock"),
-      },
-      { sessionID: props.request.sessionID, requestID: props.request.id },
-    )
     if (replied) return
     questionCache.set(props.request.id, {
       tab: store.tab,
@@ -286,9 +214,6 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
     const result = await sdk.client.question.list()
     const list = (result.data ?? []).filter((item) => item.sessionID === props.request.sessionID)
     sync.set("question", props.request.sessionID, reconcile(list, { key: "id" }))
-    console.debug(
-      `[question-dock] refreshed pending questions session=${props.request.sessionID} count=${list.length} stale=${props.request.id}`,
-    )
   }
 
   const removeStaleQuestion = () => {
@@ -308,23 +233,9 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const fail = (err: unknown) => {
     const message = err instanceof Error ? err.message : String(err)
     clearQuestionHandoff(props.request.id)
-    markQuestionFlow(
-      "dock-mutation-error",
-      {
-        message,
-        stale: questionRequestNotFound(err, props.request.id),
-      },
-      { sessionID: props.request.sessionID, requestID: props.request.id },
-    )
     if (questionRequestNotFound(err, props.request.id)) {
-      console.warn(
-        `[question-dock] stale request missing on server request=${props.request.id} session=${props.request.sessionID}`,
-      )
       removeStaleQuestion()
-      void refreshQuestions().catch((refreshErr: unknown) => {
-        const message = refreshErr instanceof Error ? refreshErr.message : String(refreshErr)
-        console.warn(`[question-dock] refresh after stale request failed request=${props.request.id} error=${message}`)
-      })
+      void refreshQuestions().catch(() => undefined)
       showToast({
         title: language.t("common.requestFailed"),
         description: `Question request is no longer pending: ${props.request.id}`,
@@ -337,83 +248,29 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   const replyMutation = useMutation(() => ({
     mutationFn: async (answers: QuestionAnswer[]) => {
-      markQuestionFlow(
-        "reply-mutation-start",
-        questionAnswerMetrics(answers),
-        { sessionID: props.request.sessionID, requestID: props.request.id },
-      )
-      const result = await sdk.client.question.reply({ requestID: props.request.id, answers })
-      markQuestionFlow(
-        "reply-mutation-resolve",
-        questionAnswerMetrics(answers),
-        { sessionID: props.request.sessionID, requestID: props.request.id },
-      )
-      return result
+      return sdk.client.question.reply({ requestID: props.request.id, answers })
     },
     onMutate: (answers: QuestionAnswer[]) => {
-      markQuestionFlow(
-        "reply-onMutate-before-onSubmit",
-        {
-          ...questionFlowElementMetrics(root, "dock"),
-          ...questionFlowViewportMetrics(document.querySelector(".scroll-view__viewport") as HTMLElement | null),
-        },
-        { sessionID: props.request.sessionID, requestID: props.request.id },
-      )
       props.onSubmit()
-      markQuestionFlow(
-        "reply-onMutate-after-onSubmit",
-        {
-          ...questionFlowElementMetrics(root, "dock"),
-          ...questionFlowViewportMetrics(document.querySelector(".scroll-view__viewport") as HTMLElement | null),
-        },
-        { sessionID: props.request.sessionID, requestID: props.request.id },
-      )
       rememberQuestionHandoff({ request: props.request, answers })
     },
     onSuccess: () => {
       replied = true
       questionCache.delete(props.request.id)
-      markQuestionFlow("reply-onSuccess", {}, { sessionID: props.request.sessionID, requestID: props.request.id })
     },
     onError: fail,
   }))
 
   const rejectMutation = useMutation(() => ({
     mutationFn: async () => {
-      markQuestionFlow("reject-mutation-start", {}, { sessionID: props.request.sessionID, requestID: props.request.id })
-      const result = await sdk.client.question.reject({ requestID: props.request.id })
-      markQuestionFlow("reject-mutation-resolve", {}, { sessionID: props.request.sessionID, requestID: props.request.id })
-      return result
+      return sdk.client.question.reject({ requestID: props.request.id })
     },
     onMutate: () => {
-      rememberQuestionFlow({
-        requestID: props.request.id,
-        sessionID: props.request.sessionID,
-        source: "dock-reject",
-        submitted: true,
-      })
-      markQuestionFlow(
-        "reject-onMutate-before-onSubmit",
-        {
-          ...questionFlowElementMetrics(root, "dock"),
-          ...questionFlowViewportMetrics(document.querySelector(".scroll-view__viewport") as HTMLElement | null),
-        },
-        { sessionID: props.request.sessionID, requestID: props.request.id },
-      )
       props.onSubmit()
-      markQuestionFlow(
-        "reject-onMutate-after-onSubmit",
-        {
-          ...questionFlowElementMetrics(root, "dock"),
-          ...questionFlowViewportMetrics(document.querySelector(".scroll-view__viewport") as HTMLElement | null),
-        },
-        { sessionID: props.request.sessionID, requestID: props.request.id },
-      )
     },
     onSuccess: () => {
       replied = true
       questionCache.delete(props.request.id)
-      markQuestionFlow("reject-onSuccess", {}, { sessionID: props.request.sessionID, requestID: props.request.id })
     },
     onError: fail,
   }))
@@ -423,47 +280,23 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   createEffect(() => setStore("sending", sending()))
 
   const reply = (answers: QuestionAnswer[]) => {
-    if (sending()) {
-      markQuestionFlow("reply-skip", { reason: "sending" }, { sessionID: props.request.sessionID, requestID: props.request.id })
-      return
-    }
+    if (sending()) return
     replyMutation.mutate(answers)
   }
 
   const reject = () => {
-    if (sending()) {
-      markQuestionFlow("reject-skip", { reason: "sending" }, { sessionID: props.request.sessionID, requestID: props.request.id })
-      return
-    }
+    if (sending()) return
     rejectMutation.mutate()
   }
 
   const submit = () => {
     const answers = questionReply(questions(), store.answers, store.images)
-    rememberQuestionFlow({
-      requestID: props.request.id,
-      sessionID: props.request.sessionID,
-      source: "dock-submit",
-      submitted: true,
-    })
-    markQuestionFlow(
-      "dock-submit",
-      {
-        tab: store.tab,
-        total: total(),
-        ...questionAnswerMetrics(answers),
-        ...questionFlowElementMetrics(root, "dock"),
-        ...questionFlowViewportMetrics(document.querySelector(".scroll-view__viewport") as HTMLElement | null),
-      },
-      { sessionID: props.request.sessionID, requestID: props.request.id },
-    )
     captureQuestionFlipSource({
       requestID: props.request.id,
       sessionID: props.request.sessionID,
       source: root,
     })
     reply(answers)
-    markQuestionFlow("dock-submit-after-reply-call", {}, { sessionID: props.request.sessionID, requestID: props.request.id })
   }
 
   const pick = (answer: string, custom: boolean = false) => {

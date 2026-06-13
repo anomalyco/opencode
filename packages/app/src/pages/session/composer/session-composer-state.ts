@@ -11,8 +11,6 @@ import { useSync } from "@/context/sync"
 import { composerDriver, composerEnabled, composerEvent } from "@/testing/session-composer"
 import { sessionPermissionRequest, sessionQuestionRequest, sessionQuestionRequests } from "./session-request-tree"
 import { working as sessionWorking } from "../session-working"
-import { markQuestionProfileUi } from "./session-question-profile"
-import { markQuestionFlow, rememberQuestionFlow } from "./session-question-flow-debug"
 import { permissionRequestNotFound, questionInvalidation } from "./session-question-dock-helpers"
 import { todoState } from "./session-composer-state-helpers"
 
@@ -78,56 +76,6 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
       )
     }
   }
-
-  createEffect(() => {
-    const request = questionRequest()
-    if (!request) return
-    markQuestionProfileUi("composer-request", request, {
-      route: params.id ?? "none",
-      sessions: sync.data.session.length,
-      pending: sync.data.question[request.sessionID]?.length ?? 0,
-    })
-  })
-
-  let lastQuestionRequest: { id: string; sessionID: string } | undefined
-  createEffect(() => {
-    const request = questionRequest()
-    const previous = lastQuestionRequest
-    const nextID = request?.id
-    if (previous?.id === nextID) return
-
-    if (request) {
-      rememberQuestionFlow({
-        requestID: request.id,
-        sessionID: request.sessionID,
-        source: "composer-question-present",
-      })
-      markQuestionFlow(
-        "composer-question-present",
-        {
-          route: params.id ?? "none",
-          previousRequest: previous?.id ?? "none",
-          pending: sync.data.question[request.sessionID]?.length ?? 0,
-          questions: request.questions.length,
-        },
-        { sessionID: request.sessionID, requestID: request.id },
-      )
-      lastQuestionRequest = { id: request.id, sessionID: request.sessionID }
-      return
-    }
-
-    if (!previous) return
-    markQuestionFlow(
-      "composer-question-missing",
-      {
-        route: params.id ?? "none",
-        previousRequest: previous.id,
-        pending: sync.data.question[previous.sessionID]?.length ?? 0,
-      },
-      { sessionID: previous.sessionID, requestID: previous.id },
-    )
-    lastQuestionRequest = undefined
-  })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
     return sessionPermissionRequest(sync.data.session, sync.data.permission, params.id, (item) => {

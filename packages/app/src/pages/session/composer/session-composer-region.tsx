@@ -16,8 +16,6 @@ import { SessionRevertDock } from "@/pages/session/composer/session-revert-dock"
 import type { SessionComposerState } from "@/pages/session/composer/session-composer-state"
 import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
 import type { FollowupDraft } from "@/components/prompt-input/submit"
-import { markQuestionFlow, questionFlowElementMetrics } from "./session-question-flow-debug"
-import { markQuestionProfileUi } from "./session-question-profile"
 
 export function SessionComposerRegion(props: {
   state: SessionComposerState
@@ -132,59 +130,6 @@ export function SessionComposerRegion(props: {
   }
 
   createEffect(() => {
-    const request = props.state.questionRequest()
-    if (!request) return
-    markQuestionProfileUi("composer-region", request, {
-      ready: store.ready,
-      propsReady: props.ready,
-      blocked: props.state.blocked(),
-      dock: props.state.dock(),
-      closing: props.state.closing(),
-      promptReady: prompt.ready(),
-    })
-  })
-
-  let lastRegionState = ""
-  let lastRegionQuestion: { id: string; sessionID: string } | undefined
-  createEffect(() => {
-    const request = props.state.questionRequest()
-    const requestID = request?.id ?? "none"
-    const sessionID = request?.sessionID ?? lastRegionQuestion?.sessionID
-    const signature = [
-      requestID,
-      store.ready ? "ready" : "not-ready",
-      props.ready ? "props-ready" : "props-not-ready",
-      props.state.blocked() ? "blocked" : "unblocked",
-      props.state.dock() ? "dock" : "no-dock",
-      props.state.closing() ? "closing" : "openable",
-      open() ? "open" : "closed",
-      prompt.ready() ? "prompt-ready" : "prompt-not-ready",
-      value().toFixed(2),
-    ].join(":")
-    if (signature === lastRegionState) return
-    lastRegionState = signature
-
-    markQuestionFlow(
-      "composer-region-state",
-      {
-        nextRequest: requestID,
-        previousRequest: lastRegionQuestion?.id ?? "none",
-        ready: store.ready,
-        propsReady: props.ready,
-        blocked: props.state.blocked(),
-        dock: props.state.dock(),
-        closing: props.state.closing(),
-        open: open(),
-        promptReady: prompt.ready(),
-        progress: Math.round(value() * 100) / 100,
-      },
-      { sessionID, requestID: request?.id ?? lastRegionQuestion?.id },
-    )
-
-    lastRegionQuestion = request ? { id: request.id, sessionID: request.sessionID } : undefined
-  })
-
-  createEffect(() => {
     const el = store.body
     if (!el) return
     let raf: number | undefined
@@ -219,20 +164,7 @@ export function SessionComposerRegion(props: {
       >
         <Show when={props.state.questionRequest()} keyed>
           {(request) => (
-            <div
-              ref={(el) => {
-                markQuestionProfileUi("question-wrapper-ref", request, {
-                  height: Math.round(el.getBoundingClientRect().height),
-                })
-                markQuestionFlow(
-                  "question-wrapper-ref",
-                  {
-                    ...questionFlowElementMetrics(el, "wrapper"),
-                  },
-                  { sessionID: request.sessionID, requestID: request.id },
-                )
-              }}
-            >
+            <div>
               <SessionQuestionDock request={request} onSubmit={props.onResponseSubmit} />
             </div>
           )}

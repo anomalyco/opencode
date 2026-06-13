@@ -1,9 +1,3 @@
-import {
-  markQuestionFlow,
-  questionFlowElementMetrics,
-  questionFlowViewportMetrics,
-} from "./session-question-flow-debug"
-
 type QuestionFlipRect = {
   top: number
   left: number
@@ -80,14 +74,6 @@ function cleanupExpired(): void {
     if (!expired(snapshot)) continue
     pending.delete(requestID)
     if (recent?.requestID === requestID) recent = undefined
-    markQuestionFlow(
-      "flip-expired",
-      {
-        ageMs: Math.round(performance.now() - snapshot.createdAt),
-        pending: pending.size,
-      },
-      { sessionID: snapshot.sessionID, requestID },
-    )
   }
 }
 
@@ -116,21 +102,12 @@ function reducedMotion(): boolean {
 }
 
 function animateTarget(target: HTMLElement, first: QuestionFlipRect, last: QuestionFlipRect): void {
-  if (reducedMotion()) {
-    markQuestionFlow("flip-animate-skip", { reason: "reduced-motion" })
-    return
-  }
-  if (last.width <= 0 || last.height <= 0) {
-    markQuestionFlow("flip-animate-skip", { reason: "empty-last", lastHeight: Math.round(last.height) })
-    return
-  }
+  if (reducedMotion()) return
+  if (last.width <= 0 || last.height <= 0) return
 
   const dx = first.left - last.left
   const dy = first.top - last.top
-  if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
-    markQuestionFlow("flip-animate-skip", { reason: "same-position", dx: Math.round(dx), dy: Math.round(dy) })
-    return
-  }
+  if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return
 
   const scaleX = clamp(first.width / last.width, 0.94, 1.06)
   const scaleY = clamp(first.height / last.height, 0.82, 1.18)
@@ -160,7 +137,6 @@ function animateTarget(target: HTMLElement, first: QuestionFlipRect, last: Quest
     target.style.removeProperty("transform")
     target.style.removeProperty("opacity")
     delete target.dataset.questionFlip
-    markQuestionFlow("flip-cleanup")
   })
 }
 
@@ -170,19 +146,9 @@ export function captureQuestionFlipSource(input: {
   source: HTMLElement | undefined
 }): void {
   const source = input.source
-  if (!source) {
-    markQuestionFlow("flip-capture-skip", { reason: "no-source" }, input)
-    return
-  }
+  if (!source) return
   const rect = rectOf(source)
-  if (rect.width <= 0 || rect.height <= 0) {
-    markQuestionFlow(
-      "flip-capture-skip",
-      { reason: "empty-source", sourceHeight: Math.round(rect.height), sourceWidth: Math.round(rect.width) },
-      input,
-    )
-    return
-  }
+  if (rect.width <= 0 || rect.height <= 0) return
 
   const snapshot: QuestionFlipSnapshot = {
     requestID: input.requestID,
@@ -194,69 +160,20 @@ export function captureQuestionFlipSource(input: {
 
   pending.set(snapshot.requestID, snapshot)
   recent = snapshot
-  markQuestionFlow(
-    "flip-capture",
-    {
-      sourceTop: Math.round(rect.top),
-      sourceHeight: Math.round(rect.height),
-      sourceWidth: Math.round(rect.width),
-      pending: pending.size,
-      ...(snapshot.viewport
-        ? {
-            viewportTop: Math.round(snapshot.viewport.scrollTop),
-            viewportScrollHeight: Math.round(snapshot.viewport.scrollHeight),
-            viewportClientHeight: Math.round(snapshot.viewport.clientHeight),
-            viewportBottomGap: Math.round(snapshot.viewport.bottomGap),
-          }
-        : { viewportRect: "none" }),
-    },
-    input,
-  )
 }
 
 export function playPendingQuestionFlip(input: { root: ParentNode; viewport: HTMLElement | undefined }): boolean {
   const viewport = input.viewport
   const sessionID = recent?.sessionID
   const snapshot = matchSnapshot(sessionID)
-  if (!snapshot) {
-    markQuestionFlow("flip-play-skip", { reason: "no-snapshot" })
-    return false
-  }
-
-  markQuestionFlow(
-    "flip-play-attempt",
-    {
-      ageMs: Math.round(performance.now() - snapshot.createdAt),
-      pending: pending.size,
-      ...questionFlowViewportMetrics(viewport, "viewport"),
-    },
-    { sessionID: snapshot.sessionID, requestID: snapshot.requestID },
-  )
+  if (!snapshot) return false
 
   const target = findQuestionTarget(input.root, snapshot)
-  if (!target) {
-    markQuestionFlow(
-      "flip-play-skip",
-      {
-        reason: "no-target",
-        candidates: input.root.querySelectorAll(QUESTION_TOOL_SELECTOR).length,
-      },
-      { sessionID: snapshot.sessionID, requestID: snapshot.requestID },
-    )
-    return false
-  }
-  if (target.dataset.questionFlip === "playing") {
-    markQuestionFlow("flip-play-skip", { reason: "target-playing" }, { sessionID: snapshot.sessionID, requestID: snapshot.requestID })
-    return false
-  }
+  if (!target) return false
+  if (target.dataset.questionFlip === "playing") return false
   if (target.dataset.questionHandoff === "answer") {
     pending.delete(snapshot.requestID)
     if (recent?.requestID === snapshot.requestID) recent = undefined
-    markQuestionFlow(
-      "flip-play-skip",
-      { reason: "handoff-answer" },
-      { sessionID: snapshot.sessionID, requestID: snapshot.requestID },
-    )
     return false
   }
 
@@ -266,28 +183,9 @@ export function playPendingQuestionFlip(input: { root: ParentNode; viewport: HTM
   const shouldPin = snapshot.viewport ? snapshot.viewport.bottomGap <= QUESTION_FLIP_BOTTOM_THRESHOLD : false
   if (shouldPin && viewport) {
     viewport.scrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
-    markQuestionFlow(
-      "flip-pin",
-      {
-        capturedBottomGap: snapshot.viewport ? Math.round(snapshot.viewport.bottomGap) : "none",
-        ...questionFlowViewportMetrics(viewport, "viewport"),
-      },
-      { sessionID: snapshot.sessionID, requestID: snapshot.requestID },
-    )
   }
 
   const last = rectOf(target)
-  markQuestionFlow(
-    "flip-play",
-    {
-      dx: Math.round(snapshot.rect.left - last.left),
-      dy: Math.round(snapshot.rect.top - last.top),
-      firstHeight: Math.round(snapshot.rect.height),
-      lastHeight: Math.round(last.height),
-      ...questionFlowElementMetrics(target, "target"),
-    },
-    { sessionID: snapshot.sessionID, requestID: snapshot.requestID },
-  )
   animateTarget(target, snapshot.rect, last)
   return true
 }
