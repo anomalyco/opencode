@@ -1,3 +1,4 @@
+import path from "node:path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { type Tool } from "ai"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
@@ -304,7 +305,8 @@ export const layer = Layer.effect(
       mcp: ConfigMCPV1.Info & { type: "local" },
     ) {
       const [cmd, ...args] = mcp.command
-      const cwd = yield* InstanceState.directory
+      const baseDir = yield* InstanceState.directory
+      const cwd = mcp.cwd ? path.resolve(baseDir, mcp.cwd) : baseDir
       const transport = new StdioClientTransport({
         stderr: "pipe",
         command: cmd,
@@ -396,6 +398,19 @@ export const layer = Layer.effect(
     )
 
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
+      client.onclose = () => {
+        if (s.clients[name] !== client) return
+        delete s.clients[name]
+        delete s.defs[name]
+        s.status[name] = { status: "failed", error: "Connection closed" }
+        bridge.fork(
+          Effect.logWarning("MCP connection closed", { server: name }).pipe(
+            Effect.andThen(events.publish(ToolsChanged, { server: name })),
+            Effect.ignore,
+          ),
+        )
+      }
+
       client.setNotificationHandler(LoggingMessageNotificationSchema, (notification) =>
         bridge.promise(serverLog(name, notification.params)),
       )
@@ -470,8 +485,11 @@ export const layer = Layer.effect(
 
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
+            const clients = Object.values(s.clients)
+            s.clients = {}
+            s.defs = {}
             yield* Effect.forEach(
-              Object.values(s.clients),
+              clients,
               (client) =>
                 Effect.gen(function* () {
                   const pid = client.transport instanceof StdioClientTransport ? client.transport.pid : null
@@ -497,6 +515,7 @@ export const layer = Layer.effect(
 
     function closeClient(s: State, name: string) {
       const client = s.clients[name]
+      delete s.clients[name]
       delete s.defs[name]
       if (!client) return Effect.void
       return Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
@@ -510,11 +529,12 @@ export const layer = Layer.effect(
       timeout?: number,
     ) {
       const bridge = yield* EffectBridge.make()
-      yield* closeClient(s, name)
+      const previous = s.clients[name]
       s.status[name] = { status: "connected" }
       s.clients[name] = client
       s.defs[name] = listed
       watch(s, name, client, bridge, timeout)
+      if (previous) yield* Effect.tryPromise(() => previous.close()).pipe(Effect.ignore)
       return s.status[name]
     })
 
@@ -741,7 +761,10 @@ export const layer = Layer.effect(
         auth,
       )
 
-      const transport = new StreamableHTTPClientTransport(url, { authProvider })
+      const transport = new StreamableHTTPClientTransport(url, {
+        authProvider,
+        requestInit: mcpConfig.headers ? { headers: mcpConfig.headers } : undefined,
+      })
 
       return yield* Effect.tryPromise({
         try: () => {

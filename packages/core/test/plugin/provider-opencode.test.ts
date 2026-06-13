@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Layer, Option } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Credential } from "@opencode-ai/core/credential"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -161,7 +162,9 @@ describe("OpencodePlugin", () => {
         yield* plugin.add(OpencodePlugin)
         const transform = yield* catalog.transform()
         yield* transform((catalog) => {
-          const item = provider("opencode", { enabled: { via: "account", service: "opencode" } })
+          const item = provider("opencode", {
+            enabled: { via: "credential", credentialID: Credential.ID.make("credential") },
+          })
           catalog.provider.update(item.id, (draft) => {
             draft.enabled = item.enabled
           })
