@@ -196,7 +196,9 @@ export const TaskTool = Tool.define(
           }
           // Budget spawn gate (design-final §4.6, soft cap): an exhausted
           // shared turn pool refuses NEW subagents while running ones finish.
-          // No pool (the interactive default) means no gate.
+          // No pool (the interactive default) means no gate. The cast narrows
+          // the loosely-typed ctx.extra bag (false positive, see ops above).
+          // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           const pool = ctx.extra?.turnBudget as TurnBudget.Pool | undefined
           if (pool !== undefined) {
             const headroom = TurnBudget.remaining(pool)
@@ -272,6 +274,10 @@ export const TaskTool = Tool.define(
         metadata,
       })
 
+      // ctx.extra is the loosely-typed `{ [key: string]: unknown }` tool bag, so
+      // narrowing the promptOps it carries is required (removing the assertion
+      // breaks the typecheck) — a false positive for no-unsafe-type-assertion.
+      // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
       const ops = ctx.extra?.promptOps as TaskPromptOps
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
 
@@ -286,7 +292,9 @@ export const TaskTool = Tool.define(
           // the previous behavior (rootID === ctx.sessionID).
           permissionSessionID: rootID,
           // The shared turn pool travels BY REFERENCE into the child loop so
-          // all nesting levels charge the root turn's budget (§4.6).
+          // all nesting levels charge the root turn's budget (§4.6). The cast
+          // narrows the loosely-typed ctx.extra bag (false positive, see above).
+          // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           turnBudgetPool: ctx.extra?.turnBudget as TurnBudget.Pool | undefined,
           model: {
             modelID: model.modelID,
