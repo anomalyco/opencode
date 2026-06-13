@@ -6,7 +6,7 @@ import {
   type ContentPart,
   type Model,
   type ProviderMetadata,
-} from "@opencode-ai/llm"
+} from "@cedric/llm"
 import { SessionMessage } from "../message"
 import type { FileAttachment } from "../prompt"
 
@@ -146,6 +146,6 @@ ${message.recent}
   }
 }
 
-/** Translate projected V2 Session history into canonical @opencode-ai/llm context. */
+/** Translate projected V2 Session history into canonical @cedric/llm context. */
 export const toLLMMessages = (messages: readonly SessionMessage.Message[], model: Model) =>
   messages.flatMap((message) => toLLMMessage(message, model))

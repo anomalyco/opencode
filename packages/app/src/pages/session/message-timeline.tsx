@@ -16,9 +16,9 @@ import { Dynamic } from "solid-js/web"
 import { useNavigate } from "@solidjs/router"
 import { useMutation } from "@tanstack/solid-query"
 import { Virtualizer, type VirtualizerHandle } from "virtua/solid"
-import { Accordion } from "@opencode-ai/ui/accordion"
-import { Button } from "@opencode-ai/ui/button"
-import { Card } from "@opencode-ai/ui/card"
+import { Accordion } from "@cedric/ui/accordion"
+import { Button } from "@cedric/ui/button"
+import { Card } from "@cedric/ui/card"
 import {
   ContextToolGroup,
   Message,
@@ -26,37 +26,37 @@ import {
   Part as MessagePart,
   partDefaultOpen,
   type UserActions,
-} from "@opencode-ai/ui/message-part"
-import { DiffChanges } from "@opencode-ai/ui/diff-changes"
-import { FileIcon } from "@opencode-ai/ui/file-icon"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { InlineInput } from "@opencode-ai/ui/inline-input"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { SessionRetry } from "@opencode-ai/ui/session-retry"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
-import { TextField } from "@opencode-ai/ui/text-field"
-import { TextReveal } from "@opencode-ai/ui/text-reveal"
-import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
+} from "@cedric/ui/message-part"
+import { DiffChanges } from "@cedric/ui/diff-changes"
+import { FileIcon } from "@cedric/ui/file-icon"
+import { Icon } from "@cedric/ui/icon"
+import { IconButton } from "@cedric/ui/icon-button"
+import { DropdownMenu } from "@cedric/ui/dropdown-menu"
+import { Dialog } from "@cedric/ui/dialog"
+import { InlineInput } from "@cedric/ui/inline-input"
+import { Spinner } from "@cedric/ui/spinner"
+import { SessionRetry } from "@cedric/ui/session-retry"
+import { ScrollView } from "@cedric/ui/scroll-view"
+import { StickyAccordionHeader } from "@cedric/ui/sticky-accordion-header"
+import { TextField } from "@cedric/ui/text-field"
+import { TextReveal } from "@cedric/ui/text-reveal"
+import { TextShimmer } from "@cedric/ui/text-shimmer"
 import type {
   AssistantMessage,
   Message as MessageType,
   Part as PartType,
   ToolPart,
   UserMessage,
-} from "@opencode-ai/sdk/v2"
+} from "@cedric/sdk/v2"
 import { showToast } from "@/utils/toast"
-import { Binary } from "@opencode-ai/core/util/binary"
-import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { Binary } from "@cedric/core/util/binary"
+import { getDirectory, getFilename } from "@cedric/core/util/path"
 import { Popover as KobaltePopover } from "@kobalte/core/popover"
-import { normalize } from "@opencode-ai/ui/session-diff"
-import { useFileComponent } from "@opencode-ai/ui/context/file"
+import { normalize } from "@cedric/ui/session-diff"
+import { useFileComponent } from "@cedric/ui/context/file"
 import { shouldMarkBoundaryGesture, normalizeWheelDelta } from "@/pages/session/message-gesture"
 import { SessionContextUsage } from "@/components/session-context-usage"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@cedric/ui/context/dialog"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLanguage } from "@/context/language"
 import { useSessionKey } from "@/pages/session/session-layout"
@@ -582,8 +582,8 @@ export function MessageTimeline(props: {
   const isMeasuredBottom = (root: HTMLDivElement) => root.scrollHeight - root.clientHeight - root.scrollTop <= 4
 
   const measureTimeline = () => {
-    virtualizer?.measure()
     anchorMeasuredBottom()
+    scheduleMeasuredBottomAnchor()
   }
 
   function anchorMeasuredBottom() {

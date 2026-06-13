@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cedric Browser</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #252525;
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+    }
+
+    .toolbar button {
+      background: #333;
+      color: #e0e0e0;
+      border: 1px solid #444;
+      padding: 6px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+      transition: background 0.2s;
+    }
+
+    .toolbar button:hover {
+      background: #444;
+    }
+
+    .toolbar button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .toolbar .address-bar {
+      flex: 1;
+      display: flex;
+      gap: 8px;
+    }
+
+    .toolbar input {
+      flex: 1;
+      background: #1a1a1a;
+      color: #e0e0e0;
+      border: 1px solid #444;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 14px;
+      outline: none;
+    }
+
+    .toolbar input:focus {
+      border-color: #666;
+    }
+
+    .toolbar .annotation-tools {
+      display: flex;
+      gap: 4px;
+      margin-left: auto;
+    }
+
+    .toolbar .annotation-tools button {
+      padding: 6px 8px;
+      font-size: 12px;
+    }
+
+    .toolbar .annotation-tools button.active {
+      background: #4a9eff;
+      border-color: #4a9eff;
+    }
+
+    .content {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .webview-container {
+      flex: 1;
+      position: relative;
+      background: white;
+    }
+
+    .webview-container webview {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+
+    .annotations-panel {
+      width: 300px;
+      background: #252525;
+      border-left: 1px solid #333;
+      padding: 16px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    .annotations-panel.open {
+      display: block;
+    }
+
+    .annotations-panel h3 {
+      margin-bottom: 12px;
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .annotation-item {
+      background: #333;
+      border-radius: 6px;
+      padding: 10px;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+
+    .annotation-item .timestamp {
+      color: #888;
+      font-size: 11px;
+      margin-bottom: 4px;
+    }
+
+    .annotation-item .text {
+      color: #e0e0e0;
+      word-break: break-word;
+    }
+
+    .annotation-item .note {
+      margin-top: 6px;
+      padding-top: 6px;
+      border-top: 1px solid #444;
+      color: #aaa;
+      font-style: italic;
+    }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 4px 12px;
+      background: #252525;
+      border-top: 1px solid #333;
+      font-size: 12px;
+      color: #888;
+      flex-shrink: 0;
+    }
+
+    .status-bar .status-text {
+      flex: 1;
+    }
+
+    .highlight-overlay {
+      position: absolute;
+      pointer-events: none;
+      z-index: 1000;
+    }
+
+    .loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: #666;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <button id="backBtn" title="Back">←</button>
+    <button id="forwardBtn" title="Forward">→</button>
+    <button id="reloadBtn" title="Reload">↻</button>
+    <div class="address-bar">
+      <input type="text" id="urlInput" placeholder="Enter URL..." value="https://www.google.com">
+    </div>
+    <div class="annotation-tools">
+      <button id="highlightBtn" title="Highlight">🖍️</button>
+      <button id="noteBtn" title="Add Note">📝</button>
+      <button id="screenshotBtn" title="Screenshot">📷</button>
+      <button id="annotationsBtn" title="Toggle Annotations">📋</button>
+      <button id="saveBtn" title="Save Annotations">💾</button>
+      <button id="loadBtn" title="Load Annotations">📂</button>
+    </div>
+  </div>
+
+  <div class="content">
+    <div class="webview-container">
+      <webview id="webview" src="https://www.google.com" allowpopups></webview>
+    </div>
+    <div class="annotations-panel" id="annotationsPanel">
+      <h3>Annotations</h3>
+      <div id="annotationsList"></div>
+    </div>
+  </div>
+
+  <div class="status-bar">
+    <span class="status-text" id="statusText">Ready</span>
+    <span id="pageTitle"></span>
+  </div>
+
+  <script src="./browser.ts" type="module"></script>
+</body>
+</html>

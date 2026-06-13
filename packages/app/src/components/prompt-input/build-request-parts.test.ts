@@ -75,6 +75,34 @@ describe("buildRequestParts", () => {
     expect(files.map((part) => (part.type === "file" ? part.filename : ""))).toEqual(["a.png", "b.pdf"])
   })
 
+  test("adds synthetic context parts", () => {
+    const result = buildRequestParts({
+      prompt: [{ type: "text", content: "summarize it", start: 0, end: 12 }],
+      context: [],
+      synthetic: [
+        {
+          text: "<browser-context>\nURL: https://example.com\n</browser-context>",
+          metadata: { cedricBrowserContext: { url: "https://example.com" } },
+        },
+      ],
+      images: [],
+      text: "summarize it",
+      messageID: "msg_browser",
+      sessionID: "ses_browser",
+      sessionDirectory: "/repo",
+    })
+
+    const synthetic = result.requestParts.find(
+      (part) => part.type === "text" && part.synthetic && part.metadata?.cedricBrowserContext,
+    )
+
+    expect(synthetic?.type).toBe("text")
+    if (synthetic?.type !== "text") throw new Error("Expected synthetic text part")
+    expect(synthetic.synthetic).toBe(true)
+    expect(synthetic.text).toContain("https://example.com")
+    expect(result.optimisticParts.some((part) => part.type === "text" && part.synthetic)).toBe(true)
+  })
+
   test("deduplicates context files when prompt already includes same path", () => {
     const prompt: Prompt = [{ type: "file", path: "src/foo.ts", content: "@src/foo.ts", start: 0, end: 11 }]
 

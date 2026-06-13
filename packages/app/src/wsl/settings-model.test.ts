@@ -11,7 +11,7 @@ describe("WSL server settings presentation", () => {
     expect(wslRuntimeRetryable({ kind: "stopped" })).toBe(true)
   })
 
-  test("offers install and update only when OpenCode needs attention", () => {
+  test("offers install and update only when Cedric needs attention", () => {
     expect(wslOpencodeAction(undefined)).toBeUndefined()
     expect(
       wslOpencodeAction({
@@ -22,7 +22,7 @@ describe("WSL server settings presentation", () => {
         matchesDesktop: null,
         error: null,
       }),
-    ).toBe("Install OpenCode")
+    ).toBe("Install Cedric")
     expect(
       wslOpencodeAction({
         distro: "Debian",
@@ -32,7 +32,7 @@ describe("WSL server settings presentation", () => {
         matchesDesktop: false,
         error: null,
       }),
-    ).toBe("Update OpenCode")
+    ).toBe("Update Cedric")
     expect(
       wslOpencodeAction({
         distro: "Debian",
@@ -45,7 +45,7 @@ describe("WSL server settings presentation", () => {
     ).toBeUndefined()
   })
 
-  test("probes the selected distro before entering the OpenCode step", async () => {
+  test("probes the selected distro before entering the Cedric step", async () => {
     const calls: string[] = []
     await enterWslOpencodeStep(
       "Debian",

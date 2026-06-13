@@ -1,5 +1,5 @@
 import { createStore, produce } from "solid-js/store"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@cedric/ui/context"
 import { batch, createEffect, createMemo, createRoot, on, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
@@ -40,10 +40,10 @@ function numberFromTitle(title: string) {
 }
 
 function pty(value: unknown): LocalPTY | undefined {
-  if (!record(value)) return
+  if (!record(value)) return undefined
 
   const id = text(value.id)
-  if (!id) return
+  if (!id) return undefined
 
   const title = text(value.title) ?? ""
   const number = num(value.titleNumber)
@@ -128,7 +128,7 @@ export function clearWorkspaceTerminals(
     entry?.value.clear()
   }
 
-  void removePersisted(terminalPersistTarget(scope, dir), platform)
+  removePersisted(terminalPersistTarget(scope, dir), platform)
 
   if (scope !== ServerScope.local) return
   const legacy = new Set(getLegacyTerminalStorageKeys(dir))
@@ -138,7 +138,7 @@ export function clearWorkspaceTerminals(
     }
   }
   for (const key of legacy) {
-    void removePersisted({ key }, platform)
+    removePersisted({ key }, platform)
   }
 }
 
@@ -223,10 +223,36 @@ function createWorkspaceTerminalSession(
       })
   }
 
+  const create = async (title?: string) => {
+    const nextNumber = pickNextTerminalNumber()
+    const nextTitle = title ?? defaultTitle(nextNumber)
+
+    const next = await sdk.client.pty
+      .create({ title: nextTitle })
+      .catch((error: unknown) => {
+        console.error("Failed to create terminal", error)
+        return undefined
+      })
+    if (!next?.data?.id) return undefined
+
+    const newTerminal = {
+      id: next.data.id,
+      title: next.data.title ?? nextTitle,
+      titleNumber: nextNumber,
+    }
+
+    batch(() => {
+      setStore("all", store.all.length, newTerminal)
+      setStore("active", newTerminal.id)
+    })
+
+    return newTerminal
+  }
+
   const clone = async (client: ReturnType<typeof useSDK>["client"], id: string) => {
     const index = store.all.findIndex((x) => x.id === id)
     const pty = store.all[index]
-    if (!pty) return
+    if (!pty) return undefined
     const next = await client.pty
       .create({
         title: pty.title,
@@ -235,25 +261,28 @@ function createWorkspaceTerminalSession(
         console.error("Failed to clone terminal", error)
         return undefined
       })
-    if (!next?.data) return
+    if (!next?.data?.id) return undefined
 
     const active = store.active === pty.id
+    const newTerminal = {
+      id: next.data.id,
+      title: next.data.title ?? pty.title,
+      titleNumber: pty.titleNumber,
+      buffer: undefined,
+      cursor: undefined,
+      scrollY: undefined,
+      rows: undefined,
+      cols: undefined,
+    }
 
     batch(() => {
-      setStore("all", index, {
-        id: next.data.id,
-        title: next.data.title ?? pty.title,
-        titleNumber: pty.titleNumber,
-        buffer: undefined,
-        cursor: undefined,
-        scrollY: undefined,
-        rows: undefined,
-        cols: undefined,
-      })
+      setStore("all", index, newTerminal)
       if (active) {
         setStore("active", next.data.id)
       }
     })
+
+    return newTerminal
   }
 
   return {
@@ -267,24 +296,10 @@ function createWorkspaceTerminalSession(
       })
     },
     new() {
-      const nextNumber = pickNextTerminalNumber()
-
-      sdk.client.pty
-        .create({ title: defaultTitle(nextNumber) })
-        .then((pty: { data?: { id?: string; title?: string } }) => {
-          const id = pty.data?.id
-          if (!id) return
-          const newTerminal = {
-            id,
-            title: pty.data?.title ?? defaultTitle(nextNumber),
-            titleNumber: nextNumber,
-          }
-          setStore("all", store.all.length, newTerminal)
-          setStore("active", id)
-        })
-        .catch((error: unknown) => {
-          console.error("Failed to create terminal", error)
-        })
+      void create()
+    },
+    create(title?: string) {
+      return create(title)
     },
     update(pty: Partial<LocalPTY> & { id: string }) {
       update(sdk.client, pty)
@@ -301,8 +316,8 @@ function createWorkspaceTerminalSession(
         return next
       })
     },
-    async clone(id: string) {
-      await clone(sdk.client, id)
+    clone(id: string) {
+      return clone(sdk.client, id)
     },
     bind() {
       const client = sdk.client
@@ -315,8 +330,8 @@ function createWorkspaceTerminalSession(
         update(pty: Partial<LocalPTY> & { id: string }) {
           update(client, pty)
         },
-        async clone(id: string) {
-          await clone(client, id)
+        clone(id: string) {
+          return clone(client, id)
         },
       }
     },
@@ -369,7 +384,7 @@ function createWorkspaceTerminalSession(
   }
 }
 
-export const { use: useTerminal, provider: TerminalProvider } = createSimpleContext({
+const terminalContext = createSimpleContext({
   name: "Terminal",
   gate: false,
   init: () => {
@@ -441,6 +456,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       all: () => workspace().all(),
       active: () => workspace().active(),
       new: () => workspace().new(),
+      create: (title?: string) => workspace().create(title),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
       trim: (id: string) => workspace().trim(id),
       trimAll: () => workspace().trimAll(),
@@ -454,3 +470,6 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
     }
   },
 })
+
+export const useTerminal = () => terminalContext.use()
+export const TerminalProvider = (props: Parameters<typeof terminalContext.provider>[0]) => terminalContext.provider(props)

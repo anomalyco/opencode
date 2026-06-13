@@ -1,6 +1,7 @@
 ## Debugging
 
-- NEVER try to restart the app, or the server process, EVER.
+- Avoid restarting the app or server by default, but do restart when it is the correct fix or required to pick up changes, clear stale state, or verify behavior.
+- Before restarting, sanity-check whether there is a less disruptive way to verify the issue and avoid interrupting unrelated work when possible.
 
 ## Local Dev
 

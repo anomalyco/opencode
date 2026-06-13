@@ -4,7 +4,7 @@ import * as Stream from "effect/Stream"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
-import { Ripgrep } from "@opencode-ai/core/filesystem/ripgrep"
+import { Ripgrep } from "@cedric/core/filesystem/ripgrep"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(Ripgrep.defaultLayer)

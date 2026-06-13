@@ -1,5 +1,5 @@
-import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { useSpring } from "@opencode-ai/ui/motion-spring"
+import { useFilteredList } from "@cedric/ui/hooks"
+import { useSpring } from "@cedric/ui/motion-spring"
 import {
   createEffect,
   on,
@@ -36,14 +36,14 @@ import { useSDK } from "@/context/sdk"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
-import { Button } from "@opencode-ai/ui/button"
-import { DockShellForm, DockTray } from "@opencode-ai/ui/dock-surface"
-import { Icon, type IconProps } from "@opencode-ai/ui/icon"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Select } from "@opencode-ai/ui/select"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Button } from "@cedric/ui/button"
+import { DockShellForm, DockTray } from "@cedric/ui/dock-surface"
+import { Icon, type IconProps } from "@cedric/ui/icon"
+import { ProviderIcon } from "@cedric/ui/provider-icon"
+import { Tooltip, TooltipKeybind } from "@cedric/ui/tooltip"
+import { IconButton } from "@cedric/ui/icon-button"
+import { Select } from "@cedric/ui/select"
+import { useDialog } from "@cedric/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
@@ -73,11 +73,11 @@ import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
-import { ImagePreview } from "@opencode-ai/ui/image-preview"
+import { ImagePreview } from "@cedric/ui/image-preview"
 import { useQueries } from "@tanstack/solid-query"
 import { useQueryOptions } from "@/context/server-sync"
 import { pathKey } from "@/utils/path-key"
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@cedric/core/util/encode"
 import { displayName } from "@/pages/layout/helpers"
 
 interface PromptInputProps {
@@ -1587,6 +1587,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       aria-label={language.t("prompt.action.attachFile")}
                     />
                   </TooltipKeybind>
+                  <Tooltip placement="top" value="Open Browser">
+                    <IconButton
+                      data-action="prompt-browser"
+                      type="button"
+                      icon="square-arrow-top-right"
+                      variant="ghost"
+                      class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted"
+                      style={buttons()}
+                      onClick={() => {
+                        const desktopWindow = window as Window & {
+                          api?: {
+                            openBrowser?: (url?: string) => Promise<void>
+                          }
+                        }
+                        if (desktopWindow.api?.openBrowser) {
+                          void desktopWindow.api.openBrowser()
+                        }
+                      }}
+                      disabled={store.mode !== "normal"}
+                      tabIndex={store.mode === "normal" ? undefined : -1}
+                      aria-label="Open Browser"
+                    />
+                  </Tooltip>
                   <Show when={showAgentControl()}>
                     <ComposerAgentControl state={agentControlState()} />
                   </Show>

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/sdk",
+  "name": "@cedric/sdk",
   "version": "1.16.2",
   "type": "module",
   "license": "MIT",

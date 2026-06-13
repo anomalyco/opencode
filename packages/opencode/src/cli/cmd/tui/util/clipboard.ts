@@ -5,7 +5,7 @@ import path from "path"
 import fs from "fs/promises"
 import { Effect } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { AppProcess } from "@opencode-ai/core/process"
+import { AppProcess } from "@cedric/core/process"
 import * as Filesystem from "../../../../util/filesystem"
 import * as Process from "../../../../util/process"
 
@@ -20,7 +20,7 @@ const writeWithStdin = (cmd: string[], text: string): Promise<void> =>
 
 // Lazy load which and clipboardy to avoid expensive execa/which/isexe chain at startup
 const getWhich = lazy(async () => {
-  const { which } = await import("@opencode-ai/core/util/which")
+  const { which } = await import("@cedric/core/util/which")
   return which
 })
 

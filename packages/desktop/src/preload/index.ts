@@ -89,6 +89,16 @@ const api: ElectronAPI = {
   setBackgroundColor: (color: string) => ipcRenderer.invoke("set-background-color", color),
   exportDebugLogs: () => ipcRenderer.invoke("export-debug-logs"),
   recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
+  openBrowser: (url?: string) => ipcRenderer.invoke("browser-open", url),
+  closeBrowser: () => ipcRenderer.invoke("browser-close"),
+  browserAutomation: (action, params) => ipcRenderer.invoke("browser-automation", { action, ...params }),
+  setActiveWebview: (id: number) => ipcRenderer.invoke("browser-set-active-webview", id),
+  clearActiveWebview: (id?: number) => ipcRenderer.invoke("browser-clear-active-webview", id),
+  onActivateBrowserTab: (cb) => {
+    const handler = (_: unknown, payload: { url?: string }) => cb(payload)
+    ipcRenderer.on("activate-browser-tab", handler)
+    return () => ipcRenderer.removeListener("activate-browser-tab", handler)
+  },
 }
 
 contextBridge.exposeInMainWorld("api", api)

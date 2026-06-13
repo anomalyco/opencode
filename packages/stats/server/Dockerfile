@@ -9,7 +9,7 @@ FROM base AS pruner
 
 COPY . .
 
-RUN bunx turbo@2.8.13 prune @opencode-ai/stats-server --docker --no-update-notifier --no-color
+RUN bunx turbo@2.8.13 prune @cedric/stats-server --docker --no-update-notifier --no-color
 
 FROM base AS installer
 
@@ -17,8 +17,8 @@ COPY --from=pruner /app/out/json/ ./
 
 # Bun 1.3.x needs the pruned workspace globs and lockfile metadata refreshed before the frozen production install.
 RUN bun -e 'const packageJson = await Bun.file("package.json").json(); packageJson.workspaces.packages = Array.from(new Bun.Glob("packages/**/package.json").scanSync(".")).map((file) => file.slice(0, -"/package.json".length)).sort(); await Bun.write("package.json", JSON.stringify(packageJson, null, 2) + "\n")'
-RUN rm -f bun.lock && bun install --filter @opencode-ai/stats-server --lockfile-only --ignore-scripts
-RUN bun install --filter @opencode-ai/stats-server --frozen-lockfile --production --ignore-scripts
+RUN rm -f bun.lock && bun install --filter @cedric/stats-server --lockfile-only --ignore-scripts
+RUN bun install --filter @cedric/stats-server --frozen-lockfile --production --ignore-scripts
 
 FROM base AS runner
 

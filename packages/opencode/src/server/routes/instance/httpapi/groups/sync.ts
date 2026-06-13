@@ -1,5 +1,5 @@
-import { NonNegativeInt } from "@opencode-ai/core/schema"
-import { EventV2 } from "@opencode-ai/core/event"
+import { NonNegativeInt } from "@cedric/core/schema"
+import { EventV2 } from "@cedric/core/event"
 import { SessionID } from "@/session/schema"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"

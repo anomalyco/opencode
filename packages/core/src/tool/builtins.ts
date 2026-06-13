@@ -3,6 +3,7 @@ export * as BuiltInTools from "./builtins"
 import { Layer } from "effect"
 import { BashTool } from "./bash"
 import { ApplyPatchTool } from "./apply-patch"
+import { ComputerControlTool } from "./computer-control"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
@@ -10,6 +11,7 @@ import { QuestionTool } from "./question"
 import { ReadTool } from "./read"
 import { SkillTool } from "./skill"
 import { TodoWriteTool } from "./todowrite"
+import { BrowserAutomationTool } from "./browser-automation"
 import { WebFetchTool } from "./webfetch"
 import { WebSearchTool } from "./websearch"
 import { WriteTool } from "./write"
@@ -30,6 +32,8 @@ import { WriteTool } from "./write"
 export const locationLayer = Layer.mergeAll(
   ApplyPatchTool.layer,
   BashTool.layer,
+  BrowserAutomationTool.layer,
+  ComputerControlTool.layer,
   EditTool.layer,
   GlobTool.layer,
   GrepTool.layer,

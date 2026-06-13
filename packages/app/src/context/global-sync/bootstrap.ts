@@ -1,4 +1,5 @@
 import type {
+  BackgroundTaskJob,
   Config,
   OpencodeClient,
   Path,
@@ -8,10 +9,10 @@ import type {
   QuestionRequest,
   Session,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
+} from "@cedric/sdk/v2/client"
 import { showToast } from "@/utils/toast"
-import { getFilename } from "@opencode-ai/core/util/path"
-import { retry } from "@opencode-ai/core/util/retry"
+import { getFilename } from "@cedric/core/util/path"
+import { retry } from "@cedric/core/util/retry"
 import { batch } from "solid-js"
 import { reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type { State, VcsCache } from "./types"
@@ -19,7 +20,7 @@ import { cmp, normalizeAgentList, normalizeProviderList } from "./utils"
 import { formatServerError } from "@/utils/server-errors"
 import { QueryClient, queryOptions } from "@tanstack/solid-query"
 import { loadMcpQuery } from "../server-sync"
-import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import { NormalizedProviderListResponse } from "@cedric/ui/context"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
 
 type GlobalStore = {
@@ -66,6 +67,29 @@ export function clearProviderRev(scope: ServerScope, directory: string) {
 
 function runAll(list: Array<() => Promise<unknown>>) {
   return Promise.allSettled(list.map((item) => item()))
+}
+
+async function loadBackgroundJobs(input: { sdk: OpencodeClient; setStore: SetStoreFunction<State> }) {
+  const jobs = (await input.sdk.experimental.session.backgroundJobs()).data ?? []
+  input.setStore("background_job", reconcile(jobs, { key: "id" }))
+  const retryable = jobs.filter((job) => job.retryable)
+  if (retryable.length === 0) return
+
+  const recovered = await Promise.allSettled(
+    retryable.map((job) =>
+      input.sdk.experimental.session.backgroundJobRetry({ sessionID: job.sessionID }).then((response) => response.data),
+    ),
+  )
+  const recoveredJobs = recovered
+    .map((result) => (result.status === "fulfilled" ? result.value : undefined))
+    .filter((job): job is BackgroundTaskJob => !!job)
+  if (recoveredJobs.length === 0) return
+
+  const recoveredIDs = new Set(recoveredJobs.map((job) => job.id))
+  input.setStore(
+    "background_job",
+    reconcile([...jobs.filter((job) => !recoveredIDs.has(job.id)), ...recoveredJobs], { key: "id" }),
+  )
 }
 
 function showErrors(input: {
@@ -239,6 +263,8 @@ export async function bootstrapDirectory(input: {
       () =>
         retry(() => input.sdk.config.get().then((x) => input.setStore("config", reconcile(x.data!, { merge: false })))),
       () => retry(() => input.sdk.session.status().then((x) => input.setStore("session_status", x.data!))),
+      () =>
+        retry(() => loadBackgroundJobs({ sdk: input.sdk, setStore: input.setStore })),
       !seededProject &&
         (() => retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id))),
       !seededPath &&

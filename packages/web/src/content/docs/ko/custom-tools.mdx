@@ -27,7 +27,7 @@ tool은 다음 위치에 둘 수 있습니다.
 tool을 가장 쉽게 만드는 방법은 타입 안정성과 validation을 제공하는 `tool()` helper를 사용하는 것입니다.
 
 ```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@cedric/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -50,7 +50,7 @@ export default tool({
 하나의 파일에서 여러 tool을 export할 수도 있습니다. 각 export는 **별도의 tool**이 되며 이름은 **`<filename>_<exportname>`** 형식을 사용합니다.
 
 ```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@cedric/plugin"
 
 export const add = tool({
   description: "Add two numbers",
@@ -86,7 +86,7 @@ export const multiply = tool({
 예를 들어, 이 파일은 기본 `bash` 도구를 대체합니다:
 
 ```ts title=".opencode/tools/bash.ts"
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@cedric/plugin"
 
 export default tool({
   description: "Restricted bash wrapper",
@@ -139,7 +139,7 @@ export default {
 tool은 현재 세션의 context 정보를 전달받습니다.
 
 ```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@cedric/plugin"
 
 export default tool({
   description: "Get project information",
@@ -176,7 +176,7 @@ print(a + b)
 그다음 이 스크립트를 호출하는 tool 정의를 만듭니다.
 
 ```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@cedric/plugin"
 import path from "path"
 
 export default tool({

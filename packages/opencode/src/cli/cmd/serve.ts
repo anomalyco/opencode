@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { effectCmd } from "../effect-cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@cedric/core/flag/flag"
 
 export const ServeCommand = effectCmd({
   command: "serve",

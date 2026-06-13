@@ -1,6 +1,6 @@
 import { EOL } from "os"
 import { Effect, Stream } from "effect"
-import { Search } from "@opencode-ai/core/filesystem/search"
+import { Search } from "@cedric/core/filesystem/search"
 import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
 import { InstanceRef } from "@/effect/instance-ref"

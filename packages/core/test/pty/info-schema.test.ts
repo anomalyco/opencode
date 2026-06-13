@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { Pty } from "@opencode-ai/core/pty"
+import { Pty } from "@cedric/core/pty"
 
 const sample = (pid: number) => ({
   id: "pty_01J5Y5H0AH4Q4NXJ6P4C3P5V2K",

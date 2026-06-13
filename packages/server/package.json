@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/server",
+  "name": "@cedric/server",
   "version": "1.16.2",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/core": "workspace:*",
+    "@cedric/core": "workspace:*",
     "drizzle-orm": "catalog:",
     "effect": "catalog:"
   },

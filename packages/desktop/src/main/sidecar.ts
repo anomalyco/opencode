@@ -14,6 +14,7 @@ type StartCommand = {
   type: "start"
   hostname: string
   port: number
+  username: string
   password: string
   userDataPath: string
 }
@@ -50,7 +51,7 @@ parentPort.on("message", (event) => {
 
 async function start(command: StartCommand) {
   try {
-    prepareSidecarEnv(command.password, command.userDataPath)
+    prepareSidecarEnv(command.username, command.password, command.userDataPath)
     ensureLoopbackNoProxy()
     useSystemCertificates()
     useEnvProxy()
@@ -60,7 +61,7 @@ async function start(command: StartCommand) {
     listener = await Server.listen({
       port: command.port,
       hostname: command.hostname,
-      username: "opencode",
+      username: command.username,
       password: command.password,
       cors: ["oc://renderer"],
     })
@@ -81,9 +82,9 @@ async function stop() {
   }
 }
 
-function prepareSidecarEnv(password: string, userDataPath: string) {
+function prepareSidecarEnv(username: string, password: string, userDataPath: string) {
   Object.assign(process.env, {
-    OPENCODE_SERVER_USERNAME: "opencode",
+    OPENCODE_SERVER_USERNAME: username,
     OPENCODE_SERVER_PASSWORD: password,
     XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
   })
@@ -135,12 +136,14 @@ function parseCommand(value: unknown): SidecarCommand | undefined {
   if (command.type !== "start") return
   if (typeof command.hostname !== "string") return
   if (typeof command.port !== "number") return
+  if (typeof command.username !== "string") return
   if (typeof command.password !== "string") return
   if (typeof command.userDataPath !== "string") return
   return {
     type: "start",
     hostname: command.hostname,
     port: command.port,
+    username: command.username,
     password: command.password,
     userDataPath: command.userDataPath,
   }

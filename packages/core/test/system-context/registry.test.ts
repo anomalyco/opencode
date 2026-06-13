@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Cause, Effect, Exit, Schema, Scope } from "effect"
-import { SystemContext } from "@opencode-ai/core/system-context"
-import { SystemContextRegistry } from "@opencode-ai/core/system-context/registry"
+import { SystemContext } from "@cedric/core/system-context"
+import { SystemContextRegistry } from "@cedric/core/system-context/registry"
 import { testEffect } from "../lib/effect"
 
 const contribution = (key: string, text: string, sourceKey = key) => ({

@@ -1,4 +1,4 @@
-import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { PermissionV1 } from "@cedric/core/v1/permission"
 import type { Permission } from "../permission"
 import type { Agent } from "./agent"
 

@@ -45,6 +45,10 @@ import type {
   ExperimentalResourceListErrors,
   ExperimentalResourceListResponses,
   ExperimentalSessionBackgroundErrors,
+  ExperimentalSessionBackgroundJobRetryErrors,
+  ExperimentalSessionBackgroundJobRetryResponses,
+  ExperimentalSessionBackgroundJobsErrors,
+  ExperimentalSessionBackgroundJobsResponses,
   ExperimentalSessionBackgroundResponses,
   ExperimentalSessionListErrors,
   ExperimentalSessionListResponses,
@@ -767,6 +771,76 @@ export class Session extends HeyApiClient {
       ThrowOnError
     >({
       url: "/experimental/session/{sessionID}/background",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List background task jobs
+   *
+   * List live background task jobs plus durable child-session snapshots for restart-aware task status.
+   */
+  public backgroundJobs<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      ExperimentalSessionBackgroundJobsResponses,
+      ExperimentalSessionBackgroundJobsErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/session/background/jobs",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Retry background task job
+   *
+   * Resume a durable orphaned background task in its existing child session after restart.
+   */
+  public backgroundJobRetry<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      ExperimentalSessionBackgroundJobRetryResponses,
+      ExperimentalSessionBackgroundJobRetryErrors,
+      ThrowOnError
+    >({
+      url: "/experimental/session/background/jobs/{sessionID}/retry",
       ...options,
       ...params,
     })

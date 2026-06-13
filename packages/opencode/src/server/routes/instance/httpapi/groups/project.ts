@@ -1,5 +1,5 @@
 import { Project } from "@/project/project"
-import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectV2 } from "@cedric/core/project"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ProjectNotFoundError } from "../errors"

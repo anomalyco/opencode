@@ -1,6 +1,6 @@
 export * as ConfigReference from "./reference"
 
-import { ConfigReferenceV1 } from "@opencode-ai/core/v1/config/reference"
+import { ConfigReferenceV1 } from "@cedric/core/v1/config/reference"
 
 export type NormalizedEntry =
   | {

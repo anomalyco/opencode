@@ -1,8 +1,8 @@
 import { describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { CoherePlugin } from "@opencode-ai/core/plugin/provider/cohere"
+import { ModelV2 } from "@cedric/core/model"
+import { PluginV2 } from "@cedric/core/plugin"
+import { CoherePlugin } from "@cedric/core/plugin/provider/cohere"
 import { fakeSelectorSdk, it, model } from "./provider-helper"
 
 const cohereOptions: Record<string, any>[] = []

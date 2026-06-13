@@ -1,7 +1,7 @@
-import { withAlpha } from "@opencode-ai/ui/theme/color"
-import { useTheme } from "@opencode-ai/ui/theme/context"
-import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
-import type { HexColor } from "@opencode-ai/ui/theme/types"
+import { withAlpha } from "@cedric/ui/theme/color"
+import { useTheme } from "@cedric/ui/theme/context"
+import { resolveThemeVariant } from "@cedric/ui/theme/resolve"
+import type { HexColor } from "@cedric/ui/theme/types"
 import { showToast } from "@/utils/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
 import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
@@ -47,6 +47,23 @@ type TerminalColors = {
   cursor: string
   selectionBackground: string
 }
+
+type TerminalDebugHandle = {
+  select(column: number, row: number, length: number): void
+  selectLines(start: number, end: number): void
+  hasSelection(): boolean
+  getSelection(): string
+  copySelection(): boolean
+}
+
+type TerminalDebugElement = HTMLDivElement & {
+  __cedricTerminal?: TerminalDebugHandle
+}
+
+type TerminalDebugWindow = Window &
+  typeof globalThis & {
+    __CEDRIC_TERMINAL_E2E__?: boolean
+  }
 
 const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
   light: {
@@ -154,6 +171,25 @@ const persistTerminal = (input: {
   })
 }
 
+const exposeTerminalDebugHandle = (input: { container: TerminalDebugElement; term: Term; cleanups: VoidFunction[] }) => {
+  if (
+    !import.meta.env.DEV &&
+    (typeof window === "undefined" || (window as TerminalDebugWindow).__CEDRIC_TERMINAL_E2E__ !== true)
+  ) {
+    return
+  }
+  input.container.__cedricTerminal = {
+    select: (column, row, length) => input.term.select(column, row, length),
+    selectLines: (start, end) => input.term.selectLines(start, end),
+    hasSelection: () => input.term.hasSelection(),
+    getSelection: () => input.term.getSelection(),
+    copySelection: () => input.term.copySelection(),
+  }
+  input.cleanups.push(() => {
+    delete input.container.__cedricTerminal
+  })
+}
+
 export const Terminal = (props: TerminalProps) => {
   const platform = usePlatform()
   const sdk = useSDK()
@@ -168,7 +204,7 @@ export const Terminal = (props: TerminalProps) => {
   const username = auth?.username ?? "opencode"
   const password = auth?.password ?? ""
   const sameOrigin = new URL(url, location.href).origin === location.origin
-  let container!: HTMLDivElement
+  let container!: TerminalDebugElement
   const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
   const id = local.pty.id
   const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
@@ -226,6 +262,15 @@ export const Terminal = (props: TerminalProps) => {
         debugTerminal("failed to sync terminal size", err)
       })
   }
+
+  const sessionExists = () =>
+    client.pty
+      .list()
+      .then((result) => result.data?.some((pty) => pty.id === id) ?? true)
+      .catch((err) => {
+        debugTerminal("failed to list terminal sessions", err)
+        return true
+      })
 
   const getTerminalColors = (): TerminalColors => {
     const mode = theme.mode() === "dark" ? "dark" : "light"
@@ -342,6 +387,11 @@ export const Terminal = (props: TerminalProps) => {
 
   onMount(() => {
     const run = async () => {
+      if (!(await sessionExists())) {
+        local.onConnectError?.(new Error(language.t("terminal.connectionLost.description")))
+        return
+      }
+
       const loaded = await loadGhostty()
       if (disposed) return
 
@@ -398,6 +448,7 @@ export const Terminal = (props: TerminalProps) => {
       serializeAddon = serializer
 
       t.open(container)
+      exposeTerminalDebugHandle({ container, term: t, cleanups })
       useTerminalUiBindings({
         container,
         term: t,

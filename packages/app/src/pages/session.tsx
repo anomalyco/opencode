@@ -1,5 +1,5 @@
-import type { Project, UserMessage } from "@opencode-ai/sdk/v2"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import type { Project, Session, UserMessage } from "@cedric/sdk/v2"
+import { useDialog } from "@cedric/ui/context/dialog"
 import { createQuery, skipToken, useMutation, useQueryClient } from "@tanstack/solid-query"
 import {
   batch,
@@ -10,6 +10,7 @@ import {
   createMemo,
   createEffect,
   createComputed,
+  createSignal,
   on,
   onMount,
   untrack,
@@ -22,15 +23,15 @@ import { debounce } from "@solid-primitives/scheduled"
 import { useLocal } from "@/context/local"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { createStore } from "solid-js/store"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { Select } from "@opencode-ai/ui/select"
-import { Tabs } from "@opencode-ai/ui/tabs"
-import { createAutoScroll } from "@opencode-ai/ui/hooks"
-import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
-import { Button } from "@opencode-ai/ui/button"
+import { ResizeHandle } from "@cedric/ui/resize-handle"
+import { Select } from "@cedric/ui/select"
+import { Tabs } from "@cedric/ui/tabs"
+import { createAutoScroll } from "@cedric/ui/hooks"
+import { previewSelectedLines } from "@cedric/ui/pierre/selection-bridge"
+import { Button } from "@cedric/ui/button"
 import { showToast } from "@/utils/toast"
-import { checksum } from "@opencode-ai/core/util/encode"
-import { useLocation, useSearchParams } from "@solidjs/router"
+import { base64Encode, checksum } from "@cedric/core/util/encode"
+import { useLocation, useNavigate, useSearchParams } from "@solidjs/router"
 import { NewSessionDesignView, NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
@@ -61,6 +62,11 @@ import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
+import {
+  BackgroundTasks,
+  backgroundTaskMergePrompt,
+  type BackgroundTaskItem,
+} from "@/components/background-tasks"
 import { shouldUseV2NewSessionPage } from "@/pages/session/new-session-layout"
 import { Identifier } from "@/utils/id"
 import { diffs as list } from "@/utils/diffs"
@@ -68,6 +74,8 @@ import { Persist, persisted } from "@/utils/persist"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
+import { setSessionHandoff } from "./session/handoff"
+import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
 import { useUsageExceededDialogs } from "./session/usage-exceeded-dialogs"
 
 const emptyUserMessages: UserMessage[] = []
@@ -198,6 +206,7 @@ export default function Page() {
   const comments = useComments()
   const terminal = useTerminal()
   const server = useServer()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const location = useLocation()
   const { params, sessionKey, workspaceKey, tabs, view } = useSessionLayout()
@@ -273,12 +282,15 @@ export default function Page() {
   const desktopReviewOpen = createMemo(() => isDesktop() && view().reviewPanel.opened() && !isV2NewSessionPage())
   const desktopFileTreeOpen = createMemo(() => isDesktop() && layout.fileTree.opened() && !isV2NewSessionPage())
   const desktopSidePanelOpen = createMemo(() => desktopReviewOpen() || desktopFileTreeOpen())
+  const [workspacePanelWidth, setWorkspacePanelWidth] = createSignal(0)
+  const desktopWorkspacePanelOpen = createMemo(() => isDesktop() && workspacePanelWidth() > 0)
   const sessionPanelWidth = createMemo(() => {
+    if (desktopWorkspacePanelOpen()) return `calc(100% - ${workspacePanelWidth()}px)`
     if (!desktopSidePanelOpen()) return "100%"
     if (desktopReviewOpen()) return `${layout.session.width()}px`
     return `calc(100% - ${layout.fileTree.width()}px)`
   })
-  const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
+  const centered = createMemo(() => isDesktop() && !desktopReviewOpen() && !desktopWorkspacePanelOpen())
 
   function normalizeTab(tab: string) {
     if (!tab.startsWith("file://")) return tab
@@ -899,6 +911,43 @@ export default function Page() {
   const focusInput = () => {
     if (isChildSession()) return
     inputRef?.focus()
+  }
+
+  const appendTextToMainPrompt = (text: string) => {
+    const current = prompt.current()
+    const length = current.reduce((total, part) => total + ("content" in part ? part.content.length : 0), 0)
+    const content = `${length ? "\n\n" : ""}${text}`
+    const part = { type: "text" as const, content, start: length, end: length + content.length }
+
+    prompt.set(
+      current.length === 1 && current[0]?.type === "text" && !current[0].content ? [part] : [...current, part],
+      length + content.length,
+    )
+    requestAnimationFrame(() => inputRef?.focus())
+  }
+
+  function openBackgroundTaskSession(session: Session) {
+    navigate(`/${base64Encode(session.directory)}/session/${session.id}`)
+  }
+
+  function mergeBackgroundTask(task: BackgroundTaskItem) {
+    const text = backgroundTaskMergePrompt(task)
+    if (task.parentSessionID === params.id && task.directory === sdk.directory) {
+      appendTextToMainPrompt(text)
+      showToast({ title: "Background task ready", description: "Result added to main chat." })
+      return
+    }
+
+    setSessionHandoff(
+      SessionStateKey.from(server.scope(), SessionRouteKey.fromRoute(base64Encode(task.directory), task.parentSessionID)),
+      { prompt: text },
+    )
+    showToast({
+      title: "Background task ready",
+      description: task.parentSession ? "Parent chat opened with the result handoff." : "Result handoff prepared.",
+    })
+
+    if (task.parentSession) openBackgroundTaskSession(task.parentSession)
   }
 
   useSessionCommands({
@@ -1818,6 +1867,14 @@ export default function Page() {
             </Switch>
           </div>
 
+          <Show when={params.id && newSessionDesign()}>
+            <BackgroundTasks
+              directories={() => [sdk.directory]}
+              onOpenSession={openBackgroundTaskSession}
+              onMergeTask={mergeBackgroundTask}
+            />
+          </Show>
+
           <Show when={params.id || !newSessionDesign()}>{composerRegion("dock")}</Show>
 
           <Show when={desktopReviewOpen()}>
@@ -1851,6 +1908,7 @@ export default function Page() {
           focusReviewDiff={focusReviewDiff}
           reviewSnap={ui.reviewSnap}
           size={size}
+          onWorkspacePanelWidthChange={setWorkspacePanelWidth}
         />
       </div>
 

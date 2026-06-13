@@ -27,7 +27,7 @@ Elas podem ser definidas:
 A maneira mais fácil de criar ferramentas é usando o helper `tool()`, que fornece segurança de tipo e validação.
 
 ```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@cedric/plugin"
 
 export default tool({
   description: "Consultar o banco de dados do projeto",
@@ -50,7 +50,7 @@ O **nome do arquivo** se torna o **nome da ferramenta**. O acima cria uma ferram
 Você também pode exportar várias ferramentas de um único arquivo. Cada exportação se torna **uma ferramenta separada** com o nome **`<filename>_<exportname>`**:
 
 ```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@cedric/plugin"
 
 export const add = tool({
   description: "Adicionar dois números",
@@ -86,7 +86,7 @@ Ferramentas personalizadas são chaveadas pelo nome da ferramenta. Se uma ferram
 Por exemplo, este arquivo substitui a ferramenta `bash` integrada:
 
 ```ts title=".opencode/tools/bash.ts"
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@cedric/plugin"
 
 export default tool({
   description: "Restricted bash wrapper",
@@ -139,7 +139,7 @@ export default {
 As ferramentas recebem contexto sobre a sessão atual:
 
 ```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@cedric/plugin"
 
 export default tool({
   description: "Obter informações do projeto",
@@ -176,7 +176,7 @@ print(a + b)
 Em seguida, crie a definição da ferramenta que a invoca:
 
 ```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@cedric/plugin"
 import path from "path"
 
 export default tool({

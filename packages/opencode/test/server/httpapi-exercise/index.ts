@@ -37,7 +37,7 @@ import { disposeApps } from "./backend"
 import { runtime } from "./runtime"
 import { type Scenario } from "./types"
 
-void (await import("@opencode-ai/core/util/log")).init({ print: false })
+void (await import("@cedric/core/util/log")).init({ print: false })
 
 function cursor(input: Record<string, unknown>) {
   return Buffer.from(JSON.stringify(input)).toString("base64url")
@@ -579,6 +579,15 @@ const scenarios: Scenario[] = [
     .json(200, (body) => {
       check(body === false, "background route should be a no-op without running subagents")
     }),
+  http.protected
+    .post("/experimental/session/background/jobs/{sessionID}/retry", "experimental.session.backgroundJobRetry.invalid")
+    .mutating()
+    .seeded((ctx) => ctx.session({ title: "Background retry owner" }))
+    .at((ctx) => ({
+      path: route("/experimental/session/background/jobs/{sessionID}/retry", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+    }))
+    .status(400),
   http.protected.get("/experimental/resource", "experimental.resource.list").json(),
   http.protected
     .post("/sync/history", "sync.history.list")

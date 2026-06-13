@@ -1,6 +1,6 @@
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import path from "path"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@cedric/core/global"
 import { errorMessage } from "@/util/error"
 import { useDialog } from "@tui/ui/dialog"
 import { useSDK } from "@tui/context/sdk"

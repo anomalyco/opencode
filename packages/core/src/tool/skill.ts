@@ -2,7 +2,7 @@ export * as SkillTool from "./skill"
 
 import path from "path"
 import { pathToFileURL } from "url"
-import { Tool, ToolFailure, toolText } from "@opencode-ai/llm"
+import { Tool, ToolFailure, toolText } from "@cedric/llm"
 import { Cause, Effect, Layer, Schema } from "effect"
 import { FSUtil } from "../fs-util"
 import { PluginBoot } from "../plugin/boot"

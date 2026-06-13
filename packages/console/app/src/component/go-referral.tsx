@@ -1,7 +1,7 @@
 import { action, json, query, useAction, useSubmission } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
-import { Referral } from "@opencode-ai/console-core/referral.js"
+import { Referral } from "@cedric/console-core/referral.js"
 import { withActor } from "~/context/auth.withActor"
 import { Modal } from "~/component/modal"
 import { IconCheck, IconCopy } from "~/component/icon"

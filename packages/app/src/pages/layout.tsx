@@ -18,23 +18,23 @@ import { useQuery } from "@tanstack/solid-query"
 import { useLayout, LocalProject } from "@/context/layout"
 import { useServerSync } from "@/context/server-sync"
 import { Persist, persisted } from "@/utils/persist"
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@cedric/core/util/encode"
 import { decode64 } from "@/utils/base64"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { Button } from "@opencode-ai/ui/button"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
-import { Dialog } from "@opencode-ai/ui/dialog"
-import { getFilename } from "@opencode-ai/core/util/path"
-import { Session, type Message } from "@opencode-ai/sdk/v2/client"
+import { ResizeHandle } from "@cedric/ui/resize-handle"
+import { Button } from "@cedric/ui/button"
+import { IconButton } from "@cedric/ui/icon-button"
+import { Tooltip } from "@cedric/ui/tooltip"
+import { DropdownMenu } from "@cedric/ui/dropdown-menu"
+import { Dialog } from "@cedric/ui/dialog"
+import { getFilename } from "@cedric/core/util/path"
+import { Session, type Message } from "@cedric/sdk/v2/client"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { useProviders } from "@/hooks/use-providers"
-import { toaster } from "@opencode-ai/ui/toast"
+import { toaster } from "@cedric/ui/toast"
 import { setV2Toast, showToast, ToastRegion } from "@/utils/toast"
 import { useServerSDK } from "@/context/server-sdk"
 import { clearWorkspaceTerminals } from "@/context/terminal"
@@ -50,8 +50,8 @@ import {
 } from "@/context/global-sync/session-prefetch"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
-import { Binary } from "@opencode-ai/core/util/binary"
-import { retry } from "@opencode-ai/core/util/retry"
+import { Binary } from "@cedric/core/util/binary"
+import { retry } from "@cedric/core/util/retry"
 import { playSoundById } from "@/utils/sound"
 import { createAim } from "@/utils/aim"
 import { setNavigate } from "@/utils/notification-click"
@@ -59,8 +59,8 @@ import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
 import { SessionRouteKey, SessionStateKey } from "@/utils/server-scope"
 
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
+import { useDialog } from "@cedric/ui/context/dialog"
+import { useTheme, type ColorScheme } from "@cedric/ui/theme/context"
 import { useCommand, type CommandOption } from "@/context/command"
 import { ConstrainDragXAxis, getDraggableId } from "@/utils/solid-dnd"
 import { DebugBar } from "@/components/debug-bar"
@@ -91,6 +91,11 @@ import {
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
 import { runUpdateAndRestart } from "./layout/update"
+import {
+  BackgroundTasks,
+  backgroundTaskMergePrompt,
+  type BackgroundTaskItem,
+} from "@/components/background-tasks"
 
 export default function Layout(props: ParentProps) {
   const serverSDK = useServerSDK()
@@ -1371,6 +1376,29 @@ export default function Layout(props: ParentProps) {
     navigateWithSidebarReset(`/${base64Encode(session.directory)}/session/${session.id}`)
   }
 
+  async function mergeBackgroundTask(task: BackgroundTaskItem) {
+    const prompt = backgroundTaskMergePrompt(task)
+    const slug = base64Encode(task.directory)
+    setSessionHandoff(SessionStateKey.from(server.scope(), SessionRouteKey.fromRoute(slug, task.parentSessionID)), {
+      prompt,
+    })
+
+    try {
+      await navigator.clipboard.writeText(prompt)
+      showToast({
+        title: "Background task copied",
+        description: task.parentSession ? "Result copied and parent chat opened." : "Result copied for main chat.",
+      })
+    } catch {
+      showToast({
+        title: "Background task ready",
+        description: task.parentSession ? "Parent chat opened with the result handoff." : "Result handoff prepared.",
+      })
+    }
+
+    if (task.parentSession) navigateToSession(task.parentSession)
+  }
+
   function openProject(directory: string, navigate = true) {
     layout.projects.open(directory)
     if (navigate) return navigateToProject(directory)
@@ -2309,6 +2337,11 @@ export default function Layout(props: ParentProps) {
                   </>
                 </Show>
               </div>
+              <BackgroundTasks
+                directories={visibleSessionDirs}
+                onOpenSession={navigateToSession}
+                onMergeTask={(task) => void mergeBackgroundTask(task)}
+              />
             </>
           )}
         </Show>

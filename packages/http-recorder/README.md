@@ -1,4 +1,4 @@
-# @opencode-ai/http-recorder
+# @cedric/http-recorder
 
 Record real Effect HTTP and WebSocket traffic once, then replay it from deterministic JSON cassettes.
 
@@ -10,7 +10,7 @@ Use it for provider integrations, retries, polling, multi-step flows, and any te
 
 ```sh
 bun add effect@4.0.0-beta.74
-bun add -d @opencode-ai/http-recorder@beta @effect/vitest vitest
+bun add -d @cedric/http-recorder@beta @effect/vitest vitest
 ```
 
 The package supports Node.js 22+ and Bun. It is not intended for browsers, workers, or Deno.
@@ -31,7 +31,7 @@ Effect `4.0.0-beta.74` has a known declaration error (`SchemaErrorTypeId` is mis
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { HttpRecorder } from "@cedric/http-recorder"
 
 const User = Schema.Struct({
   id: Schema.Number,
@@ -96,7 +96,7 @@ import { assert, it } from "@effect/vitest"
 import { NodeSocket } from "@effect/platform-node"
 import { Effect, Layer } from "effect"
 import { Socket } from "effect/unstable/socket"
-import { HttpRecorder } from "@opencode-ai/http-recorder"
+import { HttpRecorder } from "@cedric/http-recorder"
 
 const echo = Effect.gen(function* () {
   const socket = yield* Socket.Socket

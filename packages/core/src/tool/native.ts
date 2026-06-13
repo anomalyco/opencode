@@ -1,6 +1,6 @@
 export * as NativeTool from "./native"
 
-import { Tool, ToolFailure } from "@opencode-ai/llm"
+import { Tool, ToolFailure } from "@cedric/llm"
 import { Effect, Schema } from "effect"
 import type { SessionSchema } from "../session/schema"
 

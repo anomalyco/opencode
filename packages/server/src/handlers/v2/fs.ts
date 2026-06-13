@@ -1,4 +1,4 @@
-import { FileSystem } from "@opencode-ai/core/filesystem"
+import { FileSystem } from "@cedric/core/filesystem"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { V2Api } from "../../api"

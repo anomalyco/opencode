@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect, Exit, Fiber, Layer } from "effect"
-import { PermissionV2 } from "@opencode-ai/core/permission"
-import { QuestionV2 } from "@opencode-ai/core/question"
-import { SessionV2 } from "@opencode-ai/core/session"
-import { ToolRegistry } from "@opencode-ai/core/tool/registry"
-import { QuestionTool } from "@opencode-ai/core/tool/question"
+import { PermissionV2 } from "@cedric/core/permission"
+import { QuestionV2 } from "@cedric/core/question"
+import { SessionV2 } from "@cedric/core/session"
+import { ToolRegistry } from "@cedric/core/tool/registry"
+import { QuestionTool } from "@cedric/core/tool/question"
 import { testEffect } from "./lib/effect"
 
 const sessionID = SessionV2.ID.make("ses_question_tool_test")

@@ -1,4 +1,6 @@
 interface ImportMetaEnv {
+  readonly CEDRIC_CHANNEL?: string
+  readonly OPENKIMI_CHANNEL?: string
   readonly OPENCODE_CHANNEL: string
 }
 

@@ -1,5 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import type { Message, Part, PermissionRequest, Project, QuestionRequest, Session } from "@opencode-ai/sdk/v2/client"
+import type {
+  BackgroundTaskJob,
+  Message,
+  Part,
+  PermissionRequest,
+  Project,
+  QuestionRequest,
+  Session,
+} from "@cedric/sdk/v2/client"
 import { createStore } from "solid-js/store"
 import type { State } from "./types"
 import { applyDirectoryEvent, applyGlobalEvent, cleanupDroppedSessionCaches } from "./event-reducer"
@@ -57,6 +65,16 @@ const questionRequest = (id: string, sessionID: string, title = id) =>
     ],
   }) as QuestionRequest
 
+const backgroundJob = (input: Partial<BackgroundTaskJob> = {}) =>
+  ({
+    id: "job_1",
+    sessionID: "ses_child",
+    parentSessionID: "ses_parent",
+    status: "running",
+    startedAt: 1,
+    ...input,
+  }) as BackgroundTaskJob
+
 const baseState = (input: Partial<State> = {}) =>
   ({
     status: "complete",
@@ -71,6 +89,7 @@ const baseState = (input: Partial<State> = {}) =>
     session: [],
     sessionTotal: 0,
     session_status: {},
+    background_job: [],
     session_diff: {},
     todo: {},
     permission: {},
@@ -270,6 +289,38 @@ describe("applyDirectoryEvent", () => {
     }
   })
 
+  test("upserts background job lifecycle events", () => {
+    const [store, setStore] = createStore(baseState())
+
+    applyDirectoryEvent({
+      event: { type: "background.job.updated", properties: { job: backgroundJob() } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.background_job.map((job) => job.id)).toEqual(["job_1"])
+    expect(store.background_job[0]?.status).toBe("running")
+
+    applyDirectoryEvent({
+      event: {
+        type: "background.job.updated",
+        properties: { job: backgroundJob({ status: "completed", completedAt: 2, output: "done" }) },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.background_job).toHaveLength(1)
+    expect(store.background_job[0]?.status).toBe("completed")
+    expect(store.background_job[0]?.output).toBe("done")
+  })
+
   test("cleans caches for trimmed sessions on session.created", () => {
     const dropped = rootSession({ id: "ses_b" })
     const kept = rootSession({ id: "ses_a" })
@@ -279,6 +330,7 @@ describe("applyDirectoryEvent", () => {
       baseState({
         limit: 1,
         session: [dropped],
+        background_job: [backgroundJob({ sessionID: dropped.id })],
         message: { [dropped.id]: [message] },
         part: { [message.id]: [textPart("prt_1", dropped.id, message.id)] },
         session_diff: { [dropped.id]: [] },
@@ -310,6 +362,7 @@ describe("applyDirectoryEvent", () => {
     expect(store.permission[dropped.id]).toBeUndefined()
     expect(store.question[dropped.id]).toBeUndefined()
     expect(store.session_status[dropped.id]).toBeUndefined()
+    expect(store.background_job).toEqual([])
     expect(todos).toEqual([dropped.id])
   })
 

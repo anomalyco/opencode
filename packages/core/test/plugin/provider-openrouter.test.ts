@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
-import { OpenRouterPlugin } from "@opencode-ai/core/plugin/provider/openrouter"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Catalog } from "@cedric/core/catalog"
+import { ModelV2 } from "@cedric/core/model"
+import { PluginV2 } from "@cedric/core/plugin"
+import { ProviderPlugins } from "@cedric/core/plugin/provider"
+import { OpenRouterPlugin } from "@cedric/core/plugin/provider/openrouter"
+import { ProviderV2 } from "@cedric/core/provider"
 import { expectPluginRegistered, it, model, provider } from "./provider-helper"
 
 describe("OpenRouterPlugin", () => {

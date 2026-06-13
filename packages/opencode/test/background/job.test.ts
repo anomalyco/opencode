@@ -1,11 +1,80 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect } from "effect"
 import { BackgroundJob } from "@/background/job"
+import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(BackgroundJob.defaultLayer)
 
 describe("background.job", () => {
+  it.instance("emits task job updates on the global event bus", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const latch = yield* Deferred.make<void>()
+      const seen: GlobalEvent[] = []
+      const listener = (event: GlobalEvent) => {
+        if (event.payload.type === "background.job.updated") seen.push(event)
+      }
+      GlobalBus.on("event", listener)
+      yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", listener)))
+
+      const job = yield* jobs.start({
+        id: "child",
+        type: "task",
+        metadata: { sessionId: "child", parentSessionId: "parent" },
+        run: Deferred.await(latch).pipe(Effect.as("done")),
+      })
+
+      yield* Deferred.succeed(latch, undefined)
+      yield* jobs.wait({ id: job.id })
+
+      expect(seen.map((event) => event.payload.properties.job.status)).toEqual(["running", "completed"])
+      expect(seen.at(-1)?.payload.properties.job.output).toBe("done")
+    }),
+  )
+
+  it.instance("emits partial task job progress before extended work completes", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const first = yield* Deferred.make<void>()
+      const second = yield* Deferred.make<void>()
+      const partial = yield* Deferred.make<GlobalEvent>()
+      const listener = (event: GlobalEvent) => {
+        if (event.payload.type !== "background.job.updated") return
+        if (event.payload.properties.job.status === "running" && event.payload.properties.job.output === "first") {
+          Effect.runFork(Deferred.succeed(partial, event))
+        }
+      }
+      GlobalBus.on("event", listener)
+      yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", listener)))
+
+      const job = yield* jobs.start({
+        id: "child",
+        type: "task",
+        metadata: { sessionId: "child", parentSessionId: "parent" },
+        run: Deferred.await(first).pipe(Effect.as("first")),
+      })
+      expect(yield* jobs.extend({ id: job.id, run: Deferred.await(second).pipe(Effect.as("second")) })).toBe(true)
+
+      yield* Deferred.succeed(first, undefined)
+      const event = yield* Deferred.await(partial).pipe(Effect.timeout("1 second"))
+
+      expect(event.payload.properties.job).toMatchObject({
+        id: "child",
+        status: "running",
+        output: "first",
+      })
+      const progress = event.payload.properties.job.progress
+      expect(typeof progress).toBe("number")
+      if (typeof progress !== "number") throw new Error("Expected numeric progress")
+      expect(progress).toBeGreaterThan(10)
+      expect(progress).toBeLessThan(100)
+
+      yield* Deferred.succeed(second, undefined)
+      expect((yield* jobs.wait({ id: job.id })).info?.output).toBe("second")
+    }),
+  )
+
   it.instance("tracks started jobs through completion", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service

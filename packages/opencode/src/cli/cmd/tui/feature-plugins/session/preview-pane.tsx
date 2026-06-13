@@ -2,7 +2,7 @@ import { createResource, Show, createMemo, createSignal, onMount, type Accessor,
 import { TextAttributes } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
 import { debounce, leadingAndTrailing } from "@solid-primitives/scheduled"
-import type { Message, Part, Session as SdkSession } from "@opencode-ai/sdk/v2"
+import type { Message, Part, Session as SdkSession } from "@cedric/sdk/v2"
 import { useTheme } from "@tui/context/theme"
 import { useSDK } from "@tui/context/sdk"
 import { useSync } from "@tui/context/sync"

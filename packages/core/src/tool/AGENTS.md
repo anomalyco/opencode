@@ -21,7 +21,7 @@ Public Tool.make      NativeTool value      ApplicationTools      Location built
 
 There are three relevant representations:
 
-- `native.ts` defines the plain Core-native executable value exposed publicly as `Tool.make(...)`. It combines an `@opencode-ai/llm` model-facing definition with a Session-aware handler.
+- `native.ts` defines the plain Core-native executable value exposed publicly as `Tool.make(...)`. It combines an `@cedric/llm` model-facing definition with a Session-aware handler.
 - `application-tools.ts` stores process-scoped application contributions. It owns availability and scoped attachment, but it does not execute tools.
 - `registry.ts` is the single execution registry. Each Location owns one registry, its built-in contributions, effective precedence, input/output validation, permissions, and settlement.
 
@@ -97,7 +97,7 @@ tool/
   read.ts, bash.ts, ... individual Location-scoped built-in contributions
 ```
 
-Keep model/provider-neutral tool schemas and output projection in `@opencode-ai/llm`. Keep Session identity, permissions, Location precedence, and settlement in Core.
+Keep model/provider-neutral tool schemas and output projection in `@cedric/llm`. Keep Session identity, permissions, Location precedence, and settlement in Core.
 
 ## Future Directions
 

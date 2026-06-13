@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { getAdapter, registerAdapter } from "../../src/control-plane/adapters"
-import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectV2 } from "@cedric/core/project"
 import type { WorkspaceInfo } from "../../src/control-plane/types"
 
 function info(projectID: WorkspaceInfo["projectID"], type: string): WorkspaceInfo {

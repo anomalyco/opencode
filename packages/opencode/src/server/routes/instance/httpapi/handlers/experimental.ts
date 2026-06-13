@@ -7,15 +7,37 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { MCP } from "@/mcp"
 import { Project } from "@/project/project"
 import { Session } from "@/session/session"
-import type { SessionID } from "@/session/schema"
+import { SessionPrompt } from "@/session/prompt"
+import { SessionID } from "@/session/schema"
+import { renderOutput } from "@/tool/task"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { ToolRegistry } from "@/tool/registry"
 import { Worktree } from "@/worktree"
-import { Effect, Option } from "effect"
+import { ModelV2 } from "@cedric/core/model"
+import { ProviderV2 } from "@cedric/core/provider"
+import { Effect, Option, Scope } from "effect"
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { ConsoleSwitchPayload, SessionListQuery, ToolListQuery, WorktreeApiError } from "../groups/experimental"
+
+function stoppedAfterRestart<T extends { status: string; completedAt?: number; updatedAt: number; error?: string }>(job: T) {
+  if (job.status !== "running") return job
+  return {
+    ...job,
+    status: "error" as const,
+    completedAt: job.completedAt ?? job.updatedAt,
+    updatedAt: job.completedAt ?? job.updatedAt,
+    retryable: true,
+    error: job.error ?? "Background task stopped before completion because Cedric restarted.",
+  }
+}
+
+const RECOVERY_PROMPT = [
+  "Cedric restarted while this background task was running.",
+  "Continue the same background task from the existing conversation context.",
+  "Do not restart completed work unless it is necessary to produce the final result.",
+].join("\n")
 
 function mapWorktreeError<A, R>(self: Effect.Effect<A, Worktree.Error, R>) {
   return self.pipe(
@@ -33,8 +55,10 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     const registry = yield* ToolRegistry.Service
     const worktreeSvc = yield* Worktree.Service
     const sessions = yield* Session.Service
+    const promptSvc = yield* SessionPrompt.Service
     const background = yield* BackgroundJob.Service
     const flags = yield* RuntimeFlags.Service
+    const scope = yield* Scope.Scope
 
     const getConsole = Effect.fn("ExperimentalHttpApi.console")(function* () {
       const [state, groups] = yield* Effect.all(
@@ -166,6 +190,128 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
       return promoted.some((job) => job !== undefined)
     })
 
+    const sessionBackgroundJobs = Effect.fn("ExperimentalHttpApi.sessionBackgroundJobs")(function* () {
+      const ctx = yield* InstanceState.context
+      const live = (yield* background.list()).flatMap((job) => {
+        const task = BackgroundJob.taskJob(job)
+        return task ? [task] : []
+      })
+      const liveByID = new Map(live.map((job) => [job.id, job] as const))
+      const durable = (yield* sessions.listGlobal({ directory: ctx.directory, limit: 500 })).flatMap((session) => {
+        const job = BackgroundJob.taskJobFromMetadata(session.metadata)
+        if (!job || liveByID.has(job.id)) return []
+        return [stoppedAfterRestart(job)]
+      })
+      return [...live, ...durable].toSorted((a, b) => b.updatedAt - a.updatedAt)
+    })
+
+    const notifyRecoveredTask = Effect.fn("ExperimentalHttpApi.notifyRecoveredTask")(function* (input: {
+      jobID: string
+      sessionID: SessionID
+      parentSessionID: SessionID
+      title?: string
+    }) {
+      yield* background.wait({ id: input.jobID }).pipe(
+        Effect.flatMap((result) => {
+          if (result.info?.status === "completed") {
+            return promptSvc.prompt({
+              sessionID: input.parentSessionID,
+              parts: [
+                {
+                  type: "text",
+                  synthetic: true,
+                  text: renderOutput({
+                    sessionID: input.sessionID,
+                    state: "completed",
+                    summary: `Background task completed: ${input.title ?? "Recovered task"}`,
+                    text: result.info.output ?? "",
+                  }),
+                },
+              ],
+            })
+          }
+          if (result.info?.status === "error") {
+            return promptSvc.prompt({
+              sessionID: input.parentSessionID,
+              parts: [
+                {
+                  type: "text",
+                  synthetic: true,
+                  text: renderOutput({
+                    sessionID: input.sessionID,
+                    state: "error",
+                    summary: `Background task failed: ${input.title ?? "Recovered task"}`,
+                    text: result.info.error ?? "",
+                  }),
+                },
+              ],
+            })
+          }
+          return Effect.void
+        }),
+        Effect.ignore,
+        Effect.forkIn(scope, { startImmediately: true }),
+      )
+    })
+
+    const sessionBackgroundJobRetry = Effect.fn("ExperimentalHttpApi.sessionBackgroundJobRetry")(function* (ctx: {
+      params: { sessionID: SessionID }
+    }) {
+      const live = yield* background.get(ctx.params.sessionID)
+      const liveTask = live ? BackgroundJob.taskJob(live) : undefined
+      if (liveTask?.status === "running") return liveTask
+
+      const child = yield* sessions.get(ctx.params.sessionID).pipe(Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))))
+      const stored = BackgroundJob.taskJobFromMetadata(child.metadata)
+      if (!stored || stored.status !== "running") return yield* new HttpApiError.BadRequest({})
+      const parentSessionID = SessionID.make(stored.parentSessionID)
+      yield* sessions.get(parentSessionID).pipe(Effect.catch(() => Effect.fail(new HttpApiError.BadRequest({}))))
+
+      const started = yield* background.start({
+        id: ctx.params.sessionID,
+        type: "task",
+        title: stored.title,
+        metadata: {
+          parentSessionId: stored.parentSessionID,
+          sessionId: stored.sessionID,
+          background: true,
+          recovered: true,
+          ...(stored.model
+            ? {
+                model: {
+                  providerID: ProviderV2.ID.make(stored.model.providerID),
+                  modelID: ModelV2.ID.make(stored.model.modelID),
+                },
+              }
+            : {}),
+        },
+        run: promptSvc
+          .prompt({
+            sessionID: ctx.params.sessionID,
+            agent: child.agent,
+            ...(stored.model
+              ? {
+                  model: {
+                    providerID: ProviderV2.ID.make(stored.model.providerID),
+                    modelID: ModelV2.ID.make(stored.model.modelID),
+                  },
+                }
+              : {}),
+            parts: [{ type: "text", text: RECOVERY_PROMPT }],
+          })
+          .pipe(Effect.map((result) => result.parts.findLast((part) => part.type === "text")?.text ?? "")),
+      })
+      yield* notifyRecoveredTask({
+        jobID: started.id,
+        sessionID: ctx.params.sessionID,
+        parentSessionID,
+        title: stored.title,
+      })
+      const task = BackgroundJob.taskJob(started)
+      if (!task) return yield* new HttpApiError.BadRequest({})
+      return task
+    })
+
     const resource = Effect.fn("ExperimentalHttpApi.resource")(function* () {
       return yield* mcp.resources()
     })
@@ -182,6 +328,8 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
       .handle("worktreeReset", worktreeReset)
       .handle("session", session)
       .handle("sessionBackground", sessionBackground)
+      .handle("sessionBackgroundJobs", sessionBackgroundJobs)
+      .handle("sessionBackgroundJobRetry", sessionBackgroundJobRetry)
       .handle("resource", resource)
   }),
 )

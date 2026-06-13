@@ -1,4 +1,4 @@
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@cedric/core/flag/flag"
 import { Effect } from "effect"
 import path from "path"
 

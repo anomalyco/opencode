@@ -1,5 +1,6 @@
 import type {
   Agent,
+  BackgroundTaskJob,
   Command,
   Config,
   LspStatus,
@@ -14,8 +15,8 @@ import type {
   SnapshotFileDiff,
   Todo,
   VcsInfo,
-} from "@opencode-ai/sdk/v2/client"
-import { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+} from "@cedric/sdk/v2/client"
+import { NormalizedProviderListResponse } from "@cedric/ui/context"
 import type { Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 
@@ -46,6 +47,7 @@ export type State = {
   session_status: {
     [sessionID: string]: SessionStatus
   }
+  background_job: BackgroundTaskJob[]
   session_working(id: string): boolean
   session_diff: {
     [sessionID: string]: SnapshotFileDiff[]

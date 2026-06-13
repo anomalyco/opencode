@@ -2,7 +2,7 @@
 
 import { rm } from "fs/promises"
 import path from "path"
-import { Script } from "@opencode-ai/script"
+import { Script } from "@cedric/script"
 import { modelsData } from "./generate"
 
 const dir = path.resolve(import.meta.dirname, "..")
@@ -91,7 +91,7 @@ for (const item of targets) {
     `./dist/${name}/package.json`,
     JSON.stringify(
       {
-        name: `@opencode-ai/${name}`,
+        name: `@cedric/${name}`,
         version: Script.version,
         license: "MIT",
         repository: { type: "git", url: "git+https://github.com/anomalyco/opencode.git" },

@@ -1,6 +1,6 @@
 export * as ApplyPatchTool from "./apply-patch"
 
-import { Tool, ToolFailure, toolText } from "@opencode-ai/llm"
+import { Tool, ToolFailure, toolText } from "@cedric/llm"
 import { Cause, Effect, Layer, Schema } from "effect"
 import { FileMutation } from "../file-mutation"
 import { FSUtil } from "../fs-util"

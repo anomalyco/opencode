@@ -1,5 +1,5 @@
-import { AgentV2 } from "@opencode-ai/core/agent"
-import { Location } from "@opencode-ai/core/location"
+import { AgentV2 } from "@cedric/core/agent"
+import { Location } from "@cedric/core/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { V2Authorization } from "../../middleware/authorization"

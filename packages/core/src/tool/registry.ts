@@ -10,7 +10,7 @@ import {
   type ToolResultValue,
   type ToolSchema,
   type ToolSettlement,
-} from "@opencode-ai/llm"
+} from "@cedric/llm"
 import { Context, Effect, Layer, Schema, Scope } from "effect"
 import { castDraft, enableMapSet } from "immer"
 import { PermissionV2 } from "../permission"

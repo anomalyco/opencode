@@ -1,4 +1,4 @@
-import { CommandV2 } from "@opencode-ai/core/command"
+import { CommandV2 } from "@cedric/core/command"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { V2Api } from "../../api"

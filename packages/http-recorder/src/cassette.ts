@@ -36,7 +36,7 @@ export interface Interface {
   readonly list: () => Effect.Effect<ReadonlyArray<string>>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode-ai/http-recorder/Cassette") {}
+export class Service extends Context.Service<Service, Interface>()("@cedric/http-recorder/Cassette") {}
 
 const cassettePath = (directory: string, name: string) => {
   if (!name || path.isAbsolute(name) || path.win32.isAbsolute(name) || name.split(/[\\/]/).includes(".."))

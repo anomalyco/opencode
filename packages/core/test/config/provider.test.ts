@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Option, Schema } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Config } from "@opencode-ai/core/config"
-import { ConfigProviderPlugin } from "@opencode-ai/core/config/plugin/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Catalog } from "@cedric/core/catalog"
+import { Config } from "@cedric/core/config"
+import { ConfigProviderPlugin } from "@cedric/core/config/plugin/provider"
+import { ModelV2 } from "@cedric/core/model"
+import { PluginV2 } from "@cedric/core/plugin"
+import { ProviderV2 } from "@cedric/core/provider"
 import { it } from "../plugin/provider-helper"
 
 function request(headers: Record<string, string>, variant?: string) {

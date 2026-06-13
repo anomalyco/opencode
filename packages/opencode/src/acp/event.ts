@@ -1,5 +1,5 @@
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@cedric/core/util/log"
 import type {
   Event,
   EventMessagePartDelta,
@@ -8,7 +8,7 @@ import type {
   Part,
   SessionMessageResponse,
   ToolPart,
-} from "@opencode-ai/sdk/v2"
+} from "@cedric/sdk/v2"
 import { Effect } from "effect"
 import { ACPSession } from "./session"
 import { ACPPermission } from "./permission"

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ModelRequest } from "@opencode-ai/core/model-request"
+import { ModelRequest } from "@cedric/core/model-request"
 
 describe("ModelRequest", () => {
   test("partitions AI SDK model and models.dev mode options", () => {

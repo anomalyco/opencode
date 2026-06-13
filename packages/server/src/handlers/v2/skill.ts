@@ -1,4 +1,4 @@
-import { SkillV2 } from "@opencode-ai/core/skill"
+import { SkillV2 } from "@cedric/core/skill"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { V2Api } from "../../api"
 import { response } from "../../groups/v2/location"

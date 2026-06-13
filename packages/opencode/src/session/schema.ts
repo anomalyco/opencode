@@ -1,8 +1,8 @@
 import { Schema } from "effect"
 
 import { Identifier } from "@/id/id"
-import { SessionV2 } from "@opencode-ai/core/session"
-import { withStatics } from "@opencode-ai/core/schema"
+import { SessionV2 } from "@cedric/core/session"
+import { withStatics } from "@cedric/core/schema"
 
 export const SessionID = SessionV2.ID
 export type SessionID = Schema.Schema.Type<typeof SessionID>

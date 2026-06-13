@@ -7,8 +7,8 @@ import { ShareNext } from "@/share/share-next"
 import { Vcs } from "@/project/vcs"
 import { Snapshot } from "@/snapshot"
 import { Config } from "@/config/config"
-import * as Observability from "@opencode-ai/core/effect/observability"
-import { memoMap } from "@opencode-ai/core/effect/memo-map"
+import * as Observability from "@cedric/core/effect/observability"
+import { memoMap } from "@cedric/core/effect/memo-map"
 
 export const BootstrapLayer = Layer.mergeAll(
   Config.defaultLayer,

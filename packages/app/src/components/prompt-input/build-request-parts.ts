@@ -1,5 +1,5 @@
-import { getFilename } from "@opencode-ai/core/util/path"
-import { type AgentPartInput, type FilePartInput, type Part, type TextPartInput } from "@opencode-ai/sdk/v2/client"
+import { getFilename } from "@cedric/core/util/path"
+import { type AgentPartInput, type FilePartInput, type Part, type TextPartInput } from "@cedric/sdk/v2/client"
 import type { FileSelection } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
 import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from "@/context/prompt"
@@ -19,9 +19,15 @@ type ContextFile = {
   preview?: string
 }
 
+type SyntheticContext = {
+  text: string
+  metadata?: Record<string, unknown>
+}
+
 type BuildRequestPartsInput = {
   prompt: Prompt
   context: ContextFile[]
+  synthetic?: SyntheticContext[]
   images: ImageAttachmentPart[]
   text: string
   messageID: string
@@ -193,6 +199,18 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
   })
 
   requestParts.push(...files, ...context, ...agents, ...images)
+  requestParts.push(
+    ...(input.synthetic ?? []).map(
+      (item) =>
+        ({
+          id: Identifier.ascending("part"),
+          type: "text",
+          text: item.text,
+          synthetic: true,
+          metadata: item.metadata,
+        }) satisfies PromptRequestPart,
+    ),
+  )
 
   return {
     requestParts,

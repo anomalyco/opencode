@@ -14,6 +14,6 @@ export async function enterWslOpencodeStep(
 
 export function wslOpencodeAction(check?: WslOpencodeCheck) {
   if (!check) return
-  if (!check.resolvedPath) return "Install OpenCode"
-  if (check.matchesDesktop === false) return "Update OpenCode"
+  if (!check.resolvedPath) return "Install Cedric"
+  if (check.matchesDesktop === false) return "Update Cedric"
 }

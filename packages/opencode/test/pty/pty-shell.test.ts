@@ -3,7 +3,7 @@ import { Effect, Layer } from "effect"
 import { Config } from "../../src/config/config"
 import { Plugin } from "../../src/plugin"
 import { PtyPreparation } from "../../src/pty-preparation"
-import { Pty } from "@opencode-ai/core/pty"
+import { Pty } from "@cedric/core/pty"
 import { Shell } from "../../src/shell/shell"
 import { testEffect } from "../lib/effect"
 

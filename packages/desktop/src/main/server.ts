@@ -15,6 +15,8 @@ type SidecarMessage =
 
 export type SidecarListener = { stop: () => Promise<void> }
 
+export const SIDECAR_AUTH_USERNAME = "opencode"
+
 const SIDECAR_SERVICE_NAME = "opencode server"
 const SIDECAR_START_STALL_TIMEOUT = 60_000
 const SIDECAR_STOP_TIMEOUT = 6_000
@@ -130,6 +132,7 @@ export async function spawnLocalServer(
       type: "start",
       hostname,
       port,
+      username: SIDECAR_AUTH_USERNAME,
       password,
       userDataPath: options.userDataPath,
     })
@@ -180,7 +183,7 @@ export async function spawnLocalServer(
   }
 }
 
-export async function checkHealth(url: string, password?: string | null): Promise<boolean> {
+export async function checkHealth(url: string, password?: string | null, username = SIDECAR_AUTH_USERNAME): Promise<boolean> {
   let healthUrl: URL
   try {
     healthUrl = new URL("/global/health", url)
@@ -190,7 +193,7 @@ export async function checkHealth(url: string, password?: string | null): Promis
 
   const headers = new Headers()
   if (password) {
-    const auth = Buffer.from(`opencode:${password}`).toString("base64")
+    const auth = Buffer.from(`${username}:${password}`).toString("base64")
     headers.set("authorization", `Basic ${auth}`)
   }
 

@@ -1,5 +1,5 @@
 import { afterEach, expect, test } from "bun:test"
-import type { ToolPart } from "@opencode-ai/sdk/v2"
+import type { ToolPart } from "@cedric/sdk/v2"
 import { RGBA, SyntaxStyle } from "@opentui/core"
 import { MockTreeSitterClient, createTestRenderer, type TestRenderer } from "@opentui/core/testing"
 import { RunScrollbackStream } from "@/cli/cmd/run/scrollback.surface"

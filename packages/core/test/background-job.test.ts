@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { BackgroundJob } from "@opencode-ai/core/background-job"
+import { BackgroundJob } from "@cedric/core/background-job"
 import { Deferred, Effect, Exit, Scope } from "effect"
 import { it } from "./lib/effect"
 
@@ -24,6 +24,65 @@ describe("BackgroundJob", () => {
       expect(yield* jobs.wait({ id: job.id })).toMatchObject({
         timedOut: false,
         info: { status: "completed", output: "done" },
+      })
+    }).pipe(Effect.provide(BackgroundJob.layer)),
+  )
+
+  it.live("notifies listeners when jobs start and settle", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const latch = yield* Deferred.make<void>()
+      const updates: BackgroundJob.Info[] = []
+      const unsubscribe = yield* jobs.listen((info) =>
+        Effect.sync(() => {
+          updates.push(info)
+        }),
+      )
+
+      const job = yield* jobs.start({
+        type: "test",
+        run: Deferred.await(latch).pipe(Effect.as("done")),
+      })
+
+      yield* Deferred.succeed(latch, undefined)
+      yield* jobs.wait({ id: job.id })
+      yield* unsubscribe
+
+      expect(updates.map((info) => info.status)).toEqual(["running", "completed"])
+      expect(updates[1]?.output).toBe("done")
+    }).pipe(Effect.provide(BackgroundJob.layer)),
+  )
+
+  it.live("notifies listeners with partial output while extended work remains running", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const first = yield* Deferred.make<void>()
+      const second = yield* Deferred.make<void>()
+      const partial = yield* Deferred.make<BackgroundJob.Info>()
+      const unsubscribe = yield* jobs.listen((info) => {
+        if (info.status === "running" && info.output === "first") return Deferred.succeed(partial, info).pipe(Effect.asVoid)
+        return Effect.void
+      })
+
+      const job = yield* jobs.start({
+        type: "test",
+        run: Deferred.await(first).pipe(Effect.as("first")),
+      })
+      expect(yield* jobs.extend({ id: job.id, run: Deferred.await(second).pipe(Effect.as("second")) })).toBe(true)
+
+      yield* Deferred.succeed(first, undefined)
+      const running = yield* Deferred.await(partial).pipe(Effect.timeout("1 second"))
+      yield* unsubscribe
+
+      expect(running.status).toBe("running")
+      expect(running.output).toBe("first")
+      expect(running.progress).toBeGreaterThan(10)
+      expect(running.progress).toBeLessThan(100)
+
+      yield* Deferred.succeed(second, undefined)
+      expect(yield* jobs.wait({ id: job.id })).toMatchObject({
+        timedOut: false,
+        info: { status: "completed", output: "second", progress: 100 },
       })
     }).pipe(Effect.provide(BackgroundJob.layer)),
   )

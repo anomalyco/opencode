@@ -1,8 +1,9 @@
-import { Binary } from "@opencode-ai/core/util/binary"
+import { Binary } from "@cedric/core/util/binary"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type {
   Message,
   Part,
+  BackgroundTaskJob,
   PermissionRequest,
   Project,
   QuestionRequest,
@@ -10,7 +11,7 @@ import type {
   SessionStatus,
   SnapshotFileDiff,
   Todo,
-} from "@opencode-ai/sdk/v2/client"
+} from "@cedric/sdk/v2/client"
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
@@ -57,6 +58,9 @@ function cleanupSessionCaches(
   setStore(
     produce((draft) => {
       dropSessionCaches(draft, [sessionID])
+      draft.background_job = draft.background_job.filter(
+        (job) => job.sessionID !== sessionID && job.parentSessionID !== sessionID,
+      )
     }),
   )
 }
@@ -86,6 +90,7 @@ export function cleanupDroppedSessionCaches(
   setStore(
     produce((draft) => {
       dropSessionCaches(draft, stale)
+      draft.background_job = draft.background_job.filter((job) => keep.has(job.sessionID) && keep.has(job.parentSessionID))
     }),
   )
 }
@@ -182,6 +187,21 @@ export function applyDirectoryEvent(input: {
     case "session.status": {
       const props = event.properties as { sessionID: string; status: SessionStatus }
       input.setStore("session_status", props.sessionID, reconcile(props.status))
+      break
+    }
+    case "background.job.updated": {
+      const job = (event.properties as { job: BackgroundTaskJob }).job
+      const result = Binary.search(input.store.background_job, job.id, (item) => item.id)
+      if (result.found) {
+        input.setStore("background_job", result.index, reconcile(job))
+        break
+      }
+      input.setStore(
+        "background_job",
+        produce((draft) => {
+          draft.splice(result.index, 0, job)
+        }),
+      )
       break
     }
     case "message.updated": {

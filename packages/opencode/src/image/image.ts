@@ -1,7 +1,7 @@
 import { Config } from "@/config/config"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { SessionV1 } from "@cedric/core/v1/session"
 import type { MessageV2 } from "@/session/message-v2"
-import * as Log from "@opencode-ai/core/util/log"
+import * as Log from "@cedric/core/util/log"
 import photonWasm from "@silvia-odwyer/photon-node/photon_rs_bg.wasm" with { type: "file" }
 import { Context, Effect, Layer, Schema } from "effect"
 import path from "node:path"

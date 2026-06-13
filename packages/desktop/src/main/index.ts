@@ -22,6 +22,7 @@ import { createMenu } from "./menu"
 import {
   getDefaultServerUrl,
   preferAppEnv,
+  SIDECAR_AUTH_USERNAME,
   setDefaultServerUrl,
   spawnLocalServer,
   type SidecarListener,
@@ -34,22 +35,25 @@ import {
   setBackgroundColor,
   setDockIcon,
 } from "./windows"
+import { startBrowserAutomationServer } from "./browser-automation"
 import { createWslServersController } from "./wsl/servers"
 import { registerWslIpcHandlers } from "./wsl/ipc"
 import { spawnWslSidecar } from "./wsl/sidecar"
 import { migrate } from "./migrate"
 
 const APP_NAMES: Record<string, string> = {
-  dev: "OpenCode Dev",
-  beta: "OpenCode Beta",
-  prod: "OpenCode",
+  dev: "Cedric Dev",
+  beta: "Cedric Beta",
+  prod: "Cedric",
 }
 const APP_IDS: Record<string, string> = {
-  dev: "ai.opencode.desktop.dev",
-  beta: "ai.opencode.desktop.beta",
-  prod: "ai.opencode.desktop",
+  dev: "dev.cedric.desktop.dev",
+  beta: "dev.cedric.desktop.beta",
+  prod: "dev.cedric.desktop",
 }
-const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
+const TEST_ONBOARDING =
+  (process.env.CEDRIC_TEST_ONBOARDING ?? process.env.OPENKIMI_TEST_ONBOARDING ?? process.env.OPENCODE_TEST_ONBOARDING) ===
+  "1"
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 
 let logger: ReturnType<typeof initLogging>
@@ -60,7 +64,6 @@ const pendingDeepLinks: string[] = []
 
 function useEnvProxy() {
   try {
-    // Electron 41.2 runs Node 24.14.1; latest @types/node@24 is 24.12.2.
     ;(http as any).setGlobalProxyFromEnv()
   } catch (error) {
     logger.warn("failed to load proxy environment", error)
@@ -103,22 +106,25 @@ function ensureLoopbackNoProxy() {
 const main = Effect.gen(function* () {
   contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithGoogle: false })
 
-  // on macOS apps run in `/` which can cause issues with ripgrep
   try {
     process.chdir(homedir())
   } catch {}
 
+  process.env.CEDRIC_DISABLE_EMBEDDED_WEB_UI = "true"
+  process.env.OPENKIMI_DISABLE_EMBEDDED_WEB_UI = "true"
   process.env.OPENCODE_DISABLE_EMBEDDED_WEB_UI = "true"
 
-  const appId = app.isPackaged ? APP_IDS[CHANNEL] : "ai.opencode.desktop.dev"
+  const appId = app.isPackaged ? APP_IDS[CHANNEL] : "dev.cedric.desktop.dev"
   const onboardingTestRoot = ((): string | undefined => {
     if (!TEST_ONBOARDING) return
 
-    const root = join(tmpdir(), `opencode-onboarding-${randomUUID()}`)
+    const root = join(tmpdir(), `cedric-onboarding-${randomUUID()}`)
     rmSync(root, { recursive: true, force: true })
     ;["data", "config", "cache", "state", "desktop", "session"].forEach((dir) =>
       mkdirSync(join(root, dir), { recursive: true }),
     )
+    process.env.CEDRIC_DB = ":memory:"
+    process.env.OPENKIMI_DB = ":memory:"
     process.env.OPENCODE_DB = ":memory:"
     process.env.XDG_DATA_HOME = join(root, "data")
     process.env.XDG_CONFIG_HOME = join(root, "config")
@@ -126,7 +132,7 @@ const main = Effect.gen(function* () {
     process.env.XDG_STATE_HOME = join(root, "state")
     return root
   })()
-  app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "OpenCode Dev")
+  app.setName(app.isPackaged ? APP_NAMES[CHANNEL] : "Cedric Dev")
   app.setAppUserModelId(appId)
   app.setPath(
     "userData",
@@ -177,7 +183,9 @@ const main = Effect.gen(function* () {
   app.commandLine.appendSwitch("proxy-bypass-list", "<-loopback>")
   const features = app.commandLine.getSwitchValue("enable-features")
   app.commandLine.appendSwitch("enable-features", features ? `${jsCallStackFeature},${features}` : jsCallStackFeature)
-  if (!app.isPackaged) app.commandLine.appendSwitch("remote-debugging-port", "9222")
+  if (!app.isPackaged && !app.commandLine.hasSwitch("remote-debugging-port")) {
+    app.commandLine.appendSwitch("remote-debugging-port", "9222")
+  }
 
   if (!app.requestSingleInstanceLock()) {
     app.quit()
@@ -187,7 +195,7 @@ const main = Effect.gen(function* () {
   preferAppEnv(app.getPath("userData"))
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
-    const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))
+    const urls = argv.filter((arg: string) => arg.startsWith("cedric://"))
     if (urls.length) {
       logger.log("deep link received via second-instance", { urls })
       emitDeepLinks(urls)
@@ -265,7 +273,7 @@ const main = Effect.gen(function* () {
   yield* Effect.promise(() => app.whenReady())
 
   if (!TEST_ONBOARDING) migrate()
-  app.setAsDefaultProtocolClient("opencode")
+  app.setAsDefaultProtocolClient("cedric")
   registerRendererProtocol()
   setDockIcon()
   setupAutoUpdater()
@@ -278,7 +286,7 @@ const main = Effect.gen(function* () {
   )
 
   const port = yield* Effect.gen(function* () {
-    const fromEnv = process.env.OPENCODE_PORT
+    const fromEnv = process.env.CEDRIC_PORT ?? process.env.OPENKIMI_PORT ?? process.env.OPENCODE_PORT
     if (fromEnv) {
       const parsed = Number.parseInt(fromEnv, 10)
       if (!Number.isNaN(parsed)) return parsed
@@ -322,7 +330,7 @@ const main = Effect.gen(function* () {
     server = listener
     yield* Deferred.succeed(serverReady, {
       url,
-      username: "opencode",
+      username: SIDECAR_AUTH_USERNAME,
       password,
     })
 
@@ -341,6 +349,10 @@ const main = Effect.gen(function* () {
   }).pipe(forwardInitializationFailure(serverReady), Effect.forkChild)
 
   yield* Fiber.await(loadingTask)
+
+  // Start browser automation HTTP server for tool integration
+  startBrowserAutomationServer(17777)
+  logger.log("browser automation server started", { port: 17777 })
 
   mainWindow = createMainWindow()
   if (mainWindow) {

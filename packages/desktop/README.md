@@ -1,6 +1,6 @@
-# OpenCode Desktop
+# Cedric Desktop
 
-The OpenCode Desktop app, built with Electron.
+The Cedric Desktop app, built with Electron.
 
 ## Development
 

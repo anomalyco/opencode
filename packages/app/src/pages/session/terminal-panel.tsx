@@ -1,10 +1,10 @@
 import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { Tabs } from "@opencode-ai/ui/tabs"
-import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
+import { Tabs } from "@cedric/ui/tabs"
+import { ResizeHandle } from "@cedric/ui/resize-handle"
+import { IconButton } from "@cedric/ui/icon-button"
+import { TooltipKeybind } from "@cedric/ui/tooltip"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
 import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { ConstrainDragYAxis, getDraggableId } from "@/utils/solid-dnd"
@@ -146,7 +146,7 @@ export function TerminalPanel() {
   const all = terminal.all
   const ids = createMemo(() => all().map((pty) => pty.id))
 
-  const recoverTerminal = (key: string, id: string, clone: (id: string) => Promise<void>) => {
+  const recoverTerminal = (key: string, id: string, clone: (id: string) => Promise<unknown>) => {
     if (store.recovered[key]) return
     setStore("recovered", key, true)
     void clone(id)
@@ -249,83 +249,91 @@ export function TerminalPanel() {
             </div>
           }
         >
-          <DragDropProvider
-            onDragStart={handleTerminalDragStart}
-            onDragEnd={handleTerminalDragEnd}
-            onDragOver={handleTerminalDragOver}
-            collisionDetector={closestCenter}
-          >
-            <DragDropSensors />
-            <ConstrainDragYAxis />
-            <div class="flex flex-col h-full">
-              <Tabs
-                variant="alt"
-                value={terminal.active()}
-                onChange={(id) => terminal.open(id)}
-                class="!h-auto !flex-none"
-              >
-                <Tabs.List class="h-10 border-b border-border-weaker-base">
-                  <SortableProvider ids={ids()}>
-                    <For each={all()}>{(pty) => <SortableTerminalTab terminal={pty} onClose={close} />}</For>
-                  </SortableProvider>
-                  <div class="h-full flex items-center justify-center">
-                    <TooltipKeybind
-                      title={language.t("command.terminal.new")}
-                      keybind={command.keybind("terminal.new")}
-                      class="flex items-center"
-                    >
-                      <IconButton
-                        icon="plus-small"
-                        variant="ghost"
-                        iconSize="large"
-                        onClick={terminal.new}
-                        aria-label={language.t("command.terminal.new")}
-                      />
-                    </TooltipKeybind>
-                  </div>
-                </Tabs.List>
-              </Tabs>
-              <div class="flex-1 min-h-0 relative">
-                <Show when={terminal.active()} keyed>
-                  {(id) => {
-                    const ops = terminal.bind()
-                    return (
-                      <Show when={all().find((pty) => pty.id === id)}>
-                        {(pty) => (
-                          <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
-                            <Terminal
-                              pty={pty()}
-                              autoFocus={opened()}
-                              onConnect={() => markTerminalConnected(terminalRecoveryKey(pty()), id, ops.trim)}
-                              onCleanup={ops.update}
-                              onConnectError={() => recoverTerminal(terminalRecoveryKey(pty()), id, ops.clone)}
-                            />
-                          </div>
-                        )}
-                      </Show>
-                    )
-                  }}
-                </Show>
-              </div>
-            </div>
-            <DragOverlay>
-              <Show when={store.activeDraggable} keyed>
-                {(id) => (
-                  <Show when={all().find((pty) => pty.id === id)}>
-                    {(t) => (
-                      <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
-                        {terminalTabLabel({
-                          title: t().title,
-                          titleNumber: t().titleNumber,
-                          t: language.t as (key: string, vars?: Record<string, string | number | boolean>) => string,
-                        })}
-                      </div>
-                    )}
+          <Show when={opened()}>
+            <DragDropProvider
+              onDragStart={handleTerminalDragStart}
+              onDragEnd={handleTerminalDragEnd}
+              onDragOver={handleTerminalDragOver}
+              collisionDetector={closestCenter}
+            >
+              <DragDropSensors />
+              <ConstrainDragYAxis />
+              <div class="flex flex-col h-full">
+                <Tabs
+                  variant="alt"
+                  value={terminal.active()}
+                  onChange={(id) => terminal.open(id)}
+                  class="!h-auto !flex-none"
+                >
+                  <Tabs.List class="h-10 border-b border-border-weaker-base">
+                    <SortableProvider ids={ids()}>
+                      <For each={all()}>{(pty) => <SortableTerminalTab terminal={pty} onClose={close} />}</For>
+                    </SortableProvider>
+                    <div class="h-full flex items-center justify-center">
+                      <TooltipKeybind
+                        title={language.t("command.terminal.new")}
+                        keybind={command.keybind("terminal.new")}
+                        class="flex items-center"
+                      >
+                        <IconButton
+                          icon="plus-small"
+                          variant="ghost"
+                          iconSize="large"
+                          onClick={terminal.new}
+                          aria-label={language.t("command.terminal.new")}
+                        />
+                      </TooltipKeybind>
+                    </div>
+                  </Tabs.List>
+                </Tabs>
+                <div class="flex-1 min-h-0 relative">
+                  <Show when={terminal.active()} keyed>
+                    {(id) => {
+                      const ops = terminal.bind()
+                      return (
+                        <Show when={all().find((pty) => pty.id === id)}>
+                          {(pty) => (
+                            <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
+                              <Terminal
+                                pty={pty()}
+                                autoFocus={opened()}
+                                onConnect={() =>
+                                  markTerminalConnected(terminalRecoveryKey(pty()), id, (terminalID) =>
+                                    ops.trim(terminalID),
+                                  )
+                                }
+                                onCleanup={(next) => ops.update(next)}
+                                onConnectError={() =>
+                                  recoverTerminal(terminalRecoveryKey(pty()), id, (terminalID) => ops.clone(terminalID))
+                                }
+                              />
+                            </div>
+                          )}
+                        </Show>
+                      )
+                    }}
                   </Show>
-                )}
-              </Show>
-            </DragOverlay>
-          </DragDropProvider>
+                </div>
+              </div>
+              <DragOverlay>
+                <Show when={store.activeDraggable} keyed>
+                  {(id) => (
+                    <Show when={all().find((pty) => pty.id === id)}>
+                      {(t) => (
+                        <div class="relative p-1 h-10 flex items-center bg-background-stronger text-14-regular">
+                          {terminalTabLabel({
+                            title: t().title,
+                            titleNumber: t().titleNumber,
+                            t: language.t as (key: string, vars?: Record<string, string | number | boolean>) => string,
+                          })}
+                        </div>
+                      )}
+                    </Show>
+                  )}
+                </Show>
+              </DragOverlay>
+            </DragDropProvider>
+          </Show>
         </Show>
       </div>
     </div>

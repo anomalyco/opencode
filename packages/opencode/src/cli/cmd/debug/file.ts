@@ -1,9 +1,9 @@
 import { EOL } from "os"
 import { Effect } from "effect"
-import { FileSystem } from "@opencode-ai/core/filesystem"
-import { LocationServiceMap } from "@opencode-ai/core/location-layer"
-import { Search } from "@opencode-ai/core/filesystem/search"
-import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
+import { FileSystem } from "@cedric/core/filesystem"
+import { LocationServiceMap } from "@cedric/core/location-layer"
+import { Search } from "@cedric/core/filesystem/search"
+import { AbsolutePath, RelativePath } from "@cedric/core/schema"
 import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
 

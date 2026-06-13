@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { TogetherAIPlugin } from "@opencode-ai/core/plugin/provider/togetherai"
+import { PluginV2 } from "@cedric/core/plugin"
+import { TogetherAIPlugin } from "@cedric/core/plugin/provider/togetherai"
 import { fakeSelectorSdk, it, model } from "./provider-helper"
 
 describe("TogetherAIPlugin", () => {

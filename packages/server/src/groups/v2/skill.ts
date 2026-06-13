@@ -1,5 +1,5 @@
-import { SkillV2 } from "@opencode-ai/core/skill"
-import { Location } from "@opencode-ai/core/location"
+import { SkillV2 } from "@cedric/core/skill"
+import { Location } from "@cedric/core/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { V2Authorization } from "../../middleware/authorization"

@@ -13,13 +13,13 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useMatch, useNavigate, useParams } from "@solidjs/router"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Button } from "@opencode-ai/ui/button"
-import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
-import { useTheme } from "@opencode-ai/ui/theme/context"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { IconButton } from "@cedric/ui/icon-button"
+import { Icon } from "@cedric/ui/icon"
+import { Button } from "@cedric/ui/button"
+import { Tooltip, TooltipKeybind } from "@cedric/ui/tooltip"
+import { useTheme } from "@cedric/ui/theme/context"
+import { IconButtonV2 } from "@cedric/ui/v2/icon-button-v2"
+import { Icon as IconV2 } from "@cedric/ui/v2/icon"
 
 import { getProjectAvatarVariant, LayoutRoute, useLayout, type LocalProject } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
@@ -29,8 +29,8 @@ import { useSettings } from "@/context/settings"
 import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
 import { useServerSync } from "@/context/server-sync"
-import { base64Encode } from "@opencode-ai/core/util/encode"
-import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
+import { base64Encode } from "@cedric/core/util/encode"
+import { ProjectAvatar } from "@cedric/ui/v2/project-avatar-v2"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -782,7 +782,6 @@ function TabNavItem(props: {
     >
       <Show when={session.latest}>
         {(session) => {
-          console.log({ session: session() })
           const project = createMemo(() => projectForSession(session(), serverCtx()?.projects.list() ?? []))
 
           return (

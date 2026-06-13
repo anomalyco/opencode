@@ -18,7 +18,7 @@ export async function spawnWslSidecar(
   opts: { onLine?: (line: WslCommandLine) => void; healthTimeoutMs?: number } = {},
 ): Promise<WslSidecar> {
   const opencode = await resolveWslOpencode(distro)
-  if (!opencode) throw new Error(`OpenCode is not installed in ${distro}`)
+  if (!opencode) throw new Error(`Cedric CLI (opencode) is not installed in ${distro}`)
 
   const port = await allocatePort()
   const password = randomUUID()

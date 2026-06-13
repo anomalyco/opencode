@@ -1,6 +1,6 @@
 import * as InstanceState from "@/effect/instance-state"
 import { Project } from "@/project/project"
-import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectV2 } from "@cedric/core/project"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"

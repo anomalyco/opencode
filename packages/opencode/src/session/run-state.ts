@@ -1,5 +1,5 @@
 import { InstanceState } from "@/effect/instance-state"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { SessionV1 } from "@cedric/core/v1/session"
 import { Runner } from "@/effect/runner"
 import { BackgroundJob } from "@/background/job"
 import { Effect, Latch, Layer, Scope, Context } from "effect"

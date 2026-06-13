@@ -1,0 +1,63 @@
+{
+  "name": "Kimi K2.6 Optimized",
+  "description": "Maximum performance configuration for Kimi K2.6 models",
+  "provider": "moonshot",
+  "model": "kimi-k2-6",
+  "apiKey": "${MOONSHOT_API_KEY}",
+  "context": {
+    "window": 256000,
+    "allocation": {
+      "codebase": 0.40,
+      "history": 0.30,
+      "tools": 0.20
+    },
+    "optimization": "kimi"
+  },
+  "generation": {
+    "maxTokens": 8000,
+    "temperature": 0.7,
+    "topP": 0.9
+  },
+  "features": {
+    "reasoning": true,
+    "multimodal": true,
+    "computerControl": true,
+    "webBrowser": true,
+    "markdownViewer": true,
+    "swarm": false
+  },
+  "systemPrompt": {
+    "template": "kimi-default",
+    "projectAware": true,
+    "techStackAware": true
+  },
+  "tools": {
+    "enabled": [
+      "bash",
+      "computer_control",
+      "read",
+      "write",
+      "edit",
+      "glob",
+      "grep",
+      "webfetch",
+      "websearch"
+    ],
+    "computerControl": {
+      "enabled": false,
+      "requireConfirmation": true,
+      "allowedActions": [
+        "screenshot",
+        "click",
+        "type",
+        "scroll"
+      ]
+    }
+  },
+  "ui": {
+    "showReasoning": true,
+    "showTokenUsage": true,
+    "showContextWindow": true,
+    "theme": "dark"
+  }
+}

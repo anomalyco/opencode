@@ -17,7 +17,7 @@ import { Sqlite } from "./sqlite"
 
 const ATTR_DB_SYSTEM_NAME = "db.system.name"
 
-const TypeId = "~@opencode-ai/core/database/SqliteNode" as const
+const TypeId = "~@cedric/core/database/SqliteNode" as const
 type TypeId = typeof TypeId
 
 interface SqliteClient extends Client.SqlClient {

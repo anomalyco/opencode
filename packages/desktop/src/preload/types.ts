@@ -1,5 +1,5 @@
-import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
-import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
+import type { DesktopMenuAction } from "@cedric/app/desktop-menu"
+import type { WslServersPlatform } from "@cedric/app/wsl/types"
 export type {
   WslDistroProbe,
   WslInstalledDistro,
@@ -12,7 +12,7 @@ export type {
   WslServerRuntime,
   WslServersEvent,
   WslServersState,
-} from "@opencode-ai/app/wsl/types"
+} from "@cedric/app/wsl/types"
 
 export type ServerReadyData = {
   url: string
@@ -38,10 +38,20 @@ export type FatalRendererError = {
   os?: string
 }
 
+export type BrowserAPI = {
+  openBrowser: (url?: string) => Promise<void>
+  closeBrowser: () => Promise<void>
+}
+
+export type BrowserAutomationParams = Record<string, unknown>
+export type BrowserAutomationResult = unknown
+
 export type ElectronAPI = {
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
   awaitInitialization: () => Promise<ServerReadyData>
+  openBrowser: (url?: string) => Promise<void>
+  closeBrowser: () => Promise<void>
   wslServers: WslServersAPI
   getWindowConfig: () => Promise<WindowConfig>
   consumeInitialDeepLinks: () => Promise<string[]>
@@ -98,4 +108,8 @@ export type ElectronAPI = {
   setBackgroundColor: (color: string) => Promise<void>
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void>
+  browserAutomation: (action: string, params?: BrowserAutomationParams) => Promise<BrowserAutomationResult>
+  setActiveWebview: (id: number) => Promise<boolean>
+  clearActiveWebview: (id?: number) => Promise<boolean>
+  onActivateBrowserTab: (cb: (payload: { url?: string }) => void) => () => void
 }

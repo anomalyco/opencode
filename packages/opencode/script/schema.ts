@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 
 import { Config } from "@/config/config"
-import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { ConfigV1 } from "@cedric/core/v1/config/config"
 import { Schema } from "effect"
 import { TuiInfo } from "../src/cli/cmd/tui/config/tui-schema"
 

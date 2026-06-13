@@ -1,4 +1,4 @@
-import type { TuiPlugin } from "@opencode-ai/plugin/tui"
+import type { TuiPlugin } from "@cedric/plugin/tui"
 import type { InternalTuiPlugin } from "../../plugin/internal"
 import { SessionSwitcherDialog } from "./dialog"
 

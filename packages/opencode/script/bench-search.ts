@@ -1,7 +1,7 @@
 import { Effect } from "effect"
-import { Fff } from "@opencode-ai/core/filesystem/fff.bun"
+import { Fff } from "@cedric/core/filesystem/fff.bun"
 import { AppRuntime } from "@/effect/app-runtime"
-import { Search } from "@opencode-ai/core/filesystem/search"
+import { Search } from "@cedric/core/filesystem/search"
 import { InstanceStore } from "@/project/instance-store"
 
 const dir = process.cwd()

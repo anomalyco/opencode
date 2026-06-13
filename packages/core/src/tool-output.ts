@@ -5,7 +5,7 @@ export {
   ToolTextContent as TextContent,
   toolFile as file,
   toolText as text,
-} from "@opencode-ai/llm"
+} from "@cedric/llm"
 import { Schema } from "effect"
 
 export const Structured = Schema.Record(Schema.String, Schema.Any)

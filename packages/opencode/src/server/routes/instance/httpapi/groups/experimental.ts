@@ -4,7 +4,7 @@ import { MCP } from "@/mcp"
 import { Session } from "@/session/session"
 import { SessionID } from "@/session/schema"
 import { Worktree } from "@/worktree"
-import { NonNegativeInt } from "@opencode-ai/core/schema"
+import { NonNegativeInt } from "@cedric/core/schema"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { Authorization } from "../middleware/authorization"
@@ -16,8 +16,8 @@ import {
 } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 import { QueryBoolean } from "./query"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@cedric/core/provider"
+import { ModelV2 } from "@cedric/core/model"
 
 const ConsoleStateResponse = Schema.Struct({
   consoleManagedProviders: Schema.mutable(Schema.Array(Schema.String)),
@@ -82,6 +82,28 @@ export const SessionListQuery = Schema.Struct({
   limit: Schema.optional(Schema.NumberFromString),
   archived: Schema.optional(QueryBoolean),
 })
+const BackgroundTaskJobStatus = Schema.Union([
+  Schema.Literal("running"),
+  Schema.Literal("completed"),
+  Schema.Literal("error"),
+  Schema.Literal("cancelled"),
+])
+const BackgroundTaskJob = Schema.Struct({
+  id: Schema.String,
+  sessionID: Schema.String,
+  parentSessionID: Schema.String,
+  status: BackgroundTaskJobStatus,
+  title: Schema.optional(Schema.String),
+  startedAt: Schema.Number,
+  updatedAt: Schema.Number,
+  completedAt: Schema.optional(Schema.Number),
+  progress: Schema.optional(Schema.Number),
+  retryable: Schema.optional(Schema.Boolean),
+  model: Schema.optional(Schema.Struct({ providerID: Schema.String, modelID: Schema.String })),
+  output: Schema.optional(Schema.String),
+  error: Schema.optional(Schema.String),
+}).annotate({ identifier: "BackgroundTaskJob" })
+const BackgroundTaskJobs = Schema.Array(BackgroundTaskJob).annotate({ identifier: "BackgroundTaskJobs" })
 
 export const ExperimentalPaths = {
   console: "/experimental/console",
@@ -93,6 +115,8 @@ export const ExperimentalPaths = {
   worktreeReset: "/experimental/worktree/reset",
   session: "/experimental/session",
   sessionBackground: "/experimental/session/:sessionID/background",
+  sessionBackgroundJobs: "/experimental/session/background/jobs",
+  sessionBackgroundJobRetry: "/experimental/session/background/jobs/:sessionID/retry",
   resource: "/experimental/resource",
 } as const
 
@@ -228,6 +252,31 @@ export const ExperimentalApi = HttpApi.make("experimental")
             summary: "Background subagents",
             description:
               "Detach any synchronous subagents currently blocking the session and continue them in the background.",
+          }),
+        ),
+        HttpApiEndpoint.get("sessionBackgroundJobs", ExperimentalPaths.sessionBackgroundJobs, {
+          query: WorkspaceRoutingQuery,
+          success: described(BackgroundTaskJobs, "Background task jobs"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.backgroundJobs",
+            summary: "List background task jobs",
+            description:
+              "List live background task jobs plus durable child-session snapshots for restart-aware task status.",
+          }),
+        ),
+        HttpApiEndpoint.post("sessionBackgroundJobRetry", ExperimentalPaths.sessionBackgroundJobRetry, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          success: described(BackgroundTaskJob, "Retried background task job"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.backgroundJobRetry",
+            summary: "Retry background task job",
+            description:
+              "Resume a durable orphaned background task in its existing child session after restart.",
           }),
         ),
         HttpApiEndpoint.get("resource", ExperimentalPaths.resource, {

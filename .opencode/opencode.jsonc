@@ -1,6 +1,40 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "provider": {},
+  "model": "kimi-local/kimi-for-coding",
+  "provider": {
+    "kimi-local": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Kimi Local Bridge",
+      "options": {
+        "baseURL": "http://127.0.0.1:8767/v1",
+      },
+      "models": {
+        "kimi-for-coding": {
+          "id": "kimi-code/kimi-for-coding",
+          "name": "Kimi for Coding",
+          "family": "kimi",
+          "temperature": true,
+          "tool_call": true,
+          "limit": {
+            "context": 256000,
+            "output": 8192,
+          },
+        },
+        "kimi-for-coding-thinking": {
+          "id": "kimi-code/kimi-for-coding,thinking",
+          "name": "Kimi for Coding Thinking",
+          "family": "kimi",
+          "reasoning": true,
+          "temperature": true,
+          "tool_call": true,
+          "limit": {
+            "context": 256000,
+            "output": 8192,
+          },
+        },
+      },
+    },
+  },
   "permission": {},
   "reference": {
     "effect": "github.com/Effect-TS/effect-smol",

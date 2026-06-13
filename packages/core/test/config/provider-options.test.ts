@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ConfigProviderOptionsV1 } from "@opencode-ai/core/v1/config/provider-options"
+import { ConfigProviderOptionsV1 } from "@cedric/core/v1/config/provider-options"
 
 describe("ConfigProviderOptionsV1", () => {
   test("keeps raw provider and request options unchanged", () => {

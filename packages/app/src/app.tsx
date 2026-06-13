@@ -1,13 +1,13 @@
 import "@/index.css"
 import * as Sentry from "@sentry/solid"
-import { I18nProvider } from "@opencode-ai/ui/context"
-import { DialogProvider } from "@opencode-ai/ui/context/dialog"
-import { FileComponentProvider } from "@opencode-ai/ui/context/file"
-import { MarkedProvider } from "@opencode-ai/ui/context/marked"
-import { File } from "@opencode-ai/ui/file"
-import { Font } from "@opencode-ai/ui/font"
-import { Splash } from "@opencode-ai/ui/logo"
-import { ThemeProvider } from "@opencode-ai/ui/theme/context"
+import { I18nProvider } from "@cedric/ui/context"
+import { DialogProvider } from "@cedric/ui/context/dialog"
+import { FileComponentProvider } from "@cedric/ui/context/file"
+import { MarkedProvider } from "@cedric/ui/context/marked"
+import { File } from "@cedric/ui/file"
+import { Font } from "@cedric/ui/font"
+import { Splash } from "@cedric/ui/logo"
+import { ThemeProvider } from "@cedric/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
@@ -65,19 +65,6 @@ const SessionRoute = Object.assign(
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
   return <I18nProvider value={{ locale: language.intl, t: language.t }}>{props.children}</I18nProvider>
-}
-
-declare global {
-  interface Window {
-    __OPENCODE__?: {
-      updaterEnabled?: boolean
-      deepLinks?: string[]
-    }
-    api?: {
-      setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
-      exportDebugLogs?: () => Promise<string>
-    }
-  }
 }
 
 function QueryProvider(props: ParentProps) {

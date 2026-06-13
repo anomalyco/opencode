@@ -5,7 +5,7 @@
  */
 import { describe, expect, test } from "bun:test"
 import { aggregateFailures } from "@/cli/cmd/tui/context/aggregate-failures"
-import { ConfigErrorV1 } from "@opencode-ai/core/v1/config/error"
+import { ConfigErrorV1 } from "@cedric/core/v1/config/error"
 
 describe("aggregateFailures", () => {
   test("returns null when every result is fulfilled", () => {

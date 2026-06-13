@@ -1,8 +1,8 @@
 import { afterEach, describe, expect } from "bun:test"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { FSUtil } from "@cedric/core/fs-util"
 import { parsePatch } from "diff"
 import { Deferred, Effect, Layer } from "effect"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@cedric/core/cross-spawn-spawner"
 import fs from "fs/promises"
 import path from "path"
 import {
@@ -13,7 +13,7 @@ import {
   tmpdirScoped,
 } from "../fixture/fixture"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
-import { Watcher } from "@opencode-ai/core/filesystem/watcher"
+import { Watcher } from "@cedric/core/filesystem/watcher"
 import { Git } from "../../src/git"
 import { Vcs } from "@/project/vcs"
 import { testEffect } from "../lib/effect"

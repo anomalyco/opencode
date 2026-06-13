@@ -10,6 +10,7 @@ export const profiles = {
   deepseek: { provider: "deepseek", baseURL: "https://api.deepseek.com/v1" },
   fireworks: { provider: "fireworks", baseURL: "https://api.fireworks.ai/inference/v1" },
   groq: { provider: "groq", baseURL: "https://api.groq.com/openai/v1" },
+  moonshot: { provider: "moonshot", baseURL: "https://api.moonshot.cn/v1" },
   openrouter: { provider: "openrouter", baseURL: "https://openrouter.ai/api/v1" },
   togetherai: { provider: "togetherai", baseURL: "https://api.together.xyz/v1" },
   xai: { provider: "xai", baseURL: "https://api.x.ai/v1" },

@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { CommandV2 } from "@opencode-ai/core/command"
-import { Location } from "@opencode-ai/core/location"
-import { CommandPlugin } from "@opencode-ai/core/plugin/command"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { CommandV2 } from "@cedric/core/command"
+import { Location } from "@cedric/core/location"
+import { CommandPlugin } from "@cedric/core/plugin/command"
+import { AbsolutePath } from "@cedric/core/schema"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 

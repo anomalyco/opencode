@@ -1,7 +1,7 @@
 import { Effect, Layer } from "effect"
 import { Provider } from "@/provider/provider"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@cedric/core/provider"
+import { ModelV2 } from "@cedric/core/model"
 
 export namespace ProviderTest {
   export function model(override: Partial<Provider.Model> = {}): Provider.Model {

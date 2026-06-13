@@ -16,7 +16,8 @@ const optimistic: Array<{
   }
 }> = []
 const optimisticSeeded: boolean[] = []
-const storedSessions: Record<string, Array<{ id: string; title?: string }>> = {}
+type StoredSession = { id: string; title?: string }
+const storedSessions: Record<string, StoredSession[]> = {}
 const promoted: Array<{ directory: string; sessionID: string }> = []
 const sentShell: string[] = []
 const syncedDirectories: string[] = []
@@ -26,6 +27,19 @@ let selected = "/repo/worktree-a"
 let variant: string | undefined
 
 const promptValue: Prompt = [{ type: "text", content: "ls", start: 0, end: 2 }]
+
+const isStoredSession = (value: unknown): value is StoredSession => {
+  if (!value || typeof value !== "object") return false
+  return typeof Reflect.get(value, "id") === "string"
+}
+
+const isStoredSessionList = (value: unknown): value is StoredSession[] => {
+  return Array.isArray(value) && value.every(isStoredSession)
+}
+
+const isStoredSessionUpdater = (value: unknown): value is ((sessions: StoredSession[]) => unknown) => {
+  return typeof value === "function"
+}
 
 const clientFor = (directory: string) => {
   createdClients.push(directory)
@@ -63,18 +77,19 @@ beforeAll(async () => {
     useParams: () => params,
   }))
 
-  mock.module("@opencode-ai/sdk/v2/client", () => ({
+  mock.module("@cedric/sdk/v2/client", () => ({
     createOpencodeClient: (input: { directory: string }) => {
       createdClients.push(input.directory)
       return clientFor(input.directory)
     },
   }))
 
-  mock.module("@opencode-ai/ui/toast", () => ({
+  mock.module("@cedric/ui/toast", () => ({
+    Toast: { Region: () => undefined },
     showToast: () => 0,
   }))
 
-  mock.module("@opencode-ai/core/util/encode", () => ({
+  mock.module("@cedric/core/util/encode", () => ({
     base64Encode: (value: string) => value,
   }))
 
@@ -173,13 +188,8 @@ beforeAll(async () => {
           (...args: unknown[]) => {
             if (args[0] !== "session") return
             const next = args[1]
-            if (typeof next === "function") {
-              storedSessions[directory] = next(storedSessions[directory]) as Array<{ id: string; title?: string }>
-              return
-            }
-            if (Array.isArray(next)) {
-              storedSessions[directory] = next as Array<{ id: string; title?: string }>
-            }
+            const sessions = isStoredSessionUpdater(next) ? next(storedSessions[directory]) : next
+            if (isStoredSessionList(sessions)) storedSessions[directory] = sessions
           },
         ]
       },
@@ -238,7 +248,7 @@ describe("prompt submit worktree selection", () => {
       onSubmit: () => undefined,
     })
 
-    const event = { preventDefault: () => undefined } as unknown as Event
+    const event = new Event("submit")
 
     await submit.handleSubmit(event)
     selected = "/repo/worktree-b"
@@ -275,7 +285,7 @@ describe("prompt submit worktree selection", () => {
       onSubmit: () => undefined,
     })
 
-    const event = { preventDefault: () => undefined } as unknown as Event
+    const event = new Event("submit")
 
     await submit.handleSubmit(event)
 
@@ -303,7 +313,7 @@ describe("prompt submit worktree selection", () => {
       onSubmit: () => undefined,
     })
 
-    const event = { preventDefault: () => undefined } as unknown as Event
+    const event = new Event("submit")
 
     await submit.handleSubmit(event)
 
@@ -336,7 +346,7 @@ describe("prompt submit worktree selection", () => {
       onSubmit: () => undefined,
     })
 
-    const event = { preventDefault: () => undefined } as unknown as Event
+    const event = new Event("submit")
 
     await submit.handleSubmit(event)
 

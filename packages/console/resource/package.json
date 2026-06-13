@@ -1,9 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/console-resource",
+  "name": "@cedric/console-resource",
   "license": "MIT",
   "dependencies": {
-    "@cloudflare/workers-types": "catalog:"
+    "@cloudflare/workers-types": "catalog:",
+    "sst": "catalog:"
   },
   "exports": {
     ".": {

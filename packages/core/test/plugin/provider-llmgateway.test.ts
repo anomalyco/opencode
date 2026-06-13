@@ -1,10 +1,10 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { PluginV2 } from "@opencode-ai/core/plugin"
-import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
-import { LLMGatewayPlugin } from "@opencode-ai/core/plugin/provider/llmgateway"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { Catalog } from "@cedric/core/catalog"
+import { PluginV2 } from "@cedric/core/plugin"
+import { ProviderPlugins } from "@cedric/core/plugin/provider"
+import { LLMGatewayPlugin } from "@cedric/core/plugin/provider/llmgateway"
+import { ProviderV2 } from "@cedric/core/provider"
 import { expectPluginRegistered, it, provider } from "./provider-helper"
 
 describe("LLMGatewayPlugin", () => {

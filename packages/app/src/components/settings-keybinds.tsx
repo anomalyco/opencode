@@ -1,10 +1,10 @@
 import { Component, For, Show, createMemo, lazy, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { Button } from "@opencode-ai/ui/button"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TextField } from "@opencode-ai/ui/text-field"
+import { Button } from "@cedric/ui/button"
+import { Icon } from "@cedric/ui/icon"
+import { IconButton } from "@cedric/ui/icon-button"
+import { TextField } from "@cedric/ui/text-field"
 import { showToast } from "@/utils/toast"
 import fuzzysort from "fuzzysort"
 import { formatKeybind, parseKeybind, useCommand } from "@/context/command"
@@ -12,13 +12,13 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { SettingsList } from "./settings-list"
 
-const ButtonV2 = lazy(() => import("@opencode-ai/ui/v2/button-v2").then((module) => ({ default: module.ButtonV2 })))
-const IconV2 = lazy(() => import("@opencode-ai/ui/v2/icon").then((module) => ({ default: module.Icon })))
+const ButtonV2 = lazy(() => import("@cedric/ui/v2/button-v2").then((module) => ({ default: module.ButtonV2 })))
+const IconV2 = lazy(() => import("@cedric/ui/v2/icon").then((module) => ({ default: module.Icon })))
 const IconButtonV2 = lazy(() =>
-  import("@opencode-ai/ui/v2/icon-button-v2").then((module) => ({ default: module.IconButtonV2 })),
+  import("@cedric/ui/v2/icon-button-v2").then((module) => ({ default: module.IconButtonV2 })),
 )
 const TextInputV2 = lazy(() =>
-  import("@opencode-ai/ui/v2/text-input-v2").then((module) => ({ default: module.TextInputV2 })),
+  import("@cedric/ui/v2/text-input-v2").then((module) => ({ default: module.TextInputV2 })),
 )
 const SettingsListV2 = lazy(() =>
   import("./settings-v2/parts/list").then((module) => ({ default: module.SettingsListV2 })),

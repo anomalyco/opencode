@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { handlePtyInput } from "@opencode-ai/core/pty/input"
+import { handlePtyInput } from "@cedric/core/pty/input"
 import { it } from "../lib/effect"
 
 describe("pty websocket input", () => {

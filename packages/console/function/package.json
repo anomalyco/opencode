@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/console-function",
+  "name": "@cedric/console-function",
   "version": "1.16.2",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
@@ -20,8 +20,8 @@
     "@ai-sdk/anthropic": "3.0.64",
     "@ai-sdk/openai": "3.0.48",
     "@ai-sdk/openai-compatible": "2.0.37",
-    "@opencode-ai/console-core": "workspace:*",
-    "@opencode-ai/console-resource": "workspace:*",
+    "@cedric/console-core": "workspace:*",
+    "@cedric/console-resource": "workspace:*",
     "@openauthjs/openauth": "0.0.0-20250322224806",
     "ai": "catalog:",
     "zod": "catalog:"

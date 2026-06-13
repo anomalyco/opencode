@@ -5,7 +5,7 @@ import {
   type ToolOutput as LLMToolOutputType,
   type ToolResultValue,
   type Usage,
-} from "@opencode-ai/llm"
+} from "@cedric/llm"
 import { DateTime, Effect } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"

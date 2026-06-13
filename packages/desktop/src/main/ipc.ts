@@ -1,12 +1,15 @@
 import { execFile } from "node:child_process"
 import { BrowserWindow, Notification, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
-import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
+import type { DesktopMenuAction } from "@cedric/app/desktop-menu"
 
 import type { FatalRendererError, ServerReadyData, TitlebarTheme, WindowConfig } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { getStore } from "./store"
 import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
+import { registerBrowserIpcHandlers } from "./browser"
+import { registerBrowserAutomationHandlers } from "./browser-automation"
+import { registerComputerUseHandlers } from "./computer-use"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -193,6 +196,10 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("run-desktop-menu-action", (event: IpcMainInvokeEvent, action: DesktopMenuAction) => {
     runDesktopMenuAction(BrowserWindow.fromWebContents(event.sender), action)
   })
+
+  registerBrowserIpcHandlers()
+  registerBrowserAutomationHandlers()
+  registerComputerUseHandlers()
 }
 
 export function sendMenuCommand(win: BrowserWindow, id: string) {

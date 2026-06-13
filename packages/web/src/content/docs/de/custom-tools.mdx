@@ -27,7 +27,7 @@ Sie können wie folgt definiert werden:
 Der einfachste Weg, Tools zu erstellen, ist die Verwendung des `tool()`-Helfers, der Typsicherheit und Validierung bietet.
 
 ```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@cedric/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -50,7 +50,7 @@ Der **Dateiname** wird zum **Toolnamen**. Das Obige erstellt ein `database`-Tool
 Sie können auch mehrere Tools aus einer einzigen Datei exportieren. Jeder Export wird zu **einem separaten Tool** mit dem Namen **`<filename>_<exportname>`**:
 
 ```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@cedric/plugin"
 
 export const add = tool({
   description: "Add two numbers",
@@ -113,7 +113,7 @@ export default {
 Tools erhalten Kontext zur aktuellen Sitzung:
 
 ```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@cedric/plugin"
 
 export default tool({
   description: "Get project information",
@@ -150,7 +150,7 @@ print(a + b)
 Erstellen Sie dann die Werkzeugdefinition, die es aufruft:
 
 ```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@cedric/plugin"
 import path from "path"
 
 export default tool({

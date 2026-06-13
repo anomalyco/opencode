@@ -1,24 +1,29 @@
 import { afterEach, describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer, Schedule } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { eq } from "drizzle-orm"
+import { CrossSpawnSpawner } from "@cedric/core/cross-spawn-spawner"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
+import { BackgroundJob } from "@/background/job"
 import { Session } from "@/session/session"
-import { SessionTable } from "@opencode-ai/core/session/sql"
-import { Database } from "@opencode-ai/core/database/database"
-import { AccountV2 } from "@opencode-ai/core/account"
-import { AccountTable } from "@opencode-ai/core/account/sql"
-import * as Log from "@opencode-ai/core/util/log"
+import { SessionID } from "@/session/schema"
+import { SessionTable } from "@cedric/core/session/sql"
+import { Database } from "@cedric/core/database/database"
+import { AccountV2 } from "@cedric/core/account"
+import { AccountTable } from "@cedric/core/account/sql"
+import * as Log from "@cedric/core/util/log"
 import { Worktree } from "../../src/worktree"
 import { resetDatabase } from "../fixture/db"
-import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { disposeAllInstances, provideTmpdirServer, TestInstance } from "../fixture/fixture"
+import { TestLLMServer } from "../lib/llm-server"
+import { testProviderConfig } from "../lib/test-provider"
 import { testEffect } from "../lib/effect"
 import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
 void Log.init({ print: false })
 
-const it = testEffect(Layer.mergeAll(Session.defaultLayer, Database.defaultLayer, httpApiLayer))
+const it = testEffect(Layer.mergeAll(Session.defaultLayer, BackgroundJob.defaultLayer, Database.defaultLayer, httpApiLayer))
 const testWorktreeMutations = process.platform === "win32" ? it.instance.skip : it.instance
 
 function request(path: string, directory: string, init: RequestInit = {}) {
@@ -97,6 +102,17 @@ function setSessionUpdated(session: Session.Info, updated: number) {
   })
 }
 
+const parentTaskResult = Effect.fn("ExperimentalHttpApiTest.parentTaskResult")(function* (sessionID: SessionID) {
+  const messages = yield* Session.use.messages({ sessionID })
+  const text = messages
+    .flatMap((message) => message.parts)
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("\n")
+  if (!text.includes("<task ")) return yield* Effect.fail(new Error("background result not injected yet"))
+  return text
+})
+
 function withCreatedWorktree(
   directory: string,
   use: (info: Worktree.Info) => Effect.Effect<void, unknown, HttpClient.HttpClient>,
@@ -145,13 +161,14 @@ describe("experimental HttpApi", () => {
       Effect.gen(function* () {
         const tmp = yield* TestInstance
         const directory = tmp.directory
-        const [consoleState, consoleOrgs, toolList, toolIDs, worktrees, resources] = yield* Effect.all(
+        const [consoleState, consoleOrgs, toolList, toolIDs, worktrees, backgroundJobs, resources] = yield* Effect.all(
           [
             request(ExperimentalPaths.console, directory),
             request(ExperimentalPaths.consoleOrgs, directory),
             request(`${ExperimentalPaths.tool}?provider=opencode&model=gpt-5`, directory),
             request(ExperimentalPaths.toolIDs, directory),
             request(ExperimentalPaths.worktree, directory),
+            request(ExperimentalPaths.sessionBackgroundJobs, directory),
             request(ExperimentalPaths.resource, directory),
           ],
           { concurrency: "unbounded" },
@@ -181,6 +198,9 @@ describe("experimental HttpApi", () => {
         expect(worktrees.status).toBe(200)
         expect(yield* json(worktrees)).toEqual([])
 
+        expect(backgroundJobs.status).toBe(200)
+        expect(yield* json(backgroundJobs)).toEqual([])
+
         expect(resources.status).toBe(200)
         expect(yield* json(resources)).toEqual({})
       }),
@@ -197,6 +217,150 @@ describe("experimental HttpApi", () => {
         },
       },
     },
+  )
+
+  it.instance("persists background task job snapshots on the child session", () =>
+    Effect.gen(function* () {
+      const tmp = yield* TestInstance
+      const parent = yield* createSession({ title: "parent" })
+      const child = yield* createSession({ parentID: parent.id, title: "Research auth (@researcher subagent)" })
+      const jobs = yield* BackgroundJob.Service
+      const job = yield* jobs.start({
+        id: child.id,
+        type: "task",
+        title: "Research auth",
+        metadata: { sessionId: child.id, parentSessionId: parent.id },
+        run: Effect.succeed("Use OAuth."),
+      })
+      yield* jobs.wait({ id: job.id })
+
+      const stored = yield* Session.use.get(child.id)
+      expect(stored.metadata?.backgroundTaskJob).toMatchObject({
+        id: child.id,
+        sessionID: child.id,
+        parentSessionID: parent.id,
+        status: "completed",
+        output: "Use OAuth.",
+      })
+
+      const response = yield* request(ExperimentalPaths.sessionBackgroundJobs, tmp.directory)
+      expect(response.status).toBe(200)
+      expect(yield* json(response)).toContainEqual(
+        expect.objectContaining({
+          id: child.id,
+          status: "completed",
+          output: "Use OAuth.",
+          updatedAt: expect.any(Number),
+        }),
+      )
+    }),
+  )
+
+  it.instance("reports durable orphaned running background tasks as stopped after restart", () =>
+    Effect.gen(function* () {
+      const tmp = yield* TestInstance
+      const parent = yield* createSession({ title: "parent" })
+      const child = yield* createSession({ parentID: parent.id, title: "Research auth (@researcher subagent)" })
+      yield* Session.use.setMetadata({
+        sessionID: child.id,
+        metadata: {
+          backgroundTaskJob: {
+            id: child.id,
+            sessionID: child.id,
+            parentSessionID: parent.id,
+            status: "running",
+            title: "Research auth",
+            startedAt: 10,
+            updatedAt: 20,
+          },
+        },
+      })
+
+      const response = yield* request(ExperimentalPaths.sessionBackgroundJobs, tmp.directory)
+
+      expect(response.status).toBe(200)
+      expect(yield* json(response)).toContainEqual({
+        id: child.id,
+        sessionID: child.id,
+        parentSessionID: parent.id,
+        status: "error",
+        title: "Research auth",
+        startedAt: 10,
+        updatedAt: 20,
+        completedAt: 20,
+        retryable: true,
+        error: "Background task stopped before completion because Cedric restarted.",
+      })
+    }),
+  )
+
+  it.live("retries durable orphaned background tasks in the same child session", () =>
+    provideTmpdirServer(
+      ({ dir, llm }) =>
+        Effect.gen(function* () {
+          yield* llm.text("Recovered background result.", { usage: { input: 1, output: 1 } })
+          const parent = yield* createSession({ title: "parent" })
+          const child = yield* createSession({
+            parentID: parent.id,
+            title: "Research auth (@build subagent)",
+            agent: "build",
+          })
+          yield* Session.use.setMetadata({
+            sessionID: child.id,
+            metadata: {
+              backgroundTaskJob: {
+                id: child.id,
+                sessionID: child.id,
+                parentSessionID: parent.id,
+                status: "running",
+                title: "Research auth",
+                startedAt: 10,
+                updatedAt: 20,
+                model: { providerID: "test", modelID: "test-model" },
+              },
+            },
+          })
+
+          const response = yield* request(ExperimentalPaths.sessionBackgroundJobRetry.replace(":sessionID", child.id), dir, {
+            method: "POST",
+          })
+
+          expect(response.status).toBe(200)
+          expect(yield* json(response)).toMatchObject({
+            id: child.id,
+            sessionID: child.id,
+            parentSessionID: parent.id,
+            status: "running",
+            model: { providerID: "test", modelID: "test-model" },
+          })
+          const waited = yield* (yield* BackgroundJob.Service).wait({ id: child.id, timeout: 2_000 })
+          expect(waited.timedOut).toBe(false)
+          expect(waited.info?.status).toBe("completed")
+          expect(waited.info?.output).toBe("Recovered background result.")
+          const stored = yield* Effect.gen(function* () {
+            const value = yield* Session.use.get(child.id)
+            if (
+              value.metadata?.backgroundTaskJob &&
+              typeof value.metadata.backgroundTaskJob === "object" &&
+              "status" in value.metadata.backgroundTaskJob &&
+              value.metadata.backgroundTaskJob.status === "completed"
+            ) {
+              return value
+            }
+            return yield* Effect.fail(new Error("completed background task metadata not persisted yet"))
+          }).pipe(Effect.retry({ schedule: Schedule.spaced("50 millis"), times: 20 }))
+          expect(stored.metadata?.backgroundTaskJob).toMatchObject({
+            id: child.id,
+            status: "completed",
+            output: "Recovered background result.",
+          })
+          const injected = yield* parentTaskResult(parent.id).pipe(
+            Effect.retry({ schedule: Schedule.spaced("50 millis"), times: 20 }),
+          )
+          expect(injected).toContain("Recovered background result.")
+        }),
+      { git: true, config: testProviderConfig },
+    ).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
   )
 
   it.instance("returns declared worktree errors", () =>

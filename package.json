@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "opencode",
-  "description": "AI-powered development tool",
+  "name": "cedric",
+  "description": "Cedric - desktop coding workspace with Kimi-first integrations",
   "private": true,
   "type": "module",
   "packageManager": "bun@1.3.14",
@@ -9,19 +9,9 @@
     "dev": "bun run --cwd packages/opencode --conditions=browser src/index.ts",
     "dev:desktop": "bun --cwd packages/desktop dev",
     "dev:web": "bun --cwd packages/app dev",
-    "dev:console": "ulimit -n 10240 2>/dev/null; bun run --cwd packages/console/app dev",
-    "dev:stats": "bun sst shell --stage=production -- bun run --cwd packages/stats/app dev",
-    "dev:storybook": "bun --cwd packages/storybook storybook",
     "lint": "oxlint",
-    "changeset": "changeset",
-    "version:http-recorder": "changeset version",
-    "release:http-recorder": "bun ./packages/http-recorder/script/publish.ts",
     "typecheck": "bun turbo typecheck",
-    "upgrade-opentui": "bun run script/upgrade-opentui.ts",
     "postinstall": "bun run --cwd packages/core fix-node-pty",
-    "prepare": "husky",
-    "random": "echo 'Random script'",
-    "sso": "aws sso login --sso-session=opencode --no-browser",
     "test": "echo 'do not run tests from root' && exit 1"
   },
   "workspaces": {
@@ -95,31 +85,28 @@
     }
   },
   "devDependencies": {
-    "@actions/artifact": "5.0.1",
     "@changesets/cli": "2.31.0",
     "@tsconfig/bun": "catalog:",
     "@types/mime-types": "3.0.1",
     "@typescript/native-preview": "catalog:",
+    "electron": "41.2.1",
     "glob": "13.0.5",
     "husky": "9.1.7",
     "oxlint": "1.60.0",
     "oxlint-tsgolint": "0.21.0",
     "prettier": "3.6.2",
     "semver": "^7.6.0",
-    "sst": "catalog:",
     "turbo": "2.8.13"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "3.933.0",
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/script": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
-    "heap-snapshot-toolkit": "1.1.3",
+    "@cedric/plugin": "workspace:*",
+    "@cedric/script": "workspace:*",
+    "@cedric/sdk": "workspace:*",
     "typescript": "catalog:"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/anomalyco/opencode"
+    "url": "https://github.com/yourusername/cedric"
   },
   "license": "MIT",
   "prettier": {
@@ -135,23 +122,5 @@
     "tree-sitter-powershell",
     "web-tree-sitter",
     "electron"
-  ],
-  "overrides": {
-    "@opentui/core": "catalog:",
-    "@opentui/keymap": "catalog:",
-    "@opentui/solid": "catalog:",
-    "@types/bun": "catalog:",
-    "@types/node": "catalog:"
-  },
-  "patchedDependencies": {
-    "@npmcli/agent@4.0.0": "patches/@npmcli%2Fagent@4.0.0.patch",
-    "@silvia-odwyer/photon-node@0.3.4": "patches/@silvia-odwyer%2Fphoton-node@0.3.4.patch",
-    "@standard-community/standard-openapi@0.2.9": "patches/@standard-community%2Fstandard-openapi@0.2.9.patch",
-    "solid-js@1.9.10": "patches/solid-js@1.9.10.patch",
-    "virtua@0.49.1": "patches/virtua@0.49.1.patch",
-    "@ai-sdk/xai@3.0.82": "patches/@ai-sdk%2Fxai@3.0.82.patch",
-    "gcp-metadata@8.1.2": "patches/gcp-metadata@8.1.2.patch",
-    "pacote@21.5.0": "patches/pacote@21.5.0.patch",
-    "@ai-sdk/google@3.0.73": "patches/@ai-sdk%2Fgoogle@3.0.73.patch"
-  }
+  ]
 }

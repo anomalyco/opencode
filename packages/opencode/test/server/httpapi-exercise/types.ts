@@ -1,6 +1,6 @@
 import type { Duration, Effect } from "effect"
-import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { ConfigV1 } from "@cedric/core/v1/config/config"
+import { SessionV1 } from "@cedric/core/v1/session"
 import type { Config } from "../../../src/config/config"
 import type { Project } from "../../../src/project/project"
 import type { Worktree } from "../../../src/worktree"

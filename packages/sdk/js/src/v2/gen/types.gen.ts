@@ -46,6 +46,7 @@ export type Event =
   | EventSessionNextCompactionStarted
   | EventSessionNextCompactionDelta
   | EventSessionNextCompactionEnded
+  | EventBackgroundJobUpdated
   | EventMessagePartDelta
   | EventSessionDiff
   | EventSessionError
@@ -84,6 +85,7 @@ export type Event =
   | EventSessionStatus
   | EventSessionIdle
   | EventSessionCompacted
+  | EventWorkspaceActionRequested
   | EventVcsBranchUpdated
   | EventWorktreeReady
   | EventWorktreeFailed
@@ -636,6 +638,25 @@ export type Prompt = {
   references?: Array<PromptReferenceAttachment>
 }
 
+export type BackgroundTaskJobEvent = {
+  id: string
+  sessionID: string
+  parentSessionID: string
+  status: "running" | "completed" | "error" | "cancelled"
+  title?: string
+  startedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  completedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  progress?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  retryable?: boolean
+  model?: {
+    providerID: string
+    modelID: string
+  }
+  output?: string
+  error?: string
+}
+
 export type Pty = {
   id: string
   title: string
@@ -717,6 +738,28 @@ export type SessionStatus =
   | {
       type: "busy"
     }
+
+export type WorkspaceOpenFileAction = {
+  type: "openFile"
+  path: string
+  title?: string
+  activate?: boolean
+}
+
+export type WorkspaceOpenBrowserAction = {
+  type: "openBrowser"
+  url: string
+  title?: string
+  activate?: boolean
+}
+
+export type WorkspaceOpenTerminalAction = {
+  type: "openTerminal"
+  title?: string
+  activate?: boolean
+}
+
+export type WorkspaceAction = WorkspaceOpenFileAction | WorkspaceOpenBrowserAction | WorkspaceOpenTerminalAction
 
 export type GlobalEvent = {
   directory: string
@@ -1196,6 +1239,13 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "background.job.updated"
+        properties: {
+          job: BackgroundTaskJobEvent
+        }
+      }
+    | {
+        id: string
         type: "message.part.delta"
         properties: {
           sessionID: string
@@ -1565,6 +1615,14 @@ export type GlobalEvent = {
         type: "session.compacted"
         properties: {
           sessionID: string
+        }
+      }
+    | {
+        id: string
+        type: "workspace.action.requested"
+        properties: {
+          sessionID: string
+          action: WorkspaceAction
         }
       }
     | {
@@ -2275,6 +2333,27 @@ export type GlobalSession = {
   project: ProjectSummary | null
 }
 
+export type BackgroundTaskJob = {
+  id: string
+  sessionID: string
+  parentSessionID: string
+  status: "running" | "completed" | "error" | "cancelled"
+  title?: string
+  startedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  updatedAt: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  completedAt?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  progress?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  retryable?: boolean
+  model?: {
+    providerID: string
+    modelID: string
+  }
+  output?: string
+  error?: string
+}
+
+export type BackgroundTaskJobs = Array<BackgroundTaskJob>
+
 export type McpResource = {
   name: string
   uri: string
@@ -2785,6 +2864,25 @@ export type ProviderNotFoundError = {
 
 export type EffectHttpApiErrorForbidden = {
   _tag: "Forbidden"
+}
+
+export type BackgroundTaskJobEvent1 = {
+  id: string
+  sessionID: string
+  parentSessionID: string
+  status: "running" | "completed" | "error" | "cancelled"
+  title?: string
+  startedAt: number | "NaN" | "Infinity" | "-Infinity"
+  updatedAt: number | "NaN" | "Infinity" | "-Infinity"
+  completedAt?: number | "NaN" | "Infinity" | "-Infinity"
+  progress?: number | "NaN" | "Infinity" | "-Infinity"
+  retryable?: boolean
+  model?: {
+    providerID: string
+    modelID: string
+  }
+  output?: string
+  error?: string
 }
 
 export type EventTuiPromptAppend2 = {
@@ -4800,6 +4898,14 @@ export type EventSessionNextCompactionEnded = {
   }
 }
 
+export type EventBackgroundJobUpdated = {
+  id: string
+  type: "background.job.updated"
+  properties: {
+    job: BackgroundTaskJobEvent1
+  }
+}
+
 export type EventMessagePartDelta = {
   id: string
   type: "message.part.delta"
@@ -5153,6 +5259,15 @@ export type EventSessionCompacted = {
   type: "session.compacted"
   properties: {
     sessionID: string
+  }
+}
+
+export type EventWorkspaceActionRequested = {
+  id: string
+  type: "workspace.action.requested"
+  properties: {
+    sessionID: string
+    action: WorkspaceAction
   }
 }
 
@@ -5963,6 +6078,68 @@ export type ExperimentalSessionBackgroundResponses = {
 
 export type ExperimentalSessionBackgroundResponse =
   ExperimentalSessionBackgroundResponses[keyof ExperimentalSessionBackgroundResponses]
+
+export type ExperimentalSessionBackgroundJobsData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/session/background/jobs"
+}
+
+export type ExperimentalSessionBackgroundJobsErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type ExperimentalSessionBackgroundJobsError =
+  ExperimentalSessionBackgroundJobsErrors[keyof ExperimentalSessionBackgroundJobsErrors]
+
+export type ExperimentalSessionBackgroundJobsResponses = {
+  /**
+   * Background task jobs
+   */
+  200: BackgroundTaskJobs
+}
+
+export type ExperimentalSessionBackgroundJobsResponse =
+  ExperimentalSessionBackgroundJobsResponses[keyof ExperimentalSessionBackgroundJobsResponses]
+
+export type ExperimentalSessionBackgroundJobRetryData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/experimental/session/background/jobs/{sessionID}/retry"
+}
+
+export type ExperimentalSessionBackgroundJobRetryErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type ExperimentalSessionBackgroundJobRetryError =
+  ExperimentalSessionBackgroundJobRetryErrors[keyof ExperimentalSessionBackgroundJobRetryErrors]
+
+export type ExperimentalSessionBackgroundJobRetryResponses = {
+  /**
+   * Retried background task job
+   */
+  200: BackgroundTaskJob
+}
+
+export type ExperimentalSessionBackgroundJobRetryResponse =
+  ExperimentalSessionBackgroundJobRetryResponses[keyof ExperimentalSessionBackgroundJobRetryResponses]
 
 export type ExperimentalResourceListData = {
   body?: never

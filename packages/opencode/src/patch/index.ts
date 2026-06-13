@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect"
 import * as path from "path"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import * as Log from "@opencode-ai/core/util/log"
+import { FSUtil } from "@cedric/core/fs-util"
+import * as Log from "@cedric/core/util/log"
 import * as Bom from "../util/bom"
 
 const log = Log.create({ service: "patch" })

@@ -1,7 +1,7 @@
-import type { Message, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, Session } from "@cedric/sdk/v2/client"
 import { showToast } from "@/utils/toast"
-import { base64Encode } from "@opencode-ai/core/util/encode"
-import { Binary } from "@opencode-ai/core/util/binary"
+import { base64Encode } from "@cedric/core/util/encode"
+import { Binary } from "@cedric/core/util/binary"
 import { useNavigate, useParams } from "@solidjs/router"
 import { batch, type Accessor } from "solid-js"
 import type { FileSelection } from "@/context/file"
@@ -32,6 +32,10 @@ export type FollowupDraft = {
   sessionDirectory: string
   prompt: Prompt
   context: (ContextItem & { key: string })[]
+  synthetic?: {
+    text: string
+    metadata?: Record<string, unknown>
+  }[]
   agent: string
   model: { providerID: string; modelID: string }
   variant?: string
@@ -108,6 +112,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
   const { requestParts, optimisticParts } = buildRequestParts({
     prompt: input.draft.prompt,
     context: input.draft.context,
+    synthetic: input.draft.synthetic,
     images,
     text,
     sessionID: input.draft.sessionID,
@@ -215,10 +220,12 @@ export function createPromptSubmit(input: PromptSubmitInput) {
   const params = useParams()
   const pendingKey = (sessionID: string) => ScopedKey.from(sdk.scope, sessionID)
 
+  const record = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null && !Array.isArray(value)
+
   const errorMessage = (err: unknown) => {
-    if (err && typeof err === "object" && "data" in err) {
-      const data = (err as { data?: { message?: string } }).data
-      if (data?.message) return data.message
+    if (record(err) && record(err.data) && typeof err.data.message === "string") {
+      return err.data.message
     }
     if (err instanceof Error) return err.message
     return language.t("common.requestFailed")

@@ -1,4 +1,4 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@cedric/ui/context"
 import { useServerSDK } from "./server-sdk"
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({

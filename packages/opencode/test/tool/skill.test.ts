@@ -1,5 +1,5 @@
-import { PermissionV1 } from "@opencode-ai/core/v1/permission"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { PermissionV1 } from "@cedric/core/v1/permission"
+import { CrossSpawnSpawner } from "@cedric/core/cross-spawn-spawner"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"

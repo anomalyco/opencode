@@ -11,7 +11,9 @@ export type Info = {
   title?: string
   status: Status
   started_at: number
+  updated_at: number
   completed_at?: number
+  progress?: number
   output?: string
   error?: string
   metadata?: Record<string, unknown>
@@ -30,8 +32,12 @@ type Active = {
   onPromote?: Effect.Effect<void>
 }
 
+type Listener = (info: Info) => Effect.Effect<void, unknown>
+
 type State = {
   jobs: SynchronizedRef.SynchronizedRef<Map<string, Active>>
+  listeners: Map<number, Listener>
+  nextListener: number
   scope: Scope.Scope
 }
 
@@ -53,6 +59,7 @@ type ExtendResult =
   | { extended: false }
   | {
       extended: true
+      info: Info
       previous: Deferred.Deferred<void>
       scope: Scope.Closeable
       tail: Deferred.Deferred<void>
@@ -93,6 +100,7 @@ export interface Interface {
   readonly waitForPromotion: (id: string) => Effect.Effect<Info>
   readonly promote: (id: string) => Effect.Effect<Info | undefined>
   readonly cancel: (id: string) => Effect.Effect<Info | undefined>
+  readonly listen: (listener: Listener) => Effect.Effect<Effect.Effect<void>>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/BackgroundJob") {}
@@ -109,6 +117,10 @@ function errorText(error: unknown) {
   return String(error)
 }
 
+function runningProgress(next: number, pending: number) {
+  return Math.min(90, Math.max(10, Math.round(((next - pending) / next) * 90)))
+}
+
 /**
  * Makes one scoped, process-local registry. Entries are intentionally not
  * durable: process restart or owner-scope closure loses status and interrupts
@@ -119,8 +131,28 @@ function errorText(error: unknown) {
 export const make = Effect.gen(function* () {
   const state: State = {
     jobs: yield* SynchronizedRef.make(new Map()),
+    listeners: new Map(),
+    nextListener: 0,
     scope: yield* Scope.Scope,
   }
+
+  const notify = Effect.fn("BackgroundJob.notify")(function* (info: Info | undefined) {
+    if (!info) return
+    yield* Effect.forEach(
+      [...state.listeners.values()],
+      (listener) => listener(info).pipe(Effect.ignore),
+      { concurrency: "unbounded" },
+    )
+  })
+
+  const listen: Interface["listen"] = Effect.fn("BackgroundJob.listen")(function* (listener) {
+    const id = state.nextListener
+    state.nextListener += 1
+    state.listeners.set(id, listener)
+    return Effect.sync(() => {
+      state.listeners.delete(id)
+    })
+  })
 
   const settle = Effect.fn("BackgroundJob.settle")(function* (
     id: string,
@@ -133,14 +165,25 @@ export const make = Effect.gen(function* () {
       const job = jobs.get(id)
       if (!job) return [{}, jobs]
       if (job.token !== token) return [{}, jobs]
-      if (job.info.status !== "running") return [{ info: snapshot(job) }, jobs]
+      if (job.info.status !== "running") return [{}, jobs]
       const pending = job.pending - 1
       const output =
         Exit.isSuccess(exit) && (!job.output || sequence > job.output.sequence)
           ? { sequence, text: exit.value }
           : job.output
       if (Exit.isSuccess(exit) && pending > 0) {
-        return [{}, new Map(jobs).set(id, { ...job, pending, output })]
+        const next = {
+          ...job,
+          pending,
+          output,
+          info: {
+            ...job.info,
+            updated_at: completed_at,
+            progress: Math.max(job.info.progress ?? 10, runningProgress(job.next, pending)),
+            ...(output ? { output: output.text } : {}),
+          },
+        }
+        return [{ info: snapshot(next) }, new Map(jobs).set(id, next)]
       }
       const status: Exclude<Status, "running"> = Exit.isSuccess(exit)
         ? "completed"
@@ -155,7 +198,9 @@ export const make = Effect.gen(function* () {
         info: {
           ...job.info,
           status,
+          updated_at: completed_at,
           completed_at,
+          progress: 100,
           ...(output ? { output: output.text } : {}),
           ...(Exit.isFailure(exit) ? { error: errorText(Cause.squash(exit.cause)) } : {}),
         },
@@ -163,6 +208,7 @@ export const make = Effect.gen(function* () {
       return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
     })
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info).pipe(Effect.ignore)
+    yield* notify(result.info)
     if (result.scope) {
       yield* Scope.close(result.scope, Exit.void).pipe(Effect.forkIn(state.scope, { startImmediately: true }))
     }
@@ -222,6 +268,8 @@ export const make = Effect.gen(function* () {
                 title: input.title,
                 status: "running" as const,
                 started_at,
+                updated_at: started_at,
+                progress: 10,
                 metadata: input.metadata,
               },
               done,
@@ -239,6 +287,7 @@ export const make = Effect.gen(function* () {
             ]
           }),
         )
+        yield* notify(result.info)
         if ("scope" in result)
           yield* fork(
             result.scope,
@@ -255,24 +304,40 @@ export const make = Effect.gen(function* () {
   const extend: Interface["extend"] = Effect.fn("BackgroundJob.extend")(function* (input) {
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
+        const updated_at = yield* Clock.currentTimeMillis
         const tail = yield* Deferred.make<void>()
         const result = yield* SynchronizedRef.modify(
           state.jobs,
           (jobs): readonly [ExtendResult, Map<string, Active>] => {
             const job = jobs.get(input.id)
             if (!job || job.info.status !== "running") return [{ extended: false }, jobs]
+            const next = {
+              ...job,
+          info: {
+            ...job.info,
+            updated_at,
+            progress: Math.max(10, job.info.progress ?? 10),
+          },
+              pending: job.pending + 1,
+              next: job.next + 1,
+              tail,
+            }
             return [
-              { extended: true, previous: job.tail, scope: job.scope, tail, token: job.token, sequence: job.next },
-              new Map(jobs).set(input.id, {
-                ...job,
-                pending: job.pending + 1,
-                next: job.next + 1,
+              {
+                extended: true,
+                info: snapshot(next),
+                previous: job.tail,
+                scope: job.scope,
                 tail,
-              }),
+                token: job.token,
+                sequence: job.next,
+              },
+              new Map(jobs).set(input.id, next),
             ]
           },
         )
         if (!result.extended) return false
+        yield* notify(result.info)
         yield* fork(
           result.scope,
           input.id,
@@ -307,6 +372,7 @@ export const make = Effect.gen(function* () {
   })
 
   const promote: Interface["promote"] = Effect.fn("BackgroundJob.promote")(function* (id) {
+    const updated_at = yield* Clock.currentTimeMillis
     const result = yield* SynchronizedRef.modifyEffect(
       state.jobs,
       Effect.fnUntraced(function* (jobs) {
@@ -319,6 +385,7 @@ export const make = Effect.gen(function* () {
           onPromote: undefined,
           info: {
             ...job.info,
+            updated_at,
             metadata: { ...job.info.metadata, background: true },
           },
         }
@@ -330,6 +397,7 @@ export const make = Effect.gen(function* () {
     )
     if (result.info && result.promoted) yield* Deferred.succeed(result.promoted, result.info).pipe(Effect.ignore)
     if (result.onPromote) yield* result.onPromote.pipe(Effect.ignore)
+    yield* notify(result.info)
     return result.info
   })
 
@@ -346,17 +414,20 @@ export const make = Effect.gen(function* () {
         info: {
           ...job.info,
           status: "cancelled" as const,
+          updated_at: completed_at,
           completed_at,
+          progress: 100,
         },
       }
       return [{ info: snapshot(next), done: job.done, scope: job.scope }, new Map(jobs).set(id, next)]
     })
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info).pipe(Effect.ignore)
+    yield* notify(result.info)
     if (result.scope) yield* Scope.close(result.scope, Exit.void)
     return result.info
   })
 
-  return Service.of({ list, get, start, extend, wait, waitForPromotion, promote, cancel })
+  return Service.of({ list, get, start, extend, wait, waitForPromotion, promote, cancel, listen })
 })
 
 export const layer = Layer.effect(Service, make)

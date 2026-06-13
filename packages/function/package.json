@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/function",
+  "name": "@cedric/function",
   "version": "1.16.2",
   "$schema": "https://json.schemastore.org/package.json",
   "private": true,
