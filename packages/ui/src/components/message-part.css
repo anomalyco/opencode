@@ -1762,39 +1762,6 @@
   }
 }
 
-[data-component="question-answer-measure"] {
-  position: fixed;
-  top: 0;
-  left: 0;
-  visibility: hidden;
-  pointer-events: none;
-  opacity: 0;
-  z-index: -1;
-  contain: layout style paint;
-}
-
-[data-component="question-answers"][data-question-reveal="enter"] {
-  animation: questionAnswerReveal 180ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-@keyframes questionAnswerReveal {
-  from {
-    opacity: 0;
-    transform: translateY(4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  [data-component="question-answers"][data-question-reveal="enter"] {
-    animation: none;
-  }
-}
-
 [data-component="edit-tool"],
 [data-component="write-tool"],
 [data-component="apply-patch-tool"] {
