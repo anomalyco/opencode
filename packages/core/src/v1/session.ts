@@ -552,6 +552,12 @@ export const SessionInfo = Schema.Struct({
   directory: Schema.String,
   path: optionalOmitUndefined(Schema.String),
   parentID: optionalOmitUndefined(SessionSchema.ID),
+  // Convenience wire fields derived from the parentID chain (nested-agents
+  // Issue 3, additive). `depth` is the 1-based nesting level (root = 1, always
+  // present). `rootID` is the topmost ancestor; omitted for roots/orphans
+  // (a root is its own root, so callers read `rootID ?? id`).
+  depth: optionalOmitUndefined(NonNegativeInt),
+  rootID: optionalOmitUndefined(SessionSchema.ID),
   summary: optionalOmitUndefined(SessionSummary),
   cost: optionalOmitUndefined(Schema.Finite),
   tokens: optionalOmitUndefined(SessionTokens),

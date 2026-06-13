@@ -173,6 +173,51 @@ describe("Session.descendants", () => {
   )
 })
 
+describe("Session depth/rootID wire fields (nested-agents Issue 3)", () => {
+  it.instance("stamps depth 1 and no rootID on a root session", () =>
+    Effect.gen(function* () {
+      const sessions = yield* SessionNs.Service
+      const root = yield* sessions.create({})
+      expect(root.depth).toBe(1)
+      expect(root.rootID).toBeUndefined()
+      // The persisted row round-trips the same values through get().
+      const reread = yield* sessions.get(root.id)
+      expect(reread.depth).toBe(1)
+      expect(reread.rootID).toBeUndefined()
+    }),
+  )
+
+  it.instance("stamps increasing depth and a shared rootID across a 3-level tree", () =>
+    Effect.gen(function* () {
+      const sessions = yield* SessionNs.Service
+      const root = yield* sessions.create({})
+      const child = yield* sessions.create({ parentID: root.id })
+      const grandchild = yield* sessions.create({ parentID: child.id })
+
+      expect(child.depth).toBe(2)
+      expect(child.rootID).toBe(root.id)
+      expect(grandchild.depth).toBe(3)
+      expect(grandchild.rootID).toBe(root.id)
+
+      // Values survive the projector round-trip (read back from the DB).
+      expect((yield* sessions.get(child.id)).depth).toBe(2)
+      expect((yield* sessions.get(grandchild.id)).rootID).toBe(root.id)
+    }),
+  )
+
+  it.instance("treats a child of an orphaned parent as a fresh root", () =>
+    Effect.gen(function* () {
+      const sessions = yield* SessionNs.Service
+      const orphanParent = yield* sessions.create({})
+      yield* deleteRow(orphanParent.id)
+      const child = yield* sessions.create({ parentID: orphanParent.id })
+      // The parent row vanished, so the lineage walk is empty: child is a root.
+      expect(child.depth).toBe(1)
+      expect(child.rootID).toBeUndefined()
+    }),
+  )
+})
+
 describe("Session.create hard cap (HARD_MAX_DEPTH)", () => {
   it.instance("allows children up to depth 10", () =>
     Effect.gen(function* () {

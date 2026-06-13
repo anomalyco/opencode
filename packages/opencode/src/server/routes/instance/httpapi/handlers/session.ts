@@ -22,6 +22,7 @@ import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import {
+  ChildrenQuery,
   CommandPayload,
   DiffQuery,
   ForkPayload,
@@ -84,8 +85,14 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return yield* requireSession(ctx.params.sessionID)
     })
 
-    const children = Effect.fn("SessionHttpApi.children")(function* (ctx: { params: { sessionID: SessionID } }) {
+    const children = Effect.fn("SessionHttpApi.children")(function* (ctx: {
+      params: { sessionID: SessionID }
+      query: typeof ChildrenQuery.Type
+    }) {
       yield* requireSession(ctx.params.sessionID)
+      // recursive=true returns the whole descendant subtree (nested-agents
+      // Issue 3); the default stays byte-compatible (direct children only).
+      if (ctx.query.recursive) return yield* session.descendants(ctx.params.sessionID)
       return yield* session.children(ctx.params.sessionID)
     })
 

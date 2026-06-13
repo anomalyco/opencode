@@ -333,6 +333,7 @@ describe("session HttpApi", () => {
         const headers = { "x-opencode-directory": test.directory }
         const parent = yield* createSession({ title: "parent" })
         const child = yield* createSession({ title: "child", parentID: parent.id })
+        const grandchild = yield* createSession({ title: "grandchild", parentID: child.id })
         const message = yield* createTextMessage(parent.id, "hello")
         yield* createTextMessage(parent.id, "world")
 
@@ -346,11 +347,34 @@ describe("session HttpApi", () => {
           yield* requestJson<Session.Info>(pathFor(SessionPaths.get, { sessionID: parent.id }), { headers }),
         ).toMatchObject({ id: parent.id, title: "parent" })
 
-        expect(
-          (yield* requestJson<Session.Info[]>(pathFor(SessionPaths.children, { sessionID: parent.id }), {
-            headers,
-          })).map((item) => item.id),
-        ).toEqual([child.id])
+        // Default children returns only direct children (byte-compatible).
+        const directChildren = yield* requestJson<Session.Info[]>(
+          pathFor(SessionPaths.children, { sessionID: parent.id }),
+          { headers },
+        )
+        expect(directChildren.map((item) => item.id)).toEqual([child.id])
+        // depth/rootID are additive wire fields (nested-agents Issue 3): the
+        // direct child sits at depth 2 with the parent as its rootID.
+        expect(directChildren[0]).toMatchObject({ id: child.id, depth: 2, rootID: parent.id })
+
+        // recursive=true returns the entire descendant subtree.
+        const recursiveChildren = yield* requestJson<Session.Info[]>(
+          `${pathFor(SessionPaths.children, { sessionID: parent.id })}?recursive=true`,
+          { headers },
+        )
+        expect(recursiveChildren.map((item) => item.id).sort()).toEqual([child.id, grandchild.id].sort())
+        expect(recursiveChildren.find((item) => item.id === grandchild.id)).toMatchObject({
+          depth: 3,
+          rootID: parent.id,
+        })
+
+        // Root session carries depth 1 and omits rootID on the wire.
+        const fetchedParent = yield* requestJson<Session.Info>(
+          pathFor(SessionPaths.get, { sessionID: parent.id }),
+          { headers },
+        )
+        expect(fetchedParent.depth).toBe(1)
+        expect(Object.hasOwn(fetchedParent, "rootID")).toBe(false)
 
         expect(
           yield* requestJson<unknown[]>(pathFor(SessionPaths.todo, { sessionID: parent.id }), { headers }),

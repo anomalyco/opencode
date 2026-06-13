@@ -1,9 +1,9 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "4afa16d2-a0b8-4cf9-9b05-a04364ee5ec9",
+  "id": "0083c7c4-806f-47a7-b5f8-e560f97ec51f",
   "prevIds": [
-    "abd2f920-b822-49af-b8a7-2e48367d424f"
+    "4afa16d2-a0b8-4cf9-9b05-a04364ee5ec9"
   ],
   "ddl": [
     {
@@ -1123,6 +1123,26 @@
       "default": null,
       "generated": null,
       "name": "parent_id",
+      "entityType": "columns",
+      "table": "session"
+    },
+    {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "1",
+      "generated": null,
+      "name": "depth",
+      "entityType": "columns",
+      "table": "session"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "root_id",
       "entityType": "columns",
       "table": "session"
     },
@@ -2357,6 +2377,20 @@
       "where": null,
       "origin": "manual",
       "name": "session_parent_idx",
+      "entityType": "indexes",
+      "table": "session"
+    },
+    {
+      "columns": [
+        {
+          "value": "root_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_root_idx",
       "entityType": "indexes",
       "table": "session"
     },
