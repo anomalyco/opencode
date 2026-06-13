@@ -238,9 +238,19 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     const option = selected()
     if (option) props.onMove?.(option)
     if (!scroll) return
-    const target = scroll.getChildren().find((child: { id?: string }) => {
-      return child.id === JSON.stringify(selected()?.value)
-    })
+    let remaining = store.selected
+    let index = 0
+    // Locate the row by position because a unique renderable ID cannot currently be ensured.
+    for (const [category, options] of grouped()) {
+      if (category) index++
+      if (remaining < options.length) {
+        index += remaining
+        break
+      }
+      index += options.length
+      remaining -= options.length
+    }
+    const target = scroll.getChildren()[index]
     if (!target) return
     const y = target.y - scroll.y
     if (center) {
@@ -553,7 +563,6 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                       const current = createMemo(() => isDeepEqual(option.value, props.current))
                       return (
                         <box
-                          id={JSON.stringify(option.value)}
                           flexDirection="column"
                           position="relative"
                           onMouseMove={() => {

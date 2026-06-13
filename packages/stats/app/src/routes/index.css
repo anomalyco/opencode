@@ -2079,6 +2079,7 @@
   overflow: hidden;
   color: var(--stats-text);
   font-weight: 600;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -2151,6 +2152,23 @@
 }
 
 [data-page="stats"] [data-slot="geo-countries"] path[data-active="true"] {
+  fill: color-mix(in srgb, var(--stats-accent) 70%, var(--stats-text));
+  opacity: 1;
+}
+
+[data-page="stats"] [data-slot="geo-country-markers"] circle {
+  fill: var(--stats-accent);
+  stroke: var(--stats-bg);
+  stroke-width: 1.1px;
+  opacity: var(--geo-country-opacity);
+  cursor: pointer;
+  transition:
+    fill 140ms ease,
+    opacity 140ms ease,
+    r 140ms ease;
+}
+
+[data-page="stats"] [data-slot="geo-country-markers"] circle[data-active="true"] {
   fill: color-mix(in srgb, var(--stats-accent) 70%, var(--stats-text));
   opacity: 1;
 }
@@ -2248,7 +2266,7 @@
   background: var(--stats-layer);
   color: var(--stats-muted);
   font-size: 11px;
-  line-height: 1;
+  line-height: 1.25;
   text-align: left;
   transition:
     border-color 120ms ease,
@@ -2285,6 +2303,7 @@
   overflow: hidden;
   color: var(--stats-text);
   font-weight: 600;
+  line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -3487,7 +3506,7 @@
   }
 }
 
-@media (min-width: 75rem) {
+@media (min-width: 90rem) {
   [data-page="stats"] [data-slot="header-bar"] {
     gap: 32px;
   }
@@ -3842,6 +3861,7 @@
     width: calc(100% + 48px);
     margin-inline: -24px;
     padding-inline: 24px;
+    padding-block-start: 2px;
     overflow-x: auto;
     overscroll-behavior-x: contain;
     scroll-padding-inline: 24px;

@@ -1,10 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "0083c7c4-806f-47a7-b5f8-e560f97ec51f",
-  "prevIds": [
-    "4afa16d2-a0b8-4cf9-9b05-a04364ee5ec9"
-  ],
+  "id": "169a0f0f-d58f-479f-b024-fa1c7b9a09db",
+  "prevIds": ["abd2f920-b822-49af-b8a7-2e48367d424f"],
   "ddl": [
     {
       "name": "workspace",
@@ -628,11 +626,21 @@
     },
     {
       "type": "text",
-      "notNull": true,
+      "notNull": false,
       "autoincrement": false,
       "default": null,
       "generated": null,
       "name": "type",
+      "entityType": "columns",
+      "table": "project_directory"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "strategy",
       "entityType": "columns",
       "table": "project_directory"
     },
