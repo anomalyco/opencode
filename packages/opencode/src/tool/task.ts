@@ -78,12 +78,18 @@ function renderOutput(input: {
   ].join("\n")
 }
 
+// Escape untrusted subagent body to prevent XML tag breakout in rendered framing.
+// Parent must treat subagent message bodies as untrusted input.
+function escapeBody(body: string) {
+  return body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
 function renderMessage(input: { sessionID: SessionID; body: string }) {
   return [
     `<task id="${input.sessionID}" state="awaiting_reply">`,
     `<summary>Subagent sent a message and is awaiting your reply</summary>`,
     `<message>`,
-    input.body,
+    escapeBody(input.body),
     `</message>`,
     `Reply with the message tool: message(target:"subagent", task_id:"${input.sessionID}", body:"...").`,
     "</task>",
@@ -131,7 +137,20 @@ export const TaskTool = Tool.define(
       }
 
       const session = params.task_id
-        ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+        ? yield* sessions.get(SessionID.make(params.task_id)).pipe(
+            Effect.flatMap((s) => {
+              if (s.parentID !== ctx.sessionID)
+                return Effect.fail(new Error(`task_id ${params.task_id} is not a child of this session`))
+              return Effect.succeed(s)
+            }),
+            Effect.catchCause((cause) => {
+              // If the session doesn't exist at all, treat as not-found → create fresh.
+              // If it exists but parentage check failed, propagate the error.
+              const err = cause.toString()
+              if (err.includes("is not a child of this session")) return Effect.failCause(cause)
+              return Effect.succeed(undefined)
+            }),
+          )
         : undefined
       const parent = yield* sessions.get(ctx.sessionID)
       const childPermission = deriveSubagentSessionPermission({

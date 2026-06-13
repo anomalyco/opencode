@@ -113,12 +113,6 @@ export const layer = Layer.effect(
       }),
     )
 
-    const release = (value: State, child: SessionID) => {
-      value.pending.delete(child)
-      const current = value.counters.get(child)
-      if (current) value.counters.set(child, { ...current, inFlight: Math.max(0, current.inFlight - 1) })
-    }
-
     const send: Interface["send"] = Effect.fn("Messaging.send")(function* (input) {
       const value = yield* InstanceState.get(state)
       const counters = value.counters.get(input.childSessionID) ?? { inFlight: 0, roundTrips: 0 }
@@ -127,9 +121,16 @@ export const layer = Layer.effect(
       if (counters.roundTrips >= ROUND_TRIP_CAP)
         return yield* new AbuseError({ detail: `Message round-trip cap (${ROUND_TRIP_CAP}) reached for this subagent` })
 
-      // roundTrips is cumulative/monotonic and intentionally never released;
-      // leaking a +1 on interrupt is acceptable as anti-abuse.
-      value.counters.set(input.childSessionID, { ...counters, roundTrips: counters.roundTrips + 1 })
+      // Atomically reserve counters BEFORE any yield (events.publish).
+      // Effect only interrupts at yield points; no yield between the cap check above
+      // and this .set(), so the check+reserve is race-free.
+      value.counters.set(input.childSessionID, {
+        inFlight: counters.inFlight + (input.expectReply ? 1 : 0),
+        // roundTrips is cumulative/monotonic and intentionally never released;
+        // leaking a +1 on interrupt is acceptable as anti-abuse.
+        roundTrips: counters.roundTrips + 1,
+      })
+
       yield* events.publish(Event.Sent, {
         childSessionID: input.childSessionID,
         parentSessionID: input.parentSessionID,
@@ -142,10 +143,16 @@ export const layer = Layer.effect(
         return Option.none()
       }
 
+      // release is idempotent: clears pending AND decrements inFlight (only for expect_reply
+      // path, which is the only path that reserved inFlight above).
+      const release = Effect.sync(() => {
+        value.pending.delete(input.childSessionID)
+        const current = value.counters.get(input.childSessionID)
+        if (current) value.counters.set(input.childSessionID, { ...current, inFlight: Math.max(0, current.inFlight - 1) })
+      })
+
       return yield* Effect.ensuring(
         Effect.gen(function* () {
-          const current = value.counters.get(input.childSessionID) ?? { inFlight: 0, roundTrips: 0 }
-          value.counters.set(input.childSessionID, { ...current, inFlight: current.inFlight + 1 })
           const deferred = yield* Deferred.make<string, RejectedError>()
           value.pending.set(input.childSessionID, {
             childSessionID: input.childSessionID,
@@ -161,7 +168,7 @@ export const layer = Layer.effect(
           if (Option.isNone(result)) return yield* new ReplyTimeoutError({ childSessionID: input.childSessionID })
           return Option.some(result.value)
         }),
-        Effect.sync(() => release(value, input.childSessionID)),
+        release,
       )
     })
 
