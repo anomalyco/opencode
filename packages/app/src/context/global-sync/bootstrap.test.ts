@@ -90,6 +90,76 @@ describe("bootstrapDirectory", () => {
     expect(store.status).toBe("complete")
     expect(mcpReads).toEqual([])
   })
+
+  test("clears a stale busy session_status entry the backend no longer reports", async () => {
+    const [store, setStore] = createStore<State>({
+      status: "loading",
+      agent: [],
+      command: [],
+      project: "",
+      projectMeta: undefined,
+      icon: undefined,
+      provider_ready: true,
+      provider,
+      config: {},
+      path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },
+      session: [],
+      sessionTotal: 0,
+      // stale "busy" left over from a dropped session.idle event / server restart
+      session_status: { ses_stale: { type: "busy" } } as State["session_status"],
+      session_working(id: string) {
+        return this.session_status[id]?.type !== "idle"
+      },
+      session_diff: {},
+      todo: {},
+      permission: {},
+      question: {},
+      mcp_ready: true,
+      mcp: {},
+      lsp_ready: true,
+      lsp: [],
+      vcs: undefined,
+      limit: 5,
+      message: {},
+      part: {},
+      part_text_accum_delta: {},
+    })
+
+    await bootstrapDirectory({
+      directory: "/project",
+      scope: ServerScope.local,
+      mcp: false,
+      global: {
+        config: {} satisfies Config,
+        path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },
+        project: [{ id: "project", worktree: "/project" } as Project],
+        provider,
+      },
+      sdk: {
+        app: { agents: async () => ({ data: [{ name: "build", mode: "primary" }] }) },
+        config: { get: async () => ({ data: {} }) },
+        // backend reports no non-idle sessions, so ses_stale must be dropped from the store
+        session: { status: async () => ({ data: {} }) },
+        vcs: { get: async () => ({ data: undefined }) },
+        command: { list: async () => ({ data: [] }) },
+        permission: { list: async () => ({ data: [] }) },
+        question: { list: async () => ({ data: [] }) },
+        mcp: { status: async () => ({ data: {} }) },
+        provider: { list: async () => ({ data: { all: [], connected: [], default: {} } }) },
+      } as unknown as OpencodeClient,
+      store,
+      setStore,
+      vcsCache: { setStore() {} } as unknown as VcsCache,
+      loadSessions() {},
+      translate: (key) => key,
+      queryClient: new QueryClient(),
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    // bare setStore would leave the stale "busy" entry in place; reconcile drops it
+    expect(store.session_status.ses_stale).toBeUndefined()
+  })
 })
 
 describe("query keys", () => {

@@ -238,7 +238,15 @@ export async function bootstrapDirectory(input: {
           .then((data) => input.setStore("agent", data)),
       () =>
         retry(() => input.sdk.config.get().then((x) => input.setStore("config", reconcile(x.data!, { merge: false })))),
-      () => retry(() => input.sdk.session.status().then((x) => input.setStore("session_status", x.data!))),
+      () =>
+        retry(() =>
+          input.sdk.session.status().then((x) =>
+            // reconcile (not a bare setStore) so a stale "busy"/"retry" entry the backend no
+            // longer reports — session.status() only returns non-idle sessions — is actually
+            // removed; otherwise the session shows "working" forever. Mirrors the config line above.
+            input.setStore("session_status", reconcile(x.data ?? {}, { merge: false })),
+          ),
+        ),
       !seededProject &&
         (() => retry(() => input.sdk.project.current()).then((x) => input.setStore("project", x.data!.id))),
       !seededPath &&
