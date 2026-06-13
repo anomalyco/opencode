@@ -12,7 +12,7 @@ import type { SessionPrompt } from "../session/prompt"
 import { SubagentLimits } from "../session/subagent-limits"
 import { TurnBudget } from "../session/turn-budget"
 import { Config } from "@/config/config"
-import { Effect, Exit, Schema, Scope } from "effect"
+import { Effect, Exit, Option, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
@@ -128,6 +128,15 @@ export const TaskTool = Tool.define(
     // decremented via Effect.ensuring around the child run (robust against
     // success, error and abort) — no leak on any exit path.
     const concurrentChildCounts = new Map<SessionID, number>()
+    // Aggregates the cost/tokens of a finished subagent's whole subtree (the
+    // session itself + every transitive child) for the completed task part's
+    // metadata. Pure read over Session.descendants — design-final §4.6 /
+    // Phase-2 Issue 6 — no write, no effect on the per-session bill.
+    const rollupSubtreeCost = Effect.fn("TaskTool.rollupSubtreeCost")(function* (sessionID: SessionID) {
+      const root = yield* sessions.get(sessionID)
+      const descendants = yield* sessions.descendants(sessionID)
+      return SubagentLimits.aggregateCost([root, ...descendants])
+    })
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -498,9 +507,16 @@ export const TaskTool = Tool.define(
             if (result?.metadata?.background === true) return backgroundResult()
             if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
             if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
+            // Display-only subtree cost rollup (design-final §4.6 / Phase-2
+            // Issue 6): the spawned session plus its descendants. Each session
+            // still bills its own spend separately — this aggregate never
+            // double-charges, it only surfaces the teardown's total. Best-effort:
+            // a descendants/get failure must not fail an otherwise-completed task,
+            // so the rollup is simply omitted from the metadata.
+            const costRollup = Option.getOrUndefined(yield* Effect.option(rollupSubtreeCost(nextSession.id)))
             return {
               title: params.description,
-              metadata,
+              metadata: costRollup ? { ...metadata, costRollup } : metadata,
               output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.output ?? "" }),
             }
           }).pipe(

@@ -127,6 +127,57 @@ export function depthHint(depth: number, max: number): string {
   return `You are a sub-agent at delegation depth ${depth} of ${max}. You may delegate to deeper sub-agents; prefer doing small tasks yourself.`
 }
 
+/** Per-session token aggregate, shaped like `Session.Info.tokens`. */
+export interface CostRollupTokens {
+  input: number
+  output: number
+  reasoning: number
+  cache: { read: number; write: number }
+}
+
+/** Aggregated subtree spend — cost in USD plus every token bucket. */
+export interface CostRollup {
+  cost: number
+  tokens: CostRollupTokens
+}
+
+/**
+ * Structural slice of `Session.Info` the rollup reads. Typed against the shape
+ * (not the session module) on purpose so this stays a plain, import-light
+ * module — session.ts already depends on subagent-limits, and importing
+ * `Session.Info` back would be a cycle.
+ */
+export interface CostRollupNode {
+  cost?: number
+  tokens?: Partial<CostRollupTokens> & { cache?: { read?: number; write?: number } }
+}
+
+/**
+ * Sums cost and tokens across a set of sessions — the single source of truth
+ * for the subtree cost rollup (design-final §4.6 / Phase-2 Issue 6). Pure
+ * DISPLAY aggregation over `Session.descendants`: it never writes anything and
+ * the per-session accounting each node carries is untouched, so there is no
+ * double-billing. Missing cost/tokens count as zero, matching how the projector
+ * defaults an un-charged session.
+ */
+export function aggregateCost(nodes: ReadonlyArray<CostRollupNode>): CostRollup {
+  const rollup: CostRollup = {
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  }
+  for (const node of nodes) {
+    rollup.cost += node.cost ?? 0
+    const tokens = node.tokens
+    if (tokens === undefined) continue
+    rollup.tokens.input += tokens.input ?? 0
+    rollup.tokens.output += tokens.output ?? 0
+    rollup.tokens.reasoning += tokens.reasoning ?? 0
+    rollup.tokens.cache.read += tokens.cache?.read ?? 0
+    rollup.tokens.cache.write += tokens.cache?.write ?? 0
+  }
+  return rollup
+}
+
 /**
  * Raised when a session at the maximum nesting depth attempts to spawn another
  * subagent (or, as the config-free hard cap in `Session.createNext`, when a
