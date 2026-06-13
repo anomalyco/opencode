@@ -24,6 +24,12 @@ export const layer = Layer.effectDiscard(
     const { db } = yield* Database.Service
     const client = yield* BitcostClient.Service
 
+    // DIAGNOSTIC (startup probe): if this line is absent from the log at boot,
+    // the reporter layer was never built/subscribed (a wiring problem). If it is
+    // present but no per-turn "Step.Ended received" lines appear, the listener is
+    // registered but events.listen never receives Step.Ended.
+    yield* Effect.logInfo("bitcost.reporter: subscribed to event stream")
+
     yield* events.listen((event) =>
       Effect.gen(function* () {
         if (event.type !== SessionEvent.Step.Ended.type) return
