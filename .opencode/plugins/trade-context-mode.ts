@@ -17,11 +17,10 @@ const readMode = (): TradeContextMode => {
 const runHookSafely = async (
   mode: TradeContextMode,
   name: string,
-  hook: (...args: unknown[]) => Promise<void> | void,
-  args: unknown[],
+  hook: () => Promise<void> | void,
 ) => {
   try {
-    await hook(...args)
+    await hook()
   } catch (error) {
     if (mode === "off") return
     console.warn(`[trade-context-mode] ${name} failed`, error)
@@ -77,10 +76,11 @@ const toolOnlyHooks = (hooks: Hooks) => {
 const shadowHooks = (mode: TradeContextMode, hooks: Hooks | undefined) => {
   const fromDelegate = hooks?.["tool.execute.after"]
   if (typeof fromDelegate === "function") {
+    const hook: NonNullable<Hooks["tool.execute.after"]> = async (input, output) => {
+      await runHookSafely(mode, "tool.execute.after", () => fromDelegate(input, output))
+    }
     return {
-      "tool.execute.after": async (...args: unknown[]) => {
-        await runHookSafely(mode, "tool.execute.after", fromDelegate, args)
-      },
+      "tool.execute.after": hook,
     }
   }
 
