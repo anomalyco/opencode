@@ -28,6 +28,7 @@ import {
   UserMessage,
   Todo,
   QuestionAnswer,
+  QuestionImageAnswer,
   QuestionInfo,
 } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
@@ -66,6 +67,7 @@ import {
   type PartGroup,
 } from "./message-part-order"
 import { activeStreamingAssistantMessageID } from "./message-part-stream"
+import { suppressAutoScrollResizeFor } from "../hooks/create-auto-scroll"
 export type { PartGroup } from "./message-part-order"
 
 type ProviderSummary = {
@@ -3057,6 +3059,116 @@ ToolRegistry.register({
   },
 })
 
+type QuestionRevealStage = "idle" | "measure" | "scroll" | "revealed"
+
+const QUESTION_REVEAL_SCROLL_PADDING = 24
+const QUESTION_REVEAL_SCROLL_TIMEOUT_MS = 520
+const QUESTION_REVEAL_SUPPRESS_MS = 900
+
+function questionRevealReducedMotion(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+}
+
+function questionRevealViewport(): HTMLElement | undefined {
+  if (typeof document === "undefined") return undefined
+  const element = document.querySelector(".scroll-view__viewport")
+  return element instanceof HTMLElement ? element : undefined
+}
+
+function cssPixel(value: string): number {
+  const parsed = Number.parseFloat(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function questionMeasureWidth(root: HTMLElement | undefined): number | undefined {
+  if (!root) return undefined
+  const collapsible = root.querySelector<HTMLElement>('[data-component="collapsible"].tool-collapsible')
+  const target = collapsible ?? root
+  const rect = target.getBoundingClientRect()
+  if (rect.width <= 0) return undefined
+
+  const style = window.getComputedStyle(target)
+  const horizontalPadding = cssPixel(style.paddingLeft) + cssPixel(style.paddingRight)
+  const horizontalBorder = cssPixel(style.borderLeftWidth) + cssPixel(style.borderRightWidth)
+  return Math.max(0, Math.floor(rect.width - horizontalPadding - horizontalBorder))
+}
+
+function clampQuestionScroll(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value))
+}
+
+function questionRevealScrollTarget(viewport: HTMLElement, target: HTMLElement): number {
+  const viewportRect = viewport.getBoundingClientRect()
+  const targetRect = target.getBoundingClientRect()
+  const max = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
+  const bottomOverflow = targetRect.bottom - viewportRect.bottom + QUESTION_REVEAL_SCROLL_PADDING
+  const topOverflow = targetRect.top - viewportRect.top - QUESTION_REVEAL_SCROLL_PADDING
+
+  if (bottomOverflow > 0) return clampQuestionScroll(viewport.scrollTop + bottomOverflow, 0, max)
+  if (topOverflow < 0) return clampQuestionScroll(viewport.scrollTop + topOverflow, 0, max)
+  return clampQuestionScroll(viewport.scrollTop, 0, max)
+}
+
+function isQuestionImageAnswer(part: QuestionAnswer[number]): part is QuestionImageAnswer {
+  return typeof part !== "string" && part.type === "image"
+}
+
+function QuestionAnswers(props: {
+  questions: QuestionInfo[]
+  answers: QuestionAnswer[]
+  i18n: UiI18n
+  reveal?: boolean
+  onImagePreview: (image: QuestionImageAnswer) => void
+}) {
+  return (
+    <div data-component="question-answers" data-question-reveal={props.reveal ? "enter" : undefined}>
+      <For each={props.questions}>
+        {(q, i) => {
+          const answer = () => props.answers[i()] ?? []
+          const textParts = () => answer().filter((part) => typeof part === "string")
+          const imageParts = () => answer().filter(isQuestionImageAnswer)
+
+          return (
+            <div data-slot="question-answer-item">
+              <div data-slot="question-text">{q.question}</div>
+              <div data-slot="answer-content">
+                <Show when={textParts().length > 0}>
+                  <div data-slot="answer-text">{textParts().join(", ")}</div>
+                </Show>
+                <Show when={imageParts().length > 0}>
+                  <div data-slot="answer-images">
+                    <For each={imageParts()}>
+                      {(image) => (
+                        <button
+                          type="button"
+                          data-slot="answer-image-button"
+                          onClick={() => props.onImagePreview(image)}
+                        >
+                          <img
+                            src={image.url}
+                            alt={image.filename ?? props.i18n.t("ui.message.attachment.alt")}
+                            data-slot="answer-image-thumbnail"
+                          />
+                          <Show when={image.filename}>
+                            <span data-slot="answer-image-filename">{image.filename}</span>
+                          </Show>
+                        </button>
+                      )}
+                    </For>
+                  </div>
+                </Show>
+                <Show when={answer().length === 0}>
+                  <div data-slot="answer-text">{props.i18n.t("ui.question.answer.none")}</div>
+                </Show>
+              </div>
+            </div>
+          )
+        }}
+      </For>
+    </div>
+  )
+}
+
 ToolRegistry.register({
   name: "question",
   render(props) {
@@ -3068,6 +3180,156 @@ ToolRegistry.register({
     const optimistic = createMemo(() => metadataAnswers().length === 0 && handoffAnswers().length > 0)
     const answers = createMemo(() => (metadataAnswers().length > 0 ? metadataAnswers() : handoffAnswers()))
     const completed = createMemo(() => answers().length > 0)
+    const initialStagingKey = completed() && optimistic() ? (props.questionHandoff?.requestID ?? "optimistic") : undefined
+    const [stage, setStage] = createSignal<QuestionRevealStage>(initialStagingKey ? "measure" : "idle")
+    const [stagedKey, setStagedKey] = createSignal<string | undefined>(initialStagingKey)
+    const [toolOpen, setToolOpen] = createSignal(!initialStagingKey && completed())
+    const [reservedHeight, setReservedHeight] = createSignal(0)
+    const [measureWidth, setMeasureWidth] = createSignal<number | undefined>()
+
+    let root: HTMLDivElement | undefined
+    let measureRef: HTMLDivElement | undefined
+    let measureFrame: number | undefined
+    let waitFrame: number | undefined
+    let waitTimer: ReturnType<typeof setTimeout> | undefined
+    let releaseScrollSuppression: (() => void) | undefined
+
+    const cancelScheduledRevealWork = () => {
+      if (measureFrame !== undefined) {
+        cancelAnimationFrame(measureFrame)
+        measureFrame = undefined
+      }
+      if (waitFrame !== undefined) {
+        cancelAnimationFrame(waitFrame)
+        waitFrame = undefined
+      }
+      if (waitTimer !== undefined) {
+        clearTimeout(waitTimer)
+        waitTimer = undefined
+      }
+    }
+
+    const releaseStagedSuppression = () => {
+      if (!releaseScrollSuppression) return
+      releaseScrollSuppression()
+      releaseScrollSuppression = undefined
+    }
+
+    const revealAnswers = () => {
+      cancelScheduledRevealWork()
+      suppressAutoScrollResizeFor(260)
+      setReservedHeight(0)
+      setStage("revealed")
+      setToolOpen(true)
+    }
+
+    const waitForScrollThenReveal = (key: string, viewport: HTMLElement, targetTop: number) => {
+      const startedAt = questionProfileNow()
+      const finish = () => {
+        if (stagedKey() !== key) return
+        revealAnswers()
+      }
+      const tick = () => {
+        waitFrame = undefined
+        if (Math.abs(viewport.scrollTop - targetTop) <= 2) {
+          finish()
+          return
+        }
+        if (questionProfileNow() - startedAt >= QUESTION_REVEAL_SCROLL_TIMEOUT_MS) {
+          finish()
+          return
+        }
+        waitFrame = requestAnimationFrame(tick)
+      }
+
+      waitTimer = setTimeout(finish, QUESTION_REVEAL_SCROLL_TIMEOUT_MS)
+      waitFrame = requestAnimationFrame(tick)
+    }
+
+    const scheduleReveal = (key: string) => {
+      cancelScheduledRevealWork()
+      releaseStagedSuppression()
+      setMeasureWidth(questionMeasureWidth(root))
+      setReservedHeight(0)
+      setToolOpen(false)
+      setStage("measure")
+
+      measureFrame = requestAnimationFrame(() => {
+        measureFrame = undefined
+        if (stagedKey() !== key) return
+
+        const measuredHeight = Math.ceil(measureRef?.getBoundingClientRect().height ?? 0)
+        if (measuredHeight <= 0) {
+          revealAnswers()
+          return
+        }
+
+        releaseScrollSuppression = suppressAutoScrollResizeFor(QUESTION_REVEAL_SUPPRESS_MS)
+        setReservedHeight(measuredHeight)
+        setStage("scroll")
+
+        const viewport = questionRevealViewport()
+        const target = root
+        if (!viewport || !target) {
+          revealAnswers()
+          return
+        }
+
+        const targetTop = questionRevealScrollTarget(viewport, target)
+        if (questionRevealReducedMotion()) {
+          viewport.scrollTop = targetTop
+          revealAnswers()
+          return
+        }
+
+        if (Math.abs(viewport.scrollTop - targetTop) <= 2) {
+          revealAnswers()
+          return
+        }
+
+        viewport.scrollTo({ top: targetTop, behavior: "smooth" })
+        waitForScrollThenReveal(key, viewport, targetTop)
+      })
+    }
+
+    onCleanup(() => {
+      cancelScheduledRevealWork()
+      releaseStagedSuppression()
+    })
+
+    createEffect(() => {
+      const key = completed() && optimistic() ? (props.questionHandoff?.requestID ?? "optimistic") : undefined
+      if (!key) {
+        if (!completed()) {
+          cancelScheduledRevealWork()
+          releaseStagedSuppression()
+          setStagedKey(undefined)
+          setReservedHeight(0)
+          setStage("idle")
+          setToolOpen(false)
+          return
+        }
+        if (stage() === "idle") setToolOpen(true)
+        return
+      }
+
+      if (stagedKey() === key && stage() !== "idle") {
+        if (stage() === "measure" && measureFrame === undefined) scheduleReveal(key)
+        return
+      }
+
+      setStagedKey(key)
+      scheduleReveal(key)
+    })
+
+    const measureStyle = createMemo<JSX.CSSProperties>(() => {
+      const width = measureWidth()
+      return width ? { width: `${width}px` } : {}
+    })
+
+    const previewImage = (image: QuestionImageAnswer) => {
+      dialog.show(() => <ImagePreview src={image.url} alt={image.filename ?? i18n.t("ui.message.attachment.alt")} />)
+    }
 
     const subtitle = createMemo(() => {
       const count = questions().length
@@ -3077,77 +3339,52 @@ ToolRegistry.register({
     })
 
     return (
-      <BasicTool
-        {...props}
-        defaultOpen={completed()}
-        showPendingDetails={optimistic()}
-        showPendingMeta={optimistic()}
-        icon="bubble-5"
-        trigger={{
-          title: i18n.t("ui.tool.questions"),
-          titleClass: "tool-interact",
-          subtitle: subtitle(),
-        }}
+      <div
+        ref={(el) => (root = el)}
+        data-component="question-staged-tool"
+        data-question-reveal-stage={stage() !== "idle" ? stage() : undefined}
       >
-        <Show when={completed()}>
-          <div data-component="question-answers">
-            <For each={questions()}>
-              {(q, i) => {
-                const answer = () => answers()[i()] ?? []
-                const textParts = () => answer().filter((part) => typeof part === "string")
-                const imageParts = () =>
-                  answer().filter(
-                    (part): part is { type: "image"; url: string; mime: string; filename?: string } =>
-                      typeof part !== "string" && part.type === "image",
-                  )
-
-                return (
-                  <div data-slot="question-answer-item">
-                    <div data-slot="question-text">{q.question}</div>
-                    <div data-slot="answer-content">
-                      <Show when={textParts().length > 0}>
-                        <div data-slot="answer-text">{textParts().join(", ")}</div>
-                      </Show>
-                      <Show when={imageParts().length > 0}>
-                        <div data-slot="answer-images">
-                          <For each={imageParts()}>
-                            {(image) => (
-                              <button
-                                type="button"
-                                data-slot="answer-image-button"
-                                onClick={() =>
-                                  dialog.show(() => (
-                                    <ImagePreview
-                                      src={image.url}
-                                      alt={image.filename ?? i18n.t("ui.message.attachment.alt")}
-                                    />
-                                  ))
-                                }
-                              >
-                                <img
-                                  src={image.url}
-                                  alt={image.filename ?? i18n.t("ui.message.attachment.alt")}
-                                  data-slot="answer-image-thumbnail"
-                                />
-                                <Show when={image.filename}>
-                                  <span data-slot="answer-image-filename">{image.filename}</span>
-                                </Show>
-                              </button>
-                            )}
-                          </For>
-                        </div>
-                      </Show>
-                      <Show when={answer().length === 0}>
-                        <div data-slot="answer-text">{i18n.t("ui.question.answer.none")}</div>
-                      </Show>
-                    </div>
-                  </div>
-                )
-              }}
-            </For>
+        <BasicTool
+          {...props}
+          open={toolOpen()}
+          onOpenChange={(open) => {
+            if ((stage() === "measure" || stage() === "scroll") && open) {
+              revealAnswers()
+              return
+            }
+            setToolOpen(open)
+          }}
+          reserveDetailsHeight={reservedHeight()}
+          showPendingDetails={optimistic()}
+          showPendingMeta={optimistic()}
+          icon="bubble-5"
+          trigger={{
+            title: i18n.t("ui.tool.questions"),
+            titleClass: "tool-interact",
+            subtitle: subtitle(),
+          }}
+        >
+          <Show when={completed()}>
+            <QuestionAnswers
+              questions={questions()}
+              answers={answers()}
+              i18n={i18n}
+              reveal={stage() === "revealed" && !!stagedKey()}
+              onImagePreview={previewImage}
+            />
+          </Show>
+        </BasicTool>
+        <Show when={stage() === "measure"}>
+          <div
+            ref={(el) => (measureRef = el)}
+            data-component="question-answer-measure"
+            aria-hidden="true"
+            style={measureStyle()}
+          >
+            <QuestionAnswers questions={questions()} answers={answers()} i18n={i18n} onImagePreview={previewImage} />
           </div>
         </Show>
-      </BasicTool>
+      </div>
     )
   },
 })

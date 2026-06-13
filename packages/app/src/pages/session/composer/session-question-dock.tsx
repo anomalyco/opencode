@@ -350,7 +350,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       )
       return result
     },
-    onMutate: () => {
+    onMutate: (answers: QuestionAnswer[]) => {
       markQuestionFlow(
         "reply-onMutate-before-onSubmit",
         {
@@ -368,6 +368,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
         },
         { sessionID: props.request.sessionID, requestID: props.request.id },
       )
+      rememberQuestionHandoff({ request: props.request, answers })
     },
     onSuccess: () => {
       replied = true
@@ -456,7 +457,6 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
       },
       { sessionID: props.request.sessionID, requestID: props.request.id },
     )
-    rememberQuestionHandoff({ request: props.request, answers })
     captureQuestionFlipSource({
       requestID: props.request.id,
       sessionID: props.request.sessionID,

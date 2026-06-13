@@ -34,10 +34,13 @@ export interface BasicToolProps {
   showPendingDetails?: boolean
   hideDetails?: boolean
   defaultOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   forceOpen?: boolean
   hideArrow?: boolean
   defer?: boolean
   mountDetails?: "open" | "always"
+  reserveDetailsHeight?: number
   locked?: boolean
   animated?: boolean
   onSubtitleClick?: () => void
@@ -46,17 +49,23 @@ export interface BasicToolProps {
 const SPRING = { type: "spring" as const, visualDuration: 0.35, bounce: 0 }
 
 export function BasicTool(props: BasicToolProps) {
+  const defaultInitialOpen = props.open ?? props.defaultOpen ?? false
   const [state, setState] = createStore({
-    open: props.defaultOpen ?? false,
-    ready: props.defaultOpen ?? false,
+    open: defaultInitialOpen,
+    ready: defaultInitialOpen,
   })
-  const open = () => state.open
+  const controlled = () => props.open !== undefined
+  const open = () => props.forceOpen || (props.open ?? state.open)
   const ready = () => state.ready
   const pending = () => props.status === "pending" || props.status === "running"
   const meta = () => !pending() || !!props.showPendingMeta
   const details = () => !pending() || !!props.showPendingDetails
   const hasDetails = () => !!props.children && !props.hideDetails && details()
   const mountDetails = () => hasDetails() && (props.mountDetails === "always" || open() || !!props.forceOpen)
+  const reservedDetailsHeight = () => {
+    if (!hasDetails() || open()) return 0
+    return Math.max(0, props.reserveDetailsHeight ?? 0)
+  }
 
   let frame: number | undefined
 
@@ -68,16 +77,22 @@ export function BasicTool(props: BasicToolProps) {
 
   onCleanup(cancel)
 
+  const setOpen = (value: boolean, notify = false) => {
+    if (!controlled()) setState("open", value)
+    if (notify) props.onOpenChange?.(value)
+  }
+
   createEffect(() => {
-    if (props.forceOpen) setState("open", true)
+    if (props.forceOpen) setOpen(true)
   })
 
   createEffect(
     on(
       () => props.defaultOpen,
       (value) => {
+        if (controlled()) return
         if (value === undefined) return
-        setState("open", value)
+        setOpen(value)
         setState("ready", value)
       },
       { defer: true },
@@ -109,7 +124,7 @@ export function BasicTool(props: BasicToolProps) {
   // Animated height for collapsible open/close
   let contentRef: HTMLDivElement | undefined
   let heightAnim: AnimationPlaybackControls | undefined
-  const initialOpen = open()
+  const initialAnimatedOpen = open()
 
   createEffect(
     on(
@@ -142,11 +157,16 @@ export function BasicTool(props: BasicToolProps) {
     if (pending() && !props.showPendingDetails) return
     if (props.locked && !value) return
     suppressAutoScrollResize()
-    setState("open", value)
+    setOpen(value, true)
   }
 
   return (
-    <Collapsible open={open()} onOpenChange={handleOpenChange} class="tool-collapsible" data-detail-mounted={mountDetails() ? "true" : undefined}>
+    <Collapsible
+      open={open()}
+      onOpenChange={handleOpenChange}
+      class="tool-collapsible"
+      data-detail-mounted={mountDetails() ? "true" : undefined}
+    >
       <Collapsible.Trigger>
         <div data-component="tool-trigger">
           <div data-slot="basic-tool-tool-trigger-content">
@@ -224,12 +244,24 @@ export function BasicTool(props: BasicToolProps) {
           data-slot="collapsible-content"
           data-animated
           style={{
-            height: initialOpen ? "auto" : "0px",
-            overflow: initialOpen ? "visible" : "hidden",
+            height: initialAnimatedOpen ? "auto" : "0px",
+            overflow: initialAnimatedOpen ? "visible" : "hidden",
           }}
         >
           {props.children}
         </div>
+      </Show>
+      <Show when={!props.animated && reservedDetailsHeight() > 0}>
+        <div
+          data-slot="collapsible-content"
+          data-reserved
+          style={{
+            height: `${reservedDetailsHeight()}px`,
+            overflow: "hidden",
+            visibility: "hidden",
+            "pointer-events": "none",
+          }}
+        />
       </Show>
       <Show when={!props.animated && mountDetails()}>
         <Collapsible.Content>

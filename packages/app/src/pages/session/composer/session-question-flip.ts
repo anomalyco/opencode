@@ -249,6 +249,17 @@ export function playPendingQuestionFlip(input: { root: ParentNode; viewport: HTM
     markQuestionFlow("flip-play-skip", { reason: "target-playing" }, { sessionID: snapshot.sessionID, requestID: snapshot.requestID })
     return false
   }
+  const stagedReveal = target.querySelector<HTMLElement>("[data-question-reveal-stage]")
+  if (stagedReveal) {
+    pending.delete(snapshot.requestID)
+    if (recent?.requestID === snapshot.requestID) recent = undefined
+    markQuestionFlow(
+      "flip-play-skip",
+      { reason: "staged-reveal", stage: stagedReveal.dataset.questionRevealStage ?? "unknown" },
+      { sessionID: snapshot.sessionID, requestID: snapshot.requestID },
+    )
+    return false
+  }
 
   pending.delete(snapshot.requestID)
   if (recent?.requestID === snapshot.requestID) recent = undefined

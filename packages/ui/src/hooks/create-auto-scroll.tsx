@@ -8,20 +8,43 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 // otherwise cause unwanted scrollToBottom calls via ResizeObserver.
 let resizeSuppressCount = 0
 
+function releaseResizeSuppression() {
+  resizeSuppressCount = Math.max(0, resizeSuppressCount - 1)
+}
+
 /**
  * Suppress resize-triggered auto-scrolling for the duration of a layout change.
  * The suppression covers the current frame plus one additional animation frame
  * to account for Kobalte's measurement phase and subsequent reflow.
  */
-export function suppressAutoScrollResize() {
+export function suppressAutoScrollResize(frames = 2) {
   resizeSuppressCount++
-  // Two rAF frames: first for the synchronous layout triggered by the toggle,
-  // second for any async reflow (e.g. Kobalte measuring then restoring styles).
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      resizeSuppressCount--
-    })
-  })
+  let remaining = Math.max(1, frames)
+  const tick = () => {
+    remaining--
+    if (remaining <= 0) {
+      releaseResizeSuppression()
+      return
+    }
+    requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
+}
+
+export function suppressAutoScrollResizeFor(durationMs: number): () => void {
+  resizeSuppressCount++
+  let released = false
+  const release = () => {
+    if (released) return
+    released = true
+    releaseResizeSuppression()
+  }
+  const timeout = setTimeout(release, Math.max(0, durationMs))
+
+  return () => {
+    clearTimeout(timeout)
+    release()
+  }
 }
 
 export interface AutoScrollOptions {
