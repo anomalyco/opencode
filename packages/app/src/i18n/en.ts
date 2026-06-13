@@ -48,6 +48,8 @@ export const dict = {
   "command.session.new": "New session",
   "command.file.open": "Open file",
   "command.tab.close": "Close tab",
+  "command.tabs.viewAsPanels": "View tabs as panels",
+  "command.tabs.viewAsTabs": "View as tabs",
   "command.context.addSelection": "Add selection to context",
   "command.context.addSelection.description": "Add selected lines from the current file",
   "command.input.focus": "Focus input",

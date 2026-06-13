@@ -15,7 +15,17 @@
     "noEmit": true,
     "emitDeclarationOnly": false,
     "outDir": "node_modules/.ts-dist",
-    "types": ["vite/client", "node", "electron"]
+    "types": ["vite/client", "node", "electron"],
+    "paths": {
+      "@/*": ["../app/src/*"],
+      "@opencode-ai/app": ["../app/src/index.ts"],
+      "@opencode-ai/app/desktop-menu": ["../app/src/desktop-menu.ts"],
+      "@opencode-ai/app/updater": ["../app/src/updater.ts"],
+      "@opencode-ai/app/wsl/types": ["../app/src/wsl/types.ts"],
+      "@opencode-ai/app/*": ["../app/src/*"],
+      "@opencode-ai/ui": ["../ui/src/index.ts"],
+      "@opencode-ai/ui/*": ["../ui/src/*"]
+    }
   },
   "references": [{ "path": "../app" }],
   "include": ["src", "package.json"],

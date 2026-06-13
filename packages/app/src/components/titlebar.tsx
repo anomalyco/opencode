@@ -264,6 +264,10 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   .then((x) => x.data)
                   .catch(() => {}),
             )
+            const sessionTabCount = () =>
+              tabsStore.filter((tab) => tab.type === "session" && tab.server === server.key).length
+            const panelToggleLabel = () =>
+              tabs.panels.tiled() ? language.t("command.tabs.viewAsTabs") : language.t("command.tabs.viewAsPanels")
 
             const matchRoute = (route: LayoutRoute) => {
               if (route.type === "home") return
@@ -358,6 +362,14 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               const current = currentTab()
 
               return [
+                {
+                  id: "tabs.panel.toggle",
+                  category: language.t("command.category.view"),
+                  title: panelToggleLabel(),
+                  disabled: sessionTabCount() < 2,
+                  hidden: true,
+                  onSelect: () => tabs.panels.toggle(),
+                },
                 {
                   id: "tab.new",
                   category: "tab",
@@ -488,6 +500,21 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                       aria-label={language.t("command.session.new")}
                     />
                   </TooltipV2>
+                </Show>
+                <Show when={sessionTabCount() > 1}>
+                  <Tooltip placement="bottom" value={panelToggleLabel()}>
+                    <IconButtonV2
+                      type="button"
+                      variant="ghost-muted"
+                      size="large"
+                      class="shrink-0"
+                      state={tabs.panels.tiled() ? "pressed" : undefined}
+                      onClick={() => tabs.panels.toggle()}
+                      aria-label={panelToggleLabel()}
+                      aria-pressed={tabs.panels.tiled()}
+                      icon={<IconV2 name={tabs.panels.tiled() ? "status-active" : "status"} />}
+                    />
+                  </Tooltip>
                 </Show>
                 <div class="flex-1" />
                 <TitlebarV2Right state={v2RightState()} />
