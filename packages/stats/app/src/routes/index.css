@@ -119,7 +119,8 @@
 }
 
 [data-page="stats"] [data-slot="header-bar"] {
-  display: flex;
+  display: grid;
+  grid-template-columns: 0.5fr 1fr 0.5fr;
   align-items: center;
   gap: 16px;
   min-height: 72px;
@@ -183,10 +184,10 @@
 }
 
 [data-page="stats"] [data-slot="header-actions"] {
-  flex: 0 0 auto;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-self: flex-end;
+  grid-column-start: 3;
   gap: 8px;
 }
 
@@ -3509,12 +3510,6 @@
 @media (min-width: 90rem) {
   [data-page="stats"] [data-slot="header-bar"] {
     gap: 32px;
-  }
-
-  [data-page="stats"] [data-slot="brand"],
-  [data-page="stats"] [data-component="section-nav"],
-  [data-page="stats"] [data-slot="header-actions"] {
-    flex: 1 1 0;
   }
 
   [data-page="stats"] [data-slot="brand"] {
