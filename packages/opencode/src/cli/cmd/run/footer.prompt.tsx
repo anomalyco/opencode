@@ -171,6 +171,10 @@ function parseSlashCommand(text: string, commands: RunCommand[] | undefined) {
     return { type: "none" as const }
   }
 
+  if (head.name === "goal") {
+    return { type: "command" as const, command: { name: "goal", arguments: head.arguments } }
+  }
+
   if (!commands) {
     return { type: "pending" as const }
   }
@@ -417,6 +421,7 @@ export function createPromptState(input: PromptInput): PromptState {
         description: "compose in your external editor",
       } satisfies SlashOption,
       { kind: "slash", name: "new", display: "/new", description: "start a new session" } satisfies SlashOption,
+      { kind: "slash", name: "goal", display: "/goal", description: "set or manage the session goal" } satisfies SlashOption,
       { kind: "slash", name: "exit", display: "/exit", description: "close OpenCode" } satisfies SlashOption,
     ]
     const hidden = new Set(builtins.map((item) => item.name))

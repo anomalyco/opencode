@@ -1273,7 +1273,60 @@ function createLayer(input: StreamInput) {
                   ),
                 )
               : command
-                ? Effect.sync(() => {
+                ? command.name === "goal"
+                  ? Effect.sync(() => {
+                      input.trace?.write("send.goal", { sessionID: input.sessionID, arguments: command.arguments })
+                    }).pipe(
+                      Effect.andThen(
+                        Effect.promise(async () => {
+                          const anySdk = input.sdk as any
+                          const base = (anySdk?.baseUrl || anySdk?._options?.baseUrl || "http://localhost:4096").replace(/\/$/, "")
+                          const url = `${base}/session/${input.sessionID}/goal`
+                          const headers: Record<string, string> = { "content-type": "application/json" }
+                          const defH = anySdk?.headers || anySdk?._def?.headers || {}
+                          for (const [k, v] of Object.entries(defH)) headers[k] = String(v)
+                          const raw = (command.arguments || "").trim()
+                          const lower = raw.toLowerCase()
+                          if (lower === "clear" || lower === "reset") {
+                            await fetch(url, { method: "DELETE", headers })
+                            return
+                          }
+                          if (lower === "pause") {
+                            await fetch(url, { method: "PATCH", headers, body: JSON.stringify({ status: "paused" }) })
+                            return
+                          }
+                          if (lower === "resume") {
+                            await fetch(url, { method: "PATCH", headers, body: JSON.stringify({ status: "active" }) })
+                            return
+                          }
+                          if (lower.startsWith("complete")) {
+                            const note = raw.slice("complete".length).trim() || undefined
+                            await fetch(url, { method: "PATCH", headers, body: JSON.stringify({ status: "completed", verification: note }) })
+                            return
+                          }
+                          if (lower.startsWith("update ")) {
+                            const txt = raw.slice("update ".length).trim()
+                            await fetch(url, { method: "PATCH", headers, body: JSON.stringify({ text: txt }) })
+                            return
+                          }
+                          // default: set the text as the goal
+                          await fetch(url, { method: "POST", headers, body: JSON.stringify({ text: raw }) })
+                        }).pipe(
+                          Effect.tap(() =>
+                            Effect.sync(() => {
+                              input.trace?.write("send.goal.ok", { sessionID: input.sessionID })
+                              item.armed = true
+                              item.live = true
+                            }),
+                          ),
+                          Effect.flatMap(() => Deferred.succeed(item.done, undefined).pipe(Effect.ignore)),
+                          Effect.catch((error) => Deferred.fail(item.done, error).pipe(Effect.ignore)),
+                          Effect.forkIn(scope, { startImmediately: true }),
+                          Effect.asVoid,
+                        ),
+                      ),
+                    )
+                : Effect.sync(() => {
                     input.trace?.write("send.command", { sessionID: input.sessionID, command: command.name })
                   }).pipe(
                     Effect.andThen(

@@ -9,6 +9,7 @@ import { SessionRevert } from "@/session/revert"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
+import { Goal } from "@/session/goal"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { Snapshot } from "@/snapshot"
 import { Schema, Struct } from "effect"
@@ -74,6 +75,16 @@ export const RevertPayload = Schema.Struct(Struct.omit(SessionRevert.RevertInput
 export const PermissionResponsePayload = Schema.Struct({
   response: PermissionV1.Reply,
 })
+export const GoalSetPayload = Schema.Struct({
+  text: Schema.String,
+  budgetTokens: Schema.optional(Schema.Number),
+})
+export const GoalUpdatePayload = Schema.Struct({
+  text: Schema.optional(Schema.String),
+  status: Schema.optional(Goal.Status),
+  budgetTokens: Schema.optional(Schema.NullOr(Schema.Number)),
+  verification: Schema.optional(Schema.String),
+})
 
 export const SessionPaths = {
   list: root,
@@ -102,6 +113,7 @@ export const SessionPaths = {
   deleteMessage: `${root}/:sessionID/message/:messageID`,
   deletePart: `${root}/:sessionID/message/:messageID/part/:partID`,
   updatePart: `${root}/:sessionID/message/:messageID/part/:partID`,
+  goal: `${root}/:sessionID/goal`,
 } as const
 
 export const SessionApi = HttpApi.make("session")
@@ -430,20 +442,70 @@ export const SessionApi = HttpApi.make("session")
             description: "Delete a part from a message.",
           }),
         ),
-        HttpApiEndpoint.patch("updatePart", SessionPaths.updatePart, {
-          params: { sessionID: SessionID, messageID: MessageID, partID: PartID },
-          query: WorkspaceRoutingQuery,
-          payload: SessionV1.Part,
-          success: described(SessionV1.Part, "Successfully updated part"),
-          error: [HttpApiError.BadRequest, ApiNotFoundError],
-        }).annotateMerge(
-          OpenApi.annotations({
-            identifier: "part.update",
-            description: "Update a part in a message.",
-          }),
-        ),
-      )
-      .annotateMerge(
+         HttpApiEndpoint.patch("updatePart", SessionPaths.updatePart, {
+           params: { sessionID: SessionID, messageID: MessageID, partID: PartID },
+           query: WorkspaceRoutingQuery,
+           payload: SessionV1.Part,
+           success: described(SessionV1.Part, "Successfully updated part"),
+           error: [HttpApiError.BadRequest, ApiNotFoundError],
+         }).annotateMerge(
+           OpenApi.annotations({
+             identifier: "part.update",
+             description: "Update a part in a message.",
+           }),
+         ),
+         HttpApiEndpoint.get("goal", SessionPaths.goal, {
+           params: { sessionID: SessionID },
+           query: WorkspaceRoutingQuery,
+           success: described(Schema.NullOr(Goal.Info), "Session goal"),
+           error: [HttpApiError.BadRequest, ApiNotFoundError],
+         }).annotateMerge(
+           OpenApi.annotations({
+             identifier: "session.goal.get",
+             summary: "Get session goal",
+             description: "Retrieve the active goal for a session, if any.",
+           }),
+         ),
+         HttpApiEndpoint.post("goalSet", SessionPaths.goal, {
+           params: { sessionID: SessionID },
+           query: WorkspaceRoutingQuery,
+           payload: GoalSetPayload,
+           success: described(Goal.Info, "Session goal"),
+           error: [HttpApiError.BadRequest, ApiNotFoundError],
+         }).annotateMerge(
+           OpenApi.annotations({
+             identifier: "session.goal.set",
+             summary: "Set session goal",
+             description: "Create or replace the persisted goal for a session.",
+           }),
+         ),
+         HttpApiEndpoint.patch("goalUpdate", SessionPaths.goal, {
+           params: { sessionID: SessionID },
+           query: WorkspaceRoutingQuery,
+           payload: GoalUpdatePayload,
+           success: described(Goal.Info, "Session goal"),
+           error: [HttpApiError.BadRequest, ApiNotFoundError],
+         }).annotateMerge(
+           OpenApi.annotations({
+             identifier: "session.goal.update",
+             summary: "Update session goal",
+             description: "Update goal text, status, budget, or verification note.",
+           }),
+         ),
+         HttpApiEndpoint.delete("goalClear", SessionPaths.goal, {
+           params: { sessionID: SessionID },
+           query: WorkspaceRoutingQuery,
+           success: described(Schema.Boolean, "Goal cleared"),
+           error: [HttpApiError.BadRequest, ApiNotFoundError],
+         }).annotateMerge(
+           OpenApi.annotations({
+             identifier: "session.goal.clear",
+             summary: "Clear session goal",
+             description: "Remove the goal from the session.",
+           }),
+         ),
+       )
+       .annotateMerge(
         OpenApi.annotations({
           title: "session",
           description: "Experimental HttpApi session routes.",
