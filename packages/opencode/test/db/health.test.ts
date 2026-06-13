@@ -114,6 +114,35 @@ describe("database doctor and repair", () => {
     expect(second.operations).toHaveLength(0)
   })
 
+  test("repairs legacy part id prefixes required by current schemas", async () => {
+    const fixture = createFixture("part-prefix")
+    fixture.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", fixture.worktree, "[]")
+    fixture.db
+      .query("INSERT INTO session (id, project_id, slug, directory, path, title, version, agent, model) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .run("ses", "proj", "slug", fixture.worktree, fixture.worktree, "title", "1", "build", JSON.stringify({ providerID: "p", modelID: "m" }))
+    fixture.db
+      .query("INSERT INTO session_message (id, session_id, type, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)")
+      .run("msg", "ses", "assistant", Date.now(), Date.now(), JSON.stringify({ agent: "build", model: { providerID: "p", modelID: "m" } }))
+    fixture.db
+      .query("INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)")
+      .run("part_ccf86b97b002MOqoKxDVMesjG9", "msg", "ses", Date.now(), Date.now(), JSON.stringify({ type: "text", text: "hello" }))
+    fixture.db.close()
+
+    const report = await generateDoctorReport(fixture.dbPath)
+    const plan = await generateRepairPlan(fixture.dbPath)
+    const result = await applyRepairPlan(plan)
+    const second = await generateRepairPlan(fixture.dbPath)
+    const db = new BunDatabase(fixture.dbPath, { readonly: true })
+    const rows = db.query("SELECT id FROM part ORDER BY id").all() as { id: string }[]
+    db.close()
+
+    expect(report.issues.some((issue) => issue.code === "part_legacy_id_prefix" && issue.repairable)).toBe(true)
+    expect(plan.operations.map((operation) => operation.issueCode)).toContain("part_legacy_id_prefix")
+    expect(result.success).toBe(true)
+    expect(rows.map((row) => row.id)).toEqual(["prt_ccf86b97b002MOqoKxDVMesjG9"])
+    expect(second.operations).toHaveLength(0)
+  })
+
   test("rollback leaves rows unchanged when a precondition fails", async () => {
     const fixture = createFixture("rollback")
     fixture.db.query("INSERT INTO project (id, worktree, sandboxes) VALUES (?, ?, ?)").run("proj", fixture.worktree, "[]")
@@ -229,6 +258,14 @@ function createFixture(name: string) {
       id text PRIMARY KEY,
       session_id text NOT NULL,
       type text NOT NULL,
+      time_created integer NOT NULL,
+      time_updated integer NOT NULL,
+      data text NOT NULL
+    );
+    CREATE TABLE part (
+      id text PRIMARY KEY,
+      message_id text NOT NULL,
+      session_id text NOT NULL,
       time_created integer NOT NULL,
       time_updated integer NOT NULL,
       data text NOT NULL

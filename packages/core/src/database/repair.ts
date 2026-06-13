@@ -95,9 +95,23 @@ export async function applyRepairPlan(plan: RepairPlan) {
 }
 
 function applyOperation(db: BunDatabase, operation: RepairOperation) {
+  if (operation.issueCode === "part_legacy_id_prefix") return applyPartIDRepair(db, operation)
   if (operation.issueCode === "assistant_message_missing_agent") return applyAssistantAgentRepair(db, operation)
   if (operation.issueCode.startsWith("session_") && operation.issueCode.endsWith("_missing")) return applySessionMetadataRepair(db, operation)
   throw new Error(`Unsupported repair operation: ${operation.issueCode}`)
+}
+
+function applyPartIDRepair(db: BunDatabase, operation: RepairOperation) {
+  const value = (operation.after as Record<string, unknown>).id
+  if (typeof value !== "string" || !value.startsWith("prt_")) throw new Error(`Invalid part id repair value for ${operation.id}`)
+  const row = db.query("SELECT id, message_id, session_id FROM part WHERE id = ?").get(operation.rowId) as { id: string; message_id: string; session_id: string } | null
+  if (!row || row.message_id !== operation.preconditions.message_id || row.session_id !== operation.preconditions.session_id) {
+    throw new Error(`Precondition failed for ${operation.id}`)
+  }
+  if (!row.id.startsWith("part_")) throw new Error(`Precondition failed for ${operation.id}: id already repaired`)
+  const existing = db.query("SELECT count(*) AS count FROM part WHERE id = ?").get(value) as { count: number } | null
+  if (existing?.count !== 0) throw new Error(`Precondition failed for ${operation.id}: target id already exists`)
+  db.query("UPDATE part SET id = ? WHERE id = ? AND message_id = ? AND session_id = ?").run(value, row.id, row.message_id, row.session_id)
 }
 
 function applyAssistantAgentRepair(db: BunDatabase, operation: RepairOperation) {

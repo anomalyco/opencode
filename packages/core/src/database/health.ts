@@ -34,7 +34,7 @@ export interface DoctorReport {
 export interface RepairOperation {
   id: string
   issueCode: string
-  table: "session" | "session_message"
+  table: "session" | "session_message" | "part"
   rowId: string
   before: unknown
   after: unknown
@@ -61,6 +61,7 @@ interface SchemaStatus {
   columns: {
     session: Set<string>
     sessionMessage: Set<string>
+    part: Set<string>
     project: Set<string>
   }
 }
@@ -81,6 +82,12 @@ interface SessionMessageRow {
   data: string
 }
 
+interface PartRow {
+  id: string
+  message_id: string
+  session_id: string
+}
+
 export async function generateDoctorReport(dbPath: string): Promise<DoctorReport> {
   if (!(await Bun.file(dbPath).exists())) {
     return unreadableDoctorReport(dbPath, "database_not_found", "Database file does not exist")
@@ -95,7 +102,8 @@ export async function generateDoctorReport(dbPath: string): Promise<DoctorReport
 
       const sessions = analyzeSessions(db, schema.columns.session)
       const messages = analyzeMessages(db)
-      return buildReport(dbPath, schema, sessions.count, messages.count, [...schema.issues, ...sessions.issues, ...messages.issues])
+      const parts = analyzeParts(db, schema.columns.part)
+      return buildReport(dbPath, schema, sessions.count, messages.count, [...schema.issues, ...sessions.issues, ...messages.issues, ...parts.issues])
     })
   } catch (error) {
     return unreadableDoctorReport(dbPath, "database_unreadable", `Database is unreadable: ${errorMessage(error)}`)
@@ -123,7 +131,8 @@ export async function generateRepairPlan(dbPath: string, mode: RepairMode = "saf
 
       const sessions = analyzeSessions(db, schema.columns.session)
       const messages = analyzeMessages(db)
-      const issues = [...sessions.issues, ...messages.issues]
+      const parts = analyzeParts(db, schema.columns.part)
+      const issues = [...sessions.issues, ...messages.issues, ...parts.issues]
       const operations = issues.flatMap((issue) => operationForIssue(db, issue))
       return {
         dbPath,
@@ -142,6 +151,7 @@ export async function generateRepairPlan(dbPath: string, mode: RepairMode = "saf
 export function analyzeSchema(db: BunDatabase): SchemaStatus {
   const sessionMessage = tableColumns(db, "session_message")
   const session = tableColumns(db, "session")
+  const part = tableColumns(db, "part")
   const project = tableColumns(db, "project")
   const issues: Issue[] = [
     ...missingTableIssues("session_message", sessionMessage),
@@ -150,12 +160,13 @@ export function analyzeSchema(db: BunDatabase): SchemaStatus {
   ]
 
   if (issues.length > 0) {
-    return { supported: false, issues, columns: { session, sessionMessage, project } }
+    return { supported: false, issues, columns: { session, sessionMessage, part, project } }
   }
 
   const columnIssues: Issue[] = [
     ...missingColumnIssues("session_message", sessionMessage, ["id", "session_id", "type", "data"]),
     ...missingColumnIssues("session", session, ["id", "project_id", "directory", "path", "agent", "model"]),
+    ...optionalMissingColumnIssues("part", part, ["id", "message_id", "session_id"]),
     ...missingColumnIssues("project", project, ["id", "worktree"]),
   ]
 
@@ -172,7 +183,7 @@ export function analyzeSchema(db: BunDatabase): SchemaStatus {
   return {
     supported: !columnIssues.some((issue) => issue.severity === "error"),
     issues: columnIssues,
-    columns: { session, sessionMessage, project },
+    columns: { session, sessionMessage, part, project },
   }
 }
 
@@ -194,6 +205,20 @@ export function analyzeMessages(db: BunDatabase): { count: number; issues: Issue
   return {
     count: readCount(db, "session_message"),
     issues: rows.flatMap((row) => assistantMessageIssues(row as SessionMessageRow)),
+  }
+}
+
+export function analyzeParts(db: BunDatabase, columns?: Set<string>): { count: number; issues: Issue[] } {
+  if (columns?.size === 0) return { count: 0, issues: [] }
+  const count = readCount(db, "part")
+  if (columns && !(columns.has("id") && columns.has("message_id") && columns.has("session_id"))) return { count, issues: [] }
+
+  return {
+    count,
+    issues: db
+      .query("SELECT id, message_id, session_id FROM part WHERE id LIKE 'part\\_%' ESCAPE '\\'")
+      .all()
+      .flatMap((row) => partIDIssues(db, row as PartRow)),
   }
 }
 
@@ -283,6 +308,11 @@ function missingColumnIssues(table: string, columns: Set<string>, required: stri
     }))
 }
 
+function optionalMissingColumnIssues(table: string, columns: Set<string>, required: string[]): Issue[] {
+  if (columns.size === 0) return []
+  return missingColumnIssues(table, columns, required)
+}
+
 function readCount(db: BunDatabase, table: string) {
   return (db.query(`SELECT count(*) AS count FROM ${table}`).get() as { count: number } | null)?.count ?? 0
 }
@@ -328,6 +358,27 @@ function sessionMetadataIssues(db: BunDatabase, row: SessionRow): Issue[] {
     ...metadataIssue(row, "agent", deriveSessionAgent(db, row.id)),
     ...metadataIssue(row, "model", deriveSessionModel(db, row.id)),
     ...metadataIssue(row, "path", nonEmptyString(row.directory) ? row.directory : undefined),
+  ]
+}
+
+function partIDIssues(db: BunDatabase, row: PartRow): Issue[] {
+  const repaired = `prt_${row.id.slice("part_".length)}`
+  const exists = (db.query("SELECT count(*) AS count FROM part WHERE id = ?").get(repaired) as { count: number } | null)?.count !== 0
+  return [
+    {
+      code: "part_legacy_id_prefix",
+      severity: "error" as const,
+      table: "part",
+      rowId: row.id,
+      sessionId: row.session_id,
+      messageId: row.message_id,
+      repairable: !exists,
+      reason: exists ? "part.id uses the legacy part_ prefix, but the target prt_ id already exists" : "part.id uses the legacy part_ prefix; current schemas require prt_",
+      suggestedRepair: exists ? undefined : "rename_part_id_prefix",
+      confidence: exists ? undefined : ("high" as const),
+      before: { id: row.id },
+      after: exists ? undefined : { id: repaired },
+    },
   ]
 }
 
@@ -377,6 +428,7 @@ function deriveSessionModel(db: BunDatabase, sessionID: string) {
 function operationForIssue(db: BunDatabase, issue: Issue): RepairOperation[] {
   if (issue.code === "assistant_message_missing_agent" && issue.rowId) return [assistantOperation(db, issue)]
   if (issue.code.startsWith("session_") && issue.code.endsWith("_missing") && issue.rowId && issue.repairable) return [sessionMetadataOperation(db, issue)]
+  if (issue.code === "part_legacy_id_prefix" && issue.rowId && issue.repairable) return [partIDOperation(db, issue)]
   return []
 }
 
@@ -439,4 +491,22 @@ function singleValue(values: unknown[]) {
   const unique = [...new Set(values.map((value) => (typeof value === "string" ? value : JSON.stringify(value))))]
   if (unique.length !== 1) return undefined
   return unique[0]
+}
+
+function partIDOperation(db: BunDatabase, issue: Issue) {
+  if (!issue.rowId) throw new Error("Missing part repair row id")
+  const row = db.query("SELECT id, message_id, session_id FROM part WHERE id = ?").get(issue.rowId) as PartRow
+  return {
+    id: `repair_part_id_${row.id}`,
+    issueCode: issue.code,
+    table: "part" as const,
+    rowId: row.id,
+    before: issue.before,
+    after: issue.after,
+    preconditions: { id: row.id, message_id: row.message_id, session_id: row.session_id },
+    reason: issue.reason,
+    confidence: "high" as const,
+    backupRequired: true,
+    mode: "safe" as const,
+  }
 }
