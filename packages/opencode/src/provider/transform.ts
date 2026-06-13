@@ -310,7 +310,6 @@ function normalizeMessages(
     model.capabilities.interleaved.field &&
     model.api.npm !== "@openrouter/ai-sdk-provider"
   ) {
-    console.log("[interleaved DEBUG] FIRING for model:", model.id, "field:", model.capabilities.interleaved.field)
     const field = model.capabilities.interleaved.field
     return msgs.map((msg) => {
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
@@ -338,8 +337,6 @@ function normalizeMessages(
 
       return msg
     })
-  } else {
-    console.log("[interleaved DEBUG] SKIPPED for model:", model.id, "interleaved:", JSON.stringify(model.capabilities.interleaved), "npm:", model.api.npm)
   }
 
   return msgs

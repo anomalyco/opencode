@@ -307,7 +307,15 @@ const live: Layer.Layer<
           abortSignal: input.abort,
           headers: prepared.headers,
           maxRetries: input.retries ?? 0,
-          messages: prepared.messages,
+          messages: (() => {
+            for (const m of prepared.messages) {
+              if (m.role === "assistant" && Array.isArray(m.content)) {
+                const rp = m.content.filter((p: any) => p.type === "reasoning")
+                if (rp.length) console.log("[REASONING-PASSTHROUGH] assistant msg has", rp.length, "reasoning parts, total chars:", rp.reduce((s: number, p: any) => s + p.text.length, 0))
+              }
+            }
+            return prepared.messages
+          })(),
           model: wrapLanguageModel({
             model: language,
             middleware: [
