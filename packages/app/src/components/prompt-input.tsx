@@ -1130,6 +1130,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!id) return permission.isAutoAcceptingDirectory(sdk.directory)
     return permission.isAutoAccepting(id, sdk.directory)
   })
+  const branchName = createMemo(() => {
+    if (sync.project?.vcs !== "git") return
+    return sync.data.vcs?.branch
+  })
+  const branchLabel = createMemo(() => {
+    const branch = branchName()
+    if (!branch) return
+    return branch.length > 32 ? `${branch.slice(0, 29)}...` : branch
+  })
 
   const { abort, handleSubmit } = createPromptSubmit({
     info,
@@ -1600,6 +1609,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <ComposerPickerTrigger state={newProjectTriggerState()} />
                   </Show>
                   <ComposerModelControl state={modelControlState()} />
+                  <Show when={branchLabel()}>
+                    {(branch) => <ComposerBranchBadge branch={branch()} />}
+                  </Show>
                   <Show when={store.mode !== "shell" && showVariantControl()}>
                     <div
                       data-component="prompt-variant-control"
@@ -1983,6 +1995,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                         </Show>
                       </Show>
                     </Show>
+                    <Show when={branchLabel()}>
+                      {(branch) => <ComposerBranchBadge branch={branch()} />}
+                    </Show>
                   </div>
                 </div>
               </div>
@@ -2150,6 +2165,20 @@ function ComposerAgentControl(props: { state: ComposerAgentControlState }) {
           variant="ghost"
         />
       </TooltipKeybind>
+    </div>
+  )
+}
+
+function ComposerBranchBadge(props: { branch: string }) {
+  return (
+    <div
+      data-component="prompt-branch-indicator"
+      class="flex h-7 min-w-0 max-w-[180px] items-center gap-1 rounded-md px-2 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
+      title={props.branch}
+      aria-label={`Current Git branch: ${props.branch}`}
+    >
+      <Icon name="branch" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+      <span class="truncate">{props.branch}</span>
     </div>
   )
 }
