@@ -14,7 +14,7 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Button } from "@opencode-ai/ui/button"
+import { Button, type ButtonProps } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { IconButton } from "@opencode-ai/ui/icon-button"
@@ -1308,9 +1308,20 @@ function MarkdownField(props: {
   )
 }
 
-function SaveButton(props: { label: string; disabled?: boolean; onClick: () => void }) {
+function SaveButton(props: {
+  label: string
+  disabled?: boolean
+  onClick: () => void
+  variant?: ButtonProps["variant"]
+}) {
   return (
-    <Button size="small" variant="secondary" icon="save" onClick={props.onClick} disabled={props.disabled}>
+    <Button
+      size="small"
+      variant={props.variant ?? "secondary"}
+      icon="save"
+      onClick={props.onClick}
+      disabled={props.disabled}
+    >
       {props.label}
     </Button>
   )
@@ -2151,7 +2162,7 @@ function CustomEditor(props: {
         <div class="flex flex-wrap items-start justify-between gap-3 border-b border-border-weak-base px-4 py-4">
           <div>
             <div class="flex items-center gap-2">
-              <div class="text-15-medium text-text-strong">
+              <div class="text-20-medium text-text-strong">
                 {props.form.mode === "create" ? language.t("config.custom.new") : props.item?.id}
               </div>
               <span class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
@@ -2163,7 +2174,6 @@ function CustomEditor(props: {
                 </span>
               </Show>
             </div>
-            <div class="mt-2 text-12-regular text-text-weak">{language.t("config.custom.description")}</div>
           </div>
           <div class="flex flex-wrap items-center gap-2">
             <Show when={props.item}>
@@ -2183,7 +2193,7 @@ function CustomEditor(props: {
                 </Button>
               }
             >
-              <Button size="small" variant="secondary" onClick={props.onCreate}>
+              <Button size="small" variant="ghost" onClick={props.onCreate}>
                 {language.t("config.custom.new")}
               </Button>
             </Show>
@@ -2211,6 +2221,7 @@ function CustomEditor(props: {
               }
               onClick={props.onSave}
               disabled={props.busy || props.form.saving || props.form.deleting}
+              variant="ghost"
             />
           </div>
           <Show when={props.reloading}>
