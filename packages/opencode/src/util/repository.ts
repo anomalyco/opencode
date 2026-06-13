@@ -1,8 +1,9 @@
 import path from "path"
 import { fileURLToPath } from "url"
+import { Schema } from "effect"
 import { Global } from "@opencode-ai/core/global"
 
-export type Reference = {
+type BaseReference = {
   host: string
   path: string
   segments: string[]
@@ -10,10 +11,57 @@ export type Reference = {
   repo: string
   remote: string
   label: string
+}
+
+export type RemoteReference = BaseReference & {
   protocol?: string
 }
 
-function normalize(input: string) {
+export type FileReference = BaseReference & {
+  host: "file"
+  protocol: "file:"
+}
+
+export type Reference = RemoteReference | FileReference
+
+export class InvalidRepositoryReferenceError extends Schema.TaggedErrorClass<InvalidRepositoryReferenceError>()(
+  "RepositoryInvalidReferenceError",
+  {
+    repository: Schema.String,
+    message: Schema.String,
+  },
+) {}
+
+export class UnsupportedLocalRepositoryError extends Schema.TaggedErrorClass<UnsupportedLocalRepositoryError>()(
+  "RepositoryUnsupportedLocalRepositoryError",
+  {
+    repository: Schema.String,
+    message: Schema.String,
+  },
+) {}
+
+export class InvalidRepositoryBranchError extends Schema.TaggedErrorClass<InvalidRepositoryBranchError>()(
+  "RepositoryInvalidBranchError",
+  {
+    branch: Schema.String,
+    message: Schema.String,
+  },
+) {}
+
+export type RepositoryError =
+  | InvalidRepositoryReferenceError
+  | UnsupportedLocalRepositoryError
+  | InvalidRepositoryBranchError
+
+export function isRepositoryError(error: unknown): error is RepositoryError {
+  return (
+    error instanceof InvalidRepositoryReferenceError ||
+    error instanceof UnsupportedLocalRepositoryError ||
+    error instanceof InvalidRepositoryBranchError
+  )
+}
+
+function normalizeRepositoryInput(input: string) {
   return input
     .trim()
     .replace(/^git\+/, "")
@@ -54,7 +102,7 @@ function githubRemote(pathname: string) {
   return new URL(`${pathname}.git`, withSlash(base)).href
 }
 
-function build(input: { host: string; segments: string[]; remote?: string; protocol?: string }) {
+function buildRemoteReference(input: { host: string; segments: string[]; remote?: string; protocol?: string }) {
   const segments = input.segments.map(trimGitSuffix).filter(Boolean)
   if (!safeHost(input.host) || !segments.length || segments.some((segment) => !safeSegment(segment))) return null
   const pathname = segments.join("/")
@@ -69,10 +117,10 @@ function build(input: { host: string; segments: string[]; remote?: string; proto
     remote: input.remote ?? (host === "github.com" ? githubRemote(pathname) : `https://${host}/${pathname}.git`),
     label: host === "github.com" && segments.length === 2 ? pathname : `${host}/${pathname}`,
     protocol: input.protocol,
-  } satisfies Reference
+  } satisfies RemoteReference
 }
 
-function buildFile(input: { url: URL; remote: string }) {
+function buildFileReference(input: { url: URL; remote: string }) {
   const filePath = path.normalize(fileURLToPath(input.url))
   const segments = filePath.split(/[\\/]+/).filter(Boolean)
   if (!segments.length) return null
@@ -85,36 +133,38 @@ function buildFile(input: { url: URL; remote: string }) {
     remote: input.remote,
     label: filePath,
     protocol: "file:",
-  } satisfies Reference
+  } satisfies FileReference
 }
 
 export function parseRepositoryReference(input: string) {
-  const cleaned = normalize(input)
+  const cleaned = normalizeRepositoryInput(input)
   if (!cleaned) return null
 
   const githubPrefixed = cleaned.match(/^github:([^/\s]+)\/([^/\s]+)$/)
-  if (githubPrefixed) return build({ host: "github.com", segments: [githubPrefixed[1], githubPrefixed[2]] })
+  if (githubPrefixed) {
+    return buildRemoteReference({ host: "github.com", segments: [githubPrefixed[1], githubPrefixed[2]] })
+  }
 
   if (!cleaned.includes("://")) {
     const scp = cleaned.match(/^(?:[^@/\s]+@)?([^:/\s]+):(.+)$/)
-    if (scp) return build({ host: scp[1], segments: parts(scp[2]), remote: cleaned })
+    if (scp) return buildRemoteReference({ host: scp[1], segments: parts(scp[2]), remote: cleaned })
 
     const direct = parts(cleaned)
     if (direct.length >= 2 && hostLike(direct[0])) {
-      return build({ host: direct[0], segments: direct.slice(1) })
+      return buildRemoteReference({ host: direct[0], segments: direct.slice(1) })
     }
 
     if (direct.length === 2) {
-      return build({ host: "github.com", segments: direct })
+      return buildRemoteReference({ host: "github.com", segments: direct })
     }
   }
 
   try {
     const url = new URL(cleaned)
-    if (url.protocol === "file:") return buildFile({ url, remote: cleaned })
+    if (url.protocol === "file:") return buildFileReference({ url, remote: cleaned })
     const pathname = parts(url.pathname)
     const host = url.host
-    return build({
+    return buildRemoteReference({
       host,
       segments: pathname,
       remote: host === "github.com" ? githubRemote(pathname.join("/")) : cleaned,
@@ -125,23 +175,43 @@ export function parseRepositoryReference(input: string) {
   }
 }
 
+export function isFileRepositoryReference(reference: Reference): reference is FileReference {
+  return reference.protocol === "file:"
+}
+
+export function isRemoteRepositoryReference(reference: Reference): reference is RemoteReference {
+  return !isFileRepositoryReference(reference)
+}
+
 export function parseRemoteRepositoryReference(input: string) {
   const reference = parseRepositoryReference(input)
-  if (!reference) throw new Error("Repository must be a git URL, host/path reference, or GitHub owner/repo shorthand")
-  if (reference.protocol === "file:") throw new Error("Local file repositories are not supported")
+  if (!reference) {
+    throw new InvalidRepositoryReferenceError({
+      repository: input,
+      message: "Repository must be a git URL, host/path reference, or GitHub owner/repo shorthand",
+    })
+  }
+  if (!isRemoteRepositoryReference(reference)) {
+    throw new UnsupportedLocalRepositoryError({
+      repository: input,
+      message: "Local file repositories are not supported",
+    })
+  }
   return reference
 }
 
 export function validateRepositoryBranch(branch: string) {
   if (!/^[A-Za-z0-9/_.-]+$/.test(branch) || branch.startsWith("-") || branch.includes("..")) {
-    throw new Error(
-      "Branch must contain only alphanumeric characters, /, _, ., and -, and cannot start with - or contain ..",
-    )
+    throw new InvalidRepositoryBranchError({
+      branch,
+      message:
+        "Branch must contain only alphanumeric characters, /, _, ., and -, and cannot start with - or contain ..",
+    })
   }
 }
 
 export function parseGitHubRemote(input: string) {
-  const cleaned = normalize(input)
+  const cleaned = normalizeRepositoryInput(input)
   if (!cleaned.includes("://") && !cleaned.match(/^(?:[^@/\s]+@)?github\.com:/)) return null
 
   const parsed = parseRepositoryReference(cleaned)
@@ -153,6 +223,10 @@ export function repositoryCachePath(input: Reference) {
   return path.join(Global.Path.repos, ...input.host.split(":"), ...input.segments)
 }
 
+export function repositoryCacheIdentity(input: Reference) {
+  return `${input.host}/${input.path}`
+}
+
 export function sameRepositoryReference(left: Reference, right: Reference) {
-  return left.host === right.host && left.path === right.path
+  return repositoryCacheIdentity(left) === repositoryCacheIdentity(right)
 }

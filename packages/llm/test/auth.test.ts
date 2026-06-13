@@ -3,11 +3,13 @@ import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/unstable/http"
 import { LLM } from "../src"
 import { Auth } from "../src/route/auth"
+import * as OpenAIChat from "../src/protocols/openai-chat"
+import { Model } from "../src/schema"
 import { it } from "./lib/effect"
 
 const request = LLM.request({
   id: "req_auth",
-  model: LLM.model({ id: "fake-model", provider: "fake", route: "fake", baseURL: "https://fake.local" }),
+  model: Model.make({ id: "fake-model", provider: "fake", route: OpenAIChat.route }),
   prompt: "hello",
 })
 

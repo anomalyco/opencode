@@ -7,7 +7,7 @@
 // so your last-used variant sticks. Cycling (ctrl+t) updates both the active
 // variant and the persisted file.
 import path from "path"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Context, Effect, Layer } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import { Global } from "@opencode-ai/core/global"
@@ -39,7 +39,7 @@ function variantKey(model: NonNullable<RunInput["model"]>): string {
   return modelKey(model.providerID, model.modelID)
 }
 
-function modelInfo(providers: RunProvider[] | undefined, model: NonNullable<RunInput["model"]>) {
+export function modelInfo(providers: RunProvider[] | undefined, model: NonNullable<RunInput["model"]>) {
   const provider = providers?.find((item) => item.id === model.providerID)
   return {
     provider: provider?.name ?? model.providerID,
@@ -135,12 +135,12 @@ function state(value: unknown): ModelState {
   }
 }
 
-function createLayer(fs = AppFileSystem.defaultLayer) {
+function createLayer(fs = FSUtil.defaultLayer) {
   return Layer.fresh(
     Layer.effect(
       Service,
       Effect.gen(function* () {
-        const file = yield* AppFileSystem.Service
+        const file = yield* FSUtil.Service
 
         const read = Effect.fn("RunVariant.read")(function* () {
           return yield* file.readJson(MODEL_FILE).pipe(
@@ -196,7 +196,7 @@ function createLayer(fs = AppFileSystem.defaultLayer) {
 }
 
 /** @internal Exported for testing. */
-export function createVariantRuntime(fs = AppFileSystem.defaultLayer): VariantRuntime {
+export function createVariantRuntime(fs = FSUtil.defaultLayer): VariantRuntime {
   const runtime = makeRuntime(Service, createLayer(fs))
   return {
     resolveSavedVariant: (model) => runtime.runPromise((svc) => svc.resolveSavedVariant(model)).catch(() => undefined),

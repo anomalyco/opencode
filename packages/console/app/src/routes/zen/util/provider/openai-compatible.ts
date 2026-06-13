@@ -26,9 +26,9 @@ type Usage = {
 export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage }) => ({
   format: "oa-compat",
   modifyUrl: (providerApi: string) => providerApi + "/chat/completions",
-  modifyHeaders: (headers: Headers, body: Record<string, any>, apiKey: string) => {
+  modifyHeaders: (headers: Headers, apiKey: string, stickyId: string) => {
     headers.set("authorization", `Bearer ${apiKey}`)
-    headers.set("x-session-affinity", headers.get("x-opencode-session") ?? "")
+    headers.set("x-session-affinity", stickyId)
   },
   modifyBody: (body: Record<string, any>, _workspaceID?: string) => {
     return {
@@ -58,6 +58,7 @@ export const oaCompatHelper: ProviderHelper = ({ adjustCacheUsage }) => ({
       retrieve: () => usage,
     }
   },
+  extractUsage: (response: any) => response.usage,
   normalizeUsage: (usage: Usage) => {
     let inputTokens = usage.prompt_tokens ?? 0
     const outputTokens = usage.completion_tokens ?? 0

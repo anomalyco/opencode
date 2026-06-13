@@ -1,15 +1,16 @@
 import { DataProvider } from "@opencode-ai/ui/context"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { createEffect, createMemo, createResource, type ParentProps, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { LocalProvider } from "@/context/local"
 import { SDKProvider } from "@/context/sdk"
-import { SyncProvider, useSync } from "@/context/sync"
+import { useSync } from "@/context/sync"
 import { decode64 } from "@/utils/base64"
+import { Schema } from "effect"
 
-function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
+export function DirectoryDataProvider(props: ParentProps<{ directory: string; draftID?: string }>) {
   const location = useLocation()
   const navigate = useNavigate()
   const params = useParams()
@@ -17,6 +18,8 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   const slug = createMemo(() => base64Encode(props.directory))
 
   createEffect(() => {
+    // A draft lives at /new-session?draftId=… and has no directory segment to normalize.
+    if (props.draftID) return
     const next = sync.data.path.directory
     if (!next || next === props.directory) return
     const path = location.pathname.slice(slug().length + 1)
@@ -25,7 +28,7 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
 
   createResource(
     () => params.id,
-    (id) => sync.session.sync(id),
+    (id) => sync.session.sync(id).catch(() => {}),
   )
 
   return (
@@ -40,6 +43,15 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
   )
 }
 
+export const ProjectDirString = Schema.String.pipe(Schema.brand("ProjectDirString"))
+export type ProjectDirString = Schema.Schema.Type<typeof ProjectDirString>
+
+export function decodeDirectory(dir: string): ProjectDirString | undefined {
+  const decoded = decode64(dir)
+  if (!decoded) return
+  return ProjectDirString.make(decoded)
+}
+
 export default function Layout(props: ParentProps) {
   const params = useParams()
   const language = useLanguage()
@@ -48,7 +60,7 @@ export default function Layout(props: ParentProps) {
 
   const resolved = createMemo(() => {
     if (!params.dir) return ""
-    return decode64(params.dir) ?? ""
+    return decodeDirectory(params.dir) ?? ""
   })
 
   createEffect(() => {
@@ -71,10 +83,8 @@ export default function Layout(props: ParentProps) {
   return (
     <Show when={resolved()} keyed>
       {(resolved) => (
-        <SDKProvider directory={() => resolved}>
-          <SyncProvider>
-            <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
-          </SyncProvider>
+        <SDKProvider directory={resolved}>
+          <DirectoryDataProvider directory={resolved}>{props.children}</DirectoryDataProvider>
         </SDKProvider>
       )}
     </Show>

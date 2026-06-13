@@ -1,7 +1,9 @@
 import { describe, expect } from "bun:test"
+import fs from "fs/promises"
 import { realpathSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { Effect, Exit, Stream } from "effect"
+import path from "node:path"
+import { Effect, Exit, Fiber, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { AppProcess } from "@opencode-ai/core/process"
 import { testEffect } from "../lib/effect"
@@ -10,6 +12,18 @@ const it = testEffect(AppProcess.defaultLayer)
 
 const NODE = process.execPath
 const cmd = (...args: string[]) => ChildProcess.make(NODE, args)
+
+const waitForFile = (file: string) =>
+  Effect.promise(async () => {
+    while (true) {
+      try {
+        return await fs.readFile(file, "utf8")
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+        await new Promise<void>((resolve) => setTimeout(resolve, 10))
+      }
+    }
+  })
 
 describe("AppProcess", () => {
   describe("run", () => {
@@ -20,7 +34,8 @@ describe("AppProcess", () => {
         const result = yield* svc.run(cmd("-e", "process.stdout.write('hi\\n')"))
         expect(result.exitCode).toBe(0)
         expect(result.stdout.toString("utf8")).toBe("hi\n")
-        expect(result.truncated).toBe(false)
+        expect(result.stdoutTruncated).toBe(false)
+        expect(result.stderrTruncated).toBe(false)
       }),
     )
 
@@ -84,14 +99,28 @@ describe("AppProcess", () => {
     )
 
     it.effect(
-      "truncates output when maxOutputBytes is set",
+      "truncates stdout when maxOutputBytes is set",
       Effect.gen(function* () {
         const svc = yield* AppProcess.Service
         const result = yield* svc.run(cmd("-e", "process.stdout.write('0123456789')"), { maxOutputBytes: 5 })
         expect(result.exitCode).toBe(0)
-        expect(result.truncated).toBe(true)
+        expect(result.stdoutTruncated).toBe(true)
+        expect(result.stderrTruncated).toBe(false)
         expect(result.stdout.length).toBe(5)
         expect(result.stdout.toString("utf8")).toBe("01234")
+      }),
+    )
+
+    it.effect(
+      "truncates stderr when maxErrorBytes is set",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const result = yield* svc.run(cmd("-e", "process.stderr.write('0123456789')"), { maxErrorBytes: 5 })
+        expect(result.exitCode).toBe(0)
+        expect(result.stdoutTruncated).toBe(false)
+        expect(result.stderrTruncated).toBe(true)
+        expect(result.stderr.length).toBe(5)
+        expect(result.stderr.toString("utf8")).toBe("01234")
       }),
     )
 
@@ -103,6 +132,50 @@ describe("AppProcess", () => {
         expect(result.command).toBe(`${NODE} -e process.stdout.write('hi')`)
       }),
     )
+
+    if (process.platform !== "win32") {
+      it.live(
+        "timeout cleans up the scoped child process",
+        Effect.acquireUseRelease(
+          Effect.promise(() => fs.mkdtemp(path.join(tmpdir(), "opencode-process-timeout-"))),
+          (directory) => {
+            const ready = path.join(directory, "ready")
+            const settled = path.join(directory, "settled")
+            const script = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(settled)},'settled');process.exit(0)});setInterval(()=>{},60000)`
+            return Effect.gen(function* () {
+              const svc = yield* AppProcess.Service
+              const exit = yield* Effect.exit(svc.run(cmd("-e", script), { timeout: "1 second" }))
+              expect(Exit.isFailure(exit)).toBe(true)
+              expect(yield* waitForFile(ready)).toMatch(/^\d+$/)
+              expect(yield* waitForFile(settled)).toBe("settled")
+            })
+          },
+          (directory) => Effect.promise(() => fs.rm(directory, { recursive: true, force: true })),
+        ),
+        5_000,
+      )
+
+      it.live(
+        "fiber interruption cleans up the scoped child process after readiness",
+        Effect.acquireUseRelease(
+          Effect.promise(() => fs.mkdtemp(path.join(tmpdir(), "opencode-process-interrupt-"))),
+          (directory) => {
+            const ready = path.join(directory, "ready")
+            const settled = path.join(directory, "settled")
+            const script = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(settled)},'settled');process.exit(0)});setInterval(()=>{},60000)`
+            return Effect.gen(function* () {
+              const svc = yield* AppProcess.Service
+              const fiber = yield* svc.run(cmd("-e", script)).pipe(Effect.forkChild)
+              expect(yield* waitForFile(ready)).toMatch(/^\d+$/)
+              yield* Fiber.interrupt(fiber)
+              expect(yield* waitForFile(settled)).toBe("settled")
+            })
+          },
+          (directory) => Effect.promise(() => fs.rm(directory, { recursive: true, force: true })),
+        ),
+        5_000,
+      )
+    }
   })
 
   describe("inherited platform methods", () => {

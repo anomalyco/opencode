@@ -3,6 +3,7 @@ export * as AISDK from "./aisdk"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { Cause, Context, Effect, Layer, Schema } from "effect"
 import { ModelV2 } from "./model"
+import { EventV2 } from "./event"
 import { PluginV2 } from "./plugin"
 import { ProviderV2 } from "./provider"
 
@@ -57,8 +58,12 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
 }
 
 function prepareOptions(model: ModelV2.Info, pkg: string) {
-  const options: Record<string, any> = { name: model.providerID, ...model.options.aisdk.provider }
-  if (model.endpoint.type === "aisdk" && model.endpoint.url) options.baseURL = model.endpoint.url
+  const options: Record<string, any> = {
+    name: model.providerID,
+    ...(model.api.type === "aisdk" ? (model.api.settings ?? {}) : {}),
+    ...model.request.body,
+  }
+  if (model.api.type === "aisdk" && model.api.url) options.baseURL = model.api.url
 
   const customFetch = options.fetch
   const chunkTimeout = options.chunkTimeout
@@ -77,7 +82,11 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
     if (abortSignals.length === 1) opts.signal = abortSignals[0]
     if (abortSignals.length > 1) opts.signal = AbortSignal.any(abortSignals)
 
-    if ((pkg === "@ai-sdk/openai" || pkg === "@ai-sdk/azure") && opts.body && opts.method === "POST") {
+    if (
+      (pkg === "@ai-sdk/openai" || pkg === "@ai-sdk/azure" || pkg === "@ai-sdk/amazon-bedrock/mantle") &&
+      opts.body &&
+      opts.method === "POST"
+    ) {
       const body = JSON.parse(opts.body as string)
       if (body.store !== true && Array.isArray(body.input)) {
         for (const item of body.input) {
@@ -122,25 +131,25 @@ export const layer = Layer.effect(
 
     return Service.of({
       language: Effect.fn("AISDK.language")(function* (model) {
-        const key = `${model.providerID}/${model.id}/${model.options.variant ?? "default"}`
+        const key = `${model.providerID}/${model.id}/${model.request.variant ?? "default"}`
         const existing = languages.get(key)
         if (existing) return existing
-        if (model.endpoint.type !== "aisdk")
+        if (model.api.type !== "aisdk")
           return yield* new InitError({
             providerID: model.providerID,
-            cause: new Error(`Unsupported endpoint ${model.endpoint.type}`),
+            cause: new Error(`Unsupported api ${model.api.type}`),
           })
 
-        const options = prepareOptions(model, model.endpoint.package)
+        const options = prepareOptions(model, model.api.package)
         const sdkKey = JSON.stringify({
           providerID: model.providerID,
-          endpoint: model.endpoint,
+          api: model.api,
           options,
         })
         const sdk =
           sdks.get(sdkKey) ??
           (yield* plugin
-            .trigger("aisdk.sdk", { model, package: model.endpoint.package, options }, {})
+            .trigger("aisdk.sdk", { model, package: model.api.package, options }, {})
             .pipe(initError(model.providerID))).sdk
         if (!sdk)
           return yield* new InitError({
@@ -159,7 +168,7 @@ export const layer = Layer.effect(
             {},
           )
           .pipe(initError(model.providerID))
-        const language = yield* Effect.sync(() => result.language ?? sdk.languageModel(model.apiID)).pipe(
+        const language = yield* Effect.sync(() => result.language ?? sdk.languageModel(model.api.id)).pipe(
           initError(model.providerID),
         )
         languages.set(key, language)
@@ -169,4 +178,4 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(PluginV2.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide(PluginV2.locationLayer.pipe(Layer.provide(EventV2.defaultLayer))))

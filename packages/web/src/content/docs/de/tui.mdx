@@ -361,28 +361,57 @@ Du kannst das Verhalten der TUI ueber die Datei `tui.json` (oder `tui.jsonc`) an
 {
   "$schema": "https://opencode.ai/tui.json",
   "theme": "opencode",
+  "leader_timeout": 2000,
   "keybinds": {
-    "leader": "ctrl+x"
+    "leader": "ctrl+x",
+    "command_list": "ctrl+p"
   },
   "scroll_speed": 3,
   "scroll_acceleration": {
-    "enabled": true
+    "enabled": false
   },
-  "diff_style": "auto"
+  "diff_style": "auto",
+  "mouse": true,
+  "attention": {
+    "enabled": true,
+    "notifications": true,
+    "sound": true,
+    "volume": 0.4,
+    "sound_pack": "opencode.default",
+    "sounds": {
+      "error": "./sounds/error.mp3"
+    }
+  }
 }
 ```
 
 Dies ist getrennt von `opencode.json`, welche das Server-/Runtime-Verhalten konfiguriert.
 
+`keybinds` wird mit den integrierten Standardwerten zusammengeführt, daher musst du nur die Tastenkombinationen konfigurieren, die du ändern möchtest.
+
 ### Optionen
 
 - `theme` - Setzt dein UI-Theme. [Mehr dazu](/docs/themes).
 - `keybinds` - Passt Tastenkombinationen an. [Mehr dazu](/docs/keybinds).
+- `leader_timeout` - Steuert, wie lange OpenCode nach der leader key wartet. Standard ist `2000`.
 - `scroll_acceleration.enabled` - Aktiviert Scroll-Beschleunigung im macOS-Stil fuer weiches, natuerliches Scrollen. Wenn aktiviert, erhoeht sich die Scroll-Geschwindigkeit bei schnellen Gesten und bleibt praezise bei langsamen Bewegungen. **Diese Einstellung hat Vorrang vor `scroll_speed` und ueberschreibt es, wenn aktiviert.**
 - `scroll_speed` - Steuert, wie schnell die TUI scrollt (Minimum: `0.001`, unterstuetzt Dezimalwerte). Standard ist `3`. **Hinweis: Wird ignoriert, wenn `scroll_acceleration.enabled` auf `true` gesetzt ist.**
 - `diff_style` - Steuert die Diff-Darstellung. `"auto"` passt sich der Terminalbreite an, `"stacked"` zeigt immer ein einspaltiges Layout.
+- `mouse` - Aktiviert oder deaktiviert die Mauserfassung im TUI (Standard: `true`). Wenn deaktiviert, bleibt das native Mausauswahl- und Scrollverhalten des Terminals erhalten.
+- `attention` - Konfiguriert Desktop-Benachrichtigungen und Sounds des TUI. Standardmäßig deaktiviert.
 
 Verwende `OPENCODE_TUI_CONFIG`, um einen benutzerdefinierten TUI-Konfigurationspfad zu laden.
+
+### Attention
+
+Attention lässt das TUI dich benachrichtigen, wenn OpenCode auf eine Antwort wartet, eine Berechtigung bestätigt werden muss, ein Sitzungsfehler aufgetreten ist oder eine Sitzung abgeschlossen wurde. Aktiviere es mit `attention.enabled`; integrierte Ereignisse spielen beim Auftreten einen Sound ab. Desktop-Benachrichtigungen werden nur gesendet, wenn das Terminalfenster nicht fokussiert ist, und nicht für subagent-Ereignisse verwendet.
+
+- `enabled` - Aktiviert alle Benachrichtigungen und Sounds von Attention. Standard ist `false`.
+- `notifications` - Erlaubt dem TUI bei aktiviertem Attention, Desktop-Benachrichtigungen über das Terminal zu senden. Standard ist `true`.
+- `sound` - Erlaubt bei aktiviertem Attention das Abspielen von Hinweistönen. Standard ist `true`.
+- `volume` - Standardlautstärke der Hinweistöne von `0` bis `1`. Standard ist `0.4`.
+- `sound_pack` - Zu verwendende sound pack ID. Standard ist `opencode.default`.
+- `sounds` - Legt eigene Sounddateien für `default`, `question`, `permission`, `error`, `done` oder `subagent_done` fest. Pfade können absolut, `file://` URLs oder relativ zu `tui.json` sein.
 
 ---
 
