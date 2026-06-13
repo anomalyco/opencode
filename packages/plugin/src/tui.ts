@@ -470,6 +470,9 @@ export type TuiHostSlotMap = {
   session_prompt_right: {
     session_id: string
   }
+  session_prompt_spinner: {
+    session_id: string
+  }
   home_bottom: {}
   home_footer: {}
   sidebar_title: {
