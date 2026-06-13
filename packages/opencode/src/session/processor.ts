@@ -15,7 +15,6 @@ import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
-import { ACE } from "@/ace"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
@@ -748,18 +747,11 @@ export const layer = Layer.effect(
                 messageID: ctx.assistantMessage.parentID,
               })
               .pipe(Effect.ignore, Effect.forkIn(scope))
-            if (!ctx.assistantMessage.summary) {
-              const cfg = yield* config.get()
-              if (isOverflow({ cfg, tokens: usage.tokens, model: ctx.model })) {
-                ctx.needsCompaction = true
-              }
-              const policy = ACE.policy(cfg.ace)
-              yield* ACE.emitPressure(
-                events,
-                policy,
-                ACE.finishStep(ctx.assistantMessage.sessionID),
-                ctx.assistantMessage.sessionID,
-              )
+            if (
+              !ctx.assistantMessage.summary &&
+              isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
+            ) {
+              ctx.needsCompaction = true
             }
             return
           }
@@ -920,11 +912,6 @@ export const layer = Layer.effect(
         ctx.toolcalls = {}
         ctx.assistantMessage.time.completed = Date.now()
         yield* session.updateMessage(ctx.assistantMessage)
-        {
-          const cfg = yield* config.get()
-          const policy = ACE.policy(cfg.ace)
-          yield* ACE.emitPressure(events, policy, ACE.resetSession(ctx.sessionID), ctx.sessionID)
-        }
       })
 
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {

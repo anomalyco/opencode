@@ -1,5 +1,4 @@
 import { Workspace } from "@/control-plane/workspace"
-import { ablate, type AceReplayPolicy } from "@/ace/replay"
 import * as InstanceState from "@/effect/instance-state"
 import { Session } from "@/session/session"
 import { Database } from "@opencode-ai/core/database/database"
@@ -15,7 +14,7 @@ import { or } from "drizzle-orm"
 import { Effect, Scope } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { AceAblationPayload, HistoryPayload, ReplayPayload, SessionPayload } from "../groups/sync"
+import { HistoryPayload, ReplayPayload, SessionPayload } from "../groups/sync"
 
 export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handlers) =>
   Effect.gen(function* () {
@@ -59,36 +58,6 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
       return { sessionID: source }
     })
 
-    const aceAblation = Effect.fn("SyncHttpApi.aceAblation")(function* (ctx: { payload: typeof AceAblationPayload.Type }) {
-      const source = ctx.payload.events[0].aggregateID
-      const policies: AceReplayPolicy[] | undefined = ctx.payload.policies?.map((candidate) => ({
-        name: candidate.name,
-        arm: candidate.arm,
-        ace: candidate.ace as AceReplayPolicy["ace"],
-      }))
-      const arms = ablate({
-        events: ctx.payload.events.map((event) => ({
-          aggregateID: event.aggregateID,
-          seq: event.seq,
-          type: event.type,
-          data: { ...event.data },
-        })),
-        policies,
-      })
-      yield* Effect.logInfo("sync ace ablation complete", {
-        sessionID: source,
-        events: ctx.payload.events.length,
-        arms: arms.map((arm) => arm.name),
-        directory: ctx.payload.directory,
-      })
-      return {
-        directory: ctx.payload.directory,
-        sourceSessionID: source,
-        eventCount: ctx.payload.events.length,
-        arms,
-      }
-    })
-
     const steal = Effect.fn("SyncHttpApi.steal")(function* (ctx: { payload: typeof SessionPayload.Type }) {
       const workspaceID = yield* InstanceState.workspaceID
       if (!workspaceID) return yield* new HttpApiError.BadRequest({})
@@ -115,11 +84,6 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
         .pipe(Effect.orDie)
     })
 
-    return handlers
-      .handle("start", start)
-      .handle("replay", replay)
-      .handle("aceAblation", aceAblation)
-      .handle("steal", steal)
-      .handle("history", history)
+    return handlers.handle("start", start).handle("replay", replay).handle("steal", steal).handle("history", history)
   }),
 )

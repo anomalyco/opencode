@@ -398,62 +398,6 @@ export namespace Tool {
   export type Failed = typeof Failed.Type
 }
 
-export namespace ACE {
-  export const Mode = Schema.Literals(["monitor", "fixed-cap", "reject-escalate"])
-  export const Target = Schema.Literals(["tool", "spawn"])
-  export const Action = Schema.Literals(["allow", "observe", "block", "escalate"])
-
-  export const Pressure = Schema.Struct({
-    toolCalls: NonNegativeInt,
-    turnToolCalls: NonNegativeInt,
-    spawns: NonNegativeInt,
-    spawnDepth: NonNegativeInt,
-    activeSubagents: NonNegativeInt,
-    windowMs: NonNegativeInt,
-    kEff: Schema.Finite.pipe(Schema.optional),
-  }).annotate({
-    identifier: "Session.ACE.Pressure",
-  })
-  export type Pressure = typeof Pressure.Type
-
-  export const Decision = EventV2.define({
-    type: "session.next.ace.decision",
-    ...options,
-    schema: {
-      ...Base,
-      assistantMessageID: SessionMessageID.ID.pipe(Schema.optional),
-      callID: Schema.String.pipe(Schema.optional),
-      target: Target,
-      subject: Schema.String,
-      mode: Mode,
-      action: Action,
-      wouldBlock: Schema.Boolean,
-      reason: Schema.String.pipe(Schema.optional),
-      policy: Schema.Struct({
-        id: Schema.String.pipe(Schema.optional),
-        arm: Schema.String.pipe(Schema.optional),
-        source: Schema.String.pipe(Schema.optional),
-        limitName: Schema.String.pipe(Schema.optional),
-        limitValue: Schema.Finite.pipe(Schema.optional),
-      }),
-      pressure: Pressure,
-    },
-  })
-  export type Decision = typeof Decision.Type
-
-  export const PressureUpdated = EventV2.define({
-    type: "session.next.ace.pressure",
-    ...options,
-    schema: {
-      ...Base,
-      mode: Mode,
-      pressure: Pressure,
-      lastDecisionID: EventV2.ID.pipe(Schema.optional),
-    },
-  })
-  export type PressureUpdated = typeof PressureUpdated.Type
-}
-
 export const RetryError = Schema.Struct({
   message: Schema.String,
   statusCode: Schema.Finite.pipe(Schema.optional),
@@ -547,8 +491,6 @@ const DurableDefinitions = [
   Tool.Progress,
   Tool.Success,
   Tool.Failed,
-  ACE.Decision,
-  ACE.PressureUpdated,
   Reasoning.Started,
   Reasoning.Ended,
   Retried,

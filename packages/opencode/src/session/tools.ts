@@ -4,8 +4,6 @@ import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { MCP } from "@/mcp"
 import { Permission } from "@/permission"
-import { ACE } from "@/ace"
-import { Config } from "@/config/config"
 import { Tool } from "@/tool/tool"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { ToolRegistry } from "@/tool/registry"
@@ -20,7 +18,6 @@ import { Session } from "./session"
 import { SessionProcessor } from "./processor"
 import { PartID } from "./schema"
 import { EffectBridge } from "@/effect/bridge"
-import { EventV2Bridge } from "@/event-v2-bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
@@ -36,12 +33,10 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const tools: Record<string, AITool> = {}
   const run = yield* EffectBridge.make()
   const plugin = yield* Plugin.Service
-  const config = yield* Config.Service
   const permission = yield* Permission.Service
   const registry = yield* ToolRegistry.Service
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
-  const events = yield* EventV2Bridge.Service
 
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
     sessionID: input.session.id,
@@ -76,26 +71,6 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         .pipe(Effect.orDie),
   })
 
-  const gate = Effect.fn("SessionTools.aceGate")(function* (gateInput: { tool: string; ctx: Tool.Context }) {
-    const cfg = yield* config.get()
-    return yield* ACE.Middleware.gateTool({
-      events,
-      config: cfg.ace,
-      sessionID: gateInput.ctx.sessionID,
-      callID: gateInput.ctx.callID,
-      tool: gateInput.tool,
-      ask: (req) =>
-        permission.ask({
-          ...req,
-          sessionID: gateInput.ctx.sessionID,
-          ...(gateInput.ctx.callID
-            ? { tool: { messageID: gateInput.ctx.messageID, callID: gateInput.ctx.callID } }
-            : {}),
-          ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
-        }),
-    })
-  })
-
   for (const item of yield* registry.tools({
     modelID: ModelV2.ID.make(input.model.api.id),
     providerID: input.model.providerID,
@@ -109,14 +84,6 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         return run.promise(
           Effect.gen(function* () {
             const ctx = context(args, options)
-            const blocked = yield* gate({ tool: item.id, ctx })
-            if (blocked) {
-              return {
-                title: item.id,
-                metadata: { ace: { blocked: true } },
-                output: blocked,
-              }
-            }
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
@@ -158,15 +125,6 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       run.promise(
         Effect.gen(function* () {
           const ctx = context(args, opts)
-          const blocked = yield* gate({ tool: key, ctx })
-          if (blocked) {
-            return {
-              title: key,
-              metadata: { ace: { blocked: true } },
-              output: blocked,
-              content: [{ type: "text" as const, text: blocked }],
-            }
-          }
           yield* plugin.trigger(
             "tool.execute.before",
             { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
