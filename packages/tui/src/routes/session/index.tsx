@@ -1315,6 +1315,7 @@ export function Session() {
                       }}
                       sessionID={route.sessionID}
                       right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
+                      spinner={<pluginRuntime.Slot name="session_prompt_spinner" session_id={route.sessionID} />}
                     />
                   </pluginRuntime.Slot>
                 </Show>
