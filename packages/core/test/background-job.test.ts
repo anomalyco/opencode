@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { BackgroundJob } from "@opencode-ai/core/background-job"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Deferred, Effect, Exit, Scope } from "effect"
+import { Deferred, Effect, Exit, Fiber, Scope } from "effect"
 import { it } from "./lib/effect"
 
 const jobsLayer = LayerNode.compile(BackgroundJob.node)
@@ -102,5 +102,33 @@ describe("BackgroundJob", () => {
       // The abandoned in-memory registry is not a durable observation channel.
       expect((yield* jobs.get(job.id))?.status).toBe("running")
     }),
+  )
+
+  it.live("message - resolves waitForMessage and marks metadata.messaged", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const started = yield* jobs.start({
+        id: "ses_child_msg",
+        type: "task",
+        run: Effect.never,
+      })
+      expect(started.status).toBe("running")
+
+      const fiber = yield* Effect.forkChild(jobs.waitForMessage("ses_child_msg"))
+      const payload = {
+        childSessionID: "ses_child_msg",
+        parentSessionID: "ses_parent",
+        body: "need a decision",
+        expectReply: true,
+      }
+      const info = yield* jobs.message("ses_child_msg", payload)
+      expect(info?.metadata?.messaged).toBe(true)
+      expect(info?.metadata?.background).toBeUndefined()
+
+      const received = yield* Fiber.join(fiber)
+      expect(received).toEqual(payload)
+
+      yield* jobs.cancel("ses_child_msg")
+    }).pipe(Effect.provide(BackgroundJob.layer)),
   )
 })
