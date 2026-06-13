@@ -2935,14 +2935,32 @@ export async function run(_args, ctx) { return await ctx.workflow("bad-child") }
 
       const run = yield* workflow.start({ name: DETACHED_AGENT_FIXTURE, args: {}, prompt: ops })
 
-      // Auf den terminalen `completed`-Zustand warten (der Body returnt, während
-      // der detached Agent noch am Prompt hängt).
+      // Auf den vollständig settled Endzustand warten (der Body returnt, während
+      // der detached Agent noch am Prompt hängt). Statt nur auf `completed` zu
+      // pollen und dann zu hoffen, dass die Terminalisierung des Nodes UND die
+      // Abort-Kaskade bereits durchgelaufen sind (das rennt unter CPU-Last gegen
+      // den fire-and-forget-Settlement-Pfad), wird hier auf die echte Bedingung
+      // gewartet: Run `completed`, der noch laufende Node terminal als `failed`
+      // geschlossen (Grund + Zeit) UND die hängende Child-Session tatsächlich in
+      // der Fixture als gestartet + abgebrochen vermerkt.
       const done = yield* pollWithTimeout(
         Effect.gen(function* () {
           const current = yield* workflow.get(run.id)
-          return current?.status === "completed" ? current : undefined
+          if (current?.status !== "completed") return undefined
+          if (current.agents.length === 0) return undefined
+          if (current.agents.some((a) => a.status === "running")) return undefined
+          const closed = current.agents.find((a) => a.status === "failed")
+          if (!closed || !((closed.completed_at ?? 0) > 0) || !closed.error) return undefined
+          const child = current.agents[0]?.session_id
+          if (!child || !started.has(child) || !aborted.has(child)) return undefined
+          return current
         }),
-        "workflow never completed",
+        "workflow never settled (completed + node closed + child aborted)",
+        // Großzügiges Poll-Budget (unter dem 30s-Bun-Test-Timeout): der Settle
+        // (completed -> Node terminal -> Abort-Kaskade beim Kind) ist eine echte,
+        // letztlich wahre Bedingung; unter CPU-Last dauert die Propagation nur
+        // länger als die Default-5s. Wir warten auf die Bedingung, raten nicht.
+        "25 seconds",
       )
       expect(done.status).toBe("completed")
       // Der noch laufende Node ist terminal geschlossen (failed + Grund + Zeit).
