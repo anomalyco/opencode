@@ -1,0 +1,46 @@
+name: security
+
+on:
+  push:
+    branches: [dev]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  secrets:
+    name: gitleaks (secret scan)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+      - name: Install gitleaks
+        run: |
+          version=8.18.4
+          curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz" -o gitleaks.tar.gz
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo install gitleaks /usr/local/bin/gitleaks
+      - name: Scan for secrets
+        run: gitleaks detect --source . --no-banner --redact --config .gitleaks.toml
+
+  sast:
+    name: semgrep (advisory)
+    runs-on: ubuntu-latest
+    # Advisory only: findings are surfaced for human review and never auto-block a merge. Automated
+    # LLM/score-based security gating showed ~86% false positives, so a person decides. See docs/adr/0001.
+    continue-on-error: true
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+      - name: Install semgrep
+        run: pipx install semgrep
+      - name: Run semgrep
+        run: semgrep scan --error --config p/typescript --config p/javascript --config p/secrets packages script .opencode

@@ -1,0 +1,8 @@
+title = "opencode gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Deliberately fake secrets in skill-vetter test fixtures (script/skills/fixtures)"
+paths = ['''script/skills/fixtures/.*''']
