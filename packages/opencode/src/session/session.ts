@@ -866,115 +866,51 @@ export const layer: Layer.Layer<
       return Option.none<MessageV2.WithParts>()
     })
 
-    const isActiveTool = (part: MessageV2.Part): part is MessageV2.ToolPart =>
-      part.type === "tool" && (part.state.status === "running" || part.state.status === "pending")
-
-    const matchChildSession = (part: MessageV2.ToolPart, candidates: Info[], used: Set<SessionID>) => {
-      if (part.tool !== "task") return
-      if (part.state.status !== "running" && part.state.status !== "pending") return
-
-      const existing = part.state.status === "running" ? part.state.metadata?.sessionId : undefined
-      if (typeof existing === "string") {
-        const child = candidates.find((item) => item.id === existing)
-        if (child && !used.has(child.id)) {
-          used.add(child.id)
-          return child
-        }
-      }
-
-      const description = part.state.input.description
-      if (typeof description !== "string" || description.length === 0) return
-
-      const child = candidates.find((item) => {
-        if (used.has(item.id)) return false
-        if (item.title === description) return true
-        return item.title.startsWith(`${description} (@`)
-      })
-      if (!child) return
-
-      used.add(child.id)
-      return child
-    }
-
-    function finalizeOrphanedAssistantInner(sessionID: SessionID, visited: Set<SessionID>): Effect.Effect<void> {
-      return Effect.gen(function* () {
-        if (visited.has(sessionID)) return
-        visited.add(sessionID)
-
-        const latest = yield* findMessage(sessionID, (item) => item.info.role === "assistant").pipe(
-          Effect.catchCause(() => Effect.succeed(Option.none<MessageV2.WithParts>())),
-        )
-        if (Option.isNone(latest)) return
-
-        const message = latest.value
-        if (message.info.role !== "assistant") return
-
-        const now = Date.now()
-        const activeTaskParts = message.parts.filter(
-          (part): part is MessageV2.ToolPart => isActiveTool(part) && part.tool === "task",
-        )
-        const childCandidates =
-          activeTaskParts.length > 0 && !message.info.time.completed
-            ? yield* children(sessionID).pipe(Effect.catchCause(() => Effect.succeed([] as Info[])))
-            : []
-        const usedChildren = new Set<SessionID>()
-        const linkedChildren = new Map<PartID, Info>()
-
-        for (const part of activeTaskParts) {
-          const child = matchChildSession(part, childCandidates, usedChildren)
-          if (child) linkedChildren.set(part.id, child)
-        }
-
-        yield* Effect.forEach(
-          childCandidates,
-          (child) => finalizeOrphanedAssistantInner(child.id, visited),
-          { concurrency: "unbounded", discard: true },
-        )
-
-        for (const part of message.parts) {
-          if (!isActiveTool(part)) continue
-          const metadata = part.state.status === "running" ? part.state.metadata : undefined
-          const child = linkedChildren.get(part.id)
-          yield* updatePart({
-            ...part,
-            state: {
-              status: "error",
-              input: part.state.input,
-              error: "Tool execution aborted",
-              metadata: {
-                ...(metadata ?? {}),
-                ...(child ? { sessionId: child.id } : {}),
-                interrupted: true,
-              },
-              time: {
-                start: part.state.status === "running" ? part.state.time.start : now,
-                end: now,
-              },
-            },
-          })
-        }
-
-        if (message.info.time.completed) return
-        yield* updateMessage({
-          ...message.info,
-          error:
-            message.info.error ??
-            MessageV2.fromError(new DOMException("Aborted", "AbortError"), {
-              providerID: message.info.providerID,
-              aborted: true,
-            }),
-          time: {
-            ...message.info.time,
-            completed: now,
-          },
-        })
-      })
-    }
-
     const finalizeOrphanedAssistant: Interface["finalizeOrphanedAssistant"] = Effect.fn(
       "Session.finalizeOrphanedAssistant",
     )(function* (sessionID) {
-      yield* finalizeOrphanedAssistantInner(sessionID, new Set())
+      const latest = yield* findMessage(sessionID, (item) => item.info.role === "assistant").pipe(
+        Effect.catchCause(() => Effect.succeed(Option.none<MessageV2.WithParts>())),
+      )
+      if (Option.isNone(latest)) return
+
+      const message = latest.value
+      if (message.info.role !== "assistant") return
+
+      const now = Date.now()
+      for (const part of message.parts) {
+        if (part.type !== "tool") continue
+        if (part.state.status !== "running" && part.state.status !== "pending") continue
+        const metadata = part.state.status === "running" ? part.state.metadata : undefined
+        yield* updatePart({
+          ...part,
+          state: {
+            status: "error",
+            input: part.state.input,
+            error: "Tool execution aborted",
+            metadata: { ...(metadata ?? {}), interrupted: true },
+            time: {
+              start: part.state.status === "running" ? part.state.time.start : now,
+              end: now,
+            },
+          },
+        })
+      }
+
+      if (message.info.time.completed) return
+      yield* updateMessage({
+        ...message.info,
+        error:
+          message.info.error ??
+          MessageV2.fromError(new DOMException("Aborted", "AbortError"), {
+            providerID: message.info.providerID,
+            aborted: true,
+          }),
+        time: {
+          ...message.info.time,
+          completed: now,
+        },
+      })
     })
 
     return Service.of({
