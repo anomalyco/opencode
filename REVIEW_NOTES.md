@@ -6,6 +6,7 @@ Review-Agent 出力を残すための運用ログです。
 
 | Date | PR/Task | Reviewer | Decision | Blocking items | Required remediation | Close status |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-06-13 | Step2 gate follow-up closure | codex | pass | 2026-06-12 の D2/D3 hold の再評価済み状態（`report=missing`/log-only が D1/D2/D3 再評価条件を満たす） | `backtest/results/step2_operational_stop_reevaluation_summary.json` と `backtest/results/step2_*_retest.json` を最終根拠化。Task 2026-06-12 の hold 行は履歴保持のみ。 | closed |
 | 2026-06-13 | Step2 gate reevaluation closure (tracked-doc correction) | codex | pass | D2/D3 の task-level hold 記録と旧 `hold` 前提の文言が tracked 文書に残存 | `docs/mt5-report-recovery-runbook.md` / `docs/qwen-wag-dell-task-flow.md` を 2026-06-13 pass 根拠（`backtest/results/step2_operational_stop_reevaluation_summary.json` / `backtest/results/step2_*_retest.json`）と整合させる。`run_d3_recovery.ps1` 系は別タスクに分離、`prompts/` は Step2 closure から除外（廃止運用） | closed |
 | 2026-06-12 | Task D2 / D2-R | qwen3.7-plus | hold | `step2_operational_stop_daily` 分岐を追加し、daily 停止ログに合わせて必須 marker を整理 | `log-only passed=true` で hold 継続。`report` 未生成は evidence 継続で再取得を試行（2026-06-13 pass の履歴保持） | open |
 | 2026-06-12 | Task D3 | qwen3.7-plus | hold | report 回収が `report=missing` のまま継続し、log-only fallback でのみ成立 | report recovery 経路が継続するか、運用上 hold を許容する方針を正式化（2026-06-13 pass の履歴保持） | open |
