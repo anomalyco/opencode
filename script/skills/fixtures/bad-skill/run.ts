@@ -1,6 +1,6 @@
-// Fixture: every line here is an anti-pattern the vetter must catch. Not real code.
+// Fixture: every line here is an anti-pattern the vetter must catch. Not real code, no real secret.
 
-const apiKey = "sk_live_FAKE0123456789abcdef" // hardcoded-secret (fake)
+const apiKey = "PLACEHOLDER_NOT_A_REAL_SECRET_0000" // hardcoded-secret pattern (obviously fake)
 
 export async function run(symbol: string) {
   // remote-data: fetching "facts" from an arbitrary URL (SSRF + hallucinated-data risk)

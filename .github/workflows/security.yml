@@ -28,19 +28,28 @@ jobs:
           curl -sSL "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz" -o gitleaks.tar.gz
           tar -xzf gitleaks.tar.gz gitleaks
           sudo install gitleaks /usr/local/bin/gitleaks
-      - name: Scan for secrets
-        run: gitleaks detect --source . --no-banner --redact --config .gitleaks.toml
+      - name: Scan changed commits for secrets
+        env:
+          # Scan only this change's commits, not 13k+ commits of history. A fresh full-history scan
+          # surfaces pre-existing findings unrelated to the PR; .gitleaks.toml allowlists test fixtures.
+          RANGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [ -n "$RANGE_BASE" ] && git cat-file -e "${RANGE_BASE}^{commit}" 2>/dev/null; then
+            gitleaks detect --redact --no-banner --config .gitleaks.toml --log-opts="${RANGE_BASE}..HEAD"
+          else
+            gitleaks detect --redact --no-banner --config .gitleaks.toml --log-opts="-1 HEAD"
+          fi
 
   sast:
     name: semgrep (advisory)
     runs-on: ubuntu-latest
-    # Advisory only: findings are surfaced for human review and never auto-block a merge. Automated
-    # LLM/score-based security gating showed ~86% false positives, so a person decides. See docs/adr/0001.
-    continue-on-error: true
     steps:
       - name: Checkout repository
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
       - name: Install semgrep
         run: pipx install semgrep
-      - name: Run semgrep
-        run: semgrep scan --error --config p/typescript --config p/javascript --config p/secrets packages script .opencode
+      - name: Run semgrep (report only)
+        # Advisory: no --error, so semgrep prints findings but exits 0 and this check stays green.
+        # Findings are surfaced for human review and never block a merge (automated security gating
+        # showed ~86% false positives). See docs/adr/0001-verification-and-quality-pipeline.
+        run: semgrep scan --config p/typescript --config p/javascript --config p/secrets packages script .opencode
