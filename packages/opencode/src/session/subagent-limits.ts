@@ -39,6 +39,26 @@ export const SUBAGENT_TREE_LIMIT = 200
 export const HARD_MAX_TREE_LIMIT = 10_000
 
 /**
+ * Fail-fast breadth cap on the number of subagents a SINGLE session may have
+ * running concurrently as its direct children (design-final §10 variant (b),
+ * Phase-2 Issue 1). Keyed by the SPAWNING session, NOT the tree root: a
+ * tree-wide semaphore over foreground chains deadlocks (proven counterexample —
+ * two parallel L2 foreground parents each hold a permit and wait on an L3 child
+ * that can never get one). Counting per spawner keeps every level's budget
+ * independent, so a foreground parent never competes with its own descendants.
+ *
+ * The cap is fail-fast: an over-cap spawn raises SubagentConcurrencyError
+ * immediately instead of queuing/blocking, which is what guarantees the abort
+ * cascade can never hang on a permit (no waiter exists to interrupt).
+ *
+ * Default 8 is deliberately conservative: it is well above the typical handful
+ * of parallel delegations a single agent issues, while still bounding a runaway
+ * fan-out at one level. The lifetime SUBAGENT_TREE_LIMIT and the depth limit
+ * remain the tree-wide ceilings; this only bounds INSTANTANEOUS width per node.
+ */
+export const DEFAULT_SUBAGENT_CONCURRENCY = 8
+
+/**
  * Iteration cap for the `Session.lineage` parent-chain walk. Legitimate chains
  * are at most HARD_MAX_DEPTH long; exceeding this means corrupt or cyclic
  * parent data and fails with SubagentLineageError instead of hanging.
@@ -124,6 +144,29 @@ export const treeLimitError = (input: { started: number; limit: number }) =>
   })
 
 /**
+ * Raised when a SINGLE session already has its fail-fast breadth cap of direct
+ * child subagents running concurrently (DEFAULT_SUBAGENT_CONCURRENCY,
+ * overridable via `__testHooks.concurrency`). Fail-fast by design (design-final
+ * §10 variant (b)): the over-cap spawn is refused immediately, never queued, so
+ * no waiter exists that an abort cascade could hang on. Tests match on the tag;
+ * the message is model-directed and pinned once in subagent-limits.test.ts.
+ */
+export class SubagentConcurrencyError extends Schema.TaggedErrorClass<SubagentConcurrencyError>()(
+  "SubagentConcurrencyError",
+  {
+    message: Schema.String,
+    running: Schema.Finite,
+    limit: Schema.Finite,
+  },
+) {}
+
+export const concurrencyError = (input: { running: number; limit: number }) =>
+  new SubagentConcurrencyError({
+    ...input,
+    message: `Subagent concurrency limit reached: this session already has ${input.running} of ${input.limit} subagents running at once (the cap bounds parallel fan-out). Wait for one to finish, or do the remaining work directly in this session, before delegating again.`,
+  })
+
+/**
  * Raised when `task_id` names an existing session that is NOT a direct child
  * of the caller — resuming ancestors or foreign sessions is refused instead of
  * silently adopted (closes the verified resume deadlock).
@@ -177,6 +220,12 @@ export const lineageError = (input: { sessionID: SessionID }) =>
  */
 export const __testHooks = {
   treeLimit: undefined as number | undefined,
+  /**
+   * Test seam for the per-session concurrency cap (Phase-2 Issue 1): when set,
+   * the task tool gates on this value instead of DEFAULT_SUBAGENT_CONCURRENCY.
+   * Inert in production.
+   */
+  concurrency: undefined as number | undefined,
 }
 
 export * as SubagentLimits from "./subagent-limits"
