@@ -7,7 +7,6 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
-import { usePlatform } from "@/context/platform"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
@@ -41,7 +40,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const language = useLanguage()
   const local = useLocal()
   const permission = usePermission()
-  const platform = usePlatform()
   const prompt = usePrompt()
   const sdk = useSDK()
   const settings = useSettings()
@@ -70,8 +68,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   })
   const activeFileTab = tabState.activeFileTab
   const closableTab = tabState.closableTab
-  const desktopV2 = () => platform.platform === "desktop" && settings.general.newLayoutDesigns()
-  const shown = () => (desktopV2() ? settings.general.showFileTree() : true)
+  const shown = settings.visibility.fileTree
 
   const messages = () => {
     const id = params.id
@@ -547,7 +544,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       description: language.t("command.agent.cycle.description"),
       keybind: "mod+.",
       slash: "agent",
-      disabled: desktopV2() && !settings.general.showCustomAgents(),
+      disabled: !settings.visibility.customAgents(),
       onSelect: () => local.agent.move(1),
     }),
     agentCommand({
@@ -555,7 +552,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.agent.cycle.reverse"),
       description: language.t("command.agent.cycle.reverse.description"),
       keybind: "shift+mod+.",
-      disabled: desktopV2() && !settings.general.showCustomAgents(),
+      disabled: !settings.visibility.customAgents(),
       onSelect: () => local.agent.move(-1),
     }),
   ]
