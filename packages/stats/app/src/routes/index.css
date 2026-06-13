@@ -120,7 +120,7 @@
 
 [data-page="stats"] [data-slot="header-bar"] {
   display: grid;
-  grid-template-columns: 0.5fr 1fr 0.5fr;
+  grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 16px;
   min-height: 72px;
@@ -137,11 +137,9 @@
 }
 
 [data-page="stats"] [data-slot="brand"] {
-  flex: 0 0 auto;
   min-width: 0;
   display: flex;
   align-items: center;
-  margin-right: auto;
   color: var(--stats-text);
 }
 
