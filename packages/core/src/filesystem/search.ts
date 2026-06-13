@@ -35,6 +35,7 @@ export const ripgrepLayer = Layer.effect(
       .find({
         cwd: location.directory,
         pattern: "*",
+        hidden: true,
         limit: location.vcs ? Number.MAX_SAFE_INTEGER : 100_000,
         onEntry: (entry) =>
           Effect.sync(() => {
