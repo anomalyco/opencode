@@ -5,6 +5,8 @@ import { useTheme } from "../../context/theme"
 import { SplitBorder } from "../../ui/border"
 import type { AssistantMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
+import { sessionBreadcrumb, sessionDepth } from "../../util/lineage"
+import { isDefaultTitle } from "../../util/session"
 import { useTerminalDimensions } from "@opentui/solid"
 import { useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 
@@ -29,6 +31,21 @@ export function SubagentFooter() {
 
     return { label, index: index + 1, total: siblings.length }
   })
+
+  // Breadcrumb/Eltern-Kontext (Issue 4): the title chain from the root down to
+  // (but excluding) this session, derived from the parentID lineage. The leaf
+  // itself is already shown as the bold label, so the breadcrumb only carries
+  // the ancestors — making it obvious which tree a deep subagent belongs to.
+  const breadcrumb = createMemo(() => {
+    const s = session()
+    if (!s?.parentID) return [] as string[]
+    const chain = sessionBreadcrumb(sync.data.session, s.id).slice(0, -1)
+    return chain.map((title, idx) => (isDefaultTitle(title) || title.length === 0 ? `L${idx + 1}` : title))
+  })
+
+  // Depth of the current session in its tree (root = 1), for a compact badge
+  // next to the subagent label.
+  const depth = createMemo(() => sessionDepth(sync.data.session, route.sessionID))
 
   const usage = createMemo(() => {
     const msg = messages()
@@ -75,8 +92,21 @@ export function SubagentFooter() {
         flexShrink={0}
         backgroundColor={theme.backgroundPanel}
       >
+        <Show when={breadcrumb().length > 0}>
+          <box flexDirection="row" gap={1} flexShrink={0} paddingBottom={1}>
+            <text fg={theme.textMuted} wrapMode="none">
+              {breadcrumb().join(" › ")}
+              {" › "}
+            </text>
+          </box>
+        </Show>
         <box flexDirection="row" justifyContent="space-between" gap={1}>
           <box flexDirection="row" gap={1}>
+            <Show when={depth() >= 2}>
+              <text fg={theme.textMuted} flexShrink={0}>
+                L{depth()}
+              </text>
+            </Show>
             <text fg={theme.text}>
               <b>{subagentInfo().label}</b>
             </text>
