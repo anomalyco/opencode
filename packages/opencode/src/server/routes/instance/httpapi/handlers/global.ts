@@ -12,6 +12,7 @@ import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { RootHttpApi } from "../api"
 import { GlobalUpgradeInput } from "../groups/global"
+import { Preference } from "@/preference/preference"
 
 function eventData(data: unknown): Sse.Event {
   return {
@@ -69,6 +70,7 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
   Effect.gen(function* () {
     const config = yield* Config.Service
     const installation = yield* Installation.Service
+    const preference = yield* Preference.Service
     const bridge = yield* EffectBridge.make()
 
     const health = Effect.fn("GlobalHttpApi.health")(function* () {
@@ -126,6 +128,16 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       return result
     })
 
+    const preferencesGet = Effect.fn("GlobalHttpApi.preferencesGet")(function* () {
+      const content = yield* preference.read().pipe(Effect.orElseSucceed(() => undefined))
+      return content ?? ""
+    })
+
+    const preferencesUpdate = Effect.fn("GlobalHttpApi.preferencesUpdate")(function* (ctx: { payload: string }) {
+      yield* preference.write(ctx.payload)
+      return ctx.payload
+    })
+
     const upgradeRaw = Effect.fn("GlobalHttpApi.upgradeRaw")(function* (ctx: {
       request: HttpServerRequest.HttpServerRequest
     }) {
@@ -152,5 +164,7 @@ export const globalHandlers = HttpApiBuilder.group(RootHttpApi, "global", (handl
       .handle("configUpdate", configUpdate)
       .handle("dispose", dispose)
       .handleRaw("upgrade", upgradeRaw)
+      .handle("preferencesGet", preferencesGet)
+      .handle("preferencesUpdate", preferencesUpdate)
   }),
 )

@@ -26,6 +26,7 @@ import { Permission } from "@/permission"
 import { Installation } from "@/installation"
 import { InstanceLayer } from "@/project/instance-layer"
 import { Plugin } from "@/plugin"
+import { Preference } from "@/preference/preference"
 import { Project } from "@/project/project"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectCopy } from "@opencode-ai/core/project/copy"
@@ -226,6 +227,7 @@ export function createRoutes(
       ModelsDev.defaultLayer,
       Permission.defaultLayer,
       Plugin.defaultLayer,
+      Preference.defaultLayer,
       Project.defaultLayer,
       ProjectV2.defaultLayer,
       ProjectCopy.defaultLayer,

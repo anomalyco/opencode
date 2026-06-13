@@ -8,6 +8,7 @@ import { SettingsGeneralV2 } from "./general"
 import { SettingsKeybinds } from "../settings-keybinds"
 import { SettingsProvidersV2 } from "./providers"
 import { SettingsModelsV2 } from "./models"
+import { SettingsPreferencesV2 } from "./preferences"
 import "./settings-v2.css"
 import { SettingsServersV2 } from "./servers"
 
@@ -51,6 +52,10 @@ export const DialogSettings: Component = () => {
                       <Icon name="models" />
                       {language.t("settings.models.title")}
                     </TabsV2.Trigger>
+                    <TabsV2.Trigger value="preferences">
+                      <Icon name="file-text" />
+                      {language.t("settings.preferences.title", "Preferences")}
+                    </TabsV2.Trigger>
                   </div>
                 </div>
               </div>
@@ -75,6 +80,9 @@ export const DialogSettings: Component = () => {
         </TabsV2.Content>
         <TabsV2.Content value="models" class="settings-v2-panel">
           <SettingsModelsV2 />
+        </TabsV2.Content>
+        <TabsV2.Content value="preferences" class="settings-v2-panel">
+          <SettingsPreferencesV2 />
         </TabsV2.Content>
       </TabsV2>
     </Dialog>

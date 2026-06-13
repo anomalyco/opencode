@@ -70,6 +70,7 @@ export const GlobalPaths = {
   config: "/global/config",
   dispose: "/global/dispose",
   upgrade: "/global/upgrade",
+  preferences: "/global/preferences",
 } as const
 
 export const GlobalApi = HttpApi.make("global").add(
@@ -131,6 +132,25 @@ export const GlobalApi = HttpApi.make("global").add(
           identifier: "global.upgrade",
           summary: "Upgrade opencode",
           description: "Upgrade opencode to the specified version or latest if not specified.",
+        }),
+      ),
+      HttpApiEndpoint.get("preferencesGet", GlobalPaths.preferences, {
+        success: described(Schema.String, "User preferences content in Markdown format"),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "global.preferences.get",
+          summary: "Get user preferences",
+          description: "Retrieve the user preferences stored in Markdown format.",
+        }),
+      ).annotateMerge(HttpApiSchema.asText({ contentType: "text/markdown" })),
+      HttpApiEndpoint.put("preferencesUpdate", GlobalPaths.preferences, {
+        payload: Schema.String,
+        success: described(Schema.String, "Updated user preferences content"),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "global.preferences.update",
+          summary: "Update user preferences",
+          description: "Update the user preferences stored in Markdown format.",
         }),
       ),
     )
