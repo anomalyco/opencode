@@ -189,7 +189,7 @@ export const TaskTool = Tool.define(
           // Tree lifetime cap (design-final §2.2): gates NEW spawns only —
           // the resume/extend path never reaches this branch. Counted against
           // the tree's root so every level shares one ceiling.
-          const treeLimit = SubagentLimits.__testHooks.treeLimit ?? SubagentLimits.SUBAGENT_TREE_LIMIT
+          const treeLimit = SubagentLimits.treeLimit(cfg)
           const started = treeSpawnCounts.get(rootID) ?? 0
           if (started >= treeLimit) {
             return yield* Effect.fail(SubagentLimits.treeLimitError({ started, limit: treeLimit }))

@@ -152,7 +152,7 @@ By default, nesting is allowed up to **depth 5**. Sessions at depth 1 through 4 
 | Limit                      | Default                                                                                            | On violation                                                                                                                       |
 | -------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
 | Maximum nesting depth      | `5` (root session = depth 1), configurable via `experimental.subagent_max_depth`, clamped to 1–10  | The `task` and `workflow` tools are removed at the last level; any remaining spawn attempt fails with a typed `SubagentDepthError` |
-| Subagents per session tree | `200` started subagents per tree, counted **per OpenCode process** (the counter resets on restart) | Further spawns fail with `SubagentTreeLimitError`                                                                                  |
+| Subagents per session tree | `200` started subagents per tree, configurable via `experimental.subagent_tree_limit` (clamped to 1–10000), counted **per OpenCode process** (the counter resets on restart) | Further spawns fail with `SubagentTreeLimitError`                                                                                  |
 | `task_id` resume           | Only tasks the session started itself (direct children)                                            | Other session IDs fail with `SubagentResumeError`; unknown IDs still start a fresh session                                         |
 | Permission prompts         | Raised anywhere in the tree, answered on the **root session** of the tree                          | — see [permissions in nested trees](#permissions-in-nested-trees)                                                                  |
 
@@ -176,6 +176,23 @@ Set the maximum nesting depth with `experimental.subagent_max_depth`:
 - `1` — kill switch: the `task` and `workflow` tools are removed everywhere, including from the main session.
 
 Values are clamped to the range 1–10.
+
+---
+
+### Configure the tree limit
+
+Set the per-tree lifetime cap with `experimental.subagent_tree_limit`:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "subagent_tree_limit": 200
+  }
+}
+```
+
+The default is `200`. This is an in-memory safety ceiling counted per OpenCode process: resumed subagents and workflow dispatches do not count against it, and the counter resets on restart. Values are clamped to the range 1–10000; reaching the cap fails further spawns with `SubagentTreeLimitError`.
 
 ---
 
