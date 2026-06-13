@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "orchestrator"
+  // Optional per-agent model overrides, e.g.
+  //   "agent": { "explorer": { "model": "<provider>/<model>" } }
+  // Valid model IDs depend on the providers configured in YOUR environment.
+  // opencode also exposes an "opencode/<model>" namespace (see the repo's own
+  // .opencode/agent/triage.md, which uses "opencode/gpt-5.4-mini").
+  // Never inline API keys here -- use environment variables.
+}
