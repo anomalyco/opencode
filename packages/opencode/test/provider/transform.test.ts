@@ -2576,6 +2576,14 @@ describe("ProviderTransform.temperature - Cohere North", () => {
   })
 })
 
+describe("ProviderTransform.temperature - GLM", () => {
+  for (const id of ["zai/glm-4.6", "zai/glm-4.7", "zai/glm-5.2"]) {
+    test(`${id} defaults to 1.0`, () => {
+      expect(ProviderTransform.temperature({ id } as any)).toBe(1.0)
+    })
+  }
+})
+
 describe("ProviderTransform.variants", () => {
   const createMockModel = (overrides: Partial<any> = {}): any => ({
     id: "test/test-model",
