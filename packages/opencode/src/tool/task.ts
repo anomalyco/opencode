@@ -114,6 +114,17 @@ export const TaskTool = Tool.define(
     // resumes/extends do not count and workflow dispatches keep their own cap.
     const treeSpawnCounts = new Map<SessionID, number>()
 
+    // In-memory counter of subagents CURRENTLY RUNNING per SPAWNING session
+    // (Phase-2 Issue 1, design-final §10 variant (b)). Keyed by the spawner,
+    // NOT the tree root: a tree-wide semaphore over foreground chains deadlocks
+    // (two parallel L2 foreground parents each hold a permit and wait on an L3
+    // child that can never get one). Per-spawner keying gives every level its
+    // own independent budget, so a foreground parent never competes with its
+    // own descendants. Incremented synchronously at the spawn gate and
+    // decremented via Effect.ensuring around the child run (robust against
+    // success, error and abort) — no leak on any exit path.
+    const concurrentChildCounts = new Map<SessionID, number>()
+
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
       ctx: Tool.Context,
@@ -183,6 +194,10 @@ export const TaskTool = Tool.define(
           pattern: "*" as const,
           action: "deny" as const,
         })) ?? []
+      // `session` is set only on the resume/extend path; a fresh spawn (the
+      // only path that creates a session) is what the breadth cap gates and
+      // what its concurrency slot is bound to.
+      const isNewSpawn = session === undefined
       const nextSession =
         session ??
         (yield* Effect.gen(function* () {
@@ -193,6 +208,17 @@ export const TaskTool = Tool.define(
           const started = treeSpawnCounts.get(rootID) ?? 0
           if (started >= treeLimit) {
             return yield* Effect.fail(SubagentLimits.treeLimitError({ started, limit: treeLimit }))
+          }
+          // Fail-fast breadth cap (design-final §10 variant (b)): how many
+          // direct children THIS spawner already has running. Keyed by the
+          // spawner (ctx.sessionID), independent of the tree-wide tree cap and
+          // the depth limit. Over cap → typed error NOW, no queuing — that is
+          // exactly what keeps the abort cascade from hanging on a permit.
+          const concurrencyLimit =
+            SubagentLimits.__testHooks.concurrency ?? SubagentLimits.DEFAULT_SUBAGENT_CONCURRENCY
+          const running = concurrentChildCounts.get(ctx.sessionID) ?? 0
+          if (running >= concurrencyLimit) {
+            return yield* Effect.fail(SubagentLimits.concurrencyError({ running, limit: concurrencyLimit }))
           }
           // Budget spawn gate (design-final §4.6, soft cap): an exhausted
           // shared turn pool refuses NEW subagents while running ones finish.
@@ -206,15 +232,18 @@ export const TaskTool = Tool.define(
               return yield* Effect.fail(SubagentLimits.budgetError())
             }
           }
-          // Reserve the slot SYNCHRONOUSLY before the async create (the
+          // Reserve BOTH counters SYNCHRONOUSLY before the async create (the
           // TurnBudget.reserve pattern): Bun is single-threaded and there is
-          // no yield between the `started` read above and this set, so N
-          // parallel spawns each observe the updated count. Setting AFTER
+          // no yield between the reads above and these sets, so N parallel
+          // spawns each observe the updated counts. Setting AFTER
           // `sessions.create` (the pre-fix order) was a lost-update race —
-          // every racer wrote back its stale `started + 1` and the cap was
-          // systematically undercounted. Released again on create failure or
-          // interrupt so a session that never existed cannot eat the cap.
+          // every racer wrote back its stale count and the caps were
+          // systematically undercounted. Both are released again on create
+          // failure or interrupt so a session that never existed cannot eat a
+          // slot; the concurrency slot's success-path release is bound to the
+          // child run below (Effect.ensuring), not to create.
           treeSpawnCounts.set(rootID, started + 1)
+          concurrentChildCounts.set(ctx.sessionID, running + 1)
           const created = yield* sessions
             .create({
               parentID: ctx.sessionID,
@@ -238,8 +267,10 @@ export const TaskTool = Tool.define(
                 Exit.isSuccess(exit)
                   ? Effect.void
                   : Effect.sync(() => {
-                      const current = treeSpawnCounts.get(rootID) ?? 0
-                      treeSpawnCounts.set(rootID, Math.max(0, current - 1))
+                      const currentTree = treeSpawnCounts.get(rootID) ?? 0
+                      treeSpawnCounts.set(rootID, Math.max(0, currentTree - 1))
+                      const currentConcurrent = concurrentChildCounts.get(ctx.sessionID) ?? 0
+                      concurrentChildCounts.set(ctx.sessionID, Math.max(0, currentConcurrent - 1))
                     }),
               ),
             )
@@ -364,6 +395,23 @@ export const TaskTool = Tool.define(
         }
       }
 
+      // Release the concurrency slot exactly when the child RUN ends (success,
+      // error or interrupt) — and only for a fresh spawn, the path that
+      // reserved one above. Bound to the child run via Effect.ensuring so it
+      // fires for every exit, including a foreground abort and a detached
+      // background completion: the slot is freed whenever the child stops
+      // running. The release is ONE-SHOT so it can never double-decrement; a
+      // resume reused a still-running child whose original spawn still holds
+      // the slot (slotReleased starts true on that path, making release inert).
+      let slotReleased = !isNewSpawn
+      const releaseConcurrencySlot = Effect.sync(() => {
+        if (slotReleased) return
+        slotReleased = true
+        const current = concurrentChildCounts.get(ctx.sessionID) ?? 0
+        concurrentChildCounts.set(ctx.sessionID, Math.max(0, current - 1))
+      })
+      const childRun = isNewSpawn ? runTask().pipe(Effect.ensuring(releaseConcurrencySlot)) : runTask()
+
       const info = yield* background.start({
         id: nextSession.id,
         type: id,
@@ -376,7 +424,7 @@ export const TaskTool = Tool.define(
           }),
           notify(nextSession.id),
         ]),
-        run: runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id))),
+        run: childRun.pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id))),
       })
 
       function backgroundResult() {

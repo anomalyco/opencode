@@ -13,6 +13,7 @@ describe("constants", () => {
     expect(SubagentLimits.DEFAULT_MAX_TASK_DEPTH).toBe(5)
     expect(SubagentLimits.HARD_MAX_DEPTH).toBe(10)
     expect(SubagentLimits.SUBAGENT_TREE_LIMIT).toBe(200)
+    expect(SubagentLimits.DEFAULT_SUBAGENT_CONCURRENCY).toBe(8)
     expect(SubagentLimits.LINEAGE_ITERATION_CAP).toBe(32)
   })
 })
@@ -77,6 +78,16 @@ describe("typed errors", () => {
     )
   })
 
+  test("SubagentConcurrencyError", () => {
+    const error = SubagentLimits.concurrencyError({ running: 8, limit: 8 })
+    expect(error._tag).toBe("SubagentConcurrencyError")
+    expect(error.running).toBe(8)
+    expect(error.limit).toBe(8)
+    expect(error.message).toBe(
+      "Subagent concurrency limit reached: this session already has 8 of 8 subagents running at once (the cap bounds parallel fan-out). Wait for one to finish, or do the remaining work directly in this session, before delegating again.",
+    )
+  })
+
   test("SubagentLineageError", () => {
     const sessionID = SessionV2.ID.make("ses_abc")
     const error = SubagentLimits.lineageError({ sessionID })
@@ -102,5 +113,12 @@ describe("__testHooks", () => {
     SubagentLimits.__testHooks.treeLimit = 3
     expect(SubagentLimits.__testHooks.treeLimit).toBe(3)
     SubagentLimits.__testHooks.treeLimit = undefined
+  })
+
+  test("concurrency seam defaults to undefined and is settable", () => {
+    expect(SubagentLimits.__testHooks.concurrency).toBeUndefined()
+    SubagentLimits.__testHooks.concurrency = 2
+    expect(SubagentLimits.__testHooks.concurrency).toBe(2)
+    SubagentLimits.__testHooks.concurrency = undefined
   })
 })
