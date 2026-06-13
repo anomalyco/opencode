@@ -4,7 +4,7 @@
 
 **Goal:** Re-evaluate Step2 operational stop evidence against the current D1/D2/D3 gate definitions before Sentinel implementation proceeds.
 
-**Architecture:** Treat `backtest/gate_config.json` as the gate contract, `src/Scripts/analyze_mt5_report.py` as the only parser authority, and `backtest/results/` plus `SPRINT.md` as the evidence ledger. D1/D2/D3 must be evaluated from scenario-specific fresh logs, not by replaying the same aggregate tester log three times.
+**Architecture:** Treat `backtest/gate_config.json` as the gate contract, `src/Scripts/analyze_mt5_report.py` as the only parser authority, and `backtest/results/` plus `SPRINT.md` as the evidence ledger. D1/D2/D3 must be evaluated from scenario-specific fresh evidence. A committed tester log may be a cumulative MT5 log snapshot only when the parser selects the last matching scenario window and the summary records that policy explicitly.
 
 **Tech Stack:** MQL5 tester artifacts, PowerShell runner scripts on `wag-dell`, Python `unittest`, `src/Scripts/analyze_mt5_report.py`, JSON evidence under `backtest/results/`.
 
@@ -107,15 +107,17 @@ D3 must pass with all of these:
 
 A scenario has fresh evidence only when all of these are true:
 
-- the scenario has its own log file under `backtest/results/task-d*r-20260613.log`;
-- runner evidence records before/after tester log `Name`, `Length`, and `LastWriteTime`;
-- the copied log includes the forced input marker and a fresh run window;
-- parser JSON `created_at` is later than the fresh run log mtime;
+- the scenario has its own committed log file under `backtest/results/task-d*r-20260613.log`;
+- runner evidence is committed in the summary and records before/after tester log `Name`, `Length`, and `LastWriteTime`, plus runner `start`, `end`, `report`, and `logWindowUpdated`;
+- the committed log byte size matches `runner.after.length`;
+- the copied log includes the forced input marker and a fresh run window selected by the parser;
+- parser JSON `created_at` is later than committed runner `end` and `runner.after.last_write_time`;
+- the summary records `log_policy` as either `single_tester_log_window` or `cumulative_tester_log_last_matching_window`;
 - parser JSON `metrics.log_window_selected` is `true`;
 - parser JSON `failed_rules` is empty;
 - parser JSON `warnings` is empty.
 
-If any item is missing, the scenario status is `hold` or `reject`, not `pass`.
+Do not compare parser `created_at` to filesystem mtime: Git checkout/archive changes mtimes and makes that check non-reproducible. If any item is missing, the scenario status is `hold` or `reject`, not `pass`.
 
 ## Task 1: Freeze Current Workspace State
 
@@ -329,7 +331,7 @@ backtest/results/task-d2r-20260613.log
 
 Expected:
 
-- File contains only or clearly includes the fresh D2 run window.
+- File contains the fresh D2 run window. If it is a cumulative tester log snapshot, the summary must set `log_policy: "cumulative_tester_log_last_matching_window"`.
 - File contains `InpDailyDDLimit=-0.001`.
 
 - [ ] **Step 3: Parse D2 fresh log**
@@ -389,7 +391,7 @@ backtest/results/task-d3r-20260613.log
 
 Expected:
 
-- File contains only or clearly includes the fresh D3 run window.
+- File contains the fresh D3 run window. If it is a cumulative tester log snapshot, the summary must set `log_policy: "cumulative_tester_log_last_matching_window"`.
 - File contains `InpMonthlyDDLimit=-0.001`.
 
 - [ ] **Step 3: Parse D3 fresh log**
@@ -560,6 +562,13 @@ Create `backtest/results/step2_operational_stop_reevaluation_summary.json` with 
 
 If any scenario is not a clean parser pass, change the concrete `decision`, per-scenario `status`, `reason`, `sentinel_unblocked`, and `notes`. Do not leave template alternatives or empty reasons.
 
+Each scenario entry must also include:
+
+- `log_policy` matching the committed log shape.
+- `runner.scenario`, `runner.start`, `runner.end`, `runner.before`, `runner.after`, `runner.report`, and `runner.logWindowUpdated` copied from the Windows runner output.
+- `runner.after.length` equal to the committed log file byte size.
+- `runner.after.last_write_time` and `runner.end` in ISO-8601 form with timezone.
+
 Decision rules:
 
 - `decision: "pass"` only if D1/D2/D3 all satisfy the Fresh Evidence Definition.
@@ -687,7 +696,7 @@ Stop and report instead of continuing if:
 - D1 has orders after global stop;
 - log window selection fails;
 - scenario-specific fresh log cannot be produced;
-- fresh log mtime, size, and parser `created_at` cannot be tied together;
+- committed runner metadata, committed log size, and parser `created_at` cannot be tied together without filesystem mtime;
 - summary JSON contains `pass|hold|reject` template text or empty `reason`;
 - summary decision is `hold` or `reject` and any step tries to unblock Sentinel;
 - unrelated dirty files would be mixed into the Step2 commit.

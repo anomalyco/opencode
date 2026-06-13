@@ -2,11 +2,12 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
 import unittest
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
@@ -18,7 +19,6 @@ def write_json(path: Path, payload: dict) -> None:
 
 
 def parser_payload(scenario: str, log_path: str, created_at: str | None = None, **overrides: object) -> dict:
-    now = datetime.now(timezone.utc)
     payload = {
         "scenario": scenario,
         "passed": True,
@@ -33,7 +33,7 @@ def parser_payload(scenario: str, log_path: str, created_at: str | None = None, 
         },
         "failed_rules": [],
         "warnings": [],
-        "created_at": created_at or (now + timedelta(seconds=3)).isoformat(),
+        "created_at": created_at or "2026-06-13T10:02:00+09:00",
     }
     payload["metrics"].update(overrides.pop("metrics", {}))
     payload.update(overrides)
@@ -70,6 +70,10 @@ class ValidateStep2ReevaluationTest(unittest.TestCase):
             path = tmp / log_path
             path.write_text(f"fresh log: {log_path}\n", encoding="utf-8")
 
+        runner_start = "2026-06-13T10:00:00+09:00"
+        runner_end = "2026-06-13T10:01:00+09:00"
+        runner_after_time = "2026-06-13T10:00:59+09:00"
+
         created_at_values = created_at_fns or [None, None, None]
         write_json(
             results / "step2_global_stop_retest.json",
@@ -105,6 +109,20 @@ class ValidateStep2ReevaluationTest(unittest.TestCase):
                 "scenarios": {
                     "D1": {
                         "scenario": "step2_operational_stop",
+                        "log_policy": "single_tester_log_window",
+                        "runner": {
+                            "scenario": "global",
+                            "start": runner_start,
+                            "end": runner_end,
+                            "before": {"name": "before.log", "length": 1, "last_write_time": "2026-06-13T09:59:00+09:00"},
+                            "after": {
+                                "name": "20260613.log",
+                                "length": (tmp / "backtest/results/task-d1r-20260613.log").stat().st_size,
+                                "last_write_time": runner_after_time,
+                            },
+                            "report": "missing|report",
+                            "logWindowUpdated": "updated",
+                        },
                         "status": "pass",
                         "reason": "fresh global evidence",
                         "result_path": "backtest/results/step2_global_stop_retest.json",
@@ -112,6 +130,20 @@ class ValidateStep2ReevaluationTest(unittest.TestCase):
                     },
                     "D2": {
                         "scenario": "step2_operational_stop_daily",
+                        "log_policy": "cumulative_tester_log_last_matching_window",
+                        "runner": {
+                            "scenario": "daily",
+                            "start": runner_start,
+                            "end": runner_end,
+                            "before": {"name": "before.log", "length": 1, "last_write_time": "2026-06-13T09:59:00+09:00"},
+                            "after": {
+                                "name": "20260613.log",
+                                "length": (tmp / "backtest/results/task-d2r-20260613.log").stat().st_size,
+                                "last_write_time": runner_after_time,
+                            },
+                            "report": "missing|report",
+                            "logWindowUpdated": "updated",
+                        },
                         "status": "pass",
                         "reason": "fresh daily evidence",
                         "result_path": "backtest/results/step2_daily_stop_retest.json",
@@ -119,6 +151,20 @@ class ValidateStep2ReevaluationTest(unittest.TestCase):
                     },
                     "D3": {
                         "scenario": "step2_operational_stop_monthly",
+                        "log_policy": "cumulative_tester_log_last_matching_window",
+                        "runner": {
+                            "scenario": "monthly",
+                            "start": runner_start,
+                            "end": runner_end,
+                            "before": {"name": "before.log", "length": 1, "last_write_time": "2026-06-13T09:59:00+09:00"},
+                            "after": {
+                                "name": "20260613.log",
+                                "length": (tmp / "backtest/results/task-d3r-20260613.log").stat().st_size,
+                                "last_write_time": runner_after_time,
+                            },
+                            "report": "missing|report",
+                            "logWindowUpdated": "updated",
+                        },
                         "status": "pass",
                         "reason": "fresh monthly evidence",
                         "result_path": "backtest/results/step2_monthly_stop_retest.json",
@@ -129,7 +175,7 @@ class ValidateStep2ReevaluationTest(unittest.TestCase):
             },
         )
 
-        # default payload timestamps use now + 3 seconds so they remain after log mtimes.
+        # default payload timestamps use now + 3 seconds so they remain after committed runner timestamps.
 
     def test_valid_summary_passes(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -219,7 +265,42 @@ class ValidateStep2ReevaluationTest(unittest.TestCase):
             self.make_valid_tree(tmp, created_at_fns=[fixed, fixed, fixed])
             result = self.run_validator(tmp)
             self.assertEqual(result.returncode, 1)
-            self.assertIn("created_at not after log mtime", result.stdout)
+            self.assertIn("created_at not after runner end", result.stdout)
+
+    def test_checkout_mtime_change_does_not_break_freshness(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            self.make_valid_tree(tmp)
+            future = datetime(2030, 1, 1, tzinfo=timezone.utc).timestamp()
+            for path in (tmp / "backtest/results").glob("task-d*r-20260613.log"):
+                path.touch()
+                os.utime(path, (future, future))
+            result = self.run_validator(tmp)
+            self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
+
+    def test_log_size_must_match_runner_after_length(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            self.make_valid_tree(tmp)
+            summary = tmp / "backtest/results/step2_operational_stop_reevaluation_summary.json"
+            payload = json.loads(summary.read_text(encoding="utf-8"))
+            payload["scenarios"]["D2"]["runner"]["after"]["length"] += 1
+            write_json(summary, payload)
+            result = self.run_validator(tmp)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("D2: log byte size does not match runner after length", result.stdout)
+
+    def test_runner_metadata_required(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp = Path(tmpdir)
+            self.make_valid_tree(tmp)
+            summary = tmp / "backtest/results/step2_operational_stop_reevaluation_summary.json"
+            payload = json.loads(summary.read_text(encoding="utf-8"))
+            del payload["scenarios"]["D1"]["runner"]
+            write_json(summary, payload)
+            result = self.run_validator(tmp)
+            self.assertEqual(result.returncode, 1)
+            self.assertIn("D1: missing runner metadata", result.stdout)
 
 
 if __name__ == "__main__":

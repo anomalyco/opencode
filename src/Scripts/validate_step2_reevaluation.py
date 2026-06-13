@@ -14,16 +14,22 @@ EXPECTED = {
         "step2_operational_stop",
         "backtest/results/step2_global_stop_retest.json",
         "backtest/results/task-d1r-20260613.log",
+        "single_tester_log_window",
+        "global",
     ),
     "D2": (
         "step2_operational_stop_daily",
         "backtest/results/step2_daily_stop_retest.json",
         "backtest/results/task-d2r-20260613.log",
+        "cumulative_tester_log_last_matching_window",
+        "daily",
     ),
     "D3": (
         "step2_operational_stop_monthly",
         "backtest/results/step2_monthly_stop_retest.json",
         "backtest/results/task-d3r-20260613.log",
+        "cumulative_tester_log_last_matching_window",
+        "monthly",
     ),
 }
 
@@ -84,8 +90,8 @@ def validate_summary(root: Path, summary: dict[str, Any]) -> list[str]:
     if not isinstance(scenarios, dict):
         return errors + ["missing scenarios object"]
 
-    for key, (scenario_name, result_path, log_path) in EXPECTED.items():
-        errors.extend(validate_scenario(root, key, scenario_name, result_path, log_path, scenarios.get(key)))
+    for key, (scenario_name, result_path, log_path, log_policy, runner_scenario) in EXPECTED.items():
+        errors.extend(validate_scenario(root, key, scenario_name, result_path, log_path, log_policy, runner_scenario, scenarios.get(key)))
 
     if decision == "pass" and all(scenarios.get(key, {}).get("status") == "pass" for key in EXPECTED):
         pass
@@ -106,6 +112,8 @@ def validate_scenario(
     scenario_name: str,
     result_path: str,
     log_path: str,
+    log_policy: str,
+    runner_scenario: str,
     item: dict[str, Any] | None,
 ) -> list[str]:
     errors: list[str] = []
@@ -127,6 +135,8 @@ def validate_scenario(
         errors.append(f"{key}: log_path mismatch")
     if item.get("scenario") != scenario_name:
         errors.append(f"{key}: summary scenario mismatch")
+    if item.get("log_policy") != log_policy:
+        errors.append(f"{key}: log_policy mismatch")
 
     result_file = root / result_path
     log_file = root / log_path
@@ -148,15 +158,16 @@ def validate_scenario(
         errors.append(f"{key}: warnings not empty")
 
     created_at = payload.get("created_at")
+    created_dt: datetime | None = None
     if not isinstance(created_at, str):
         errors.append(f"{key}: parser created_at missing")
     else:
         try:
-            created_ts = parse_iso8601(created_at).timestamp()
-            if created_ts <= log_file.stat().st_mtime:
-                errors.append(f"{key}: parser created_at not after log mtime")
+            created_dt = parse_iso8601(created_at)
         except ValueError:
             errors.append(f"{key}: parser created_at invalid")
+
+    errors.extend(validate_runner_metadata(key, log_file, item, runner_scenario, created_dt))
 
     metrics = payload.get("metrics")
     if not isinstance(metrics, dict):
@@ -187,6 +198,76 @@ def validate_scenario(
         errors.append(f"{key}: margin_error_count is not 0")
 
     return errors
+
+
+def validate_runner_metadata(
+    key: str,
+    log_file: Path,
+    item: dict[str, Any],
+    runner_scenario: str,
+    created_dt: datetime | None,
+) -> list[str]:
+    errors: list[str] = []
+    runner = item.get("runner")
+    if not isinstance(runner, dict):
+        return [f"{key}: missing runner metadata"]
+
+    if runner.get("scenario") != runner_scenario:
+        errors.append(f"{key}: runner scenario mismatch")
+    if runner.get("logWindowUpdated") != "updated":
+        errors.append(f"{key}: logWindowUpdated is not updated")
+    if not isinstance(runner.get("report"), str) or not runner.get("report"):
+        errors.append(f"{key}: runner report missing")
+
+    start_dt = parse_runner_datetime(errors, key, "runner start", runner.get("start"))
+    end_dt = parse_runner_datetime(errors, key, "runner end", runner.get("end"))
+    if start_dt is not None and end_dt is not None and start_dt > end_dt:
+        errors.append(f"{key}: runner start after runner end")
+
+    before = runner.get("before")
+    if not isinstance(before, dict):
+        errors.append(f"{key}: missing runner before metadata")
+        before = {}
+    validate_runner_log_metadata(errors, key, "runner before", before)
+
+    after = runner.get("after")
+    if not isinstance(after, dict):
+        errors.append(f"{key}: missing runner after metadata")
+        after = {}
+    validate_runner_log_metadata(errors, key, "runner after", after)
+
+    after_length = after.get("length")
+    if not isinstance(after_length, int):
+        errors.append(f"{key}: runner after length missing")
+    elif log_file.stat().st_size != after_length:
+        errors.append(f"{key}: log byte size does not match runner after length")
+
+    if created_dt is not None:
+        after_dt = parse_runner_datetime(errors, key, "runner after last_write_time", after.get("last_write_time"))
+        for label, evidence_dt in (("runner end", end_dt), ("runner after last_write_time", after_dt)):
+            if evidence_dt is not None and created_dt <= evidence_dt:
+                errors.append(f"{key}: parser created_at not after {label}")
+
+    return errors
+
+
+def validate_runner_log_metadata(errors: list[str], key: str, label: str, value: dict[str, Any]) -> None:
+    if not isinstance(value.get("name"), str) or not value.get("name"):
+        errors.append(f"{key}: {label} name missing")
+    if not isinstance(value.get("length"), int):
+        errors.append(f"{key}: {label} length missing")
+    parse_runner_datetime(errors, key, f"{label} last_write_time", value.get("last_write_time"))
+
+
+def parse_runner_datetime(errors: list[str], key: str, label: str, value: Any) -> datetime | None:
+    if not isinstance(value, str):
+        errors.append(f"{key}: {label} missing")
+        return None
+    try:
+        return parse_iso8601(value)
+    except ValueError:
+        errors.append(f"{key}: {label} invalid")
+        return None
 
 
 if __name__ == "__main__":

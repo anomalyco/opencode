@@ -6,6 +6,25 @@
       "scenario": "step2_operational_stop",
       "result_path": "backtest/results/step2_global_stop_retest.json",
       "log_path": "backtest/results/task-d1r-20260613.log",
+      "log_policy": "single_tester_log_window",
+      "runner": {
+        "scenario": "global",
+        "config": "C:\\Users\\wag\\Downloads\\step2_global_stop.recovery.ini",
+        "start": "2026-06-13T10:48:46+09:00",
+        "end": "2026-06-13T10:48:53+09:00",
+        "before": {
+          "name": "20260612.log",
+          "length": 2477438,
+          "last_write_time": "2026-06-12T14:18:08+09:00"
+        },
+        "after": {
+          "name": "20260613.log",
+          "length": 12010,
+          "last_write_time": "2026-06-13T10:48:52+09:00"
+        },
+        "report": "missing|C:\\Program Files\\Axiory MetaTrader 5\\reports\\step2_global_stop.htm",
+        "logWindowUpdated": "updated"
+      },
       "status": "pass",
       "reason": "fresh global-stop log passed current parser gate with no failed rules or warnings"
     },
@@ -13,6 +32,25 @@
       "scenario": "step2_operational_stop_daily",
       "result_path": "backtest/results/step2_daily_stop_retest.json",
       "log_path": "backtest/results/task-d2r-20260613.log",
+      "log_policy": "cumulative_tester_log_last_matching_window",
+      "runner": {
+        "scenario": "daily",
+        "config": "C:\\Users\\wag\\Downloads\\step2_daily_stop.recovery.ini",
+        "start": "2026-06-13T10:49:14+09:00",
+        "end": "2026-06-13T10:49:19+09:00",
+        "before": {
+          "name": "20260613.log",
+          "length": 12010,
+          "last_write_time": "2026-06-13T10:48:52+09:00"
+        },
+        "after": {
+          "name": "20260613.log",
+          "length": 364226,
+          "last_write_time": "2026-06-13T10:49:18+09:00"
+        },
+        "report": "missing|C:\\Program Files\\Axiory MetaTrader 5\\reports\\step2_daily_stop.htm",
+        "logWindowUpdated": "updated"
+      },
       "status": "pass",
       "reason": "fresh daily-stop log passed current parser gate with no failed rules or warnings"
     },
@@ -20,6 +58,25 @@
       "scenario": "step2_operational_stop_monthly",
       "result_path": "backtest/results/step2_monthly_stop_retest.json",
       "log_path": "backtest/results/task-d3r-20260613.log",
+      "log_policy": "cumulative_tester_log_last_matching_window",
+      "runner": {
+        "scenario": "monthly",
+        "config": "C:\\Users\\wag\\Downloads\\step2_monthly_stop.recovery.ini",
+        "start": "2026-06-13T10:49:41+09:00",
+        "end": "2026-06-13T10:49:47+09:00",
+        "before": {
+          "name": "20260613.log",
+          "length": 364226,
+          "last_write_time": "2026-06-13T10:49:18+09:00"
+        },
+        "after": {
+          "name": "20260613.log",
+          "length": 376284,
+          "last_write_time": "2026-06-13T10:49:44+09:00"
+        },
+        "report": "missing|C:\\Program Files\\Axiory MetaTrader 5\\reports\\step2_monthly_stop.htm",
+        "logWindowUpdated": "updated"
+      },
       "status": "pass",
       "reason": "fresh monthly-stop log passed current parser gate with no failed rules or warnings"
     }
@@ -27,6 +84,7 @@
   "sentinel_unblocked": true,
   "notes": [
     "MT5 HTML reports were missing for D1/D2/D3, but Step2 operational stop scenarios have require_report_metrics=false and passed log-only parser gates.",
-    "D1 gate no longer requires the environment-dependent thread finished marker; Test passed plus global stop/close markers are used for completion."
+    "D1 gate no longer requires the environment-dependent thread finished marker; Test passed plus global stop/close markers are used for completion.",
+    "D2 and D3 logs are cumulative tester log snapshots; parser validation uses the last matching scenario window selected by log_window_start_pattern."
   ]
 }
