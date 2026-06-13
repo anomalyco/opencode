@@ -28,6 +28,7 @@ import type { Event, Part, PermissionRequest, QuestionRequest, ToolPart } from "
 import * as Locale from "@/util/locale"
 import { toolView } from "./tool"
 import type { FooterOutput, FooterPatch, FooterView, StreamCommit } from "./types"
+import { formatReplayStatus, reduceReplayEvent, type AceReplayFooter } from "@/ace/replay"
 
 const money = new Intl.NumberFormat("en-US", {
   style: "currency",
@@ -86,6 +87,7 @@ export type SessionData = {
   visible: Map<string, string>
   end: Set<string>
   echo: Map<string, Set<string>>
+  ace: AceReplayFooter
 }
 
 export type SessionDataInput = {
@@ -124,6 +126,7 @@ export function createSessionData(
     visible: new Map(),
     end: new Set(),
     echo: new Map(),
+    ace: { mode: "off", toolCalls: 0, spawns: 0, activeSubagents: 0 },
   }
 }
 
@@ -774,6 +777,17 @@ export function reduceSessionData(input: SessionDataInput): SessionDataOutput {
   const commits: SessionCommit[] = []
   const data = input.data
   const event = input.event
+
+  const eventType = event.type as string
+  if (eventType === "session.next.ace.decision" || eventType === "session.next.ace.pressure") {
+    const next = reduceReplayEvent(event as Record<string, unknown>, input.sessionID, data.ace)
+    if (next) {
+      data.ace = next
+      const status = formatReplayStatus(next)
+      if (status) return out(data, commits, patch({ status }))
+    }
+    return out(data, commits)
+  }
 
   if (event.type === "session.next.shell.started") {
     if (event.properties.sessionID !== input.sessionID) {
