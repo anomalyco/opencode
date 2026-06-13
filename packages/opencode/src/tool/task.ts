@@ -78,6 +78,18 @@ function renderOutput(input: {
   ].join("\n")
 }
 
+function renderMessage(input: { sessionID: SessionID; body: string }) {
+  return [
+    `<task id="${input.sessionID}" state="awaiting_reply">`,
+    `<summary>Subagent sent a message and is awaiting your reply</summary>`,
+    `<message>`,
+    input.body,
+    `</message>`,
+    `Reply with the message tool: message(target:"subagent", task_id:"${input.sessionID}", body:"...").`,
+    "</task>",
+  ].join("\n")
+}
+
 export const TaskTool = Tool.define(
   id,
   Effect.gen(function* () {
@@ -306,10 +318,25 @@ export const TaskTool = Tool.define(
         }),
         () =>
           Effect.gen(function* () {
-            const result = yield* Effect.raceFirst(
-              background.wait({ id: nextSession.id }).pipe(Effect.map((waited) => waited.info)),
-              background.waitForPromotion(nextSession.id),
+            const outcome = yield* Effect.raceFirst(
+              Effect.raceFirst(
+                background.wait({ id: nextSession.id }).pipe(Effect.map((waited) => ({ kind: "settled" as const, info: waited.info }))),
+                background.waitForPromotion(nextSession.id).pipe(Effect.map((info) => ({ kind: "promoted" as const, info }))),
+              ),
+              background.waitForMessage(nextSession.id).pipe(Effect.map((payload) => ({ kind: "message" as const, payload }))),
             )
+            if (outcome.kind === "message") {
+              // Child is parked awaiting the parent's reply and has been backgrounded;
+              // fork notify so its eventual completion is still delivered to the parent.
+              yield* notify(nextSession.id)
+              return {
+                title: params.description,
+                metadata,
+                output: renderMessage({ sessionID: nextSession.id, body: outcome.payload.body }),
+              }
+            }
+            if (outcome.kind === "promoted") return backgroundResult()
+            const result = outcome.info
             if (result?.metadata?.background === true) return backgroundResult()
             if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
             if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
