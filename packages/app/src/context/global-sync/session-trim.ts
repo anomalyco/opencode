@@ -47,8 +47,23 @@ export function trimSessions(
   const recent = takeRecentSessions(roots.slice(limit), SESSION_RECENT_LIMIT, cutoff)
   const keepRoots = [...base, ...recent]
   const keepRootIds = new Set(keepRoots.map((s) => s.id))
+  // Expand the keep set transitively: a child survives when its parent chain
+  // reaches a kept root, no matter how deep (fixpoint loop, cycle-safe since
+  // cycle members are never anchored to a kept root).
+  const keptByAncestor = new Set(keepRootIds)
+  let changed = true
+  while (changed) {
+    changed = false
+    for (const child of children) {
+      if (keptByAncestor.has(child.id)) continue
+      if (child.parentID && keptByAncestor.has(child.parentID)) {
+        keptByAncestor.add(child.id)
+        changed = true
+      }
+    }
+  }
   const keepChildren = children.filter((s) => {
-    if (s.parentID && keepRootIds.has(s.parentID)) return true
+    if (keptByAncestor.has(s.id)) return true
     const perms = options.permission[s.id] ?? []
     if (perms.length > 0) return true
     return sessionUpdatedAt(s) > cutoff
