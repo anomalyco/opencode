@@ -50,7 +50,7 @@ export const Controlled = {
           <RadioItemV2 value="weekly" label="Weekly" />
           <RadioItemV2 value="never" label="Never" />
         </RadioGroupV2>
-        <div style={{ "font-family": "var(--font-family-sans)", "font-size": "12px", color: "#808080" }}>
+        <div style={{ "font-family": "var(--v2-font-family-sans)", "font-size": "12px", color: "#808080" }}>
           Selected: {value()}
         </div>
       </div>

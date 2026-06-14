@@ -11,28 +11,42 @@ export type EndpointPart<Body> = string | ((input: EndpointInput<Body>) => strin
 /**
  * Declarative URL construction for one route.
  *
- * `Endpoint` carries only the path. The host always lives on `model.baseURL`,
- * supplied by the provider helper that constructs the model. `render(...)`
- * just appends the path (and any `model.queryParams`) to that host.
+ * `Endpoint` carries URL construction for one route. Routes with a canonical
+ * host put `baseURL` here; provider helpers can override it by configuring the
+ * route before selecting a model.
  *
  * `path` may be a string or a function of `EndpointInput`, for routes whose
  * URL embeds the model id, region, or another body field (e.g. Bedrock,
  * Gemini).
  */
 export interface Endpoint<Body> {
+  readonly baseURL?: string
   readonly path: EndpointPart<Body>
+  readonly query?: Record<string, string>
 }
 
+export type EndpointPatch<Body> = Partial<Endpoint<Body>>
+
 /** Construct an `Endpoint` from a path string or path function. */
-export const path = <Body>(value: EndpointPart<Body>): Endpoint<Body> => ({ path: value })
+export const path = <Body>(value: EndpointPart<Body>, options: Omit<Endpoint<Body>, "path"> = {}): Endpoint<Body> => ({
+  ...options,
+  path: value,
+})
+
+export const merge = <Body>(base: Endpoint<Body>, patch: EndpointPatch<Body>): Endpoint<Body> => ({
+  ...base,
+  ...patch,
+  baseURL: patch.baseURL ?? base.baseURL,
+  path: patch.path ?? base.path,
+  query: patch.query === undefined ? base.query : { ...base.query, ...patch.query },
+})
 
 const renderPart = <Body>(part: EndpointPart<Body>, input: EndpointInput<Body>) =>
   typeof part === "function" ? part(input) : part
 
 export const render = <Body>(endpoint: Endpoint<Body>, input: EndpointInput<Body>) => {
-  const url = new URL(`${ProviderShared.trimBaseUrl(input.request.model.baseURL)}${renderPart(endpoint.path, input)}`)
-  const params = input.request.model.queryParams
-  if (params) for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value)
+  const url = new URL(`${ProviderShared.trimBaseUrl(endpoint.baseURL ?? "")}${renderPart(endpoint.path, input)}`)
+  for (const [key, value] of Object.entries(endpoint.query ?? {})) url.searchParams.set(key, value)
   return url
 }
 

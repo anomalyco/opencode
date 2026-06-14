@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "session-runner/openai-chat-streams-text",
+    "recordedAt": "2026-06-02T19:52:25.084Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gpt-4o-mini\",\"messages\":[{\"role\":\"user\",\"content\":\"Say hello in one short sentence.\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":20,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"id\":\"chatcmpl-DmPRwO9SjY0GJZ3TFFe1Be72wysEG\",\"object\":\"chat.completion.chunk\",\"created\":1780429944,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_40bf7dabb5\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\",\"refusal\":null},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"f3yrdno80\"}\n\ndata: {\"id\":\"chatcmpl-DmPRwO9SjY0GJZ3TFFe1Be72wysEG\",\"object\":\"chat.completion.chunk\",\"created\":1780429944,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_40bf7dabb5\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"fDsGzJ\"}\n\ndata: {\"id\":\"chatcmpl-DmPRwO9SjY0GJZ3TFFe1Be72wysEG\",\"object\":\"chat.completion.chunk\",\"created\":1780429944,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_40bf7dabb5\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"!\"},\"logprobs\":null,\"finish_reason\":null}],\"usage\":null,\"obfuscation\":\"RqaP5kpPNU\"}\n\ndata: {\"id\":\"chatcmpl-DmPRwO9SjY0GJZ3TFFe1Be72wysEG\",\"object\":\"chat.completion.chunk\",\"created\":1780429944,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_40bf7dabb5\",\"choices\":[{\"index\":0,\"delta\":{},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"usage\":null,\"obfuscation\":\"B19l5\"}\n\ndata: {\"id\":\"chatcmpl-DmPRwO9SjY0GJZ3TFFe1Be72wysEG\",\"object\":\"chat.completion.chunk\",\"created\":1780429944,\"model\":\"gpt-4o-mini-2024-07-18\",\"service_tier\":\"default\",\"system_fingerprint\":\"fp_40bf7dabb5\",\"choices\":[],\"usage\":{\"prompt_tokens\":22,\"completion_tokens\":2,\"total_tokens\":24,\"prompt_tokens_details\":{\"cached_tokens\":0,\"audio_tokens\":0},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"audio_tokens\":0,\"accepted_prediction_tokens\":0,\"rejected_prediction_tokens\":0}},\"obfuscation\":\"kbiJobM55YE\"}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

@@ -1,6 +1,7 @@
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSync } from "@/context/server-sync"
 import { decode64 } from "@/utils/base64"
 import { useParams } from "@solidjs/router"
+import { Iterable, pipe } from "effect"
 import { createMemo } from "solid-js"
 
 export const popularProviders = [
@@ -16,29 +17,45 @@ export const popularProviders = [
 const popularProviderSet = new Set(popularProviders)
 
 export function useProviders() {
-  const globalSync = useGlobalSync()
+  const serverSync = useServerSync()
   const params = useParams()
   const dir = createMemo(() => decode64(params.dir) ?? "")
   const providers = () => {
     if (dir()) {
-      const [projectStore] = globalSync.child(dir())
+      const [projectStore] = serverSync.child(dir())
       if (projectStore.provider_ready) return projectStore.provider
     }
-    return globalSync.data.provider
+    return serverSync.data.provider
   }
   return {
     all: () => providers().all,
     default: () => providers().default,
-    popular: () => providers().all.filter((p) => popularProviderSet.has(p.id)),
+    popular: () =>
+      pipe(
+        providers().all,
+        Iterable.map(([, p]) => p),
+        Iterable.filter((p) => popularProviderSet.has(p.id)),
+        (v) => Array.from(v),
+      ),
     connected: () => {
       const connected = new Set(providers().connected)
-      return providers().all.filter((p) => connected.has(p.id))
+      return pipe(
+        providers().all,
+        Iterable.map(([, p]) => p),
+        Iterable.filter((p) => connected.has(p.id)),
+        (v) => Array.from(v),
+      )
     },
     paid: () => {
       const connected = new Set(providers().connected)
-      return providers().all.filter(
-        (p) => connected.has(p.id) && (p.id !== "opencode" || Object.values(p.models).some((m) => m.cost?.input)),
-      )
+      return [
+        ...Iterable.filter(
+          providers().all,
+          ([id]) =>
+            connected.has(id) &&
+            (id !== "opencode" || Object.values(providers().all.get(id)?.models ?? {}).some((m) => m.cost?.input)),
+        ),
+      ]
     },
   }
 }

@@ -210,7 +210,6 @@ export type TuiPromptRef = {
 
 export type TuiPromptProps = {
   sessionID?: string
-  workspaceID?: string
   visible?: boolean
   disabled?: boolean
   onSubmit?: () => void
@@ -458,12 +457,9 @@ export type TuiHostSlotMap = {
   app_bottom: {}
   home_logo: {}
   home_prompt: {
-    workspace_id?: string
     ref?: (ref: TuiPromptRef | undefined) => void
   }
-  home_prompt_right: {
-    workspace_id?: string
-  }
+  home_prompt_right: {}
   session_prompt: {
     session_id: string
     visible?: boolean

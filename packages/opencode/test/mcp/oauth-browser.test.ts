@@ -38,7 +38,7 @@ class MockUnauthorizedError extends Error {
 const transportCalls: Array<{
   type: "streamable" | "sse"
   url: string
-  options: { authProvider?: unknown }
+  options: { authProvider?: unknown; requestInit?: RequestInit }
 }> = []
 
 // Mock the transport constructors
@@ -46,7 +46,10 @@ void mock.module("@modelcontextprotocol/sdk/client/streamableHttp.js", () => ({
   StreamableHTTPClientTransport: class MockStreamableHTTP {
     url: string
     authProvider: { redirectToAuthorization?: (url: URL) => Promise<void> } | undefined
-    constructor(url: URL, options?: { authProvider?: { redirectToAuthorization?: (url: URL) => Promise<void> } }) {
+    constructor(
+      url: URL,
+      options?: { authProvider?: { redirectToAuthorization?: (url: URL) => Promise<void> }; requestInit?: RequestInit },
+    ) {
       this.url = url.toString()
       this.authProvider = options?.authProvider
       transportCalls.push({
@@ -86,8 +89,14 @@ void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
 // Mock the MCP SDK Client to trigger OAuth flow
 void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
   Client: class MockClient {
+    setRequestHandler() {}
+
     async connect(transport: { start: () => Promise<void> }) {
       await transport.start()
+    }
+
+    getServerCapabilities() {
+      return { tools: {} }
     }
   },
 }))
@@ -106,28 +115,29 @@ beforeEach(() => {
 
 // Import modules after mocking
 const { MCP } = await import("../../src/mcp/index")
-const { Bus } = await import("../../src/bus")
+const { EventV2Bridge } = await import("../../src/event-v2-bridge")
 const { Config } = await import("../../src/config/config")
 const { McpAuth } = await import("../../src/mcp/auth")
 const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
-const { AppFileSystem } = await import("@opencode-ai/core/filesystem")
+const { FSUtil } = await import("@opencode-ai/core/fs-util")
 const { CrossSpawnSpawner } = await import("@opencode-ai/core/cross-spawn-spawner")
 const mcpTest = testEffect(
   MCP.layer.pipe(
     Layer.provide(McpAuth.defaultLayer),
-    Layer.provideMerge(Bus.layer),
+    Layer.provideMerge(EventV2Bridge.defaultLayer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
   ),
 )
 const service = MCP.Service as unknown as Effect.Effect<MCPNS.Interface, never, never>
 
-const config = (name: string) => ({
+const config = (name: string, headers?: Record<string, string>) => ({
   mcp: {
     [name]: {
       type: "remote" as const,
       url: "https://example.com/mcp",
+      headers,
     },
   },
 })
@@ -142,12 +152,14 @@ const trackBrowserOpen = Effect.gen(function* () {
 })
 
 const trackBrowserOpenFailed = Effect.gen(function* () {
-  const bus = yield* Bus.Service
+  const events = yield* EventV2Bridge.Service
   const event = yield* Deferred.make<{ mcpName: string; url: string }>()
-  const unsubscribe = yield* bus.subscribeCallback(MCP.BrowserOpenFailed, (evt) => {
-    Effect.runSync(Deferred.succeed(event, evt.properties).pipe(Effect.ignore))
+  const unsubscribe = yield* events.listen((evt) => {
+    if (evt.type === MCP.BrowserOpenFailed.type)
+      Deferred.doneUnsafe(event, Effect.succeed(evt.data as { mcpName: string; url: string }))
+    return Effect.void
   })
-  yield* Effect.addFinalizer(() => Effect.sync(unsubscribe))
+  yield* Effect.addFinalizer(() => unsubscribe)
   return event
 })
 
@@ -221,6 +233,7 @@ mcpTest.instance(
       expect(failure).toEqual(Option.none())
       expect(typeof url).toBe("string")
       expect(url).toContain("https://")
+      expect(transportCalls.at(-1)?.options.requestInit?.headers).toEqual({ "X-Custom-Header": "custom-value" })
     }),
-  { config: config("test-oauth-server-3") },
+  { config: config("test-oauth-server-3", { "X-Custom-Header": "custom-value" }) },
 )
