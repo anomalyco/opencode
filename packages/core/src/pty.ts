@@ -197,8 +197,6 @@ export const layer = Layer.effect(
       const command = input.command || Shell.preferred(Config.latest(yield* config.entries(), "shell"))
       const args = Shell.login(command) ? [...(input.args ?? []), "-l"] : [...(input.args ?? [])]
       const cwd = input.cwd || location.directory
-      // TODO: Apply plugin shell.env environment augmentation once V2 plugin hooks exist; legacy
-      // routes merge plugin-provided values into input.env at the boundary.
       const env = {
         ...process.env,
         ...input.env,
