@@ -13,10 +13,13 @@ import { Daemon } from "../../services/daemon"
 export default Runtime.handler(
   Commands.commands.serve,
   Effect.fn("cli.serve")(function* (input) {
+    const providerURL = Option.isSome(input["provider-url"]) ? input["provider-url"].value : undefined
+    const model = Option.isSome(input.model) ? input.model.value : undefined
     return yield* Effect.scoped(
       Effect.gen(function* () {
         const daemon = yield* Daemon.Service
-        const address = yield* listen(input.hostname, input.port, yield* daemon.password())
+        // Передаём пустую строку вместо daemon.password(), чтобы отключить аутентификацию
+        const address = yield* listen(input.hostname, input.port, "", providerURL, model)
         if (input.register) yield* daemon.register(address)
         console.log(`server listening on ${HttpServer.formatAddress(address)}`)
         return yield* Effect.never
@@ -25,16 +28,14 @@ export default Runtime.handler(
   }),
 )
 
-function listen(hostname: string, port: Option.Option<number>, password: string) {
-  if (Option.isSome(port)) return bind(hostname, port.value, password)
-  // Preserve the familiar default when available, but let the OS choose a free
-  // port when another local server already owns 4096.
-  return bind(hostname, 4096, password).pipe(Effect.catch(() => bind(hostname, 0, password)))
+function listen(hostname: string, port: Option.Option<number>, password: string, providerURL?: string, model?: string) {
+  if (Option.isSome(port)) return bind(hostname, port.value, password, providerURL, model)
+  return bind(hostname, 4096, password, providerURL, model).pipe(Effect.catch(() => bind(hostname, 0, password, providerURL, model)))
 }
 
-function bind(hostname: string, port: number, password: string) {
+function bind(hostname: string, port: number, password: string, providerURL?: string, model?: string) {
   return Layer.build(
-    HttpRouter.serve(createRoutes(password), { disableListenLog: true, disableLogger: true }).pipe(
+    HttpRouter.serve(createRoutes(password, providerURL, model), { disableListenLog: true, disableLogger: true }).pipe(
       Layer.provideMerge(NodeHttpServer.layer(() => createServer(), { port, host: hostname })),
       Layer.provide(Credential.defaultLayer),
       Layer.provide(PermissionSaved.defaultLayer),

@@ -27,7 +27,7 @@ import { ProviderPlugins } from "./provider"
 import { SkillV2 } from "../skill"
 import { Reference } from "../reference"
 
-type Plugin = {
+export type Plugin = {
   id: PluginV2.ID
   effect: PluginV2.Effect<
     | Catalog.Service
@@ -53,6 +53,15 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/PluginBoot") {}
+
+const _extraPlugins: Plugin[] = []
+
+export const setExtraPlugins = (plugins: Plugin[]) => {
+  _extraPlugins.length = 0
+  _extraPlugins.push(...plugins)
+}
+
+const getExtraPlugins = () => _extraPlugins
 
 export const layer = Layer.effect(
   Service,
@@ -110,6 +119,9 @@ export const layer = Layer.effect(
       yield* add(ConfigCommandPlugin.Plugin)
       yield* add(ConfigSkillPlugin.Plugin)
       yield* add(ConfigReferencePlugin.Plugin)
+      for (const item of getExtraPlugins()) {
+        yield* add(item)
+      }
     }).pipe(Effect.withSpan("PluginBoot.boot"))
 
     yield* boot.pipe(

@@ -1,0 +1,36 @@
+{
+  "vk_token": "YOUR_VK_TOKEN_HERE",
+  "opencode_url": "http://127.0.0.1:4096",
+  "session_file": "sessions.json",
+  "vk_api_version": "5.200",
+  "longpoll_wait": 25,
+  "peer_id": 2000000002,
+  "thinking_peer_id": 2000000003,
+  "model": "llama.cpp/qwen3.6-claude",
+  "opencode_bin_path": "/path/to/opencode/bin/opencode",
+  "opencode_config_path": "~/.config/opencode/opencode.json",
+  "llama_server_path": "/path/to/llama-server",
+  "llama_server_host": "http://localhost:8081",
+  "models": {
+    "qwen3.6-claude": {
+      "model": "llama.cpp/qwen3.6-claude",
+      "args": "-m /path/to/model.gguf --port 8081 --host 0.0.0.0 --ctx-size 262144 --fit on -fa auto -tb 5 --no-mmap --parallel 2 --verbose"
+    },
+    "qwen3.6-27b": {
+      "model": "llama.cpp/qwen3.6-27b",
+      "args": "-m /path/to/model.gguf --port 8081 --host 0.0.0.0 --ctx-size 262144 --fit on -fa auto -tb 5 --no-mmap --parallel 2 --verbose"
+    },
+    "qwen3.5-122b": {
+      "model": "llama.cpp/qwen3.5-122b",
+      "args": "-m /path/to/model.gguf --port 8081 --host 0.0.0.0 --ctx-size 262144 --fit on -b 1024 -ub 256 -tb 6 --no-mmap --verbose -np 2"
+    }
+  },
+  "default_model": "qwen3.6-claude",
+  "mcp_servers": {
+    "ya-disk-uploader": {
+      "type": "local",
+      "command": ["/path/to/ya-disk-uploader/ya-disk-uploader", "mcp"],
+      "enabled": true
+    }
+  }
+}

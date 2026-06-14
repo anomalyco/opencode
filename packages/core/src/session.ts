@@ -426,7 +426,6 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(SessionExecution.noopLayer),
   Layer.provide(SessionStore.defaultLayer),
   Layer.provide(SessionProjector.defaultLayer),
   Layer.provide(EventV2.defaultLayer),

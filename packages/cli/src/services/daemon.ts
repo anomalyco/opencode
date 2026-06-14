@@ -47,6 +47,8 @@ export const layer = Layer.effect(
 
       // Keep one private credential across server restarts so discovered clients
       // can reconnect without exposing a password flag or environment variable.
+      // Если value === "", не генерируем пароль (отключаем аутентификацию)
+      if (value === "") return ""
       const generated = value ?? randomBytes(32).toString("base64url")
       const temp = passwordFile + ".tmp"
       yield* fs.makeDirectory(directory, { recursive: true })

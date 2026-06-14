@@ -30,6 +30,8 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
         hostname: Flag.string("hostname").pipe(Flag.withDefault("127.0.0.1")),
         port: Flag.integer("port").pipe(Flag.optional),
         register: Flag.boolean("register").pipe(Flag.withDefault(false)),
+        "provider-url": Flag.string("provider-url").pipe(Flag.optional),
+        model: Flag.string("model").pipe(Flag.optional),
       },
     }),
   ],
