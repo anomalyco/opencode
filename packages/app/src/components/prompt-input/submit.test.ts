@@ -147,12 +147,12 @@ beforeAll(async () => {
           return clientFor(opts.directory)
         },
       }
-      return sdk
+      return () => sdk
     },
   }))
 
   mock.module("@/context/sync", () => ({
-    useSync: () => ({
+    useSync: () => () => ({
       data: { command: [] },
       session: {
         optimistic: {
@@ -176,7 +176,7 @@ beforeAll(async () => {
   }))
 
   mock.module("@/context/server-sync", () => ({
-    useServerSync: () => ({
+    useServerSync: () => () => ({
       child: (directory: string) => {
         syncedDirectories.push(directory)
         storedSessions[directory] ??= []

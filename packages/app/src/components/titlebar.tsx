@@ -291,7 +291,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     item.type === "session" && item.server === route.server && item.sessionId === route.sessionId,
                 )
                 if (main) return main
-                const sync = serverSync.createDirSyncContext(route.dir)
+                const sync = serverSync().createDirSyncContext(route.dir)
                 const session = sync.session.get(route.sessionId)
                 if (session?.parentID) {
                   const parentID = session.parentID
@@ -312,7 +312,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               if (tab) return
 
               if (route.type === "session") {
-                const sync = serverSync.createDirSyncContext(route.dir)
+                const sync = serverSync().createDirSyncContext(route.dir)
                 const session = sync.session.get(route.sessionId)
                 if (!session) return
                 const sessionId = session.parentID ?? session.id

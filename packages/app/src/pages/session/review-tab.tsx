@@ -53,7 +53,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
   const layout = useLayout()
 
   const readFile = async (path: string) => {
-    return sdk.client.file
+    return sdk().client.file
       .read({ path })
       .then((x) => x.data)
       .catch((error) => {
