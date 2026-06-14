@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/console-support",
-  "version": "1.17.4",
+  "version": "1.17.6",
   "type": "module",
   "license": "MIT",
   "scripts": {
