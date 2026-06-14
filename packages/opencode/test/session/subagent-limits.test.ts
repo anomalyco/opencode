@@ -8,12 +8,49 @@ import { SubagentLimits } from "@/session/subagent-limits"
 const cfg = (value?: number) =>
   ({ experimental: value === undefined ? {} : { subagent_max_depth: value } }) as unknown as ConfigV1.Info
 
+// Same cast for the Phase-2 `subagent_tree_limit` knob (Issue 2).
+const treeCfg = (value?: number) =>
+  ({ experimental: value === undefined ? {} : { subagent_tree_limit: value } }) as unknown as ConfigV1.Info
+
 describe("constants", () => {
   test("limits match the design", () => {
     expect(SubagentLimits.DEFAULT_MAX_TASK_DEPTH).toBe(5)
     expect(SubagentLimits.HARD_MAX_DEPTH).toBe(10)
     expect(SubagentLimits.SUBAGENT_TREE_LIMIT).toBe(200)
+    expect(SubagentLimits.HARD_MAX_TREE_LIMIT).toBe(10_000)
     expect(SubagentLimits.LINEAGE_ITERATION_CAP).toBe(32)
+  })
+})
+
+describe("treeLimit", () => {
+  test("defaults to 200 when unset", () => {
+    expect(SubagentLimits.treeLimit(treeCfg())).toBe(200)
+    expect(SubagentLimits.treeLimit({} as ConfigV1.Info)).toBe(200)
+  })
+
+  test("clamps to [1, HARD_MAX_TREE_LIMIT]", () => {
+    expect(SubagentLimits.treeLimit(treeCfg(0))).toBe(1)
+    expect(SubagentLimits.treeLimit(treeCfg(-5))).toBe(1)
+    expect(SubagentLimits.treeLimit(treeCfg(1))).toBe(1)
+    expect(SubagentLimits.treeLimit(treeCfg(50))).toBe(50)
+    expect(SubagentLimits.treeLimit(treeCfg(200))).toBe(200)
+    expect(SubagentLimits.treeLimit(treeCfg(999_999))).toBe(10_000)
+  })
+
+  test("truncates fractional values", () => {
+    expect(SubagentLimits.treeLimit(treeCfg(50.9))).toBe(50)
+  })
+
+  test("ignores non-finite values (falls back to default)", () => {
+    expect(SubagentLimits.treeLimit(treeCfg(Number.NaN))).toBe(200)
+    expect(SubagentLimits.treeLimit(treeCfg(Number.POSITIVE_INFINITY))).toBe(200)
+  })
+
+  test("__testHooks.treeLimit overrides config when set", () => {
+    SubagentLimits.__testHooks.treeLimit = 3
+    expect(SubagentLimits.treeLimit(treeCfg(200))).toBe(3)
+    SubagentLimits.__testHooks.treeLimit = undefined
+    expect(SubagentLimits.treeLimit(treeCfg(200))).toBe(200)
   })
 })
 

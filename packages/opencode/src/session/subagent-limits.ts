@@ -21,11 +21,21 @@ export const DEFAULT_MAX_TASK_DEPTH = 5
 export const HARD_MAX_DEPTH = 10
 
 /**
- * In-memory lifetime cap on subagents started per session tree (keyed by root
- * session). A safety ceiling against runaway delegation within one process
- * run, not an accounting counter; resumes do not count.
+ * Default in-memory lifetime cap on subagents started per session tree (keyed
+ * by root session). A safety ceiling against runaway delegation within one
+ * process run, not an accounting counter; resumes do not count. Overridable
+ * via `experimental.subagent_tree_limit` — see `treeLimit(cfg)`.
  */
 export const SUBAGENT_TREE_LIMIT = 200
+
+/**
+ * Config-free upper bound for `experimental.subagent_tree_limit`. The cap stays
+ * a per-process safety ceiling, so even a power user's override is clamped to a
+ * sane order of magnitude (guards against typos/overflow turning the ceiling
+ * into "effectively unlimited"). Well above the 200 default; the lower clamp
+ * bound is 1 (at least one spawn must remain possible).
+ */
+export const HARD_MAX_TREE_LIMIT = 10_000
 
 /**
  * Iteration cap for the `Session.lineage` parent-chain walk. Legitimate chains
@@ -48,6 +58,23 @@ export function maxDepth(cfg: ConfigV1.Info): number {
   const raw = (cfg.experimental as { subagent_max_depth?: number } | undefined)?.subagent_max_depth
   if (typeof raw !== "number" || !Number.isFinite(raw)) return DEFAULT_MAX_TASK_DEPTH
   return Math.min(Math.max(Math.trunc(raw), 1), HARD_MAX_DEPTH)
+}
+
+/**
+ * Resolves the effective subagent tree lifetime cap — the single source of
+ * truth for the spawn gate (design-final §2.5, Phase-2 Issue 2). Precedence:
+ * the `__testHooks.treeLimit` seam wins, then `experimental.subagent_tree_limit`
+ * (clamped to 1..HARD_MAX_TREE_LIMIT, truncated), else the SUBAGENT_TREE_LIMIT
+ * default. The in-memory per-process counter is unchanged — this only sets the
+ * ceiling.
+ */
+export function treeLimit(cfg: ConfigV1.Info): number {
+  if (typeof __testHooks.treeLimit === "number") return __testHooks.treeLimit
+  // The config key ships with the default-opening track; the cast keeps this
+  // helper typed against ConfigV1.Info before and after the schema gains it.
+  const raw = (cfg.experimental as { subagent_tree_limit?: number } | undefined)?.subagent_tree_limit
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return SUBAGENT_TREE_LIMIT
+  return Math.min(Math.max(Math.trunc(raw), 1), HARD_MAX_TREE_LIMIT)
 }
 
 /**
@@ -194,8 +221,8 @@ export const lineageError = (input: { sessionID: SessionID }) =>
   })
 
 /**
- * Test seam for the tree lifetime cap: when set, the task tool gates on this
- * value instead of SUBAGENT_TREE_LIMIT. Inert in production.
+ * Test seam for the tree lifetime cap: when set, `treeLimit(cfg)` returns this
+ * value instead of the config-derived/default ceiling. Inert in production.
  */
 export const __testHooks = {
   treeLimit: undefined as number | undefined,
