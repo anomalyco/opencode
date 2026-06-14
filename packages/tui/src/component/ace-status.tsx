@@ -5,6 +5,7 @@ import { useEvent } from "../context/event"
 import { useSync } from "../context/sync"
 import { useTheme } from "../context/theme"
 import { useRoute } from "../context/route"
+import { kEffTone } from "../util/budget"
 
 type AceMode = "off" | "monitor" | "fixed-cap" | "reject-escalate"
 
@@ -14,6 +15,7 @@ type AcePressure = {
   spawns: number
   spawnDepth: number
   activeSubagents: number
+  kEff?: number
 }
 
 type AceEvent = Event & {
@@ -48,6 +50,7 @@ export function AceStatus() {
     toolCalls: 0,
     spawns: 0,
     activeSubagents: 0,
+    kEff: undefined as number | undefined,
     blocked: "",
   })
 
@@ -75,6 +78,7 @@ export function AceStatus() {
           toolCalls: pressure.toolCalls,
           spawns: pressure.spawns,
           activeSubagents: pressure.activeSubagents,
+          kEff: pressure.kEff,
         })
       }
       if (raw.type === "session.next.ace.decision" && raw.properties.action === "block") {
@@ -91,6 +95,11 @@ export function AceStatus() {
 
   const mode = createMemo(() => (store.mode === "off" ? configuredMode() : store.mode))
 
+  const kEffColor = createMemo(() => {
+    const tone = kEffTone(store.kEff)
+    return tone === "error" ? theme.error : tone === "warning" ? theme.warning : theme.textMuted
+  })
+
   return (
     <Show when={activeSessionID() && mode() !== "off"}>
       <Show
@@ -99,6 +108,10 @@ export function AceStatus() {
           <text fg={theme.textMuted}>
             ACE {mode()} {store.toolCalls}tc {store.spawns}sp
             {store.activeSubagents > 0 ? ` ${store.activeSubagents}active` : ""}
+            <Show when={store.kEff !== undefined}>
+              {" "}
+              <span style={{ fg: kEffColor() }}>k{store.kEff!.toFixed(2)}</span>
+            </Show>
           </text>
         }
       >

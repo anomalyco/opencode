@@ -6,6 +6,7 @@ import { useConnected } from "../../component/use-connected"
 import { createStore } from "solid-js/store"
 import { useRoute } from "../../context/route"
 import { AceStatus } from "../../component/ace-status"
+import { BudgetStatus } from "../../component/budget-status"
 
 export function Footer() {
   const { theme } = useTheme()
@@ -83,6 +84,7 @@ export function Footer() {
                 {mcp()} MCP
               </text>
             </Show>
+            <BudgetStatus />
             <AceStatus />
             <text fg={theme.textMuted}>/status</text>
           </Match>
