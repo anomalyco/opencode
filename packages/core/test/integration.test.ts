@@ -147,11 +147,9 @@ describe("Integration", () => {
           method: { type: "key", label: "API key" },
         }),
       )
-      const updated = yield* events.subscribe(Integration.Event.Updated).pipe(
-        Stream.take(1),
-        Stream.runCollect,
-        Effect.forkScoped,
-      )
+      const updated = yield* events
+        .subscribe(Integration.Event.Updated)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       yield* integrations.connection.key({

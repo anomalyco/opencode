@@ -93,11 +93,7 @@ export const layer = Layer.effect(
     const integrations = yield* Integration.Service
     const scope = yield* Scope.Scope
 
-    const available = (
-      provider: ProviderV2.Info,
-      integration: Integration.Info | undefined,
-      connected: boolean,
-    ) => {
+    const available = (provider: ProviderV2.Info, integration: Integration.Info | undefined, connected: boolean) => {
       if (provider.disabled) return false
       if (typeof provider.request.body.apiKey === "string") return true
       if (connected) return true
