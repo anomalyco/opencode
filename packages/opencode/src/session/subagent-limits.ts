@@ -5,9 +5,9 @@ import { SessionID } from "./schema"
 /**
  * Shared constants and typed errors for nested subagent spawning
  * (design-final.md §2). Depth is a purely derived value: the root ("CEO")
- * session is depth 1 and every task/subtask/workflow dispatch adds one level.
- * This is a plain module on purpose — NOT an Effect service — so the session
- * layer, tools and the workflow dispatcher can consume it without wiring.
+ * session is depth 1 and every task/subtask dispatch adds one level. This is a
+ * plain module on purpose — NOT an Effect service — so the session layer and
+ * tools can consume it without wiring.
  */
 
 /** Default maximum nesting depth (root session = 1; levels 1..4 may spawn). */
@@ -23,8 +23,7 @@ export const HARD_MAX_DEPTH = 10
 /**
  * In-memory lifetime cap on subagents started per session tree (keyed by root
  * session). A safety ceiling against runaway delegation within one process
- * run, not an accounting counter; resumes do not count, workflow dispatches
- * keep their own `DEFAULT_AGENT_LIMIT`.
+ * run, not an accounting counter; resumes do not count.
  */
 export const SUBAGENT_TREE_LIMIT = 200
 
@@ -57,6 +56,57 @@ export function maxDepth(cfg: ConfigV1.Info): number {
  */
 export function depthHint(depth: number, max: number): string {
   return `You are a sub-agent at delegation depth ${depth} of ${max}. You may delegate to deeper sub-agents; prefer doing small tasks yourself.`
+}
+
+/** Per-session token aggregate, shaped like `Session.Info.tokens`. */
+export interface CostRollupTokens {
+  input: number
+  output: number
+  reasoning: number
+  cache: { read: number; write: number }
+}
+
+/** Aggregated subtree spend — cost in USD plus every token bucket. */
+export interface CostRollup {
+  cost: number
+  tokens: CostRollupTokens
+}
+
+/**
+ * Structural slice of `Session.Info` the rollup reads. Typed against the shape
+ * (not the session module) on purpose so this stays a plain, import-light
+ * module — session.ts already depends on subagent-limits, and importing
+ * `Session.Info` back would be a cycle.
+ */
+export interface CostRollupNode {
+  cost?: number
+  tokens?: Partial<CostRollupTokens> & { cache?: { read?: number; write?: number } }
+}
+
+/**
+ * Sums cost and tokens across a set of sessions — the single source of truth
+ * for the subtree cost rollup (design-final §4.6 / Phase-2 Issue 6). Pure
+ * DISPLAY aggregation over `Session.descendants`: it never writes anything and
+ * the per-session accounting each node carries is untouched, so there is no
+ * double-billing. Missing cost/tokens count as zero, matching how the projector
+ * defaults an un-charged session.
+ */
+export function aggregateCost(nodes: ReadonlyArray<CostRollupNode>): CostRollup {
+  const rollup: CostRollup = {
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  }
+  for (const node of nodes) {
+    rollup.cost += node.cost ?? 0
+    const tokens = node.tokens
+    if (tokens === undefined) continue
+    rollup.tokens.input += tokens.input ?? 0
+    rollup.tokens.output += tokens.output ?? 0
+    rollup.tokens.reasoning += tokens.reasoning ?? 0
+    rollup.tokens.cache.read += tokens.cache?.read ?? 0
+    rollup.tokens.cache.write += tokens.cache?.write ?? 0
+  }
+  return rollup
 }
 
 /**
@@ -129,7 +179,7 @@ export const budgetError = () =>
 /**
  * Raised when the parent-chain walk exceeds LINEAGE_ITERATION_CAP (corrupt or
  * cyclic session parents). Callers treat this like "depth ≥ limit": spawning
- * is refused and the task/workflow tools are filtered.
+ * is refused and the task tool is filtered.
  */
 export class SubagentLineageError extends Schema.TaggedErrorClass<SubagentLineageError>()("SubagentLineageError", {
   message: Schema.String,
@@ -144,9 +194,8 @@ export const lineageError = (input: { sessionID: SessionID }) =>
   })
 
 /**
- * Test seam for the tree lifetime cap (mirrors `__testHooks.agentLimit` in
- * workflow.ts): when set, the task tool gates on this value instead of
- * SUBAGENT_TREE_LIMIT. Inert in production.
+ * Test seam for the tree lifetime cap: when set, the task tool gates on this
+ * value instead of SUBAGENT_TREE_LIMIT. Inert in production.
  */
 export const __testHooks = {
   treeLimit: undefined as number | undefined,
