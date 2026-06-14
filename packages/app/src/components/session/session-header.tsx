@@ -158,6 +158,7 @@ export function SessionHeader() {
   const isV2 = settings.general.newLayoutDesigns
   const search = settings.visibility.search
   const status = settings.visibility.status
+  const fileTree = settings.visibility.fileTree
 
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
     finder: true,
@@ -238,6 +239,20 @@ export function SessionHeader() {
     reviewKeybind: command.keybind("review.toggle"),
     reviewOpened: view().reviewPanel.opened(),
     onReviewToggle: () => view().reviewPanel.toggle(),
+    searchVisible: search(),
+    searchLabel: language.t("session.header.searchFiles"),
+    searchKeybind: command.keybind("file.open"),
+    onSearchTrigger: () => command.trigger("file.open"),
+    fileTreeVisible: fileTree(),
+    fileTreeOpened: layout.fileTree.opened(),
+    fileTreeLabel: language.t("command.fileTree.toggle"),
+    fileTreeKeybind: command.keybind("fileTree.toggle"),
+    onFileTreeToggle: () => layout.fileTree.toggle(),
+    terminalVisible: settings.general.showTerminal(),
+    terminalOpened: view().terminal.opened(),
+    terminalLabel: language.t("command.terminal.toggle"),
+    terminalKeybind: command.keybind("terminal.toggle"),
+    onTerminalToggle: toggleTerminal,
   }))
 
   const selectApp = (app: OpenApp) => {
@@ -320,7 +335,7 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <Show
-              when={isV2}
+              when={isV2()}
               fallback={
                 <div class="flex items-center gap-2">
                   <Show when={projectDirectory()}>
@@ -520,11 +535,70 @@ type SessionHeaderV2ActionsState = {
   reviewKeybind: string
   reviewOpened: boolean
   onReviewToggle: () => void
+  searchVisible: boolean
+  searchLabel: string
+  searchKeybind: string
+  onSearchTrigger: () => void
+  fileTreeVisible: boolean
+  fileTreeOpened: boolean
+  fileTreeLabel: string
+  fileTreeKeybind: string
+  onFileTreeToggle: () => void
+  terminalVisible: boolean
+  terminalOpened: boolean
+  terminalLabel: string
+  terminalKeybind: string
+  onTerminalToggle: () => void
 }
 
 function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
   return (
     <div class="flex items-center gap-2">
+      <Show when={props.state.searchVisible}>
+        <TooltipKeybind title={props.state.searchLabel} keybind={props.state.searchKeybind}>
+          <IconButtonV2
+            type="button"
+            variant="ghost-muted"
+            size="large"
+            class="!w-9 shrink-0"
+            onClick={props.state.onSearchTrigger}
+            aria-label={props.state.searchLabel}
+            icon={<IconV2 name="magnifying-glass" />}
+          />
+        </TooltipKeybind>
+      </Show>
+      <Show when={props.state.terminalVisible}>
+        <TooltipKeybind title={props.state.terminalLabel} keybind={props.state.terminalKeybind}>
+          <IconButtonV2
+            type="button"
+            variant="ghost-muted"
+            size="large"
+            class="!w-9 shrink-0"
+            state={props.state.terminalOpened ? "pressed" : undefined}
+            onClick={props.state.onTerminalToggle}
+            aria-label={props.state.terminalLabel}
+            aria-expanded={props.state.terminalOpened}
+            aria-controls="terminal-panel"
+            icon={<IconV2 name="terminal" />}
+          />
+        </TooltipKeybind>
+      </Show>
+      <Show when={props.state.fileTreeVisible}>
+        <TooltipKeybind title={props.state.fileTreeLabel} keybind={props.state.fileTreeKeybind}>
+          <IconButtonV2
+            type="button"
+            variant="ghost-muted"
+            size="large"
+            class="!w-9 shrink-0"
+            state={props.state.fileTreeOpened ? "pressed" : undefined}
+            onClick={props.state.onFileTreeToggle}
+            aria-label={props.state.fileTreeLabel}
+            aria-expanded={props.state.fileTreeOpened}
+            aria-controls="file-tree-panel"
+            icon={<IconV2 name="file-tree" />}
+          />
+        </TooltipKeybind>
+      </Show>
       <Show when={props.state.statusVisible}>
         <Tooltip placement="bottom" value={props.state.statusLabel}>
           <StatusPopoverV2 />
