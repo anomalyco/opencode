@@ -38,6 +38,50 @@ import type { ServerScope } from "@/utils/server-scope"
 import { persisted } from "@/utils/persist"
 import { toggleMcp } from "./global-sync/mcp"
 
+// Map a directory-scoped event to the session/message it concerns, so the listener can route it to
+// the store that actually holds that session even when the event's own instance directory has no
+// registered store. This is the cross-instance subagent case: a child anchored in a monorepo
+// subproject (directory=<subproject>) the UI never opened as its own project — the child is loaded
+// into and displayed from its PARENT project's store (via childSessions). Directory-level events
+// (server.instance.disposed / vcs / lsp) return no ids and must NOT use the fallback.
+function eventRoutingIdentity(event: { type: string; properties?: unknown }): {
+  sessionID?: string
+  messageID?: string
+} {
+  const p = (event.properties ?? {}) as {
+    info?: { id?: string; sessionID?: string }
+    part?: { sessionID?: string; messageID?: string }
+    sessionID?: string
+    messageID?: string
+  }
+  switch (event.type) {
+    case "session.created":
+    case "session.updated":
+    case "session.deleted":
+      return { sessionID: p.info?.id }
+    case "message.updated":
+      return { sessionID: p.info?.sessionID, messageID: p.info?.id }
+    case "message.part.updated":
+      return { sessionID: p.part?.sessionID, messageID: p.part?.messageID }
+    case "message.removed":
+      return { sessionID: p.sessionID, messageID: p.messageID }
+    case "message.part.removed":
+    case "message.part.delta":
+      return { messageID: p.messageID }
+    case "session.diff":
+    case "todo.updated":
+    case "session.status":
+    case "permission.asked":
+    case "permission.replied":
+    case "question.asked":
+    case "question.replied":
+    case "question.rejected":
+      return { sessionID: p.sessionID }
+    default:
+      return {}
+  }
+}
+
 type GlobalStore = {
   ready: boolean
   error?: InitError
@@ -394,22 +438,58 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     }
 
     const existing = children.children[key]
-    if (!existing) return
-    children.mark(key)
-    const [store, setStore] = existing
-    applyDirectoryEvent({
-      event,
-      directory,
-      store,
-      setStore,
-      push: queue.push,
-      setSessionTodo,
-      retainedLimit: sessionMeta.get(key)?.limit,
-      vcsCache: children.vcsCache.get(key),
-      loadLsp: () => {
-        void queryClient.fetchQuery(queryOptionsApi.lsp(key))
-      },
-    })
+    if (existing) {
+      children.mark(key)
+      const [store, setStore] = existing
+      applyDirectoryEvent({
+        event,
+        directory,
+        store,
+        setStore,
+        push: queue.push,
+        setSessionTodo,
+        retainedLimit: sessionMeta.get(key)?.limit,
+        vcsCache: children.vcsCache.get(key),
+        loadLsp: () => {
+          void queryClient.fetchQuery(queryOptionsApi.lsp(key))
+        },
+      })
+      return
+    }
+
+    // Fallback: the event's own instance directory has no registered store. Happens for a subagent
+    // child anchored in a subproject (directory=<subproject>) that the UI never opened as its own
+    // project — the child session is loaded into and displayed from its PARENT project's store.
+    // Without this, the child's live events (message/part deltas, status, questions) are dropped and
+    // the child view stays frozen until it is re-entered (which re-fetches a snapshot). Route such
+    // session-scoped events to every registered store that already holds that session/message.
+    const identity = eventRoutingIdentity(event)
+    if (identity.sessionID === undefined && identity.messageID === undefined) return
+    for (const targetKey of Object.keys(children.children)) {
+      const target = children.children[targetKey]
+      if (!target) continue
+      const [store, setStore] = target
+      const holdsSession =
+        identity.sessionID !== undefined &&
+        (store.message[identity.sessionID] !== undefined || store.session.some((s) => s.id === identity.sessionID))
+      const holdsMessage = identity.messageID !== undefined && store.part[identity.messageID] !== undefined
+      if (!holdsSession && !holdsMessage) continue
+      const targetDirKey = directoryKey(targetKey)
+      children.mark(targetKey)
+      applyDirectoryEvent({
+        event,
+        directory: targetKey,
+        store,
+        setStore,
+        push: queue.push,
+        setSessionTodo,
+        retainedLimit: sessionMeta.get(targetDirKey)?.limit,
+        vcsCache: children.vcsCache.get(targetDirKey),
+        loadLsp: () => {
+          void queryClient.fetchQuery(queryOptionsApi.lsp(targetDirKey))
+        },
+      })
+    }
   })
 
   onCleanup(unsub)

@@ -2,6 +2,8 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { GlobalBus } from "@/bus/global"
 import { EventV2 } from "@opencode-ai/core/event"
+import { Session } from "@/session/session"
+import { SessionID } from "@/session/schema"
 import { Effect, Queue } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerResponse } from "effect/unstable/http"
@@ -31,13 +33,73 @@ function eventResponse(events: EventV2.Interface) {
     const queue = yield* Queue.unbounded<EventV2.Payload>()
     const unsubscribe = yield* events.listen((event) => Effect.sync(() => Queue.offerUnsafe(queue, event)))
     yield* Effect.addFinalizer(() => unsubscribe)
+    const sessions = yield* Session.Service
+
+    // OPENCODE_EVENT_SUBTREE (default on): a subscription on directory D receives events from every
+    // session whose tree is ROOTED in D — the open session plus all of its (possibly cross-directory)
+    // descendant subagents. This is what lets a monorepo-root TUI observe a subagent launched in a
+    // subproject (live progress, child-session navigation, live questions). Matching is by session
+    // lineage (parentID), NOT by the child's own directory, so it is robust to subagents anchored
+    // anywhere — including worktrees outside the subscription directory. Events without an owning
+    // session (global/instance events) stay scoped to the exact instance directory. Set
+    // OPENCODE_EVENT_SUBTREE=0 to restore strict matching (events only for sessions whose own
+    // directory equals the subscription directory).
+    // TODO(PR anomalyco/opencode#29271): revisit this env gate before upstreaming (opt-in or drop it).
+    const subtreeEvents = !["0", "false", "off", "no"].includes(
+      (process.env["OPENCODE_EVENT_SUBTREE"] ?? "").toLowerCase(),
+    )
+
+    // Memoized lineage resolver: maps a session id to the directory of its root ancestor (the
+    // subscription anchor for the whole tree). Cached per connection; each session is walked at most
+    // once, so subsequent events for it are an O(1) map lookup.
+    const rootDirectoryCache = new Map<string, string>()
+    const rootDirectoryOf = (sessionID: string): Effect.Effect<string | undefined> =>
+      Effect.gen(function* () {
+        const chain: string[] = []
+        let current: string | undefined = sessionID
+        let root: string | undefined = undefined
+        while (current) {
+          const cached = rootDirectoryCache.get(current)
+          if (cached) {
+            root = cached
+            break
+          }
+          if (chain.includes(current)) break // cycle guard (should not happen)
+          chain.push(current)
+          const info: Session.Info | undefined = yield* sessions
+            .get(SessionID.make(current))
+            .pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+          if (!info) break
+          if (!info.parentID) {
+            root = info.directory
+            break
+          }
+          current = info.parentID
+        }
+        if (root) for (const id of chain) rootDirectoryCache.set(id, root)
+        return root
+      })
+
+    const sessionIDOf = (event: EventV2.Payload): string | undefined => {
+      const sid = (event.data as { sessionID?: unknown } | undefined)?.sessionID
+      return typeof sid === "string" ? sid : undefined
+    }
+
+    const matches = (event: EventV2.Payload): Effect.Effect<boolean> =>
+      Effect.gen(function* () {
+        if (event.location?.workspaceID !== undefined && event.location.workspaceID !== workspaceID) return false
+        const sessionID = sessionIDOf(event)
+        // Global/instance events (no owning session) keep the historical exact-directory behaviour.
+        if (sessionID === undefined) return event.location?.directory === instance.directory
+        if (!subtreeEvents) return event.location?.directory === instance.directory
+        const root = yield* rootDirectoryOf(sessionID)
+        return root === instance.directory
+      })
+
     const stream = Stream.fromQueue(queue).pipe(
-      Stream.filter(
-        (event) =>
-          event.location?.directory === instance.directory &&
-          (event.location.workspaceID === undefined || event.location.workspaceID === workspaceID),
-      ),
-      Stream.map((event) => ({ id: event.id, type: event.type, properties: event.data })),
+      Stream.mapEffect((event) => matches(event).pipe(Effect.map((keep) => ({ event, keep })))),
+      Stream.filter(({ keep }) => keep),
+      Stream.map(({ event }) => ({ id: event.id, type: event.type, properties: event.data })),
     )
     const disposed = Stream.callback<{ id: string; type: string; properties: unknown }>((queue) => {
       const listener = (event: {
