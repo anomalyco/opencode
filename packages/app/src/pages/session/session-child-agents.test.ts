@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { Message, Part, Session, ToolPart } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, Session, SessionStatus, ToolPart } from "@opencode-ai/sdk/v2/client"
 import { collectSessionChildAgentEntries } from "./session-child-agents"
 
 const session = (input: { id: string; parentID?: string; title?: string; agent?: string; created: number }) =>
@@ -15,16 +15,22 @@ const session = (input: { id: string; parentID?: string; title?: string; agent?:
     time: { created: input.created, updated: input.created },
   }) as Session
 
-const assistant = (input: { id: string; sessionID: string; created: number }) =>
-  ({
+const assistant = (input: { id: string; sessionID: string; created: number; completed?: number | false }) => {
+  const time =
+    input.completed === false
+      ? { created: input.created }
+      : { created: input.created, completed: input.completed ?? input.created + 1 }
+
+  return {
     id: input.id,
     sessionID: input.sessionID,
     role: "assistant",
     parentID: "msg_user",
-    time: { created: input.created, completed: input.created + 1 },
+    time,
     agent: "build",
     model: { providerID: "test", modelID: "model" },
-  }) as unknown as Message
+  } as unknown as Message
+}
 
 const task = (input: {
   id: string
@@ -146,5 +152,63 @@ describe("collectSessionChildAgentEntries", () => {
 
     expect(entries).toHaveLength(1)
     expect(entries[0]?.id).toBe("tool:msg_1:prt_1:ses_child")
+    expect(entries[0]?.status).toBeUndefined()
+  })
+
+  test("uses child session activity over completed task tool status", () => {
+    const message = assistant({ id: "msg_1", sessionID: "ses_parent", created: 10 })
+    const entries = collectSessionChildAgentEntries({
+      sessionID: "ses_parent",
+      messages: [message],
+      parts: {
+        msg_1: [
+          task({
+            id: "prt_1",
+            sessionID: "ses_parent",
+            messageID: "msg_1",
+            childID: "ses_child",
+            description: "keep working",
+            agent: "general",
+            started: 25,
+          }),
+        ],
+      },
+      sessions: [session({ id: "ses_child", parentID: "ses_parent", title: "Keep working", created: 25 })],
+      messagesBySession: {
+        ses_child: [assistant({ id: "msg_child", sessionID: "ses_child", created: 30, completed: false })],
+      },
+    })
+
+    expect(entries[0]?.status).toBe("running")
+  })
+
+  test("marks completed only when the child assistant has completed", () => {
+    const message = assistant({ id: "msg_1", sessionID: "ses_parent", created: 10 })
+    const entries = collectSessionChildAgentEntries({
+      sessionID: "ses_parent",
+      messages: [message],
+      parts: {
+        msg_1: [
+          task({
+            id: "prt_1",
+            sessionID: "ses_parent",
+            messageID: "msg_1",
+            childID: "ses_child",
+            description: "done work",
+            agent: "general",
+            started: 25,
+          }),
+        ],
+      },
+      sessions: [session({ id: "ses_child", parentID: "ses_parent", title: "Done work", created: 25 })],
+      messagesBySession: {
+        ses_child: [assistant({ id: "msg_child", sessionID: "ses_child", created: 30, completed: 40 })],
+      },
+      statuses: {
+        ses_child: { type: "busy" } as SessionStatus,
+      },
+    })
+
+    expect(entries[0]?.status).toBe("completed")
   })
 })

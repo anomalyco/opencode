@@ -1,4 +1,7 @@
-import type { Message, Part, Session, ToolPart } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part, Session, SessionStatus, ToolPart } from "@opencode-ai/sdk/v2/client"
+import { working } from "./session-working"
+
+type SessionChildAgentStatus = Exclude<ToolPart["state"]["status"], "pending">
 
 export type SessionChildAgentEntry = {
   id: string
@@ -7,7 +10,7 @@ export type SessionChildAgentEntry = {
   agent?: string
   description?: string
   created: number
-  status?: Exclude<ToolPart["state"]["status"], "pending">
+  status?: SessionChildAgentStatus
 }
 
 type CollectChildAgentEntriesInput = {
@@ -15,6 +18,8 @@ type CollectChildAgentEntriesInput = {
   messages: readonly Message[]
   parts: Record<string, readonly Part[] | undefined>
   sessions: readonly Session[]
+  messagesBySession?: Record<string, readonly Message[] | undefined>
+  statuses?: Record<string, SessionStatus | undefined>
 }
 
 const taskTool = (part: Part): part is ToolPart => part.type === "tool" && part.tool.trim().toLowerCase() === "task"
@@ -60,6 +65,15 @@ export function collectSessionChildAgentEntries(input: CollectChildAgentEntriesI
   const sessionByID = new Map(childSessions.map((session) => [session.id, session] as const))
   const entries: Array<SessionChildAgentEntry & { order: number }> = []
   let order = 0
+  const statusFor = (sessionID: string, toolStatus?: SessionChildAgentStatus): SessionChildAgentStatus | undefined => {
+    const messages = input.messagesBySession?.[sessionID]
+    if (working(input.statuses?.[sessionID], messages)) return "running"
+    if (messages !== undefined) {
+      const last = messages.at(-1)
+      if (last?.role === "assistant" && typeof last.time.completed === "number") return "completed"
+    }
+    if (toolStatus === "running" || toolStatus === "error") return toolStatus
+  }
 
   for (const message of input.messages) {
     const parts = input.parts[message.id] ?? []
@@ -81,7 +95,7 @@ export function collectSessionChildAgentEntries(input: CollectChildAgentEntriesI
         agent: agent ?? text(session?.agent),
         description,
         created: stateStart(part.state) ?? session?.time.created ?? message.time.created,
-        status: part.state.status === "pending" ? undefined : part.state.status,
+        status: statusFor(sessionID, part.state.status === "pending" ? undefined : part.state.status),
         order,
       })
       order += 1
@@ -97,6 +111,7 @@ export function collectSessionChildAgentEntries(input: CollectChildAgentEntriesI
       title: sessionTitle(session, undefined, text(session.agent)),
       agent: text(session.agent),
       created: session.time.created,
+      status: statusFor(session.id),
       order,
     })
     order += 1

@@ -2,20 +2,20 @@ import type { AssistantMessage, Message, SessionStatus } from "@opencode-ai/sdk/
 
 const idle = { type: "idle" as const }
 
-export function pending(list: Message[] | undefined) {
+export function pending(list: readonly Message[] | undefined) {
   const last = list?.at(-1)
   if (!last || last.role !== "assistant") return false
   return typeof last.time.completed !== "number"
 }
 
-export function active(list: Message[] | undefined): AssistantMessage | undefined {
+export function active(list: readonly Message[] | undefined): AssistantMessage | undefined {
   const last = list?.at(-1)
   if (!last || last.role !== "assistant") return
   if (typeof last.time.completed === "number") return
   return last
 }
 
-export function working(status: SessionStatus | undefined, list: Message[] | undefined) {
+export function working(status: SessionStatus | undefined, list: readonly Message[] | undefined) {
   if ((status ?? idle).type === "idle") return active(list) !== undefined
   const last = list?.at(-1)
   if (!last || last.role !== "assistant") return true

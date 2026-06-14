@@ -306,6 +306,8 @@ export default function Page() {
       messages: messages(),
       parts: sync.data.part,
       sessions: childAgentSessions(),
+      messagesBySession: sync.data.message,
+      statuses: sync.data.session_status,
     }),
   )
   const messagesReady = createMemo(() => {
