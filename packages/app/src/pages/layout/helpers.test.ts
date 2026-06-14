@@ -8,6 +8,7 @@ import {
 } from "./deep-links"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import {
+  archiveToggleLabelKey,
   childSessionOnPath,
   closeHomeProject,
   displayName,
@@ -17,6 +18,7 @@ import {
   homeProjectNavigation,
   homeProjectDirectories,
   homeSessionServerStatus,
+  isSessionArchived,
   latestRootSession,
   toggleHomeProjectSelection,
 } from "./helpers"
@@ -317,5 +319,30 @@ describe("layout workspace helpers", () => {
     expect(errorMessage({ data: { message: "boom" } }, "fallback")).toBe("boom")
     expect(errorMessage(new Error("broken"), "fallback")).toBe("broken")
     expect(errorMessage("unknown", "fallback")).toBe("fallback")
+  })
+})
+
+describe("session archive toggle", () => {
+  test("treats a numeric timestamp as archived", () => {
+    expect(isSessionArchived(1_700_000_000_000)).toBe(true)
+  })
+
+  test("treats the epoch-zero timestamp as archived", () => {
+    expect(isSessionArchived(0)).toBe(true)
+  })
+
+  test("treats null and undefined as not archived", () => {
+    expect(isSessionArchived(null)).toBe(false)
+    expect(isSessionArchived(undefined)).toBe(false)
+  })
+
+  test("selects the unarchive label for archived sessions", () => {
+    expect(archiveToggleLabelKey(1_700_000_000_000)).toBe("common.unarchive")
+    expect(archiveToggleLabelKey(0)).toBe("common.unarchive")
+  })
+
+  test("selects the archive label for active sessions", () => {
+    expect(archiveToggleLabelKey(null)).toBe("common.archive")
+    expect(archiveToggleLabelKey(undefined)).toBe("common.archive")
   })
 })

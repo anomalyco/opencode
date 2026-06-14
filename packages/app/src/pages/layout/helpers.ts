@@ -116,6 +116,22 @@ export function projectForSession<T extends { id?: string; worktree: string; san
   )
 }
 
+// A session is archived when it carries an archived timestamp. Guard with `!= null` so an
+// epoch-zero timestamp still counts as archived instead of collapsing into the active bucket,
+// and so the nullable field is never mistaken for "active" when it is explicitly cleared.
+export const isSessionArchived = (archived: number | null | undefined) => archived != null
+
+// Factory for the `time` patch that unarchives a session. The generated SDK type advertises
+// `archived?: number` and omits `null` because Effect Schema emits `optional(NullOr(Finite))` as a
+// plain `{type:number}` in OpenAPI. The runtime accepts `null` to clear the timestamp and restore
+// the session, so the cast lives here once and every call site reuses it instead of re-casting.
+// Returns a FRESH object per call so a shared mutable payload can never be aliased across SDK calls.
+export const unarchivePatch = () => ({ archived: null as never })
+
+// Pick the i18n key for the archive/unarchive toggle based on the current archived state.
+export const archiveToggleLabelKey = (archived: number | null | undefined) =>
+  isSessionArchived(archived) ? ("common.unarchive" as const) : ("common.archive" as const)
+
 export const errorMessage = (err: unknown, fallback: string) => {
   if (err && typeof err === "object" && "data" in err) {
     const data = (err as { data?: { message?: string } }).data

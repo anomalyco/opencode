@@ -34,6 +34,8 @@ export const dict = {
   "command.session.previous.unseen": "Previous unread session",
   "command.session.next.unseen": "Next unread session",
   "command.session.archive": "Archive session",
+  "command.session.unarchive": "Unarchive session",
+  "command.session.archivedBrowse": "Browse archived sessions",
 
   "command.palette": "Command palette",
 
@@ -313,6 +315,9 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Search folders",
   "dialog.directory.empty": "No folders found",
+
+  "dialog.archivedSessions.title": "Archived sessions",
+  "dialog.archivedSessions.empty": "No archived sessions",
 
   "app.server.unreachable": "Could not reach {{server}}",
   "app.server.retrying": "Retrying automatically...",
@@ -713,11 +718,13 @@ export const dict = {
   "common.dismiss": "Dismiss",
   "common.moreCountSuffix": " (+{{count}} more)",
   "common.requestFailed": "Request failed",
+  "common.retry": "Retry",
   "common.moreOptions": "More options",
   "common.learnMore": "Learn more",
   "common.rename": "Rename",
   "common.reset": "Reset",
   "common.archive": "Archive",
+  "common.unarchive": "Unarchive",
   "common.delete": "Delete",
   "common.close": "Close",
   "common.edit": "Edit",

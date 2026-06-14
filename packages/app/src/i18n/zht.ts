@@ -35,6 +35,8 @@ export const dict = {
   "command.session.previous.unseen": "上一個未讀會話",
   "command.session.next.unseen": "下一個未讀會話",
   "command.session.archive": "封存工作階段",
+  "command.session.unarchive": "取消封存工作階段",
+  "command.session.archivedBrowse": "瀏覽封存的工作階段",
 
   "command.palette": "命令面板",
 
@@ -306,6 +308,8 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "搜尋資料夾",
   "dialog.directory.empty": "找不到資料夾",
+  "dialog.archivedSessions.title": "封存的工作階段",
+  "dialog.archivedSessions.empty": "沒有封存的工作階段",
 
   "dialog.server.title": "伺服器",
   "dialog.server.description": "切換此應用程式連線的 OpenCode 伺服器。",
@@ -580,11 +584,13 @@ export const dict = {
   "common.closeTab": "關閉標籤頁",
   "common.dismiss": "忽略",
   "common.requestFailed": "要求失敗",
+  "common.retry": "重試",
   "common.moreOptions": "更多選項",
   "common.learnMore": "深入了解",
   "common.rename": "重新命名",
   "common.reset": "重設",
   "common.archive": "封存",
+  "common.unarchive": "取消封存",
   "common.delete": "刪除",
   "common.close": "關閉",
   "common.edit": "編輯",

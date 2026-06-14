@@ -34,6 +34,8 @@ export const dict = {
   "command.session.previous.unseen": "Попередня непрочитана сесія",
   "command.session.next.unseen": "Наступна непрочитана сесія",
   "command.session.archive": "Архівувати сесію",
+  "command.session.unarchive": "Розархівувати сесію",
+  "command.session.archivedBrowse": "Переглянути архівовані сесії",
 
   "command.palette": "Палітра команд",
 
@@ -313,6 +315,8 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Пошук папок",
   "dialog.directory.empty": "Папок не знайдено",
+  "dialog.archivedSessions.title": "Архівовані сесії",
+  "dialog.archivedSessions.empty": "Немає архівованих сесій",
 
   "app.server.unreachable": "Не вдалося досягти {{server}}",
   "app.server.retrying": "Автоматичне повторення...",
@@ -646,11 +650,13 @@ export const dict = {
   "common.dismiss": "Відхилити",
   "common.moreCountSuffix": " (ще {{count}})",
   "common.requestFailed": "Запит не виконано",
+  "common.retry": "Повторити",
   "common.moreOptions": "Більше опцій",
   "common.learnMore": "Дізнатися більше",
   "common.rename": "Перейменувати",
   "common.reset": "Скинути",
   "common.archive": "Архівувати",
+  "common.unarchive": "Розархівувати",
   "common.delete": "Видалити",
   "common.close": "Закрити",
   "common.edit": "Редагувати",

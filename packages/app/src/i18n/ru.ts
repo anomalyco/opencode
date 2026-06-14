@@ -31,6 +31,8 @@ export const dict = {
   "command.session.previous.unseen": "Предыдущая непрочитанная сессия",
   "command.session.next.unseen": "Следующая непрочитанная сессия",
   "command.session.archive": "Архивировать сессию",
+  "command.session.unarchive": "Разархивировать сессию",
+  "command.session.archivedBrowse": "Просмотр архивированных сессий",
 
   "command.palette": "Палитра команд",
 
@@ -306,6 +308,8 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Поиск папок",
   "dialog.directory.empty": "Папки не найдены",
+  "dialog.archivedSessions.title": "Архивированные сессии",
+  "dialog.archivedSessions.empty": "Нет архивированных сессий",
 
   "dialog.server.title": "Серверы",
   "dialog.server.description": "Переключите сервер OpenCode к которому подключается приложение.",
@@ -590,11 +594,13 @@ export const dict = {
   "common.closeTab": "Закрыть вкладку",
   "common.dismiss": "Закрыть",
   "common.requestFailed": "Запрос не выполнен",
+  "common.retry": "Повторить",
   "common.moreOptions": "Дополнительные опции",
   "common.learnMore": "Подробнее",
   "common.rename": "Переименовать",
   "common.reset": "Сбросить",
   "common.archive": "Архивировать",
+  "common.unarchive": "Разархивировать",
   "common.delete": "Удалить",
   "common.close": "Закрыть",
   "common.edit": "Редактировать",

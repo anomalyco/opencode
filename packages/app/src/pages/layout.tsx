@@ -75,6 +75,7 @@ import {
   errorMessage,
   latestRootSession,
   sortedRootSessions,
+  unarchivePatch,
 } from "./layout/helpers"
 import {
   collectNewSessionDeepLinks,
@@ -990,6 +991,37 @@ export default function Layout(props: ParentProps) {
     }
   }
 
+  async function unarchiveSession(session: Session) {
+    const [, setStore] = serverSync.child(session.directory)
+
+    await serverSDK.client.session.update({
+      directory: session.directory,
+      sessionID: session.id,
+      time: unarchivePatch(),
+    })
+
+    const restored = { ...session, time: { ...session.time, archived: undefined } }
+    setStore(
+      produce((draft) => {
+        const match = Binary.search(draft.session, session.id, (s) => s.id)
+        if (match.found) {
+          draft.session[match.index] = restored
+          return
+        }
+        draft.session.splice(match.index, 0, restored)
+      }),
+    )
+    navigate(`/${base64Encode(session.directory)}/session/${session.id}`)
+  }
+
+  function browseArchivedSessions() {
+    const run = ++dialogRun
+    void import("@/components/dialog-archived-sessions").then((x) => {
+      if (dialogDead || dialogRun !== run) return
+      dialog.show(() => <x.DialogArchivedSessions onUnarchive={unarchiveSession} />)
+    })
+  }
+
   command.register("layout", () => {
     const commands: CommandOption[] = [
       {
@@ -1089,6 +1121,32 @@ export default function Layout(props: ParentProps) {
           const session = currentSessions().find((s) => s.id === params.id)
           if (session) void archiveSession(session)
         },
+      },
+      {
+        id: "session.unarchive",
+        title: language.t("command.session.unarchive"),
+        category: language.t("command.category.session"),
+        // Mirrors `session.archive`: gated only on having a current session, NOT on archived
+        // state. Archiving splices the session out of the window list (`store.session`) and
+        // navigates away, so the in-window store can't reliably report whether `params.id` is
+        // archived — gating visibility on it would leave this command permanently disabled and
+        // unreachable. Kept symmetric with `session.archive` instead.
+        disabled: !params.dir || !params.id,
+        onSelect: () => {
+          const directory = decode64(params.dir)
+          if (!directory) return
+          const [store] = serverSync.child(directory, { bootstrap: false })
+          const session = (store.session ?? []).find((s) => s.id === params.id)
+          if (session) void unarchiveSession(session)
+        },
+      },
+      {
+        id: "session.archived.browse",
+        title: language.t("command.session.archivedBrowse"),
+        category: language.t("command.category.session"),
+        // Discovery entry point: intentionally NOT disabled by `!params.id` — it must work from
+        // anywhere to surface archived sessions across every project.
+        onSelect: () => browseArchivedSessions(),
       },
       {
         id: "workspace.new",

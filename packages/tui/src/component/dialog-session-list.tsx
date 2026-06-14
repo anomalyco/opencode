@@ -15,6 +15,7 @@ import { useToast } from "../ui/toast"
 import { openWorkspaceSelect, type WorkspaceSelection, warpWorkspaceSession } from "./dialog-workspace-create"
 import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
+import { nextArchivedAt } from "../util/session"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 import { useCommandShortcut } from "../keymap"
 
@@ -291,6 +292,32 @@ export function DialogSessionList() {
           title: "rename",
           onTrigger: async (option) => {
             dialog.replace(() => <DialogSessionRename session={option.value} />)
+          },
+        },
+        {
+          command: "session.archive.toggle",
+          title: "archive/unarchive",
+          onTrigger: async (option) => {
+            const session = sessions().find((item) => item.id === option.value)
+            if (!session) return
+            const result = await sdk.client.session.update({
+              sessionID: option.value,
+              // The generated SDK type advertises `archived?: number` and omits `null` because
+              // Effect Schema emits `optional(NullOr(Finite))` as a plain number in OpenAPI. The
+              // runtime accepts `null` to clear the timestamp (unarchive), so cast at the call
+              // site instead of regenerating the SDK.
+              time: { archived: nextArchivedAt(session.time.archived, Date.now()) as never },
+            })
+            if (result.error) {
+              toast.show({
+                variant: "error",
+                title: "Failed to update session",
+                message: errorMessage(result.error),
+              })
+              return
+            }
+            await sync.session.refresh()
+            if (search()) await refetch()
           },
         },
       ]}

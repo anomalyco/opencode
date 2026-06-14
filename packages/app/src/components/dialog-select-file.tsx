@@ -16,6 +16,8 @@ import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { errorMessage, isSessionArchived, unarchivePatch } from "@/pages/layout/helpers"
+import { showToast } from "@/utils/toast"
 import { decode64 } from "@/utils/base64"
 import { getRelativeTime } from "@/utils/time"
 
@@ -261,7 +263,11 @@ function createSessionEntries(props: {
   return { sessions }
 }
 
-export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFile?: (path: string) => void }) {
+export function DialogSelectFile(props: {
+  mode?: DialogSelectFileMode
+  onOpenFile?: (path: string) => void
+  onSelectFile?: (path: string) => void
+}) {
   const command = useCommand()
   const language = useLanguage()
   const layout = useLayout()
@@ -370,11 +376,39 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
 
     if (item.type === "session") {
       if (!item.directory || !item.sessionID) return
-      navigate(`/${base64Encode(item.directory)}/session/${item.sessionID}`)
+      const directory = item.directory
+      const sessionID = item.sessionID
+      const href = `/${base64Encode(directory)}/session/${sessionID}`
+      // Archived sessions are shown dimmed in the picker; selecting one restores it before
+      // navigating so the user lands on an active session rather than an archived shell.
+      if (isSessionArchived(item.archived)) {
+        void serverSDK.client.session
+          .update({
+            directory,
+            sessionID,
+            time: unarchivePatch(),
+          })
+          // Navigate only after the unarchive succeeds, so the user never lands on a still-
+          // archived session. On failure, surface the error (mirroring the sibling unarchive call
+          // sites) and stay put; the catch also prevents an unhandled promise rejection.
+          .then(() => navigate(href))
+          .catch((err) => {
+            showToast({
+              title: language.t("common.requestFailed"),
+              description: errorMessage(err, language.t("common.requestFailed")),
+            })
+          })
+        return
+      }
+      navigate(href)
       return
     }
 
     if (!item.path) return
+    if (props.onSelectFile) {
+      props.onSelectFile(item.path)
+      return
+    }
     open(item.path)
   }
 
@@ -440,14 +474,14 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
                   <div class="flex items-center gap-2 min-w-0">
                     <span
                       class="text-14-regular text-text-strong truncate"
-                      classList={{ "opacity-70": !!item.archived }}
+                      classList={{ "opacity-70": isSessionArchived(item.archived) }}
                     >
                       {item.title}
                     </span>
                     <Show when={item.description}>
                       <span
                         class="text-14-regular text-text-weak truncate"
-                        classList={{ "opacity-70": !!item.archived }}
+                        classList={{ "opacity-70": isSessionArchived(item.archived) }}
                       >
                         {item.description}
                       </span>

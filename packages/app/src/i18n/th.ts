@@ -31,6 +31,8 @@ export const dict = {
   "command.session.previous.unseen": "เซสชันที่ยังไม่ได้อ่านก่อนหน้า",
   "command.session.next.unseen": "เซสชันที่ยังไม่ได้อ่านถัดไป",
   "command.session.archive": "จัดเก็บเซสชัน",
+  "command.session.unarchive": "ยกเลิกการจัดเก็บเซสชัน",
+  "command.session.archivedBrowse": "เรียกดูเซสชันที่จัดเก็บ",
 
   "command.palette": "คำสั่งค้นหา",
 
@@ -306,6 +308,8 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "ค้นหาโฟลเดอร์",
   "dialog.directory.empty": "ไม่พบโฟลเดอร์",
+  "dialog.archivedSessions.title": "เซสชันที่จัดเก็บ",
+  "dialog.archivedSessions.empty": "ไม่มีเซสชันที่จัดเก็บ",
 
   "dialog.server.title": "เซิร์ฟเวอร์",
   "dialog.server.description": "สลับเซิร์ฟเวอร์ OpenCode ที่แอปนี้เชื่อมต่อด้วย",
@@ -584,11 +588,13 @@ export const dict = {
   "common.closeTab": "ปิดแท็บ",
   "common.dismiss": "ปิด",
   "common.requestFailed": "คำขอล้มเหลว",
+  "common.retry": "ลองใหม่",
   "common.moreOptions": "ตัวเลือกเพิ่มเติม",
   "common.learnMore": "เรียนรู้เพิ่มเติม",
   "common.rename": "เปลี่ยนชื่อ",
   "common.reset": "รีเซ็ต",
   "common.archive": "จัดเก็บ",
+  "common.unarchive": "ยกเลิกการจัดเก็บ",
   "common.delete": "ลบ",
   "common.close": "ปิด",
   "common.edit": "แก้ไข",

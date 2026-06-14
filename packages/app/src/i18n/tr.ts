@@ -35,6 +35,8 @@ export const dict = {
   "command.session.previous.unseen": "Önceki okunmamış oturum",
   "command.session.next.unseen": "Sonraki okunmamış oturum",
   "command.session.archive": "Oturumu arşivle",
+  "command.session.unarchive": "Oturumu arşivden çıkar",
+  "command.session.archivedBrowse": "Arşivlenmiş oturumlara göz at",
 
   "command.palette": "Komut paleti",
 
@@ -311,6 +313,8 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Klasör ara",
   "dialog.directory.empty": "Klasör bulunamadı",
+  "dialog.archivedSessions.title": "Arşivlenmiş oturumlar",
+  "dialog.archivedSessions.empty": "Arşivlenmiş oturum yok",
 
   "dialog.server.title": "Sunucular",
   "dialog.server.description": "Bu uygulamanın hangi OpenCode sunucusuna bağlanacağını değiştirin.",
@@ -596,11 +600,13 @@ export const dict = {
   "common.closeTab": "Sekmeyi kapat",
   "common.dismiss": "Kapat",
   "common.requestFailed": "İstek başarısız",
+  "common.retry": "Yeniden dene",
   "common.moreOptions": "Daha fazla seçenek",
   "common.learnMore": "Daha fazla bilgi",
   "common.rename": "Yeniden adlandır",
   "common.reset": "Sıfırla",
   "common.archive": "Arşivle",
+  "common.unarchive": "Arşivden çıkar",
   "common.delete": "Sil",
   "common.close": "Kapat",
   "common.edit": "Düzenle",

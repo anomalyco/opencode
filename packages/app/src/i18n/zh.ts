@@ -40,6 +40,8 @@ export const dict = {
   "command.session.previous.unseen": "上一个未读会话",
   "command.session.next.unseen": "下一个未读会话",
   "command.session.archive": "归档会话",
+  "command.session.unarchive": "取消归档会话",
+  "command.session.archivedBrowse": "浏览归档会话",
 
   "command.palette": "命令面板",
 
@@ -326,6 +328,8 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "搜索文件夹",
   "dialog.directory.empty": "未找到文件夹",
+  "dialog.archivedSessions.title": "归档会话",
+  "dialog.archivedSessions.empty": "没有归档会话",
 
   "dialog.server.title": "服务器",
   "dialog.server.description": "切换此应用连接的 OpenCode 服务器。",
@@ -593,11 +597,13 @@ export const dict = {
   "common.closeTab": "关闭标签页",
   "common.dismiss": "忽略",
   "common.requestFailed": "请求失败",
+  "common.retry": "重试",
   "common.moreOptions": "更多选项",
   "common.learnMore": "了解更多",
   "common.rename": "重命名",
   "common.reset": "重置",
   "common.archive": "归档",
+  "common.unarchive": "取消归档",
   "common.delete": "删除",
   "common.close": "关闭",
   "common.edit": "编辑",

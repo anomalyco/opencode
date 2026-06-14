@@ -34,6 +34,8 @@ export const dict = {
   "command.session.previous.unseen": "Forrige uleste økt",
   "command.session.next.unseen": "Neste uleste økt",
   "command.session.archive": "Arkiver sesjon",
+  "command.session.unarchive": "Gjenopprett sesjon fra arkiv",
+  "command.session.archivedBrowse": "Bla gjennom arkiverte sesjoner",
 
   "command.palette": "Kommandopalett",
 
@@ -309,6 +311,8 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Søk etter mapper",
   "dialog.directory.empty": "Ingen mapper funnet",
+  "dialog.archivedSessions.title": "Arkiverte sesjoner",
+  "dialog.archivedSessions.empty": "Ingen arkiverte sesjoner",
 
   "dialog.server.title": "Servere",
   "dialog.server.description": "Bytt hvilken OpenCode-server denne appen kobler til.",
@@ -593,11 +597,13 @@ export const dict = {
   "common.closeTab": "Lukk fane",
   "common.dismiss": "Avvis",
   "common.requestFailed": "Forespørsel mislyktes",
+  "common.retry": "Prøv igjen",
   "common.moreOptions": "Flere alternativer",
   "common.learnMore": "Lær mer",
   "common.rename": "Gi nytt navn",
   "common.reset": "Tilbakestill",
   "common.archive": "Arkiver",
+  "common.unarchive": "Gjenopprett fra arkiv",
   "common.delete": "Slett",
   "common.close": "Lukk",
   "common.edit": "Rediger",
