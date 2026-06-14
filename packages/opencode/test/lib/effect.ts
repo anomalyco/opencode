@@ -37,7 +37,7 @@ type Runner = <A, E, R, E2>(value: Body<A, E, R | Scope.Scope>, layer: Layer.Lay
 
 const isolatedRun: Runner = (value, layer) =>
   Effect.gen(function* () {
-    const exit = yield* body(value).pipe(Effect.scoped, Effect.provide(layer), Effect.exit)
+    const exit = yield* body(value).pipe(Effect.scoped, Effect.provide(layer, { local: true }), Effect.exit)
     if (Exit.isFailure(exit)) {
       for (const err of Cause.prettyErrors(exit.cause)) {
         yield* Effect.logError(err)

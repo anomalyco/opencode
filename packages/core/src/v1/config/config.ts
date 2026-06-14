@@ -163,6 +163,16 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  evolution: Schema.optional(
+    Schema.Struct({
+      enabled: Schema.optional(Schema.Boolean).annotate({
+        description: "Enable Evolution Layer for AI-assisted development (default: false)",
+      }),
+      mode: Schema.optional(Schema.Literals(["observe", "assist", "autonomous"])).annotate({
+        description: "Evolution mode: observe (read-only), assist (suggestions), autonomous (auto-execute)",
+      }),
+    }),
+  ).annotate({ description: "Evolution Layer configuration — AI project memory, planning, and review" }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),

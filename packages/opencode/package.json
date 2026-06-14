@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@babel/core": "7.28.4",
+    "@babel/preset-typescript": "7.27.1",
     "@octokit/webhooks-types": "7.6.1",
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/http-recorder": "workspace:*",
