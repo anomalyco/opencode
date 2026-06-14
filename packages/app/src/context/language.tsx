@@ -34,6 +34,15 @@ function cookie(locale: Locale) {
   return `oc_locale=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`
 }
 
+const DIR: Record<Locale, string> = {
+  ar: "rtl",
+}
+const DIR_DEFAULT = "ltr"
+
+function localeDir(locale: Locale) {
+  return DIR[locale] ?? DIR_DEFAULT
+}
+
 const LOCALES: readonly Locale[] = [
   "en",
   "zh",
@@ -225,6 +234,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     createEffect(() => {
       if (typeof document !== "object") return
       document.documentElement.lang = locale()
+      document.documentElement.dir = localeDir(locale())
       document.cookie = cookie(locale())
     })
 

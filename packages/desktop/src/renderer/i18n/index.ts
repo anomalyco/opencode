@@ -161,6 +161,17 @@ function build(locale: Locale): Dictionary {
   return { ...base, ...i18n.flatten(appKo), ...i18n.flatten(desktopKo) }
 }
 
+const RTL_LOCALES = new Set(["ar"])
+
+function localeDir(locale: Locale) {
+  return RTL_LOCALES.has(locale) ? "rtl" : "ltr"
+}
+
+function setDocumentDir(locale: Locale) {
+  if (typeof document === "undefined") return
+  document.documentElement.dir = localeDir(locale)
+}
+
 const state = {
   locale: detectLocale(),
   dict: base as Dictionary,
@@ -168,6 +179,7 @@ const state = {
 }
 
 state.dict = build(state.locale)
+setDocumentDir(state.locale)
 
 const translate = i18n.translator(() => state.dict, i18n.resolveTemplate)
 
@@ -186,6 +198,7 @@ export function initI18n(): Promise<Locale> {
 
     state.locale = next
     state.dict = build(next)
+    setDocumentDir(next)
     return next
   })().catch(() => state.locale)
 

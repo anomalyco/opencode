@@ -1,0 +1,280 @@
+[dir="rtl"] {
+  /* ===== Generic overrides ===== */
+  direction: rtl;
+  text-align: start;
+
+  /* ===== Truncate-start (used in file paths) ===== */
+  .truncate-start {
+    direction: ltr;
+    text-align: right;
+  }
+
+  /* ===== Layout & flex ===== */
+  [data-component="sidebar"] {
+    /* sidebar is positioned on the left by default, flip to right */
+  }
+
+  /* ===== Markdown ===== */
+  [data-slot="markdown-content"] {
+    direction: rtl;
+  }
+  [data-slot="markdown-content"] ol,
+  [data-slot="markdown-content"] ul {
+    padding-right: 32px;
+    padding-left: 0;
+  }
+  [data-slot="markdown-content"] li {
+    padding-right: 0;
+  }
+  [data-slot="markdown-content"] blockquote {
+    border-right: 2px solid var(--border-weak-base);
+    border-left: none;
+    padding-right: 0.5rem;
+    padding-left: 0;
+  }
+
+  /* ===== Message parts ===== */
+  [data-slot="message-part"] {
+    direction: rtl;
+  }
+  [data-slot="message-part-content"] {
+    text-align: start;
+  }
+  [data-component="message-part-tool"] {
+    direction: ltr;
+    text-align: left;
+  }
+
+  /* ===== Session review ===== */
+  [data-slot="session-review"] {
+    direction: rtl;
+  }
+  [data-slot="session-review-directory"] {
+    direction: rtl;
+    text-align: right;
+  }
+
+  /* ===== Session turn ===== */
+  [data-slot="session-turn"] {
+    direction: rtl;
+  }
+  [data-slot="session-turn-diff-directory"] {
+    direction: rtl;
+    text-align: right;
+  }
+
+  /* ===== Input fields ===== */
+  textarea,
+  input[type="text"],
+  input[type="search"],
+  input[type="email"],
+  input[type="url"],
+  input:not([type]) {
+    text-align: start;
+    direction: rtl;
+  }
+
+  /* ===== Code blocks are LTR ===== */
+  pre,
+  code,
+  kbd,
+  samp,
+  [data-slot="code-block"],
+  [data-component="diff-code"] {
+    direction: ltr;
+    text-align: left;
+    unicode-bidi: isolate;
+  }
+
+  /* ===== Tabs ===== */
+  [data-slot="tabs"] {
+    direction: rtl;
+  }
+  [data-slot="tab"] {
+  }
+
+  /* ===== Dropdown menu ===== */
+  [data-component="dropdown-menu-content"],
+  [data-component="dropdown-menu-sub-content"] {
+    direction: rtl;
+    text-align: start;
+  }
+  [data-slot="dropdown-menu-item"] {
+    text-align: start;
+  }
+  [data-slot="dropdown-menu-radio-item"] {
+    padding-right: 2px;
+    padding-left: 2px;
+  }
+
+  /* ===== Dialog ===== */
+  [data-component="dialog-content"] {
+    direction: rtl;
+    text-align: start;
+  }
+
+  /* ===== Tooltip ===== */
+  [data-component="tooltip-content"] {
+    direction: rtl;
+    text-align: start;
+  }
+
+  /* ===== Toast ===== */
+  [data-component="toast"] {
+    direction: rtl;
+    text-align: start;
+  }
+
+  /* ===== Context menu ===== */
+  [data-component="context-menu"] {
+    direction: rtl;
+    text-align: start;
+  }
+
+  /* ===== Popover ===== */
+  [data-component="popover-content"] {
+    direction: rtl;
+    text-align: start;
+  }
+
+  /* ===== Select ===== */
+  [data-component="select-content"] {
+    direction: rtl;
+    text-align: start;
+  }
+
+  /* ===== Hover card ===== */
+  [data-component="hover-card-content"] {
+    direction: rtl;
+    text-align: start;
+  }
+
+  /* ===== List ===== */
+  [data-component="list"] {
+    direction: rtl;
+    text-align: start;
+  }
+
+  /* ===== Prompt input ===== */
+  [data-component="prompt-input"] {
+    direction: rtl;
+  }
+
+  /* ===== Settings ===== */
+  [data-slot="settings-panel"] {
+    direction: rtl;
+    text-align: start;
+  }
+
+  /* ===== Shell submessage ===== */
+  [data-slot="shell-submessage"] {
+    direction: rtl;
+  }
+
+  /* ===== Accordion ===== */
+  [data-component="accordion"] {
+    direction: rtl;
+    text-align: start;
+  }
+
+  /* ===== Card ===== */
+  [data-component="card"] {
+    direction: rtl;
+    text-align: start;
+  }
+
+  /* ===== Button (text alignment) ===== */
+  [data-component="button"] {
+    .button-label {
+      text-align: inherit;
+    }
+  }
+
+  /* ===== Resize handle ===== */
+  [data-component="resize-handle"] {
+    direction: ltr;
+  }
+
+  /* ===== Scroll view ===== */
+  [data-component="scroll-view"] {
+    direction: rtl;
+  }
+  [data-component="scroll-view-content"] {
+    direction: rtl;
+  }
+
+  /* ===== File tree ===== */
+  [data-component="file-tree"] {
+    direction: rtl;
+    text-align: start;
+  }
+}
+
+/* ===== RTL-aware utility classes ===== */
+[dir="rtl"] .rtl\\:text-right {
+  text-align: right;
+}
+
+[dir="rtl"] .rtl\\:text-left {
+  text-align: left;
+}
+
+[dir="rtl"] .rtl\\:flex-row-reverse {
+  flex-direction: row-reverse;
+}
+
+/* ===== Direction-aware margins and paddings (Tailwind compat) ===== */
+[dir="rtl"] .ml-auto {
+  margin-right: auto;
+  margin-left: 0;
+}
+
+[dir="rtl"] .mr-auto {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+[dir="rtl"] .space-x-reverse > * + * {
+  margin-right: calc(1rem * calc(1 - var(--tw-space-x-reverse, 0)));
+  margin-left: calc(1rem * var(--tw-space-x-reverse, 0));
+}
+
+[dir="rtl"] [style*="margin-left: auto"] {
+  margin-left: 0;
+  margin-right: auto;
+}
+
+[dir="rtl"] [style*="margin-right: auto"] {
+  margin-right: 0;
+  margin-left: auto;
+}
+
+/* ===== Inline styles with directional properties ===== */
+[dir="rtl"] [style*="left:"]:not([style*="left: 0; right: 0"]):not([style*="left: 50%"]):not([style*="left: calc"]) {
+  /* individual left overrides are handled per-component below */
+}
+
+/* ===== Directional icon flips ===== */
+[dir="rtl"] .icon-arrow-right,
+[dir="rtl"] .icon-chevron-right {
+  transform: scaleX(-1);
+}
+
+[dir="rtl"] .icon-arrow-left,
+[dir="rtl"] .icon-chevron-left {
+  transform: scaleX(-1);
+}
+
+/* ===== Text alignment in common contexts ===== */
+[dir="rtl"] .text-left {
+  text-align: right;
+}
+
+[dir="rtl"] .text-right {
+  text-align: left;
+}
+
+/* ===== Image preview (next/prev buttons) ===== */
+[dir="rtl"] [data-component="image-preview"] {
+  direction: ltr;
+}
