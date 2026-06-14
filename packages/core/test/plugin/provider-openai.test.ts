@@ -21,16 +21,16 @@ describe("OpenAIPlugin", () => {
       const plugin = yield* PluginV2.Service
       yield* add(plugin, yield* Integration.Service)
       expect((yield* (yield* Integration.Service).get(Integration.ID.make("openai")))?.methods).toEqual([
-        new Integration.OAuthMethod({
+        {
           id: Integration.MethodID.make("chatgpt-browser"),
           type: "oauth",
           label: "ChatGPT Pro/Plus (browser)",
-        }),
-        new Integration.OAuthMethod({
+        },
+        {
           id: Integration.MethodID.make("chatgpt-headless"),
           type: "oauth",
           label: "ChatGPT Pro/Plus (headless)",
-        }),
+        },
       ])
     }),
   )
