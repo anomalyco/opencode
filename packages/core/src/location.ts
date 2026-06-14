@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, Schema } from "effect"
 import { Project } from "./project"
-import { AbsolutePath } from "./schema"
+import { AbsolutePath, optionalOmitUndefined } from "./schema"
 import { WorkspaceV2 } from "./workspace"
 
 export * as Location from "./location"
@@ -12,7 +12,7 @@ export class Ref extends Schema.Class<Ref>("Location.Ref")({
 
 export class Info extends Schema.Class<Info>("Location.Info")({
   directory: AbsolutePath,
-  workspaceID: WorkspaceV2.ID.pipe(Schema.optional),
+  workspaceID: optionalOmitUndefined(WorkspaceV2.ID),
   project: Schema.Struct({
     id: Project.ID,
     directory: AbsolutePath,
