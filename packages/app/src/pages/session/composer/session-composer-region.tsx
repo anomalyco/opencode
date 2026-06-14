@@ -57,7 +57,7 @@ export function SessionComposerRegion(props: {
   const view = layout.view(route.sessionKey)
 
   const handoffPrompt = createMemo(() => getSessionHandoff(route.sessionKey())?.prompt)
-  const info = createMemo(() => (route.params.id ? sync.session.get(route.params.id) : undefined))
+  const info = createMemo(() => (route.params.id ? sync().session.get(route.params.id) : undefined))
   const parentID = createMemo(() => info()?.parentID)
   const child = createMemo(() => !!parentID())
   const showComposer = createMemo(() => !props.state.blocked() || child())
