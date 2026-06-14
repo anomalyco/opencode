@@ -37,7 +37,12 @@ describe("acp tool conversion", () => {
     expect(toLocations("external_directory", { directories: ["/tmp/outside"], patterns: ["/tmp/outside/*"] })).toEqual([
       { path: "/tmp/outside" },
     ])
-    expect(toLocations("bash", { filePath: "/tmp/nope.ts", path: "/tmp" })).toEqual([])
+    expect(toLocations("bash", { cmd: "pwd" }, "/workspace")).toEqual([{ path: "/workspace" }])
+    expect(toLocations("bash", { command: "pwd", workdir: "subdir" }, "/workspace")).toEqual([
+      { path: "/workspace/subdir" },
+    ])
+    expect(toLocations("bash", { command: "pwd", workdir: "/abs/dir" }, "/workspace")).toEqual([{ path: "/abs/dir" }])
+    expect(toLocations("bash", { command: "printf hello" })).toEqual([])
     expect(toLocations("read", { path: "/tmp/missing-file-path.ts" })).toEqual([])
   })
 
