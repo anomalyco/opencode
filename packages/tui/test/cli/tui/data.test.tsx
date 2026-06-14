@@ -94,14 +94,22 @@ test("refreshes resources into reactive getters", async () => {
 
 test("refreshes integrations after integration updates", async () => {
   const events = createEventSource()
-  let requests = 0
+  const requests = { integration: 0, model: 0, provider: 0 }
   const calls = createFetch((url) => {
+    if (url.pathname === "/api/model") {
+      requests.model++
+      return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
+    }
+    if (url.pathname === "/api/provider") {
+      requests.provider++
+      return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
+    }
     if (url.pathname !== "/api/integration") return
-    requests++
+    requests.integration++
     return json({
       location: { directory, project: { id: "proj_test", directory } },
       data:
-        requests === 1
+        requests.integration === 1
           ? []
           : [
               {
@@ -140,10 +148,48 @@ test("refreshes integrations after integration updates", async () => {
     await mounted
     await wait(() => data.location.integration.list() !== undefined)
     expect(data.location.integration.list()).toEqual([])
+    const before = { ...requests }
 
     emitEvent(events, { id: "evt_integration", type: "integration.updated", properties: {} })
     await wait(() => data.location.integration.list()?.length === 1)
+    await wait(() => requests.model > before.model && requests.provider > before.provider)
     expect(data.location.integration.list()?.[0]).toMatchObject({ id: "openai", name: "OpenAI" })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("refreshes effective catalog data after catalog updates", async () => {
+  const events = createEventSource()
+  const requests = { model: 0, provider: 0 }
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/model") {
+      requests.model++
+      return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
+    }
+    if (url.pathname === "/api/provider") {
+      requests.provider++
+      return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
+    }
+  })
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+        <ProjectProvider>
+          <DataProvider>
+            <box />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => requests.model > 0 && requests.provider > 0)
+    const before = { ...requests }
+    emitEvent(events, { id: "evt_catalog", type: "catalog.updated", properties: {} })
+    await wait(() => requests.model > before.model && requests.provider > before.provider)
   } finally {
     app.renderer.destroy()
   }
