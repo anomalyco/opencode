@@ -662,7 +662,21 @@ function googleThinkingVariants(model: Provider.Model): Record<string, Record<st
   )
 }
 
+function openRouterFusionVariants(): Record<string, Record<string, any>> {
+  const preset = (analysis: readonly string[]) => ({
+    plugins: [{ id: "fusion", analysis_models: [...analysis], model: analysis[0] }],
+  })
+  return {
+    quality: preset(["~anthropic/claude-opus-latest", "~openai/gpt-latest", "~google/gemini-pro-latest"]),
+    budget: preset(["~google/gemini-flash-latest", "~moonshotai/kimi-latest", "deepseek/deepseek-v4-pro"]),
+  }
+}
+
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
+  if (model.api.npm === "@openrouter/ai-sdk-provider" && model.api.id === "openrouter/fusion") {
+    return openRouterFusionVariants()
+  }
+
   if (!model.capabilities.reasoning) return {}
 
   const id = model.id.toLowerCase()

@@ -2619,6 +2619,50 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
+  test("openrouter fusion returns quality and budget presets without reasoning capabilities", () => {
+    const result = ProviderTransform.variants(
+      createMockModel({
+        id: "openrouter/fusion",
+        providerID: "openrouter",
+        api: {
+          id: "openrouter/fusion",
+          url: "https://openrouter.ai/api/v1",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+        capabilities: { reasoning: false },
+      }),
+    )
+
+    expect(result).toEqual({
+      quality: {
+        plugins: [
+          {
+            id: "fusion",
+            analysis_models: [
+              "~anthropic/claude-opus-latest",
+              "~openai/gpt-latest",
+              "~google/gemini-pro-latest",
+            ],
+            model: "~anthropic/claude-opus-latest",
+          },
+        ],
+      },
+      budget: {
+        plugins: [
+          {
+            id: "fusion",
+            analysis_models: [
+              "~google/gemini-flash-latest",
+              "~moonshotai/kimi-latest",
+              "deepseek/deepseek-v4-pro",
+            ],
+            model: "~google/gemini-flash-latest",
+          },
+        ],
+      },
+    })
+  })
+
   test("deepseek returns empty object", () => {
     const model = createMockModel({
       id: "deepseek/deepseek-chat",
