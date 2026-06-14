@@ -44,8 +44,18 @@ export type PlugCtx = {
   directory: string
 }
 
+const noopSpinner: Spin = {
+  start() {},
+  stop() {},
+}
+
+export function createPlugSpinner(isTTY = Boolean(process.stdout.isTTY)): Spin {
+  if (!isTTY) return noopSpinner
+  return spinner()
+}
+
 const defaultPlugDeps: PlugDeps = {
-  spinner: () => spinner(),
+  spinner: () => createPlugSpinner(),
   log: {
     error: (msg) => log.error(msg),
     info: (msg) => log.info(msg),

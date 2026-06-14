@@ -3,7 +3,7 @@ import fs from "fs/promises"
 import path from "path"
 import { parse as parseJsonc } from "jsonc-parser"
 import { Filesystem } from "@/util/filesystem"
-import { createPlugTask, type PlugCtx, type PlugDeps } from "../../src/cli/cmd/plug"
+import { createPlugSpinner, createPlugTask, type PlugCtx, type PlugDeps } from "../../src/cli/cmd/plug"
 import { tmpdir } from "../fixture/fixture"
 
 function deps(global: string, target: string | Error): PlugDeps {
@@ -109,6 +109,24 @@ async function read(file: string) {
 }
 
 describe("plugin.install.task", () => {
+  test("uses a quiet spinner for non-TTY output", () => {
+    const writes: string[] = []
+    const original = process.stdout.write
+    process.stdout.write = ((chunk: string | Uint8Array) => {
+      writes.push(String(chunk))
+      return true
+    }) as typeof process.stdout.write
+    try {
+      const spin = createPlugSpinner(false)
+      spin.start("Installing plugin package...")
+      spin.stop("Plugin package ready")
+    } finally {
+      process.stdout.write = original
+    }
+
+    expect(writes).toEqual([])
+  })
+
   test("writes both server and tui config entries", async () => {
     await using tmp = await tmpdir()
     const target = await plugin(tmp.path, ["server", "tui"])
