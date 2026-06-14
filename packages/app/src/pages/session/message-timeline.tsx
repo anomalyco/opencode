@@ -853,8 +853,8 @@ export function MessageTimeline(props: {
     const index = sessions.findIndex((s) => s.id === sessionID)
     const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
 
-    await sdk().client.session
-      .update({ sessionID, time: { archived: Date.now() } })
+    await sdk()
+      .client.session.update({ sessionID, time: { archived: Date.now() } })
       .then(() => {
         sync().set(
           produce((draft) => {
@@ -882,8 +882,8 @@ export function MessageTimeline(props: {
     const index = sessions.findIndex((s) => s.id === sessionID)
     const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
 
-    const result = await sdk().client.session
-      .delete({ sessionID })
+    const result = await sdk()
+      .client.session.delete({ sessionID })
       .then((x) => x.data)
       .catch((err) => {
         showToast({

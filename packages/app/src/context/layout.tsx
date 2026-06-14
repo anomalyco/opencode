@@ -536,8 +536,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           continue
         }
 
-        void serverSdk().client.project
-          .update({ projectID: project.id, directory: worktree, icon: { color } })
+        void serverSdk()
+          .client.project.update({ projectID: project.id, directory: worktree, icon: { color } })
           .catch(() => {
             if (colorRequested.get(worktree) === color) colorRequested.delete(worktree)
           })

@@ -247,8 +247,8 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       pending.delete(key)
       return Promise.resolve()
     }
-    return sdk().client.session
-      .abort({
+    return sdk()
+      .client.session.abort({
         sessionID,
       })
       .catch(() => {})
@@ -559,12 +559,14 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         }, timeoutMs)
       })
 
-      const result = await Promise.race([WorktreeState.wait(sdk().scope, sessionDirectory), abortWait, timeout]).finally(
-        () => {
-          if (timer.id === undefined) return
-          clearTimeout(timer.id)
-        },
-      )
+      const result = await Promise.race([
+        WorktreeState.wait(sdk().scope, sessionDirectory),
+        abortWait,
+        timeout,
+      ]).finally(() => {
+        if (timer.id === undefined) return
+        clearTimeout(timer.id)
+      })
       pending.delete(pendingKey(session.id))
       if (controller.signal.aborted) return false
       if (result.status === "failed") throw new Error(result.message)

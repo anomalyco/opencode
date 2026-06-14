@@ -469,7 +469,8 @@ export default function Page() {
     if (store.changes === "git" || store.changes === "branch") return store.changes
   })
   const vcsKey = createMemo(
-    () => ["session-vcs", sdk().directory, sync().data.vcs?.branch ?? "", sync().data.vcs?.default_branch ?? ""] as const,
+    () =>
+      ["session-vcs", sdk().directory, sync().data.vcs?.branch ?? "", sync().data.vcs?.default_branch ?? ""] as const,
   )
   const vcsQuery = createQuery(() => {
     const mode = vcsMode()
@@ -480,8 +481,8 @@ export default function Page() {
       enabled,
       queryFn: mode
         ? () =>
-            sdk().client.vcs
-              .diff({ mode })
+            sdk()
+              .client.vcs.diff({ mode })
               .then((result) => list(result.data))
               .catch((error) => {
                 console.debug("[session-review] failed to load vcs diff", { mode, error })
@@ -682,7 +683,9 @@ export default function Page() {
         todoTimer = undefined
         if (!id) return
         if (status === "idle" && !blocked) return
-        const cached = untrack(() => sync().data.todo[id] !== undefined || serverSync().data.session_todo[id] !== undefined)
+        const cached = untrack(
+          () => sync().data.todo[id] !== undefined || serverSync().data.session_todo[id] !== undefined,
+        )
 
         todoFrame = requestAnimationFrame(() => {
           todoFrame = undefined
@@ -1487,7 +1490,11 @@ export default function Page() {
   }
 
   const halt = (sessionID: string) =>
-    busy(sessionID) ? sdk().client.session.abort({ sessionID }).catch(() => {}) : Promise.resolve()
+    busy(sessionID)
+      ? sdk()
+          .client.session.abort({ sessionID })
+          .catch(() => {})
+      : Promise.resolve()
 
   const revertMutation = useMutation(() => ({
     mutationFn: async (input: { sessionID: string; messageID: string }) => {

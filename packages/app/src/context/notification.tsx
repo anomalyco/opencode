@@ -211,8 +211,8 @@ export const { use: useNotification, provider: NotificationProvider } = createSi
       const [syncStore] = serverSync().child(directory, { bootstrap: false })
       const match = Binary.search(syncStore.session, sessionID, (s) => s.id)
       if (match.found) return syncStore.session[match.index]
-      return serverSDK().client.session
-        .get({ directory, sessionID })
+      return serverSDK()
+        .client.session.get({ directory, sessionID })
         .then((x) => x.data)
         .catch(() => undefined)
     }

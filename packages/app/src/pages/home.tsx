@@ -1104,8 +1104,8 @@ function LegacyHome() {
   const language = useLanguage()
   const homedir = createMemo(() => sync().data.path.home)
   const recent = createMemo(() => {
-    return sync().data.project
-      .slice()
+    return sync()
+      .data.project.slice()
       .sort((a, b) => (b.time.updated ?? b.time.created) - (a.time.updated ?? a.time.created))
       .slice(0, 5)
   })
