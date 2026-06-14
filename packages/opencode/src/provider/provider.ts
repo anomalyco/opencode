@@ -1557,6 +1557,62 @@ export const layer = Layer.effect(
           })
         }
 
+        // Discover models for custom openai-compatible providers with a baseURL
+        for (const [id, provider] of Object.entries(providers)) {
+          const providerID = ProviderV2.ID.make(id)
+          if (provider.source !== "config") continue
+          const baseURL = typeof provider.options?.baseURL === "string" && provider.options.baseURL !== "" ? provider.options.baseURL : undefined
+          if (!baseURL) continue
+          const configProvider = cfg.provider?.[providerID]
+          const npm = configProvider?.npm ?? "@ai-sdk/openai-compatible"
+          if (npm !== "@ai-sdk/openai-compatible") continue
+
+          yield* Effect.promise(async () => {
+            try {
+              const response = await fetch(`${baseURL}/models`, {
+                signal: AbortSignal.timeout(5_000),
+              })
+              if (!response.ok) return
+              const data = await response.json()
+              if (!data?.data?.length) return
+
+              for (const model of data.data) {
+                if (typeof model.id !== "string") continue
+                if (provider.models[model.id]) continue
+                provider.models[model.id] = {
+                   id: ModelV2.ID.make(model.id),
+                   providerID,
+                   name: model.id,
+                   family: "",
+                   api: {
+                     id: model.id,
+                     url: baseURL,
+                     npm,
+                   },
+                   status: "active",
+                   headers: {},
+                   options: {},
+                   cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                   limit: { context: 128000, output: 4096 },
+                  capabilities: {
+                    temperature: false,
+                    reasoning: false,
+                    attachment: false,
+                    toolcall: true,
+                    input: { text: true, audio: false, image: false, video: false, pdf: false },
+                    output: { text: true, audio: false, image: false, video: false, pdf: false },
+                    interleaved: false,
+                  },
+                  release_date: "",
+                  variants: {},
+                }
+              }
+            } catch {
+              // Discovery failed silently — existing models are preserved
+            }
+          })
+        }
+
         for (const [id, provider] of Object.entries(providers)) {
           const providerID = ProviderV2.ID.make(id)
           if (!isProviderAllowed(providerID)) {

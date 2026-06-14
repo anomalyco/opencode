@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, expect, mock, test } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
@@ -22,6 +22,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
 const originalEnv = new Map<string, string | undefined>()
+const originalFetch = globalThis.fetch
 
 const rememberEnv = (k: string) => {
   if (!originalEnv.has(k)) originalEnv.set(k, process.env[k])
@@ -53,6 +54,7 @@ afterEach(async () => {
     else process.env[key] = value
   }
   originalEnv.clear()
+  globalThis.fetch = originalFetch
   await disposeAllInstances()
 })
 
@@ -1790,4 +1792,195 @@ it.effect("opencode loader keeps paid models when auth exists", () =>
     expect(none).toBe(0)
     expect(keyedCount).toBeGreaterThan(0)
   }).pipe(provideMultiInstance),
+)
+
+it.instance(
+  "custom provider with baseURL discovers models from remote /models endpoint",
+  () =>
+    Effect.gen(function* () {
+      globalThis.fetch = mock((url: string) => {
+        if (url === "http://localhost:8080/v1/models") {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: [
+                  { id: "llama-3.1-8b", object: "model" },
+                  { id: "mistral-7b", object: "model" },
+                ],
+              }),
+              { status: 200 },
+            ),
+          )
+        }
+        return Promise.resolve(originalFetch(url))
+      }) as unknown as typeof fetch
+
+      const providers = yield* list
+      const provider = providers[ProviderV2.ID.make("llamacpp-router")]
+      expect(provider).toBeDefined()
+      expect(Object.keys(provider.models)).toContain("llama-3.1-8b")
+      expect(Object.keys(provider.models)).toContain("mistral-7b")
+    }),
+  {
+    config: {
+      provider: {
+        "llamacpp-router": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "llama.cpp router",
+          options: {
+            baseURL: "http://localhost:8080/v1",
+            timeout: false,
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "custom provider with failing /models endpoint is removed gracefully",
+  () =>
+    Effect.gen(function* () {
+      globalThis.fetch = mock((url: string) => {
+        if (url === "http://localhost:8080/v1/models") {
+          return Promise.resolve(new Response("Internal Server Error", { status: 500 }))
+        }
+        return Promise.resolve(originalFetch(url))
+      }) as unknown as typeof fetch
+
+      const providers = yield* list
+      expect(providers[ProviderV2.ID.make("failing-provider")]).toBeUndefined()
+    }),
+  {
+    config: {
+      provider: {
+        "failing-provider": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "Failing Provider",
+          options: {
+            baseURL: "http://localhost:8080/v1",
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "custom provider handles non-JSON response gracefully",
+  () =>
+    Effect.gen(function* () {
+      globalThis.fetch = mock((url: string) => {
+        if (url === "http://localhost:8080/v1/models") {
+          return Promise.resolve(new Response("<html>error</html>", { status: 200 }))
+        }
+        return Promise.resolve(originalFetch(url))
+      }) as unknown as typeof fetch
+
+      const providers = yield* list
+      expect(providers[ProviderV2.ID.make("non-json-provider")]).toBeUndefined()
+    }),
+  {
+    config: {
+      provider: {
+        "non-json-provider": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "Non-JSON Provider",
+          options: {
+            baseURL: "http://localhost:8080/v1",
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "custom provider handles empty data array gracefully",
+  () =>
+    Effect.gen(function* () {
+      globalThis.fetch = mock((url: string) => {
+        if (url === "http://localhost:8080/v1/models") {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ data: [] }),
+              { status: 200 },
+            ),
+          )
+        }
+        return Promise.resolve(originalFetch(url))
+      }) as unknown as typeof fetch
+
+      const providers = yield* list
+      expect(providers[ProviderV2.ID.make("empty-provider")]).toBeUndefined()
+    }),
+  {
+    config: {
+      provider: {
+        "empty-provider": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "Empty Provider",
+          options: {
+            baseURL: "http://localhost:8080/v1",
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "custom provider discovers additional models while preserving config-defined model settings",
+  () =>
+    Effect.gen(function* () {
+      globalThis.fetch = mock((url: string) => {
+        if (url === "http://localhost:8080/v1/models") {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                data: [
+                  { id: "llama-3.1-8b", object: "model" },
+                  { id: "mistral-7b", object: "model" },
+                  { id: "gemma-2-9b", object: "model" },
+                ],
+              }),
+              { status: 200 },
+            ),
+          )
+        }
+        return Promise.resolve(originalFetch(url))
+      }) as unknown as typeof fetch
+
+      const providers = yield* list
+      const provider = providers[ProviderV2.ID.make("llamacpp-router")]
+      expect(provider).toBeDefined()
+
+      // Config-defined model should preserve custom settings
+      expect(provider.models["llama-3.1-8b"]).toBeDefined()
+      expect(provider.models["llama-3.1-8b"].name).toBe("My Llama")
+      expect(provider.models["llama-3.1-8b"].capabilities.reasoning).toBe(true)
+
+      // Discovered models should be added
+      expect(provider.models["mistral-7b"]).toBeDefined()
+      expect(provider.models["gemma-2-9b"]).toBeDefined()
+    }),
+  {
+    config: {
+      provider: {
+        "llamacpp-router": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "llama.cpp router",
+          options: {
+            baseURL: "http://localhost:8080/v1",
+          },
+          models: {
+            "llama-3.1-8b": {
+              name: "My Llama",
+              reasoning: true,
+            },
+          },
+        },
+      },
+    },
+  },
 )
