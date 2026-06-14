@@ -82,6 +82,9 @@ if not VK_TOKEN:
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
 OPENCODE_BIN = Path(args.opencode_bin or CONFIG["opencode_bin_path"])
+# Resolve relative path against SCRIPT_DIR so it works when workdir changes
+if not OPENCODE_BIN.is_absolute():
+    OPENCODE_BIN = (SCRIPT_DIR / OPENCODE_BIN).resolve()
 ATTACHES_DIR = SCRIPT_DIR / "attaches"
 OPENCODE_CONFIG_PATH = Path(CONFIG.get("opencode_config_path", "~/.config/opencode/opencode.json")).expanduser()
 
@@ -149,6 +152,8 @@ def switch_config(config_name: str) -> bool:
     current_module.MCP_SERVERS = new_config.get("mcp_servers", {})
     current_module.SUBAGENT_PREFIX = new_config.get("subagent_prefix", "[subagent] ")
     current_module.OPENCODE_BIN = Path(new_config["opencode_bin_path"])
+    if not current_module.OPENCODE_BIN.is_absolute():
+        current_module.OPENCODE_BIN = (SCRIPT_DIR / current_module.OPENCODE_BIN).resolve()
     current_module.OPENCODE_CONFIG_PATH = Path(new_config.get("opencode_config_path", "~/.config/opencode/opencode.json")).expanduser()
     current_module.PROVIDER_URL = (args.llama_host or new_config.get("llama_server_host", "http://localhost:8081")).rstrip("/") + "/v1"
     # CLI_MODEL: разрешаем алиас в реальное имя модели
