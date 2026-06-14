@@ -2401,6 +2401,7 @@ ToolRegistry.register({
     const trigger = () => (
       <div data-slot="basic-tool-tool-info-structured">
         <div data-slot="basic-tool-tool-info-main">
+          <span class="text-12-regular text-text-weak font-mono mr-1">[skill]</span>
           <span data-slot="basic-tool-tool-title" class="capitalize agent-title">
             {titleContent()}
           </span>
