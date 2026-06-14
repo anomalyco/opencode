@@ -862,6 +862,37 @@ it.instance("subtask child inherits parent session external_directory allow", ()
       expect.arrayContaining([{ permission: "external_directory", pattern: "/tmp/allowed/*", action: "allow" }]),
     )
     expect(Permission.evaluate("external_directory", "/tmp/allowed/file", rules).action).toBe("allow")
+    // T6 (design-final §4.2): below the depth limit (this child sits at depth
+    // 2 of 5) there is no task auto-deny anymore — the `general` child may
+    // itself spawn deeper subagents.
+    expect(Permission.evaluate("task", "anything", rules).action).not.toBe("deny")
+  }),
+)
+
+it.instance("subtask child spawned AT the depth limit carries a task deny", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    // A chain of 4 sessions: the subtask below spawns the child at depth 5 =
+    // maxDepth — the last level is a pure work level whose session ruleset
+    // denies task.
+    const root = yield* sessions.create({ title: "Root" })
+    const l2 = yield* sessions.create({ parentID: root.id })
+    const l3 = yield* sessions.create({ parentID: l2.id })
+    const l4 = yield* sessions.create({ parentID: l3.id })
+    yield* llm.text("done")
+    const msg = yield* user(l4.id, "hello")
+    yield* addSubtask(l4.id, msg.id)
+
+    yield* prompt.loop({ sessionID: l4.id })
+
+    const kids = yield* sessions.children(l4.id)
+    expect(kids).toHaveLength(1)
+    const rules = kids[0]!.permission ?? []
+    expect(rules).toEqual(
+      expect.arrayContaining([{ permission: "task", pattern: "*", action: "deny" }]),
+    )
     expect(Permission.evaluate("task", "anything", rules).action).toBe("deny")
   }),
 )

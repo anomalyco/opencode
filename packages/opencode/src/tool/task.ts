@@ -110,7 +110,7 @@ export const TaskTool = Tool.define(
     // In-memory lifetime counter of subagents started per session TREE, keyed
     // by the root session id (design-final §2.2). A safety ceiling against
     // runaway delegation within one process run — deliberately not persisted;
-    // resumes/extends do not count and workflow dispatches keep their own cap.
+    // resumes/extends do not count.
     const treeSpawnCounts = new Map<SessionID, number>()
 
     const run = Effect.fn("TaskTool.execute")(function* (
@@ -166,23 +166,22 @@ export const TaskTool = Tool.define(
         return yield* Effect.fail(SubagentLimits.resumeError({ taskID: session.id }))
       }
       const parent = yield* sessions.get(ctx.sessionID)
+      // The task/todowrite auto-denies live in ONE place
+      // (deriveSubagentSessionPermission, design-final §4.2) and are depth
+      // gated there: only a child AT maxDepth gets them. This call keeps only
+      // the `experimental.primary_tools` denies.
       const childPermission = deriveSubagentSessionPermission({
         parentSessionPermission: parent.permission ?? [],
         subagent: next,
+        childDepth: spawnerDepth + 1,
+        maxDepth: depthLimit,
       })
-      const childToolDenies = [
-        ...(next.permission.some((rule) => rule.permission === "todowrite")
-          ? []
-          : [{ permission: "todowrite" as const, pattern: "*" as const, action: "deny" as const }]),
-        ...(next.permission.some((rule) => rule.permission === id)
-          ? []
-          : [{ permission: id, pattern: "*" as const, action: "deny" as const }]),
-        ...(cfg.experimental?.primary_tools?.map((permission) => ({
+      const childToolDenies =
+        cfg.experimental?.primary_tools?.map((permission) => ({
           permission,
           pattern: "*" as const,
           action: "deny" as const,
-        })) ?? []),
-      ]
+        })) ?? []
       const nextSession =
         session ??
         (yield* Effect.gen(function* () {

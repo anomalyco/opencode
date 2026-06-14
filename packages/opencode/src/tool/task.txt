@@ -17,3 +17,5 @@ Usage notes:
 5. The agent's outputs should generally be trusted
 6. Clearly tell the agent whether you expect it to write code or just to do research (search, file reads, web fetches, etc.), since it is not aware of the user's intent. Tell it how to verify its work if possible (e.g., relevant test commands).
 7. If the agent description mentions that it should be used proactively, then you should try your best to use it without the user having to ask for it first. Use your judgement.
+8. Agents may themselves delegate to deeper sub-agents. Nesting is allowed up to a configured maximum depth (your own session counts as one level; the root session is depth 1). On the deepest level this tool is not available — an agent there must do the remaining work itself and report results in its final message.
+9. task_id can only resume tasks that THIS session started itself (its own direct children). Passing the id of a parent, sibling, or unrelated session fails; an unknown id starts a fresh session.
