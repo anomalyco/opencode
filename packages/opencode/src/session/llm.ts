@@ -321,22 +321,15 @@ const live: Layer.Layer<
                       input.model,
                       prepared.messageTransformOptions,
                     )
-                    // Dump raw prompt after transform for kimi-k2.7-code
-                    if (input.model.id.includes("kimi-k2")) {
-                      const fs = require("fs")
-                      const dump = args.params.prompt.map((m: any) => ({
-                        role: m.role,
-                        content: Array.isArray(m.content)
-                          ? m.content.map((p: any) => ({ type: p.type, text: p.text?.slice(0, 200), hasProviderOptions: !!p.providerOptions }))
-                          : m.content?.slice(0, 200),
-                        providerOptions: m.providerOptions ? Object.keys(m.providerOptions) : undefined,
-                        hasReasoningContent: !!(m.providerOptions as any)?.openaiCompatible?.reasoning_content,
-                      }))
-                      const ts = Date.now()
-                      const path = `/tmp/opencode-prompt-${ts}.json`
-                      fs.writeFileSync(path, JSON.stringify(dump, null, 2))
-                      console.log("[RAW-PROMPT] wrote to", path)
-                    }
+                    // Dump raw prompt after transform
+                    console.log("[RAW-PROMPT]", JSON.stringify(args.params.prompt.map((m: any) => ({
+                      role: m.role,
+                      contentLen: Array.isArray(m.content) ? m.content.length : (m.content?.length || 0),
+                      hasReasoningPart: Array.isArray(m.content) && m.content.some((p: any) => p.type === "reasoning"),
+                      providerKeys: m.providerOptions ? Object.keys(m.providerOptions) : [],
+                      hasRc: !!(m.providerOptions as any)?.openaiCompatible?.reasoning_content,
+                      rcPreview: ((m.providerOptions as any)?.openaiCompatible?.reasoning_content || "").slice(0, 80),
+                    }))))
                   }
                   return args.params
                 },
