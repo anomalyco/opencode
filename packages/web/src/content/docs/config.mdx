@@ -865,6 +865,21 @@ The `experimental` key contains options that are under active development.
 Experimental options are not stable. They may change or be removed without notice.
 :::
 
+#### Subagent nesting depth
+
+Use `experimental.subagent_max_depth` to control how deep subagents can [nest](/docs/agents#nesting). The root session is depth 1; values are clamped to 1–10.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "subagent_max_depth": 5
+  }
+}
+```
+
+The default is `5`. Set it to `2` to restore the previous behavior (the main session spawns subagents, subagents do not), or to `1` to disable the task tool entirely.
+
 ---
 
 ## Variables
