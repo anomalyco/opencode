@@ -300,7 +300,7 @@ export function MessageTimeline(props: {
   const sessionMessages = createMemo(() => {
     const id = sessionID()
     if (!id) return emptyMessages
-    return sync.data.message[id] ?? emptyMessages
+    return sync().data.message[id] ?? emptyMessages
   })
   const messageByID = createMemo(() => new Map(sessionMessages().map((message) => [message.id, message] as const)))
   const assistantMessagesByParent = createMemo(() => {
@@ -324,10 +324,10 @@ export function MessageTimeline(props: {
   const sessionStatus = createMemo(() => {
     const id = sessionID()
     if (!id) return idle
-    return sync.data.session_status[id] ?? idle
+    return sync().data.session_status[id] ?? idle
   })
   const working = createMemo(() => sessionStatus().type !== "idle")
-  const tint = createMemo(() => messageAgentColor(sessionMessages(), sync.data.agent))
+  const tint = createMemo(() => messageAgentColor(sessionMessages(), sync().data.agent))
 
   const [timeoutDone, setTimeoutDone] = createSignal(true)
 
@@ -366,25 +366,25 @@ export function MessageTimeline(props: {
   const info = createMemo(() => {
     const id = sessionID()
     if (!id) return
-    return sync.session.get(id)
+    return sync().session.get(id)
   })
   const titleValue = createMemo(() => info()?.title)
   const titleLabel = createMemo(() => sessionTitle(titleValue()))
   const shareUrl = createMemo(() => info()?.share?.url)
-  const shareEnabled = createMemo(() => sync.data.config.share !== "disabled")
+  const shareEnabled = createMemo(() => sync().data.config.share !== "disabled")
   const parentID = createMemo(() => info()?.parentID)
   const parent = createMemo(() => {
     const id = parentID()
     if (!id) return
-    return sync.session.get(id)
+    return sync().session.get(id)
   })
   const parentMessages = createMemo(() => {
     const id = parentID()
     if (!id) return emptyMessages
-    return sync.data.message[id] ?? emptyMessages
+    return sync().data.message[id] ?? emptyMessages
   })
   const parentTitle = createMemo(() => sessionTitle(parent()?.title) ?? language.t("command.session.new"))
-  const getMsgParts = (msgId: string) => sync.data.part[msgId] ?? emptyParts
+  const getMsgParts = (msgId: string) => sync().data.part[msgId] ?? emptyParts
   const childTaskDescription = createMemo(() => {
     const id = sessionID()
     if (!id) return
@@ -730,14 +730,14 @@ export function MessageTimeline(props: {
   }
 
   const shareMutation = useMutation(() => ({
-    mutationFn: (id: string) => serverSDK.client.session.share({ sessionID: id, directory: sdk.directory }),
+    mutationFn: (id: string) => serverSDK().client.session.share({ sessionID: id, directory: sdk().directory }),
     onError: (err) => {
       console.error("Failed to share session", err)
     },
   }))
 
   const unshareMutation = useMutation(() => ({
-    mutationFn: (id: string) => serverSDK.client.session.unshare({ sessionID: id, directory: sdk.directory }),
+    mutationFn: (id: string) => serverSDK().client.session.unshare({ sessionID: id, directory: sdk().directory }),
     onError: (err) => {
       console.error("Failed to unshare session", err)
     },
@@ -745,9 +745,9 @@ export function MessageTimeline(props: {
 
   const titleMutation = useMutation(() => ({
     mutationFn: (input: { id: string; title: string }) =>
-      sdk.client.session.update({ sessionID: input.id, title: input.title }),
+      sdk().client.session.update({ sessionID: input.id, title: input.title }),
     onSuccess: (_, input) => {
-      sync.set(
+      sync().set(
         produce((draft) => {
           const index = draft.session.findIndex((s) => s.id === input.id)
           if (index !== -1) draft.session[index].title = input.title
@@ -797,8 +797,8 @@ export function MessageTimeline(props: {
       () => [parentID(), childTaskDescription()] as const,
       ([id, description]) => {
         if (!id || description) return
-        if (sync.data.message[id] !== undefined) return
-        void sync.session.sync(id)
+        if (sync().data.message[id] !== undefined) return
+        void sync().session.sync(id)
       },
       { defer: true },
     ),
@@ -846,25 +846,25 @@ export function MessageTimeline(props: {
   }
 
   const archiveSession = async (sessionID: string) => {
-    const session = sync.session.get(sessionID)
+    const session = sync().session.get(sessionID)
     if (!session) return
 
-    const sessions = sync.data.session ?? []
+    const sessions = sync().data.session ?? []
     const index = sessions.findIndex((s) => s.id === sessionID)
     const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
 
-    await sdk.client.session
-      .update({ sessionID, time: { archived: Date.now() } })
+    await sdk()
+      .client.session.update({ sessionID, time: { archived: Date.now() } })
       .then(() => {
-        sync.set(
+        sync().set(
           produce((draft) => {
             const index = draft.session.findIndex((s) => s.id === sessionID)
             if (index !== -1) draft.session.splice(index, 1)
           }),
         )
-        sync.session.evict(sessionID)
+        sync().session.evict(sessionID)
         navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
-        notifySessionTabsRemoved({ directory: sdk.directory, sessionIDs: [sessionID] })
+        notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [sessionID] })
       })
       .catch((err) => {
         showToast({
@@ -875,15 +875,15 @@ export function MessageTimeline(props: {
   }
 
   const deleteSession = async (sessionID: string) => {
-    const session = sync.session.get(sessionID)
+    const session = sync().session.get(sessionID)
     if (!session) return false
 
-    const sessions = (sync.data.session ?? []).filter((s) => !s.parentID && !s.time?.archived)
+    const sessions = (sync().data.session ?? []).filter((s) => !s.parentID && !s.time?.archived)
     const index = sessions.findIndex((s) => s.id === sessionID)
     const nextSession = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
 
-    const result = await sdk.client.session
-      .delete({ sessionID })
+    const result = await sdk()
+      .client.session.delete({ sessionID })
       .then((x) => x.data)
       .catch((err) => {
         showToast({
@@ -897,7 +897,7 @@ export function MessageTimeline(props: {
 
     const removed = new Set<string>([sessionID])
     const byParent = new Map<string, string[]>()
-    for (const item of sync.data.session) {
+    for (const item of sync().data.session) {
       const parentID = item.parentID
       if (!parentID) continue
       const existing = byParent.get(parentID)
@@ -925,16 +925,16 @@ export function MessageTimeline(props: {
 
     navigateAfterSessionRemoval(sessionID, session.parentID, nextSession?.id)
 
-    sync.set(
+    sync().set(
       produce((draft) => {
         draft.session = draft.session.filter((s) => !removed.has(s.id))
       }),
     )
 
     for (const id of removed) {
-      sync.session.evict(id)
+      sync().session.evict(id)
     }
-    notifySessionTabsRemoved({ directory: sdk.directory, sessionIDs: [...removed] })
+    notifySessionTabsRemoved({ directory: sdk().directory, sessionIDs: [...removed] })
     return true
   }
 
@@ -946,7 +946,7 @@ export function MessageTimeline(props: {
 
   function DialogDeleteSession(props: { sessionID: string }) {
     const name = createMemo(
-      () => sessionTitle(sync.session.get(props.sessionID)?.title) ?? language.t("command.session.new"),
+      () => sessionTitle(sync().session.get(props.sessionID)?.title) ?? language.t("command.session.new"),
     )
     const handleDelete = async () => {
       await deleteSession(props.sessionID)

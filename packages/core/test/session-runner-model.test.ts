@@ -3,6 +3,8 @@ import { LLM } from "@opencode-ai/llm"
 import { LLMClient } from "@opencode-ai/llm/route"
 import { ConfigProvider, DateTime, Effect } from "effect"
 import { Headers } from "effect/unstable/http"
+import { Credential } from "@opencode-ai/core/credential"
+import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -45,8 +47,6 @@ const provider = (api: ProviderV2.Info["api"]) =>
   new ProviderV2.Info({
     id: ProviderV2.ID.make("test-provider"),
     name: "Test provider",
-    enabled: { via: "env", name: "TEST_PROVIDER_API_KEY" },
-    env: ["TEST_PROVIDER_API_KEY"],
     api,
     request: { headers: {}, body: {} },
   })
@@ -247,7 +247,7 @@ describe("SessionRunnerModel", () => {
           ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
           request: { headers: {}, body: {}, generation: {}, options: {} },
         }),
-        provider({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
+        { type: "env", name: "TEST_PROVIDER_API_KEY" },
       )
       const request = LLM.request({ model: resolved, prompt: "Hello" })
       const headers = yield* resolved.route.auth
@@ -263,6 +263,35 @@ describe("SessionRunnerModel", () => {
         )
 
       expect(headers.authorization).toBe("Bearer secret")
+    }),
+  )
+
+  it.effect("prefers stored credentials over configured auth", () =>
+    Effect.gen(function* () {
+      const credential = new Credential.Stored({
+        id: Credential.ID.create(),
+        integrationID: Integration.ID.make("test-provider"),
+        label: "Work",
+        value: new Credential.Key({ type: "key", key: "stored-secret", metadata: { tenant: "work" } }),
+      })
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        new ModelV2.Info({
+          ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
+          request: { headers: {}, body: { apiKey: "configured-secret" }, generation: {}, options: {} },
+        }),
+        { type: "credential", id: credential.id, label: credential.label },
+        credential,
+      )
+      const headers = yield* resolved.route.auth.apply({
+        request: LLM.request({ model: resolved, prompt: "Hello" }),
+        method: "POST",
+        url: "https://openai.example/v1/responses",
+        body: "{}",
+        headers: Headers.empty,
+      })
+
+      expect(headers.authorization).toBe("Bearer stored-secret")
+      expect(resolved.route.defaults.http?.body).toEqual({ tenant: "work" })
     }),
   )
 
