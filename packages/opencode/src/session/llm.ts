@@ -321,18 +321,14 @@ const live: Layer.Layer<
                       input.model,
                       prepared.messageTransformOptions,
                     )
-                    // Dump raw prompt to /tmp
-                    const dump = args.params.prompt.map((m: any) => ({
+                    // Dump raw prompt to stderr
+                    const dump = JSON.stringify(args.params.prompt.map((m: any) => ({
                       role: m.role,
-                      contentLen: Array.isArray(m.content) ? m.content.length : (m.content?.length || 0),
-                      hasReasoningPart: Array.isArray(m.content) && m.content.some((p: any) => p.type === "reasoning"),
-                      providerKeys: m.providerOptions ? Object.keys(m.providerOptions) : [],
-                      hasRc: !!(m.providerOptions as any)?.openaiCompatible?.reasoning_content,
-                      rcPreview: ((m.providerOptions as any)?.openaiCompatible?.reasoning_content || "").slice(0, 80),
-                    }))
-                    const ts = Date.now()
-                    const path = `/tmp/opencode-prompt-${ts}.json`
-                    Bun.write(`/tmp/opencode-prompt-${Date.now()}.json`, JSON.stringify(dump, null, 2))
+                      cl: Array.isArray(m.content) ? m.content.length : String(m.content||"").length,
+                      rp: Array.isArray(m.content) && m.content.some((p: any) => p.type === "reasoning"),
+                      rc: !!(m.providerOptions as any)?.openaiCompatible?.reasoning_content,
+                    })))
+                    console.error("[RAW-PROMPT]", dump)
                   }
                   return args.params
                 },
