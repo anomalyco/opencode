@@ -28,8 +28,10 @@ const connections = Credential.layer.pipe(
   Layer.provide(Database.layerFromPath(":memory:").pipe(Layer.fresh)),
   Layer.provide(events),
 )
-const catalog = Catalog.layer.pipe(Layer.provide(Layer.mergeAll(events, locationLayer, plugins, policy, connections)))
 const integrations = Integration.locationLayer.pipe(Layer.provide(events), Layer.provide(connections))
+const catalog = Catalog.layer.pipe(
+  Layer.provide(Layer.mergeAll(events, locationLayer, plugins, policy, connections, integrations)),
+)
 const layer = Layer.mergeAll(
   catalog.pipe(Layer.provide(connections)),
   integrations,
@@ -61,11 +63,11 @@ describe("ModelsDevPlugin", () => {
               id: Integration.ID.make("acme"),
               name: "Acme",
               methods: [
-                new Integration.KeyMethod({ type: "key" }),
-                new Integration.EnvMethod({
+                { type: "key" },
+                {
                   type: "env",
                   names: ["ACME_API_KEY"],
-                }),
+                },
               ],
               connections: [],
             }),

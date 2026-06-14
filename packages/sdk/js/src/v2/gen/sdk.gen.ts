@@ -5812,10 +5812,24 @@ export class Credential extends HeyApiClient {
   public remove<ThrowOnError extends boolean = false>(
     parameters: {
       credentialID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "credentialID" }] }])
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "credentialID" },
+            { in: "query", key: "location" },
+          ],
+        },
+      ],
+    )
     return (options?.client ?? this.client).delete<V2CredentialRemoveResponses, V2CredentialRemoveErrors, ThrowOnError>(
       {
         url: "/api/credential/{credentialID}",
@@ -5833,6 +5847,10 @@ export class Credential extends HeyApiClient {
   public update<ThrowOnError extends boolean = false>(
     parameters: {
       credentialID: string
+      location?: {
+        directory?: string
+        workspace?: string
+      }
       label?: string
     },
     options?: Options<never, ThrowOnError>,
@@ -5843,6 +5861,7 @@ export class Credential extends HeyApiClient {
         {
           args: [
             { in: "path", key: "credentialID" },
+            { in: "query", key: "location" },
             { in: "body", key: "label" },
           ],
         },
