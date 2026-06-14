@@ -1,9 +1,9 @@
 import { Session } from "@/session/session"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { MessageV2 } from "../../session/message-v2"
 import { SessionID } from "../../session/schema"
 import { effectCmd, fail } from "../effect-cmd"
 import { UI } from "../ui"
+import { Filesystem } from "@/util/filesystem"
 import * as prompts from "@clack/prompts"
 import { EOL } from "os"
 import { Effect } from "effect"
@@ -219,9 +219,65 @@ function sanitize(data: { info: Session.Info; messages: SessionV1.WithParts[] })
   }
 }
 
+function toolTitle(state: SessionV1.ToolState): string | undefined {
+  if (state.status === "completed") return state.title
+  if (state.status === "running") return state.title
+  if (state.status === "error") return `error: ${state.error}`
+  return undefined
+}
+
+function toolOutput(state: SessionV1.ToolState): string | undefined {
+  if (state.status === "completed") return state.output
+  if (state.status === "error") return state.error
+  return undefined
+}
+
+function partMarkdown(value: SessionV1.Part): string[] {
+  if (value.type === "text") return value.text.trim() ? ["", value.text.trim()] : []
+  if (value.type === "reasoning")
+    return value.text.trim()
+      ? ["", "<details><summary>Reasoning</summary>", "", value.text.trim(), "", "</details>"]
+      : []
+  if (value.type === "tool") {
+    const title = toolTitle(value.state)
+    const output = toolOutput(value.state)?.trimEnd()
+    const head = `**🔧 ${value.tool}**${title ? ` — ${title}` : ""}`
+    return output ? ["", head, "", "```", output, "```"] : ["", head]
+  }
+  return []
+}
+
+function messageMarkdown(message: SessionV1.WithParts): string[] {
+  const body = message.parts.flatMap(partMarkdown)
+  if (body.length === 0) return []
+  return ["", message.info.role === "user" ? "## 👤 User" : "## 🤖 Assistant", ...body]
+}
+
+function markdown(value: { info: Session.Info; messages: SessionV1.WithParts[] }): string {
+  const info = value.info
+  const lines: string[] = []
+  lines.push(`# ${info.title || info.id}`)
+  lines.push("")
+  lines.push("| Field | Value |")
+  lines.push("| --- | --- |")
+  lines.push(`| Session | \`${info.id}\` |`)
+  lines.push(`| Directory | \`${info.directory}\` |`)
+  if (info.agent) lines.push(`| Agent | ${info.agent} |`)
+  if (info.model) lines.push(`| Model | ${info.model.providerID}/${info.model.id} |`)
+  lines.push(`| Version | ${info.version} |`)
+  lines.push(`| Created | ${new Date(info.time.created).toISOString()} |`)
+  lines.push(`| Updated | ${new Date(info.time.updated).toISOString()} |`)
+  if (info.cost) lines.push(`| Cost | $${info.cost.toFixed(4)} |`)
+  lines.push("")
+  lines.push("---")
+  for (const message of value.messages) lines.push(...messageMarkdown(message))
+  lines.push("")
+  return lines.join(EOL)
+}
+
 export const ExportCommand = effectCmd({
   command: "export [sessionID]",
-  describe: "export session data as JSON",
+  describe: "export session data as JSON or Markdown",
   builder: (yargs) =>
     yargs
       .positional("sessionID", {
@@ -229,15 +285,32 @@ export const ExportCommand = effectCmd({
         type: "string",
       })
       .option("sanitize", {
-        describe: "redact sensitive transcript and file data",
+        describe: "redact sensitive transcript and file data (JSON only)",
         type: "boolean",
+      })
+      .option("format", {
+        alias: "f",
+        describe: "output format",
+        type: "string",
+        choices: ["json", "markdown"],
+        default: "json",
+      })
+      .option("output", {
+        alias: "o",
+        describe: "write to a file instead of stdout",
+        type: "string",
       }),
   handler: Effect.fn("Cli.export")(function* (args) {
     return yield* run(args)
   }),
 })
 
-const run = Effect.fn("Cli.export.body")(function* (args: { sessionID?: string; sanitize?: boolean }) {
+const run = Effect.fn("Cli.export.body")(function* (args: {
+  sessionID?: string
+  sanitize?: boolean
+  format?: string
+  output?: string
+}) {
   const svc = yield* Session.Service
   let sessionID = args.sessionID ? SessionID.make(args.sessionID) : undefined
   process.stderr.write(`Exporting session: ${sessionID ?? "latest"}\n`)
@@ -286,7 +359,18 @@ const run = Effect.fn("Cli.export.body")(function* (args: { sessionID?: string; 
 
     const exportData = { info: sessionInfo, messages }
 
-    process.stdout.write(JSON.stringify(args.sanitize ? sanitize(exportData) : exportData, null, 2))
+    const content =
+      args.format === "markdown"
+        ? markdown(exportData)
+        : JSON.stringify(args.sanitize ? sanitize(exportData) : exportData, null, 2)
+
+    if (args.output) {
+      yield* Effect.promise(() => Filesystem.write(args.output!, content))
+      process.stderr.write(`Wrote ${args.format ?? "json"} export to ${args.output}${EOL}`)
+      return
+    }
+
+    process.stdout.write(content)
     process.stdout.write(EOL)
   }).pipe(Effect.catchCause(() => fail(`Session not found: ${sessionID!}`)))
 })
