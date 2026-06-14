@@ -12,6 +12,7 @@ import { provideInstance, provideTmpdirInstance, testInstanceStoreLayer, tmpdir 
 import { testEffect } from "../lib/effect"
 import path from "path"
 import fs from "fs/promises"
+import { pathToFileURL } from "url"
 
 const node = CrossSpawnSpawner.defaultLayer
 
@@ -319,6 +320,38 @@ description: A skill in the .claude/skills directory.
       expect(invalid._tag).toBe("SkillInvalidError")
       expect(mismatch).toBeInstanceOf(Skill.NameMismatchError)
       expect(mismatch._tag).toBe("SkillNameMismatchError")
+    }),
+  )
+
+  // Regression: pathToFileURL("<built-in>") produced a garbage URL before the guard was added.
+  // The guard `skill.location.startsWith("<") ? skill.location : pathToFileURL(...)` must emit
+  // the raw sentinel string for built-in skills and a valid file:// URL for disk skills.
+  it.effect("fmt() emits raw built-in sentinel and file:// URL for disk skill in verbose output", () =>
+    Effect.sync(() => {
+      const diskSkillPath = "/tmp/opencode-test-skill/SKILL.md"
+      const list: Skill.Info[] = [
+        {
+          name: "customize-opencode",
+          description: "Built-in skill description.",
+          location: "<built-in>",
+          content: "built-in content",
+        },
+        {
+          name: "disk-skill",
+          description: "A disk-resident skill.",
+          location: diskSkillPath,
+          content: "disk content",
+        },
+      ]
+
+      // No exception thrown — pathToFileURL("<built-in>") would emit a garbage URL without the guard
+      const output = Skill.fmt(list, { verbose: true })
+
+      // 1. Built-in sentinel is passed through verbatim (not converted to a file:// URL)
+      expect(output).toContain("<location><built-in></location>")
+
+      // 2. Guard applies only to the sentinel; disk skill location IS a valid file:// URL
+      expect(output).toContain(`<location>${pathToFileURL(diskSkillPath).href}</location>`)
     }),
   )
 

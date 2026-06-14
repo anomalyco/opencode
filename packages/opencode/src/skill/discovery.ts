@@ -19,6 +19,23 @@ class Index extends Schema.Class<Index>("Index")({
   skills: Schema.Array(IndexSkill),
 }) {}
 
+// Validates that a skill name is a simple directory name with no traversal components.
+const isSafeName = (name: string) =>
+  !name.includes("/") &&
+  !name.includes("\\") &&
+  !name.includes("..") &&
+  name.length > 0 &&
+  name.length < 256
+
+// Validates that a file path from a remote manifest contains no traversal components.
+// Subdirectory separators are allowed (e.g. "assets/icon.png"), but ".." and absolute paths are not.
+const isSafeFilePath = (file: string) =>
+  !file.includes("..") &&
+  !file.startsWith("/") &&
+  !file.startsWith("\\") &&
+  file.length > 0 &&
+  file.length < 512
+
 export interface Interface {
   readonly pull: (url: string) => Effect.Effect<string[]>
 }
@@ -71,15 +88,40 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Path.Path | Htt
       )
       const list = data.skills.filter((skill) => skill.files.includes("SKILL.md"))
 
+      const resolvedCache = path.resolve(cache)
+
       const dirs = yield* Effect.forEach(
         list,
         (skill) =>
           Effect.gen(function* () {
+            if (!isSafeName(skill.name)) {
+              yield* Effect.logWarning("skipping skill with unsafe name", { name: skill.name, url: index })
+              return null
+            }
+
             const root = path.join(cache, skill.name)
+            if (!root.startsWith(resolvedCache + path.sep) && root !== resolvedCache) {
+              yield* Effect.logWarning("skipping skill: name escapes cache boundary", { name: skill.name, url: index })
+              return null
+            }
+
+            const resolvedRoot = path.resolve(root)
 
             yield* Effect.forEach(
               skill.files,
-              (file) => download(new URL(file, `${host}/${skill.name}/`).href, path.join(root, file)),
+              (file) =>
+                Effect.gen(function* () {
+                  if (!isSafeFilePath(file)) {
+                    yield* Effect.logWarning("skipping file: unsafe file path", { name: skill.name, file, url: index })
+                    return
+                  }
+                  const dest = path.join(root, file)
+                  if (!dest.startsWith(resolvedRoot + path.sep) && dest !== resolvedRoot) {
+                    yield* Effect.logWarning("skipping file: path escapes skill root", { name: skill.name, file, url: index })
+                    return
+                  }
+                  yield* download(new URL(file, `${host}/${skill.name}/`).href, dest)
+                }),
               {
                 concurrency: fileConcurrency,
               },

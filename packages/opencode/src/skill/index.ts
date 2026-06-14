@@ -1,7 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import path from "path"
 import { pathToFileURL } from "url"
-import { Effect, Layer, Context, Schema } from "effect"
+import { Effect, Layer, Context, Schema, Ref } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
 import type { Agent } from "@/agent/agent"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -87,6 +87,7 @@ type State = {
 type DiscoveryState = {
   matches: string[]
   dirs: string[]
+  scanRoots: string[]
 }
 
 type ScanState = {
@@ -100,6 +101,7 @@ export interface Interface {
   readonly all: () => Effect.Effect<Info[]>
   readonly dirs: () => Effect.Effect<string[]>
   readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
+  readonly refresh: () => Effect.Effect<Info[]>
 }
 
 const add = Effect.fnUntraced(function* (state: State, match: string, events: EventV2Bridge.Service["Service"]) {
@@ -181,6 +183,7 @@ const discoverSkills = Effect.fnUntraced(function* (
   worktree: string,
 ) {
   const state: ScanState = { matches: new Set(), dirs: new Set() }
+  const scanRoots: string[] = []
 
   const externalDirs: string[] = []
   if (!disableExternalSkills) {
@@ -191,6 +194,7 @@ const discoverSkills = Effect.fnUntraced(function* (
       const root = path.join(global.home, dir)
       if (!(yield* fsys.isDir(root))) continue
       yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "global" })
+      scanRoots.push(root)
     }
 
     const upDirs = yield* fsys
@@ -199,12 +203,14 @@ const discoverSkills = Effect.fnUntraced(function* (
 
     for (const root of upDirs) {
       yield* scan(state, root, EXTERNAL_SKILL_PATTERN, { dot: true, scope: "project" })
+      scanRoots.push(root)
     }
   }
 
   const configDirs = yield* config.directories()
   for (const dir of configDirs) {
     yield* scan(state, dir, OPENCODE_SKILL_PATTERN)
+    scanRoots.push(dir)
   }
 
   const cfg = yield* config.get()
@@ -217,18 +223,21 @@ const discoverSkills = Effect.fnUntraced(function* (
     }
 
     yield* scan(state, dir, SKILL_PATTERN)
+    scanRoots.push(dir)
   }
 
   for (const url of cfg.skills?.urls ?? []) {
     const pulledDirs = yield* discovery.pull(url)
     for (const dir of pulledDirs) {
       yield* scan(state, dir, SKILL_PATTERN)
+      // URL-pulled dirs are NOT added to scanRoots — no OS subscription possible
     }
   }
 
   return {
     matches: Array.from(state.matches),
     dirs: Array.from(state.dirs),
+    scanRoots,
   }
 })
 
@@ -271,8 +280,8 @@ export const layer = Layer.effect(
       }),
     )
     const state = yield* InstanceState.make(
-      Effect.fn("Skill.state")(function* () {
-        const s: State = { skills: {}, dirs: new Set() }
+      Effect.fn("Skill.state")(function* (ctx) {
+        const s: State = { skills: Object.create(null) as Record<string, Info>, dirs: new Set() }
         // Register the built-in skill BEFORE disk discovery so a user-disk
         // skill with the same name can override it.
         s.skills[CUSTOMIZE_OPENCODE_SKILL_NAME] = {
@@ -281,40 +290,78 @@ export const layer = Layer.effect(
           location: "<built-in>",
           content: CUSTOMIZE_OPENCODE_SKILL_BODY,
         }
-        yield* loadSkills(s, yield* InstanceState.get(discovered), events)
-        return s
+        const discoveryResult = yield* InstanceState.get(discovered)
+        yield* loadSkills(s, discoveryResult, events)
+        const stateRef = yield* Ref.make(s)
+
+        // Shared rescan closure — used by both the watcher fiber and refresh().
+        // Rebuilds state from scratch: re-registers the built-in skill first, then
+        // rescans disk, atomically replaces the Ref, and returns the new Info list.
+        const doRefresh = Effect.gen(function* () {
+          const freshDiscovery = yield* discoverSkills(
+            config,
+            discovery,
+            fsys,
+            global,
+            flags.disableExternalSkills,
+            flags.disableClaudeCodeSkills,
+            ctx.directory,
+            ctx.worktree,
+          )
+          const freshState: State = { skills: Object.create(null) as Record<string, Info>, dirs: new Set() }
+          // Re-register built-in before disk scan — same invariant as initial load
+          freshState.skills[CUSTOMIZE_OPENCODE_SKILL_NAME] = {
+            name: CUSTOMIZE_OPENCODE_SKILL_NAME,
+            description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
+            location: "<built-in>",
+            content: CUSTOMIZE_OPENCODE_SKILL_BODY,
+          }
+          yield* loadSkills(freshState, freshDiscovery, events)
+          yield* Ref.set(stateRef, freshState)
+          return Object.values(freshState.skills)
+        })
+
+        return { stateRef, doRefresh }
       }),
     )
 
+    const getState = Effect.fn("Skill.getState")(function* () {
+      return yield* Ref.get((yield* InstanceState.get(state)).stateRef)
+    })
+
     const get = Effect.fn("Skill.get")(function* (name: string) {
-      const s = yield* InstanceState.get(state)
+      const s = yield* getState()
       return s.skills[name]
     })
 
     const require = Effect.fn("Skill.require")(function* (name: string) {
-      const s = yield* InstanceState.get(state)
+      const s = yield* getState()
       const info = s.skills[name]
       if (info) return info
       return yield* new NotFoundError({ name, available: Object.keys(s.skills).toSorted() })
     })
 
     const all = Effect.fn("Skill.all")(function* () {
-      const s = yield* InstanceState.get(state)
+      const s = yield* getState()
       return Object.values(s.skills)
     })
 
     const dirs = Effect.fn("Skill.dirs")(function* () {
-      return (yield* InstanceState.get(discovered)).dirs
+      return Array.from((yield* getState()).dirs)
     })
 
     const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
-      const s = yield* InstanceState.get(state)
+      const s = yield* getState()
       const list = Object.values(s.skills).toSorted((a, b) => a.name.localeCompare(b.name))
       if (!agent) return list
       return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
     })
 
-    return Service.of({ get, require, all, dirs, available })
+    const refresh = Effect.fn("Skill.refresh")(function* () {
+      return yield* (yield* InstanceState.get(state)).doRefresh
+    })
+
+    return Service.of({ get, require, all, dirs, available, refresh })
   }),
 )
 
@@ -327,6 +374,14 @@ export const defaultLayer = layer.pipe(
   Layer.provide(RuntimeFlags.defaultLayer),
 )
 
+const xmlEscape = (s: string) =>
+  s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;")
+
 export function fmt(list: Info[], opts: { verbose: boolean }) {
   const described = list.filter((skill) => skill.description !== undefined)
   if (described.length === 0) return "No skills are currently available."
@@ -337,9 +392,9 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
         .toSorted((a, b) => a.name.localeCompare(b.name))
         .flatMap((skill) => [
           "  <skill>",
-          `    <name>${skill.name}</name>`,
-          `    <description>${skill.description}</description>`,
-          `    <location>${pathToFileURL(skill.location).href}</location>`,
+          `    <name>${xmlEscape(skill.name)}</name>`,
+          `    <description>${xmlEscape(skill.description ?? "")}</description>`,
+          `    <location>${skill.location.startsWith("<") ? skill.location : pathToFileURL(skill.location).href}</location>`,
           "  </skill>",
         ]),
       "</available_skills>",
