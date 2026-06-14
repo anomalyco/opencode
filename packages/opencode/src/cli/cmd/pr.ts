@@ -5,12 +5,19 @@ import { Git } from "@/git"
 import { InstanceRef } from "@/effect/instance-ref"
 import { Process } from "@/util/process"
 
+export function parsePrNumber(input: string | number): number | undefined {
+  const normalized = String(input).trim().replace(/^#/, "")
+  if (!/^\d+$/.test(normalized)) return undefined
+  const value = Number(normalized)
+  return Number.isInteger(value) && value > 0 ? value : undefined
+}
+
 export const PrCommand = effectCmd({
   command: "pr <number>",
   describe: "fetch and checkout a GitHub PR branch, then run opencode",
   builder: (yargs) =>
     yargs.positional("number", {
-      type: "number",
+      type: "string",
       describe: "PR number to checkout",
       demandOption: true,
     }),
@@ -24,7 +31,10 @@ export const PrCommand = effectCmd({
     const git = yield* Git.Service
     const worktree = ctx.worktree
 
-    const prNumber = args.number
+    const prNumber = parsePrNumber(args.number)
+    if (prNumber === undefined) {
+      return yield* fail(`Invalid PR number: ${args.number}. Pass a positive integer, optionally prefixed with '#'.`)
+    }
     const localBranchName = `pr/${prNumber}`
     UI.println(`Fetching and checking out PR #${prNumber}...`)
 
