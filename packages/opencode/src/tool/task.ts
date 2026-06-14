@@ -21,6 +21,35 @@ export interface TaskPromptOps {
   prompt(input: SessionPrompt.PromptInput): Effect.Effect<SessionV1.WithParts>
 }
 
+type ForwardedFilePart = Extract<SessionPrompt.PromptInput["parts"][number], { type: "file" }>
+
+function parentAttachments(
+  messages: SessionV1.WithParts[],
+  parentMessageID: MessageID,
+  subagent: string,
+): ForwardedFilePart[] {
+  const parent = messages.find((message) => message.info.role === "user" && message.info.id === parentMessageID)
+  // Only forward attachments when the parent message explicitly targets this subagent.
+  if (!parent || !parent.parts.some((part) => part.type === "agent" && part.name === subagent)) return []
+
+  const seen = new Set<string>()
+  return parent.parts.flatMap((part) => {
+    if (part.type !== "file") return []
+    const key = [part.url, part.mime, part.filename ?? ""].join("\n")
+    if (seen.has(key)) return []
+    seen.add(key)
+    return [
+      {
+        type: "file" as const,
+        mime: part.mime,
+        filename: part.filename,
+        url: part.url,
+        source: part.source,
+      },
+    ]
+  })
+}
+
 const id = "task"
 const BACKGROUND_DESCRIPTION = [
   "Background mode: background=true launches the subagent asynchronously and returns immediately.",
@@ -162,11 +191,12 @@ export const TaskTool = Tool.define(
         Effect.orDie,
       )
       if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
-      const variant = msg.info.variant
+      const assistant = msg.info
+      const variant = assistant.variant
 
       const model = next.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
+        modelID: assistant.modelID,
+        providerID: assistant.providerID,
       }
       const metadata = {
         parentSessionId: ctx.sessionID,
@@ -185,6 +215,23 @@ export const TaskTool = Tool.define(
 
       const runTask = Effect.fn("TaskTool.runTask")(function* () {
         const parts = yield* ops.resolvePromptParts(params.prompt)
+        const forwarded = parentAttachments(ctx.messages, assistant.parentID, next.name)
+        const promptParts =
+          forwarded.length === 0
+            ? parts
+            : [
+                ...parts,
+                ...forwarded.filter(
+                  (candidate) =>
+                    !parts.some(
+                      (part) =>
+                        part.type === "file" &&
+                        part.url === candidate.url &&
+                        part.mime === candidate.mime &&
+                        part.filename === candidate.filename,
+                    ),
+                ),
+              ]
         const result = yield* ops.prompt({
           messageID: MessageID.ascending(),
           sessionID: nextSession.id,
@@ -194,7 +241,7 @@ export const TaskTool = Tool.define(
           },
           variant: next.model ? undefined : variant,
           agent: next.name,
-          parts,
+          parts: promptParts,
         })
         return result.parts.findLast((item) => item.type === "text")?.text ?? ""
       })

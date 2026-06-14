@@ -248,6 +248,62 @@ describe("tool.task", () => {
     }),
   )
 
+  it.instance("execute forwards parent user file parts for matching agent handoff", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: assistant.parentID,
+        sessionID: chat.id,
+        type: "agent",
+        name: "general",
+        source: {
+          value: "@general",
+          start: 0,
+          end: 8,
+        },
+      })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: assistant.parentID,
+        sessionID: chat.id,
+        type: "file",
+        mime: "image/png",
+        filename: "image.png",
+        url: "data:image/png;base64,AAAA",
+      })
+
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ onPrompt: (input) => (seen = input) })
+
+      yield* def.execute(
+        {
+          description: "inspect image",
+          prompt: "describe this image",
+          subagent_type: "general",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: yield* sessions.messages({ sessionID: chat.id }),
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      expect(seen?.parts).toEqual([
+        { type: "text", text: "describe this image" },
+        { type: "file", mime: "image/png", filename: "image.png", url: "data:image/png;base64,AAAA" },
+      ])
+    }),
+  )
+
   it.instance("execute asks by default and skips checks when bypassed", () =>
     Effect.gen(function* () {
       const { chat, assistant } = yield* seed()
