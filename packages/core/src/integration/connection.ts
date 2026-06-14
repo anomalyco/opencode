@@ -3,16 +3,18 @@ export * as IntegrationConnection from "./connection"
 import { Schema } from "effect"
 import { Credential } from "../credential"
 
-export class CredentialInfo extends Schema.Class<CredentialInfo>("Connection.CredentialInfo")({
+export const CredentialInfo = Schema.Struct({
   type: Schema.Literal("credential"),
   id: Credential.ID,
   label: Schema.String,
-}) {}
+}).annotate({ identifier: "Connection.CredentialInfo" })
+export type CredentialInfo = typeof CredentialInfo.Type
 
-export class EnvInfo extends Schema.Class<EnvInfo>("Connection.EnvInfo")({
+export const EnvInfo = Schema.Struct({
   type: Schema.Literal("env"),
   name: Schema.String,
-}) {}
+}).annotate({ identifier: "Connection.EnvInfo" })
+export type EnvInfo = typeof EnvInfo.Type
 
 export const Info = Schema.Union([CredentialInfo, EnvInfo])
   .pipe(Schema.toTaggedUnion("type"))
