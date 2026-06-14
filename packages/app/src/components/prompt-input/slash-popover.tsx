@@ -1,9 +1,10 @@
-import { Component, For, Match, Show, Switch } from "solid-js"
+import { Component, For, Match, Show, Switch, createMemo } from "solid-js"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { getTopRecentSkills, recordSkillUsage } from "@opencode-ai/core/util/recent-skills"
 
 export type AtOption =
   | { type: "agent"; name: string; display: string }
@@ -48,6 +49,8 @@ type PromptPopoverProps = {
 }
 
 export const PromptPopover: Component<PromptPopoverProps> = (props) => {
+  const recentNames = createMemo(() => getTopRecentSkills(5))
+
   return (
     <Show when={props.popover}>
       <div
@@ -268,6 +271,101 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                 </div>
               }
             >
+              <Show when={recentNames().length > 0}>
+                <div
+                  class="px-2 py-1 uppercase tracking-wide"
+                  classList={{
+                    "text-[11px] leading-[calc(var(--font-size-base)*1.8)] [font-weight:500]": props.newLayoutDesigns,
+                    "text-v2-text-text-muted": props.newLayoutDesigns,
+                    "text-11-medium text-text-subtle": !props.newLayoutDesigns,
+                  }}
+                >
+                  Recently Used
+                </div>
+                <For each={recentNames()}>
+                  {(name) => {
+                    const cmd = props.slashFlat.find((c) => c.id === name)
+                    if (!cmd) return null
+                    return (
+                      <button
+                        data-slash-id={cmd.id}
+                        classList={{
+                          "w-full flex items-center justify-between gap-4 px-2 py-1": true,
+                          "rounded-[4px] scroll-my-2": props.newLayoutDesigns,
+                          "rounded-md": !props.newLayoutDesigns,
+                          "bg-v2-overlay-simple-overlay-hover": props.newLayoutDesigns && props.slashActive === cmd.id,
+                          "bg-surface-raised-base-hover": !props.newLayoutDesigns && props.slashActive === cmd.id,
+                        }}
+                        onClick={() => {
+                          recordSkillUsage(cmd.id)
+                          props.onSlashSelect(cmd)
+                        }}
+                        onPointerMove={() => props.setSlashActive(cmd.id)}
+                      >
+                        <div class="flex items-center gap-2 min-w-0">
+                          <span
+                            class="whitespace-nowrap"
+                            classList={{
+                              "text-[13px] leading-[calc(var(--font-size-base)*1.8)] tracking-[-0.04px] [font-weight:440]":
+                                props.newLayoutDesigns,
+                              "text-v2-text-text-base": props.newLayoutDesigns,
+                              "text-14-regular": !props.newLayoutDesigns,
+                              "text-text-strong": !props.newLayoutDesigns,
+                            }}
+                          >
+                            /{cmd.trigger}
+                          </span>
+                          <Show when={cmd.description}>
+                            <span
+                              class="truncate"
+                              classList={{
+                                "text-[13px] leading-[calc(var(--font-size-base)*1.8)] tracking-[-0.04px] [font-weight:440]":
+                                  props.newLayoutDesigns,
+                                "text-v2-text-text-muted": props.newLayoutDesigns,
+                                "text-14-regular": !props.newLayoutDesigns,
+                                "text-text-weak": !props.newLayoutDesigns,
+                              }}
+                            >
+                              {cmd.description}
+                            </span>
+                          </Show>
+                        </div>
+                        <div class="flex items-center gap-2 shrink-0">
+                          <Show when={cmd.type === "custom" && cmd.source !== "command"}>
+                            <Show
+                              when={props.newLayoutDesigns}
+                              fallback={
+                                <span class="text-11-regular px-1.5 py-0.5 rounded bg-surface-base text-text-subtle">
+                                  {cmd.source === "skill"
+                                    ? props.t("prompt.slash.badge.skill")
+                                    : cmd.source === "mcp"
+                                      ? props.t("prompt.slash.badge.mcp")
+                                      : props.t("prompt.slash.badge.custom")}
+                                </span>
+                              }
+                            >
+                              <Tag>
+                                {cmd.source === "skill"
+                                  ? props.t("prompt.slash.badge.skill")
+                                  : cmd.source === "mcp"
+                                    ? props.t("prompt.slash.badge.mcp")
+                                    : props.t("prompt.slash.badge.custom")}
+                              </Tag>
+                            </Show>
+                          </Show>
+                        </div>
+                      </button>
+                    )
+                  }}
+                </For>
+                <div
+                  class="my-1"
+                  classList={{
+                    "border-t border-v2-border-border-base": props.newLayoutDesigns,
+                    "border-t border-border-base": !props.newLayoutDesigns,
+                  }}
+                />
+              </Show>
               <For each={props.slashFlat}>
                 {(cmd) => {
                   const keybind = () => props.commandKeybind(cmd.id)
@@ -282,7 +380,10 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                         "bg-v2-overlay-simple-overlay-hover": props.newLayoutDesigns && props.slashActive === cmd.id,
                         "bg-surface-raised-base-hover": !props.newLayoutDesigns && props.slashActive === cmd.id,
                       }}
-                      onClick={() => props.onSlashSelect(cmd)}
+                      onClick={() => {
+                        if (cmd.source === "skill") recordSkillUsage(cmd.id)
+                        props.onSlashSelect(cmd)
+                      }}
                       onPointerMove={() => props.setSlashActive(cmd.id)}
                     >
                       <div class="flex items-center gap-2 min-w-0">

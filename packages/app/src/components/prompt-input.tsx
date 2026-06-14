@@ -825,7 +825,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   } = useFilteredList<SlashCommand>({
     items: slashCommands,
     key: (x) => x?.id,
-    filterKeys: ["trigger", "title"],
+    filterKeys: ["trigger", "title", "description"],
     onSelect: handleSlashSelect,
   })
 

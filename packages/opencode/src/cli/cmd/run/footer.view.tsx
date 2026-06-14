@@ -21,6 +21,7 @@ import {
   RunSubagentSelectBody,
   RunVariantSelectBody,
 } from "./footer.command"
+import { recordSkillUsage } from "@opencode-ai/core/util/recent-skills"
 import { FOOTER_MENU_ROWS, RunFooterMenu } from "./footer.menu"
 import { RunFooterSubagentBody } from "./footer.subagent"
 import { RunPromptBody, createPromptState } from "./footer.prompt"
@@ -741,6 +742,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                             commands={props.commands}
                             onClose={closePanel}
                             onSelect={(name) => {
+                              recordSkillUsage(name)
                               composer.replacePrompt({
                                 text: `/${name} `,
                                 parts: [],

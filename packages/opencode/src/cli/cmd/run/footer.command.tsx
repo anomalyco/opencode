@@ -4,6 +4,7 @@ import { useKeyboard, type JSX } from "@opentui/solid"
 import fuzzysort from "fuzzysort"
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import { RunFooterMenu, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
+import { recordSkillUsage, getTopRecentSkills } from "@opencode-ai/core/util/recent-skills"
 import type { RunFooterTheme } from "./theme"
 import type { FooterQueuedPrompt, FooterSubagentTab, RunCommand, RunInput, RunProvider } from "./types"
 
@@ -131,6 +132,7 @@ function handleKey(input: {
   setQuery: (value: string) => void
   select: () => void
   close: () => void
+  onDrillDown?: () => void
 }) {
   const name = input.event.name.toLowerCase()
   const ctrl = input.event.ctrl && !input.event.meta && !input.event.shift && !input.event.super
@@ -180,6 +182,12 @@ function handleKey(input: {
   if (name === "return") {
     input.event.preventDefault()
     input.select()
+    return
+  }
+
+  if (name === "right" && input.onDrillDown) {
+    input.event.preventDefault()
+    input.onDrillDown()
     return
   }
 
@@ -774,6 +782,7 @@ export function RunSkillSelectBody(props: {
 }) {
   let field: InputRenderable | undefined
   const [query, setQuery] = createSignal("")
+  const [drilledDown, setDrilledDown] = createSignal(false)
   const entries = createMemo<SkillEntry[]>(() =>
     (props.commands() ?? [])
       .filter((item) => item.source === "skill")
@@ -786,7 +795,19 @@ export function RunSkillSelectBody(props: {
       }))
       .sort((a, b) => a.display.localeCompare(b.display)),
   )
-  const items = createMemo<SkillEntry[]>(() => match(query(), entries()))
+  const recentEntries = createMemo<SkillEntry[]>(() => {
+    if (query()) return []
+    return getTopRecentSkills(5).map((recent) => ({
+      category: "",
+      display: recent,
+      description: undefined,
+      keywords: `skill ${recent}`,
+      name: recent,
+    }))
+  })
+  const allEntries = createMemo<SkillEntry[]>(() => [...recentEntries(), ...entries()])
+  const filteredEntries = createMemo<SkillEntry[]>(() => match(query(), allEntries()))
+  const items = filteredEntries
   const menu = createFooterMenuState({ count: () => items().length, limit: PANEL_LIST_ROWS })
   const select = () => {
     const item = items()[menu.selected()]
@@ -794,12 +815,19 @@ export function RunSkillSelectBody(props: {
       return
     }
 
+    recordSkillUsage(item.name)
     props.onSelect(item.name)
   }
+
+  const drilledItem = createMemo(() => {
+    if (!drilledDown()) return undefined
+    return items()[menu.selected()]
+  })
 
   createEffect(() => {
     query()
     menu.reset()
+    setDrilledDown(false)
   })
 
   useKeyboard((event) => {
@@ -807,7 +835,21 @@ export function RunSkillSelectBody(props: {
       return
     }
 
-    handleKey({ event, menu, field: () => field, setQuery, select, close: props.onClose })
+    if (event.name === "left" && drilledDown()) {
+      event.preventDefault()
+      setDrilledDown(false)
+      return
+    }
+
+    handleKey({
+      event,
+      menu,
+      field: () => field,
+      setQuery,
+      select,
+      close: props.onClose,
+      onDrillDown: () => setDrilledDown(true),
+    })
   })
 
   return (
@@ -815,7 +857,7 @@ export function RunSkillSelectBody(props: {
       title="Skills"
       query={query()}
       count={items().length}
-      total={entries().length}
+      total={allEntries().length}
       placeholder="Search"
       theme={props.theme}
       inputRef={(input) => {
@@ -825,20 +867,39 @@ export function RunSkillSelectBody(props: {
       dark
       chrome="minimal"
     >
-      <RunFooterMenu
-        theme={props.theme}
-        items={items}
-        selected={menu.selected}
-        offset={menu.offset}
-        rows={() => PANEL_LIST_ROWS}
-        limit={PANEL_LIST_ROWS}
-        empty={props.commands() ? "No skills found" : "Skills loading"}
-        border={false}
-        paddingLeft={PANEL_PAD}
-        paddingRight={PANEL_PAD}
-        grouped={false}
-        background
-      />
+      {drilledItem() ? (
+        <box
+          flexDirection="column"
+          height={PANEL_LIST_ROWS}
+          paddingLeft={PANEL_PAD}
+          paddingRight={PANEL_PAD}
+        >
+          <text fg={props.theme().highlight} attributes={TextAttributes.BOLD} wrapMode="none">
+            {drilledItem()!.name}
+          </text>
+          <text marginTop={1} fg={props.theme().text} wrapMode="none">
+            {drilledItem()!.description || "No description available"}
+          </text>
+          <text marginTop={1} fg={props.theme().muted} wrapMode="none">
+            Press ← to go back
+          </text>
+        </box>
+      ) : (
+        <RunFooterMenu
+          theme={props.theme}
+          items={items}
+          selected={menu.selected}
+          offset={menu.offset}
+          rows={() => PANEL_LIST_ROWS}
+          limit={PANEL_LIST_ROWS}
+          empty={props.commands() ? "No skills found" : "Skills loading"}
+          border={false}
+          paddingLeft={PANEL_PAD}
+          paddingRight={PANEL_PAD}
+          grouped={false}
+          background
+        />
+      )}
     </PanelShell>
   )
 }
