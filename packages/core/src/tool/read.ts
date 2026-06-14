@@ -53,9 +53,11 @@ export const layer = Layer.effectDiscard(
           },
           execute: (input, context) => {
             return Effect.gen(function* () {
-              const absolute = path.resolve(location.directory, input.path)
-              const selected = path.isAbsolute(input.path) ? path.dirname(absolute) : location.directory
-              if (!path.isAbsolute(input.path) && !FSUtil.contains(location.directory, absolute))
+              // Expand a leading `~`/`~/` first so home paths use the absolute-path read branch.
+              const expanded = FSUtil.expandHome(input.path)
+              const absolute = path.resolve(location.directory, expanded)
+              const selected = path.isAbsolute(expanded) ? path.dirname(absolute) : location.directory
+              if (!path.isAbsolute(expanded) && !FSUtil.contains(location.directory, absolute))
                 return yield* Effect.die(new Error("Path escapes the allowed read root"))
               const real = yield* fs.realPath(absolute).pipe(Effect.orDie)
               const root = yield* fs.realPath(selected).pipe(Effect.orDie)

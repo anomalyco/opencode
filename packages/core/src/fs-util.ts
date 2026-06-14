@@ -1,6 +1,7 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { dirname, isAbsolute, join, relative, resolve as pathResolve, sep } from "path"
 import { realpathSync } from "fs"
+import { homedir } from "os"
 import * as NFS from "fs/promises"
 import { lookup } from "mime-types"
 import { Context, Effect, FileSystem, Layer, Schema } from "effect"
@@ -201,6 +202,22 @@ export namespace FSUtil {
   // Pure helpers that don't need Effect (path manipulation, sync operations)
   export function mimeType(p: string): string {
     return lookup(p) || "application/octet-stream"
+  }
+
+  /**
+   * Expand a leading `~` to the user's home directory.
+   *
+   * Only a path that is exactly `~` or begins with `~/` (and on Windows `~\`)
+   * is expanded; the remainder is joined onto `os.homedir()`. Other `~user`
+   * forms are intentionally left literal because resolving a *named* user's
+   * home directory is platform-specific and out of scope here. This keeps the
+   * expansion escape-safe: only the documented prefixes are touched.
+   */
+  export function expandHome(p: string): string {
+    if (p === "~") return homedir()
+    if (p.startsWith("~/")) return join(homedir(), p.slice(2).replace(/^[\\/]+/u, ""))
+    if (process.platform === "win32" && p.startsWith("~\\")) return join(homedir(), p.slice(2).replace(/^[\\/]+/u, ""))
+    return p
   }
 
   export function normalizePath(p: string): string {

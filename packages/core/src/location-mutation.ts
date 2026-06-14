@@ -117,8 +117,11 @@ export const layer = Layer.effect(
     })
 
     const resolve = Effect.fn("LocationMutation.resolve")(function* (input: ResolveInput) {
-      const relative = !path.isAbsolute(input.path)
-      const absolute = path.resolve(location.directory, input.path)
+      // Expand a leading `~`/`~/` so a tilde path is treated as the absolute
+      // path it denotes; the isAbsolute/escape checks run against the expansion.
+      const expanded = FSUtil.expandHome(input.path)
+      const relative = !path.isAbsolute(expanded)
+      const absolute = path.resolve(location.directory, expanded)
       const lexicallyInternal = FSUtil.contains(location.directory, absolute)
       if (relative && !lexicallyInternal) return yield* new PathError({ path: input.path, reason: "relative_escape" })
 
