@@ -208,7 +208,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const sessionID = params.id
     if (!sessionID) return false
 
-    const diffs = sync.data.session_diff[sessionID]
+    const diffs = sync().data.session_diff[sessionID]
     if (!diffs) return false
     return diffs.some((diff) => diff.file === path)
   }
@@ -270,8 +270,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     return paths
   })
-  const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
-  const working = createMemo(() => sync.data.session_working(params.id ?? ""))
+  const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
+  const working = createMemo(() => sync().data.session_working(params.id ?? ""))
   const imageAttachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )
@@ -350,7 +350,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const hasUserPrompt = createMemo(() => {
     const sessionID = params.id
     if (!sessionID) return false
-    const messages = sync.data.message[sessionID]
+    const messages = sync().data.message[sessionID]
     if (!messages) return false
     return messages.some((m) => m.role === "user")
   })
@@ -476,7 +476,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (server.isLocal()) {
       pickAttachmentFiles({
         picker: platform.openAttachmentPickerDialog,
-        directory: () => sdk.directory,
+        directory: () => sdk().directory,
         fallback: () => fileInputRef?.click(),
         onFile: addAttachment,
         onError: (error) =>
@@ -493,7 +493,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         <module.DialogSelectFile
           mode="files"
           onSelectFile={(path) => {
-            void sdk.client.v2.fs
+            void sdk().client.v2.fs
               .read({ path })
               .then((response) => response.data?.data)
               .then((data) => data && addAttachments([serverAttachmentFile(path, data)]))
@@ -620,7 +620,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const agentList = createMemo(() =>
-    sync.data.agent
+    sync().data.agent
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
       .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name })),
   )
@@ -690,7 +690,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         type: "builtin" as const,
       }))
 
-    const custom = sync.data.command.map((cmd) => ({
+    const custom = sync().data.command.map((cmd) => ({
       id: `custom.${cmd.name}`,
       trigger: cmd.name,
       title: cmd.name,
@@ -1144,8 +1144,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const showVariantControl = createMemo(() => local.model.variant.list().length > 0)
   const accepting = createMemo(() => {
     const id = params.id
-    if (!id) return permission.isAutoAcceptingDirectory(sdk.directory)
-    return permission.isAutoAccepting(id, sdk.directory)
+    if (!id) return permission.isAutoAcceptingDirectory(sdk().directory)
+    return permission.isAutoAccepting(id, sdk().directory)
   })
 
   const { abort, handleSubmit } = createPromptSubmit({
@@ -1336,9 +1336,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const [agentsQuery, globalProvidersQuery, providersQuery] = useQueries(() => ({
     queries: [
-      queryOptions.agents(pathKey(sdk.directory)),
-      queryOptions.providers(null),
-      queryOptions.providers(pathKey(sdk.directory)),
+      queryOptions().agents(pathKey(sdk().directory)),
+      queryOptions().providers(null),
+      queryOptions().providers(pathKey(sdk().directory)),
     ],
   }))
 
@@ -1383,7 +1383,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       (project) => pathKey(project.worktree) === key || project.sandboxes?.some((sandbox) => pathKey(sandbox) === key),
     )
   }
-  const selectedProject = createMemo(() => projectForDirectory(sdk.directory))
+  const selectedProject = createMemo(() => projectForDirectory(sdk().directory))
   const projectResults = createMemo(() => {
     const search = picker.projectSearch.trim().toLowerCase()
     if (!search) return projects()
