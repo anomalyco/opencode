@@ -29,6 +29,7 @@ import { pathToFileURL, fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { ConfigMarkdown } from "@/config/markdown"
 import { SessionSummary } from "./summary"
+import { Budget } from "./budget"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { SessionProcessor } from "./processor"
 import { Tool } from "@/tool/tool"
@@ -119,6 +120,7 @@ export const layer = Layer.effect(
     const state = yield* SessionRunState.Service
     const revert = yield* SessionRevert.Service
     const summary = yield* SessionSummary.Service
+    const budget = yield* Budget.Service
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
     const events = yield* EventV2Bridge.Service
@@ -1191,6 +1193,24 @@ export const layer = Layer.effect(
               history: msgs,
             }).pipe(Effect.ignore, Effect.forkIn(scope))
 
+          // Always-on budget & runaway guard. Check cumulative spend before
+          // committing to another model step. Stops gracefully before exceeding
+          // the cap (default), and warns once per threshold as it approaches.
+          let budgetNotice: string | undefined
+          {
+            const current = yield* sessions.get(sessionID).pipe(Effect.catchAll(() => Effect.succeed(session)))
+            const b = yield* budget.check(sessionID, current.cost)
+            if (b.enabled && b.exceeded && b.onExceed === "stop") {
+              const error = new NamedError.Unknown({ message: Budget.stopText(b.spent, b.usd!) })
+              yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
+              yield* Effect.logInfo("budget stop", { "session.id": sessionID, spent: b.spent, cap: b.usd })
+              break
+            }
+            for (const threshold of b.newlyCrossed) budgetNotice = Budget.warningText(b.spent, b.usd!, threshold)
+            if (b.enabled && b.exceeded && b.onExceed === "warn" && !budgetNotice)
+              budgetNotice = Budget.warningText(b.spent, b.usd!, b.fraction)
+          }
+
           const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
           const task = tasks.pop()
 
@@ -1340,7 +1360,11 @@ export const layer = Layer.effect(
               sessionID,
               parentSessionID: session.parentID,
               system,
-              messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
+              messages: [
+                ...modelMsgs,
+                ...(budgetNotice ? [{ role: "assistant" as const, content: budgetNotice }] : []),
+                ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : []),
+              ],
               tools,
               model,
               toolChoice: format.type === "json_schema" ? "required" : undefined,
@@ -1581,6 +1605,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Session.defaultLayer),
     Layer.provide(SessionRevert.defaultLayer),
     Layer.provide(SessionSummary.defaultLayer),
+    Layer.provide(Budget.defaultLayer),
     Layer.provide(Image.defaultLayer),
     Layer.provide(
       Layer.mergeAll(
@@ -1721,6 +1746,7 @@ export const node = LayerNode.make(layer, [
   SessionRunState.node,
   SessionRevert.node,
   SessionSummary.node,
+  Budget.node,
   SystemPrompt.node,
   LLM.node,
   EventV2Bridge.node,

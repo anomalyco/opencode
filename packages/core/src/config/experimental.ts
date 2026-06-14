@@ -50,7 +50,26 @@ export class Criticality extends Schema.Class<Criticality>("ConfigV2.Experimenta
   window_ms: Schema.Number.pipe(Schema.optional).annotate({ description: "Legacy alias for sliding_window_ms." }),
 }) {}
 
+// Always-on budget & runaway guard. Independent of multi-agent ACE: applies to
+// every session. Emits early warnings as the session approaches its spend cap and
+// (by default) stops gracefully before exceeding it.
+export class Budget extends Schema.Class<Budget>("ConfigV2.Experimental.Budget")({
+  usd: Schema.Number.pipe(Schema.optional).annotate({
+    description: "Spend cap in USD for a single session. Unset = no budget guard.",
+  }),
+  warn_at: Schema.Number.pipe(Schema.Array, Schema.optional).annotate({
+    description: "Fractions of the cap at which to warn the model once (default [0.5, 0.8]).",
+  }),
+  on_exceed: Schema.Union([Schema.Literal("stop"), Schema.Literal("warn")])
+    .pipe(Schema.optional)
+    .annotate({
+      description:
+        "'stop' (default): halt the session gracefully before exceeding the cap. 'warn': keep going but inject a final over-budget warning.",
+    }),
+}) {}
+
 export class Experimental extends Schema.Class<Experimental>("ConfigV2.Experimental")({
   policies: Policy.pipe(Schema.Array, Schema.optional),
   criticality: Schema.optional(Criticality),
+  budget: Schema.optional(Budget),
 }) {}

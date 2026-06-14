@@ -20,7 +20,7 @@
           },
           {
             "group": "Guides",
-            "pages": ["cascade-control"]
+            "pages": ["cascade-control", "budget-guard"]
           }
         ]
       }
