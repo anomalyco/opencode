@@ -311,6 +311,13 @@ function normalizeMessages(
     model.api.npm !== "@openrouter/ai-sdk-provider"
   ) {
     const field = model.capabilities.interleaved.field
+    // DEBUG: dump reasoning parts in all assistant messages
+    for (const msg of msgs) {
+      if (msg.role === "assistant" && Array.isArray(msg.content)) {
+        const rp = msg.content.filter((p: any) => p.type === "reasoning")
+        if (rp.length) console.log("[INTERLEAVED] FIRING for", model.id, "| assistant msg has", rp.length, "reasoning parts, total chars:", rp.reduce((s: number, p: any) => s + (p.text?.length || 0), 0), "| setting field:", field)
+      }
+    }
     return msgs.map((msg) => {
       if (msg.role === "assistant" && Array.isArray(msg.content)) {
         const reasoningParts = msg.content.filter((part: any) => part.type === "reasoning")
@@ -337,6 +344,8 @@ function normalizeMessages(
 
       return msg
     })
+  } else {
+    console.log("[INTERLEAVED] SKIPPED for", model.id, "| interleaved:", model.capabilities.interleaved, "| npm:", model.api.npm)
   }
 
   return msgs
