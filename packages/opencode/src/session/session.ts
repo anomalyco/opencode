@@ -36,6 +36,7 @@ import { Snapshot } from "@/snapshot"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { SessionID, MessageID, PartID } from "./schema"
+import { SubagentLimits } from "./subagent-limits"
 
 import type { Provider } from "@/provider/provider"
 import { Permission } from "@/permission"
@@ -489,6 +490,23 @@ export interface Interface {
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionV1.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
+  /**
+   * The parent chain of a session, ordered self → root: `depth = chain.length`,
+   * `rootID = chain.at(-1)!.id`. A parent row that vanished mid-chain ends the
+   * walk there (orphans count as roots — the safest reading). Fails with
+   * SubagentLineageError once the walk exceeds LINEAGE_ITERATION_CAP (corrupt
+   * or cyclic parent data); callers treat that like "depth ≥ limit" instead of
+   * hanging.
+   */
+  readonly lineage: (
+    sessionID: SessionID,
+  ) => Effect.Effect<Info[], SubagentLimits.SubagentLineageError | NotFound>
+  /**
+   * Every transitive child of a session (the session itself excluded),
+   * collected by iterative BFS over `children`. Cycle-safe via a seen-set and
+   * truncated at a 10 000-node safety cap.
+   */
+  readonly descendants: (sessionID: SessionID) => Effect.Effect<Info[]>
   readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
   readonly updateMessage: <T extends SessionV1.Info>(msg: T) => Effect.Effect<T>
   readonly removeMessage: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<MessageID>
@@ -550,6 +568,23 @@ export const layer: Layer.Layer<
       metadata?: typeof Metadata.Type
       permission?: PermissionV1.Ruleset
     }) {
+      // Config-free hard cap on session nesting (design-final §4.1, line 4):
+      // no code path — today's or a future one — may create a session deeper
+      // than HARD_MAX_DEPTH. Every guarded spawn path fails earlier with a
+      // typed error at the (clamped, ≤10) configured limit, so tripping this
+      // is an invariant violation and surfaces as a defect carrying the typed
+      // error; the public create() contract stays Effect<Info>.
+      if (input.parentID !== undefined) {
+        const chain = yield* lineage(input.parentID).pipe(
+          // An unknown parent is an orphan and orphans count as roots.
+          Effect.catchTag("NotFoundError", () => Effect.succeed<Info[]>([])),
+          Effect.catchTag("SubagentLineageError", (error) => Effect.die(error)),
+        )
+        if (chain.length + 1 > SubagentLimits.HARD_MAX_DEPTH)
+          yield* Effect.die(
+            SubagentLimits.depthError({ depth: chain.length + 1, limit: SubagentLimits.HARD_MAX_DEPTH }),
+          )
+      }
       const ctx = yield* InstanceState.context
       const result: Info = {
         id: SessionID.descending(input.id),
@@ -643,6 +678,40 @@ export const layer: Layer.Layer<
         .all()
         .pipe(Effect.orDie)
       return rows.map(fromRow)
+    })
+
+    const lineage: Interface["lineage"] = Effect.fn("Session.lineage")(function* (sessionID: SessionID) {
+      const chain = [yield* get(sessionID)]
+      while (chain.at(-1)!.parentID !== undefined) {
+        if (chain.length >= SubagentLimits.LINEAGE_ITERATION_CAP)
+          return yield* Effect.fail(SubagentLimits.lineageError({ sessionID }))
+        const parent = yield* get(chain.at(-1)!.parentID!).pipe(Effect.option)
+        // A vanished parent ends the chain: orphans count as roots.
+        if (Option.isNone(parent)) return chain
+        chain.push(parent.value)
+      }
+      return chain
+    })
+
+    // Safety cap for the descendants traversal; legitimate trees stay far
+    // below it (HARD_MAX_DEPTH levels × the per-tree spawn cap).
+    const DESCENDANTS_CAP = 10_000
+
+    const descendants: Interface["descendants"] = Effect.fn("Session.descendants")(function* (sessionID: SessionID) {
+      const seen = new Set<SessionID>([sessionID])
+      const result: Info[] = []
+      const queue = [sessionID]
+      while (queue.length > 0) {
+        const kids = yield* children(queue.shift()!)
+        for (const kid of kids) {
+          if (seen.has(kid.id)) continue
+          seen.add(kid.id)
+          result.push(kid)
+          if (result.length >= DESCENDANTS_CAP) return result
+          queue.push(kid.id)
+        }
+      }
+      return result
     })
 
     const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
@@ -951,6 +1020,8 @@ export const layer: Layer.Layer<
       diff,
       messages,
       children,
+      lineage,
+      descendants,
       remove,
       updateMessage,
       removeMessage,
