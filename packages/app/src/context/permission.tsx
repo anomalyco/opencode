@@ -119,9 +119,11 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     const respond: PermissionRespondFn = (input) => {
-      serverSDK().client.permission.respond(input).catch(() => {
-        responded.delete(input.permissionID)
-      })
+      serverSDK()
+        .client.permission.respond(input)
+        .catch(() => {
+          responded.delete(input.permissionID)
+        })
     }
 
     function respondOnce(permission: PermissionRequest, directory?: string) {
@@ -179,8 +181,8 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
         }),
       )
 
-      serverSDK().client.permission
-        .list({ directory })
+      serverSDK()
+        .client.permission.list({ directory })
         .then((x) => {
           if (!isAutoAcceptingDirectory(directory)) return
           for (const perm of x.data ?? []) {
@@ -211,8 +213,8 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
         }),
       )
 
-      serverSDK().client.permission
-        .list({ directory })
+      serverSDK()
+        .client.permission.list({ directory })
         .then((x) => {
           if (enableVersion.get(key) !== version) return
           if (!isAutoAccepting(sessionID, directory)) return

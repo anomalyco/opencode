@@ -127,8 +127,8 @@ export const SettingsGeneral: Component = () => {
 
   const [shells] = createResource(
     () =>
-      serverSdk().client.pty
-        .shells()
+      serverSdk()
+        .client.pty.shells()
         .then((res) => res.data ?? [])
         .catch(() => [] as ShellOption[]),
     { initialValue: [] as ShellOption[] },

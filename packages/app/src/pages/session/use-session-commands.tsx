@@ -175,8 +175,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       return
     }
 
-    const url = await sdk().client.session
-      .share({ sessionID })
+    const url = await sdk()
+      .client.session.share({ sessionID })
       .then((res) => res.data?.share?.url)
       .catch(() => undefined)
     if (!url) {
@@ -195,8 +195,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
 
-    await sdk().client.session
-      .unshare({ sessionID })
+    await sdk()
+      .client.session.unshare({ sessionID })
       .then(() =>
         showToast({
           title: language.t("toast.session.unshare.success.title"),
@@ -284,7 +284,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!sessionID) return
 
     if (sync().data.session_working(params.id ?? "")) {
-      await sdk().client.session.abort({ sessionID }).catch(() => {})
+      await sdk()
+        .client.session.abort({ sessionID })
+        .catch(() => {})
     }
 
     const revert = info()?.revert?.messageID

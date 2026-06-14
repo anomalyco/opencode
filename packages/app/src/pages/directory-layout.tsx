@@ -28,7 +28,10 @@ export function DirectoryDataProvider(props: ParentProps<{ directory: string; dr
 
   createResource(
     () => params.id,
-    (id) => sync().session.sync(id).catch(() => {}),
+    (id) =>
+      sync()
+        .session.sync(id)
+        .catch(() => {}),
   )
 
   return (

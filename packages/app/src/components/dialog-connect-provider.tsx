@@ -158,8 +158,8 @@ export function DialogConnectProvider(props: { provider: string }) {
       }
       dispatch({ type: "auth.pending" })
       const start = Date.now()
-      await serverSDK().client.provider.oauth
-        .authorize(
+      await serverSDK()
+        .client.provider.oauth.authorize(
           {
             providerID: props.provider,
             method: index,
@@ -480,8 +480,8 @@ export function DialogConnectProvider(props: { provider: string }) {
       }
 
       setFormStore("error", undefined)
-      const result = await serverSDK().client.provider.oauth
-        .callback({
+      const result = await serverSDK()
+        .client.provider.oauth.callback({
           providerID: props.provider,
           method: store.methodIndex,
           code,
@@ -533,8 +533,8 @@ export function DialogConnectProvider(props: { provider: string }) {
 
     onMount(() => {
       void (async () => {
-        const result = await serverSDK().client.provider.oauth
-          .callback({
+        const result = await serverSDK()
+          .client.provider.oauth.callback({
             providerID: props.provider,
             method: store.methodIndex,
           })

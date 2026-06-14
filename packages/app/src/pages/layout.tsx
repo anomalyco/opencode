@@ -1293,8 +1293,8 @@ export default function Layout(props: ParentProps) {
     }
     const refreshDirs = async (target?: string) => {
       if (!target || target === root || canOpen(target)) return canOpen(target)
-      const listed = await serverSDK().client.worktree
-        .list({ directory: root })
+      const listed = await serverSDK()
+        .client.worktree.list({ directory: root })
         .then((x) => x.data ?? [])
         .catch(() => [] as string[])
       dirs = effectiveWorkspaceOrder(root, [root, ...listed], store.workspaceOrder[root])
@@ -1308,8 +1308,8 @@ export default function Layout(props: ParentProps) {
         navigateWithSidebarReset(`/${base64Encode(target.directory)}/session/${target.id}`)
         return true
       }
-      const resolved = await serverSDK().client.session
-        .get({ sessionID: target.id })
+      const resolved = await serverSDK()
+        .client.session.get({ sessionID: target.id })
         .then((x) => x.data)
         .catch(() => undefined)
       if (!resolved?.directory) return false
@@ -1339,8 +1339,8 @@ export default function Layout(props: ParentProps) {
       await Promise.all(
         dirs.map(async (item) => ({
           path: { directory: item },
-          session: await serverSDK().client.session
-            .list({ directory: item })
+          session: await serverSDK()
+            .client.session.list({ directory: item })
             .then((x) => x.data ?? [])
             .catch(() => []),
         })),
@@ -1495,8 +1495,8 @@ export default function Layout(props: ParentProps) {
 
     setBusy(directory, true)
 
-    const result = await serverSDK().client.worktree
-      .remove({ directory: root, worktreeRemoveInput: { directory } })
+    const result = await serverSDK()
+      .client.worktree.remove({ directory: root, worktreeRemoveInput: { directory } })
       .then((x) => x.data)
       .catch((err) => {
         showToast({
@@ -1553,8 +1553,8 @@ export default function Layout(props: ParentProps) {
     })
     const dismiss = () => toaster.dismiss(progress)
 
-    const sessions: Session[] = await serverSDK().client.session
-      .list({ directory })
+    const sessions: Session[] = await serverSDK()
+      .client.session.list({ directory })
       .then((x) => x.data ?? [])
       .catch(() => [])
 
@@ -1564,10 +1564,12 @@ export default function Layout(props: ParentProps) {
       platform,
       serverSDK().scope,
     )
-    await serverSDK().client.instance.dispose({ directory }).catch(() => undefined)
+    await serverSDK()
+      .client.instance.dispose({ directory })
+      .catch(() => undefined)
 
-    const result = await serverSDK().client.worktree
-      .reset({ directory: root, worktreeResetInput: { directory } })
+    const result = await serverSDK()
+      .client.worktree.reset({ directory: root, worktreeResetInput: { directory } })
       .then((x) => x.data)
       .catch((err) => {
         showToast({
@@ -1588,8 +1590,8 @@ export default function Layout(props: ParentProps) {
       sessions
         .filter((session) => session.time.archived === undefined)
         .map((session) =>
-          serverSDK().client.session
-            .update({
+          serverSDK()
+            .client.session.update({
               sessionID: session.id,
               directory: session.directory,
               time: { archived: archivedAt },
@@ -1629,8 +1631,8 @@ export default function Layout(props: ParentProps) {
     })
 
     onMount(() => {
-      serverSDK().client.vcs
-        .status({ directory: props.directory })
+      serverSDK()
+        .client.vcs.status({ directory: props.directory })
         .then((x) => {
           const files = x.data ?? []
           const dirty = files.length > 0
@@ -1688,8 +1690,8 @@ export default function Layout(props: ParentProps) {
     })
 
     const refresh = async () => {
-      const sessions = await serverSDK().client.session
-        .list({ directory: props.directory })
+      const sessions = await serverSDK()
+        .client.session.list({ directory: props.directory })
         .then((x) => x.data ?? [])
         .catch(() => [])
       const active = sessions.filter((session) => session.time.archived === undefined)
@@ -1697,8 +1699,8 @@ export default function Layout(props: ParentProps) {
     }
 
     onMount(() => {
-      serverSDK().client.vcs
-        .status({ directory: props.directory })
+      serverSDK()
+        .client.vcs.status({ directory: props.directory })
         .then((x) => {
           const files = x.data ?? []
           const dirty = files.length > 0
@@ -1928,8 +1930,8 @@ export default function Layout(props: ParentProps) {
 
   const createWorkspace = async (project: LocalProject) => {
     clearSidebarHoverState()
-    const created = await serverSDK().client.worktree
-      .create({ directory: project.worktree })
+    const created = await serverSDK()
+      .client.worktree.create({ directory: project.worktree })
       .then((x) => x.data)
       .catch((err) => {
         showToast({
