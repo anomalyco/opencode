@@ -178,7 +178,7 @@ When OpenCode prompts for approval, the UI offers three outcomes:
 
 The set of patterns that `always` would approve is provided by the tool (for example, bash approvals typically whitelist a safe command prefix like `git status*`).
 
-When the request comes from a [nested subagent](/docs/agents#nesting), the prompt is attributed to the **root session** of the session tree — you answer it there, without navigating into child sessions. The prompt's `metadata.originSessionID`, `metadata.originAgent`, and `metadata.originDepth` identify the subagent that asked. Answering `always` applies instance-wide for the rest of the OpenCode process — it covers the whole session tree, and also any other sessions in the same instance.
+When the request comes from a [nested subagent](/docs/agents#nesting), the prompt is attributed to the **root session** of the session tree — you answer it there, without navigating into child sessions. The prompt's `metadata.originSessionID`, `metadata.originAgent`, and `metadata.originDepth` identify the subagent that asked. Answering `always` sticks to that root session and applies tree-wide for the rest of the OpenCode process — it covers every session in the same tree (at any depth), but it does not carry over to other session trees in the same instance.
 
 ---
 

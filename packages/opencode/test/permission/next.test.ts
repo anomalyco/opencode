@@ -776,7 +776,7 @@ it.instance(
 )
 
 it.instance(
-  "reply - always persists approval and resolves",
+  "reply - always persists approval and resolves within the same root scope",
   () =>
     Effect.gen(function* () {
       const fiber = yield* ask({
@@ -793,8 +793,11 @@ it.instance(
       yield* reply({ requestID: PermissionV1.ID.make("per_test3"), reply: "always" })
       yield* Fiber.join(fiber)
 
+      // Issue 7: an `always` is scoped to the asking root session (the request's
+      // sessionID is the tree root). A second ask routed to the SAME root is
+      // auto-approved without a new pending entry.
       const result = yield* ask({
-        sessionID: SessionID.make("session_test2"),
+        sessionID: SessionID.make("session_test"),
         permission: "bash",
         patterns: ["ls"],
         metadata: {},
@@ -802,6 +805,145 @@ it.instance(
         ruleset: [],
       })
       expect(result).toBeUndefined()
+    }),
+  { git: true },
+)
+
+// Issue 7: Root-scoping of the `always`-approved list. The request's sessionID
+// is the tree root (TaskTool sets permissionSessionID = rootID and it is
+// propagated transitively), so keying the approved-rules map by sessionID
+// scopes approvals to a single tree without any Permission→Session dependency.
+
+it.instance(
+  "always in tree A does not free an identical ask in tree B",
+  () =>
+    Effect.gen(function* () {
+      const a = yield* ask({
+        id: PermissionV1.ID.make("per_scope_a"),
+        sessionID: SessionID.make("session_root_a"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: ["ls"],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      yield* waitForPending(1)
+      yield* reply({ requestID: PermissionV1.ID.make("per_scope_a"), reply: "always" })
+      yield* Fiber.join(a)
+
+      // Identical permission/pattern, but a DIFFERENT root → must still ask.
+      const b = yield* ask({
+        id: PermissionV1.ID.make("per_scope_b"),
+        sessionID: SessionID.make("session_root_b"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      const pending = yield* waitForPending(1)
+      expect(pending).toHaveLength(1)
+      expect(pending[0].id).toBe(PermissionV1.ID.make("per_scope_b"))
+
+      yield* rejectAll()
+      yield* Fiber.await(b)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "repeated ask in the same tree (deeper level) stays free after always",
+  () =>
+    Effect.gen(function* () {
+      // The root grants `always`. Because every level reroutes its asks to the
+      // same root sessionID, a deeper-level ask carries the same sessionID and
+      // must be auto-approved.
+      const root = yield* ask({
+        id: PermissionV1.ID.make("per_deep_root"),
+        sessionID: SessionID.make("session_root_deep"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: ["ls"],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      yield* waitForPending(1)
+      yield* reply({ requestID: PermissionV1.ID.make("per_deep_root"), reply: "always" })
+      yield* Fiber.join(root)
+
+      // A nested subagent (depth 3) routes its ask to the same root sessionID.
+      const deep = yield* ask({
+        sessionID: SessionID.make("session_root_deep"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: { originSessionID: "session_grandchild", originDepth: 3 },
+        always: [],
+        ruleset: [],
+      })
+      expect(deep).toBeUndefined()
+      expect(yield* list()).toHaveLength(0)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "pending auto-resolve on always respects root scoping",
+  () =>
+    Effect.gen(function* () {
+      // Two roots both have a pending ask for the same permission/pattern.
+      const a = yield* ask({
+        id: PermissionV1.ID.make("per_autoresolve_a"),
+        sessionID: SessionID.make("session_root_a"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: ["ls"],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      const b = yield* ask({
+        id: PermissionV1.ID.make("per_autoresolve_b"),
+        sessionID: SessionID.make("session_root_b"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      yield* waitForPending(2)
+      // Approve `always` on root A. The same-session auto-resolve must NOT
+      // touch root B's pending request even though it matches the pattern.
+      yield* reply({ requestID: PermissionV1.ID.make("per_autoresolve_a"), reply: "always" })
+      yield* Fiber.join(a)
+
+      expect((yield* list()).map((item) => item.id)).toEqual([PermissionV1.ID.make("per_autoresolve_b")])
+
+      // And a brand-new ask in root B (matching A's approved rule) still asks.
+      const c = yield* ask({
+        id: PermissionV1.ID.make("per_autoresolve_c"),
+        sessionID: SessionID.make("session_root_b"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      const pending = yield* waitForPending(2)
+      expect(pending.map((item) => item.id).sort()).toEqual(
+        [PermissionV1.ID.make("per_autoresolve_b"), PermissionV1.ID.make("per_autoresolve_c")].sort(),
+      )
+
+      // Cleanup: rejecting b cascades to c (same root session), so reject once
+      // and await both rather than calling rejectAll (which would double-reject
+      // the already-cascaded request).
+      yield* reply({ requestID: PermissionV1.ID.make("per_autoresolve_b"), reply: "reject" })
+      yield* Fiber.await(b)
+      yield* Fiber.await(c)
     }),
   { git: true },
 )
