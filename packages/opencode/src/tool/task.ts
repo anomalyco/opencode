@@ -152,6 +152,7 @@ export const TaskTool = Tool.define<
   | BackgroundJob.Service
   | Config.Service
   | Session.Service
+  | Criticality.Service
   | Scope.Scope
   | RuntimeFlags.Service
   | Database.Service
@@ -255,6 +256,8 @@ export const TaskTool = Tool.define<
             title: params.description,
             metadata: {
               parentSessionId: ctx.sessionID,
+              sessionId: ctx.sessionID,
+              model,
               criticality: {
                 k_eff_agent: criticalityMetrics.kEff,
                 depth: criticalityMetrics.depth,
