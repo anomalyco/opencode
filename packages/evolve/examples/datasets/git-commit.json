@@ -1,0 +1,50 @@
+{
+  "cases": [
+    {
+      "id": "subject-length",
+      "prompt": "Agent writes a commit subject line.",
+      "expectKeywords": ["imperative", "72 characters"],
+      "forbidKeywords": ["WIP"]
+    },
+    {
+      "id": "body-explains-why",
+      "prompt": "Agent writes a commit body for a non-trivial change.",
+      "expectKeywords": ["explain why", "body"]
+    },
+    {
+      "id": "no-secrets",
+      "prompt": "Agent avoids committing secrets.",
+      "expectKeywords": ["secret", "credential"]
+    },
+    {
+      "id": "atomic",
+      "prompt": "Agent keeps unrelated changes out of one commit.",
+      "expectKeywords": ["atomic", "unrelated"]
+    }
+  ],
+  "traces": [
+    {
+      "caseId": "body-explains-why",
+      "success": false,
+      "output": "Subject only, no body.",
+      "failureReason": "Skill never tells the agent to add a body that explains why the change was made."
+    },
+    {
+      "caseId": "no-secrets",
+      "success": false,
+      "output": "Committed an .env file.",
+      "failureReason": "Skill has no guidance about not committing secrets or credentials."
+    },
+    {
+      "caseId": "atomic",
+      "success": false,
+      "output": "Bundled a refactor with a feature.",
+      "failureReason": "Skill does not say to keep unrelated changes in separate, atomic commits."
+    },
+    {
+      "caseId": "subject-length",
+      "success": true,
+      "output": "Imperative subject under 72 chars."
+    }
+  ]
+}
