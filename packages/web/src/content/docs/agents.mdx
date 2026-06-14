@@ -141,20 +141,20 @@ Hidden system agent that creates session summaries. It runs automatically and is
 
 ## Nesting
 
-Subagents can spawn subagents of their own. A session tree starts at your main session — that's **depth 1**. Every Task tool call, `@` mention, or workflow agent dispatch creates a child session one level deeper.
+Subagents can spawn subagents of their own. A session tree starts at your main session — that's **depth 1**. Every Task tool call or `@` mention creates a child session one level deeper.
 
-By default, nesting is allowed up to **depth 5**. Sessions at depth 1 through 4 can delegate; sessions at the maximum depth are pure workers — the `task` and `workflow` tools are removed from their tool list entirely, so the model plans around it instead of wasting turns on failed attempts.
+By default, nesting is allowed up to **depth 5**. Sessions at depth 1 through 4 can delegate; sessions at the maximum depth are pure workers — the `task` tool is removed from their tool list entirely, so the model plans around it instead of wasting turns on failed attempts.
 
 ---
 
 ### Limits
 
-| Limit                      | Default                                                                                           | On violation                                                                                                                       |
-| -------------------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Maximum nesting depth      | `5` (root session = depth 1), configurable via `experimental.subagent_max_depth`, clamped to 1–10 | The `task` and `workflow` tools are removed at the last level; any remaining spawn attempt fails with a typed `SubagentDepthError` |
-| Subagents per session tree | `200` started subagents over the lifetime of the tree                                             | Further spawns fail with `SubagentTreeLimitError`                                                                                  |
-| `task_id` resume           | Only tasks the session started itself (direct children)                                           | Other session IDs fail with `SubagentResumeError`; unknown IDs still start a fresh session                                         |
-| Permission prompts         | Raised anywhere in the tree, answered on the **root session** of the tree                         | — see [permissions in nested trees](#permissions-in-nested-trees)                                                                  |
+| Limit                      | Default                                                                                            | On violation                                                                                                                       |
+| -------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Maximum nesting depth      | `5` (root session = depth 1), configurable via `experimental.subagent_max_depth`, clamped to 1–10  | The `task` tool is removed at the last level; any remaining spawn attempt fails with a typed `SubagentDepthError` |
+| Subagents per session tree | `200` started subagents per tree, counted **per OpenCode process** (the counter resets on restart) | Further spawns fail with `SubagentTreeLimitError`                                                                                  |
+| `task_id` resume           | Only tasks the session started itself (direct children)                                            | Other session IDs fail with `SubagentResumeError`; unknown IDs still start a fresh session                                         |
+| Permission prompts         | Raised anywhere in the tree, answered on the **root session** of the tree                          | — see [permissions in nested trees](#permissions-in-nested-trees)                                                                  |
 
 ---
 
@@ -172,7 +172,7 @@ Set the maximum nesting depth with `experimental.subagent_max_depth`:
 ```
 
 - `5` — the default, nesting up to 5 levels.
-- `2` — restores the previous behavior: your main session can spawn subagents, but subagents cannot spawn further subagents.
+- `2` — restores the previous spawn behavior: your main session can spawn subagents, but subagents cannot spawn further subagents. One thing still differs from the old release: custom agents with an explicit `task` allow — which previously nested without limit — are now bounded too.
 - `1` — kill switch: the `task` tool is removed everywhere, including from the main session.
 
 Values are clamped to the range 1–10.
@@ -184,7 +184,7 @@ Values are clamped to the range 1–10.
 - Whether an agent below the depth limit can spawn is governed by its regular [task permissions](#task-permissions). The default wildcard `"*": "allow"` is enough — an exact `task` rule is no longer required.
 - A user-configured `task: deny` stays sticky: it blocks delegation for the entire subtree below it.
 - Permission prompts raised anywhere in the tree appear on the **root session**, so you can answer them without navigating into child sessions. Each prompt carries its origin in `metadata.originSessionID`, `metadata.originAgent`, and `metadata.originDepth`.
-- Answering a prompt with `always` sticks to the root session and applies **tree-wide**.
+- Answering a prompt with `always` applies **instance-wide** for the rest of the OpenCode process — it covers the whole session tree, and also any other sessions in the same instance.
 
 :::note
 Child sessions created before nesting support keep their stored `task` deny — resuming one of these older subagent sessions leaves it unable to spawn. The same applies after **raising** `subagent_max_depth`: existing child sessions created at the old limit keep their stored deny. **Lowering** the limit takes effect immediately for all sessions.
