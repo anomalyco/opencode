@@ -2,9 +2,11 @@
 // fallback, and continuation state intentionally live above this file.
 
 import WebSocket from "ws"
+import { APICallError } from "ai"
 import { ProviderError } from "@/provider/error"
 import { errorMessage } from "@/util/error"
 import { ProxyEnv } from "@/util/proxy-env"
+import { isRecord } from "@/util/record"
 
 export const PROTOCOL_HEADER = "responses_websockets=2026-02-06"
 
@@ -20,12 +22,18 @@ export interface StreamResponsesWebSocketOptions {
   body: Record<string, unknown>
   idleTimeout?: number
   signal?: AbortSignal
-  onFirstEvent?: () => void
+  onFirstEvent?: (error?: WrappedError) => void
   onComplete?: (event: Record<string, unknown>) => void
   onTerminal?: (event: Record<string, unknown>) => void
   onRetryableTerminal?: (event: Record<string, unknown>) => Promise<WebSocket | undefined>
   onConnectionInvalid?: (error: ProviderError.ResponseStreamError) => void
   onAbort?: (error: Error) => void
+}
+
+export interface WrappedError {
+  status: number
+  headers?: Record<string, string>
+  body: string
 }
 
 export function toWebSocketUrl(url: string) {
@@ -186,7 +194,7 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
       }
     })()
 
-    if (event?.type === "error" && !emitted && options.onRetryableTerminal) {
+    if (event?.type === "error" && options.onRetryableTerminal) {
       cleanupSocket()
       if (idleTimer) clearTimeout(idleTimer)
       idleTimer = undefined
@@ -208,6 +216,25 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
         )
         return
       }
+    }
+
+    const wrappedError = parseWrappedError(event, text)
+    if (wrappedError && event) {
+      if (!emitted) options.onFirstEvent?.(wrappedError)
+      completed = true
+      cleanup()
+      options.onTerminal?.(event)
+      controller?.error(
+        new APICallError({
+          message: wrappedError.message,
+          url: socket.url,
+          requestBodyValues: options.body,
+          statusCode: wrappedError.status,
+          responseHeaders: wrappedError.headers,
+          responseBody: wrappedError.body,
+        }),
+      )
+      return
     }
 
     if (!emitted) options.onFirstEvent?.()
@@ -310,6 +337,26 @@ export function streamResponsesWebSocket(options: StreamResponsesWebSocketOption
       headers: { "content-type": "text/event-stream" },
     },
   )
+}
+
+function parseWrappedError(event: Record<string, unknown> | undefined, body: string) {
+  if (event?.type !== "error") return
+  const status = event.status ?? event.status_code
+  if (typeof status !== "number" || (status >= 200 && status < 300)) return
+  return {
+    status,
+    headers: isRecord(event.headers)
+      ? Object.fromEntries(
+          Object.entries(event.headers).flatMap(([key, value]) =>
+            typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+              ? [[key, String(value)]]
+              : [],
+          ),
+        )
+      : undefined,
+    body,
+    message: isRecord(event.error) && typeof event.error.message === "string" ? event.error.message : `${status}`,
+  }
 }
 
 function cancelError(reason: unknown) {

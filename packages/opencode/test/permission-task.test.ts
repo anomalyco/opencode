@@ -1,3 +1,4 @@
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { describe, test, expect } from "bun:test"
 import { Effect } from "effect"
 import { Permission } from "../src/permission"
@@ -9,7 +10,7 @@ const it = testEffect(Config.defaultLayer)
 const load = Config.use.get()
 
 describe("Permission.evaluate for permission.task", () => {
-  const createRuleset = (rules: Record<string, "allow" | "deny" | "ask">): Permission.Ruleset =>
+  const createRuleset = (rules: Record<string, "allow" | "deny" | "ask">): PermissionV1.Ruleset =>
     Object.entries(rules).map(([pattern, action]) => ({
       permission: "task",
       pattern,
@@ -75,7 +76,7 @@ describe("Permission.disabled for task tool", () => {
   // Note: The `disabled` function checks if a TOOL should be completely removed from the tool list.
   // It only disables a tool when there's a rule with `pattern: "*"` and `action: "deny"`.
   // It does NOT evaluate complex subagent patterns - those are handled at runtime by `evaluate`.
-  const createRuleset = (rules: Record<string, "allow" | "deny" | "ask">): Permission.Ruleset =>
+  const createRuleset = (rules: Record<string, "allow" | "deny" | "ask">): PermissionV1.Ruleset =>
     Object.entries(rules).map(([pattern, action]) => ({
       permission: "task",
       pattern,

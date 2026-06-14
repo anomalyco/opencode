@@ -8,11 +8,14 @@ import {
   type CacheHint,
   type FinishReason,
   type LLMRequest,
+  type ProviderMetadata,
+  type ReasoningPart,
   type ToolCallPart,
   type ToolDefinition,
   type ToolResultPart,
 } from "../schema"
 import { BedrockEventStream } from "./bedrock-event-stream"
+import { isContextOverflow } from "../provider-error"
 import { JsonObject, optionalArray, ProviderShared } from "./shared"
 import { BedrockAuth } from "./utils/bedrock-auth"
 import { BedrockCache } from "./utils/bedrock-cache"
@@ -237,6 +240,16 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ tool: { name } }) as const,
   })
 
+const bedrockMetadata = (metadata: Record<string, unknown>): ProviderMetadata => ({ bedrock: metadata })
+
+const reasoningSignature = (part: ReasoningPart) => {
+  const bedrock = part.providerMetadata?.bedrock
+  return (
+    part.encrypted ??
+    (ProviderShared.isRecord(bedrock) && typeof bedrock.signature === "string" ? bedrock.signature : undefined)
+  )
+}
+
 const lowerToolCall = (part: ToolCallPart): BedrockToolUseBlock => ({
   toolUse: {
     toolUseId: part.id,
@@ -256,7 +269,12 @@ const lowerToolResultContent = Effect.fn("BedrockConverse.lowerToolResultContent
       content.push({ text: item.text })
       continue
     }
-    const media = yield* BedrockMedia.lower(item)
+    const media = yield* BedrockMedia.lower({
+      type: "media",
+      mediaType: item.mime,
+      data: item.uri,
+      filename: item.name,
+    })
     if (!("image" in media))
       return yield* ProviderShared.invalidRequest("Bedrock Converse only supports image media in tool results")
     content.push(media)
@@ -281,6 +299,16 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
   const messages: BedrockMessage[] = []
 
   for (const message of request.messages) {
+    if (message.role === "system") {
+      const part = yield* ProviderShared.wrappedSystemUpdate("Bedrock Converse", message)
+      const content = textWithCache(breakpoints, part.text, part.cache)
+      const previous = messages.at(-1)
+      if (previous?.role === "user")
+        messages[messages.length - 1] = { role: "user", content: [...previous.content, ...content] }
+      else messages.push({ role: "user", content })
+      continue
+    }
+
     if (message.role === "user") {
       const content: BedrockUserBlock[] = []
       for (const part of message.content) {
@@ -315,7 +343,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
         if (part.type === "reasoning") {
           content.push({
             reasoningContent: {
-              reasoningText: { text: part.text, signature: part.encrypted },
+              reasoningText: { text: part.text, signature: reasoningSignature(part) },
             },
           })
           continue
@@ -425,6 +453,7 @@ interface ParserState {
   readonly pendingFinish: { readonly reason: FinishReason; readonly usage?: Usage } | undefined
   readonly hasToolCalls: boolean
   readonly lifecycle: Lifecycle.State
+  readonly reasoningSignatures: Readonly<Record<number, string>>
 }
 
 const step = (state: ParserState, event: BedrockEvent) =>
@@ -468,17 +497,19 @@ const step = (state: ParserState, event: BedrockEvent) =>
       ] as const
     }
 
-    if (event.contentBlockDelta?.delta?.reasoningContent?.text) {
+    if (event.contentBlockDelta?.delta?.reasoningContent) {
+      const index = event.contentBlockDelta.contentBlockIndex
+      const reasoning = event.contentBlockDelta.delta.reasoningContent
       const events: LLMEvent[] = []
       return [
         {
           ...state,
-          lifecycle: Lifecycle.reasoningDelta(
-            state.lifecycle,
-            events,
-            `reasoning-${event.contentBlockDelta.contentBlockIndex}`,
-            event.contentBlockDelta.delta.reasoningContent.text,
-          ),
+          lifecycle: reasoning.text
+            ? Lifecycle.reasoningDelta(state.lifecycle, events, `reasoning-${index}`, reasoning.text)
+            : state.lifecycle,
+          reasoningSignatures: reasoning.signature
+            ? { ...state.reasoningSignatures, [index]: reasoning.signature }
+            : state.reasoningSignatures,
         },
         events,
       ] as const
@@ -501,15 +532,19 @@ const step = (state: ParserState, event: BedrockEvent) =>
     }
 
     if (event.contentBlockStop) {
-      const result = yield* ToolStream.finish(ADAPTER, state.tools, event.contentBlockStop.contentBlockIndex)
+      const index = event.contentBlockStop.contentBlockIndex
+      const result = yield* ToolStream.finish(ADAPTER, state.tools, index)
       const events: LLMEvent[] = []
       const resultEvents = result.events ?? []
       const lifecycle = resultEvents.length
         ? Lifecycle.stepStart(state.lifecycle, events)
         : Lifecycle.reasoningEnd(
-            Lifecycle.textEnd(state.lifecycle, events, `text-${event.contentBlockStop.contentBlockIndex}`),
+            Lifecycle.textEnd(state.lifecycle, events, `text-${index}`),
             events,
-            `reasoning-${event.contentBlockStop.contentBlockIndex}`,
+            `reasoning-${index}`,
+            state.reasoningSignatures[index]
+              ? bedrockMetadata({ signature: state.reasoningSignatures[index] })
+              : undefined,
           )
       events.push(...resultEvents)
       return [
@@ -518,6 +553,9 @@ const step = (state: ParserState, event: BedrockEvent) =>
           hasToolCalls: resultEvents.some(LLMEvent.is.toolCall) ? true : state.hasToolCalls,
           lifecycle,
           tools: result.tools,
+          reasoningSignatures: Object.fromEntries(
+            Object.entries(state.reasoningSignatures).filter(([key]) => key !== String(index)),
+          ),
         },
         events,
       ] as const
@@ -550,7 +588,16 @@ const step = (state: ParserState, event: BedrockEvent) =>
     if (event.validationException || event.throttlingException) {
       const message =
         event.validationException?.message ?? event.throttlingException?.message ?? "Bedrock Converse error"
-      return [state, [LLMEvent.providerError({ message, retryable: event.throttlingException !== undefined })]] as const
+      return [
+        state,
+        [
+          LLMEvent.providerError({
+            message,
+            classification: event.validationException && isContextOverflow(message) ? "context-overflow" : undefined,
+            retryable: event.throttlingException !== undefined,
+          }),
+        ],
+      ] as const
     }
 
     return [state, []] as const
@@ -591,6 +638,7 @@ export const protocol = Protocol.make({
       pendingFinish: undefined,
       hasToolCalls: false,
       lifecycle: Lifecycle.initial(),
+      reasoningSignatures: {},
     }),
     step,
     onHalt,

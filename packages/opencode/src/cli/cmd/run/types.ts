@@ -12,7 +12,7 @@
 //       → footer.ts queues commits and patches the footer view
 //         → OpenTUI split-footer renderer writes to terminal
 import type { OpencodeClient, PermissionRequest, QuestionRequest, ToolPart } from "@opencode-ai/sdk/v2"
-import type { TuiConfig } from "@/cli/cmd/tui/config/tui"
+import type { TuiConfig } from "@opencode-ai/tui/config"
 
 export type RunFilePart = {
   type: "file"
@@ -31,6 +31,8 @@ export type RunCommand = NonNullable<Awaited<ReturnType<OpencodeClient["command"
 export type RunProvider = NonNullable<Awaited<ReturnType<OpencodeClient["provider"]["list"]>>["data"]>["all"][number]
 
 export type RunPrompt = {
+  messageID?: string
+  partID?: string
   text: string
   parts: RunPromptPart[]
   mode?: "shell"
@@ -38,6 +40,12 @@ export type RunPrompt = {
     name: string
     arguments: string
   }
+}
+
+export type FooterQueuedPrompt = {
+  messageID: string
+  partID: string
+  prompt: RunPrompt
 }
 
 export type RunAgent = NonNullable<Awaited<ReturnType<OpencodeClient["app"]["agents"]>>["data"]>[number]
@@ -60,6 +68,7 @@ export type RunInput = {
   files: RunFilePart[]
   initialInput?: string
   thinking: boolean
+  backgroundSubagents: boolean
   demo?: boolean
 }
 
@@ -87,6 +96,12 @@ export type FooterState = {
 export type FooterPatch = Partial<FooterState>
 
 export type RunDiffStyle = "auto" | "stacked"
+
+export type TurnSummary = {
+  agent: string
+  model: string
+  duration: string
+}
 
 export type ScrollbackOptions = {
   diffStyle?: RunDiffStyle
@@ -162,9 +177,11 @@ export type FooterView =
 
 export type FooterPromptRoute =
   | { type: "composer" }
+  | { type: "queued-menu" }
   | { type: "subagent-menu" }
   | { type: "subagent"; sessionID: string }
   | { type: "command" }
+  | { type: "skill" }
   | { type: "model" }
   | { type: "variant" }
 
@@ -174,7 +191,8 @@ export type FooterSubagentTab = {
   callID: string
   label: string
   description: string
-  status: "running" | "completed" | "error"
+  status: "running" | "completed" | "cancelled" | "error"
+  background?: boolean
   title?: string
   toolCalls?: number
   lastUpdatedAt: number
@@ -221,6 +239,10 @@ export type FooterEvent =
   | {
       type: "queue"
       queue: number
+    }
+  | {
+      type: "queued.prompts"
+      prompts: FooterQueuedPrompt[]
     }
   | {
       type: "first"
@@ -283,6 +305,7 @@ export type StreamCommit = {
   text: string
   phase: StreamPhase
   source: StreamSource
+  summary?: TurnSummary
   messageID?: string
   partID?: string
   tool?: string
@@ -296,12 +319,28 @@ export type StreamCommit = {
   }
 }
 
+export type LocalReplayAnchor = {
+  kind: EntryKind
+  text: string
+  phase: StreamPhase
+  messageID?: string
+  partID?: string
+  toolState?: StreamToolState
+  visible?: string
+}
+
+export type LocalReplayRow = {
+  commit: StreamCommit
+  after?: LocalReplayAnchor
+}
+
 // The public contract between the stream transport / prompt queue and
 // the footer. RunFooter implements this. The transport and queue never
 // touch the renderer directly -- they go through this interface.
 export type FooterApi = {
   readonly isClosed: boolean
   onPrompt(fn: (input: RunPrompt) => void): () => void
+  onQueuedRemove(fn: (messageID: string) => boolean | Promise<boolean>): () => void
   onClose(fn: () => void): () => void
   event(next: FooterEvent): void
   append(commit: StreamCommit): void

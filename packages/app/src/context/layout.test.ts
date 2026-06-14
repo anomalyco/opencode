@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
-import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout"
+import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
 
 describe("layout session-key helpers", () => {
   test("couples touch and scroll seed in order", () => {

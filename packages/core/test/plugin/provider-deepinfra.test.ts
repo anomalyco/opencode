@@ -122,7 +122,7 @@ describe("DeepInfraPlugin", () => {
       yield* plugin.add(DeepInfraPlugin)
       const language = yield* aisdk.language(
         model("deepinfra", "meta-llama/Llama-3.3-70B-Instruct", {
-          endpoint: { type: "aisdk", package: "@ai-sdk/deepinfra" },
+          api: { type: "aisdk", package: "@ai-sdk/deepinfra" },
         }),
       )
       expect(language.provider).toBe("deepinfra.chat")

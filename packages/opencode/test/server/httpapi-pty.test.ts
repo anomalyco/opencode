@@ -1,19 +1,16 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { PtyID } from "../../src/pty/schema"
+import { PtyID } from "@opencode-ai/core/pty/schema"
 import { Server } from "../../src/server/server"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
-import * as Log from "@opencode-ai/core/util/log"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, tmpdir, tmpdirScoped } from "../fixture/fixture"
 import { Config, Effect, Layer, Queue, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
-import { Pty } from "../../src/pty"
+import { Pty } from "@opencode-ai/core/pty"
 import { testEffect } from "../lib/effect"
-
-void Log.init({ print: false })
 
 const testPty = process.platform === "win32" ? test.skip : test
 
@@ -137,6 +134,23 @@ describe("pty HttpApi bridge", () => {
       ptyID: info.id,
       message: `PTY session not found: ${info.id}`,
     })
+  })
+
+  testPty("disposes PTY sessions with their legacy instance", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const headers = { "x-opencode-directory": tmp.path }
+    const created = await app().request(PtyPaths.create, {
+      method: "POST",
+      headers: { ...headers, "content-type": "application/json" },
+      body: JSON.stringify({ command: "/usr/bin/env", args: ["sh", "-c", "sleep 5"] }),
+    })
+    expect(created.status).toBe(200)
+
+    await disposeAllInstances()
+
+    const list = await app().request(PtyPaths.list, { headers })
+    expect(list.status).toBe(200)
+    expect(await list.json()).toEqual([])
   })
 
   test("returns 404 for missing PTY websocket before upgrade", async () => {

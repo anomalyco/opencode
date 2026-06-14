@@ -26,22 +26,22 @@ describe("OpenRouterPlugin", () => {
       const transform = yield* catalog.transform()
       yield* transform((catalog) => {
         const openrouter = provider("openrouter", {
-          endpoint: { type: "aisdk", package: "@openrouter/ai-sdk-provider" },
-          options: { headers: { Existing: "value" }, body: {}, aisdk: { provider: {}, request: {} } },
+          api: { type: "aisdk", package: "@openrouter/ai-sdk-provider" },
+          request: { headers: { Existing: "value" }, body: {} },
         })
         catalog.provider.update(openrouter.id, (item) => {
-          item.endpoint = openrouter.endpoint
-          item.options = openrouter.options
+          item.api = openrouter.api
+          item.request = openrouter.request
         })
         catalog.provider.update(ProviderV2.ID.make("nvidia"), () => {})
       })
 
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("openrouter"))).options.headers).toEqual({
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("openrouter"))).request.headers).toEqual({
         Existing: "value",
         "HTTP-Referer": "https://opencode.ai/",
         "X-Title": "opencode",
       })
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("nvidia"))).options.headers).toEqual({})
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("nvidia"))).request.headers).toEqual({})
     }),
   )
 
@@ -78,10 +78,10 @@ describe("OpenRouterPlugin", () => {
       const transform = yield* catalog.transform()
       yield* transform((catalog) => {
         const openrouter = provider("openrouter", {
-          endpoint: { type: "aisdk", package: "@openrouter/ai-sdk-provider" },
+          api: { type: "aisdk", package: "@openrouter/ai-sdk-provider" },
         })
         catalog.provider.update(openrouter.id, (item) => {
-          item.endpoint = openrouter.endpoint
+          item.api = openrouter.api
         })
         catalog.provider.update(ProviderV2.ID.openai, () => {})
         for (const item of [

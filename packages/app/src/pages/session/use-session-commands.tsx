@@ -7,13 +7,12 @@ import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
-import { usePlatform } from "@/context/platform"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@/utils/toast"
 import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
@@ -41,7 +40,6 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const language = useLanguage()
   const local = useLocal()
   const permission = usePermission()
-  const platform = usePlatform()
   const prompt = usePrompt()
   const sdk = useSDK()
   const settings = useSettings()
@@ -70,8 +68,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   })
   const activeFileTab = tabState.activeFileTab
   const closableTab = tabState.closableTab
-  const desktopV2 = () => platform.platform === "desktop" && settings.general.newLayoutDesigns()
-  const shown = () => (desktopV2() ? settings.general.showFileTree() : true)
+  const shown = settings.visibility.fileTree
 
   const messages = () => {
     const id = params.id
@@ -418,23 +415,26 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }),
   ]
 
-  const fileCmds = () => [
-    fileCommand({
-      id: "file.open",
-      title: language.t("command.file.open"),
-      description: language.t("palette.search.placeholder"),
-      keybind: "mod+k,mod+p",
-      slash: "open",
-      onSelect: openFile,
-    }),
-    fileCommand({
-      id: "tab.close",
-      title: language.t("command.tab.close"),
-      keybind: "mod+w",
-      disabled: !closableTab(),
-      onSelect: closeTab,
-    }),
-  ]
+  const fileCmds = () => {
+    const tab = closableTab()
+    return [
+      fileCommand({
+        id: "file.open",
+        title: language.t("command.file.open"),
+        description: language.t("palette.search.placeholder"),
+        keybind: "mod+k,mod+p",
+        slash: "open",
+        onSelect: openFile,
+      }),
+      tab &&
+        fileCommand({
+          id: "tab.close",
+          title: language.t("command.tab.close"),
+          keybind: "mod+w",
+          onSelect: closeTab,
+        }),
+    ].filter((v) => !!v)
+  }
 
   const contextCmds = () => [
     contextCommand({
@@ -544,6 +544,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       description: language.t("command.agent.cycle.description"),
       keybind: "mod+.",
       slash: "agent",
+      disabled: !settings.visibility.customAgents(),
       onSelect: () => local.agent.move(1),
     }),
     agentCommand({
@@ -551,6 +552,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.agent.cycle.reverse"),
       description: language.t("command.agent.cycle.reverse.description"),
       keybind: "shift+mod+.",
+      disabled: !settings.visibility.customAgents(),
       onSelect: () => local.agent.move(-1),
     }),
   ]

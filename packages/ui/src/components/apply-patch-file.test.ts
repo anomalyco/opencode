@@ -18,6 +18,7 @@ describe("apply patch file", () => {
 
     expect(file).toBeDefined()
     expect(file?.view.fileDiff.name).toBe("a.ts")
+    expect(file?.view.fileDiff.isPartial).toBe(false)
     expect(text(file!.view, "deletions")).toBe("one\ntwo\n")
     expect(text(file!.view, "additions")).toBe("one\nthree\n")
   })

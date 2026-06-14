@@ -58,7 +58,7 @@ Files:
 Current usage:
 
 - `storage/db.ts` opens the singleton database, applies pragmas, exposes callback-style access, holds ambient transaction context, and queues post-commit effects.
-- `index.ts` checks `Database.getPath()` to decide whether JSON migration is needed, then runs `JsonMigration.run(drizzle({ client: Database.Client().$client }), ...)`.
+- `index.ts` no longer performs the removed JSON-to-SQLite migration during startup.
 - `node.ts` publicly re-exports `Database` from the legacy module.
 - `cli/cmd/db.ts` uses `Database.getPath()` to print the path, open a readonly Bun SQLite handle, run `sqlite3`, and vacuum.
 
