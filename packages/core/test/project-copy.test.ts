@@ -365,6 +365,18 @@ describe("ProjectCopy", () => {
     }),
   )
 
+  it.live("refresh ignores existing directories that are no longer git checkouts", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      yield* Effect.promise(() => fs.rm(path.join(input.sourceDirectory, ".git"), { recursive: true }))
+      const copy = yield* ProjectCopy.Service
+
+      yield* copy.refresh({ projectID: input.projectID })
+
+      expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
+    }),
+  )
+
   it.live("refresh with no roots is a no-op", () =>
     Effect.gen(function* () {
       const copy = yield* ProjectCopy.Service

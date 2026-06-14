@@ -322,7 +322,6 @@ export function entryWriter(input: {
 export function spacerWriter(): ScrollbackWriter {
   return (ctx: ScrollbackRenderContext) => ({
     root: new TextRenderable(ctx.renderContext, {
-      id: "run-scrollback-spacer",
       width: Math.max(1, Math.trunc(ctx.width)),
       height: 1,
       content: "",
