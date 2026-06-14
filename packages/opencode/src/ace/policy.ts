@@ -84,6 +84,24 @@ function normalizeMode(mode: AceConfigMode | undefined): AceMode {
   return "fixed-cap"
 }
 
+// Merge a per-agent override (config.agents[agentName]) over the base ACE
+// config. Returns the base config unchanged when there is no matching override.
+// Only the gating-relevant knobs (mode, limits, maxSteps, maxSpawns, message)
+// are overridable; headless/experiment/trace remain global.
+export function mergeAgentOverride(config: AceConfig | undefined, agentName?: string): AceConfig | undefined {
+  if (!config || !agentName) return config
+  const override = (config as any).agents?.[agentName]
+  if (!override) return config
+  return {
+    ...config,
+    ...(override.mode !== undefined ? { mode: override.mode } : {}),
+    ...(override.maxSteps !== undefined ? { maxSteps: override.maxSteps } : {}),
+    ...(override.maxSpawns !== undefined ? { maxSpawns: override.maxSpawns } : {}),
+    ...(override.message !== undefined ? { message: override.message } : {}),
+    ...(override.limits !== undefined ? { limits: { ...config.limits, ...override.limits } } : {}),
+  }
+}
+
 export function resolve(config: AceConfig | undefined): AcePolicy {
   const limits = config?.limits
   return {

@@ -224,6 +224,7 @@ export const TaskTool = Tool.define<
         config: cfg.ace,
         sessionID: ctx.sessionID,
         subagent: next.name,
+        agentName: next.name,
         depth: yield* spawnDepth(ctx.sessionID),
         skip: !!session,
         ask: (req) => ctx.ask(req),

@@ -2,7 +2,7 @@ import type { Interface } from "@opencode-ai/core/event"
 import type { SessionID } from "@/session/schema"
 import { Effect } from "effect"
 import { blockedOutput, acceptSpawn, gateSpawn as evaluateSpawn, gateToolCall, policy } from "./index"
-import type { AceConfig, AceDecision } from "./policy"
+import { mergeAgentOverride, type AceConfig, type AceDecision } from "./policy"
 import { emitDecision } from "./trace"
 import { skipHumanApproval } from "./headless"
 
@@ -20,6 +20,8 @@ export type GateToolInput = {
   callID?: string
   tool: string
   ask: AceAsk
+  /** Session's running agent; selects a per-agent override if configured. */
+  agentName?: string
 }
 
 export type GateSpawnInput = {
@@ -30,6 +32,8 @@ export type GateSpawnInput = {
   depth: number
   ask: AceAsk
   skip?: boolean
+  /** Agent whose override applies; defaults to the spawned subagent. */
+  agentName?: string
 }
 
 export type GateSpawnResult = {
@@ -39,11 +43,12 @@ export type GateSpawnResult = {
 }
 
 export const gateTool = Effect.fn("ACE.middleware.gateTool")(function* (input: GateToolInput) {
-  const current = policy(input.config)
+  const current = policy(mergeAgentOverride(input.config, input.agentName))
   const decision = gateToolCall(input.config, {
     sessionID: input.sessionID,
     callID: input.callID,
     tool: input.tool,
+    agentName: input.agentName,
   })
   if (!decision) return undefined
   yield* emitDecision(input.events, current, decision)
@@ -69,11 +74,12 @@ export const gateTool = Effect.fn("ACE.middleware.gateTool")(function* (input: G
 
 export const gateSpawn = Effect.fn("ACE.middleware.gateSpawn")(function* (input: GateSpawnInput) {
   if (input.skip) return { tracked: false }
-  const current = policy(input.config)
+  const current = policy(mergeAgentOverride(input.config, input.agentName ?? input.subagent))
   const decision = evaluateSpawn(input.config, {
     sessionID: input.sessionID,
     subagent: input.subagent,
     depth: input.depth,
+    agentName: input.agentName ?? input.subagent,
   })
   if (!decision) return { tracked: false }
   yield* emitDecision(input.events, current, decision)

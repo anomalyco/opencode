@@ -55,6 +55,17 @@ export class Headless extends Schema.Class<Headless>("ConfigV2.ACE.Headless")({
   outputConstraints: OutputConstraints.pipe(Schema.optional),
 }) {}
 
+// Per-agent override of the gating-relevant ACE knobs. Keyed by agent name in
+// `Info.agents`; merged over the base policy when gating a tool call for that
+// session's agent or a spawn of that subagent.
+export class AgentOverride extends Schema.Class<AgentOverride>("ConfigV2.ACE.AgentOverride")({
+  mode: Mode.pipe(Schema.optional),
+  limits: Limits.pipe(Schema.optional),
+  maxSteps: NonNegativeInt.pipe(Schema.optional),
+  maxSpawns: NonNegativeInt.pipe(Schema.optional),
+  message: Schema.String.pipe(Schema.optional),
+}) {}
+
 export class Info extends Schema.Class<Info>("ConfigV2.ACE")({
   enabled: Schema.Boolean.pipe(Schema.optional),
   mode: Mode.pipe(Schema.optional),
@@ -65,4 +76,5 @@ export class Info extends Schema.Class<Info>("ConfigV2.ACE")({
   maxSteps: NonNegativeInt.pipe(Schema.optional),
   maxSpawns: NonNegativeInt.pipe(Schema.optional),
   message: Schema.String.pipe(Schema.optional),
+  agents: Schema.Record(Schema.String, AgentOverride).pipe(Schema.optional),
 }) {}
