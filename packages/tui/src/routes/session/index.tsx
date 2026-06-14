@@ -1004,7 +1004,12 @@ export function Session() {
                 (project.instance.path().worktree === "/" ? undefined : project.instance.path().worktree) ||
                 project.instance.directory() ||
                 paths.cwd,
+            }).catch((e) => {
+              // File was already saved above. Opening the editor afterward is
+              // best-effort — swallow errors so they don't reach the outer
+              // catch block, which would incorrectly show "Failed to export".
             })
+
             if (result !== undefined) {
               await writeExport(filepath, result)
             }
