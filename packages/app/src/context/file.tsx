@@ -62,10 +62,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const language = useLanguage()
     const layout = useLayout()
 
-    const scope = createMemo(() => sdk.directory)
+    const scope = createMemo(() => sdk().directory)
     const path = createPathHelpers(scope)
     const tabs = layout.tabs(() =>
-      SessionStateKey.from(serverSDK.scope, SessionRouteKey.fromRoute(params.dir, params.id)),
+      SessionStateKey.from(serverSDK().scope, SessionRouteKey.fromRoute(params.dir, params.id)),
     )
 
     const inflight = new Map<string, Promise<void>>()
@@ -78,7 +78,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const tree = createFileTreeStore({
       scope,
       normalizeDir: path.normalizeDir,
-      list: (dir) => sdk.client.file.list({ path: dir }).then((x) => x.data ?? []),
+      list: (dir) =>
+        sdk()
+          .client.file.list({ path: dir })
+          .then((x) => x.data ?? []),
       onError: (message) => {
         showToast({
           variant: "error",
@@ -112,7 +115,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       })
     })
 
-    const viewCache = createFileViewCache(serverSDK.scope)
+    const viewCache = createFileViewCache(serverSDK().scope)
     const view = createMemo(() => viewCache.load(scope(), params.id))
 
     const ensure = (file: string) => {
@@ -176,8 +179,8 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       setLoading(file)
 
-      const promise = sdk.client.file
-        .read({ path: file })
+      const promise = sdk()
+        .client.file.read({ path: file })
         .then((x) => {
           if (scope() !== directory) return
           const content = x.data
@@ -200,12 +203,14 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     }
 
     const search = (query: string, dirs: "true" | "false") =>
-      sdk.client.find.files({ query, dirs }).then(
-        (x) => (x.data ?? []).map(path.normalize),
-        () => [],
-      )
+      sdk()
+        .client.find.files({ query, dirs })
+        .then(
+          (x) => (x.data ?? []).map(path.normalize),
+          () => [],
+        )
 
-    const stop = sdk.event.listen((e) => {
+    const stop = sdk().event.listen((e) => {
       invalidateFromWatcher(e.details, {
         normalize: path.normalize,
         hasFile: (file) => Boolean(store.file[file]),
