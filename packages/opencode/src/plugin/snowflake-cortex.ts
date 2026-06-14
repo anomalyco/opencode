@@ -44,9 +44,17 @@ function normalizeAccount(input: string) {
 
 function generateRandomString(length: number) {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
-  return Array.from(crypto.getRandomValues(new Uint8Array(length)))
-    .map((b) => chars[b % chars.length])
-    .join("")
+  // Reject bytes in the biased tail so each character is uniformly distributed.
+  const limit = 256 - (256 % chars.length)
+  let result = ""
+  while (result.length < length) {
+    const bytes = crypto.getRandomValues(new Uint8Array(length - result.length))
+    for (let i = 0; i < bytes.length && result.length < length; i++) {
+      if (bytes[i] >= limit) continue
+      result += chars[bytes[i] % chars.length]
+    }
+  }
+  return result
 }
 
 function base64UrlEncode(buffer: ArrayBuffer) {
@@ -168,13 +176,16 @@ const HTML_SUCCESS = `<!doctype html>
   </body>
 </html>`
 
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!)
+
 const htmlError = (message: string) => `<!doctype html>
 <html>
   <head><title>OpenCode - Snowflake Authorization Failed</title></head>
   <body style="font-family: system-ui; display:flex; align-items:center; justify-content:center; height:100vh; margin:0; background:#111; color:#eee;">
     <div style="text-align:center; max-width:48rem; padding:2rem;">
       <h1 style="color:#ff7b72;">Authorization Failed</h1>
-      <pre style="white-space:pre-wrap; color:#ffb3ad; background:#2a1210; padding:1rem; border-radius:.5rem;">${message}</pre>
+      <pre style="white-space:pre-wrap; color:#ffb3ad; background:#2a1210; padding:1rem; border-radius:.5rem;">${escapeHtml(message)}</pre>
     </div>
   </body>
 </html>`
