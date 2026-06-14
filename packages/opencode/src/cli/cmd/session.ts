@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import { cmd } from "./cmd"
 import { effectCmd, fail } from "../effect-cmd"
 import { Session } from "@/session/session"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { SessionID } from "../../session/schema"
 import { UI } from "../ui"
 import { Locale } from "@/util/locale"
@@ -44,7 +45,8 @@ function pagerCmd(): string[] {
 export const SessionCommand = cmd({
   command: "session",
   describe: "manage sessions",
-  builder: (yargs: Argv) => yargs.command(SessionListCommand).command(SessionDeleteCommand).demandCommand(),
+  builder: (yargs: Argv) =>
+    yargs.command(SessionListCommand).command(SessionViewCommand).command(SessionDeleteCommand).demandCommand(),
   async handler() {},
 })
 
@@ -66,6 +68,114 @@ export const SessionDeleteCommand = effectCmd({
     UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
   }),
 })
+
+export const SessionViewCommand = effectCmd({
+  command: "view [sessionID]",
+  describe: "view a session transcript as markdown",
+  builder: (yargs) =>
+    yargs
+      .positional("sessionID", {
+        describe: "session ID to view (defaults to the most recent session)",
+        type: "string",
+      })
+      .option("reasoning", {
+        describe: "include assistant reasoning blocks (use --no-reasoning to omit)",
+        type: "boolean",
+        default: true,
+      })
+      .option("tools", {
+        describe: "include tool calls (use --no-tools to omit)",
+        type: "boolean",
+        default: true,
+      }),
+  handler: Effect.fn("Cli.session.view")(function* (args) {
+    const svc = yield* Session.Service
+
+    const target = args.sessionID
+      ? SessionID.make(args.sessionID)
+      : yield* Effect.gen(function* () {
+          const sessions = yield* svc.list({ roots: true })
+          if (sessions.length === 0) return yield* fail("No sessions found")
+          sessions.sort((a, b) => b.time.updated - a.time.updated)
+          process.stderr.write(`Viewing most recent session: ${sessions[0].id}${EOL}`)
+          return sessions[0].id
+        })
+
+    return yield* Effect.gen(function* () {
+      const info = yield* svc.get(target)
+      const messages = yield* svc.messages({ sessionID: info.id })
+      const output = renderTranscript({ info, messages }, { reasoning: args.reasoning, tools: args.tools })
+
+      if (process.stdout.isTTY) {
+        yield* Effect.promise(async () => {
+          const proc = Process.spawn(pagerCmd(), { stdin: "pipe", stdout: "inherit", stderr: "inherit" })
+          if (!proc.stdin) {
+            console.log(output)
+            return
+          }
+          proc.stdin.write(output)
+          proc.stdin.end()
+          await proc.exited
+        })
+        return
+      }
+
+      process.stdout.write(output)
+      process.stdout.write(EOL)
+    }).pipe(Effect.catchCause(() => fail(`Session not found: ${target}`)))
+  }),
+})
+
+function toolTitle(state: SessionV1.ToolState): string | undefined {
+  if (state.status === "completed") return state.title
+  if (state.status === "running") return state.title
+  if (state.status === "error") return `error: ${state.error}`
+  return undefined
+}
+
+function partTranscript(value: SessionV1.Part, opts: { reasoning: boolean; tools: boolean }): string[] {
+  if (value.type === "text") return value.text.trim() ? ["", value.text.trim()] : []
+  if (value.type === "reasoning")
+    return opts.reasoning && value.text.trim()
+      ? ["", "<details><summary>Reasoning</summary>", "", value.text.trim(), "", "</details>"]
+      : []
+  if (value.type === "tool" && opts.tools) {
+    const title = toolTitle(value.state)
+    return ["", `**🔧 ${value.tool}**${title ? ` — ${title}` : ""}`]
+  }
+  return []
+}
+
+function messageTranscript(message: SessionV1.WithParts, opts: { reasoning: boolean; tools: boolean }): string[] {
+  const body = message.parts.flatMap((part) => partTranscript(part, opts))
+  if (body.length === 0) return []
+  return ["", message.info.role === "user" ? "## 👤 User" : "## 🤖 Assistant", ...body]
+}
+
+function renderTranscript(
+  value: { info: Session.Info; messages: SessionV1.WithParts[] },
+  opts: { reasoning: boolean; tools: boolean },
+): string {
+  const info = value.info
+  const lines: string[] = []
+  lines.push(`# ${info.title || info.id}`)
+  lines.push("")
+  lines.push("| Field | Value |")
+  lines.push("| --- | --- |")
+  lines.push(`| Session | \`${info.id}\` |`)
+  lines.push(`| Directory | \`${info.directory}\` |`)
+  if (info.agent) lines.push(`| Agent | ${info.agent} |`)
+  if (info.model) lines.push(`| Model | ${info.model.providerID}/${info.model.id} |`)
+  lines.push(`| Version | ${info.version} |`)
+  lines.push(`| Created | ${new Date(info.time.created).toISOString()} |`)
+  lines.push(`| Updated | ${new Date(info.time.updated).toISOString()} |`)
+  if (info.cost) lines.push(`| Cost | $${info.cost.toFixed(4)} |`)
+  lines.push("")
+  lines.push("---")
+  for (const message of value.messages) lines.push(...messageTranscript(message, opts))
+  lines.push("")
+  return lines.join(EOL)
+}
 
 export const SessionListCommand = effectCmd({
   command: "list",
