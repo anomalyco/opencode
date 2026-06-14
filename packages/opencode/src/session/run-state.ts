@@ -122,16 +122,22 @@ export const defaultLayer = layer.pipe(
   Layer.provide(SessionStatus.defaultLayer),
 )
 
+// Convergence cap for the cancel cascade's re-listing passes: jobs that
+// start detached while the cascade runs escape a one-shot list() snapshot,
+// so the cascade re-lists until a fresh snapshot has no new running matches.
+// The cap bounds a pathological spawn loop fighting the cancel.
+const CANCEL_PASS_CAP = 5
+
 const cancelBackgroundJobs = Effect.fn("SessionRunState.cancelBackgroundJobs")(function* (
   background: BackgroundJob.Interface,
   sessionID: SessionID,
   seedSessionIDs?: ReadonlyArray<SessionID>,
 ) {
-  const jobs = yield* background.list()
   // The reachable frontier: the cancelled session, the optional seeds (the
   // session tree's descendants — the second cancel source for mid-tree
   // cancels whose job metadata chain is broken), and every session/job the
-  // metadata chain (parentSessionId → sessionId) reaches from there.
+  // metadata chain (parentSessionId → sessionId) reaches from there. It
+  // persists across passes — reachability only ever grows.
   const pending = new Set<string>([sessionID, ...(seedSessionIDs ?? [])])
   const reaches = (job: BackgroundJob.Info) => {
     if (pending.has(job.id)) return true
@@ -141,26 +147,30 @@ const cancelBackgroundJobs = Effect.fn("SessionRunState.cancelBackgroundJobs")(f
     if (typeof job.metadata?.rootSessionId === "string" && pending.has(job.metadata.rootSessionId)) return true
     return typeof job.metadata?.parentSessionId === "string" && pending.has(job.metadata.parentSessionId)
   }
-  // Expansion to a fixpoint over ALL job records — a completed mid-tree job
-  // still bridges the chain to its children (the release race: the middle
-  // task finished while its grandchild is still running). Only running jobs
-  // are cancelled below; completed ones serve purely as bridges.
-  let changed = true
-  while (changed) {
-    changed = false
-    for (const job of jobs) {
-      if (!reaches(job)) continue
-      const before = pending.size
-      pending.add(job.id)
-      if (typeof job.metadata?.sessionId === "string") pending.add(job.metadata.sessionId)
-      if (pending.size > before) changed = true
+  const cancelled = new Set<string>()
+  for (let pass = 0; pass < CANCEL_PASS_CAP; pass++) {
+    const jobs = yield* background.list()
+    // Expansion to a fixpoint over ALL job records — a completed mid-tree job
+    // still bridges the chain to its children (the release race: the middle
+    // task finished while its grandchild is still running). Only running jobs
+    // are cancelled below; completed ones serve purely as bridges.
+    let changed = true
+    while (changed) {
+      changed = false
+      for (const job of jobs) {
+        if (!reaches(job)) continue
+        const before = pending.size
+        pending.add(job.id)
+        if (typeof job.metadata?.sessionId === "string") pending.add(job.metadata.sessionId)
+        if (pending.size > before) changed = true
+      }
     }
+    const targets = jobs.filter((job) => job.status === "running" && reaches(job) && !cancelled.has(job.id))
+    // Converged: the fresh snapshot has no new running matches.
+    if (targets.length === 0) return
+    for (const job of targets) cancelled.add(job.id)
+    yield* Effect.forEach(targets, (job) => background.cancel(job.id), { concurrency: "unbounded", discard: true })
   }
-  yield* Effect.forEach(
-    jobs.filter((job) => job.status === "running" && reaches(job)),
-    (job) => background.cancel(job.id),
-    { concurrency: "unbounded", discard: true },
-  )
 })
 
 function busyError(sessionID: SessionID) {
