@@ -70,6 +70,7 @@ import { DialogExportOptions } from "../../ui/dialog-export-options"
 import * as Model from "../../util/model"
 import { formatTranscript } from "../../util/transcript"
 import { sessionEpilogue } from "../../util/presentation"
+import { formatSubagentLabel, sessionDepth } from "../../util/lineage"
 import { setPreLayoutSiblingMargin } from "../../util/layout"
 import { useTuiConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
@@ -2266,12 +2267,21 @@ function Task(props: ToolProps) {
     return assistant - first
   })
 
+  // Tiefen-Badge (Issue 4): the depth of the spawned child session, derived
+  // from its parentID chain (root = 1). Nested subagents (depth ≥ 2) get an
+  // "Ln" prefix on the task-card label so a deep tree is legible at a glance;
+  // the badge is empty until the child session has hydrated into sync.data.
+  const childDepth = createMemo(() => {
+    const id = sessionID()
+    return id ? sessionDepth(sync.data.session, id) : 0
+  })
+
   const content = createMemo(() => {
     const description = stringValue(props.input.description)
     if (!description) return ""
     let content = [
       formatSubagentTitle(
-        Locale.titlecase(stringValue(props.input.subagent_type) ?? "General"),
+        formatSubagentLabel(Locale.titlecase(stringValue(props.input.subagent_type) ?? "General"), childDepth()),
         description,
         props.metadata.background === true,
       ),
