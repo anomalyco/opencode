@@ -30,7 +30,7 @@ import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
-import { ServerSDKProvider } from "@/context/server-sdk"
+import { ServerSDKProvider, useServerSDK } from "@/context/server-sdk"
 import { ServerSyncProvider } from "@/context/server-sync"
 import { GlobalProvider } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
@@ -50,6 +50,7 @@ import DirectoryLayout, { DirectoryDataProvider } from "@/pages/directory-layout
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
+import { LocalImageProvider, type LocalImageResolver } from "@opencode-ai/ui/context/local-image"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
 const Session = lazy(() => import("@/pages/session"))
@@ -128,6 +129,25 @@ function ResolvedDraftRoute(props: { draftID: string }) {
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
   return <I18nProvider value={{ locale: language.intl, t: language.t }}>{props.children}</I18nProvider>
+}
+
+function LocalImageResolverProvider(props: ParentProps) {
+  const serverSDK = useServerSDK()
+  const resolver: LocalImageResolver = async (rawPath, directory) => {
+    if (!directory) return undefined
+    if (!rawPath || /^[/\\]/.test(rawPath) || /^[a-zA-Z]:/.test(rawPath) || /(^|[/\\])\.\.([/\\]|$)/.test(rawPath)) return undefined
+    try {
+      const client = serverSDK.createClient({ directory, throwOnError: true })
+      const resp = await client.file.read({ path: rawPath })
+      if (resp.data?.type === "binary" && resp.data.encoding === "base64" && resp.data.mimeType?.startsWith("image/")) {
+        return `data:${resp.data.mimeType};base64,${resp.data.content}`
+      }
+    } catch (err) {
+      if (import.meta.env.DEV) console.warn("[local-image] failed to resolve", rawPath, err)
+    }
+    return undefined
+  }
+  return <LocalImageProvider value={resolver}>{props.children}</LocalImageProvider>
 }
 
 declare global {
@@ -401,7 +421,9 @@ export function AppInterface(props: {
                   <QueryProvider>
                     <ServerSDKProvider>
                       <ServerSyncProvider>
-                        <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>
+                        <LocalImageResolverProvider>
+                          <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>
+                        </LocalImageResolverProvider>
                       </ServerSyncProvider>
                     </ServerSDKProvider>
                   </QueryProvider>

@@ -1,4 +1,5 @@
 import { useMarked } from "../context/marked"
+import { useLocalImageResolver } from "../context/local-image"
 import { useI18n } from "../context/i18n"
 import DOMPurify from "dompurify"
 import morphdom from "morphdom"
@@ -14,6 +15,8 @@ type Entry = {
 
 const max = 200
 const cache = new Map<string, Entry>()
+const imageMax = 50
+const imageCache = new Map<string, Promise<string | undefined>>()
 
 if (typeof window !== "undefined" && DOMPurify.isSupported) {
   DOMPurify.addHook("afterSanitizeAttributes", (node: Element) => {
@@ -34,7 +37,7 @@ const config = {
   FORBID_TAGS: ["style"],
   FORBID_CONTENTS: ["style", "script"],
   ADD_TAGS: ["svg", "path"],
-  ADD_ATTR: ["d", "viewBox", "preserveAspectRatio", "xmlns", "target"],
+  ADD_ATTR: ["d", "viewBox", "preserveAspectRatio", "xmlns", "target", "data-local-image", "data-local-image-resolved"],
 }
 
 const iconPaths = {
@@ -245,9 +248,10 @@ export function Markdown(
     streaming?: boolean
     class?: string
     classList?: Record<string, boolean>
+    directory?: string
   },
 ) {
-  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList"])
+  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList", "directory"])
   const marked = useMarked()
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
@@ -320,6 +324,16 @@ export function Markdown(
         ) {
           setCopyState(toEl, labels, true)
         }
+        if (
+          fromEl instanceof HTMLImageElement &&
+          toEl instanceof HTMLImageElement &&
+          fromEl.getAttribute("data-local-image") === toEl.getAttribute("data-local-image") &&
+          fromEl.hasAttribute("data-local-image-resolved")
+        ) {
+          const src = fromEl.getAttribute("src")
+          if (src) toEl.setAttribute("src", src)
+          toEl.setAttribute("data-local-image-resolved", "")
+        }
         if (fromEl.isEqualNode(toEl)) return false
         return true
       },
@@ -330,6 +344,30 @@ export function Markdown(
         copy: i18n.t("ui.message.copy"),
         copied: i18n.t("ui.message.copied"),
       }))
+
+    const resolver = useLocalImageResolver()
+    if (resolver && local.directory) {
+      let alive = true
+      for (const img of container.querySelectorAll<HTMLImageElement>("[data-local-image]")) {
+        const imgPath = img.getAttribute("data-local-image")
+        if (!imgPath || img.hasAttribute("data-local-image-resolved")) continue
+        img.setAttribute("data-local-image-resolved", "")
+        const cacheKey = `${local.directory}\0${imgPath}`
+        const pending = imageCache.get(cacheKey) ?? resolver(imgPath, local.directory)
+        imageCache.set(cacheKey, pending)
+        if (imageCache.size > imageMax) {
+          const oldest = imageCache.keys().next().value
+          if (oldest !== undefined) imageCache.delete(oldest)
+        }
+        pending
+          .then((dataUri) => {
+            if (!alive || !img.isConnected || !dataUri) return
+            img.src = dataUri
+          })
+          .catch(() => {})
+      }
+      onCleanup(() => { alive = false })
+    }
   })
 
   onCleanup(() => {

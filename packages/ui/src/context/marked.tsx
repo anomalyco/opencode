@@ -475,6 +475,16 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
             const titleAttr = title ? ` title="${title}"` : ""
             return `<a href="${href}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`
           },
+          image({ href, title, text }) {
+            const safeAlt = (text ?? "").replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+            const safeTitle = title ? ` title="${title.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}"` : ""
+            if (href && !/^(https?:|data:|#|\/\/)/.test(href)) {
+              const safeHref = href.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+              return `<img data-local-image="${safeHref}" alt="${safeAlt}"${safeTitle}>`
+            }
+            if (!href) return `<img alt="${safeAlt}"${safeTitle}>`
+            return `<img src="${href.replace(/&/g, "&amp;").replace(/"/g, "&quot;")}" alt="${safeAlt}"${safeTitle}>`
+          },
         },
       },
       markedKatex({
