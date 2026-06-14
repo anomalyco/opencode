@@ -48,7 +48,7 @@ export const ripgrepLayer = Layer.effect(
     return Service.of({
       glob: (input) =>
         Effect.gen(function* () {
-          const target = path.resolve(location.directory, input.path ?? ".")
+          const target = path.resolve(location.directory, FSUtil.expandHome(input.path ?? "."))
           const info = yield* fs.stat(target).pipe(Effect.orDie)
           const cwd = info.type === "File" ? path.dirname(target) : target
           return yield* ripgrep
@@ -72,7 +72,7 @@ export const ripgrepLayer = Layer.effect(
         }),
       grep: (input) =>
         Effect.gen(function* () {
-          const target = path.resolve(location.directory, input.path ?? ".")
+          const target = path.resolve(location.directory, FSUtil.expandHome(input.path ?? "."))
           const info = yield* fs.stat(target).pipe(Effect.orDie)
           const cwd = info.type === "File" ? path.dirname(target) : target
           return yield* ripgrep

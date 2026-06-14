@@ -53,9 +53,12 @@ export const layer = Layer.effectDiscard(
           },
           execute: (input, context) => {
             return Effect.gen(function* () {
-              const absolute = path.resolve(location.directory, input.path)
-              const selected = path.isAbsolute(input.path) ? path.dirname(absolute) : location.directory
-              if (!path.isAbsolute(input.path) && !FSUtil.contains(location.directory, absolute))
+              // Expand a leading `~`/`~/` first so a tilde path becomes absolute
+              // and the escape checks below run against the expanded path.
+              const expanded = FSUtil.expandHome(input.path)
+              const absolute = path.resolve(location.directory, expanded)
+              const selected = path.isAbsolute(expanded) ? path.dirname(absolute) : location.directory
+              if (!path.isAbsolute(expanded) && !FSUtil.contains(location.directory, absolute))
                 return yield* Effect.die(new Error("Path escapes the allowed read root"))
               const real = yield* fs.realPath(absolute).pipe(Effect.orDie)
               const root = yield* fs.realPath(selected).pipe(Effect.orDie)
