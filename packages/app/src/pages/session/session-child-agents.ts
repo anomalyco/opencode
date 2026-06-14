@@ -15,6 +15,11 @@ export type SessionChildAgentEntry = {
   usage?: SessionChildAgentUsage
 }
 
+type StatusForOptions = {
+  toolStatus?: SessionChildAgentStatus
+  background?: boolean
+}
+
 type CollectChildAgentEntriesInput = {
   sessionID?: string
   messages: readonly Message[]
@@ -66,14 +71,15 @@ export function collectSessionChildAgentEntries(input: CollectChildAgentEntriesI
   const sessionByID = new Map(childSessions.map((session) => [session.id, session] as const))
   const entries: Array<SessionChildAgentEntry & { order: number }> = []
   let order = 0
-  const statusFor = (sessionID: string, toolStatus?: SessionChildAgentStatus): SessionChildAgentStatus | undefined => {
+  const statusFor = (sessionID: string, options: StatusForOptions = {}): SessionChildAgentStatus | undefined => {
     const messages = input.messagesBySession?.[sessionID]
     if (working(input.statuses?.[sessionID], messages)) return "running"
     if (messages !== undefined) {
       const last = messages.at(-1)
       if (last?.role === "assistant" && typeof last.time.completed === "number") return "completed"
     }
-    if (toolStatus === "running" || toolStatus === "error") return toolStatus
+    if (options.toolStatus === "running" || options.toolStatus === "error") return options.toolStatus
+    if (options.toolStatus === "completed" && options.background !== true) return "completed"
   }
 
   for (const message of input.messages) {
@@ -96,7 +102,10 @@ export function collectSessionChildAgentEntries(input: CollectChildAgentEntriesI
         agent: agent ?? text(session?.agent),
         description,
         created: stateStart(part.state) ?? session?.time.created ?? message.time.created,
-        status: statusFor(sessionID, part.state.status === "pending" ? undefined : part.state.status),
+        status: statusFor(sessionID, {
+          toolStatus: part.state.status === "pending" ? undefined : part.state.status,
+          background: metadata?.background === true,
+        }),
         order,
       })
       order += 1

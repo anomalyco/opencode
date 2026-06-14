@@ -40,6 +40,7 @@ const task = (input: {
   description: string
   agent: string
   started: number
+  background?: boolean
 }) =>
   ({
     id: input.id,
@@ -58,6 +59,7 @@ const task = (input: {
       title: input.description,
       metadata: {
         sessionId: input.childID,
+        ...(input.background ? { background: true } : {}),
       },
       time: { start: input.started, end: input.started + 1 },
     },
@@ -153,7 +155,7 @@ describe("collectSessionChildAgentEntries", () => {
 
     expect(entries).toHaveLength(1)
     expect(entries[0]?.id).toBe("tool:msg_1:prt_1:ses_child")
-    expect(entries[0]?.status).toBeUndefined()
+    expect(entries[0]?.status).toBe("completed")
     expect(entries[0]?.usage).toBeUndefined()
   })
 
@@ -180,6 +182,32 @@ describe("collectSessionChildAgentEntries", () => {
 
     expect(entries[0]?.title).toBe("inspect bug")
     expect(entries[0]?.agent).toBe("Coder - Implementation Agent")
+    expect(entries[0]?.status).toBe("completed")
+  })
+
+  test("does not mark background task children completed without loaded child messages", () => {
+    const message = assistant({ id: "msg_1", sessionID: "ses_parent", created: 10 })
+    const entries = collectSessionChildAgentEntries({
+      sessionID: "ses_parent",
+      messages: [message],
+      parts: {
+        msg_1: [
+          task({
+            id: "prt_1",
+            sessionID: "ses_parent",
+            messageID: "msg_1",
+            childID: "ses_child",
+            description: "background work",
+            agent: "general",
+            started: 25,
+            background: true,
+          }),
+        ],
+      },
+      sessions: [session({ id: "ses_child", parentID: "ses_parent", title: "Background work", created: 25 })],
+    })
+
+    expect(entries[0]?.status).toBeUndefined()
   })
 
   test("marks direct child sessions not referenced by task metadata as not used", () => {
