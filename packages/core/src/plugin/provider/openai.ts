@@ -2,10 +2,17 @@ import { Effect } from "effect"
 import { ModelV2 } from "../../model"
 import { PluginV2 } from "../../plugin"
 import { ProviderV2 } from "../../provider"
+import { Integration } from "../../integration"
+import { browser, headless } from "./openai-auth"
 
 export const OpenAIPlugin = PluginV2.define({
   id: PluginV2.ID.make("openai"),
   effect: Effect.gen(function* () {
+    const integrations = yield* Integration.Service
+    yield* integrations.update((editor) => {
+      editor.method.update(browser)
+      editor.method.update(headless)
+    })
     return {
       "aisdk.sdk": Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/openai") return

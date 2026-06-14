@@ -53,7 +53,6 @@ import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
-import { serverAttachmentFile } from "./prompt-input/server-attachment"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
@@ -473,34 +472,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const escBlur = () => platform.platform === "desktop" && platform.os === "macos"
 
   const pick = () => {
-    if (server.isLocal()) {
-      pickAttachmentFiles({
-        picker: platform.openAttachmentPickerDialog,
-        directory: () => sdk().directory,
-        fallback: () => fileInputRef?.click(),
-        onFile: addAttachment,
-        onError: (error) =>
-          showToast({
-            variant: "error",
-            title: language.t("common.requestFailed"),
-            description: error instanceof Error ? error.message : String(error),
-          }),
-      })
-      return
-    }
-    void import("@/components/dialog-select-file").then((module) =>
-      dialog.show(() => (
-        <module.DialogSelectFile
-          mode="files"
-          onSelectFile={(path) => {
-            void sdk().client.v2.fs
-              .read({ path })
-              .then((response) => response.data?.data)
-              .then((data) => data && addAttachments([serverAttachmentFile(path, data)]))
-          }}
-        />
-      )),
-    )
+    pickAttachmentFiles({
+      picker: platform.openAttachmentPickerDialog,
+      directory: () => sdk().directory,
+      fallback: () => fileInputRef?.click(),
+      onFile: addAttachment,
+      onError: (error) =>
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: error instanceof Error ? error.message : String(error),
+        }),
+    })
   }
 
   const setMode = (mode: "normal" | "shell") => {
@@ -620,8 +603,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const agentList = createMemo(() =>
-    sync().data.agent
-      .filter((agent) => !agent.hidden && agent.mode !== "primary")
+    sync()
+      .data.agent.filter((agent) => !agent.hidden && agent.mode !== "primary")
       .map((agent): AtOption => ({ type: "agent", name: agent.name, display: agent.name })),
   )
   const agentNames = createMemo(() => local.agent.list().map((agent) => agent.name))
@@ -1389,7 +1372,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!search) return projects()
     return projects().filter((project) => displayName(project).toLowerCase().includes(search))
   })
-  const showAgentControl = createMemo(() => settings.general.showCustomAgents() && agentNames().length > 0)
+  const showAgentControl = createMemo(() => settings.visibility.customAgents() && agentNames().length > 0)
   const selectProject = (worktree: string) => {
     setPicker({
       projectOpen: false,

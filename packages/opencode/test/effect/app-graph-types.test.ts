@@ -91,14 +91,18 @@ void (0 as unknown as ClosedRequires)
 void (0 as unknown as ClosedError)
 
 const replacement = LayerNode.make(Layer.succeed(A, A.of({ value: "a" })), [])
-LayerNode.replace(a, replacement)
-LayerNode.replace(notFoundOrDiskA, notFoundA)
-LayerNode.replace(notFoundOrDiskA, diskA)
+LayerNode.replace(a, Layer.succeed(A, A.of({ value: "a" })))
+LayerNode.replace(notFoundOrDiskA, notFoundAImplementation)
+LayerNode.replace(notFoundOrDiskA, diskAImplementation)
+LayerNode.replaceWithNode(a, replacement)
 
 // @ts-expect-error An override for A must still provide A
-LayerNode.replace(a, b)
+LayerNode.replaceWithNode(a, b)
 
 // @ts-expect-error A replacement cannot introduce NetworkError
-LayerNode.replace(notFoundOrDiskA, networkA)
+LayerNode.replace(notFoundOrDiskA, networkAImplementation)
+
+// @ts-expect-error A replacement layer must not have unresolved dependencies
+LayerNode.replace(b, bImplementation)
 
 test("type exploration compiles", () => {})
