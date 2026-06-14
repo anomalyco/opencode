@@ -7,7 +7,7 @@ import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { it } from "../plugin/provider-helper"
+import { it, withEnv } from "../plugin/provider-helper"
 
 function request(headers: Record<string, string>, variant?: string) {
   return {
@@ -136,7 +136,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
   )
 
   it.effect("loads configured providers and applies later model overrides", () =>
-    Effect.gen(function* () {
+    withEnv({ CUSTOM_API_KEY: "secret" }, () => Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const integrations = yield* Integration.Service
       const plugin = yield* PluginV2.Service
@@ -236,7 +236,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
         { type: "env", names: ["CUSTOM_API_KEY"] },
       )
       expect((yield* integrations.get(Integration.ID.make("custom")))?.name).toBe("Renamed")
-      expect(provider.enabled).toEqual({ via: "custom", data: {} })
+      expect(provider.disabled).toBeUndefined()
       expect(provider.api).toEqual({ type: "aisdk", package: "custom-sdk", url: "https://example.test" })
       expect(provider.request.headers).toEqual({ first: "first", shared: "last", last: "last" })
       expect(model.api.id).toBe(ModelV2.ID.make("api-chat"))
@@ -253,6 +253,6 @@ describe("ConfigProviderPlugin.Plugin", () => {
       ])
       expect(model.variants[0]?.headers).toEqual({ first: "first", shared: "last", last: "last" })
       expect(model.variants[1]?.headers).toEqual({ slow: "slow" })
-    }),
+    })),
   )
 })

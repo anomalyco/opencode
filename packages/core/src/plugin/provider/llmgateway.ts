@@ -9,11 +9,8 @@ export const LLMGatewayPlugin = PluginV2.define({
     return {
       "catalog.transform": Effect.fn(function* (evt) {
         for (const item of evt.provider.list()) {
-          if (
-            item.provider.enabled === false &&
-            !(yield* integrations.connection.forIntegration(Integration.ID.make(item.provider.id)))
-          )
-            continue
+          if (item.provider.disabled) continue
+          if (!(yield* integrations.get(Integration.ID.make(item.provider.id)))) continue
           if (item.provider.api.type !== "aisdk") continue
           if (item.provider.api.package !== "@ai-sdk/openai-compatible") continue
           if (item.provider.api.url !== "https://api.llmgateway.io/v1") continue

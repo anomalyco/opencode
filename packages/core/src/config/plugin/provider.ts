@@ -19,17 +19,10 @@ export const Plugin = PluginV2.define({
     const integrationTransform = yield* integrations.transform()
     const entries = yield* config.entries()
     const files = entries.filter((entry): entry is Config.Document => entry.type === "document")
-    const configuredIntegrations = new Set(
-      files.flatMap((file) =>
-        Object.entries(file.info.providers ?? {}).flatMap(([id, provider]) => (provider.env === undefined ? [] : [id])),
-      ),
-    )
-
     yield* integrationTransform((integrations) => {
       for (const file of files) {
         for (const [id, item] of Object.entries(file.info.providers ?? {})) {
           const integrationID = Integration.ID.make(id)
-          if (!configuredIntegrations.has(id) && !integrations.get(integrationID)) continue
           integrations.update(integrationID, (integration) => {
             integration.name = item.name ?? integration.name
           })
@@ -54,7 +47,6 @@ export const Plugin = PluginV2.define({
           const providerID = ProviderV2.ID.make(id)
           catalog.provider.update(providerID, (provider) => {
             if (item.name !== undefined) provider.name = item.name
-            provider.enabled = { via: "custom", data: {} }
             if (item.api !== undefined) provider.api = { ...item.api }
             if (item.request !== undefined) {
               Object.assign(provider.request.headers, item.request.headers)

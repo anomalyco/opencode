@@ -165,31 +165,6 @@ describe("OpencodePlugin", () => {
     ),
   )
 
-  it.effect("uses auth-enabled providers as credentials", () =>
-    withEnv({ OPENCODE_API_KEY: undefined }, () =>
-      Effect.gen(function* () {
-        const plugin = yield* PluginV2.Service
-        const catalog = yield* Catalog.Service
-        yield* plugin.add(pluginWithIntegrations(yield* Integration.Service))
-        const transform = yield* catalog.transform()
-        yield* transform((catalog) => {
-          const item = provider("opencode", {
-            enabled: { via: "credential", credentialID: Credential.ID.make("credential") },
-          })
-          catalog.provider.update(item.id, (draft) => {
-            draft.enabled = item.enabled
-          })
-          const paid = model("opencode", "paid", { cost: cost(1) })
-          catalog.model.update(item.id, paid.id, (draft) => {
-            draft.cost = [...paid.cost]
-          })
-        })
-        expect((yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBeUndefined()
-        expect((yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("paid"))).enabled).toBe(true)
-      }),
-    ),
-  )
-
   it.effect("ignores non-opencode providers and models", () =>
     withEnv({ OPENCODE_API_KEY: undefined }, () =>
       Effect.gen(function* () {

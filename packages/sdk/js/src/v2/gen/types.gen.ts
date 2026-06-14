@@ -4019,22 +4019,7 @@ export type ModelV2Info = {
 export type ProviderV2Info = {
   id: string
   name: string
-  enabled:
-    | false
-    | {
-        via: "env"
-        name: string
-      }
-    | {
-        via: "credential"
-        credentialID: string
-      }
-    | {
-        via: "custom"
-        data: {
-          [key: string]: unknown
-        }
-      }
+  disabled?: boolean
   api:
     | {
         type: "aisdk"

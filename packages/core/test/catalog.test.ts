@@ -47,7 +47,7 @@ describe("CatalogV2", () => {
     }),
   )
 
-  it.effect("projects active credentials without rebuilding catalog state", () => {
+  it.effect("derives availability from active credentials without changing provider state", () => {
     const integrationID = Integration.ID.make("test")
     const first = {
       id: Credential.ID.create(),
@@ -79,15 +79,11 @@ describe("CatalogV2", () => {
       const transform = yield* catalog.transform()
       yield* transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
 
-      expect(yield* catalog.provider.get(ProviderV2.ID.make("test"))).toMatchObject({
-        enabled: { via: "credential", credentialID: first.id },
-        request: { body: { apiKey: "first", tenant: "one" } },
-      })
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([ProviderV2.ID.make("test")])
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("test"))).request.body).toEqual({})
       active = second
-      expect(yield* catalog.provider.get(ProviderV2.ID.make("test"))).toMatchObject({
-        enabled: { via: "credential", credentialID: second.id },
-        request: { body: { apiKey: "second", tenant: "two" } },
-      })
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([ProviderV2.ID.make("test")])
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("test"))).request.body).toEqual({})
     }).pipe(Effect.provide(layer))
   })
 
@@ -111,9 +107,7 @@ describe("CatalogV2", () => {
           )
           yield* (yield* catalog.transform())((editor) => editor.provider.update(providerID, () => {}))
 
-          expect(yield* catalog.provider.get(providerID)).toMatchObject({
-            enabled: { via: "env", name: "CATALOG_TEST_API_KEY" },
-          })
+          expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(providerID)
         }),
       (previous) =>
         Effect.sync(() => {
@@ -337,13 +331,13 @@ describe("CatalogV2", () => {
   it.effect("falls back to newest available model when no default is configured", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
+      const integrations = yield* Integration.Service
       const providerID = ProviderV2.ID.make("test")
       const transform = yield* catalog.transform()
+      yield* integrations.update((editor) => editor.update(Integration.ID.make(providerID), () => {}))
 
       yield* transform((catalog) => {
-        catalog.provider.update(providerID, (provider) => {
-          provider.enabled = { via: "custom", data: {} }
-        })
+        catalog.provider.update(providerID, () => {})
         catalog.model.update(providerID, ModelV2.ID.make("old"), (model) => {
           model.time.released = DateTime.makeUnsafe(1000)
         })
@@ -359,15 +353,15 @@ describe("CatalogV2", () => {
   it.effect("uses a transform-provided default model until that transform is replaced", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
+      const integrations = yield* Integration.Service
       const providerID = ProviderV2.ID.make("test")
       const old = ModelV2.ID.make("old")
       const newest = ModelV2.ID.make("new")
       const transform = yield* catalog.transform()
+      yield* integrations.update((editor) => editor.update(Integration.ID.make(providerID), () => {}))
 
       const models = (catalog: Catalog.Editor) => {
-        catalog.provider.update(providerID, (provider) => {
-          provider.enabled = { via: "custom", data: {} }
-        })
+        catalog.provider.update(providerID, () => {})
         catalog.model.update(providerID, old, (model) => {
           model.time.released = DateTime.makeUnsafe(1000)
         })
@@ -390,20 +384,23 @@ describe("CatalogV2", () => {
   it.effect("ignores a configured default on a disabled provider", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
+      const integrations = yield* Integration.Service
       const disabledProvider = ProviderV2.ID.make("disabled")
       const enabledProvider = ProviderV2.ID.make("enabled")
       const disabledModel = ModelV2.ID.make("configured")
       const fallbackModel = ModelV2.ID.make("fallback")
       const transform = yield* catalog.transform()
+      yield* integrations.update((editor) => {
+        editor.update(Integration.ID.make(disabledProvider), () => {})
+        editor.update(Integration.ID.make(enabledProvider), () => {})
+      })
 
       yield* transform((catalog) => {
         catalog.provider.update(disabledProvider, (provider) => {
-          provider.enabled = false
+          provider.disabled = true
         })
         catalog.model.update(disabledProvider, disabledModel, () => {})
-        catalog.provider.update(enabledProvider, (provider) => {
-          provider.enabled = { via: "custom", data: {} }
-        })
+        catalog.provider.update(enabledProvider, () => {})
         catalog.model.update(enabledProvider, fallbackModel, () => {})
         catalog.model.default.set(disabledProvider, disabledModel)
       })
