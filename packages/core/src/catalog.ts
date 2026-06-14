@@ -101,8 +101,7 @@ export const layer = Layer.effect(
       if (provider.disabled) return false
       if (typeof provider.request.body.apiKey === "string") return true
       if (connected) return true
-      if (!integration) return false
-      return integration.methods.length === 0
+      return !integration
     }
 
     const projectModel = (model: ModelV2.Info, provider: ProviderV2.Info) => {

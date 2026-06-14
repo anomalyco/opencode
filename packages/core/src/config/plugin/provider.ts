@@ -19,10 +19,16 @@ export const Plugin = PluginV2.define({
     const integrationTransform = yield* integrations.transform()
     const entries = yield* config.entries()
     const files = entries.filter((entry): entry is Config.Document => entry.type === "document")
+    const configuredIntegrations = new Set(
+      files.flatMap((file) =>
+        Object.entries(file.info.providers ?? {}).flatMap(([id, provider]) => (provider.env === undefined ? [] : [id])),
+      ),
+    )
     yield* integrationTransform((integrations) => {
       for (const file of files) {
         for (const [id, item] of Object.entries(file.info.providers ?? {})) {
           const integrationID = Integration.ID.make(id)
+          if (!configuredIntegrations.has(id) && !integrations.get(integrationID)) continue
           integrations.update(integrationID, (integration) => {
             integration.name = item.name ?? integration.name
           })

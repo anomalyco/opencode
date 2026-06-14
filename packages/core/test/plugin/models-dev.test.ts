@@ -71,12 +71,6 @@ describe("ModelsDevPlugin", () => {
               ],
               connections: [],
             }),
-            new Integration.Info({
-              id: Integration.ID.make("local"),
-              name: "Local",
-              methods: [],
-              connections: [],
-            }),
           ])
         }).pipe(Effect.provide(ModelsDev.defaultLayer)),
       (previous) =>

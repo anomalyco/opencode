@@ -65,9 +65,9 @@ export const ModelsDevPlugin = PluginV2.define({
       const data = yield* modelsDev.get()
       yield* integrationTransform((integrations) => {
         for (const item of Object.values(data)) {
+          if (item.env.length === 0) continue
           const integrationID = Integration.ID.make(item.id)
           integrations.update(integrationID, (integration) => (integration.name = item.name))
-          if (item.env.length === 0) continue
           integrations.method.update({
             integrationID,
             method: { type: "key" },

@@ -331,10 +331,8 @@ describe("CatalogV2", () => {
   it.effect("falls back to newest available model when no default is configured", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const integrations = yield* Integration.Service
       const providerID = ProviderV2.ID.make("test")
       const transform = yield* catalog.transform()
-      yield* integrations.update((editor) => editor.update(Integration.ID.make(providerID), () => {}))
 
       yield* transform((catalog) => {
         catalog.provider.update(providerID, () => {})
@@ -353,12 +351,10 @@ describe("CatalogV2", () => {
   it.effect("uses a transform-provided default model until that transform is replaced", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const integrations = yield* Integration.Service
       const providerID = ProviderV2.ID.make("test")
       const old = ModelV2.ID.make("old")
       const newest = ModelV2.ID.make("new")
       const transform = yield* catalog.transform()
-      yield* integrations.update((editor) => editor.update(Integration.ID.make(providerID), () => {}))
 
       const models = (catalog: Catalog.Editor) => {
         catalog.provider.update(providerID, () => {})
@@ -384,16 +380,11 @@ describe("CatalogV2", () => {
   it.effect("ignores a configured default on a disabled provider", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
-      const integrations = yield* Integration.Service
       const disabledProvider = ProviderV2.ID.make("disabled")
       const enabledProvider = ProviderV2.ID.make("enabled")
       const disabledModel = ModelV2.ID.make("configured")
       const fallbackModel = ModelV2.ID.make("fallback")
       const transform = yield* catalog.transform()
-      yield* integrations.update((editor) => {
-        editor.update(Integration.ID.make(disabledProvider), () => {})
-        editor.update(Integration.ID.make(enabledProvider), () => {})
-      })
 
       yield* transform((catalog) => {
         catalog.provider.update(disabledProvider, (provider) => {
