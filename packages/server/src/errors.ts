@@ -84,3 +84,18 @@ export class QuestionNotFoundError extends Schema.TaggedErrorClass<QuestionNotFo
   },
   { httpApiStatus: 404 },
 ) {}
+
+export class ForbiddenError extends Schema.TaggedErrorClass<ForbiddenError>()(
+  "ForbiddenError",
+  { message: Schema.String },
+  { httpApiStatus: 403 },
+) {}
+
+export class PtyNotFoundError extends Schema.TaggedErrorClass<PtyNotFoundError>()(
+  "PtyNotFoundError",
+  {
+    ptyID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
