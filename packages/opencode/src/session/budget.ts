@@ -1,4 +1,4 @@
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@daemon-protocol/core/effect/layer-node"
 import { Config } from "@/config/config"
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
@@ -51,8 +51,8 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Budget") {}
 
-export function readSettings(experimental: { budget?: Record<string, unknown> } | undefined): Settings {
-  const b = (experimental as any)?.budget
+export function readSettings(experimental: unknown): Settings {
+  const b = (experimental as { budget?: Record<string, unknown> } | undefined)?.budget
   if (!b) return { warnAt: DEFAULT_WARN_AT, onExceed: "stop" }
   const usd = typeof b.usd === "number" && b.usd > 0 && Number.isFinite(b.usd) ? b.usd : undefined
   const warnAt = Array.isArray(b.warn_at)

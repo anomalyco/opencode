@@ -1,7 +1,7 @@
 import { LayerNode } from "@daemon-protocol/core/effect/layer-node"
 import { Config } from "@/config/config"
 import { BackgroundJob } from "@/background/job"
-import { Effect, Layer, Context } from "effect"
+import { Effect, Layer, Context, Option } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { Session } from "./session"
 import { SessionID } from "./schema"
@@ -132,7 +132,7 @@ function pickPositive(semantic: unknown, legacy: unknown, fallback: number): num
   return fallback
 }
 
-export function readSettings(experimental: { criticality?: Partial<Record<keyof Settings | string, unknown>> } | undefined): Settings {
+export function readSettings(experimental: unknown): Settings {
   const c = (experimental as any)?.criticality
   if (!c) return DEFAULTS
 
@@ -196,17 +196,12 @@ export const layer = Layer.effect(
       const seen = new Set<string>()
       while (current && !seen.has(current)) {
         seen.add(current)
-        try {
-          const info = yield* sessions.get(current)
-          const parent = info?.parentID
-          if (!parent) break
-          depth++
-          current = parent
-          if (depth > 256) break // safety bound against malformed chains
-        } catch {
-          // If we can't fetch the session, stop walking up. Return current depth.
-          break
-        }
+        const option: Option.Option<Session.Info> = yield* sessions.get(current).pipe(Effect.option)
+        if (Option.isNone(option)) break
+        if (!option.value.parentID) break
+        depth++
+        current = option.value.parentID
+        if (depth > 256) break
       }
       return depth
     })
@@ -220,23 +215,19 @@ export const layer = Layer.effect(
       let root: SessionID = sessionID
       let current: SessionID | undefined = sessionID
       const seenUp = new Set<string>()
-      // Find root, walking up the parentID chain.
       while (current && !seenUp.has(current)) {
         seenUp.add(current)
-        try {
-          const info = yield* sessions.get(current)
-          if (!info?.parentID) {
-            root = current
-            break
-          }
-          current = info.parentID
-        } catch {
-          // If we can't fetch the parent, treat current as root.
+        const option: Option.Option<Session.Info> = yield* sessions.get(current).pipe(Effect.option)
+        if (Option.isNone(option)) {
           root = current
           break
         }
+        if (!option.value.parentID) {
+          root = current
+          break
+        }
+        current = option.value.parentID
       }
-      // Sum root + descendants in one walk, without yielding between reads.
       let total = 0
       const stack: SessionID[] = [root]
       const visited = new Set<string>()
@@ -244,28 +235,17 @@ export const layer = Layer.effect(
         const id = stack.pop()!
         if (visited.has(id)) continue
         visited.add(id)
-        try {
-          const info = yield* sessions.get(id)
-          if (info) total += info.cost ?? 0
-          const kids = yield* sessions.children(id)
-          for (const kid of kids) stack.push(kid.id)
-        } catch {
-          // If a session is deleted or inaccessible, count conservatively.
-          // Assume it might have had cost; don't undercount the budget.
-          total += 1 // small penalty to be conservative on missing data
-        }
+        const info = yield* sessions.get(id).pipe(Effect.option)
+        if (Option.isSome(info)) total += info.value.cost ?? 0
+        const kids = yield* sessions.children(id)
+        for (const kid of kids) stack.push(kid.id)
       }
       return total
     })
 
     const activePopulation = Effect.fn("Criticality.activePopulation")(function* () {
-      try {
-        const jobs = yield* background.list()
-        return jobs.filter((job) => job.status === "running").length
-      } catch {
-        // If background job list fails, assume no active jobs (conservative).
-        return 0
-      }
+      const jobs = yield* background.list()
+      return jobs.filter((job) => job.status === "running").length
     })
 
     const evaluate = Effect.fn("Criticality.evaluate")(function* (parentID: SessionID, costHat?: number) {

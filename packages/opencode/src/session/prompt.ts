@@ -1198,8 +1198,8 @@ export const layer = Layer.effect(
           // the cap (default), and warns once per threshold as it approaches.
           let budgetNotice: string | undefined
           {
-            const current = yield* sessions.get(sessionID).pipe(Effect.catchAll(() => Effect.succeed(session)))
-            const b = yield* budget.check(sessionID, current.cost)
+            const current = yield* sessions.get(sessionID).pipe(Effect.catch(() => Effect.succeed(session)))
+            const b = yield* budget.check(sessionID, current.cost ?? 0)
             if (b.enabled && b.exceeded && b.onExceed === "stop") {
               const error = new NamedError.Unknown({ message: Budget.stopText(b.spent, b.usd!) })
               yield* events.publish(Session.Event.Error, { sessionID, error: error.toObject() })
@@ -1605,8 +1605,6 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Session.defaultLayer),
     Layer.provide(SessionRevert.defaultLayer),
     Layer.provide(SessionSummary.defaultLayer),
-    Layer.provide(Budget.defaultLayer),
-    Layer.provide(Image.defaultLayer),
     Layer.provide(
       Layer.mergeAll(
         Agent.defaultLayer,
@@ -1616,6 +1614,8 @@ export const defaultLayer = Layer.suspend(() =>
         CrossSpawnSpawner.defaultLayer,
         RuntimeFlags.defaultLayer,
         EventV2Bridge.defaultLayer,
+        Budget.defaultLayer,
+        Image.defaultLayer,
       ),
     ),
   ),

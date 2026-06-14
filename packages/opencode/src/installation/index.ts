@@ -239,10 +239,10 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
                   HttpClientRequest.acceptJson,
                 ),
               )
-              .pipe(Effect.catchAll(() => Effect.succeed(null)))
+              .pipe(Effect.catch(() => Effect.succeed(null)))
             if (!response) continue
             const data = yield* HttpClientResponse.schemaBodyJson(BrewFormula)(response).pipe(
-              Effect.catchAll(() => Effect.succeed(null)),
+              Effect.catch(() => Effect.succeed(null)),
             )
             if (data) return data.versions.stable
           }
@@ -267,10 +267,10 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
                   `https://community.chocolatey.org/api/v2/Packages?$filter=Id%20eq%20%27${id}%27%20and%20IsLatestVersion&$select=Version`,
                 ).pipe(HttpClientRequest.setHeaders({ Accept: "application/json;odata=verbose" })),
               )
-              .pipe(Effect.catchAll(() => Effect.succeed(null)))
+              .pipe(Effect.catch(() => Effect.succeed(null)))
             if (!response) continue
             const data = yield* HttpClientResponse.schemaBodyJson(ChocoPackage)(response).pipe(
-              Effect.catchAll(() => Effect.succeed(null)),
+              Effect.catch(() => Effect.succeed(null)),
             )
             if (data?.d.results[0]?.Version) return data.d.results[0].Version
           }
@@ -285,10 +285,10 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
                   `https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/${id}.json`,
                 ).pipe(HttpClientRequest.setHeaders({ Accept: "application/json" })),
               )
-              .pipe(Effect.catchAll(() => Effect.succeed(null)))
+              .pipe(Effect.catch(() => Effect.succeed(null)))
             if (!response) continue
             const data = yield* HttpClientResponse.schemaBodyJson(ScoopManifest)(response).pipe(
-              Effect.catchAll(() => Effect.succeed(null)),
+              Effect.catch(() => Effect.succeed(null)),
             )
             if (data?.version) return data.version
           }
