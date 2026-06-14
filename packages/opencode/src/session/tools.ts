@@ -1,4 +1,4 @@
-import { Agent } from "@/agent/agent"
+import { Agent, planRulesConfig } from "@/agent/agent"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
@@ -18,6 +18,7 @@ import { Session } from "./session"
 import { SessionProcessor } from "./processor"
 import { PartID } from "./schema"
 import { EffectBridge } from "@/effect/bridge"
+import { InstanceState } from "@/effect/instance-state"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
@@ -37,6 +38,13 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const registry = yield* ToolRegistry.Service
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
+  const instance = yield* InstanceState.context
+
+  const ruleset = (agent: Agent.Info) => {
+    const planCaps =
+      agent.name === "plan" ? Permission.fromConfig(planRulesConfig(instance.worktree)) : []
+    return Permission.merge(agent.permission, input.session.permission ?? [], planCaps)
+  }
 
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
     sessionID: input.session.id,
@@ -66,7 +74,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           ...req,
           sessionID: input.session.id,
           tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-          ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+          ruleset: ruleset(input.agent),
         })
         .pipe(Effect.orDie),
   })

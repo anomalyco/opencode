@@ -123,9 +123,13 @@ describe("AgentV2", () => {
         "summary",
         "title",
       ])
-      for (const item of agents) {
+      const otherAgents = agents.filter((item) => item.id !== AgentV2.ID.make("plan"))
+      for (const item of otherAgents) {
         expect(item.permissions.some((rule) => rule.action === "bash" && rule.effect !== "deny")).toBe(false)
       }
+
+      const plan = agents.find((item) => item.id === AgentV2.ID.make("plan"))!
+      expect(plan.permissions.some((rule) => rule.action === "bash")).toBe(false)
     }),
   )
 })

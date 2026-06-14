@@ -5,16 +5,49 @@ import { Effect, Layer, Schema } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigAgentPlugin } from "@opencode-ai/core/config/plugin/agent"
+import { AgentPlugin, planModeBashReadonly } from "@opencode-ai/core/plugin/agent"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Location } from "@opencode-ai/core/location"
 import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Project } from "@opencode-ai/core/project"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
+
+const testLocation = Location.Service.of({
+  directory: AbsolutePath.make("/tmp"),
+  project: { id: Project.ID.make("prj_test"), directory: AbsolutePath.make("/tmp") },
+})
 
 const it = testEffect(Layer.mergeAll(AgentV2.locationLayer, FSUtil.defaultLayer))
 const decode = Schema.decodeUnknownSync(Config.Info)
 
 describe("ConfigAgentPlugin.Plugin", () => {
+  it.effect("applies plan bash ask-default and readonly allows after plugin boot", () =>
+    Effect.gen(function* () {
+      const agents = yield* AgentV2.Service
+      const location = Location.Service.of(testLocation)
+
+      yield* AgentPlugin.Plugin.effect.pipe(Effect.provideService(Location.Service, location))
+      yield* ConfigAgentPlugin.Plugin.effect.pipe(
+        Effect.provideService(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) })),
+        Effect.provideService(AgentV2.Service, agents),
+        Effect.provideService(Location.Service, location),
+      )
+
+      const plan = yield* agents.get(AgentV2.ID.make("plan"))
+      if (!plan) throw new Error("expected plan agent")
+
+      const wildcard = plan.permissions.findLast((rule) => rule.action === "bash" && rule.resource === "*")
+      expect(wildcard?.effect).toBe("ask")
+      for (const resource of planModeBashReadonly) {
+        expect(plan.permissions).toContainEqual({ action: "bash", resource, effect: "allow" })
+      }
+      expect(PermissionV2.evaluate("bash", "ls -la", plan.permissions).effect).toBe("allow")
+      expect(PermissionV2.evaluate("bash", "lsof", plan.permissions).effect).toBe("ask")
+    }),
+  )
+
   it.effect("applies all global permissions before agent-specific permissions", () =>
     Effect.gen(function* () {
       const agents = yield* AgentV2.Service
@@ -71,6 +104,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
       yield* ConfigAgentPlugin.Plugin.effect.pipe(
         Effect.provideService(Config.Service, config),
         Effect.provideService(AgentV2.Service, agents),
+        Effect.provideService(Location.Service, testLocation),
       )
 
       const buildAgent = yield* agents.get(build)
@@ -153,6 +187,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
       yield* ConfigAgentPlugin.Plugin.effect.pipe(
         Effect.provideService(Config.Service, config),
         Effect.provideService(AgentV2.Service, agents),
+        Effect.provideService(Location.Service, testLocation),
       )
 
       const reviewer = yield* agents.get(AgentV2.ID.make("reviewer"))
@@ -193,6 +228,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
       yield* ConfigAgentPlugin.Plugin.effect.pipe(
         Effect.provideService(Config.Service, config),
         Effect.provideService(AgentV2.Service, agents),
+        Effect.provideService(Location.Service, testLocation),
       )
 
       expect(yield* agents.get(build)).toBeUndefined()
@@ -254,6 +290,7 @@ Use native v2 fields.`,
           yield* ConfigAgentPlugin.Plugin.effect.pipe(
             Effect.provideService(Config.Service, config),
             Effect.provideService(AgentV2.Service, agents),
+            Effect.provideService(Location.Service, testLocation),
           )
 
           expect(yield* agents.get(AgentV2.ID.make("reviewer"))).toMatchObject({

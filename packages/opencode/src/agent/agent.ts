@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Config } from "@/config/config"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
@@ -31,6 +32,7 @@ import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { Reference } from "@opencode-ai/core/reference"
 import { Location } from "@opencode-ai/core/location"
+import { planModeBashReadonly } from "@opencode-ai/core/plugin/agent"
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -54,6 +56,28 @@ export const Info = Schema.Struct({
   steps: Schema.optional(Schema.Finite),
 }).annotate({ identifier: "Agent" })
 export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
+
+// Global permission and session permission cannot relax plan caps; agent.plan.permission can (intentional opt-out).
+export function planRulesConfig(worktree: string): ConfigPermissionV1.Info {
+  return {
+    question: "allow",
+    plan_exit: "allow",
+    plan_enter: "deny",
+    task: { general: "deny" },
+    external_directory: {
+      [path.join(Global.Path.data, "plans", "*")]: "allow",
+    },
+    edit: {
+      "*": "deny",
+      [path.join(".opencode", "plans", "*.md")]: "allow",
+      [path.relative(worktree, path.join(Global.Path.data, "plans", "*.md"))]: "allow",
+    },
+    bash: {
+      "*": "ask",
+      ...Object.fromEntries(planModeBashReadonly.map((resource) => [resource, "allow"])),
+    },
+  }
+}
 
 const GeneratedAgent = Schema.Struct({
   identifier: Schema.String,
@@ -135,6 +159,8 @@ export const layer = Layer.effect(
 
         const user = Permission.fromConfig(cfg.permission ?? {})
 
+        const planRules = Permission.fromConfig(planRulesConfig(ctx.worktree))
+
         const agents: Record<string, Info> = {
           build: {
             name: "build",
@@ -155,25 +181,7 @@ export const layer = Layer.effect(
             name: "plan",
             description: "Plan mode. Disallows all edit tools.",
             options: {},
-            permission: Permission.merge(
-              defaults,
-              Permission.fromConfig({
-                question: "allow",
-                plan_exit: "allow",
-                task: {
-                  general: "deny",
-                },
-                external_directory: {
-                  [path.join(Global.Path.data, "plans", "*")]: "allow",
-                },
-                edit: {
-                  "*": "deny",
-                  [path.join(".opencode", "plans", "*.md")]: "allow",
-                  [path.relative(ctx.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
-                },
-              }),
-              user,
-            ),
+            permission: Permission.merge(defaults, user, planRules),
             mode: "primary",
             native: true,
           },

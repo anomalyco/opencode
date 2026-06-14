@@ -11,6 +11,8 @@ import { ModelV2 } from "../../model"
 import { PluginV2 } from "../../plugin"
 import { ConfigAgentV1 } from "../../v1/config/agent"
 import { ConfigMigrateV1 } from "../../v1/config/migrate"
+import { Location } from "../../location"
+import { planAgentRestrictions } from "../../plugin/agent"
 
 const legacySources = [
   { pattern: "{agent,agents}/**/*.md", primary: false },
@@ -39,6 +41,7 @@ export const Plugin = PluginV2.define({
     const agent = yield* AgentV2.Service
     const config = yield* Config.Service
     const fs = yield* FSUtil.Service
+    const location = yield* Location.Service
     const documents = yield* Effect.forEach(yield* config.entries(), (entry) => {
       if (entry.type === "document") return Effect.succeed([entry])
       return Effect.gen(function* () {
@@ -63,6 +66,10 @@ export const Plugin = PluginV2.define({
       for (const current of editor.list()) {
         editor.update(current.id, (agent) => agent.permissions.push(...global))
       }
+
+      editor.update(AgentV2.ID.make("plan"), (item) => {
+        item.permissions.push(...planAgentRestrictions(location.directory))
+      })
 
       for (const document of documents) {
         for (const [id, item] of Object.entries(document.info.agents ?? {})) {

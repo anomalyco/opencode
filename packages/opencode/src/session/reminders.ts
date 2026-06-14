@@ -8,6 +8,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
+import { Permission } from "@/permission"
 import PROMPT_PLAN from "./prompt/plan.txt"
 import BUILD_SWITCH from "./prompt/build-switch.txt"
 import PLAN_MODE from "./prompt/plan-mode.txt"
@@ -23,7 +24,12 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   const userMessage = input.messages.findLast((msg) => msg.info.role === "user")
   if (!userMessage) return input.messages
 
-  if (!flags.experimentalPlanMode) {
+  const planExitAvailable =
+    flags.client === "cli" &&
+    Permission.evaluate("plan_exit", "*", Permission.merge(input.agent.permission, input.session.permission ?? []))
+      .action !== "deny"
+
+  if (!flags.experimentalPlanMode || !planExitAvailable) {
     if (input.agent.name === "plan") {
       userMessage.parts.push({
         id: PartID.ascending(),

@@ -10,6 +10,7 @@ import { ShellTool } from "../../src/tool/shell"
 import { Filesystem } from "@/util/filesystem"
 import { provideInstance, testInstanceStoreLayer, tmpdirScoped } from "../fixture/fixture"
 import type { Permission } from "../../src/permission"
+import { Permission as PermissionService } from "../../src/permission"
 import { Agent } from "../../src/agent/agent"
 import { Truncate } from "@/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -996,7 +997,7 @@ describe("tool.shell permissions", () => {
     }),
   )
 
-  each("matches redirects in permission pattern", () =>
+  each("skips bash pattern for write redirects", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()
       yield* runIn(
@@ -1011,8 +1012,104 @@ describe("tool.shell permissions", () => {
             ),
           ).toMatchObject({ message: err.message })
           const bashReq = requests.find((r) => r.permission === "bash")
+          const extDirReq = requests.find((r) => r.permission === "external_directory")
+          expect(bashReq).toBeUndefined()
+          expect(extDirReq).toBeDefined()
+          expect(extDirReq!.patterns).toContain(glob(path.join(tmp, "*")))
+        }),
+      )
+    }),
+  )
+
+  each("keeps bash pattern for read redirects", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* Effect.promise(() => Bun.write(path.join(tmp, "input.txt"), "x"))
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          yield* run(
+            {
+              command: "cat < input.txt",
+              description: "Read redirected input",
+            },
+            capture(requests),
+          )
+          const bashReq = requests.find((r) => r.permission === "bash")
           expect(bashReq).toBeDefined()
-          expect(bashReq!.patterns).toContain("echo test > output.txt")
+          expect(bashReq!.patterns).toContain("cat < input.txt")
+        }),
+      )
+    }),
+  )
+
+  each("skips bash auto-allow for append and stderr redirects", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const err = new Error("stop after permission")
+          for (const command of ["ls > out", "echo x >> out", "echo x &> out"]) {
+            const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+            expect(
+              yield* fail({ command, description: command }, capture(requests, err)),
+            ).toMatchObject({ message: err.message })
+            expect(requests.find((r) => r.permission === "bash")).toBeUndefined()
+            expect(requests.find((r) => r.permission === "external_directory")).toBeDefined()
+          }
+        }),
+      )
+    }),
+  )
+
+  each("asks bash for tee in pipeline on plan agent", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* Effect.promise(() => Bun.write(path.join(tmp, "file"), "x"))
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const plan = yield* Agent.use.get("plan")
+          const err = new Error("stop after permission")
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          expect(
+            yield* fail(
+              { command: "cat file | tee out", description: "Tee output" },
+              { ...capture(requests, err), agent: "plan" },
+            ),
+          ).toMatchObject({ message: err.message })
+          const bashReq = requests.find((r) => r.permission === "bash")
+          expect(bashReq).toBeDefined()
+          expect(bashReq!.patterns.some((pattern) => pattern.includes("tee"))).toBe(true)
+          expect(
+            bashReq!.patterns.some(
+              (pattern) => PermissionService.evaluate("bash", pattern, plan!.permission).action === "ask",
+            ),
+          ).toBe(true)
+        }),
+      )
+    }),
+  )
+
+  each("allows readonly pipeline on plan agent", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const plan = yield* Agent.use.get("plan")
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          yield* run(
+            { command: "ls -la | head", description: "Readonly pipeline" },
+            { ...capture(requests), agent: "plan" },
+          )
+          const bashReq = requests.find((r) => r.permission === "bash")
+          expect(bashReq).toBeDefined()
+          for (const pattern of bashReq!.patterns) {
+            expect(PermissionService.evaluate("bash", pattern, plan!.permission).action).toBe("allow")
+          }
         }),
       )
     }),

@@ -7,7 +7,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { SessionRevert } from "./revert"
 import { Session } from "./session"
-import { Agent } from "../agent/agent"
+import { Agent, planRulesConfig } from "../agent/agent"
 import { Provider } from "@/provider/provider"
 
 import { type Tool as AITool, tool, jsonSchema } from "ai"
@@ -327,7 +327,13 @@ export const layer = Layer.effect(
               .ask({
                 ...req,
                 sessionID,
-                ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
+                ruleset: Permission.merge(
+                  taskAgent.permission,
+                  session.permission ?? [],
+                  taskAgent.name === "plan"
+                    ? Permission.fromConfig(planRulesConfig(ctx.worktree))
+                    : [],
+                ),
               })
               .pipe(Effect.orDie),
         })

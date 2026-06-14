@@ -6,6 +6,7 @@ import { Question } from "../question"
 import { Session } from "@/session/session"
 import { MessageV2 } from "../session/message-v2"
 import { Provider } from "@/provider/provider"
+import { Agent } from "@/agent/agent"
 import { InstanceState } from "@/effect/instance-state"
 import { MessageID, PartID } from "../session/schema"
 import EXIT_DESCRIPTION from "./plan-exit.txt"
@@ -18,6 +19,7 @@ export const PlanExitTool = Tool.define(
     const session = yield* Session.Service
     const question = yield* Question.Service
     const provider = yield* Provider.Service
+    const agents = yield* Agent.Service
 
     return {
       description: EXIT_DESCRIPTION,
@@ -47,15 +49,30 @@ export const PlanExitTool = Tool.define(
 
           const messages = yield* session.messages({ sessionID: ctx.sessionID }).pipe(Effect.orDie)
           const lastUser = messages.findLast((item) => item.info.role === "user" && item.info.model)
+          const target =
+            (yield* agents.get("build")) ??
+            (yield* agents.list()).find((a) => a.mode === "primary" && !a.hidden && a.name !== "plan")
+
+          if (!target) {
+            return {
+              title: "No build agent available",
+              output:
+                "No primary non-plan agent is configured. Stay with the plan agent or enable a build agent.",
+              metadata: {},
+            }
+          }
+
           const model =
-            lastUser?.info.role === "user" && lastUser.info.model ? lastUser.info.model : yield* provider.defaultModel()
+            target.model ??
+            (lastUser?.info.role === "user" ? lastUser.info.model : undefined) ??
+            (yield* provider.defaultModel())
 
           const msg: SessionV1.User = {
             id: MessageID.ascending(),
             sessionID: ctx.sessionID,
             role: "user",
             time: { created: Date.now() },
-            agent: "build",
+            agent: target.name,
             model,
           }
           yield* session.updateMessage(msg)

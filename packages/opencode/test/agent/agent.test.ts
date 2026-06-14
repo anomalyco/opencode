@@ -96,12 +96,12 @@ it.instance("plan agent denies the general subagent by default", () =>
 )
 
 it.instance(
-  "user permission can allow the general subagent from plan mode",
+  "user permission cannot relax plan agent task.general deny",
   () =>
     Effect.gen(function* () {
       const plan = yield* load((svc) => svc.get("plan"))
       expect(plan).toBeDefined()
-      expect(Permission.evaluate("task", "general", plan!.permission).action).toBe("allow")
+      expect(Permission.evaluate("task", "general", plan!.permission).action).toBe("deny")
     }),
   {
     config: {

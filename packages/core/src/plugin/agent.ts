@@ -4,7 +4,6 @@ import path from "path"
 import { Effect } from "effect"
 import { AgentV2 } from "../agent"
 import { Global } from "../global"
-import { Location } from "../location"
 import { PermissionV2 } from "../permission"
 import { PluginV2 } from "../plugin"
 
@@ -97,12 +96,50 @@ Rules:
 - If the conversation ends with an unanswered question to the user, preserve that exact question
 - If the conversation ends with an imperative statement or request to the user (e.g. "Now please run the command and paste the console output"), always include that exact request in the summary`
 
+/** Read-only bash invocations allowed without prompt in plan mode. Use "cmd *" form (matches bare cmd too). */
+export const planModeBashReadonly = [
+  "pwd",
+  "ls *",
+  "cat *",
+  "head *",
+  "tail *",
+  "grep *",
+  "rg *",
+  "wc *",
+  "which *",
+  "tree *",
+  "git status *",
+  "git log *",
+  "git diff *",
+  "git show *",
+  "git blame *",
+] as const
+
+export function planAgentRestrictions(worktree: string): PermissionV2.Ruleset {
+  return [
+    { action: "plan_enter", resource: "*", effect: "deny" },
+    { action: "question", resource: "*", effect: "allow" },
+    { action: "plan_exit", resource: "*", effect: "allow" },
+    { action: "task", resource: "general", effect: "deny" },
+    { action: "external_directory", resource: path.join(Global.Path.data, "plans", "*"), effect: "allow" },
+    { action: "edit", resource: "*", effect: "deny" },
+    { action: "edit", resource: path.join(".opencode", "plans", "*.md"), effect: "allow" },
+    {
+      action: "edit",
+      resource: path.relative(worktree, path.join(Global.Path.data, "plans", "*.md")),
+      effect: "allow",
+    },
+    { action: "bash", resource: "*", effect: "ask" },
+    ...planModeBashReadonly.map(
+      (resource): PermissionV2.Rule => ({ action: "bash", resource, effect: "allow" }),
+    ),
+  ]
+}
+
 export const Plugin = PluginV2.define({
   id: PluginV2.ID.make("agent"),
   effect: Effect.gen(function* () {
     const agent = yield* AgentV2.Service
-    const location = yield* Location.Service
-    const worktree = location.directory
     const whitelistedDirs = [TRUNCATION_GLOB, path.join(Global.Path.tmp, "*")]
     const readonlyExternalDirectory: PermissionV2.Ruleset = [
       { action: "external_directory", resource: "*", effect: "ask" },
@@ -142,14 +179,6 @@ export const Plugin = PluginV2.define({
           ...PermissionV2.merge(defaults, [
             { action: "question", resource: "*", effect: "allow" },
             { action: "plan_exit", resource: "*", effect: "allow" },
-            { action: "external_directory", resource: path.join(Global.Path.data, "plans", "*"), effect: "allow" },
-            { action: "edit", resource: "*", effect: "deny" },
-            { action: "edit", resource: path.join(".opencode", "plans", "*.md"), effect: "allow" },
-            {
-              action: "edit",
-              resource: path.relative(worktree, path.join(Global.Path.data, "plans", "*.md")),
-              effect: "allow",
-            },
           ]),
         )
       })

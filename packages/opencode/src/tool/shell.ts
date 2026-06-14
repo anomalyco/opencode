@@ -120,6 +120,51 @@ function source(node: Node) {
   return (node.parent?.type === "redirected_statement" ? node.parent.text : node.text).trim()
 }
 
+const WRITE_REDIRECT = new Set([">", ">>", "&>", "&>>", ">|", ">&"])
+
+function redirectDest(node: Node, ps: boolean) {
+  const parent = node.parent
+  if (!parent || parent.type !== "redirected_statement") return
+
+  for (let i = 0; i < parent.childCount; i++) {
+    const child = parent.child(i)
+    if (!child) continue
+    if (ps) {
+      if (child.type !== "file_redirect" && child.type !== "redirected_output") continue
+      const text = child.text.trim()
+      if (!/^(\*>>?|>>?)/.test(text)) continue
+      const dest = child.childForFieldName("destination")
+      if (dest) return dest.text
+      for (let j = child.childCount - 1; j >= 0; j--) {
+        const part = child.child(j)
+        if (!part) continue
+        if (part.type === "word" || part.type === "string" || part.type === "raw_string" || part.type === "concatenation")
+          return part.text
+      }
+      continue
+    }
+    if (child.type !== "file_redirect") continue
+    const text = child.text.trim()
+    if (/^<<</.test(text) || /^<</.test(text) || /^</.test(text)) continue
+    const operator = child.childForFieldName("operator")?.text ?? text.match(/^(\d*&?>|\d*>>&?|>>|>\||>&)/)?.[1]
+    if (!operator) continue
+    if (/^\d+>$/.test(operator) || /^\d+>>$/.test(operator)) continue
+    if (!WRITE_REDIRECT.has(operator) && operator !== ">" && operator !== ">>" && !/^\d*&>/.test(operator)) continue
+    const dest = child.childForFieldName("destination")
+    if (dest) return dest.text
+    for (let j = child.childCount - 1; j >= 0; j--) {
+      const part = child.child(j)
+      if (!part) continue
+      if (part.type === "word" || part.type === "string" || part.type === "raw_string" || part.type === "concatenation")
+        return part.text
+    }
+  }
+}
+
+function writeRedirect(node: Node, ps: boolean) {
+  return redirectDest(node, ps) !== undefined
+}
+
 function commands(node: Node) {
   return node.descendantsOfType("command").filter((child): child is Node => Boolean(child))
 }
@@ -410,7 +455,16 @@ export const ShellTool = Tool.define(
           }
         }
 
-        if (tokens.length && (!cmd || !CWD.has(cmd))) {
+        const redirect = redirectDest(node, ps)
+        if (redirect) {
+          const resolved = yield* argPath(redirect, cwd, ps, shell)
+          if (resolved) {
+            const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
+            scan.dirs.add(dir)
+          }
+        }
+
+        if (tokens.length && (!cmd || !CWD.has(cmd)) && !writeRedirect(node, ps)) {
           scan.patterns.add(source(node))
           scan.always.add(BashArity.prefix(tokens).join(" ") + " *")
         }
