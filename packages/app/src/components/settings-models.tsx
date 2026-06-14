@@ -8,12 +8,13 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { showToast } from "@opencode-ai/ui/toast"
 import { createMemo, type Component, For, type JSX, Show } from "solid-js"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { useModels } from "@/context/models"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { ModelSelectorPopover } from "./dialog-select-model"
 import { SettingsList } from "./settings-list"
+import { SettingsServerPicker, SettingsServerScope } from "./settings-server-picker"
 
 type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
 type ModelKey = { providerID: string; modelID: string }
@@ -46,8 +47,16 @@ const ListEmptyState: Component<{ message: string; filter: string }> = (props) =
 }
 
 export const SettingsModels: Component = () => {
+  return (
+    <SettingsServerScope>
+      <SettingsModelsContent />
+    </SettingsServerScope>
+  )
+}
+
+const SettingsModelsContent: Component = () => {
   const language = useLanguage()
-  const globalSync = useGlobalSync()
+  const serverSync = useServerSync()
   const models = useModels()
   const providers = useProviders()
 
@@ -60,11 +69,11 @@ export const SettingsModels: Component = () => {
   }
 
   const updateConfig = (config: Config, rollback: () => void) => {
-    void globalSync.updateConfig(config).catch((err: unknown) => handleConfigError(err, rollback))
+    void serverSync().updateConfig(config).catch((err: unknown) => handleConfigError(err, rollback))
   }
 
   const configuredDefaultModel = createMemo(() => {
-    const model = parseConfigModel(globalSync.data.config.model)
+    const model = parseConfigModel(serverSync().data.config.model)
     if (!model) return
     return models.find(model)
   })
@@ -88,12 +97,12 @@ export const SettingsModels: Component = () => {
 
   const setDefaultModel = (model: ModelKey | undefined, options?: { recent?: boolean }) => {
     if (!model) return
-    const before = globalSync.data.config.model
+    const before = serverSync().data.config.model
     const next = `${model.providerID}/${model.modelID}`
-    globalSync.set("config", "model", next)
+    serverSync().set("config", "model", next)
     models.setVisibility(model, true)
     if (options?.recent) models.recent.push(model)
-    updateConfig({ model: next }, () => globalSync.set("config", "model", before))
+    updateConfig({ model: next }, () => serverSync().set("config", "model", before))
   }
 
   const defaultModelState = {
@@ -129,7 +138,10 @@ export const SettingsModels: Component = () => {
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
         <div class="flex flex-col gap-4 pt-6 pb-6 max-w-[720px]">
-          <h2 class="text-16-medium text-text-strong">{language.t("settings.models.title")}</h2>
+          <div class="flex items-center justify-between gap-4">
+            <h2 class="text-16-medium text-text-strong">{language.t("settings.models.title")}</h2>
+            <SettingsServerPicker />
+          </div>
           <div class="flex items-center gap-2 px-3 h-9 rounded-lg bg-surface-base">
             <Icon name="magnifying-glass" class="text-icon-weak-base flex-shrink-0" />
             <TextField

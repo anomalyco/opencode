@@ -1,7 +1,7 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createStore } from "solid-js/store"
 import { createEffect, onCleanup, onMount } from "solid-js"
-import { useGlobalSDK } from "./global-sdk"
+import { useServerSDK } from "./server-sdk"
 import { usePlatform } from "./platform"
 import { useSettings } from "./settings"
 import { NOTIFICATION_PERMISSION_GRANTED_EVENT } from "@/utils/notification-click"
@@ -47,7 +47,7 @@ function finiteNumber(value: unknown) {
 export const { use: usePush, provider: PushProvider } = createSimpleContext({
   name: "Push",
   init: () => {
-    const globalSDK = useGlobalSDK()
+    const serverSDK = useServerSDK()
     const platform = usePlatform()
     const settings = useSettings()
     const supported =
@@ -144,9 +144,10 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
       notifyOnError: item.notifyOnError,
       serverOrigin: item.serverOrigin,
     })
+    type PushDeviceResult = Parameters<typeof normalizeDevice>[0]
 
     const refreshDevices = async () => {
-      const result = await globalSDK.client.global.listPushSubscriptions().catch(() => undefined)
+      const result = await serverSDK().client.global.listPushSubscriptions().catch(() => undefined)
       const devices = (result?.data ?? []).map(normalizeDevice)
       setStore("devices", devices)
       return devices
@@ -220,7 +221,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
           const worker = await registration()
           if (!worker) return
 
-          const pushPublicKey = await globalSDK.client.global.pushPublicKey().catch(() => undefined)
+          const pushPublicKey = await serverSDK().client.global.pushPublicKey().catch(() => undefined)
           const publicKey =
             pushPublicKey?.data?.supported === true && typeof pushPublicKey.data.publicKey === "string"
               ? pushPublicKey.data.publicKey
@@ -258,7 +259,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
 
           const json = subscription.toJSON()
           if (!json.endpoint || !json.keys?.auth || !json.keys?.p256dh) return
-          const result = await globalSDK.client.global.upsertPushSubscription({
+          const result = await serverSDK().client.global.upsertPushSubscription({
             deviceLabel: store.deviceLabel.trim() || undefined,
             endpoint: json.endpoint,
             expirationTime: json.expirationTime ?? undefined,
@@ -304,7 +305,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
       const subscription = await worker.pushManager.getSubscription().catch(() => undefined)
       const id = await subscriptionID(subscription)
       if (id) {
-        await globalSDK.client.global.removePushSubscription({ id }).catch(() => undefined)
+        await serverSDK().client.global.removePushSubscription({ id }).catch(() => undefined)
       }
       const removed = subscription ? await subscription.unsubscribe().catch(() => false) : true
       await refreshDevices()
@@ -325,24 +326,16 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
 
     const removeDevice = async (id: string) => {
       if (id === store.subscriptionID) return unsubscribe()
-      const removed = await globalSDK.client.global.removePushSubscription({ id }).catch(() => false)
+      const removed = await serverSDK().client.global.removePushSubscription({ id }).catch(() => false)
       await refreshDevices()
       return removed === true
     }
 
     const setDeviceEnabled = async (id: string, enabled: boolean) => {
       const result = await (
-        globalSDK.client.global as typeof globalSDK.client.global & {
+        serverSDK().client.global as {
           updatePushSubscription: (input: { id: string; enabled?: boolean }) => Promise<{
-            data?: {
-              deviceLabel?: string
-              id: string
-              failureCount: number
-              lastError?: string
-              lastFailureAt?: number | null
-              lastSuccessAt?: number | null
-              serverOrigin: string
-            }
+            data?: PushDeviceResult
           }>
         }
       )
@@ -359,17 +352,9 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
     const updateDeviceLabel = async (id: string, value: string) => {
       const trimmed = value.trim()
       const result = await (
-        globalSDK.client.global as typeof globalSDK.client.global & {
+        serverSDK().client.global as {
           updatePushSubscription: (input: { id: string; deviceLabel?: string }) => Promise<{
-            data?: {
-              deviceLabel?: string
-              id: string
-              failureCount: number
-              lastError?: string
-              lastFailureAt?: number | null
-              lastSuccessAt?: number | null
-              serverOrigin: string
-            }
+            data?: PushDeviceResult
           }>
         }
       )
@@ -400,7 +385,7 @@ export const { use: usePush, provider: PushProvider } = createSimpleContext({
       const subscription = worker ? await worker.pushManager.getSubscription().catch(() => undefined) : undefined
       const id = await subscriptionID(subscription)
       const result = await (
-        globalSDK.client.global as typeof globalSDK.client.global & {
+        serverSDK().client.global as {
           testPush: (input?: { id?: string }) => Promise<{ data?: { sent?: boolean } }>
         }
       )

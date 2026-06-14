@@ -45,6 +45,15 @@ export const dict = {
   "ui.sessionTurn.error.freeUsageExceeded": "無料使用制限に達しました",
   "ui.sessionTurn.error.addCredits": "クレジットを追加",
 
+  "dialog.usageExceeded.freeTier.title": "無料制限に達しました",
+  "dialog.usageExceeded.freeTier.description":
+    "OpenCode Go にサブスクライブして、最高のオープンソースモデルに安定してアクセスできます。月額 $5 から。",
+  "dialog.usageExceeded.freeTier.actionLabel": "サブスクライブ",
+  "dialog.usageExceeded.accountRateLimit.title": "Go の制限に達しました",
+  "dialog.usageExceeded.accountRateLimit.description":
+    "使用制限に達しました。今すぐこのモデルを使い続けるには、利用可能な残高からの使用を有効にしてください",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "設定を開く",
+
   "ui.sessionTurn.status.delegating": "作業を委任中",
   "ui.sessionTurn.status.planning": "次のステップを計画中",
   "ui.sessionTurn.status.gatheringContext": "探索中",

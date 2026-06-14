@@ -1,5 +1,5 @@
 import { integer, text, sqliteTable } from "drizzle-orm/sqlite-core"
-import { Timestamps } from "@/storage/schema.sql"
+import { Timestamps } from "@opencode-ai/core/database/schema.sql"
 
 export const PushSubscriptionTable = sqliteTable("push_subscription", {
   id: text().primaryKey(),

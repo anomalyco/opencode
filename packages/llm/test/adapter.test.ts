@@ -1,12 +1,12 @@
 import { describe, expect } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { LLM } from "../src"
-import { Route, Endpoint, LLMClient, Protocol, type RouteModelInput, type FramingDef } from "../src/route"
-import { ModelRef } from "../src/schema"
+import { Route, Endpoint, LLMClient, Protocol, type FramingDef } from "../src/route"
+import { Model } from "../src/schema"
 import { testEffect } from "./lib/effect"
 import { dynamicResponse } from "./lib/http"
 
-const updateModel = (model: ModelRef, patch: Partial<ModelRef.Input>) => ModelRef.update(model, patch)
+const updateModel = (model: Model, patch: Partial<Model.Input>) => Model.update(model, patch)
 
 const Json = Schema.fromJsonString(Schema.Unknown)
 const encodeJson = Schema.encodeSync(Json)
@@ -37,17 +37,6 @@ const fakeFraming: FramingDef<FakeEvent> = {
       ),
     ).pipe(Stream.flatMap(Stream.fromIterable)),
 }
-
-const request = LLM.request({
-  id: "req_1",
-  model: LLM.model({
-    id: "fake-model",
-    provider: "fake-provider",
-    route: "fake",
-    baseURL: "https://fake.local",
-  }),
-  prompt: "hello",
-})
 
 const raiseEvent = (event: FakeEvent): import("../src/schema").LLMEvent =>
   event.type === "finish"
@@ -84,12 +73,24 @@ const fake = Route.make({
   endpoint: Endpoint.path("/chat"),
   framing: fakeFraming,
 })
+const configuredFake = fake.with({ endpoint: { baseURL: "https://fake.local" } })
 
 const gemini = Route.make({
   id: "gemini-fake",
   protocol: fakeProtocol,
   endpoint: Endpoint.path("/chat"),
   framing: fakeFraming,
+})
+const configuredGemini = gemini.with({ endpoint: { baseURL: "https://fake.local" } })
+
+const request = LLM.request({
+  id: "req_1",
+  model: Model.make({
+    id: "fake-model",
+    provider: "fake-provider",
+    route: configuredFake,
+  }),
+  prompt: "hello",
 })
 
 const echoLayer = dynamicResponse(({ text, respond }) =>
@@ -117,61 +118,47 @@ describe("llm route", () => {
     }),
   )
 
-  it.effect("selects routes by request route", () =>
+  it.effect("selects routes by model route value", () =>
     Effect.gen(function* () {
       const llm = yield* LLMClient.Service
       const prepared = yield* llm.prepare(
-        LLM.updateRequest(request, { model: updateModel(request.model, { route: "gemini-fake" }) }),
+        LLM.updateRequest(request, { model: updateModel(request.model, { route: configuredGemini }) }),
       )
 
       expect(prepared.route).toBe("gemini-fake")
     }),
   )
 
-  it.effect("maps model input before building refs", () =>
+  it.effect("builds models from configured routes", () =>
     Effect.gen(function* () {
-      const mapped = Route.model<RouteModelInput & { readonly region?: string }>(
-        fake,
-        { provider: "fake-provider", baseURL: "https://fake.local" },
-        {
-          mapInput: (input) => {
-            const { region, ...rest } = input
-            return { ...rest, native: { region } }
+      const configured = fake.with({ provider: "fake-provider", endpoint: { baseURL: "https://fake.local" } })
+
+      expect(configured.model({ id: "fake-model" })).toMatchObject({
+        provider: "fake-provider",
+      })
+    }),
+  )
+
+  it.effect("does not register duplicate route ids globally", () =>
+    Effect.gen(function* () {
+      const duplicate = Route.make({
+        id: "fake",
+        protocol: Protocol.make({
+          ...fakeProtocol,
+          body: {
+            ...fakeProtocol.body,
+            from: () => Effect.succeed({ body: "late-default" }),
           },
-        },
+        }),
+        endpoint: Endpoint.path("/chat", { baseURL: "https://fake.local" }),
+        framing: fakeFraming,
+      })
+
+      const prepared = yield* (yield* LLMClient.Service).prepare(
+        LLM.updateRequest(request, { model: updateModel(request.model, { route: duplicate }) }),
       )
 
-      expect(mapped({ id: "fake-model", region: "us-east-1" }).native).toEqual({ region: "us-east-1" })
-    }),
-  )
-
-  it.effect("rejects duplicate route ids", () =>
-    Effect.gen(function* () {
-      expect(() =>
-        Route.make({
-          id: "fake",
-          protocol: Protocol.make({
-            ...fakeProtocol,
-            body: {
-              ...fakeProtocol.body,
-              from: () => Effect.succeed({ body: "late-default" }),
-            },
-          }),
-          endpoint: Endpoint.path("/chat"),
-          framing: fakeFraming,
-        }),
-      ).toThrow('Duplicate LLM route id "fake"')
-    }),
-  )
-
-  it.effect("rejects missing route", () =>
-    Effect.gen(function* () {
-      const llm = yield* LLMClient.Service
-      const error = yield* llm
-        .prepare(LLM.updateRequest(request, { model: updateModel(request.model, { route: "missing" }) }))
-        .pipe(Effect.flip)
-
-      expect(error.message).toContain("No LLM route")
+      expect(prepared.body).toEqual({ body: "late-default" })
     }),
   )
 })

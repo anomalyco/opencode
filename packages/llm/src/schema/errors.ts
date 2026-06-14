@@ -1,6 +1,9 @@
 import { Schema } from "effect"
 import { ModelID, ProviderID, ProviderMetadata, RouteID } from "./ids"
 
+export const ProviderFailureClassification = Schema.Literal("context-overflow")
+export type ProviderFailureClassification = typeof ProviderFailureClassification.Type
+
 export class HttpRequestDetails extends Schema.Class<HttpRequestDetails>("LLM.HttpRequestDetails")({
   method: Schema.String,
   url: Schema.String,
@@ -32,6 +35,7 @@ export class InvalidRequestReason extends Schema.Class<InvalidRequestReason>("LL
   _tag: Schema.tag("InvalidRequest"),
   message: Schema.String,
   parameter: Schema.optional(Schema.String),
+  classification: Schema.optional(ProviderFailureClassification),
   providerMetadata: Schema.optional(ProviderMetadata),
   http: Schema.optional(HttpContext),
 }) {

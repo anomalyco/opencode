@@ -2,13 +2,16 @@ import { describe, expect } from "bun:test"
 import { createGroq } from "@ai-sdk/groq"
 import { Effect, Layer } from "effect"
 import { AISDK } from "@opencode-ai/core/aisdk"
+import { EventV2 } from "@opencode-ai/core/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { GroqPlugin } from "@opencode-ai/core/plugin/provider/groq"
 import { it, model } from "./provider-helper"
 import { testEffect } from "../lib/effect"
 
-const aisdkIt = testEffect(AISDK.layer.pipe(Layer.provideMerge(PluginV2.defaultLayer)))
+const aisdkIt = testEffect(
+  AISDK.layer.pipe(Layer.provideMerge(PluginV2.locationLayer.pipe(Layer.provide(EventV2.defaultLayer)))),
+)
 
 describe("GroqPlugin", () => {
   it.effect("creates a Groq SDK for @ai-sdk/groq", () =>
@@ -72,25 +75,21 @@ describe("GroqPlugin", () => {
     }),
   )
 
-  aisdkIt.effect("uses the default languageModel(apiID) behavior", () =>
+  aisdkIt.effect("uses the default languageModel(api.id) behavior", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const aisdk = yield* AISDK.Service
       yield* plugin.add(GroqPlugin)
       const result = yield* aisdk.language(
         model("groq", "alias", {
-          apiID: ModelV2.ID.make("llama-api"),
-          endpoint: {
+          api: {
+            id: ModelV2.ID.make("llama-api"),
             type: "aisdk",
             package: "@ai-sdk/groq",
           },
-          options: {
+          request: {
             headers: {},
-            body: {},
-            aisdk: {
-              provider: { apiKey: "test" },
-              request: {},
-            },
+            body: { apiKey: "test" },
           },
         }),
       )

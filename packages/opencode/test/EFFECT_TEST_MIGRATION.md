@@ -149,7 +149,7 @@ Do not maintain a long file checklist here. It goes stale quickly.
 When looking for the next target, search for current anti-patterns:
 
 ```bash
-git grep -n "Effect.runPromise\|ManagedRuntime\|Promise.withResolvers\|Bun.sleep\|WithInstance" -- packages/opencode/test
+git grep -n "Effect.runPromise\|ManagedRuntime\|Promise.withResolvers\|Bun.sleep\|withTestInstance" -- packages/opencode/test
 ```
 
 Then choose one file or one small cluster, keep the PR focused, and mention

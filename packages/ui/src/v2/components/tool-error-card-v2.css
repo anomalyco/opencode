@@ -1,0 +1,200 @@
+[data-component="tool-error-card"] {
+  --tec-border: var(--state-fg-danger);
+  --tec-title: var(--text-text-base);
+  --tec-sep: var(--text-text-muted);
+  --tec-subtitle: var(--text-text-muted);
+  --tec-suffix: var(--text-text-faint);
+  --tec-chevron: var(--text-text-faint);
+  --tec-icon: var(--icon-icon-base);
+
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  min-width: 0;
+  width: 100%;
+  padding: 0 0 0 10px;
+  gap: 8px;
+  border-left: 2px solid var(--tec-border);
+  font-variant-numeric: tabular-nums;
+
+  [data-slot="tool-error-card-trigger"] {
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
+    min-height: 24px;
+    padding: 2px 0;
+    margin: 0;
+    text-align: left;
+    color: inherit;
+    outline: none;
+    border-radius: 2px;
+  }
+
+  [data-slot="tool-error-card-trigger"]:focus-visible {
+    outline: 2px solid var(--border-border-focus);
+    outline-offset: 2px;
+  }
+
+  [data-slot="tool-error-card-icon-wrap"] {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 16px;
+    height: 20px;
+    box-sizing: border-box;
+    color: var(--tec-icon);
+  }
+
+  [data-slot="tool-error-card-ban"] {
+    display: block;
+    flex-shrink: 0;
+  }
+
+  [data-slot="tool-error-card-loader"] {
+    display: block;
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    animation: tool-error-card-spin 0.65s linear infinite;
+    transform-origin: 50% 50%;
+  }
+
+  [data-slot="tool-error-card-main"] {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: flex-start;
+    min-width: 0;
+    min-height: 20px;
+    flex: 1 1 auto;
+  }
+
+  [data-slot="tool-error-card-labels"] {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  [data-slot="tool-error-card-title"] {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    max-width: 100%;
+    height: 20px;
+    font-size: 13px;
+    font-weight: 530;
+    line-height: 20px;
+    letter-spacing: -0.04px;
+    color: var(--tec-title);
+    user-select: none;
+  }
+
+  [data-slot="tool-error-card-sep"] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    height: 20px;
+    font-size: 11px;
+    font-weight: 530;
+    line-height: 20px;
+    letter-spacing: 0.05px;
+    color: var(--tec-sep);
+    user-select: none;
+  }
+
+  [data-slot="tool-error-card-subtitle"] {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    height: 20px;
+    flex: 0 1 auto;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 440;
+    line-height: 20px;
+    letter-spacing: -0.04px;
+    color: var(--tec-subtitle);
+    user-select: none;
+  }
+
+  a[data-slot="tool-error-card-subtitle"] {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    height: 20px;
+    flex: 0 1 auto;
+    flex-shrink: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 13px;
+    font-weight: 440;
+    line-height: 20px;
+    letter-spacing: -0.04px;
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    user-select: none;
+  }
+
+  [data-slot="tool-error-card-chevron-wrap"] {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 14px;
+    height: 20px;
+    color: var(--tec-chevron);
+    user-select: none;
+  }
+
+  [data-slot="tool-error-card-chevron"] {
+    display: block;
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    color: var(--tec-chevron);
+    transition: transform 0.15s ease-out;
+  }
+
+  &[data-expanded] [data-slot="tool-error-card-chevron"] {
+    transform: rotate(90deg);
+  }
+
+  [data-slot="tool-error-card-content"] {
+    box-sizing: border-box;
+    min-width: 0;
+  }
+
+  [data-slot="tool-error-card-suffix"] {
+    padding: 0 0 0 24px;
+    font-size: 13px;
+    font-weight: 440;
+    line-height: 1;
+    letter-spacing: -0.04px;
+    color: var(--tec-suffix);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+}
+
+@keyframes tool-error-card-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
