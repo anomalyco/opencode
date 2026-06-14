@@ -321,15 +321,20 @@ const live: Layer.Layer<
                       input.model,
                       prepared.messageTransformOptions,
                     )
-                    // Dump raw prompt after transform
-                    console.log("[RAW-PROMPT]", JSON.stringify(args.params.prompt.map((m: any) => ({
-                      role: m.role,
-                      contentLen: Array.isArray(m.content) ? m.content.length : (m.content?.length || 0),
-                      hasReasoningPart: Array.isArray(m.content) && m.content.some((p: any) => p.type === "reasoning"),
-                      providerKeys: m.providerOptions ? Object.keys(m.providerOptions) : [],
-                      hasRc: !!(m.providerOptions as any)?.openaiCompatible?.reasoning_content,
-                      rcPreview: ((m.providerOptions as any)?.openaiCompatible?.reasoning_content || "").slice(0, 80),
-                    }))))
+                    // Dump raw prompt to /tmp for inspection
+                    try {
+                      const dump = args.params.prompt.map((m: any) => ({
+                        role: m.role,
+                        contentLen: Array.isArray(m.content) ? m.content.length : (m.content?.length || 0),
+                        hasReasoningPart: Array.isArray(m.content) && m.content.some((p: any) => p.type === "reasoning"),
+                        providerKeys: m.providerOptions ? Object.keys(m.providerOptions) : [],
+                        hasRc: !!(m.providerOptions as any)?.openaiCompatible?.reasoning_content,
+                        rcPreview: ((m.providerOptions as any)?.openaiCompatible?.reasoning_content || "").slice(0, 80),
+                      }))
+                      const ts = Date.now()
+                      const path = `/tmp/opencode-prompt-${ts}.json`
+                      await Bun.write(path, JSON.stringify(dump, null, 2))
+                    } catch(e) {}
                   }
                   return args.params
                 },
