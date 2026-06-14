@@ -366,6 +366,8 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
         })
       },
+      "session.next.ace.decision": () => Effect.void,
+      "session.next.ace.pressure": () => Effect.void,
       "session.next.retried": () => Effect.void,
       "session.next.compaction.started": () => Effect.void,
       "session.next.compaction.delta": () => Effect.void,

@@ -14,6 +14,8 @@ import { Config } from "@/config/config"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { ACE, Headless, Profiles } from "@/ace"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
 
 export interface TaskPromptOps {
@@ -50,6 +52,25 @@ const BaseParameterFields = {
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
+  profile: Schema.optional(Schema.Literals(Profiles.PROFILE_IDS)).annotate({
+    description:
+      "ACE headless task profile (create-file, refactor, bugfix, unit-tests). When set, the task prompt is assembled from the profile template in docs/ace-headless-subagent-profiles.md",
+  }),
+  target_path: Schema.optional(Schema.String).annotate({
+    description: "Primary file path for profile placeholders (TARGET_FILE_PATH / SOURCE_FILE_PATH)",
+  }),
+  target_paths: Schema.optional(Schema.String).annotate({
+    description: "One or more paths for bugfix profile (TARGET_PATHS); defaults to target_path",
+  }),
+  test_path: Schema.optional(Schema.String).annotate({
+    description: "Destination test file path for unit-tests profile (TEST_FILE_PATH)",
+  }),
+  tech_stack: Schema.optional(Schema.String).annotate({
+    description: "Language or framework hint for create-file profile (TECH_STACK)",
+  }),
+  test_framework: Schema.optional(Schema.String).annotate({
+    description: "Test runner label for unit-tests profile (TEST_FRAMEWORK); default bun test",
+  }),
 }
 
 const BaseParameters = Schema.Struct(BaseParameterFields)
@@ -111,6 +132,32 @@ function criticalityRejectionText(m: Criticality.Metrics): string {
 }
 
 export const TaskTool = Tool.define(
+type TaskModel = {
+  modelID: string
+  providerID: string
+}
+
+type TaskMetadata = {
+  parentSessionId: SessionID
+  sessionId: SessionID
+  model: TaskModel
+  background?: boolean
+  jobId?: string
+  ace?: { blocked: boolean }
+}
+
+export const TaskTool = Tool.define<
+  typeof Parameters,
+  TaskMetadata,
+  | Agent.Service
+  | BackgroundJob.Service
+  | Config.Service
+  | Session.Service
+  | Scope.Scope
+  | RuntimeFlags.Service
+  | Database.Service
+  | EventV2Bridge.Service
+>(
   id,
   Effect.gen(function* () {
     const agent = yield* Agent.Service
@@ -121,6 +168,14 @@ export const TaskTool = Tool.define(
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const events = yield* EventV2Bridge.Service
+
+    const spawnDepth = (sessionID: SessionID): Effect.Effect<number> =>
+      Effect.gen(function* () {
+        const current = yield* sessions.get(sessionID).pipe(Effect.orDie)
+        if (!current.parentID) return 1
+        return 1 + (yield* spawnDepth(current.parentID))
+      })
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -155,6 +210,39 @@ export const TaskTool = Tool.define(
         ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
       const parent = yield* sessions.get(ctx.sessionID)
+      const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
+        Effect.provideService(Database.Service, database),
+        Effect.orDie,
+      )
+      if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
+      const variant = msg.info.variant
+      const model = next.model ?? {
+        modelID: msg.info.modelID,
+        providerID: msg.info.providerID,
+      }
+      const spawn = yield* ACE.Middleware.gateSpawn({
+        events,
+        config: cfg.ace,
+        sessionID: ctx.sessionID,
+        subagent: next.name,
+        depth: yield* spawnDepth(ctx.sessionID),
+        skip: !!session,
+        ask: (req) => ctx.ask(req),
+      })
+      if (spawn.blocked) {
+        return {
+          title: params.description,
+          output: spawn.blocked,
+          metadata: {
+            parentSessionId: ctx.sessionID,
+            sessionId: ctx.sessionID,
+            model,
+            ...(runInBackground ? { background: true } : {}),
+            ace: { blocked: true },
+          },
+        }
+      }
+      const spawnTracked = spawn.tracked
 
       // Fission-inspired Agent Criticality circuit breaker. Only fresh spawns
       // (not task_id resumes) feed the branching-process estimate and are
@@ -222,17 +310,6 @@ export const TaskTool = Tool.define(
           ],
         }))
 
-      const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
-        Effect.provideService(Database.Service, database),
-        Effect.orDie,
-      )
-      if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
-      const variant = msg.info.variant
-
-      const model = next.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
-      }
       const metadata = {
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,
@@ -258,8 +335,17 @@ export const TaskTool = Tool.define(
       const ops = ctx.extra?.promptOps as TaskPromptOps
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
 
-      const runTask = Effect.fn("TaskTool.runTask")(function* () {
-        const parts = yield* ops.resolvePromptParts(params.prompt)
+      const finishTrackedSpawn = Effect.fn("TaskTool.finishTrackedSpawn")(function* () {
+        if (!spawnTracked) return
+        const policy = ACE.policy(cfg.ace)
+        yield* ACE.emitPressure(events, policy, ACE.finishSpawn(ctx.sessionID), ctx.sessionID)
+      })
+
+      const runTaskBody = Effect.fn("TaskTool.runTask")(function* () {
+        const prefix = Headless.promptPrefix(cfg.ace)
+        const body = Profiles.taskPromptBody(params, cfg.ace)
+        const prompt = prefix ? prefix + body : body
+        const parts = yield* ops.resolvePromptParts(prompt)
         const result = yield* ops.prompt({
           messageID: MessageID.ascending(),
           sessionID: nextSession.id,
@@ -273,6 +359,7 @@ export const TaskTool = Tool.define(
         })
         return result.parts.findLast((item) => item.type === "text")?.text ?? ""
       })
+      const runTask = () => runTaskBody().pipe(Effect.ensuring(finishTrackedSpawn()))
 
       const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
         state: "completed" | "error",

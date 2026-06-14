@@ -10,6 +10,7 @@ import { PermissionSchema } from "./permission/schema"
 import { Policy } from "./policy"
 import { AbsolutePath } from "./schema"
 import { ConfigAgent } from "./config/agent"
+import { ConfigACE } from "./config/ace"
 import { ConfigAttachments } from "./config/attachments"
 import { ConfigCompaction } from "./config/compaction"
 import { ConfigCommand } from "./config/command"
@@ -61,6 +62,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   agents: Schema.Record(Schema.String, ConfigAgent.Info).pipe(Schema.optional).annotate({
     description: "Named built-in agent overrides and custom agent definitions",
+  }),
+  ace: ConfigACE.Info.pipe(Schema.optional).annotate({
+    description: "Adaptive Cascade Enforcer policy for trace-only monitoring and bounded execution gates",
   }),
   snapshots: Schema.Boolean.pipe(Schema.optional).annotate({
     description: "Enable snapshots used for undo and revert behavior",
