@@ -40,8 +40,44 @@ function configMode(raw?: string): AceMode {
   return "fixed-cap"
 }
 
-export function AceStatus() {
+/**
+ * Presentational ACE readout. Pure (theme-only) so it can be rendered and
+ * snapshot-tested without the event/sync/route contexts.
+ */
+export function AceReadout(props: {
+  mode: AceMode
+  toolCalls: number
+  spawns: number
+  activeSubagents: number
+  kEff?: number
+  blocked?: string
+}) {
   const { theme } = useTheme()
+  const kEffColor = createMemo(() => {
+    const tone = kEffTone(props.kEff)
+    return tone === "error" ? theme.error : tone === "warning" ? theme.warning : theme.textMuted
+  })
+
+  return (
+    <Show
+      when={props.blocked}
+      fallback={
+        <text fg={theme.textMuted}>
+          ACE {props.mode} {props.toolCalls}tc {props.spawns}sp
+          {props.activeSubagents > 0 ? ` ${props.activeSubagents}active` : ""}
+          <Show when={props.kEff !== undefined}>
+            {" "}
+            <span style={{ fg: kEffColor() }}>k{props.kEff!.toFixed(2)}</span>
+          </Show>
+        </text>
+      }
+    >
+      <text fg={theme.error}>ACE block {props.blocked}</text>
+    </Show>
+  )
+}
+
+export function AceStatus() {
   const event = useEvent()
   const sync = useSync()
   const route = useRoute()
@@ -95,28 +131,16 @@ export function AceStatus() {
 
   const mode = createMemo(() => (store.mode === "off" ? configuredMode() : store.mode))
 
-  const kEffColor = createMemo(() => {
-    const tone = kEffTone(store.kEff)
-    return tone === "error" ? theme.error : tone === "warning" ? theme.warning : theme.textMuted
-  })
-
   return (
     <Show when={activeSessionID() && mode() !== "off"}>
-      <Show
-        when={store.blocked}
-        fallback={
-          <text fg={theme.textMuted}>
-            ACE {mode()} {store.toolCalls}tc {store.spawns}sp
-            {store.activeSubagents > 0 ? ` ${store.activeSubagents}active` : ""}
-            <Show when={store.kEff !== undefined}>
-              {" "}
-              <span style={{ fg: kEffColor() }}>k{store.kEff!.toFixed(2)}</span>
-            </Show>
-          </text>
-        }
-      >
-        <text fg={theme.error}>ACE block {store.blocked}</text>
-      </Show>
+      <AceReadout
+        mode={mode()}
+        toolCalls={store.toolCalls}
+        spawns={store.spawns}
+        activeSubagents={store.activeSubagents}
+        kEff={store.kEff}
+        blocked={store.blocked || undefined}
+      />
     </Show>
   )
 }

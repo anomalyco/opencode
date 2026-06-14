@@ -14,8 +14,35 @@ type BudgetConfig = {
   warn_at?: number[]
 }
 
-export function BudgetStatus() {
+function toneColor(theme: ReturnType<typeof useTheme>["theme"], tone: HealthTone) {
+  return tone === "error" ? theme.error : tone === "warning" ? theme.warning : theme.textMuted
+}
+
+/**
+ * Presentational spend-vs-cap readout. Pure (theme-only) so it can be rendered
+ * and snapshot-tested without the sync/route contexts. Returns nothing when no
+ * cap is configured.
+ */
+export function BudgetReadout(props: { cost: number; cap: number | undefined; warnAt?: number[] }) {
   const { theme } = useTheme()
+  const view = createMemo(() => {
+    const result = budgetView(props.cost, props.cap, props.warnAt)
+    if (!result) return undefined
+    return { ...result, cost: props.cost, cap: props.cap! }
+  })
+
+  return (
+    <Show when={view()}>
+      {(v) => (
+        <text fg={toneColor(theme, v().tone)}>
+          {money.format(v().cost)}/{money.format(v().cap)} ({Math.round(v().pct * 100)}%)
+        </text>
+      )}
+    </Show>
+  )
+}
+
+export function BudgetStatus() {
   const sync = useSync()
   const route = useRoute()
 
@@ -31,27 +58,15 @@ export function BudgetStatus() {
     return experimental?.budget
   })
 
-  const view = createMemo(() => {
+  const cost = createMemo(() => {
     const id = activeSessionID()
     if (!id) return undefined
-    const cap = budget()?.usd
-    if (!cap) return undefined
-    const cost = sync.session.get(id)?.cost ?? 0
-    const result = budgetView(cost, cap, budget()?.warn_at)
-    if (!result) return undefined
-    return { ...result, cost, cap }
+    return sync.session.get(id)?.cost ?? 0
   })
 
-  const color = (tone: HealthTone) =>
-    tone === "error" ? theme.error : tone === "warning" ? theme.warning : theme.textMuted
-
   return (
-    <Show when={view()}>
-      {(v) => (
-        <text fg={color(v().tone)}>
-          {money.format(v().cost)}/{money.format(v().cap)} ({Math.round(v().pct * 100)}%)
-        </text>
-      )}
+    <Show when={cost() !== undefined}>
+      <BudgetReadout cost={cost()!} cap={budget()?.usd} warnAt={budget()?.warn_at} />
     </Show>
   )
 }
