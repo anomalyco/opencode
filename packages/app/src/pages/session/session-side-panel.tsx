@@ -151,6 +151,7 @@ export function SessionSidePanel(props: {
     hasReview: props.canReview,
   })
   const contextOpen = tabState.contextOpen
+  const filesOpen = tabState.filesOpen
   const openedTabs = tabState.openedTabs
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
@@ -299,6 +300,9 @@ export function SessionSidePanel(props: {
                             </div>
                           </Tabs.Trigger>
                         </Show>
+                        <Tabs.Trigger value="files">
+                          <div>{language.t("session.tab.files")}</div>
+                        </Tabs.Trigger>
                         <SortableProvider ids={openedTabs()}>
                           <For each={openedTabs()}>{(tab) => <SortableTab tab={tab} onTabClose={tabs().close} />}</For>
                         </SortableProvider>
@@ -353,6 +357,25 @@ export function SessionSidePanel(props: {
                         </Show>
                       </Tabs.Content>
                     </Show>
+
+                    <Tabs.Content value="files" class="flex flex-col h-full overflow-hidden contain-strict">
+                      <Show when={activeTab() === "files" || filesOpen()}>
+                        <div class="relative flex-1 min-h-0 overflow-hidden bg-background-stronger px-3 py-0">
+                          <Switch>
+                            <Match when={nofiles()}>{empty(language.t("session.files.empty"))}</Match>
+                            <Match when={true}>
+                              <FileTree
+                                path=""
+                                class="pt-3"
+                                modified={diffFiles()}
+                                kinds={kinds()}
+                                onFileClick={(node) => openTab(file.tab(node.path))}
+                              />
+                            </Match>
+                          </Switch>
+                        </div>
+                      </Show>
+                    </Tabs.Content>
 
                     <Show when={activeFileTab()} keyed>
                       {(tab) => <FileTabContent tab={tab} />}

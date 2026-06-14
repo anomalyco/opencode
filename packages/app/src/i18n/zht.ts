@@ -502,6 +502,7 @@ export const dict = {
   "session.tab.session": "工作階段",
   "session.tab.review": "審查",
   "session.tab.context": "上下文",
+  "session.tab.files": "檔案列表",
   "session.panel.reviewAndFiles": "審查與檔案",
   "session.review.filesChanged": "{{count}} 個檔案變更",
   "session.review.change.one": "變更",
