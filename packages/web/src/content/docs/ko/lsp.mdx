@@ -1,15 +1,15 @@
 ---
 title: LSP 서버
-description: OpenCode는 LSP 서버와 통합됩니다.
+description: Daemon Protocol는 LSP 서버와 통합됩니다.
 ---
 
-OpenCode는 Language Server Protocol(LSP) 서버와 통합해 진단 정보를 agent의 피드백으로 사용할 수 있습니다.
+Daemon Protocol는 Language Server Protocol(LSP) 서버와 통합해 진단 정보를 agent의 피드백으로 사용할 수 있습니다.
 
 ---
 
 ## 기본 제공 (Built-in)
 
-OpenCode는 널리 사용되는 언어를 위해 여러 built-in LSP 서버를 제공합니다.
+Daemon Protocol는 널리 사용되는 언어를 위해 여러 built-in LSP 서버를 제공합니다.
 
 | LSP 서버           | 확장자                                                              | 요구 사항                                                  |
 | ------------------ | ------------------------------------------------------------------- | ---------------------------------------------------------- |
@@ -57,7 +57,7 @@ LSP는 기본적으로 비활성화되어 있습니다. 활성화하면 위 확�
 
 ## 작동 방식
 
-LSP가 활성화되어 있고 OpenCode가 파일을 열면 다음과 같이 동작합니다.
+LSP가 활성화되어 있고 Daemon Protocol가 파일을 열면 다음과 같이 동작합니다.
 
 1. 활성화된 모든 LSP 서버에 대해 파일 확장자를 확인합니다.
 2. 적절한 LSP 서버가 아직 실행 중이지 않다면 시작합니다.
@@ -74,7 +74,7 @@ LSP는 언어 서버의 진단을 제공해 agent가 문제를 찾고 수정하�
 
 ## 구성
 
-OpenCode config의 `lsp` 섹션에서 LSP 서버를 활성화하고 사용자 정의할 수 있습니다.
+Daemon Protocol config의 `lsp` 섹션에서 LSP 서버를 활성화하고 사용자 정의할 수 있습니다.
 
 모든 내장 LSP 서버를 활성화하려면 `lsp`를 `true`로 설정하세요.
 

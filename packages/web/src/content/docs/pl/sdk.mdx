@@ -1,13 +1,13 @@
 ---
 title: SDK
-description: Typowany klient JS dla serwera OpenCode.
+description: Typowany klient JS dla serwera Daemon Protocol.
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-Pakiet SDK JS/TS OpenCode zapewnia klienta z bezpiecznym typowaniem (type-safe) do interakcji z serwerem.
-Użyj go do budowania integracji i programowej kontroli OpenCode.
+Pakiet SDK JS/TS Daemon Protocol zapewnia klienta z bezpiecznym typowaniem (type-safe) do interakcji z serwerem.
+Użyj go do budowania integracji i programowej kontroli Daemon Protocol.
 
 [Dowiedz się więcej](/docs/server) o działaniu serwera. Przykłady znajdziesz w [projektach](/docs/ecosystem#projects) stworzonych przez społeczność.
 
@@ -25,7 +25,7 @@ npm install @opencode-ai/sdk
 
 ## Tworzenie klienta
 
-Utwórz instancję OpenCode:
+Utwórz instancję Daemon Protocol:
 
 ```javascript
 import { createOpencode } from "@opencode-ai/sdk"
@@ -69,7 +69,7 @@ opencode.server.close()
 
 ## Tylko klient
 
-Jeśli masz już działającą instancję OpenCode, możesz utworzyć instancję klienta, aby się z nią połączyć:
+Jeśli masz już działającą instancję Daemon Protocol, możesz utworzyć instancję klienta, aby się z nią połączyć:
 
 ```javascript
 import { createOpencodeClient } from "@opencode-ai/sdk"

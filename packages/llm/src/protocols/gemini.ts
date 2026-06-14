@@ -150,7 +150,7 @@ interface ParserState {
 // 1. Sanitize — fix common authoring mistakes Gemini rejects: integer/number
 //    enums (must be strings), `required` entries that don't match a property,
 //    untyped arrays (`items` must be present), and `properties`/`required`
-//    keys on non-object scalars. Mirrors OpenCode's historical Gemini rules.
+//    keys on non-object scalars. Mirrors Daemon Protocol's historical Gemini rules.
 //
 // 2. Project — lossy mapping from JSON Schema to Gemini's schema dialect:
 //    drop empty objects, derive `nullable: true` from `type: [..., "null"]`,

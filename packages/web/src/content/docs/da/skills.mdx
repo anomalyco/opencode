@@ -3,7 +3,7 @@ title: "Agentfærdigheder"
 description: "Definer gjenbrugbar atferd via SKILL.md-definisjoner"
 ---
 
-Agentferdigheter lar OpenCode oppdage gjenbrugbare instruksjoner fra repo- eller hjemmekatalogen din.
+Agentferdigheter lar Daemon Protocol oppdage gjenbrugbare instruksjoner fra repo- eller hjemmekatalogen din.
 Ferdigheter lastes inn på forespørsel via det opprinnelige `skill`-verktøyet – agenter ser tilgængelige ferdigheter og kan laste inn hele innholdet når det er nødvendig.
 
 ---
@@ -11,7 +11,7 @@ Ferdigheter lastes inn på forespørsel via det opprinnelige `skill`-verktøyet 
 ## Placer filer
 
 Opret én mappe per ferdighetsnavn og tilføj inn en `SKILL.md` i den.
-OpenCode søker etter disse stedene:
+Daemon Protocol søker etter disse stedene:
 
 - Prosjektkonfigurasjon: `.opencode/skills/<name>/SKILL.md`
 - Global konfigurasjon: `~/.config/opencode/skills/<name>/SKILL.md`
@@ -24,7 +24,7 @@ OpenCode søker etter disse stedene:
 
 ## Forstå opdagelsen
 
-For prosjektlokale stier går OpenCode opp fra din nåværende arbejdskatalog til den når git-arbeidstreet.
+For prosjektlokale stier går Daemon Protocol opp fra din nåværende arbejdskatalog til den når git-arbeidstreet.
 Den laster alle matchende `skills/*/SKILL.md` i `.opencode/` og alle matchende `.claude/skills/*/SKILL.md` eller `.agents/skills/*/SKILL.md` underveis.
 
 Globale definisjoner lastes også inn fra `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` og `~/.agents/skills/*/SKILL.md`.
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## Genkend værktøjsbeskrivelsen
 
-OpenCode viser tilgængelige ferdigheter i `skill` verktøybeskrivelsen.
+Daemon Protocol viser tilgængelige ferdigheter i `skill` verktøybeskrivelsen.
 Hver oppføring inneholder ferdighetsnavnet og beskrivelsen:
 
 ```xml

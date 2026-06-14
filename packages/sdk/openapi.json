@@ -311,7 +311,7 @@
             }
           }
         },
-        "description": "Get health information about the OpenCode server.",
+        "description": "Get health information about the Daemon Protocol server.",
         "summary": "Get health",
         "x-codeSamples": [
           {
@@ -348,7 +348,7 @@
             }
           }
         },
-        "description": "Subscribe to global events from the OpenCode system using server-sent events.",
+        "description": "Subscribe to global events from the Daemon Protocol system using server-sent events.",
         "summary": "Get global events",
         "x-codeSamples": [
           {
@@ -385,7 +385,7 @@
             }
           }
         },
-        "description": "Retrieve the current global OpenCode configuration settings and preferences.",
+        "description": "Retrieve the current global Daemon Protocol configuration settings and preferences.",
         "summary": "Get global configuration",
         "x-codeSamples": [
           {
@@ -427,7 +427,7 @@
             }
           }
         },
-        "description": "Update global OpenCode configuration settings and preferences.",
+        "description": "Update global Daemon Protocol configuration settings and preferences.",
         "summary": "Update global configuration",
         "requestBody": {
           "content": {
@@ -474,7 +474,7 @@
             }
           }
         },
-        "description": "Clean up and dispose all OpenCode instances, releasing all resources.",
+        "description": "Clean up and dispose all Daemon Protocol instances, releasing all resources.",
         "summary": "Dispose instance",
         "x-codeSamples": [
           {
@@ -661,7 +661,7 @@
             }
           }
         },
-        "description": "Retrieve the current OpenCode configuration settings and preferences.",
+        "description": "Retrieve the current Daemon Protocol configuration settings and preferences.",
         "summary": "Get configuration",
         "x-codeSamples": [
           {
@@ -720,7 +720,7 @@
             }
           }
         },
-        "description": "Update OpenCode configuration settings and preferences.",
+        "description": "Update Daemon Protocol configuration settings and preferences.",
         "summary": "Update configuration",
         "requestBody": {
           "content": {
@@ -1006,7 +1006,7 @@
             }
           }
         },
-        "description": "Persist a new active Console account/org selection for the current local OpenCode state.",
+        "description": "Persist a new active Console account/org selection for the current local Daemon Protocol state.",
         "summary": "Switch active Console org",
         "requestBody": {
           "content": {
@@ -1558,7 +1558,7 @@
             }
           }
         },
-        "description": "Get a list of all OpenCode sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.",
+        "description": "Get a list of all Daemon Protocol sessions across projects, sorted by most recently updated. Archived sessions are excluded by default.",
         "summary": "List sessions",
         "x-codeSamples": [
           {
@@ -2214,7 +2214,7 @@
             }
           }
         },
-        "description": "Clean up and dispose the current OpenCode instance, releasing all resources.",
+        "description": "Clean up and dispose the current Daemon Protocol instance, releasing all resources.",
         "summary": "Dispose instance",
         "x-codeSamples": [
           {
@@ -2268,7 +2268,7 @@
             }
           }
         },
-        "description": "Retrieve the current working directory and related path information for the OpenCode instance.",
+        "description": "Retrieve the current working directory and related path information for the Daemon Protocol instance.",
         "summary": "Get paths",
         "x-codeSamples": [
           {
@@ -2653,7 +2653,7 @@
             }
           }
         },
-        "description": "Get a list of all available commands in the OpenCode system.",
+        "description": "Get a list of all available commands in the Daemon Protocol system.",
         "summary": "List commands",
         "x-codeSamples": [
           {
@@ -2711,7 +2711,7 @@
             }
           }
         },
-        "description": "Get a list of all available AI agents in the OpenCode system.",
+        "description": "Get a list of all available AI agents in the Daemon Protocol system.",
         "summary": "List agents",
         "x-codeSamples": [
           {
@@ -2785,7 +2785,7 @@
             }
           }
         },
-        "description": "Get a list of all available skills in the OpenCode system.",
+        "description": "Get a list of all available skills in the Daemon Protocol system.",
         "summary": "List skills",
         "x-codeSamples": [
           {
@@ -3593,7 +3593,7 @@
             }
           }
         },
-        "description": "Get a list of projects that have been opened with OpenCode.",
+        "description": "Get a list of projects that have been opened with Daemon Protocol.",
         "summary": "List all projects",
         "x-codeSamples": [
           {
@@ -3647,7 +3647,7 @@
             }
           }
         },
-        "description": "Retrieve the currently active project that OpenCode is working with.",
+        "description": "Retrieve the currently active project that Daemon Protocol is working with.",
         "summary": "Get current project",
         "x-codeSamples": [
           {
@@ -4095,7 +4095,7 @@
             }
           }
         },
-        "description": "Get a list of all active pseudo-terminal (PTY) sessions managed by OpenCode.",
+        "description": "Get a list of all active pseudo-terminal (PTY) sessions managed by Daemon Protocol.",
         "summary": "List PTY sessions",
         "x-codeSamples": [
           {
@@ -5369,7 +5369,7 @@
             }
           }
         },
-        "description": "Get a list of all OpenCode sessions, sorted by most recently updated.",
+        "description": "Get a list of all Daemon Protocol sessions, sorted by most recently updated.",
         "summary": "List sessions",
         "x-codeSamples": [
           {
@@ -5428,7 +5428,7 @@
             }
           }
         },
-        "description": "Create a new OpenCode session for interacting with AI assistants and managing conversations.",
+        "description": "Create a new Daemon Protocol session for interacting with AI assistants and managing conversations.",
         "summary": "Create session",
         "requestBody": {
           "content": {
@@ -5621,7 +5621,7 @@
             }
           }
         },
-        "description": "Retrieve detailed information about a specific OpenCode session.",
+        "description": "Retrieve detailed information about a specific Daemon Protocol session.",
         "summary": "Get session",
         "x-codeSamples": [
           {

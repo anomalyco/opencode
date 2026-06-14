@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: 使用 OpenCode 終端機使用者介面。
+description: 使用 Daemon Protocol 終端機使用者介面。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode 提供了一個互動式終端機介面（TUI），用於配合 LLM 處理您的專案。
+Daemon Protocol 提供了一個互動式終端機介面（TUI），用於配合 LLM 處理您的專案。
 
-執行 OpenCode 即可啟動當前目錄的 TUI。
+執行 Daemon Protocol 即可啟動當前目錄的 TUI。
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## 指令
 
-使用 OpenCode TUI 時，您可以輸入 `/` 後跟指令名稱來快速執行操作。例如：
+使用 Daemon Protocol TUI 時，您可以輸入 `/` 後跟指令名稱來快速執行操作。例如：
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### connect
 
-將供應商新增到 OpenCode。允許您從可用的供應商中選擇並新增其 API 金鑰。
+將供應商新增到 Daemon Protocol。允許您從可用的供應商中選擇並新增其 API 金鑰。
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### exit
 
-退出 OpenCode。_別名_：`/quit`、`/q`
+退出 Daemon Protocol。_別名_：`/quit`、`/q`
 
 ```bash frame="none"
 /exit
@@ -390,7 +390,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 - `theme` - 設定您的 UI 主題。[了解更多](/docs/themes)。
 - `keybinds` - 自訂鍵盤快速鍵。[了解更多](/docs/keybinds)。
-- `leader_timeout` - 控制按下 leader key 後 OpenCode 等待後續按鍵的時間。預設為 `2000`。
+- `leader_timeout` - 控制按下 leader key 後 Daemon Protocol 等待後續按鍵的時間。預設為 `2000`。
 - `scroll_acceleration.enabled` - 啟用 macOS 風格的捲動加速，實現平滑、自然的捲動體驗。啟用後，快速捲動時速度會增加，慢速移動時保持精確。**此設定優先於 `scroll_speed`，啟用時會覆蓋它。**
 - `scroll_speed` - 控制使用捲動指令時 TUI 的捲動速度（最小值：`0.001`，支援小數值）。預設為 `3`。**注意：如果 `scroll_acceleration.enabled` 設定為 `true`，則此設定會被忽略。**
 - `diff_style` - 控制差異呈現方式。`"auto"` 根據終端機寬度自適應，`"stacked"` 始終顯示單列。
@@ -401,7 +401,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### Attention
 
-當 OpenCode 需要你處理問題、核准權限請求、查看工作階段錯誤，或告知工作階段已完成時，TUI 可以透過聲音和桌面通知提醒你。設定 `attention.enabled` 後會啟用這些提醒；內建事件觸發時會播放聲音。桌面通知只會在終端機視窗未聚焦時傳送，且不會用於 subagent 事件。
+當 Daemon Protocol 需要你處理問題、核准權限請求、查看工作階段錯誤，或告知工作階段已完成時，TUI 可以透過聲音和桌面通知提醒你。設定 `attention.enabled` 後會啟用這些提醒；內建事件觸發時會播放聲音。桌面通知只會在終端機視窗未聚焦時傳送，且不會用於 subagent 事件。
 
 - `enabled` - 開啟 Attention 的所有通知和聲音。預設為 `false`。
 - `notifications` - 啟用 Attention 後，允許 TUI 透過終端機傳送桌面通知。預設為 `true`。

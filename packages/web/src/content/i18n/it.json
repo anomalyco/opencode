@@ -53,7 +53,7 @@
   "share.error_id_not_found": "ID non trovato",
   "share.error_api_url_not_found": "URL API non trovato",
   "share.error_connection_failed": "Connessione non riuscita",
-  "share.opencode_version": "Versione OpenCode",
+  "share.opencode_version": "Versione Daemon Protocol",
   "share.opencode_name": "opencode",
   "share.models": "Modelli",
   "share.cost": "Costo",

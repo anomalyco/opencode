@@ -1,15 +1,15 @@
 ---
 title: Konfiguration
-description: Ved at bruge OpenCode JSON konfig.
+description: Ved at bruge Daemon Protocol JSON konfig.
 ---
 
-Du kan konfigurere OpenCode ved hjælp af en JSON-konfigurationsfil.
+Du kan konfigurere Daemon Protocol ved hjælp af en JSON-konfigurationsfil.
 
 ---
 
 ## Format
 
-OpenCode understøtter både **JSON** og **JSONC** (JSON med kommentarer) formater.
+Daemon Protocol understøtter både **JSON** og **JSONC** (JSON med kommentarer) formater.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -96,7 +96,7 @@ Du kan aktivere specifikke servere i din lokale konfiguration:
 
 ### Global
 
-Placer din globale OpenCode-konfiguration i `~/.config/opencode/opencode.json`. Brug global konfiguration til brugerdækkende præferencer som temaer, udbydere eller nøglebindinger.
+Placer din globale Daemon Protocol-konfiguration i `~/.config/opencode/opencode.json`. Brug global konfiguration til brugerdækkende præferencer som temaer, udbydere eller nøglebindinger.
 
 Global config tilsidesætter eksterne organisatoriske standarder.
 
@@ -110,7 +110,7 @@ Tilføj `opencode.json` i dit projektrod. Project config har den højeste forran
 Placer projektspecifik konfiguration i roden af ​​dit projekt.
 :::
 
-Når OpenCode starter op, søger den efter en konfigurationsfil i den aktuelle mappe eller går op til den nærmeste Git-mappe.
+Når Daemon Protocol starter op, søger den efter en konfigurationsfil i den aktuelle mappe eller går op til den nærmeste Git-mappe.
 
 Dette er også sikkert at blive tjekket ind i Git og bruger det samme skema som det globale.
 
@@ -201,7 +201,7 @@ Tilgængelige muligheder:
 
 - `port` - Port til at lytte på.
 - `hostname` - Værtsnavn at lytte på. Når `mdns` er aktiveret, og der ikke er angivet noget værtsnavn, er standarden `0.0.0.0`.
-- `mdns` - Aktiver mDNS-tjenesteopdagelse. Dette gør det muligt for andre enheder på netværket at opdage din OpenCode-server.
+- `mdns` - Aktiver mDNS-tjenesteopdagelse. Dette gør det muligt for andre enheder på netværket at opdage din Daemon Protocol-server.
 - `mdnsDomain` - Brugerdefineret domænenavn til mDNS-tjeneste. Som standard er `opencode.local`. Nyttigt til at køre flere forekomster på det samme netværk.
 - `cors` - Yderligere oprindelser for at tillade CORS ved brug af HTTP-serveren fra en browserbaseret klient. Værdier skal være fulde oprindelser (skema + vært + valgfri port), f.eks. `https://app.example.com`.
 
@@ -229,7 +229,7 @@ Du kan administrere de værktøjer, en LLM kan bruge, gennem indstillingen `tool
 
 ### Modeller (`models`)
 
-Du kan konfigurere de udbydere og modeller, du vil bruge i din OpenCode-konfiguration, gennem mulighederne `provider`, `model` og `small_model`.
+Du kan konfigurere de udbydere og modeller, du vil bruge i din Daemon Protocol-konfiguration, gennem mulighederne `provider`, `model` og `small_model`.
 
 ```json title="opencode.json"
 {
@@ -240,7 +240,7 @@ Du kan konfigurere de udbydere og modeller, du vil bruge i din OpenCode-konfigur
 }
 ```
 
-Indstillingen `small_model` konfigurerer en separat model til lette opgaver som titelgenerering. Som standard forsøger OpenCode at bruge en billigere model, hvis en er tilgængelig fra din udbyder, ellers falder den tilbage til din hovedmodel.
+Indstillingen `small_model` konfigurerer en separat model til lette opgaver som titelgenerering. Som standard forsøger Daemon Protocol at bruge en billigere model, hvis en er tilgængelig fra din udbyder, ellers falder den tilbage til din hovedmodel.
 
 Udbydermuligheder kan omfatte `timeout` og `setCacheKey`:
 
@@ -302,7 +302,7 @@ Bearer tokens (`AWS_BEARER_TOKEN_BEDROCK` eller `/connect`) har forrang over pro
 
 ### Temaer (`themes`)
 
-Du kan konfigurere det tema, du vil bruge i din OpenCode-konfiguration, gennem indstillingen `theme`.
+Du kan konfigurere det tema, du vil bruge i din Daemon Protocol-konfiguration, gennem indstillingen `theme`.
 
 ```json title="opencode.json"
 {
@@ -352,7 +352,7 @@ Du kan indstille standardagenten ved at bruge indstillingen `default_agent`. Det
 }
 ```
 
-Standardagenten skal være en primær agent (ikke en subagent). Dette kan være en indbygget agent som `"build"` eller `"plan"`, eller en [custom agent](/docs/agents), du har defineret. Hvis den angivne agent ikke eksisterer eller er en underagent, vil OpenCode falde tilbage til `"build"` med en advarsel.
+Standardagenten skal være en primær agent (ikke en subagent). Dette kan være en indbygget agent som `"build"` eller `"plan"`, eller en [custom agent](/docs/agents), du har defineret. Hvis den angivne agent ikke eksisterer eller er en underagent, vil Daemon Protocol falde tilbage til `"build"` med en advarsel.
 
 Denne indstilling gælder på tværs af alle grænseflader: TUI, CLI (`opencode run`), desktop-app og GitHub Action.
 
@@ -422,7 +422,7 @@ Du kan tilpasse dine nøglebindinger gennem indstillingen `keybinds`.
 
 ### Auto-opdatering (`autoupdate`)
 
-OpenCode vil automatisk downloade alle nye opdateringer, når den starter op. Du kan deaktivere dette med indstillingen `autoupdate`.
+Daemon Protocol vil automatisk downloade alle nye opdateringer, når den starter op. Du kan deaktivere dette med indstillingen `autoupdate`.
 
 ```json title="opencode.json"
 {
@@ -537,7 +537,7 @@ Du kan konfigurere MCP-servere, som du vil bruge, gennem indstillingen `mcp`.
 
 ### Plugin
 
-[Plugins](/docs/plugins) udvide OpenCode med brugerdefinerede værktøjer, kroge og integrationer.
+[Plugins](/docs/plugins) udvide Daemon Protocol med brugerdefinerede værktøjer, kroge og integrationer.
 
 Placer plugin-filer i `.opencode/plugins/` eller `~/.config/opencode/plugins/`. Du kan også indlæse plugins fra npm gennem indstillingen `plugin`.
 
@@ -602,7 +602,7 @@ Du kan angive en tilladelsesliste over udbydere gennem muligheden `enabled_provi
 }
 ```
 
-Dette er nyttigt, når du vil begrænse OpenCode til kun at bruge specifikke udbydere i stedet for at deaktivere dem én efter én.
+Dette er nyttigt, når du vil begrænse Daemon Protocol til kun at bruge specifikke udbydere i stedet for at deaktivere dem én efter én.
 
 :::note
 `disabled_providers` har prioritet over `enabled_providers`.

@@ -1,11 +1,11 @@
 ---
 title: Web
-description: Brug af OpenCode i din browser.
+description: Brug af Daemon Protocol i din browser.
 ---
 
-OpenCode kan køre som en webapplikation i din browser, hvilket giver den samme kraftfulde AI-kodningsoplevelse uden behov for en terminal.
+Daemon Protocol kan køre som en webapplikation i din browser, hvilket giver den samme kraftfulde AI-kodningsoplevelse uden behov for en terminal.
 
-![OpenCode Web - Ny session](../../../assets/web/web-homepage-new-session.png)
+![Daemon Protocol Web - Ny session](../../../assets/web/web-homepage-new-session.png)
 
 ## Kom godt i gang
 
@@ -15,7 +15,7 @@ Start webgrænsefladen ved at køre:
 opencode web
 ```
 
-Dette starter en lokal server på `127.0.0.1` med en tilfældig tilgængelig port og åbner automatisk OpenCode i din standardbrowser.
+Dette starter en lokal server på `127.0.0.1` med en tilfældig tilgængelig port og åbner automatisk Daemon Protocol i din standardbrowser.
 
 :::caution
 Hvis `OPENCODE_SERVER_PASSWORD` ikke er indstillet, vil serveren være usikret. Dette er fint til lokal brug, men bør indstilles til netværksadgang.
@@ -33,7 +33,7 @@ Du kan konfigurere webserveren ved hjælp af kommandolinjeflag eller i din [conf
 
 ### Port
 
-Som standard vælger OpenCode en tilgængelig port. Du kan angive en port:
+Som standard vælger Daemon Protocol en tilgængelig port. Du kan angive en port:
 
 ```bash
 opencode web --port 4096
@@ -41,13 +41,13 @@ opencode web --port 4096
 
 ### Værtsnavn
 
-Som standard binder serveren til `127.0.0.1` (kun lokal vært). Sådan gør du OpenCode tilgængelig på dit netværk:
+Som standard binder serveren til `127.0.0.1` (kun lokal vært). Sådan gør du Daemon Protocol tilgængelig på dit netværk:
 
 ```bash
 opencode web --hostname 0.0.0.0
 ```
 
-Når du bruger `0.0.0.0`, vil OpenCode vise både lokale adresser og netværksadresser:
+Når du bruger `0.0.0.0`, vil Daemon Protocol vise både lokale adresser og netværksadresser:
 
 ```
   Local access:       http://localhost:4096
@@ -92,19 +92,19 @@ Brugernavnet er som standard `opencode`, men kan ændres med `OPENCODE_SERVER_US
 
 ## Brug af webgrænsefladen
 
-Når den er startet, giver webgrænsefladen adgang til dine OpenCode-sessioner.
+Når den er startet, giver webgrænsefladen adgang til dine Daemon Protocol-sessioner.
 
 ### Sessioner
 
 Se og administrer dine sessioner fra hjemmesiden. Du kan se aktive sessioner og starte nye.
 
-![OpenCode Web - Active Session](../../../assets/web/web-homepage-active-session.png)
+![Daemon Protocol Web - Active Session](../../../assets/web/web-homepage-active-session.png)
 
 ### Serverstatus
 
 Klik på "Se servere" for at se tilsluttede servere og deres status.
 
-![OpenCode Web - Se servere](../../../assets/web/web-homepage-see-servers.png)
+![Daemon Protocol Web - Se servere](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 

@@ -1,17 +1,17 @@
 ---
 title: CLI
-description: OpenCode CLI opcije i naredbe.
+description: Daemon Protocol CLI opcije i naredbe.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode CLI po defaultu pokreće [TUI](/docs/tui) kada se pokrene bez ikakvih argumenata.
+Daemon Protocol CLI po defaultu pokreće [TUI](/docs/tui) kada se pokrene bez ikakvih argumenata.
 
 ```bash
 opencode
 ```
 
-Ali takođe prihvata naredbe kao što je dokumentovano na ovoj stranici. Ovo vam omogućava programsku interakciju sa OpenCode.
+Ali takođe prihvata naredbe kao što je dokumentovano na ovoj stranici. Ovo vam omogućava programsku interakciju sa Daemon Protocol.
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-Pokrenite OpenCode terminalski korisnički interfejs.
+Pokrenite Daemon Protocol terminalski korisnički interfejs.
 
 ```bash
 opencode [project]
@@ -44,13 +44,13 @@ opencode [project]
 
 ## Naredbe
 
-OpenCode CLI takođe ima sljedeće naredbe.
+Daemon Protocol CLI takođe ima sljedeće naredbe.
 
 ---
 
 ### agent
 
-Upravljajte OpenCode agentima.
+Upravljajte Daemon Protocol agentima.
 
 ```bash
 opencode agent [command]
@@ -60,13 +60,13 @@ opencode agent [command]
 
 ### attach
 
-Priključite terminal na već pokrenut OpenCode backend server pokrenut putem `serve` ili `web` naredbi.
+Priključite terminal na već pokrenut Daemon Protocol backend server pokrenut putem `serve` ili `web` naredbi.
 
 ```bash
 opencode attach [url]
 ```
 
-Ovo omogućava korištenje TUI-ja sa udaljenim OpenCode backend-om. Na primjer:
+Ovo omogućava korištenje TUI-ja sa udaljenim Daemon Protocol backend-om. Na primjer:
 
 ```bash
 # Start the backend server for web/mobile access
@@ -123,13 +123,13 @@ opencode auth [command]
 
 #### login
 
-OpenCode pokreće lista provajdera na [Models.dev](https://models.dev), tako da možete koristiti `opencode auth login` da konfigurirate API ključeve za bilo kojeg provajdera kojeg želite koristiti. Ovo je pohranjeno u `~/.local/share/opencode/auth.json`.
+Daemon Protocol pokreće lista provajdera na [Models.dev](https://models.dev), tako da možete koristiti `opencode auth login` da konfigurirate API ključeve za bilo kojeg provajdera kojeg želite koristiti. Ovo je pohranjeno u `~/.local/share/opencode/auth.json`.
 
 ```bash
 opencode auth login
 ```
 
-Kada se OpenCode pokrene, učitava dobavljače iz datoteke vjerodajnica. I ako postoje neki ključevi definirani u vašim okruženjima ili `.env` fajl u vašem projektu.
+Kada se Daemon Protocol pokrene, učitava dobavljače iz datoteke vjerodajnica. I ako postoje neki ključevi definirani u vašim okruženjima ili `.env` fajl u vašem projektu.
 
 ---
 
@@ -302,7 +302,7 @@ opencode models anthropic
 | <nobr><code>{"--refresh"}</code></nobr> | Osvježite keš modela sa models.dev                                       |
 | <nobr><code>{"--verbose"}</code></nobr> | Koristite detaljniji izlaz modela (uključuje metapodatke poput troškova) |
 
-Koristite `--refresh` zastavicu da ažurirate keširanu listu modela. Ovo je korisno kada su novi modeli dodani provajderu i želite da ih vidite u OpenCode.
+Koristite `--refresh` zastavicu da ažurirate keširanu listu modela. Ovo je korisno kada su novi modeli dodani provajderu i želite da ih vidite u Daemon Protocol.
 
 ```bash
 opencode models --refresh
@@ -312,7 +312,7 @@ opencode models --refresh
 
 ### run
 
-Pokrenite OpenCode u neinteraktivnom modu tako što ćete direktno proslijediti prompt.
+Pokrenite Daemon Protocol u neinteraktivnom modu tako što ćete direktno proslijediti prompt.
 
 ```bash
 opencode run [message..]
@@ -348,7 +348,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--file"}</code></nobr>     | `-f`   | Fajlovi koje treba priložiti poruci                                                           |
 | <nobr><code>{"--format"}</code></nobr>   |        | Format: default (formatiran) ili json (sirovi JSON događaji)                                  |
 | <nobr><code>{"--title"}</code></nobr>    |        | Naslov sesije (koristi skraćeni prompt ako nije navedena vrijednost)                          |
-| <nobr><code>{"--attach"}</code></nobr>   |        | Priključite na pokrenuti OpenCode server (npr. http://localhost:4096)                         |
+| <nobr><code>{"--attach"}</code></nobr>   |        | Priključite na pokrenuti Daemon Protocol server (npr. http://localhost:4096)                         |
 | <nobr><code>{"--password"}</code></nobr> | `-p`   | Lozinka za osnovnu autentifikaciju (zadano: `OPENCODE_SERVER_PASSWORD`)                       |
 | <nobr><code>{"--username"}</code></nobr> | `-u`   | Korisničko ime za osnovnu autentifikaciju (zadano: `OPENCODE_SERVER_USERNAME` ili `opencode`) |
 | <nobr><code>{"--dir"}</code></nobr>      |        | Direktorij za pokretanje, ili putanja na udaljenom serveru pri spajanju                       |
@@ -360,13 +360,13 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### serve
 
-Pokrenite OpenCode headless server za API pristup. Pogledajte [server docs](/docs/server) za kompletan HTTP interfejs.
+Pokrenite Daemon Protocol headless server za API pristup. Pogledajte [server docs](/docs/server) za kompletan HTTP interfejs.
 
 ```bash
 opencode serve
 ```
 
-Ovo pokreće HTTP server koji pruža API pristup funkcionalnosti OpenCode-a bez TUI interfejsa. Postavite `OPENCODE_SERVER_PASSWORD` da omogućite HTTP osnovnu auth (korisničko ime je zadano na `opencode`).
+Ovo pokreće HTTP server koji pruža API pristup funkcionalnosti Daemon Protocol-a bez TUI interfejsa. Postavite `OPENCODE_SERVER_PASSWORD` da omogućite HTTP osnovnu auth (korisničko ime je zadano na `opencode`).
 
 #### Opcije
 
@@ -381,7 +381,7 @@ Ovo pokreće HTTP server koji pruža API pristup funkcionalnosti OpenCode-a bez 
 
 ### session
 
-Upravljajte OpenCode sesijama.
+Upravljajte Daemon Protocol sesijama.
 
 ```bash
 opencode session [command]
@@ -391,7 +391,7 @@ opencode session [command]
 
 #### list
 
-Navedite sve OpenCode sesije.
+Navedite sve Daemon Protocol sesije.
 
 ```bash
 opencode session list
@@ -408,7 +408,7 @@ opencode session list
 
 ### stats
 
-Prikaži statistiku upotrebe tokena i troškova za vaše OpenCode sesije.
+Prikaži statistiku upotrebe tokena i troškova za vaše Daemon Protocol sesije.
 
 ```bash
 opencode stats
@@ -439,13 +439,13 @@ Ako ne unesete ID sesije, od vas će biti zatraženo da odaberete neku od dostup
 
 ### import
 
-Uvezite podatke sesije iz JSON datoteke ili OpenCode dijeljenog URL-a.
+Uvezite podatke sesije iz JSON datoteke ili Daemon Protocol dijeljenog URL-a.
 
 ```bash
 opencode import <file>
 ```
 
-Možete uvesti iz lokalne datoteke ili OpenCode dijeljenog URL-a.
+Možete uvesti iz lokalne datoteke ili Daemon Protocol dijeljenog URL-a.
 
 ```bash
 opencode import session.json
@@ -456,13 +456,13 @@ opencode import https://opncd.ai/s/abc123
 
 ### web
 
-Pokrenite OpenCode headless server sa web interfejsom.
+Pokrenite Daemon Protocol headless server sa web interfejsom.
 
 ```bash
 opencode web
 ```
 
-Ovo pokreće HTTP server i otvara web pretraživač za pristup OpenCode-u preko web interfejsa. Postavite `OPENCODE_SERVER_PASSWORD` da omogućite HTTP osnovnu auth (korisničko ime je zadano na `opencode`).
+Ovo pokreće HTTP server i otvara web pretraživač za pristup Daemon Protocol-u preko web interfejsa. Postavite `OPENCODE_SERVER_PASSWORD` da omogućite HTTP osnovnu auth (korisničko ime je zadano na `opencode`).
 
 #### Opcije
 
@@ -497,7 +497,7 @@ Ova naredba pokreće ACP server koji komunicira preko stdin/stdout koristeći nd
 
 ### uninstall
 
-Deinstalirajte OpenCode i uklonite sve povezane datoteke.
+Deinstalirajte Daemon Protocol i uklonite sve povezane datoteke.
 
 ```bash
 opencode uninstall
@@ -516,7 +516,7 @@ opencode uninstall
 
 ### upgrade
 
-Ažurira OpenCode na najnoviju verziju ili određenu verziju.
+Ažurira Daemon Protocol na najnoviju verziju ili određenu verziju.
 
 ```bash
 opencode upgrade [target]
@@ -544,7 +544,7 @@ opencode upgrade v0.1.48
 
 ## Globalne opcije
 
-OpenCode CLI prihvata sljedeće globalne zastavice.
+Daemon Protocol CLI prihvata sljedeće globalne zastavice.
 
 | Opcija                                     | Kratko | Opis                                      |
 | ------------------------------------------ | ------ | ----------------------------------------- |
@@ -557,7 +557,7 @@ OpenCode CLI prihvata sljedeće globalne zastavice.
 
 ## Varijable okruženja
 
-OpenCode se može konfigurirati pomoću varijabli okruženja.
+Daemon Protocol se može konfigurirati pomoću varijabli okruženja.
 
 | Varijabla                             | Tip     | Opis                                                               |
 | ------------------------------------- | ------- | ------------------------------------------------------------------ |

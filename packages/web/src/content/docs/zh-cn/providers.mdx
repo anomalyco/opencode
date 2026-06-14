@@ -1,17 +1,17 @@
 ---
 title: 提供商
-description: 在 OpenCode 中使用任意 LLM 提供商。
+description: 在 Daemon Protocol 中使用任意 LLM 提供商。
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.dev)，支持 **75+ LLM 提供商**，同时也支持运行本地模型。
+Daemon Protocol 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.dev)，支持 **75+ LLM 提供商**，同时也支持运行本地模型。
 
 要添加提供商，你需要：
 
 1. 使用 `/connect` 命令添加提供商的 API 密钥。
-2. 在 OpenCode 配置中设置该提供商。
+2. 在 Daemon Protocol 配置中设置该提供商。
 
 ---
 
@@ -24,7 +24,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 ### 配置
 
-你可以通过 OpenCode 配置中的 `provider` 部分来自定义提供商。
+你可以通过 Daemon Protocol 配置中的 `provider` 部分来自定义提供商。
 
 ---
 
@@ -47,12 +47,12 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 ---
 
-## OpenCode Zen
+## Daemon Zen
 
-OpenCode Zen 是由 OpenCode 团队提供的模型列表，这些模型已经过测试和验证，能够与 OpenCode 良好配合使用。[了解更多](/docs/zen)。
+Daemon Zen 是由 Daemon Protocol 团队提供的模型列表，这些模型已经过测试和验证，能够与 Daemon Protocol 良好配合使用。[了解更多](/docs/zen)。
 
 :::tip
-如果你是新用户，我们建议从 OpenCode Zen 开始。
+如果你是新用户，我们建议从 Daemon Zen 开始。
 :::
 
 1. 在 TUI 中执行 `/connect` 命令，选择 opencode，然后前往 [opencode.ai/auth](https://opencode.ai/auth)。
@@ -78,7 +78,7 @@ OpenCode Zen 是由 OpenCode 团队提供的模型列表，这些模型已经过
    /models
    ```
 
-它的使用方式与 OpenCode 中的其他提供商完全相同，且完全可选。
+它的使用方式与 Daemon Protocol 中的其他提供商完全相同，且完全可选。
 
 ---
 
@@ -121,7 +121,7 @@ OpenCode Zen 是由 OpenCode 团队提供的模型列表，这些模型已经过
 
 ### Amazon Bedrock
 
-要在 OpenCode 中使用 Amazon Bedrock：
+要在 Daemon Protocol 中使用 Amazon Bedrock：
 
 1. 前往 Amazon Bedrock 控制台中的**模型目录**，申请访问你想要使用的模型。
 
@@ -284,7 +284,7 @@ OpenCode Zen 是由 OpenCode 团队提供的模型列表，这些模型已经过
    ```
 
 :::info
-在 OpenCode 中使用 Claude Pro/Max 订阅不是 [Anthropic](https://anthropic.com) 官方支持的用法。
+在 Daemon Protocol 中使用 Claude Pro/Max 订阅不是 [Anthropic](https://anthropic.com) 官方支持的用法。
 :::
 
 ##### 使用 API 密钥
@@ -346,7 +346,7 @@ OpenCode Zen 是由 OpenCode 团队提供的模型列表，这些模型已经过
 2. 前往 [Azure AI Foundry](https://ai.azure.com/) 并部署一个模型。
 
    :::note
-   部署名称必须与模型名称一致，OpenCode 才能正常工作。
+   部署名称必须与模型名称一致，Daemon Protocol 才能正常工作。
    :::
 
 3. 执行 `/connect` 命令并搜索 **Azure**。
@@ -393,7 +393,7 @@ OpenCode Zen 是由 OpenCode 团队提供的模型列表，这些模型已经过
 2. 前往 [Azure AI Foundry](https://ai.azure.com/) 并部署一个模型。
 
    :::note
-   部署名称必须与模型名称一致，OpenCode 才能正常工作。
+   部署名称必须与模型名称一致，Daemon Protocol 才能正常工作。
    :::
 
 3. 执行 `/connect` 命令并搜索 **Azure Cognitive Services**。
@@ -525,7 +525,7 @@ Cloudflare AI Gateway 允许你通过统一端点访问来自 OpenAI、Anthropic
    /models
    ```
 
-   你也可以通过 OpenCode 配置添加模型。
+   你也可以通过 Daemon Protocol 配置添加模型。
 
    ```json title="opencode.json"
    {
@@ -705,7 +705,7 @@ GitLab Duo 通过 GitLab 的 Anthropic 代理提供具有原生工具调用能�
    #### 使用个人访问令牌
    1. 前往 [GitLab 用户设置 > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. 点击 **Add new token**
-   3. 名称填写 `OpenCode`，范围选择 `api`
+   3. 名称填写 `Daemon Protocol`，范围选择 `api`
    4. 复制令牌（以 `glpat-` 开头）
    5. 在终端中输入该令牌
 
@@ -721,13 +721,13 @@ GitLab Duo 通过 GitLab 的 Anthropic 代理提供具有原生工具调用能�
    - **duo-chat-opus-4-5** - 最强大，适合复杂分析
 
 :::note
-你也可以通过指定 `GITLAB_TOKEN` 环境变量来避免将令牌存储在 OpenCode 的认证存储中。
+你也可以通过指定 `GITLAB_TOKEN` 环境变量来避免将令牌存储在 Daemon Protocol 的认证存储中。
 :::
 
 ##### 自托管 GitLab
 
 :::note[合规说明]
-OpenCode 会使用一个小模型来执行部分 AI 任务，例如生成会话标题。默认情况下使用由 Zen 托管的 gpt-5-nano。如果你需要让 OpenCode 仅使用你自己的 GitLab 托管实例，请在 `opencode.json` 文件中添加以下内容。同时建议禁用会话共享。
+Daemon Protocol 会使用一个小模型来执行部分 AI 任务，例如生成会话标题。默认情况下使用由 Zen 托管的 gpt-5-nano。如果你需要让 Daemon Protocol 仅使用你自己的 GitLab 托管实例，请在 `opencode.json` 文件中添加以下内容。同时建议禁用会话共享。
 
 ```json
 {
@@ -819,7 +819,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ### GitHub Copilot
 
-要在 OpenCode 中使用你的 GitHub Copilot 订阅：
+要在 Daemon Protocol 中使用你的 GitHub Copilot 订阅：
 
 :::note
 部分模型可能需要 [Pro+ 订阅](https://github.com/features/copilot/plans)才能使用。
@@ -853,7 +853,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ### Google Vertex AI
 
-要在 OpenCode 中使用 Google Vertex AI：
+要在 Daemon Protocol 中使用 Google Vertex AI：
 
 1. 前往 Google Cloud Console 中的**模型花园**，查看你所在区域可用的模型。
 
@@ -981,7 +981,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 #### 可选配置
 
-如果 Helicone 的某些功能或模型未通过 OpenCode 自动配置，你随时可以手动配置。
+如果 Helicone 的某些功能或模型未通过 Daemon Protocol 自动配置，你随时可以手动配置。
 
 [Helicone 模型目录](https://helicone.ai/models)中可以找到你需要添加的模型 ID。
 
@@ -1034,7 +1034,7 @@ Helicone 支持用于缓存、用户跟踪和会话管理等功能的自定义�
 
 ##### 会话跟踪
 
-Helicone 的 [Sessions](https://docs.helicone.ai/features/sessions) 功能允许你将相关的 LLM 请求归为一组。使用 [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) 插件可以自动将每个 OpenCode 对话记录为 Helicone 中的一个会话。
+Helicone 的 [Sessions](https://docs.helicone.ai/features/sessions) 功能允许你将相关的 LLM 请求归为一组。使用 [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) 插件可以自动将每个 Daemon Protocol 对话记录为 Helicone 中的一个会话。
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1048,7 +1048,7 @@ npm install -g opencode-helicone-session
 }
 ```
 
-该插件会在你的请求中注入 `Helicone-Session-Id` 和 `Helicone-Session-Name` 请求头。在 Helicone 的 Sessions 页面中，你可以看到每个 OpenCode 对话都作为独立的会话列出。
+该插件会在你的请求中注入 `Helicone-Session-Id` 和 `Helicone-Session-Name` 请求头。在 Helicone 的 Sessions 页面中，你可以看到每个 Daemon Protocol 对话都作为独立的会话列出。
 
 ##### 常用 Helicone 请求头
 
@@ -1065,7 +1065,7 @@ npm install -g opencode-helicone-session
 
 ### llama.cpp
 
-你可以通过 [llama.cpp](https://github.com/ggml-org/llama.cpp) 的 llama-server 工具配置 OpenCode 使用本地模型。
+你可以通过 [llama.cpp](https://github.com/ggml-org/llama.cpp) 的 llama-server 工具配置 Daemon Protocol 使用本地模型。
 
 ```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
 {
@@ -1132,7 +1132,7 @@ IO.NET 提供 17 个针对不同用例优化的模型：
 
 ### LM Studio
 
-你可以通过 LM Studio 配置 OpenCode 使用本地模型。
+你可以通过 LM Studio 配置 Daemon Protocol 使用本地模型。
 
 ```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
 {
@@ -1249,10 +1249,10 @@ IO.NET 提供 17 个针对不同用例优化的模型：
 
 ### Ollama
 
-你可以通过 Ollama 配置 OpenCode 使用本地模型。
+你可以通过 Ollama 配置 Daemon Protocol 使用本地模型。
 
 :::tip
-Ollama 可以自动为 OpenCode 进行配置。详见 [Ollama 集成文档](https://docs.ollama.com/integrations/opencode)。
+Ollama 可以自动为 Daemon Protocol 进行配置。详见 [Ollama 集成文档](https://docs.ollama.com/integrations/opencode)。
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1291,13 +1291,13 @@ Ollama 可以自动为 OpenCode 进行配置。详见 [Ollama 集成文档](http
 
 ### Ollama Cloud
 
-要在 OpenCode 中使用 Ollama Cloud：
+要在 Daemon Protocol 中使用 Ollama Cloud：
 
 1. 前往 [https://ollama.com/](https://ollama.com/) 登录或创建账户。
 
 2. 导航到 **Settings** > **Keys**，点击 **Add API Key** 生成新的 API 密钥。
 
-3. 复制 API 密钥以便在 OpenCode 中使用。
+3. 复制 API 密钥以便在 Daemon Protocol 中使用。
 
 4. 执行 `/connect` 命令并搜索 **Ollama Cloud**。
 
@@ -1314,7 +1314,7 @@ Ollama 可以自动为 OpenCode 进行配置。详见 [Ollama 集成文档](http
    └ enter
    ```
 
-6. **重要**：在 OpenCode 中使用云端模型之前，必须先将模型信息拉取到本地：
+6. **重要**：在 Daemon Protocol 中使用云端模型之前，必须先将模型信息拉取到本地：
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1360,19 +1360,19 @@ Ollama 可以自动为 OpenCode 进行配置。详见 [Ollama 集成文档](http
 
 ---
 
-### OpenCode Zen
+### Daemon Zen
 
-OpenCode Zen 是由 OpenCode 团队提供的经过测试和验证的模型列表。[了解更多](/docs/zen)。
+Daemon Zen 是由 Daemon Protocol 团队提供的经过测试和验证的模型列表。[了解更多](/docs/zen)。
 
-1. 登录 **<a href={console}>OpenCode Zen</a>** 并点击 **Create API Key**。
+1. 登录 **<a href={console}>Daemon Zen</a>** 并点击 **Create API Key**。
 
-2. 执行 `/connect` 命令并搜索 **OpenCode Zen**。
+2. 执行 `/connect` 命令并搜索 **Daemon Zen**。
 
    ```txt
    /connect
    ```
 
-3. 输入你的 OpenCode API 密钥。
+3. 输入你的 Daemon Protocol API 密钥。
 
    ```txt
    ┌ API key
@@ -1414,7 +1414,7 @@ OpenCode Zen 是由 OpenCode 团队提供的经过测试和验证的模型列表
    /models
    ```
 
-   你也可以通过 OpenCode 配置添加更多模型。
+   你也可以通过 Daemon Protocol 配置添加更多模型。
 
    ```json title="opencode.json" {6}
    {
@@ -1429,7 +1429,7 @@ OpenCode Zen 是由 OpenCode 团队提供的经过测试和验证的模型列表
    }
    ```
 
-5. 你还可以通过 OpenCode 配置自定义模型。以下是指定提供商的示例：
+5. 你还可以通过 Daemon Protocol 配置自定义模型。以下是指定提供商的示例：
 
    ```json title="opencode.json"
    {
@@ -1570,7 +1570,7 @@ STACKIT AI Model Serving 提供完全托管的主权托管环境，专注于 Lla
 
 ### Scaleway
 
-要在 OpenCode 中使用 [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/)：
+要在 Daemon Protocol 中使用 [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/)：
 
 1. 前往 [Scaleway Console IAM 设置](https://console.scaleway.com/iam/api-keys)生成新的 API 密钥。
 
@@ -1678,7 +1678,7 @@ Vercel AI Gateway 允许你通过统一端点访问来自 OpenAI、Anthropic、G
    /models
    ```
 
-你也可以通过 OpenCode 配置自定义模型。以下是指定提供商路由顺序的示例。
+你也可以通过 Daemon Protocol 配置自定义模型。以下是指定提供商路由顺序的示例。
 
 ```json title="opencode.json"
 {
@@ -1788,7 +1788,7 @@ Vercel AI Gateway 允许你通过统一端点访问来自 OpenAI、Anthropic、G
    /models
    ```
 
-   你也可以通过 OpenCode 配置添加更多模型。
+   你也可以通过 Daemon Protocol 配置添加更多模型。
 
    ```json title="opencode.json" {6}
    {
@@ -1810,7 +1810,7 @@ Vercel AI Gateway 允许你通过统一端点访问来自 OpenAI、Anthropic、G
 要添加 `/connect` 命令中未列出的任何 **OpenAI 兼容**提供商：
 
 :::tip
-你可以在 OpenCode 中使用任何 OpenAI 兼容的提供商。大多数现代 AI 提供商都提供 OpenAI 兼容的 API。
+你可以在 Daemon Protocol 中使用任何 OpenAI 兼容的提供商。大多数现代 AI 提供商都提供 OpenAI 兼容的 API。
 :::
 
 1. 执行 `/connect` 命令，向下滚动到 **Other**。
@@ -1931,7 +1931,7 @@ Vercel AI Gateway 允许你通过统一端点访问来自 OpenAI、Anthropic、G
 - **limit.context**：模型接受的最大输入 Token 数。
 - **limit.output**：模型可生成的最大 Token 数。
 
-`limit` 字段让 OpenCode 了解你还剩余多少上下文空间。标准提供商会自动从 models.dev 拉取这些信息。
+`limit` 字段让 Daemon Protocol 了解你还剩余多少上下文空间。标准提供商会自动从 models.dev 拉取这些信息。
 
 ---
 
@@ -1943,7 +1943,7 @@ Vercel AI Gateway 允许你通过统一端点访问来自 OpenAI、Anthropic、G
 
    这不适用于 Amazon Bedrock 等依赖环境变量进行认证的提供商。
 
-2. 对于自定义提供商，请检查 OpenCode 配置并确认：
-   - `/connect` 命令中使用的提供商 ID 与 OpenCode 配置中的 ID 一致。
+2. 对于自定义提供商，请检查 Daemon Protocol 配置并确认：
+   - `/connect` 命令中使用的提供商 ID 与 Daemon Protocol 配置中的 ID 一致。
    - 使用了正确的 npm 包。例如，Cerebras 应使用 `@ai-sdk/cerebras`。对于其他所有 OpenAI 兼容的提供商，使用 `@ai-sdk/openai-compatible`（`/v1/chat/completions`）；如果模型走 `/v1/responses`，请使用 `@ai-sdk/openai`。同一 provider 混用时，可在模型下设置 `provider.npm` 覆盖默认值。
    - `options.baseURL` 字段中的 API 端点地址正确。

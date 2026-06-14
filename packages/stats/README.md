@@ -1,4 +1,4 @@
-# OpenCode Stats
+# Daemon Protocol Stats
 
 Stats is a separate site from the console. Runtime, database, and domain services live in `core`; the SolidStart website lives in `app`; deployable Lambda entrypoints live in `function`.
 

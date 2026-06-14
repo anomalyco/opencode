@@ -48,11 +48,11 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Install OpenCode
+      - name: Install Daemon Protocol
         if: steps.changes.outputs.has_changes == 'true'
         run: curl -fsSL https://opencode.ai/install | bash
 
-      - name: Sync locale docs with OpenCode
+      - name: Sync locale docs with Daemon Protocol
         if: steps.changes.outputs.has_changes == 'true'
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}

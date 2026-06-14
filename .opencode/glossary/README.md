@@ -37,7 +37,7 @@ Prefer guidance that is:
 
 ## Do Not Translate (Locale Additions)
 
-- `OpenCode` (preserve casing)
+- `Daemon Protocol` (preserve casing)
 
 ## Preferred Terms
 

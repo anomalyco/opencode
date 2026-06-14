@@ -15,7 +15,7 @@ Du kan skifte mellem agenter under en session eller kalde dem med `@`-omtalen.
 
 ## Typer
 
-Der er to typer agenter i OpenCode; primære agenter og subagenter.
+Der er to typer agenter i Daemon Protocol; primære agenter og subagenter.
 
 ---
 
@@ -27,7 +27,7 @@ Primære agenter er de vigtigste assistenter, du interagerer direkte med. Du kan
 Du kan bruge **Tab**-tasten til at skifte mellem primære agenter under en session.
 :::
 
-OpenCode leveres med indbyggede primære agenter, **Build** og **Plan**. Vi vil
+Daemon Protocol leveres med indbyggede primære agenter, **Build** og **Plan**. Vi vil
 se på disse nedenfor.
 
 ---
@@ -36,13 +36,13 @@ se på disse nedenfor.
 
 Subagenter er specialiserede assistenter, som primære agenter kan påbegynde sig til specifikke opgaver. Du kan også kalde dem manuelt ved at **@ nævne** dem i dine beskeder.
 
-OpenCode leveres med tre indbyggede subagenter, **General**, **Explore** og **Scout**. Vi ser nærmere på dem nedenfor.
+Daemon Protocol leveres med tre indbyggede subagenter, **General**, **Explore** og **Scout**. Vi ser nærmere på dem nedenfor.
 
 ---
 
 ## Indbyggede
 
-OpenCode leveres med to indbyggede primære agenter og tre indbyggede subagenter.
+Daemon Protocol leveres med to indbyggede primære agenter og tre indbyggede subagenter.
 
 ---
 
@@ -88,7 +88,7 @@ En hurtig, skrivebeskyttet agent til at udforske kodebaser. Kan ikke ændre file
 
 _Tilstand_: `subagent`
 
-En skrivebeskyttet agent til eksterne docs og research af dependencies. Brug denne, når du har brug for at klone et dependency-repository ind i OpenCode's administrerede cache, inspicere kildekoden i et bibliotek eller krydstjekke lokal kode mod upstream-implementeringer uden at ændre dit workspace.
+En skrivebeskyttet agent til eksterne docs og research af dependencies. Brug denne, når du har brug for at klone et dependency-repository ind i Daemon Protocol's administrerede cache, inspicere kildekoden i et bibliotek eller krydstjekke lokal kode mod upstream-implementeringer uden at ændre dit workspace.
 
 ---
 
@@ -285,7 +285,7 @@ Temperaturværdier typisk fra 0,0 til 1,0:
 }
 ```
 
-Hvis ingen temperatur er angivet, bruger OpenCode modelspecifikke standardindstillinger; typisk 0 for de fleste modeller, 0,55 for Qwen-modeller.
+Hvis ingen temperatur er angivet, bruger Daemon Protocol modelspecifikke standardindstillinger; typisk 0 for de fleste modeller, 0,55 for Qwen-modeller.
 
 ---
 
@@ -345,7 +345,7 @@ Angiv en brugerdefineret systempromptfil for denne agent med `prompt`-konfigurat
 }
 ```
 
-Denne sti er i forhold til, hvor konfigurationsfilen er placeret. Så dette virker både for den globale OpenCode-konfiguration og den projektspecifikke konfiguration.
+Denne sti er i forhold til, hvor konfigurationsfilen er placeret. Så dette virker både for den globale Daemon Protocol-konfiguration og den projektspecifikke konfiguration.
 
 ---
 
@@ -367,7 +367,7 @@ Hvis du ikke angiver en model, bruger primære agenter [model konfigureret globa
 }
 ```
 
-Model-id'et i din OpenCode-konfiguration brugerformatet `provider/model-id`. For eksempel, hvis du bruger [OpenCode Zen](/docs/zen), vil du bruge `opencode/gpt-5.1-codex` til GPT 5.1 Codex.
+Model-id'et i din Daemon Protocol-konfiguration brugerformatet `provider/model-id`. For eksempel, hvis du bruger [Daemon Zen](/docs/zen), vil du bruge `opencode/gpt-5.1-codex` til GPT 5.1 Codex.
 
 ---
 

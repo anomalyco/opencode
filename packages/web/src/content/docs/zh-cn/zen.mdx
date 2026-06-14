@@ -1,15 +1,15 @@
 ---
 title: Zen
-description: 由 OpenCode 提供的精选模型列表。
+description: 由 Daemon Protocol 提供的精选模型列表。
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Zen 是由 OpenCode 团队提供的一组经过测试和验证的模型。
+Daemon Zen 是由 Daemon Protocol 团队提供的一组经过测试和验证的模型。
 
-Zen 的工作方式与 OpenCode 中的任何其他提供商相同。你登录 OpenCode Zen 并获取 API 密钥。它是**完全可选的**，即使不用它，你也可以照常使用 OpenCode。
+Zen 的工作方式与 Daemon Protocol 中的任何其他提供商相同。你登录 Daemon Zen 并获取 API 密钥。它是**完全可选的**，即使不用它，你也可以照常使用 Daemon Protocol。
 
 ---
 
@@ -18,7 +18,7 @@ Zen 的工作方式与 OpenCode 中的任何其他提供商相同。你登录 Op
 现在市面上有大量模型，但其中只有少数模型适合作为编码代理使用。此外，大多数提供商的配置方式差异很大，因此你获得的性能和质量也会非常不同。
 
 :::tip
-我们测试了一组与 OpenCode 配合良好的精选模型和提供商。
+我们测试了一组与 Daemon Protocol 配合良好的精选模型和提供商。
 :::
 
 所以，如果你通过 OpenRouter 之类的服务使用模型，你无法确定自己拿到的是否是目标模型的最佳版本。
@@ -29,16 +29,16 @@ Zen 的工作方式与 OpenCode 中的任何其他提供商相同。你登录 Op
 2. 然后我们与几家提供商合作，确保这些模型被正确提供。
 3. 最后，我们对模型和提供商的组合进行了基准测试，并整理出了一份我们认为值得推荐的列表。
 
-OpenCode Zen 是一个 AI 网关，让你可以访问这些模型。
+Daemon Zen 是一个 AI 网关，让你可以访问这些模型。
 
 ---
 
 ## 工作原理
 
-OpenCode Zen 的工作方式与 OpenCode 中的任何其他提供商相同。
+Daemon Zen 的工作方式与 Daemon Protocol 中的任何其他提供商相同。
 
-1. 登录 **<a href={console}>OpenCode Zen</a>**，添加你的账单信息，然后复制你的 API 密钥。
-2. 在 TUI 中运行 `/connect` 命令，选择 OpenCode Zen，然后粘贴你的 API 密钥。
+1. 登录 **<a href={console}>Daemon Zen</a>**，添加你的账单信息，然后复制你的 API 密钥。
+2. 在 TUI 中运行 `/connect` 命令，选择 Daemon Zen，然后粘贴你的 API 密钥。
 3. 在 TUI 中运行 `/models`，查看我们推荐的模型列表。
 
 你按请求付费，也可以向账户充值。
@@ -101,7 +101,7 @@ OpenCode Zen 的工作方式与 OpenCode 中的任何其他提供商相同。
 | Nemotron 3 Ultra Free  | nemotron-3-ultra-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 
-在你的 OpenCode 配置中，[模型 ID](/docs/config/#models) 使用 `opencode/<model-id>` 格式。例如，对于 GPT 5.5，你需要在配置中使用 `opencode/gpt-5.5`。
+在你的 Daemon Protocol 配置中，[模型 ID](/docs/config/#models) 使用 `opencode/<model-id>` 格式。例如，对于 GPT 5.5，你需要在配置中使用 `opencode/gpt-5.5`。
 
 ---
 
@@ -183,11 +183,11 @@ https://opencode.ai/zen/v1/models
 
 免费模型：
 
-- DeepSeek V4 Flash Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
-- MiMo-V2.5 Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
-- North Mini Code Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
-- Nemotron 3 Ultra Free 目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
-- Big Pickle 是一个隐身模型，目前在 OpenCode 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
+- DeepSeek V4 Flash Free 目前在 Daemon Protocol 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
+- MiMo-V2.5 Free 目前在 Daemon Protocol 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
+- North Mini Code Free 目前在 Daemon Protocol 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
+- Nemotron 3 Ultra Free 目前在 Daemon Protocol 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
+- Big Pickle 是一个隐身模型，目前在 Daemon Protocol 上限时免费提供。团队正在利用这段时间收集反馈并改进模型。
 
 如果你有任何问题，请<a href={email}>联系我们</a>。
 
@@ -288,9 +288,9 @@ Admin 可以为工作区启用或禁用特定模型。向已禁用模型发出�
 
 ## 目标
 
-我们创建 OpenCode Zen，是为了：
+我们创建 Daemon Zen，是为了：
 
 1. 为编码代理**基准测试**最佳模型和提供商。
 2. 提供**最高质量**的选项，而不是降低性能或路由到更便宜的提供商。
 3. 通过按成本销售来传递任何**降价**；因此唯一的加价只是为了覆盖我们的处理费用。
-4. 保持**无锁定**，允许你将它与任何其他编码代理一起使用。同时也始终允许你在 OpenCode 中使用任何其他提供商。
+4. 保持**无锁定**，允许你将它与任何其他编码代理一起使用。同时也始终允许你在 Daemon Protocol 中使用任何其他提供商。

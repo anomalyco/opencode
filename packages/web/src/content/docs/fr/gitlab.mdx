@@ -1,33 +1,33 @@
 ---
 title: GitLab
-description: Utilisez OpenCode dans les issues GitLab et les merge requests.
+description: Utilisez Daemon Protocol dans les issues GitLab et les merge requests.
 ---
 
-OpenCode s'intègre à votre flux de travail GitLab via votre pipeline CI/CD GitLab ou avec GitLab Duo.
+Daemon Protocol s'intègre à votre flux de travail GitLab via votre pipeline CI/CD GitLab ou avec GitLab Duo.
 
-Dans les deux cas, OpenCode fonctionnera sur vos runners GitLab.
+Dans les deux cas, Daemon Protocol fonctionnera sur vos runners GitLab.
 
 ---
 
 ## GitLab CI
 
-OpenCode fonctionne dans un pipeline GitLab régulier. Vous pouvez l'intégrer dans un pipeline en tant que [composant CI](https://docs.gitlab.com/ee/ci/components/)
+Daemon Protocol fonctionne dans un pipeline GitLab régulier. Vous pouvez l'intégrer dans un pipeline en tant que [composant CI](https://docs.gitlab.com/ee/ci/components/)
 
-Ici, nous utilisons un composant CI/CD créé par la communauté pour OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+Ici, nous utilisons un composant CI/CD créé par la communauté pour Daemon Protocol — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
 
 ---
 
 ### Fonctionnalités
 
-- **Utiliser une configuration personnalisée par tâche** : configurez OpenCode avec un répertoire de configuration personnalisé, par exemple `./config/#custom-directory` pour activer ou désactiver la fonctionnalité pour chaque appel d'OpenCode.
-- **Configuration minimale** : le composant CI configure OpenCode en arrière-plan, il vous suffit de créer la configuration OpenCode et le prompt initial.
+- **Utiliser une configuration personnalisée par tâche** : configurez Daemon Protocol avec un répertoire de configuration personnalisé, par exemple `./config/#custom-directory` pour activer ou désactiver la fonctionnalité pour chaque appel d'Daemon Protocol.
+- **Configuration minimale** : le composant CI configure Daemon Protocol en arrière-plan, il vous suffit de créer la configuration Daemon Protocol et le prompt initial.
 - **Flexible** : le composant CI prend en charge plusieurs entrées pour personnaliser son comportement
 
 ---
 
 ### Installation
 
-1. Stockez votre authentification OpenCode JSON en tant que variables d'environnement CI de type fichier sous **Paramètres** > **CI/CD** > **Variables**. Assurez-vous de les marquer comme « Masquées et protégées ».
+1. Stockez votre authentification Daemon Protocol JSON en tant que variables d'environnement CI de type fichier sous **Paramètres** > **CI/CD** > **Variables**. Assurez-vous de les marquer comme « Masquées et protégées ».
 2. Ajoutez ce qui suit à votre fichier `.gitlab-ci.yml`.
 
    ```yaml title=".gitlab-ci.yml"
@@ -35,7 +35,7 @@ Ici, nous utilisons un composant CI/CD créé par la communauté pour OpenCode �
      - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         auth_json: $OPENCODE_AUTH_JSON # The variable name for your Daemon Protocol authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
@@ -46,23 +46,23 @@ Pour plus d'entrées et de cas d'utilisation [consultez la doc](https://gitlab.c
 
 ## GitLab Duo
 
-OpenCode s'intègre à votre flux de travail GitLab.
-Mentionnez `@opencode` dans un commentaire et OpenCode exécutera les tâches au sein de votre pipeline CI GitLab.
+Daemon Protocol s'intègre à votre flux de travail GitLab.
+Mentionnez `@opencode` dans un commentaire et Daemon Protocol exécutera les tâches au sein de votre pipeline CI GitLab.
 
 ---
 
 ### Fonctionnalités
 
-- **Triage d'issues** : demandez à OpenCode d'examiner une issue et de vous l'expliquer.
-- **Correction et implémentation** : demandez à OpenCode de résoudre une issue ou d'implémenter une fonctionnalité.
+- **Triage d'issues** : demandez à Daemon Protocol d'examiner une issue et de vous l'expliquer.
+- **Correction et implémentation** : demandez à Daemon Protocol de résoudre une issue ou d'implémenter une fonctionnalité.
   Cela créera une nouvelle branche et déclenchera une merge request avec les modifications.
-- **Sécurisé** : OpenCode fonctionne sur vos runners GitLab.
+- **Sécurisé** : Daemon Protocol fonctionne sur vos runners GitLab.
 
 ---
 
 ### Installation
 
-OpenCode s'exécute dans votre pipeline CI/CD GitLab. Voici ce dont vous aurez besoin pour le configurer :
+Daemon Protocol s'exécute dans votre pipeline CI/CD GitLab. Voici ce dont vous aurez besoin pour le configurer :
 
 :::tip
 Consultez la [**documentation GitLab**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) pour obtenir des instructions à jour.
@@ -91,7 +91,7 @@ Consultez la [**documentation GitLab**](https://docs.gitlab.com/user/duo_agent_p
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
+      - echo "Creating Daemon Protocol auth configuration"
       - mkdir --parents ~/.local/share/opencode
       - |
         cat > ~/.local/share/opencode/auth.json << EOF
@@ -104,10 +104,10 @@ Consultez la [**documentation GitLab**](https://docs.gitlab.com/user/duo_agent_p
         EOF
       - echo "Configuring git"
       - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.name "Daemon Protocol"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running Daemon Protocol"
       - |
         opencode run "
         You are an AI assistant helping with GitLab operations.
@@ -158,7 +158,7 @@ Vous pouvez vous référer aux [GitLab CLI agents docs](https://docs.gitlab.com/
 
 ### Exemples
 
-Voici quelques exemples de la façon dont vous pouvez utiliser OpenCode dans GitLab.
+Voici quelques exemples de la façon dont vous pouvez utiliser Daemon Protocol dans GitLab.
 
 :::tip
 Vous pouvez configurer pour utiliser une phrase de déclenchement différente de `@opencode`.
@@ -172,7 +172,7 @@ Ajoutez ce commentaire dans une issue GitLab.
   @opencode explain this issue
 ```
 
-OpenCode lira l'issue et répondra avec une explication claire.
+Daemon Protocol lira l'issue et répondra avec une explication claire.
 
 - **Résoudre une issue**
 
@@ -182,7 +182,7 @@ Dans une issue GitLab, dites :
   @opencode fix this
 ```
 
-OpenCode créera une nouvelle branche, mettra en œuvre les modifications et ouvrira une merge request avec les modifications.
+Daemon Protocol créera une nouvelle branche, mettra en œuvre les modifications et ouvrira une merge request avec les modifications.
 
 - **Revue de merge request**
 
@@ -192,4 +192,4 @@ Laissez le commentaire suivant sur une merge request GitLab.
   @opencode review this merge request
 ```
 
-OpenCode examinera la merge request et fournira des commentaires.
+Daemon Protocol examinera la merge request et fournira des commentaires.

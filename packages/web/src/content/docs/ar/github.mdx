@@ -1,17 +1,17 @@
 ---
 title: GitHub
-description: استخدم OpenCode في GitHub Issues وPull Requests.
+description: استخدم Daemon Protocol في GitHub Issues وPull Requests.
 ---
 
-يتكامل OpenCode مع سير عمل GitHub لديك. اذكر `/opencode` أو `/oc` في تعليقك، وسيقوم OpenCode بتنفيذ المهام داخل GitHub Actions runner لديك.
+يتكامل Daemon Protocol مع سير عمل GitHub لديك. اذكر `/opencode` أو `/oc` في تعليقك، وسيقوم Daemon Protocol بتنفيذ المهام داخل GitHub Actions runner لديك.
 
 ---
 
 ## الميزات
 
-- **فرز Issues**: اطلب من OpenCode الاطلاع على Issue وشرحها لك.
-- **إصلاح وتنفيذ**: اطلب من OpenCode إصلاح Issue أو تنفيذ ميزة. وسيعمل على فرع جديد ويقدّم PR يضم كل التغييرات.
-- **آمن**: يعمل OpenCode داخل GitHub runners لديك.
+- **فرز Issues**: اطلب من Daemon Protocol الاطلاع على Issue وشرحها لك.
+- **إصلاح وتنفيذ**: اطلب من Daemon Protocol إصلاح Issue أو تنفيذ ميزة. وسيعمل على فرع جديد ويقدّم PR يضم كل التغييرات.
+- **آمن**: يعمل Daemon Protocol داخل GitHub runners لديك.
 
 ---
 
@@ -63,7 +63,7 @@ opencode github install
               fetch-depth: 1
               persist-credentials: false
 
-          - name: Run OpenCode
+          - name: Run Daemon Protocol
            uses: anomalyco/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -81,13 +81,13 @@ opencode github install
 
 ## الإعدادات
 
-- `model`: النموذج الذي سيستخدمه OpenCode. يأخذ الصيغة `provider/model`. هذا **مطلوب**.
+- `model`: النموذج الذي سيستخدمه Daemon Protocol. يأخذ الصيغة `provider/model`. هذا **مطلوب**.
 - `agent`: الـagent الذي سيتم استخدامه. يجب أن يكون agent أساسيًا. يعود افتراضيًا إلى `default_agent` من الإعدادات أو `"build"` إذا لم يُعثر عليه.
-- `share`: هل تتم مشاركة جلسة OpenCode. القيمة الافتراضية **true** للمستودعات العامة.
-- `prompt`: موجه مخصص اختياري لتجاوز السلوك الافتراضي. استخدمه لتخصيص كيفية معالجة OpenCode للطلبات.
-- `token`: GitHub access token اختياري لتنفيذ عمليات مثل إنشاء التعليقات، وcommit للتغييرات، وفتح Pull Requests. افتراضيًا يستخدم OpenCode installation access token الخاص بـOpenCode GitHub App، لذا تظهر commits والتعليقات وPull Requests وكأنها صادرة من التطبيق.
+- `share`: هل تتم مشاركة جلسة Daemon Protocol. القيمة الافتراضية **true** للمستودعات العامة.
+- `prompt`: موجه مخصص اختياري لتجاوز السلوك الافتراضي. استخدمه لتخصيص كيفية معالجة Daemon Protocol للطلبات.
+- `token`: GitHub access token اختياري لتنفيذ عمليات مثل إنشاء التعليقات، وcommit للتغييرات، وفتح Pull Requests. افتراضيًا يستخدم Daemon Protocol installation access token الخاص بـDaemon Protocol GitHub App، لذا تظهر commits والتعليقات وPull Requests وكأنها صادرة من التطبيق.
 
-  بدلًا من ذلك، يمكنك استخدام [`GITHUB_TOKEN` المدمج](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) في GitHub Action runner دون تثبيت OpenCode GitHub App. فقط تأكد من منح الأذونات المطلوبة في الـworkflow:
+  بدلًا من ذلك، يمكنك استخدام [`GITHUB_TOKEN` المدمج](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) في GitHub Action runner دون تثبيت Daemon Protocol GitHub App. فقط تأكد من منح الأذونات المطلوبة في الـworkflow:
 
   ```yaml
   permissions:
@@ -103,23 +103,23 @@ opencode github install
 
 ## الأحداث المدعومة
 
-يمكن تشغيل OpenCode عبر أحداث GitHub التالية:
+يمكن تشغيل Daemon Protocol عبر أحداث GitHub التالية:
 
 | نوع الحدث                     | يتم تشغيله عبر                 | التفاصيل                                                                                                |
 | ----------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| `issue_comment`               | تعليق على Issue أو PR          | اذكر `/opencode` أو `/oc` في تعليقك. يقرأ OpenCode السياق ويمكنه إنشاء فروع، وفتح PRs، أو الرد.         |
-| `pull_request_review_comment` | تعليق على أسطر كود محددة في PR | اذكر `/opencode` أو `/oc` أثناء مراجعة الكود. يستلم OpenCode مسار الملف وأرقام الأسطر وسياق الـdiff.    |
-| `issues`                      | فتح Issue أو تعديلها           | تشغيل OpenCode تلقائيًا عند إنشاء Issues أو تعديلها. يتطلب إدخال `prompt`.                              |
-| `pull_request`                | فتح PR أو تحديثه               | تشغيل OpenCode تلقائيًا عند فتح PRs أو مزامنتها أو إعادة فتحها. مفيد للمراجعات الآلية.                  |
-| `schedule`                    | جدول يعتمد على Cron            | تشغيل OpenCode وفق جدول. يتطلب إدخال `prompt`. يذهب الناتج إلى logs وPRs (لا يوجد Issue للتعليق عليها). |
-| `workflow_dispatch`           | تشغيل يدوي من واجهة GitHub     | تشغيل OpenCode عند الطلب عبر Actions tab. يتطلب إدخال `prompt`. يذهب الناتج إلى logs وPRs.              |
+| `issue_comment`               | تعليق على Issue أو PR          | اذكر `/opencode` أو `/oc` في تعليقك. يقرأ Daemon Protocol السياق ويمكنه إنشاء فروع، وفتح PRs، أو الرد.         |
+| `pull_request_review_comment` | تعليق على أسطر كود محددة في PR | اذكر `/opencode` أو `/oc` أثناء مراجعة الكود. يستلم Daemon Protocol مسار الملف وأرقام الأسطر وسياق الـdiff.    |
+| `issues`                      | فتح Issue أو تعديلها           | تشغيل Daemon Protocol تلقائيًا عند إنشاء Issues أو تعديلها. يتطلب إدخال `prompt`.                              |
+| `pull_request`                | فتح PR أو تحديثه               | تشغيل Daemon Protocol تلقائيًا عند فتح PRs أو مزامنتها أو إعادة فتحها. مفيد للمراجعات الآلية.                  |
+| `schedule`                    | جدول يعتمد على Cron            | تشغيل Daemon Protocol وفق جدول. يتطلب إدخال `prompt`. يذهب الناتج إلى logs وPRs (لا يوجد Issue للتعليق عليها). |
+| `workflow_dispatch`           | تشغيل يدوي من واجهة GitHub     | تشغيل Daemon Protocol عند الطلب عبر Actions tab. يتطلب إدخال `prompt`. يذهب الناتج إلى logs وPRs.              |
 
 ### مثال للجدولة
 
-شغّل OpenCode وفق جدول لتنفيذ مهام آلية:
+شغّل Daemon Protocol وفق جدول لتنفيذ مهام آلية:
 
 ```yaml title=".github/workflows/opencode-scheduled.yml"
-name: Scheduled OpenCode Task
+name: Scheduled Daemon Protocol Task
 
 on:
   schedule:
@@ -139,7 +139,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run OpenCode
+      - name: Run Daemon Protocol
         uses: anomalyco/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -150,7 +150,7 @@ jobs:
             If you find issues worth addressing, open an issue to track them.
 ```
 
-بالنسبة لأحداث `schedule`، يكون إدخال `prompt` **مطلوبًا** لعدم وجود تعليق لاستخراج التعليمات منه. تعمل عمليات الـworkflow المجدولة دون سياق مستخدم للتحقق من الأذونات، لذا يجب أن يمنح الـworkflow صلاحيات `contents: write` و`pull-requests: write` إذا كنت تتوقع أن ينشئ OpenCode فروعًا أو PRs.
+بالنسبة لأحداث `schedule`، يكون إدخال `prompt` **مطلوبًا** لعدم وجود تعليق لاستخراج التعليمات منه. تعمل عمليات الـworkflow المجدولة دون سياق مستخدم للتحقق من الأذونات، لذا يجب أن يمنح الـworkflow صلاحيات `contents: write` و`pull-requests: write` إذا كنت تتوقع أن ينشئ Daemon Protocol فروعًا أو PRs.
 
 ---
 
@@ -191,7 +191,7 @@ jobs:
             - Suggest improvements
 ```
 
-بالنسبة لأحداث `pull_request`، إذا لم يتم توفير `prompt`، فإن OpenCode يراجع Pull Request افتراضيًا.
+بالنسبة لأحداث `pull_request`، إذا لم يتم توفير `prompt`، فإن Daemon Protocol يراجع Pull Request افتراضيًا.
 
 ---
 
@@ -252,7 +252,7 @@ jobs:
 
 ## الموجهات المخصصة
 
-قم بتجاوز الموجه الافتراضي لتخصيص سلوك OpenCode ضمن الـworkflow لديك.
+قم بتجاوز الموجه الافتراضي لتخصيص سلوك Daemon Protocol ضمن الـworkflow لديك.
 
 ```yaml title=".github/workflows/opencode.yml"
 - uses: anomalyco/opencode/github@latest
@@ -271,7 +271,7 @@ jobs:
 
 ## أمثلة
 
-إليك بعض الأمثلة على كيفية استخدام OpenCode في GitHub.
+إليك بعض الأمثلة على كيفية استخدام Daemon Protocol في GitHub.
 
 - **شرح Issue**
 
@@ -281,7 +281,7 @@ jobs:
   /opencode explain this issue
   ```
 
-  سيقرأ OpenCode كامل النقاش، بما في ذلك جميع التعليقات، ويرد بشرح واضح.
+  سيقرأ Daemon Protocol كامل النقاش، بما في ذلك جميع التعليقات، ويرد بشرح واضح.
 
 - **إصلاح Issue**
 
@@ -291,7 +291,7 @@ jobs:
   /opencode fix this
   ```
 
-  وسيُنشئ OpenCode فرعًا جديدًا، وينفّذ التغييرات، ويفتح PR يتضمنها.
+  وسيُنشئ Daemon Protocol فرعًا جديدًا، وينفّذ التغييرات، ويفتح PR يتضمنها.
 
 - **مراجعة PRs وإجراء تغييرات**
 
@@ -301,18 +301,18 @@ jobs:
   Delete the attachment from S3 when the note is removed /oc
   ```
 
-  سينفّذ OpenCode التغيير المطلوب ويعمل له commit إلى نفس PR.
+  سينفّذ Daemon Protocol التغيير المطلوب ويعمل له commit إلى نفس PR.
 
 - **مراجعة أسطر كود محددة**
 
-  اترك تعليقًا مباشرة على أسطر الكود في تبويب "Files" داخل PR. يكتشف OpenCode تلقائيًا الملف وأرقام الأسطر وسياق الـdiff لتقديم ردود دقيقة.
+  اترك تعليقًا مباشرة على أسطر الكود في تبويب "Files" داخل PR. يكتشف Daemon Protocol تلقائيًا الملف وأرقام الأسطر وسياق الـdiff لتقديم ردود دقيقة.
 
   ```
   [Comment on specific lines in Files tab]
   /oc add error handling here
   ```
 
-  عند التعليق على أسطر محددة، يستلم OpenCode:
+  عند التعليق على أسطر محددة، يستلم Daemon Protocol:
   - الملف الدقيق الذي تتم مراجعته
   - أسطر الكود المحددة
   - سياق الـdiff المحيط

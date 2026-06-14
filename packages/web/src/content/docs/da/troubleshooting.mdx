@@ -3,7 +3,7 @@ title: Fejlfinding
 description: Almindelige problemer, og hvordan de løses.
 ---
 
-For at fejlfinde problemer med OpenCode, start med at tjekke logfilerne og de lokale data, den gemmer på disken.
+For at fejlfinde problemer med Daemon Protocol, start med at tjekke logfilerne og de lokale data, den gemmer på disken.
 
 ---
 
@@ -39,13 +39,13 @@ Denne mappe indeholder:
 
 ## Desktop-app
 
-OpenCode Desktop kører en lokal OpenCode-server (`opencode-cli` sidevognen) i baggrunden. De fleste problemer er forårsaget af et plugin, der fungerer dårligt, en ødelagt cache eller en dårlig serverindstilling.
+Daemon Protocol Desktop kører en lokal Daemon Protocol-server (`opencode-cli` sidevognen) i baggrunden. De fleste problemer er forårsaget af et plugin, der fungerer dårligt, en ødelagt cache eller en dårlig serverindstilling.
 
 ### Hurtige tjek
 
 - Afslut og start appen på ny.
 - Hvis appen viser en fejlskærm, klikker du på **Start på ny** og kopierer fejldetaljerne.
-- Kun macOS: `OpenCode`-menu -> **Genindlæs webvisning** (hjælper hvis UI er tom/frosset).
+- Kun macOS: `Daemon Protocol`-menu -> **Genindlæs webvisning** (hjælper hvis UI er tom/frosset).
 
 ---
 
@@ -72,7 +72,7 @@ Hvis du har konfigureret plugins, deaktiver dem midlertidigt ved at fjerne nøgl
 
 #### Tjek plugin-mapper
 
-OpenCode kan også indlæse lokale plugins fra disken. Flyt disse midlertidigt væk (eller giv mappen nyt navn) og start skrivebordsappen på ny:
+Daemon Protocol kan også indlæse lokale plugins fra disken. Flyt disse midlertidigt væk (eller giv mappen nyt navn) og start skrivebordsappen på ny:
 
 - **Globale plugins**
   - **macOS/Linux**: `~/.config/opencode/plugins/`
@@ -86,22 +86,22 @@ Hvis appen begynder at fungere igen, aktiverer du plugins én ad gangen for at f
 
 ### Ryd cachen
 
-Hvis deaktivering af plugins ikke hjælper (eller en plugin-installation sidder fast), tøm cachen så OpenCode kan genopbygge den.
+Hvis deaktivering af plugins ikke hjælper (eller en plugin-installation sidder fast), tøm cachen så Daemon Protocol kan genopbygge den.
 
-1. Afslut OpenCode Desktop helt.
+1. Afslut Daemon Protocol Desktop helt.
 2. Slet cache-mappen:
 
 - **macOS**: Finder -> `Cmd+Shift+G` -> indsæt `~/.cache/opencode`
 - **Linux**: slet `~/.cache/opencode` (eller kør `rm -rf ~/.cache/opencode`)
 - **Windows**: Tryk `WIN+R` og indsæt `%USERPROFILE%\.cache\opencode`
 
-3. Start OpenCode Desktop på ny.
+3. Start Daemon Protocol Desktop på ny.
 
 ---
 
 ### Løs problemer med serverforbindelse
 
-OpenCode Desktop kan enten starte sin egen lokale server (standard) eller forbinde til en server URL, du har konfigureret.
+Daemon Protocol Desktop kan enten starte sin egen lokale server (standard) eller forbinde til en server URL, du har konfigureret.
 
 Hvis du ser en **"Forbindelse mislykkedes"**-dialogboks (eller appen kommer aldrig forbi splash-skærmen), se efter en brugerdefineret server URL.
 
@@ -132,21 +132,21 @@ På Linux kan nogle Wayland-opsætninger forårsage tomme vinduer eller komposit
 
 ### Windows: WebView2-runtime
 
-På Windows kræver OpenCode Desktop Microsoft Edge **WebView2 Runtime**. Hvis appen åbnes i et tomt vindue eller ikke starter, installer/opdater WebView2 og prøv igen.
+På Windows kræver Daemon Protocol Desktop Microsoft Edge **WebView2 Runtime**. Hvis appen åbnes i et tomt vindue eller ikke starter, installer/opdater WebView2 og prøv igen.
 
 ---
 
 ### Windows: Generelle ydeevneproblemer
 
-Hvis du oplever langsom ydeevne, problemer med filadgang eller terminalproblemer på Windows, kan du prøve at bruge [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL giver et Linux-miljø som fungerer mere sømløst med funktionerne i OpenCode.
+Hvis du oplever langsom ydeevne, problemer med filadgang eller terminalproblemer på Windows, kan du prøve at bruge [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL giver et Linux-miljø som fungerer mere sømløst med funktionerne i Daemon Protocol.
 
 ---
 
 ### Meddelelser vises ikke
 
-OpenCode Desktop viser kun systemvarsler når:
+Daemon Protocol Desktop viser kun systemvarsler når:
 
-- varsler er aktiveret for OpenCode i dine OS-indstillinger, og
+- varsler er aktiveret for Daemon Protocol i dine OS-indstillinger, og
 - appvinduet ikke er fokuseret.
 
 ---
@@ -155,8 +155,8 @@ OpenCode Desktop viser kun systemvarsler når:
 
 Hvis appen ikke starter og du ikke kan slette indstillingerne fra UI, nulstil skrivebordsappens gemte tilstand.
 
-1. Afslut OpenCode Desktop.
-2. Find og slet disse filer (de findes i OpenCode Desktop-appens datamappe):
+1. Afslut Daemon Protocol Desktop.
+2. Find og slet disse filer (de findes i Daemon Protocol Desktop-appens datamappe):
 
 - `opencode.settings.dat` (skrivebordsstandardserver URL)
 - `opencode.global.dat` og `opencode.workspace.*.dat` (UI tilstand som nylige servere/projekter)
@@ -171,7 +171,7 @@ Sådan finder du mappen hurtigt:
 
 ## Få hjælp
 
-Hvis du oplever problemer med OpenCode:
+Hvis du oplever problemer med Daemon Protocol:
 
 1. **Rapporter problemer på GitHub**
 
@@ -195,7 +195,7 @@ Her er nogle almindelige problemer og hvordan du kan løse dem.
 
 ---
 
-### OpenCode vil ikke starte
+### Daemon Protocol vil ikke starte
 
 1. Tjek logfilerne for fejlmeddelelser
 2. Prøv at køre med `--print-logs` for at se output i terminalen

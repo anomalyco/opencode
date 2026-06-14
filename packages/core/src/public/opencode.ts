@@ -20,7 +20,7 @@ export interface Interface {
   readonly tools: Tool.Interface
 }
 
-/** Intentional public native API for Effect applications embedding OpenCode. */
+/** Intentional public native API for Effect applications embedding Daemon Protocol. */
 export class Service extends Context.Service<Service, Interface>()("@opencode/public/OpenCode") {}
 
 class SessionModelValidation extends Context.Service<
@@ -126,4 +126,4 @@ export const layer = Layer.effect(
   }),
 ).pipe(Layer.provide(Layer.merge(ApplicationToolsLayer, SessionsLayer)))
 
-// TODO: Add OpenCode.create(...) as the Promise facade over the same native API semantics.
+// TODO: Add Daemon Protocol create(...) as the Promise facade over the same native API semantics.

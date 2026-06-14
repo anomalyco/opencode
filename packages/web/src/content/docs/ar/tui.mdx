@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: استخدام واجهة المستخدم TUI في OpenCode.
+description: استخدام واجهة المستخدم TUI في Daemon Protocol.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-يوفّر OpenCode واجهة terminal تفاعلية (TUI) للعمل على مشاريعك باستخدام LLM.
+يوفّر Daemon Protocol واجهة terminal تفاعلية (TUI) للعمل على مشاريعك باستخدام LLM.
 
-يؤدي تشغيل OpenCode إلى بدء واجهة TUI للدليل الحالي.
+يؤدي تشغيل Daemon Protocol إلى بدء واجهة TUI للدليل الحالي.
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## الأوامر
 
-عند استخدام واجهة OpenCode في terminal، يمكنك كتابة `/` متبوعة باسم أمر لتنفيذ الإجراءات بسرعة. مثلا:
+عند استخدام واجهة Daemon Protocol في terminal، يمكنك كتابة `/` متبوعة باسم أمر لتنفيذ الإجراءات بسرعة. مثلا:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### connect
 
-أضف موفّرا إلى OpenCode. يتيح لك اختيار أحد الموفّرين المتاحين وإضافة مفاتيح API الخاصة بهم.
+أضف موفّرا إلى Daemon Protocol. يتيح لك اختيار أحد الموفّرين المتاحين وإضافة مفاتيح API الخاصة بهم.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### exit
 
-اخرج من OpenCode. _الأسماء المستعارة_: `/quit`, `/q`
+اخرج من Daemon Protocol. _الأسماء المستعارة_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -390,7 +390,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 - `theme` - يحدد سمة UI. [اعرف المزيد](/docs/themes).
 - `keybinds` - يخصص اختصارات لوحة المفاتيح. [اعرف المزيد](/docs/keybinds).
-- `leader_timeout` - يتحكم في مدة انتظار OpenCode بعد الضغط على leader key. القيمة الافتراضية `2000`.
+- `leader_timeout` - يتحكم في مدة انتظار Daemon Protocol بعد الضغط على leader key. القيمة الافتراضية `2000`.
 - `scroll_acceleration.enabled` - يفعّل تسارع التمرير على نمط macOS لتمرير سلس وطبيعي. عند تفعيله، تزداد سرعة التمرير مع إيماءات التمرير السريعة وتبقى دقيقة للحركات الأبطأ. **يتقدّم هذا الإعداد على `scroll_speed` ويستبدله عند تفعيله.**
 - `scroll_speed` - يتحكم في سرعة تمرير TUI عند استخدام أوامر التمرير (الحد الأدنى: `0.001`، ويدعم القيم العشرية). القيمة الافتراضية `3`. **ملاحظة: يتم تجاهل هذا إذا تم ضبط `scroll_acceleration.enabled` على `true`.**
 - `diff_style` - يتحكم في عرض الفروقات (diff). القيمة `"auto"` تتكيف مع عرض terminal، و`"stacked"` تعرض عمودًا واحدًا دائمًا.
@@ -401,7 +401,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### Attention
 
-تجعل ميزة Attention واجهة TUI تنبهك عندما ينتظر OpenCode ردًا منك، أو يحتاج إلى الموافقة على permission، أو يواجه session error، أو ينهي session. فعّلها باستخدام `attention.enabled`؛ تشغّل الأحداث المدمجة صوتًا عند حدوثها. لا تُرسل desktop notifications إلا عندما لا تكون نافذة terminal في المقدمة، ولا تُستخدم مع أحداث subagent.
+تجعل ميزة Attention واجهة TUI تنبهك عندما ينتظر Daemon Protocol ردًا منك، أو يحتاج إلى الموافقة على permission، أو يواجه session error، أو ينهي session. فعّلها باستخدام `attention.enabled`؛ تشغّل الأحداث المدمجة صوتًا عند حدوثها. لا تُرسل desktop notifications إلا عندما لا تكون نافذة terminal في المقدمة، ولا تُستخدم مع أحداث subagent.
 
 - `enabled` - يفعّل جميع notifications والأصوات الخاصة بميزة Attention. القيمة الافتراضية `false`.
 - `notifications` - عند تفعيل Attention، يسمح لـ TUI بإرسال desktop notifications عبر terminal. القيمة الافتراضية `true`.

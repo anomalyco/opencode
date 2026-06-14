@@ -3,7 +3,7 @@ title: Solución de problemas
 description: Problemas comunes y cómo resolverlos.
 ---
 
-Para depurar problemas con OpenCode, comience verificando los registros y los datos locales que almacena en el disco.
+Para depurar problemas con Daemon Protocol, comience verificando los registros y los datos locales que almacena en el disco.
 
 ---
 
@@ -39,13 +39,13 @@ Este directorio contiene:
 
 ## Aplicación de escritorio
 
-OpenCode Desktop ejecuta un servidor OpenCode local (el sidecar `opencode-cli`) en segundo plano. La mayoría de los problemas se deben a un complemento que no funciona correctamente, una memoria caché dañada o una mala configuración del servidor.
+Daemon Protocol Desktop ejecuta un servidor Daemon Protocol local (el sidecar `opencode-cli`) en segundo plano. La mayoría de los problemas se deben a un complemento que no funciona correctamente, una memoria caché dañada o una mala configuración del servidor.
 
 ### Comprobaciones rápidas
 
 - Salga por completo y reinicie la aplicación.
 - Si la aplicación muestra una pantalla de error, haga clic en **Reiniciar** y copie los detalles del error.
-- Solo macOS: menú `OpenCode` -> **Recargar vista web** (ayuda si la interfaz de usuario está en blanco/congelada).
+- Solo macOS: menú `Daemon Protocol` -> **Recargar vista web** (ayuda si la interfaz de usuario está en blanco/congelada).
 
 ---
 
@@ -72,7 +72,7 @@ Si tiene complementos configurados, desactívelos temporalmente eliminando la cl
 
 #### Verificar directorios de complementos
 
-OpenCode también puede cargar complementos locales desde el disco. Quítelos temporalmente del camino (o cambie el nombre de la carpeta) y reinicie la aplicación de escritorio:
+Daemon Protocol también puede cargar complementos locales desde el disco. Quítelos temporalmente del camino (o cambie el nombre de la carpeta) y reinicie la aplicación de escritorio:
 
 - **Complementos globales**
   - **macOS/Linux**: `~/.config/opencode/plugins/`
@@ -86,22 +86,22 @@ Si la aplicación comienza a funcionar nuevamente, vuelva a habilitar los comple
 
 ### Borrar el caché
 
-Si deshabilitar los complementos no ayuda (o la instalación de un complemento está bloqueada), borre el caché para que OpenCode pueda reconstruirlo.
+Si deshabilitar los complementos no ayuda (o la instalación de un complemento está bloqueada), borre el caché para que Daemon Protocol pueda reconstruirlo.
 
-1. Salga de OpenCode Desktop por completo.
+1. Salga de Daemon Protocol Desktop por completo.
 2. Elimine el directorio de caché:
 
 - **macOS**: Buscador -> `Cmd+Shift+G` -> pegar `~/.cache/opencode`
 - **Linux**: eliminar `~/.cache/opencode` (o ejecutar `rm -rf ~/.cache/opencode`)
 - **Windows**: Presione `WIN+R` y pegue `%USERPROFILE%\.cache\opencode`
 
-3. Reinicie el escritorio OpenCode.
+3. Reinicie el escritorio Daemon Protocol.
 
 ---
 
 ### Solucionar problemas de conexión del servidor
 
-OpenCode Desktop puede iniciar su propio servidor local (predeterminado) o conectarse a la URL de un servidor que haya configurado.
+Daemon Protocol Desktop puede iniciar su propio servidor local (predeterminado) o conectarse a la URL de un servidor que haya configurado.
 
 Si ve un cuadro de diálogo **"Error de conexión"** (o la aplicación nunca pasa de la pantalla de inicio), busque una URL de servidor personalizada.
 
@@ -132,21 +132,21 @@ En Linux, algunas configuraciones de Wayland pueden causar ventanas en blanco o 
 
 ### Windows: tiempo de ejecución de WebView2
 
-En Windows, el escritorio OpenCode requiere Microsoft Edge **WebView2 Runtime**. Si la aplicación se abre en una ventana en blanco o no se inicia, instale/actualice WebView2 e inténtelo nuevamente.
+En Windows, el escritorio Daemon Protocol requiere Microsoft Edge **WebView2 Runtime**. Si la aplicación se abre en una ventana en blanco o no se inicia, instale/actualice WebView2 e inténtelo nuevamente.
 
 ---
 
 ### Windows: Problemas generales de rendimiento
 
-Si tiene un rendimiento lento, problemas de acceso a archivos o problemas de terminal en Windows, intente usar [WSL (Windows Subsistema para Linux)](/docs/windows-wsl). WSL proporciona un entorno Linux que funciona de manera más fluida con las funciones de OpenCode.
+Si tiene un rendimiento lento, problemas de acceso a archivos o problemas de terminal en Windows, intente usar [WSL (Windows Subsistema para Linux)](/docs/windows-wsl). WSL proporciona un entorno Linux que funciona de manera más fluida con las funciones de Daemon Protocol.
 
 ---
 
 ### Notificaciones que no se muestran
 
-OpenCode Desktop solo muestra notificaciones del sistema cuando:
+Daemon Protocol Desktop solo muestra notificaciones del sistema cuando:
 
-- las notificaciones están habilitadas para OpenCode en la configuración de su sistema operativo, y
+- las notificaciones están habilitadas para Daemon Protocol en la configuración de su sistema operativo, y
 - la ventana de la aplicación no está enfocada.
 
 ---
@@ -155,8 +155,8 @@ OpenCode Desktop solo muestra notificaciones del sistema cuando:
 
 Si la aplicación no se inicia y no puede borrar la configuración desde la interfaz de usuario, restablezca el estado guardado de la aplicación de escritorio.
 
-1. Salga del escritorio OpenCode.
-2. Busque y elimine estos archivos (se encuentran en el directorio de datos de la aplicación de escritorio OpenCode):
+1. Salga del escritorio Daemon Protocol.
+2. Busque y elimine estos archivos (se encuentran en el directorio de datos de la aplicación de escritorio Daemon Protocol):
 
 - `opencode.settings.dat` (URL del servidor predeterminado de escritorio)
 - `opencode.global.dat` y `opencode.workspace.*.dat` (estado de la interfaz de usuario como servidores/proyectos recientes)
@@ -171,7 +171,7 @@ Para encontrar el directorio rápidamente:
 
 ## Obtener ayuda
 
-Si tiene problemas con OpenCode:
+Si tiene problemas con Daemon Protocol:
 
 1. **Informar problemas el GitHub**
 
@@ -195,7 +195,7 @@ A continuación se detallan algunos problemas comunes y cómo resolverlos.
 
 ---
 
-### OpenCode no se inicia
+### Daemon Protocol no se inicia
 
 1. Verifique los registros en busca de mensajes de error.
 2. Intente ejecutar con `--print-logs` para ver el resultado en la terminal.

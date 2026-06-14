@@ -1,17 +1,17 @@
 ---
 title: Zen
-description: Utvalgt liste over modeller levert av OpenCode.
+description: Utvalgt liste over modeller levert av Daemon Protocol.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Zen er en liste over testede og verifiserte modeller levert av OpenCode-teamet.
+Daemon Zen er en liste over testede og verifiserte modeller levert av Daemon Protocol-teamet.
 
-Zen fungerer som enhver annen leverandør i OpenCode. Du logger inn på OpenCode Zen og får
+Zen fungerer som enhver annen leverandør i Daemon Protocol. Du logger inn på Daemon Zen og får
 API-nøkkelen din. Det er **helt valgfritt**, og du trenger ikke bruke det for å bruke
-OpenCode.
+Daemon Protocol.
 
 ---
 
@@ -22,7 +22,7 @@ disse modellene fungerer godt som kodeagenter. I tillegg er de fleste leverandø
 konfigurert svært ulikt, så du får veldig ulik ytelse og kvalitet.
 
 :::tip
-Vi testet en utvalgt gruppe modeller og leverandører som fungerer godt med OpenCode.
+Vi testet en utvalgt gruppe modeller og leverandører som fungerer godt med Daemon Protocol.
 :::
 
 Så hvis du bruker en modell gjennom noe som OpenRouter, kan du aldri være
@@ -37,17 +37,17 @@ For å løse dette gjorde vi et par ting:
 3. Til slutt benchmarket vi kombinasjonen av modell/leverandør og laget
    en liste vi føler oss trygge på å anbefale.
 
-OpenCode Zen er en AI gateway som gir deg tilgang til disse modellene.
+Daemon Zen er en AI gateway som gir deg tilgang til disse modellene.
 
 ---
 
 ## Slik fungerer det
 
-OpenCode Zen fungerer som enhver annen leverandør i OpenCode.
+Daemon Zen fungerer som enhver annen leverandør i Daemon Protocol.
 
-1. Du logger inn på **<a href={console}>OpenCode Zen</a>**, legger til
+1. Du logger inn på **<a href={console}>Daemon Zen</a>**, legger til
    faktureringsdetaljene dine og kopierer API-nøkkelen din.
-2. Du kjører kommandoen `/connect` i TUI, velger OpenCode Zen og limer inn API-nøkkelen din.
+2. Du kjører kommandoen `/connect` i TUI, velger Daemon Zen og limer inn API-nøkkelen din.
 3. Kjør `/models` i TUI for å se listen over modeller vi anbefaler.
 
 Du blir belastet per forespørsel, og du kan legge til kreditt på kontoen din.
@@ -110,7 +110,7 @@ Du kan også få tilgang til modellene våre gjennom følgende API-endepunkter.
 | Nemotron 3 Ultra Free  | nemotron-3-ultra-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 
-[modell-id](/docs/config/#models) i OpenCode-konfigurasjonen din
+[modell-id](/docs/config/#models) i Daemon Protocol-konfigurasjonen din
 bruker formatet `opencode/<model-id>`. For eksempel, for GPT 5.5, ville du
 brukt `opencode/gpt-5.5` i konfigurasjonen din.
 
@@ -194,11 +194,11 @@ Kredittkortgebyrer videreføres til kostpris (4.4% + $0.30 per transaction); vi 
 
 Gratis-modellene:
 
-- DeepSeek V4 Flash Free er tilgjengelig på OpenCode i en begrenset periode. Teamet bruker denne tiden til å samle inn tilbakemeldinger og forbedre modellen.
-- MiMo-V2.5 Free er tilgjengelig på OpenCode i en begrenset periode. Teamet bruker denne tiden til å samle inn tilbakemeldinger og forbedre modellen.
-- North Mini Code Free er tilgjengelig på OpenCode i en begrenset periode. Teamet bruker denne tiden til å samle inn tilbakemeldinger og forbedre modellen.
-- Nemotron 3 Ultra Free er tilgjengelig på OpenCode i en begrenset periode. Teamet bruker denne tiden til å samle inn tilbakemeldinger og forbedre modellen.
-- Big Pickle er en stealth-modell som er gratis på OpenCode i en begrenset periode. Teamet bruker denne tiden til å samle inn tilbakemeldinger og forbedre modellen.
+- DeepSeek V4 Flash Free er tilgjengelig på Daemon Protocol i en begrenset periode. Teamet bruker denne tiden til å samle inn tilbakemeldinger og forbedre modellen.
+- MiMo-V2.5 Free er tilgjengelig på Daemon Protocol i en begrenset periode. Teamet bruker denne tiden til å samle inn tilbakemeldinger og forbedre modellen.
+- North Mini Code Free er tilgjengelig på Daemon Protocol i en begrenset periode. Teamet bruker denne tiden til å samle inn tilbakemeldinger og forbedre modellen.
+- Nemotron 3 Ultra Free er tilgjengelig på Daemon Protocol i en begrenset periode. Teamet bruker denne tiden til å samle inn tilbakemeldinger og forbedre modellen.
+- Big Pickle er en stealth-modell som er gratis på Daemon Protocol i en begrenset periode. Teamet bruker denne tiden til å samle inn tilbakemeldinger og forbedre modellen.
 
 <a href={email}>Kontakt oss</a> hvis du har spørsmål.
 
@@ -306,9 +306,9 @@ og du vil bruke den i stedet for den Zen tilbyr.
 
 ## Mål
 
-Vi opprettet OpenCode Zen for å:
+Vi opprettet Daemon Zen for å:
 
 1. **Benchmarke** de beste modellene/leverandørene for kodeagenter.
 2. Ha tilgang til alternativene med **høyest kvalitet** og ikke nedgradere ytelsen eller rute til billigere leverandører.
 3. Videreføre eventuelle **prisreduksjoner** ved å selge til kostpris, slik at det eneste påslaget er for å dekke behandlingsgebyrene våre.
-4. Ha **ingen lock-in** ved å la deg bruke det med enhver annen kodeagent. Og alltid la deg bruke enhver annen leverandør med OpenCode også.
+4. Ha **ingen lock-in** ved å la deg bruke det med enhver annen kodeagent. Og alltid la deg bruke enhver annen leverandør med Daemon Protocol også.

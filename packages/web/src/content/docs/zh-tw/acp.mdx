@@ -1,9 +1,9 @@
 ---
 title: ACP 支援
-description: 在任何相容 ACP 的編輯器中使用 OpenCode。
+description: 在任何相容 ACP 的編輯器中使用 Daemon Protocol。
 ---
 
-OpenCode 支援 [Agent Client Protocol](https://agentclientprotocol.com)（ACP），允許你直接在相容的編輯器和 IDE 中使用它。
+Daemon Protocol 支援 [Agent Client Protocol](https://agentclientprotocol.com)（ACP），允許你直接在相容的編輯器和 IDE 中使用它。
 
 :::tip
 有關支援 ACP 的編輯器和工具列表，請查看 [ACP 進展報告](https://zed.dev/blog/acp-progress-report#available-now)。
@@ -15,9 +15,9 @@ ACP 是一個開放協議，用於標準化程式碼編輯器與 AI 編碼代理
 
 ## 設定
 
-要透過 ACP 使用 OpenCode，請在編輯器中設定執行 `opencode acp` 命令。
+要透過 ACP 使用 Daemon Protocol，請在編輯器中設定執行 `opencode acp` 命令。
 
-該命令會將 OpenCode 作為相容 ACP 的子程序啟動，透過 stdio 上的 JSON-RPC 與編輯器進行通訊。
+該命令會將 Daemon Protocol 作為相容 ACP 的子程序啟動，透過 stdio 上的 JSON-RPC 與編輯器進行通訊。
 
 以下是支援 ACP 的常用編輯器的設定範例。
 
@@ -30,7 +30,7 @@ ACP 是一個開放協議，用於標準化程式碼編輯器與 AI 編碼代理
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
-    "OpenCode": {
+    "Daemon Protocol": {
       "command": "opencode",
       "args": ["acp"]
     }
@@ -51,7 +51,7 @@ ACP 是一個開放協議，用於標準化程式碼編輯器與 AI 編碼代理
         {
           "agent": {
             "custom": {
-              "name": "OpenCode",
+              "name": "Daemon Protocol",
               "command": {
                 "command": "opencode",
                 "args": ["acp"]
@@ -74,7 +74,7 @@ ACP 是一個開放協議，用於標準化程式碼編輯器與 AI 編碼代理
 ```json title="acp.json"
 {
   "agent_servers": {
-    "OpenCode": {
+    "Daemon Protocol": {
       "command": "/absolute/path/bin/opencode",
       "args": ["acp"]
     }
@@ -82,7 +82,7 @@ ACP 是一個開放協議，用於標準化程式碼編輯器與 AI 編碼代理
 }
 ```
 
-開啟方式：在 AI Chat 代理選擇器中選擇新的 'OpenCode' 代理。
+開啟方式：在 AI Chat 代理選擇器中選擇新的 'Daemon Protocol' 代理。
 
 ---
 
@@ -121,7 +121,7 @@ ACP 是一個開放協議，用於標準化程式碼編輯器與 AI 編碼代理
 
 ### CodeCompanion.nvim
 
-要在 [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim) 中將 OpenCode 用作 ACP 代理，請將以下內容新增到你的 Neovim 設定中：
+要在 [CodeCompanion.nvim](https://github.com/olimorris/codecompanion.nvim) 中將 Daemon Protocol 用作 ACP 代理，請將以下內容新增到你的 Neovim 設定中：
 
 ```lua
 require("codecompanion").setup({
@@ -136,13 +136,13 @@ require("codecompanion").setup({
 })
 ```
 
-此設定將 CodeCompanion 設為使用 OpenCode 作為聊天的 ACP 代理。
+此設定將 CodeCompanion 設為使用 Daemon Protocol 作為聊天的 ACP 代理。
 
 如果需要傳遞環境變數（如 `OPENCODE_API_KEY`），請參閱 CodeCompanion.nvim 文件中的[設定適配器：環境變數](https://codecompanion.olimorris.dev/getting-started#setting-an-api-key)了解詳細資訊。
 
 ## 支援
 
-OpenCode 透過 ACP 使用時與在終端機中使用的效果完全一致。所有功能均受支援：
+Daemon Protocol 透過 ACP 使用時與在終端機中使用的效果完全一致。所有功能均受支援：
 
 :::note
 部分內建斜線命令（如 `/undo` 和 `/redo`）目前暫不支援。
@@ -150,7 +150,7 @@ OpenCode 透過 ACP 使用時與在終端機中使用的效果完全一致。所
 
 - 內建工具（檔案操作、終端機命令等）
 - 自訂工具和斜線命令
-- 在 OpenCode 設定中設定的 MCP 伺服器
+- 在 Daemon Protocol 設定中設定的 MCP 伺服器
 - 來自 `AGENTS.md` 的專案級規則
 - 自訂格式化工具和程式碼檢查工具
 - 代理和權限系統

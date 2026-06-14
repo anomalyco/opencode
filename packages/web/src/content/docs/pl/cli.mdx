@@ -1,17 +1,17 @@
 ---
 title: CLI
-description: Opcje i polecenia wiersza poleceń OpenCode.
+description: Opcje i polecenia wiersza poleceń Daemon Protocol.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-CLI OpenCode domyślnie uruchamia [TUI](/docs/tui), gdy wywołasz je bez argumentów.
+CLI Daemon Protocol domyślnie uruchamia [TUI](/docs/tui), gdy wywołasz je bez argumentów.
 
 ```bash
 opencode
 ```
 
-CLI obsługuje też polecenia opisane na tej stronie, więc możesz używać OpenCode programowo.
+CLI obsługuje też polecenia opisane na tej stronie, więc możesz używać Daemon Protocol programowo.
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-Uruchamia interfejs terminalowy (TUI) OpenCode.
+Uruchamia interfejs terminalowy (TUI) Daemon Protocol.
 
 ```bash
 opencode [project]
@@ -44,13 +44,13 @@ opencode [project]
 
 ## Polecenia
 
-Interfejs CLI OpenCode zawiera także dodatkowe polecenia.
+Interfejs CLI Daemon Protocol zawiera także dodatkowe polecenia.
 
 ---
 
 ### agent
 
-Zarządzaj agentami OpenCode.
+Zarządzaj agentami Daemon Protocol.
 
 ```bash
 opencode agent [command]
@@ -60,13 +60,13 @@ opencode agent [command]
 
 ### attach
 
-Dołącz terminal do już działającego serwera backendu OpenCode uruchomionego za pomocą `serve` lub `web`.
+Dołącz terminal do już działającego serwera backendu Daemon Protocol uruchomionego za pomocą `serve` lub `web`.
 
 ```bash
 opencode attach [url]
 ```
 
-Pozwala to połączyć TUI ze zdalnym backendem OpenCode. Na przykład:
+Pozwala to połączyć TUI ze zdalnym backendem Daemon Protocol. Na przykład:
 
 ```bash
 # Start the backend server for web/mobile access
@@ -123,13 +123,13 @@ opencode auth [command]
 
 #### login
 
-OpenCode integruje się z wieloma dostawcami. Możesz użyć `opencode auth login`, aby skonfigurować klucz API dla dowolnego obsługiwanego dostawcy. Klucze są bezpiecznie przechowywane w `~/.local/share/opencode/auth.json`.
+Daemon Protocol integruje się z wieloma dostawcami. Możesz użyć `opencode auth login`, aby skonfigurować klucz API dla dowolnego obsługiwanego dostawcy. Klucze są bezpiecznie przechowywane w `~/.local/share/opencode/auth.json`.
 
 ```bash
 opencode auth login
 ```
 
-Podczas uruchamiania OpenCode ładuje dostawców z pliku poświadczeń, a także ze zmiennych środowiskowych lub pliku `.env` w Twoim projekcie.
+Podczas uruchamiania Daemon Protocol ładuje dostawców z pliku poświadczeń, a także ze zmiennych środowiskowych lub pliku `.env` w Twoim projekcie.
 
 ---
 
@@ -305,7 +305,7 @@ opencode models anthropic
 | <nobr><code>{"--refresh"}</code></nobr> | Odśwież pamięć podręczną modeli                                                 |
 | <nobr><code>{"--verbose"}</code></nobr> | Bardziej szczegółowe dane wyjściowe modelu (zawiera metadane, takie jak koszty) |
 
-Użyj flagi `--refresh`, aby zaktualizować listę modeli w pamięci podręcznej. Jest to przydatne, gdy dostawca dodał nowe modele, które chcesz zobaczyć w OpenCode.
+Użyj flagi `--refresh`, aby zaktualizować listę modeli w pamięci podręcznej. Jest to przydatne, gdy dostawca dodał nowe modele, które chcesz zobaczyć w Daemon Protocol.
 
 ```bash
 opencode models --refresh
@@ -315,7 +315,7 @@ opencode models --refresh
 
 ### run
 
-Uruchom OpenCode w trybie nieinteraktywnym, przekazując bezpośrednio prompt.
+Uruchom Daemon Protocol w trybie nieinteraktywnym, przekazując bezpośrednio prompt.
 
 ```bash
 opencode run [message..]
@@ -351,7 +351,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--file"}</code></nobr>     | `-f`  | Pliki do załączenia do wiadomości                                                                     |
 | <nobr><code>{"--format"}</code></nobr>   |       | Format wyjściowy: `default` (sformatowany) lub `json` (surowy JSON)                                   |
 | <nobr><code>{"--title"}</code></nobr>    |       | Tytuł sesji (jeśli nie podano, zostanie wygenerowany z promptu)                                       |
-| <nobr><code>{"--attach"}</code></nobr>   |       | Dołącz do działającego serwera OpenCode (np. http://localhost:4096)                                   |
+| <nobr><code>{"--attach"}</code></nobr>   |       | Dołącz do działającego serwera Daemon Protocol (np. http://localhost:4096)                                   |
 | <nobr><code>{"--password"}</code></nobr> | `-p`  | Hasło uwierzytelniania podstawowego (domyślnie `OPENCODE_SERVER_PASSWORD`)                            |
 | <nobr><code>{"--username"}</code></nobr> | `-u`  | Nazwa użytkownika uwierzytelniania podstawowego (domyślnie `OPENCODE_SERVER_USERNAME` lub `opencode`) |
 | <nobr><code>{"--dir"}</code></nobr>      |       | Katalog do uruchomienia lub ścieżka na zdalnym serwerze podczas dołączania                            |
@@ -363,13 +363,13 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### serve
 
-Uruchom serwer OpenCode (bez interfejsu) w celu uzyskania dostępu do API. Pełny opis API HTTP znajduje się w [dokumentacji serwera](/docs/server).
+Uruchom serwer Daemon Protocol (bez interfejsu) w celu uzyskania dostępu do API. Pełny opis API HTTP znajduje się w [dokumentacji serwera](/docs/server).
 
 ```bash
 opencode serve
 ```
 
-Uruchamia to serwer HTTP, który zapewnia dostęp do API OpenCode bez interfejsu TUI. Ustaw `OPENCODE_SERVER_PASSWORD`, aby włączyć podstawowe uwierzytelnianie HTTP (domyślna nazwa użytkownika to `opencode`).
+Uruchamia to serwer HTTP, który zapewnia dostęp do API Daemon Protocol bez interfejsu TUI. Ustaw `OPENCODE_SERVER_PASSWORD`, aby włączyć podstawowe uwierzytelnianie HTTP (domyślna nazwa użytkownika to `opencode`).
 
 #### Flagi
 
@@ -384,7 +384,7 @@ Uruchamia to serwer HTTP, który zapewnia dostęp do API OpenCode bez interfejsu
 
 ### session
 
-Zarządzaj sesjami OpenCode.
+Zarządzaj sesjami Daemon Protocol.
 
 ```bash
 opencode session [command]
@@ -394,7 +394,7 @@ opencode session [command]
 
 #### list
 
-Lista wszystkich sesji OpenCode.
+Lista wszystkich sesji Daemon Protocol.
 
 ```bash
 opencode session list
@@ -411,7 +411,7 @@ opencode session list
 
 ### stats
 
-Pokaż statystyki wykorzystania tokenów i sesji OpenCode.
+Pokaż statystyki wykorzystania tokenów i sesji Daemon Protocol.
 
 ```bash
 opencode stats
@@ -442,7 +442,7 @@ Jeśli nie podasz identyfikatora sesji, zostaniesz poproszony o wybranie jednej 
 
 ### import
 
-Importuj dane sesji z pliku JSON lub adresu URL udostępniania OpenCode.
+Importuj dane sesji z pliku JSON lub adresu URL udostępniania Daemon Protocol.
 
 ```bash
 opencode import <file>
@@ -459,13 +459,13 @@ opencode import https://opncd.ai/s/abc123
 
 ### web
 
-Uruchom serwer OpenCode z interfejsem internetowym.
+Uruchom serwer Daemon Protocol z interfejsem internetowym.
 
 ```bash
 opencode web
 ```
 
-Uruchamia to serwer HTTP i udostępnia OpenCode przez interfejs przeglądarkowy. Ustaw `OPENCODE_SERVER_PASSWORD`, aby włączyć podstawowe uwierzytelnianie HTTP (domyślna nazwa użytkownika to `opencode`).
+Uruchamia to serwer HTTP i udostępnia Daemon Protocol przez interfejs przeglądarkowy. Ustaw `OPENCODE_SERVER_PASSWORD`, aby włączyć podstawowe uwierzytelnianie HTTP (domyślna nazwa użytkownika to `opencode`).
 
 #### Flagi
 
@@ -500,7 +500,7 @@ Uruchamia serwer ACP, który komunikuje się przez stdin/stdout przy użyciu JSO
 
 ### uninstall
 
-Odinstaluj OpenCode i usuń wszystkie powiązane pliki.
+Odinstaluj Daemon Protocol i usuń wszystkie powiązane pliki.
 
 ```bash
 opencode uninstall
@@ -519,7 +519,7 @@ opencode uninstall
 
 ### upgrade
 
-Aktualizuj OpenCode do najnowszej lub określonej wersji.
+Aktualizuj Daemon Protocol do najnowszej lub określonej wersji.
 
 ```bash
 opencode upgrade [target]
@@ -547,7 +547,7 @@ opencode upgrade v0.1.48
 
 ## Flagi globalne
 
-Interfejs CLI OpenCode przyjmuje następujące flagi globalne dla każdego polecenia.
+Interfejs CLI Daemon Protocol przyjmuje następujące flagi globalne dla każdego polecenia.
 
 | Flaga                                      | Skrót | Opis                                        |
 | ------------------------------------------ | ----- | ------------------------------------------- |
@@ -560,7 +560,7 @@ Interfejs CLI OpenCode przyjmuje następujące flagi globalne dla każdego polec
 
 ## Zmienne środowiskowe
 
-OpenCode można skonfigurować za pomocą zmiennych środowiskowych.
+Daemon Protocol można skonfigurować za pomocą zmiennych środowiskowych.
 
 | Zmienna                               | Typ     | Opis                                                       |
 | ------------------------------------- | ------- | ---------------------------------------------------------- |

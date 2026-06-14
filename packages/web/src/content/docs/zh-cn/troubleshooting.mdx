@@ -3,7 +3,7 @@ title: 故障排除
 description: 常见问题及其解决方法。
 ---
 
-要调试 OpenCode 的问题，请先检查其存储在磁盘上的日志和本地数据。
+要调试 Daemon Protocol 的问题，请先检查其存储在磁盘上的日志和本地数据。
 
 ---
 
@@ -22,7 +22,7 @@ description: 常见问题及其解决方法。
 
 ## 存储
 
-OpenCode 将会话数据和其他应用数据存储在磁盘上：
+Daemon Protocol 将会话数据和其他应用数据存储在磁盘上：
 
 - **macOS/Linux**: `~/.local/share/opencode/`
 - **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.local\share\opencode`
@@ -39,13 +39,13 @@ OpenCode 将会话数据和其他应用数据存储在磁盘上：
 
 ## 桌面应用
 
-OpenCode Desktop 会在后台运行一个本地 OpenCode 服务器（即 `opencode-cli` 附属进程）。大多数问题是由插件异常、缓存损坏或错误的服务器设置引起的。
+Daemon Protocol Desktop 会在后台运行一个本地 Daemon Protocol 服务器（即 `opencode-cli` 附属进程）。大多数问题是由插件异常、缓存损坏或错误的服务器设置引起的。
 
 ### 快速检查
 
 - 完全退出并重新启动应用。
 - 如果应用显示错误页面，请点击**重新启动**并复制错误详情。
-- 仅限 macOS：`OpenCode` 菜单 -> **Reload Webview**（当 UI 空白或冻结时有效）。
+- 仅限 macOS：`Daemon Protocol` 菜单 -> **Reload Webview**（当 UI 空白或冻结时有效）。
 
 ---
 
@@ -72,7 +72,7 @@ OpenCode Desktop 会在后台运行一个本地 OpenCode 服务器（即 `openco
 
 #### 检查插件目录
 
-OpenCode 还可以从磁盘加载本地插件。临时将这些插件移走（或重命名文件夹），然后重新启动桌面应用：
+Daemon Protocol 还可以从磁盘加载本地插件。临时将这些插件移走（或重命名文件夹），然后重新启动桌面应用：
 
 - **全局插件**
   - **macOS/Linux**: `~/.config/opencode/plugins/`
@@ -86,22 +86,22 @@ OpenCode 还可以从磁盘加载本地插件。临时将这些插件移走（�
 
 ### 清除缓存
 
-如果禁用插件没有帮助（或插件安装卡住了），请清除缓存以便 OpenCode 重新构建。
+如果禁用插件没有帮助（或插件安装卡住了），请清除缓存以便 Daemon Protocol 重新构建。
 
-1. 完全退出 OpenCode Desktop。
+1. 完全退出 Daemon Protocol Desktop。
 2. 删除缓存目录：
 
 - **macOS**: Finder -> `Cmd+Shift+G` -> 粘贴 `~/.cache/opencode`
 - **Linux**: 删除 `~/.cache/opencode`（或运行 `rm -rf ~/.cache/opencode`）
 - **Windows**: 按 `WIN+R` 并粘贴 `%USERPROFILE%\.cache\opencode`
 
-3. 重新启动 OpenCode Desktop。
+3. 重新启动 Daemon Protocol Desktop。
 
 ---
 
 ### 修复服务器连接问题
 
-OpenCode Desktop 可以启动自己的本地服务器（默认行为），也可以连接到你配置的服务器 URL。
+Daemon Protocol Desktop 可以启动自己的本地服务器（默认行为），也可以连接到你配置的服务器 URL。
 
 如果你看到**"Connection Failed"**对话框（或应用始终停留在启动画面），请检查自定义服务器 URL。
 
@@ -132,21 +132,21 @@ OpenCode Desktop 可以启动自己的本地服务器（默认行为），也可
 
 ### Windows: WebView2 运行时
 
-在 Windows 上，OpenCode Desktop 需要 Microsoft Edge **WebView2 Runtime**。如果应用打开后是空白窗口或无法启动，请安装或更新 WebView2 后重试。
+在 Windows 上，Daemon Protocol Desktop 需要 Microsoft Edge **WebView2 Runtime**。如果应用打开后是空白窗口或无法启动，请安装或更新 WebView2 后重试。
 
 ---
 
 ### Windows: 常见性能问题
 
-如果你在 Windows 上遇到性能缓慢、文件访问问题或终端问题，请尝试使用 [WSL (Windows Subsystem for Linux)](/docs/windows-wsl)。WSL 提供了一个 Linux 环境，能更好地与 OpenCode 的功能兼容。
+如果你在 Windows 上遇到性能缓慢、文件访问问题或终端问题，请尝试使用 [WSL (Windows Subsystem for Linux)](/docs/windows-wsl)。WSL 提供了一个 Linux 环境，能更好地与 Daemon Protocol 的功能兼容。
 
 ---
 
 ### 通知不显示
 
-OpenCode Desktop 仅在以下情况下显示系统通知：
+Daemon Protocol Desktop 仅在以下情况下显示系统通知：
 
-- 在操作系统设置中已为 OpenCode 启用通知，且
+- 在操作系统设置中已为 Daemon Protocol 启用通知，且
 - 应用窗口未处于焦点状态。
 
 ---
@@ -155,8 +155,8 @@ OpenCode Desktop 仅在以下情况下显示系统通知：
 
 如果应用无法启动且你无法从 UI 内部清除设置，请重置桌面应用的保存状态。
 
-1. 退出 OpenCode Desktop。
-2. 找到并删除以下文件（它们位于 OpenCode Desktop 应用数据目录中）：
+1. 退出 Daemon Protocol Desktop。
+2. 找到并删除以下文件（它们位于 Daemon Protocol Desktop 应用数据目录中）：
 
 - `opencode.settings.dat`（桌面默认服务器 URL）
 - `opencode.global.dat` 和 `opencode.workspace.*.dat`（UI 状态，如最近的服务器/项目）
@@ -171,7 +171,7 @@ OpenCode Desktop 仅在以下情况下显示系统通知：
 
 ## 获取帮助
 
-如果你遇到 OpenCode 的问题：
+如果你遇到 Daemon Protocol 的问题：
 
 1. **在 GitHub 上报告问题**
 
@@ -195,7 +195,7 @@ OpenCode Desktop 仅在以下情况下显示系统通知：
 
 ---
 
-### OpenCode 无法启动
+### Daemon Protocol 无法启动
 
 1. 检查日志中的错误消息
 2. 尝试使用 `--print-logs` 运行以在终端中查看输出
@@ -251,7 +251,7 @@ OpenCode Desktop 仅在以下情况下显示系统通知：
 
 ### AI_APICallError 和提供商包问题
 
-如果你遇到 API 调用错误，可能是由于提供商包过期导致的。OpenCode 会根据需要动态安装提供商包（OpenAI、Anthropic、Google 等）并将它们缓存到本地。
+如果你遇到 API 调用错误，可能是由于提供商包过期导致的。Daemon Protocol 会根据需要动态安装提供商包（OpenAI、Anthropic、Google 等）并将它们缓存到本地。
 
 要解决提供商包问题：
 
@@ -263,9 +263,9 @@ OpenCode Desktop 仅在以下情况下显示系统通知：
 
    在 Windows 上，按 `WIN+R` 并删除：`%USERPROFILE%\.cache\opencode`
 
-2. 重新启动 OpenCode 以重新安装最新的提供商包
+2. 重新启动 Daemon Protocol 以重新安装最新的提供商包
 
-这将强制 OpenCode 下载最新版本的提供商包，通常可以解决模型参数和 API 变更带来的兼容性问题。
+这将强制 Daemon Protocol 下载最新版本的提供商包，通常可以解决模型参数和 API 变更带来的兼容性问题。
 
 ---
 
@@ -296,4 +296,4 @@ Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 export DISPLAY=:99.0
 ```
 
-OpenCode 会检测你是否正在使用 Wayland 并优先使用 `wl-clipboard`，否则将按以下顺序尝试查找剪贴板工具：`xclip` 和 `xsel`。
+Daemon Protocol 会检测你是否正在使用 Wayland 并优先使用 `wl-clipboard`，否则将按以下顺序尝试查找剪贴板工具：`xclip` 和 `xsel`。

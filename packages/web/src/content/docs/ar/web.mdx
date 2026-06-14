@@ -1,11 +1,11 @@
 ---
 title: الويب
-description: استخدام OpenCode في متصفحك.
+description: استخدام Daemon Protocol في متصفحك.
 ---
 
-يمكن تشغيل OpenCode كتطبيق ويب داخل متصفحك، ليمنحك تجربة البرمجة القوية بالذكاء الاصطناعي نفسها دون الحاجة إلى terminal.
+يمكن تشغيل Daemon Protocol كتطبيق ويب داخل متصفحك، ليمنحك تجربة البرمجة القوية بالذكاء الاصطناعي نفسها دون الحاجة إلى terminal.
 
-![OpenCode Web - جلسة جديدة](../../../assets/web/web-homepage-new-session.png)
+![Daemon Protocol Web - جلسة جديدة](../../../assets/web/web-homepage-new-session.png)
 
 ## البدء
 
@@ -15,7 +15,7 @@ description: استخدام OpenCode في متصفحك.
 opencode web
 ```
 
-يؤدي ذلك إلى تشغيل خادم محلي على `127.0.0.1` بمنفذ عشوائي متاح، ويفتح OpenCode تلقائيا في المتصفح الافتراضي لديك.
+يؤدي ذلك إلى تشغيل خادم محلي على `127.0.0.1` بمنفذ عشوائي متاح، ويفتح Daemon Protocol تلقائيا في المتصفح الافتراضي لديك.
 
 :::caution
 إذا لم يتم تعيين `OPENCODE_SERVER_PASSWORD` فسيكون الخادم دون حماية. هذا مناسب للاستخدام المحلي، لكنه يجب أن يكون مُعينا عند إتاحة الوصول عبر الشبكة.
@@ -33,7 +33,7 @@ opencode web
 
 ### المنفذ
 
-افتراضيا، يختار OpenCode منفذا متاحا. يمكنك تحديد منفذ:
+افتراضيا، يختار Daemon Protocol منفذا متاحا. يمكنك تحديد منفذ:
 
 ```bash
 opencode web --port 4096
@@ -41,13 +41,13 @@ opencode web --port 4096
 
 ### اسم المضيف
 
-افتراضيا، يرتبط الخادم بـ `127.0.0.1` (للاستخدام المحلي فقط). لجعل OpenCode متاحا على شبكتك:
+افتراضيا، يرتبط الخادم بـ `127.0.0.1` (للاستخدام المحلي فقط). لجعل Daemon Protocol متاحا على شبكتك:
 
 ```bash
 opencode web --hostname 0.0.0.0
 ```
 
-عند استخدام `0.0.0.0` سيعرض OpenCode كلا من عناوين الوصول المحلي وعناوين الشبكة:
+عند استخدام `0.0.0.0` سيعرض Daemon Protocol كلا من عناوين الوصول المحلي وعناوين الشبكة:
 
 ```
   Local access:       http://localhost:4096
@@ -92,19 +92,19 @@ OPENCODE_SERVER_PASSWORD=secret opencode web
 
 ## استخدام واجهة الويب
 
-بعد التشغيل، تتيح لك واجهة الويب الوصول إلى جلسات OpenCode الخاصة بك.
+بعد التشغيل، تتيح لك واجهة الويب الوصول إلى جلسات Daemon Protocol الخاصة بك.
 
 ### الجلسات
 
 اعرض جلساتك وأدرها من الصفحة الرئيسية. يمكنك رؤية الجلسات النشطة وبدء جلسات جديدة.
 
-![OpenCode Web - جلسة نشطة](../../../assets/web/web-homepage-active-session.png)
+![Daemon Protocol Web - جلسة نشطة](../../../assets/web/web-homepage-active-session.png)
 
 ### حالة الخادم
 
 انقر على "See Servers" لعرض الخوادم المتصلة وحالتها.
 
-![OpenCode Web - See Servers (عرض الخوادم)](../../../assets/web/web-homepage-see-servers.png)
+![Daemon Protocol Web - See Servers (عرض الخوادم)](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 

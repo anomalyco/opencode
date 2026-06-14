@@ -3,7 +3,7 @@ title: 工具
 description: 管理 LLM 可以使用的工具。
 ---
 
-工具允许 LLM 在您的代码库中执行操作。OpenCode 自带一组内置工具，您也可以通过[自定义工具](/docs/custom-tools)或 [MCP 服务器](/docs/mcp-servers)来扩展它。
+工具允许 LLM 在您的代码库中执行操作。Daemon Protocol 自带一组内置工具，您也可以通过[自定义工具](/docs/custom-tools)或 [MCP 服务器](/docs/mcp-servers)来扩展它。
 
 默认情况下，所有工具都是**启用**的，且无需权限即可运行。您可以通过[权限](/docs/permissions)来控制工具的行为。
 
@@ -41,7 +41,7 @@ description: 管理 LLM 可以使用的工具。
 
 ## 内置工具
 
-以下是 OpenCode 中所有可用的内置工具。
+以下是 Daemon Protocol 中所有可用的内置工具。
 
 ---
 
@@ -253,9 +253,9 @@ description: 管理 LLM 可以使用的工具。
 在网络上搜索信息。
 
 :::note
-该工具仅在使用 OpenCode 提供商时，或当 `OPENCODE_ENABLE_EXA` 环境变量设置为任意真值（例如 `true` 或 `1`）时可用。
+该工具仅在使用 Daemon Protocol 提供商时，或当 `OPENCODE_ENABLE_EXA` 环境变量设置为任意真值（例如 `true` 或 `1`）时可用。
 
-在启动 OpenCode 时启用：
+在启动 Daemon Protocol 时启用：
 
 ```bash
 OPENCODE_ENABLE_EXA=1 opencode

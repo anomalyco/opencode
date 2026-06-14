@@ -1,17 +1,17 @@
 ---
 title: CLI
-description: Options et commandes de la CLI OpenCode.
+description: Options et commandes de la CLI Daemon Protocol.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-La CLI OpenCode démarre par défaut le [TUI](/docs/tui) lorsqu'il est exécuté sans aucun argument.
+La CLI Daemon Protocol démarre par défaut le [TUI](/docs/tui) lorsqu'il est exécuté sans aucun argument.
 
 ```bash
 opencode
 ```
 
-Mais elle accepte également les commandes documentées sur cette page. Cela vous permet d'interagir avec OpenCode par programme.
+Mais elle accepte également les commandes documentées sur cette page. Cela vous permet d'interagir avec Daemon Protocol par programme.
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-Démarrez l’interface utilisateur du terminal OpenCode.
+Démarrez l’interface utilisateur du terminal Daemon Protocol.
 
 ```bash
 opencode [project]
@@ -44,13 +44,13 @@ opencode [project]
 
 ## Commandes
 
-La CLI OpenCode dispose également des commandes suivantes.
+La CLI Daemon Protocol dispose également des commandes suivantes.
 
 ---
 
 ### agent
 
-Gérer les agents pour OpenCode.
+Gérer les agents pour Daemon Protocol.
 
 ```bash
 opencode agent [command]
@@ -60,13 +60,13 @@ opencode agent [command]
 
 ### attach
 
-Attachez un terminal à un serveur backend OpenCode déjà en cours d'exécution démarré via les commandes `serve` ou `web`.
+Attachez un terminal à un serveur backend Daemon Protocol déjà en cours d'exécution démarré via les commandes `serve` ou `web`.
 
 ```bash
 opencode attach [url]
 ```
 
-Cela permet d'utiliser le TUI avec un backend OpenCode distant. Par exemple :
+Cela permet d'utiliser le TUI avec un backend Daemon Protocol distant. Par exemple :
 
 ```bash
 # Start the backend server for web/mobile access
@@ -123,13 +123,13 @@ opencode auth [command]
 
 #### login
 
-OpenCode est alimenté par la liste des fournisseurs sur [Models.dev](https://models.dev), vous pouvez donc utiliser `opencode auth login` pour configurer les clés API pour tout fournisseur que vous souhaitez utiliser. Ceci est stocké dans `~/.local/share/opencode/auth.json`.
+Daemon Protocol est alimenté par la liste des fournisseurs sur [Models.dev](https://models.dev), vous pouvez donc utiliser `opencode auth login` pour configurer les clés API pour tout fournisseur que vous souhaitez utiliser. Ceci est stocké dans `~/.local/share/opencode/auth.json`.
 
 ```bash
 opencode auth login
 ```
 
-Lorsque OpenCode démarre, il charge les fournisseurs à partir du fichier d'informations d'identification, ainsi que les clés définies dans vos environnements ou un fichier `.env` dans votre projet.
+Lorsque Daemon Protocol démarre, il charge les fournisseurs à partir du fichier d'informations d'identification, ainsi que les clés définies dans vos environnements ou un fichier `.env` dans votre projet.
 
 ---
 
@@ -305,7 +305,7 @@ opencode models anthropic
 | <nobr><code>{"--refresh"}</code></nobr> | Actualisez le cache des modèles à partir de models.dev                                     |
 | <nobr><code>{"--verbose"}</code></nobr> | Utiliser une sortie de modèle plus détaillée (inclut des métadonnées telles que les coûts) |
 
-Utilisez l'option `--refresh` pour mettre à jour la liste des modèles mis en cache. Ceci est utile lorsque de nouveaux modèles ont été ajoutés à un fournisseur et que vous souhaitez les voir dans OpenCode.
+Utilisez l'option `--refresh` pour mettre à jour la liste des modèles mis en cache. Ceci est utile lorsque de nouveaux modèles ont été ajoutés à un fournisseur et que vous souhaitez les voir dans Daemon Protocol.
 
 ```bash
 opencode models --refresh
@@ -363,13 +363,13 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### serve
 
-Démarrez un serveur OpenCode sans interface graphique pour un accès API. Consultez le [serveur docs](/docs/server) pour l'interface complète HTTP.
+Démarrez un serveur Daemon Protocol sans interface graphique pour un accès API. Consultez le [serveur docs](/docs/server) pour l'interface complète HTTP.
 
 ```bash
 opencode serve
 ```
 
-Cela démarre un serveur HTTP qui fournit un accès API aux fonctionnalités d'OpenCode sans l'interface TUI. Définissez `OPENCODE_SERVER_PASSWORD` pour activer l'authentification de base HTTP (le nom d'utilisateur par défaut est `opencode`).
+Cela démarre un serveur HTTP qui fournit un accès API aux fonctionnalités d'Daemon Protocol sans l'interface TUI. Définissez `OPENCODE_SERVER_PASSWORD` pour activer l'authentification de base HTTP (le nom d'utilisateur par défaut est `opencode`).
 
 #### Options
 
@@ -384,7 +384,7 @@ Cela démarre un serveur HTTP qui fournit un accès API aux fonctionnalités d'O
 
 ### session
 
-Gérer les sessions OpenCode.
+Gérer les sessions Daemon Protocol.
 
 ```bash
 opencode session [command]
@@ -394,7 +394,7 @@ opencode session [command]
 
 #### list
 
-Liste toutes les sessions OpenCode.
+Liste toutes les sessions Daemon Protocol.
 
 ```bash
 opencode session list
@@ -411,7 +411,7 @@ opencode session list
 
 ### stats
 
-Affichez les statistiques d'utilisation et de coût des jetons pour vos sessions OpenCode.
+Affichez les statistiques d'utilisation et de coût des jetons pour vos sessions Daemon Protocol.
 
 ```bash
 opencode stats
@@ -442,13 +442,13 @@ Si vous ne fournissez pas d'ID de session, vous serez invité à sélectionner p
 
 ### import
 
-Importez les données de session à partir d'un fichier JSON ou d'une URL de partage OpenCode.
+Importez les données de session à partir d'un fichier JSON ou d'une URL de partage Daemon Protocol.
 
 ```bash
 opencode import <file>
 ```
 
-Vous pouvez importer à partir d'un fichier local ou d'une URL de partage OpenCode.
+Vous pouvez importer à partir d'un fichier local ou d'une URL de partage Daemon Protocol.
 
 ```bash
 opencode import session.json
@@ -459,13 +459,13 @@ opencode import https://opncd.ai/s/abc123
 
 ### web
 
-Démarrez un serveur OpenCode sans interface graphique avec une interface Web.
+Démarrez un serveur Daemon Protocol sans interface graphique avec une interface Web.
 
 ```bash
 opencode web
 ```
 
-Cela démarre un serveur HTTP et ouvre un navigateur Web pour accéder à OpenCode via une interface Web. Définissez `OPENCODE_SERVER_PASSWORD` pour activer l'authentification de base HTTP (le nom d'utilisateur par défaut est `opencode`).
+Cela démarre un serveur HTTP et ouvre un navigateur Web pour accéder à Daemon Protocol via une interface Web. Définissez `OPENCODE_SERVER_PASSWORD` pour activer l'authentification de base HTTP (le nom d'utilisateur par défaut est `opencode`).
 
 #### Options
 
@@ -500,7 +500,7 @@ Cette commande démarre un serveur ACP qui communique via stdin/stdout en utilis
 
 ### uninstall
 
-Désinstallez OpenCode et supprimez tous les fichiers associés.
+Désinstallez Daemon Protocol et supprimez tous les fichiers associés.
 
 ```bash
 opencode uninstall
@@ -560,7 +560,7 @@ La CLI opencode prend les flags globaux suivants.
 
 ## Variables d'environnement
 
-OpenCode peut être configuré à l'aide de variables d'environnement.
+Daemon Protocol peut être configuré à l'aide de variables d'environnement.
 
 | Variables                             | Type    | Description                                                                       |
 | ------------------------------------- | ------- | --------------------------------------------------------------------------------- |

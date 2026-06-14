@@ -15,7 +15,7 @@ description: 配置和使用专门的代理。
 
 ## 类型
 
-OpenCode 中有两种类型的代理：主代理和子代理。
+Daemon Protocol 中有两种类型的代理：主代理和子代理。
 
 ---
 
@@ -27,7 +27,7 @@ OpenCode 中有两种类型的代理：主代理和子代理。
 您可以在会话期间使用 **Tab** 键在主代理之间切换。
 :::
 
-OpenCode 内置了两个主代理：**Build** 和 **Plan**。我们将在下面介绍它们。
+Daemon Protocol 内置了两个主代理：**Build** 和 **Plan**。我们将在下面介绍它们。
 
 ---
 
@@ -35,13 +35,13 @@ OpenCode 内置了两个主代理：**Build** 和 **Plan**。我们将在下面�
 
 子代理是主代理可以调用来执行特定任务的专业助手。您也可以通过在消息中 **@ 提及**它们来手动调用。
 
-OpenCode 内置了三个子代理：**General**、**Explore** 和 **Scout**。我们将在下面介绍它们。
+Daemon Protocol 内置了三个子代理：**General**、**Explore** 和 **Scout**。我们将在下面介绍它们。
 
 ---
 
 ## 内置代理
 
-OpenCode 内置了两个主代理和三个子代理。
+Daemon Protocol 内置了两个主代理和三个子代理。
 
 ---
 
@@ -87,7 +87,7 @@ _模式_：`subagent`
 
 _模式_：`subagent`
 
-一个用于外部文档和依赖研究的只读代理。当您需要将某个依赖仓库克隆到 OpenCode 的托管缓存中、检查库的源代码，或在不修改工作区的情况下将本地代码与 upstream 实现进行交叉对照时，请使用此代理。
+一个用于外部文档和依赖研究的只读代理。当您需要将某个依赖仓库克隆到 Daemon Protocol 的托管缓存中、检查库的源代码，或在不修改工作区的情况下将本地代码与 upstream 实现进行交叉对照时，请使用此代理。
 
 ---
 
@@ -284,7 +284,7 @@ Markdown 文件名即为代理名称。例如，`review.md` 会创建一个名�
 }
 ```
 
-如果未指定温度，OpenCode 将使用模型特定的默认值；大多数模型通常为 0，Qwen 模型为 0.55。
+如果未指定温度，Daemon Protocol 将使用模型特定的默认值；大多数模型通常为 0，Qwen 模型为 0.55。
 
 ---
 
@@ -344,7 +344,7 @@ Markdown 文件名即为代理名称。例如，`review.md` 会创建一个名�
 }
 ```
 
-此路径相对于配置文件所在位置。因此它同时适用于全局 OpenCode 配置和项目级配置。
+此路径相对于配置文件所在位置。因此它同时适用于全局 Daemon Protocol 配置和项目级配置。
 
 ---
 
@@ -366,7 +366,7 @@ Markdown 文件名即为代理名称。例如，`review.md` 会创建一个名�
 }
 ```
 
-OpenCode 配置中的模型 ID 使用 `provider/model-id` 格式。例如，如果您使用 [OpenCode Zen](/docs/zen)，则可以使用 `opencode/gpt-5.1-codex` 来表示 GPT 5.1 Codex。
+Daemon Protocol 配置中的模型 ID 使用 `provider/model-id` 格式。例如，如果您使用 [Daemon Zen](/docs/zen)，则可以使用 `opencode/gpt-5.1-codex` 来表示 GPT 5.1 Codex。
 
 ---
 

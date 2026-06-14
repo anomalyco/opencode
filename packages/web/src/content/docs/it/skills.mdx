@@ -3,7 +3,7 @@ title: "Competenze dell'agente"
 description: "Definisci comportamenti riutilizzabili tramite definizioni in SKILL.md"
 ---
 
-Le skill degli agenti permettono a OpenCode di individuare istruzioni riutilizzabili dal tuo repo o dalla home directory.
+Le skill degli agenti permettono a Daemon Protocol di individuare istruzioni riutilizzabili dal tuo repo o dalla home directory.
 Le skill vengono caricate on-demand tramite lo strumento nativo `skill`: gli agenti vedono le skill disponibili e possono caricarne il contenuto completo quando serve.
 
 ---
@@ -11,7 +11,7 @@ Le skill vengono caricate on-demand tramite lo strumento nativo `skill`: gli age
 ## Posizione dei file
 
 Crea una cartella per ogni nome di skill e metti un `SKILL.md` al suo interno.
-OpenCode cerca in queste posizioni:
+Daemon Protocol cerca in queste posizioni:
 
 - Config di progetto: `.opencode/skills/<name>/SKILL.md`
 - Config globale: `~/.config/opencode/skills/<name>/SKILL.md`
@@ -24,7 +24,7 @@ OpenCode cerca in queste posizioni:
 
 ## Discovery
 
-Per i percorsi locali al progetto, OpenCode risale dalla directory di lavoro corrente finche' non raggiunge il worktree git.
+Per i percorsi locali al progetto, Daemon Protocol risale dalla directory di lavoro corrente finche' non raggiunge il worktree git.
 Carica qualsiasi `skills/*/SKILL.md` corrispondente in `.opencode/` e qualsiasi `.claude/skills/*/SKILL.md` o `.agents/skills/*/SKILL.md` corrispondente lungo il percorso.
 
 Le definizioni globali vengono caricate anche da `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` e `~/.agents/skills/*/SKILL.md`.
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## Descrizione strumento
 
-OpenCode elenca le skill disponibili nella descrizione dello strumento `skill`.
+Daemon Protocol elenca le skill disponibili nella descrizione dello strumento `skill`.
 Ogni voce include il nome della skill e la descrizione:
 
 ```xml

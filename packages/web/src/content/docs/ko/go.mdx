@@ -7,9 +7,9 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Go는 인기 있는 오픈 코딩 모델에 안정적으로 액세스할 수 있게 해주는 저비용 구독 서비스입니다. **첫 달은 $5**, 이후에는 **월 $10**입니다.
+Daemon Protocol Go는 인기 있는 오픈 코딩 모델에 안정적으로 액세스할 수 있게 해주는 저비용 구독 서비스입니다. **첫 달은 $5**, 이후에는 **월 $10**입니다.
 
-Go는 OpenCode의 다른 제공자와 똑같이 작동합니다. OpenCode Go를 구독하고 API 키를 발급받으면 됩니다. 이는 **완전히 선택 사항**이며, OpenCode를 사용하기 위해 꼭 필요하지는 않습니다.
+Go는 Daemon Protocol의 다른 제공자와 똑같이 작동합니다. Daemon Protocol Go를 구독하고 API 키를 발급받으면 됩니다. 이는 **완전히 선택 사항**이며, Daemon Protocol를 사용하기 위해 꼭 필요하지는 않습니다.
 
 주로 해외 사용자를 위해 설계되었으며, 안정적인 전 세계 액세스를 위해 모델은 미국, EU, 싱가포르에 호스팅됩니다.
 
@@ -22,7 +22,7 @@ Go는 OpenCode의 다른 제공자와 똑같이 작동합니다. OpenCode Go를 
 하지만 이런 모델에 안정적이고 낮은 지연 시간으로 액세스하는 일은 쉽지 않을 수 있습니다. 제공자마다 품질과 가용성이 다르기 때문입니다.
 
 :::tip
-OpenCode와 잘 맞는 선별된 모델과 제공자 그룹을 테스트했습니다.
+Daemon Protocol와 잘 맞는 선별된 모델과 제공자 그룹을 테스트했습니다.
 :::
 
 이를 해결하기 위해, 저희는 몇 가지를 진행했습니다.
@@ -31,20 +31,20 @@ OpenCode와 잘 맞는 선별된 모델과 제공자 그룹을 테스트했습�
 2. 그런 다음 몇몇 제공자와 협력해, 이 모델들이 올바르게 서비스되도록 했습니다.
 3. 마지막으로 모델/제공자 조합을 벤치마킹해, 자신 있게 추천할 수 있는 목록을 만들었습니다.
 
-OpenCode Go를 사용하면 **첫 달은 $5**, 이후에는 **월 $10**으로 이러한 모델에 액세스할 수 있습니다.
+Daemon Protocol Go를 사용하면 **첫 달은 $5**, 이후에는 **월 $10**으로 이러한 모델에 액세스할 수 있습니다.
 
 ---
 
 ## 작동 방식
 
-OpenCode Go는 OpenCode의 다른 제공자와 똑같이 작동합니다.
+Daemon Protocol Go는 Daemon Protocol의 다른 제공자와 똑같이 작동합니다.
 
-1. **<a href={console}>OpenCode Zen</a>**에 로그인해 Go를 구독하고 API 키를 복사합니다.
-2. TUI에서 `/connect` 명령을 실행하고 `OpenCode Go`를 선택한 다음 API 키를 붙여넣습니다.
+1. **<a href={console}>Daemon Zen</a>**에 로그인해 Go를 구독하고 API 키를 복사합니다.
+2. TUI에서 `/connect` 명령을 실행하고 `Daemon Protocol Go`를 선택한 다음 API 키를 붙여넣습니다.
 3. TUI에서 `/models`를 실행해 Go를 통해 사용할 수 있는 모델 목록을 확인합니다.
 
 :::note
-workspace당 한 명의 멤버만 OpenCode Go를 구독할 수 있습니다.
+workspace당 한 명의 멤버만 Daemon Protocol Go를 구독할 수 있습니다.
 :::
 
 현재 모델 목록에는 다음이 포함됩니다.
@@ -69,7 +69,7 @@ workspace당 한 명의 멤버만 OpenCode Go를 구독할 수 있습니다.
 
 ## 사용 한도
 
-OpenCode Go에는 다음과 같은 한도가 포함됩니다.
+Daemon Protocol Go에는 다음과 같은 한도가 포함됩니다.
 
 - **5시간 한도** — 사용량 $12
 - **주간 한도** — 사용량 $30
@@ -167,7 +167,7 @@ Zen 잔액에 크레딧도 있다면, console에서 **Use balance** 옵션을 �
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
-OpenCode config의 [model id](/docs/config/#models)는 `opencode-go/<model-id>` 형식을 사용합니다. 예를 들어 Kimi K2.7 Code의 경우 config에서 `opencode-go/kimi-k2.7-code`를 사용하면 됩니다.
+Daemon Protocol config의 [model id](/docs/config/#models)는 `opencode-go/<model-id>` 형식을 사용합니다. 예를 들어 Kimi K2.7 Code의 경우 config에서 `opencode-go/kimi-k2.7-code`를 사용하면 됩니다.
 
 ---
 
@@ -189,9 +189,9 @@ https://opencode.ai/zen/go/v1/models
 
 ## 목표
 
-OpenCode Go를 만든 목적은 다음과 같습니다.
+Daemon Protocol Go를 만든 목적은 다음과 같습니다.
 
 1. 저비용 구독으로 더 많은 사람이 AI 코딩을 **접근 가능하게** 이용할 수 있도록 합니다.
 2. 최고의 오픈 코딩 모델에 **안정적으로** 액세스할 수 있게 합니다.
 3. 코딩 에이전트 사용에 맞게 **테스트되고 벤치마킹된** 모델을 선별합니다.
-4. OpenCode에서 다른 제공자도 함께 사용할 수 있게 해 **종속성 없음**을 유지합니다.
+4. Daemon Protocol에서 다른 제공자도 함께 사용할 수 있게 해 **종속성 없음**을 유지합니다.

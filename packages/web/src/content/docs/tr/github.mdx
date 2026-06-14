@@ -63,7 +63,7 @@ Veya manuel olarak ayarlayabilirsiniz.
               fetch-depth: 1
               persist-credentials: false
 
-          - name: Run OpenCode
+          - name: Run Daemon Protocol
            uses: anomalyco/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -119,7 +119,7 @@ opencode aşağıdaki GitHub olayları tarafından tetiklenebilir:
 Otomatik görevleri gerçekleştirmek için opencode'u bir zamanlamaya göre çalıştırın:
 
 ```yaml title=".github/workflows/opencode-scheduled.yml"
-name: Scheduled OpenCode Task
+name: Scheduled Daemon Protocol Task
 
 on:
   schedule:
@@ -139,7 +139,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run OpenCode
+      - name: Run Daemon Protocol
         uses: anomalyco/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

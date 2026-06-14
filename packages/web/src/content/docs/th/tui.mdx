@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: การใช้อินเทอร์เฟซผู้ใช้ terminal OpenCode
+description: การใช้อินเทอร์เฟซผู้ใช้ terminal Daemon Protocol
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode มีอินเทอร์เฟซ terminal แบบโต้ตอบหรือ TUI สำหรับการทำงานในโครงการของคุณด้วย LLM
+Daemon Protocol มีอินเทอร์เฟซ terminal แบบโต้ตอบหรือ TUI สำหรับการทำงานในโครงการของคุณด้วย LLM
 
-การรัน OpenCode จะเริ่มต้น TUI สำหรับไดเร็กทอรีปัจจุบัน
+การรัน Daemon Protocol จะเริ่มต้น TUI สำหรับไดเร็กทอรีปัจจุบัน
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## คำสั่ง
 
-เมื่อใช้ OpenCode TUI คุณสามารถพิมพ์ `/` ตามด้วยชื่อคำสั่งเพื่อดำเนินการอย่างรวดเร็ว ตัวอย่างเช่น:
+เมื่อใช้ Daemon Protocol TUI คุณสามารถพิมพ์ `/` ตามด้วยชื่อคำสั่งเพื่อดำเนินการอย่างรวดเร็ว ตัวอย่างเช่น:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### connect
 
-เพิ่มผู้ให้บริการให้กับ OpenCode ให้คุณเลือกจากผู้ให้บริการที่มีอยู่และเพิ่มคีย์ API
+เพิ่มผู้ให้บริการให้กับ Daemon Protocol ให้คุณเลือกจากผู้ให้บริการที่มีอยู่และเพิ่มคีย์ API
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### exit
 
-ออกจาก OpenCode _นามแฝง_: `/quit`, `/q`
+ออกจาก Daemon Protocol _นามแฝง_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -393,7 +393,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 - `theme` - ตั้งค่าธีม UI ของคุณ [เรียนรู้เพิ่มเติม](/docs/themes)
 - `keybinds` - ปรับแต่งแป้นพิมพ์ลัด [เรียนรู้เพิ่มเติม](/docs/keybinds)
-- `leader_timeout` - ควบคุมระยะเวลาที่ OpenCode จะรอหลังจากกด leader key ค่าเริ่มต้นคือ `2000`
+- `leader_timeout` - ควบคุมระยะเวลาที่ Daemon Protocol จะรอหลังจากกด leader key ค่าเริ่มต้นคือ `2000`
 - `scroll_acceleration.enabled` - ​​เปิดใช้งานการเร่งความเร็วการเลื่อนแบบ macOS เพื่อการเลื่อนที่ราบรื่นและเป็นธรรมชาติ เมื่อเปิดใช้งาน ความเร็วในการเลื่อนจะเพิ่มขึ้นตามท่าทางการเลื่อนอย่างรวดเร็ว และคงความแม่นยำไว้สำหรับการเคลื่อนไหวที่ช้าลง **การตั้งค่านี้มีความสำคัญมากกว่า `scroll_speed` และแทนที่เมื่อเปิดใช้งาน**
 - `scroll_speed` - ​​ควบคุมความเร็วของการเลื่อน TUI เมื่อใช้คำสั่งการเลื่อน (ขั้นต่ำ: `0.001` รองรับค่าทศนิยม) ค่าเริ่มต้นเป็น `3` **หมายเหตุ: สิ่งนี้จะถูกละเว้นหากตั้งค่า `scroll_acceleration.enabled` เป็น `true`.**
 - `diff_style` - ควบคุมการเรนเดอร์ diff `"auto"` ปรับให้เข้ากับความกว้างของ terminal `"stacked"` จะแสดงคอลัมน์เดียวเสมอ
@@ -404,7 +404,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### Attention
 
-Attention ช่วยให้ TUI แจ้งเตือนคุณเมื่อ OpenCode กำลังรอคำตอบ ต้องการการอนุมัติ permission พบ session error หรือ session เสร็จสิ้นแล้ว เปิดใช้งานด้วย `attention.enabled`; เหตุการณ์ในตัวจะเล่นเสียงเมื่อเกิดขึ้น Desktop notifications จะส่งเฉพาะเมื่อหน้าต่าง terminal ไม่ได้อยู่ในโฟกัส และจะไม่ใช้กับ subagent events
+Attention ช่วยให้ TUI แจ้งเตือนคุณเมื่อ Daemon Protocol กำลังรอคำตอบ ต้องการการอนุมัติ permission พบ session error หรือ session เสร็จสิ้นแล้ว เปิดใช้งานด้วย `attention.enabled`; เหตุการณ์ในตัวจะเล่นเสียงเมื่อเกิดขึ้น Desktop notifications จะส่งเฉพาะเมื่อหน้าต่าง terminal ไม่ได้อยู่ในโฟกัส และจะไม่ใช้กับ subagent events
 
 - `enabled` - เปิดใช้งาน notifications และ sounds ทั้งหมดของ Attention ค่าเริ่มต้นคือ `false`
 - `notifications` - เมื่อเปิด Attention แล้ว อนุญาตให้ TUI ส่ง desktop notifications ผ่าน terminal ค่าเริ่มต้นคือ `true`

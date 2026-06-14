@@ -1,9 +1,9 @@
 ---
 title: Complementos
-description: Escriba sus propios complementos para extender OpenCode.
+description: Escriba sus propios complementos para extender Daemon Protocol.
 ---
 
-Los complementos le permiten extender OpenCode al conectarse a varios eventos y personalizar el comportamiento. Puede crear complementos para agregar nuevas funciones, integrarlos con servicios externos o modificar el comportamiento predeterminado de OpenCode.
+Los complementos le permiten extender Daemon Protocol al conectarse a varios eventos y personalizar el comportamiento. Puede crear complementos para agregar nuevas funciones, integrarlos con servicios externos o modificar el comportamiento predeterminado de Daemon Protocol.
 
 Para ver ejemplos, consulte los [complementos](/docs/ecosystem#plugins) creados por la comunidad.
 
@@ -83,7 +83,7 @@ Los complementos locales y las herramientas personalizadas pueden utilizar paque
 }
 ```
 
-OpenCode ejecuta `bun install` al inicio para instalarlos. Luego, sus complementos y herramientas pueden importarlos.
+Daemon Protocol ejecuta `bun install` al inicio para instalarlos. Luego, sus complementos y herramientas pueden importarlos.
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -235,7 +235,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 Estamos usando `osascript` para ejecutar AppleScript en macOS. Aquí lo estamos usando para enviar notificaciones.
 
 :::note
-Si está utilizando la aplicación de escritorio OpenCode, puede enviar notificaciones del sistema automáticamente cuando una respuesta esté lista o cuando se produzca un error en una sesión.
+Si está utilizando la aplicación de escritorio Daemon Protocol, puede enviar notificaciones del sistema automáticamente cuando una respuesta esté lista o cuando se produzca un error en una sesión.
 :::
 
 ---

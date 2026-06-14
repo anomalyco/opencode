@@ -3,7 +3,7 @@ title: "代理技能"
 description: "透過 SKILL.md 定義可重複使用的行為"
 ---
 
-代理技能讓 OpenCode 能夠從你的儲存庫或主目錄中發現可重複使用的指令。
+代理技能讓 Daemon Protocol 能夠從你的儲存庫或主目錄中發現可重複使用的指令。
 技能透過原生的 `skill` 工具按需載入——代理可以查看可用技能，並在需要時載入完整內容。
 
 ---
@@ -11,7 +11,7 @@ description: "透過 SKILL.md 定義可重複使用的行為"
 ## 放置檔案
 
 為每個技能名稱建立一個資料夾，並在其中放入 `SKILL.md`。
-OpenCode 會搜尋以下位置：
+Daemon Protocol 會搜尋以下位置：
 
 - 專案設定：`.opencode/skills/<name>/SKILL.md`
 - 全域設定：`~/.config/opencode/skills/<name>/SKILL.md`
@@ -24,7 +24,7 @@ OpenCode 會搜尋以下位置：
 
 ## 了解發現機制
 
-對於專案本地路徑，OpenCode 會從當前工作目錄向上遍歷，直到到達 git 工作樹根目錄。
+對於專案本地路徑，Daemon Protocol 會從當前工作目錄向上遍歷，直到到達 git 工作樹根目錄。
 在此過程中，它會載入 `.opencode/` 中所有匹配的 `skills/*/SKILL.md`，以及匹配的 `.claude/skills/*/SKILL.md` 或 `.agents/skills/*/SKILL.md`。
 
 全域定義也會從 `~/.config/opencode/skills/*/SKILL.md`、`~/.claude/skills/*/SKILL.md` 和 `~/.agents/skills/*/SKILL.md` 中載入。
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## 識別工具描述
 
-OpenCode 會在 `skill` 工具描述中列出可用技能。
+Daemon Protocol 會在 `skill` 工具描述中列出可用技能。
 每個條目包含技能名稱和描述：
 
 ```xml

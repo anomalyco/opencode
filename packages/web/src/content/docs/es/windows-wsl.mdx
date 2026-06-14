@@ -1,14 +1,14 @@
 ---
 title: Windows (WSL)
-description: Ejecuta OpenCode en Windows con WSL para una mejor experiencia.
+description: Ejecuta Daemon Protocol en Windows con WSL para una mejor experiencia.
 ---
 
 import { Steps } from "@astrojs/starlight/components"
 
-Aunque OpenCode puede ejecutarse directamente en Windows, recomendamos usar [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) para obtener la mejor experiencia. WSL ofrece un entorno Linux que funciona perfectamente con las funciones de OpenCode.
+Aunque Daemon Protocol puede ejecutarse directamente en Windows, recomendamos usar [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) para obtener la mejor experiencia. WSL ofrece un entorno Linux que funciona perfectamente con las funciones de Daemon Protocol.
 
 :::tip[¿Por qué WSL?]
-WSL ofrece mejor rendimiento del sistema de archivos, soporte completo de terminal y compatibilidad con las herramientas de desarrollo de las que depende OpenCode.
+WSL ofrece mejor rendimiento del sistema de archivos, soporte completo de terminal y compatibilidad con las herramientas de desarrollo de las que depende Daemon Protocol.
 :::
 
 ---
@@ -21,17 +21,17 @@ WSL ofrece mejor rendimiento del sistema de archivos, soporte completo de termin
 
    Si aún no lo hiciste, [instala WSL](https://learn.microsoft.com/en-us/windows/wsl/install) usando la guía oficial de Microsoft.
 
-2. **Instala OpenCode en WSL**
+2. **Instala Daemon Protocol en WSL**
 
-   Cuando WSL esté listo, abre tu terminal de WSL e instala OpenCode con uno de los [métodos de instalación](/docs/).
+   Cuando WSL esté listo, abre tu terminal de WSL e instala Daemon Protocol con uno de los [métodos de instalación](/docs/).
 
    ```bash
    curl -fsSL https://opencode.ai/install | bash
    ```
 
-3. **Usa OpenCode desde WSL**
+3. **Usa Daemon Protocol desde WSL**
 
-   Ve al directorio de tu proyecto (accede a los archivos de Windows desde `/mnt/c/`, `/mnt/d/`, etc.) y ejecuta OpenCode.
+   Ve al directorio de tu proyecto (accede a los archivos de Windows desde `/mnt/c/`, `/mnt/d/`, etc.) y ejecuta Daemon Protocol.
 
    ```bash
    cd /mnt/c/Users/YourName/project
@@ -44,7 +44,7 @@ WSL ofrece mejor rendimiento del sistema de archivos, soporte completo de termin
 
 ## Aplicación de escritorio + servidor WSL
 
-Si prefieres usar la app de escritorio de OpenCode pero quieres ejecutar el servidor en WSL:
+Si prefieres usar la app de escritorio de Daemon Protocol pero quieres ejecutar el servidor en WSL:
 
 1. **Inicia el servidor en WSL** con `--hostname 0.0.0.0` para permitir conexiones externas:
 
@@ -79,7 +79,7 @@ Para obtener la mejor experiencia web en Windows:
    opencode web --hostname 0.0.0.0
    ```
 
-2. **Accede desde tu navegador de Windows** en `http://localhost:<port>` (OpenCode muestra la URL)
+2. **Accede desde tu navegador de Windows** en `http://localhost:<port>` (Daemon Protocol muestra la URL)
 
 Ejecutar `opencode web` desde WSL garantiza acceso correcto al sistema de archivos e integración con la terminal, manteniéndolo accesible desde tu navegador de Windows.
 
@@ -101,13 +101,13 @@ opencode
 ```
 
 :::tip
-Para una experiencia más fluida, considera clonar o copiar tu repo al sistema de archivos de WSL (por ejemplo en `~/code/`) y ejecutar OpenCode ahí.
+Para una experiencia más fluida, considera clonar o copiar tu repo al sistema de archivos de WSL (por ejemplo en `~/code/`) y ejecutar Daemon Protocol ahí.
 :::
 
 ---
 
 ## Consejos
 
-- Ejecuta OpenCode en WSL para proyectos guardados en unidades de Windows: el acceso a archivos es transparente
-- Usa la [extensión WSL de VS Code](https://code.visualstudio.com/docs/remote/wsl) junto con OpenCode para un flujo de desarrollo integrado
-- Tu configuración y tus sesiones de OpenCode se guardan dentro del entorno WSL en `~/.local/share/opencode/`
+- Ejecuta Daemon Protocol en WSL para proyectos guardados en unidades de Windows: el acceso a archivos es transparente
+- Usa la [extensión WSL de VS Code](https://code.visualstudio.com/docs/remote/wsl) junto con Daemon Protocol para un flujo de desarrollo integrado
+- Tu configuración y tus sesiones de Daemon Protocol se guardan dentro del entorno WSL en `~/.local/share/opencode/`

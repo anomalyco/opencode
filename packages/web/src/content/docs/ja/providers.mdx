@@ -1,17 +1,17 @@
 ---
 title: プロバイダー
-description: OpenCode で LLM プロバイダーを使用する。
+description: Daemon Protocol で LLM プロバイダーを使用する。
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode は [AI SDK](https://ai-sdk.dev/) および [Models.dev](https://models.dev) を使用して **75 以上の LLM プロバイダー** をサポートし、ローカルモデルの実行をサポートします。
+Daemon Protocol は [AI SDK](https://ai-sdk.dev/) および [Models.dev](https://models.dev) を使用して **75 以上の LLM プロバイダー** をサポートし、ローカルモデルの実行をサポートします。
 
 プロバイダーを追加するには、次のことを行う必要があります。
 
 1. `/connect` コマンドを使用して、プロバイダーの API キーを追加します。
-2. OpenCode 設定でプロバイダーを構成します。
+2. Daemon Protocol 設定でプロバイダーを構成します。
 
 ---
 
@@ -24,7 +24,7 @@ OpenCode は [AI SDK](https://ai-sdk.dev/) および [Models.dev](https://models
 
 ### 設定
 
-OpenCode の `provider` セクションを通じてプロバイダーをカスタマイズできます。
+Daemon Protocol の `provider` セクションを通じてプロバイダーをカスタマイズできます。
 config.
 
 ---
@@ -48,16 +48,16 @@ config.
 
 ---
 
-## OpenCode Zen
+## Daemon Zen
 
-OpenCode Zen は、OpenCode チームが提供するモデルのリストです。
-OpenCode で適切に動作することがテストおよび検証されています。 [詳細はこちら](/docs/zen)。
+Daemon Zen は、Daemon Protocol チームが提供するモデルのリストです。
+Daemon Protocol で適切に動作することがテストおよび検証されています。 [詳細はこちら](/docs/zen)。
 
 :::tip
-初めての方は、OpenCode Zen から始めることをお勧めします。
+初めての方は、Daemon Zen から始めることをお勧めします。
 :::
 
-1. TUI で `/connect` コマンドを実行し、`OpenCode Zen` を選択して、[opencode.ai/zen](https://opencode.ai/zen) にアクセスします。
+1. TUI で `/connect` コマンドを実行し、`Daemon Zen` を選択して、[opencode.ai/zen](https://opencode.ai/zen) にアクセスします。
 
    ```txt
    /connect
@@ -80,15 +80,15 @@ OpenCode で適切に動作することがテストおよび検証されてい�
    /models
    ```
 
-これは OpenCode の他のプロバイダーと同様に機能し、使用は完全にオプションです。
+これは Daemon Protocol の他のプロバイダーと同様に機能し、使用は完全にオプションです。
 
 ---
 
-## OpenCode Go
+## Daemon Protocol Go
 
-OpenCode Go は、OpenCode チームによって提供される、人気のあるオープンコーディングモデルへの信頼性の高いアクセスを提供する低コストのサブスクリプションプランです。これらは OpenCode でうまく機能することがテストおよび検証されています。
+Daemon Protocol Go は、Daemon Protocol チームによって提供される、人気のあるオープンコーディングモデルへの信頼性の高いアクセスを提供する低コストのサブスクリプションプランです。これらは Daemon Protocol でうまく機能することがテストおよび検証されています。
 
-1. TUI で `/connect` コマンドを実行し、`OpenCode Go` を選択して、[opencode.ai/zen](https://opencode.ai/zen) にアクセスします。
+1. TUI で `/connect` コマンドを実行し、`Daemon Protocol Go` を選択して、[opencode.ai/zen](https://opencode.ai/zen) にアクセスします。
 
    ```txt
    /connect
@@ -111,7 +111,7 @@ OpenCode Go は、OpenCode チームによって提供される、人気のあ�
    /models
    ```
 
-これは OpenCode の他のプロバイダーと同様に機能し、使用は完全にオプションです。
+これは Daemon Protocol の他のプロバイダーと同様に機能し、使用は完全にオプションです。
 
 ---
 
@@ -155,7 +155,7 @@ OpenCode Go は、OpenCode チームによって提供される、人気のあ�
 
 ### Amazon Bedrock
 
-OpenCode で Amazon Bedrock を使用するには:
+Daemon Protocol で Amazon Bedrock を使用するには:
 
 1. Amazon Bedrock コンソールの **モデルカタログ** に移動し、必要なモデルへのアクセスをリクエストします。
 
@@ -318,7 +318,7 @@ OpenCode で Amazon Bedrock を使用するには:
    ```
 
 :::info
-OpenCode での Claude Pro/Max サブスクリプションの使用は、[Anthropic](https://anthropic.com) によって正式に許可されていませんが、一般的に機能します。
+Daemon Protocol での Claude Pro/Max サブスクリプションの使用は、[Anthropic](https://anthropic.com) によって正式に許可されていませんが、一般的に機能します。
 :::
 
 ##### APIキーの使用
@@ -380,7 +380,7 @@ opencode は、OpenAI 互換の API サーバーの背後でローカル LLM を
 2. [Azure AI Foundry](https://ai.azure.com/) に移動し、モデルをデプロイします。
 
 :::note
-OpenCode が正しく動作するには、デプロイメント名がモデル名と一致する必要があります。
+Daemon Protocol が正しく動作するには、デプロイメント名がモデル名と一致する必要があります。
 :::
 
 3. `/connect` コマンドを実行し、**Azure** を検索します。
@@ -427,7 +427,7 @@ OpenCode が正しく動作するには、デプロイメント名がモデル�
 2. [Azure AI Foundry](https://ai.azure.com/) に移動し、モデルをデプロイします。
 
 :::note
-OpenCode が正しく動作するには、デプロイメント名がモデル名と一致する必要があります。
+Daemon Protocol が正しく動作するには、デプロイメント名がモデル名と一致する必要があります。
 :::
 
 3. `/connect` コマンドを実行し、**Azure Cognitive Services** を検索します。
@@ -559,7 +559,7 @@ Cloudflare AI Gatewayを使用すると、統合エンドポイントを通じ�
    /models
    ```
 
-OpenCode 設定を通じてモデルを追加することもできます。
+Daemon Protocol 設定を通じてモデルを追加することもできます。
 
 ```json title="opencode.json"
 {
@@ -740,7 +740,7 @@ GitLab Duo は、GitLab の Anthropic プロキシを介したネイティブツ
 
 1.  [GitLab ユーザー設定 > アクセス Tokens](https://gitlab.com/-/user_settings/personal_access_tokens) に移動します。
 2.  **新しいトークンを追加** をクリックします
-3.  名前: `OpenCode`、スコープ: `api`
+3.  名前: `Daemon Protocol`、スコープ: `api`
 4.  トークンをコピーします（`glpat-`で始まる）
 5.  ターミナルに入力してください
 
@@ -791,14 +791,14 @@ STACKIT AI Model Serving は、Llama、Mistral、Qwen などの LLM に焦点を
 
 :::note
 必要がない場合は、「GITLAB_TOKEN」環境変数を指定することもできます。
-トークンを OpenCode 認証ストレージに保存します。
+トークンを Daemon Protocol 認証ストレージに保存します。
 :::
 
 ##### 自己ホスト型 GitLab
 
 :::note[コンプライアンスメモ]
-OpenCode は、セッションタイトルの生成などの一部の AI タスクに小規模なモデルを使用します。
-デフォルトでは、Zen によってホストされる gpt-5-nano を使用するように構成されています。 OpenCode をロックするには
+Daemon Protocol は、セッションタイトルの生成などの一部の AI タスクに小規模なモデルを使用します。
+デフォルトでは、Zen によってホストされる gpt-5-nano を使用するように構成されています。 Daemon Protocol をロックするには
 自分の GitLab でホストされているインスタンスのみを使用するには、次の行を
 `opencode.json` ファイル。セッション共有を無効にすることもお勧めします。
 
@@ -893,7 +893,7 @@ GitLab ツール (マージリクエスト、問題、パイプライン、CI/CD
 
 ### GitHub Copilot
 
-GitHub Copilot サブスクリプションを OpenCode で使用するには:
+GitHub Copilot サブスクリプションを Daemon Protocol で使用するには:
 
 :::note
 一部のモデルでは [Pro+] が必要になる場合があります。
@@ -931,7 +931,7 @@ subscription](https://github.com/features/copilot/plans) を使用します。
 
 ### Google Vertex AI
 
-OpenCode で Google Vertex AI を使用するには:
+Daemon Protocol で Google Vertex AI を使用するには:
 
 1. Google Cloud Console の **Model Garden** に移動し、
    お住まいの地域で利用可能なモデル。
@@ -1060,7 +1060,7 @@ opencode の実行中に設定します。
 
 #### オプションの設定
 
-OpenCode を通じて自動的に構成されていない Helicone の機能またはモデルを見つけた場合は、いつでも自分で構成できます。
+Daemon Protocol を通じて自動的に構成されていない Helicone の機能またはモデルを見つけた場合は、いつでも自分で構成できます。
 
 これは [Helicone のモデルディレクトリ](https://helicone.ai/models) です。追加するモデルの ID を取得するためにこれが必要になります。
 
@@ -1113,7 +1113,7 @@ Helicone は、キャッシュ、ユーザー追跡、セッション管理な�
 
 ##### セッション追跡
 
-Helicone の [Sessions](https://docs.helicone.ai/features/sessions) 機能を使用すると、関連する LLM リクエストをグループ化できます。 [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) プラグインを使用して、各 OpenCode 会話を Helicone のセッションとして自動的に記録します。
+Helicone の [Sessions](https://docs.helicone.ai/features/sessions) 機能を使用すると、関連する LLM リクエストをグループ化できます。 [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) プラグインを使用して、各 Daemon Protocol 会話を Helicone のセッションとして自動的に記録します。
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1127,7 +1127,7 @@ npm install -g opencode-helicone-session
 }
 ```
 
-プラグインは、リクエストに `Helicone-Session-Id` ヘッダーと `Helicone-Session-Name` ヘッダーを挿入します。 Helicone のセッションページでは、OpenCode の各会話が個別のセッションとしてリストされています。
+プラグインは、リクエストに `Helicone-Session-Id` ヘッダーと `Helicone-Session-Name` ヘッダーを挿入します。 Helicone のセッションページでは、Daemon Protocol の各会話が個別のセッションとしてリストされています。
 
 ##### 一般的なヘリコーンヘッダー
 
@@ -1331,7 +1331,7 @@ Moonshot AI の Kim K2 を使用するには:
 Ollama を通じてローカルモデルを使用するように opencode を構成できます。
 
 :::tip
-Ollama は OpenCode 用に自動的に構成できます。詳細については、[Ollama 統合 docs](https://docs.ollama.com/integrations/opencode)」を参照してください。
+Ollama は Daemon Protocol 用に自動的に構成できます。詳細については、[Ollama 統合 docs](https://docs.ollama.com/integrations/opencode)」を参照してください。
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1370,13 +1370,13 @@ Ollama は OpenCode 用に自動的に構成できます。詳細については
 
 ### Ollama Cloud
 
-OpenCode で Ollama Cloud を使用するには:
+Daemon Protocol で Ollama Cloud を使用するには:
 
 1. [https://ollama.com/](https://ollama.com/) にアクセスしてサインインするか、アカウントを作成します。
 
 2. [**設定**] > [キー**] に移動し、[**API キーの追加**] をクリックして新しい API キーを生成します。
 
-3. OpenCode で使用するために API キーをコピーします。
+3. Daemon Protocol で使用するために API キーをコピーします。
 
 4. `/connect` コマンドを実行し、**Ollama Cloud** を検索します。
 
@@ -1393,7 +1393,7 @@ OpenCode で Ollama Cloud を使用するには:
    └ enter
    ```
 
-6. **重要**: OpenCode でクラウドモデルを使用する前に、モデル情報をローカルに取得する必要があります。
+6. **重要**: Daemon Protocol でクラウドモデルを使用する前に、モデル情報をローカルに取得する必要があります。
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1440,19 +1440,19 @@ OpenCode で Ollama Cloud を使用するには:
 
 ---
 
-### OpenCode Zen
+### Daemon Zen
 
-OpenCode Zen は、OpenCode チームによって提供される、テストおよび検証されたモデルのリストです。 [詳細はこちら](/docs/zen)。
+Daemon Zen は、Daemon Protocol チームによって提供される、テストおよび検証されたモデルのリストです。 [詳細はこちら](/docs/zen)。
 
-1. **<a href={console}>OpenCode Zen</a>** にサインインし、**API キーの作成** をクリックします。
+1. **<a href={console}>Daemon Zen</a>** にサインインし、**API キーの作成** をクリックします。
 
-2. `/connect` コマンドを実行し、**OpenCode Zen** を検索します。
+2. `/connect` コマンドを実行し、**Daemon Zen** を検索します。
 
    ```txt
    /connect
    ```
 
-3. OpenCode API キーを入力します。
+3. Daemon Protocol API キーを入力します。
 
    ```txt
    ┌ API key
@@ -1494,7 +1494,7 @@ OpenCode Zen は、OpenCode チームによって提供される、テストお�
    /models
    ```
 
-OpenCode 設定を通じて追加のモデルを追加することもできます。
+Daemon Protocol 設定を通じて追加のモデルを追加することもできます。
 
 ```json title="opencode.json" {6}
 {
@@ -1509,7 +1509,7 @@ OpenCode 設定を通じて追加のモデルを追加することもできま�
 }
 ```
 
-5. OpenCode 設定を通じてカスタマイズすることもできます。プロバイダーを指定する例を次に示します。
+5. Daemon Protocol 設定を通じてカスタマイズすることもできます。プロバイダーを指定する例を次に示します。
 
    ```json title="opencode.json"
    {
@@ -1725,7 +1725,7 @@ Vercel AI Gateway を使用すると、統合エンドポイントを通じて O
    /models
    ```
 
-OpenCode 設定を通じてモデルをカスタマイズすることもできます。プロバイダーのルーティング順序を指定する例を次に示します。
+Daemon Protocol 設定を通じてモデルをカスタマイズすることもできます。プロバイダーのルーティング順序を指定する例を次に示します。
 
 ```json title="opencode.json"
 {
@@ -1835,7 +1835,7 @@ OpenCode 設定を通じてモデルをカスタマイズすることもでき�
    /models
    ```
 
-OpenCode 設定を通じて追加のモデルを追加することもできます。
+Daemon Protocol 設定を通じて追加のモデルを追加することもできます。
 
 ```json title="opencode.json" {6}
 {
@@ -1857,7 +1857,7 @@ OpenCode 設定を通じて追加のモデルを追加することもできま�
 `/connect` コマンドにリストされていない **OpenAI 互換**プロバイダーを追加するには:
 
 :::tip
-OpenAI と互換性のある任意のプロバイダーを OpenCode で使用できます。最新の AI プロバイダーのほとんどは、OpenAI 互換の API を提供しています。
+OpenAI と互換性のある任意のプロバイダーを Daemon Protocol で使用できます。最新の AI プロバイダーのほとんどは、OpenAI 互換の API を提供しています。
 :::
 
 1. `/connect` コマンドを実行し、**その他**まで下にスクロールします。
@@ -1979,7 +1979,7 @@ OpenAI と互換性のある任意のプロバイダーを OpenCode で使用で
 - **limit.context**: モデルが受け入れる最大入力トークン。
 - **limit.output**: モデルが生成できる最大出力トークン。
 
-`limit` フィールドを使用すると、OpenCode はコンテキストがどのくらい残っているかを理解できます。標準プロバイダーは、これらを models.dev から自動的に取得します。
+`limit` フィールドを使用すると、Daemon Protocol はコンテキストがどのくらい残っているかを理解できます。標準プロバイダーは、これらを models.dev から自動的に取得します。
 
 ---
 
@@ -1992,7 +1992,7 @@ OpenAI と互換性のある任意のプロバイダーを OpenCode で使用で
 
 これは、認証に環境変数に依存する Amazon Bedrock のようなプロバイダーには当てはまりません。
 
-2. カスタムプロバイダーの場合は、OpenCode 設定を確認し、次のことを行います。
-   - `/connect` コマンドで使用されるプロバイダー ID が、OpenCode 設定内の ID と一致することを確認してください。
+2. カスタムプロバイダーの場合は、Daemon Protocol 設定を確認し、次のことを行います。
+   - `/connect` コマンドで使用されるプロバイダー ID が、Daemon Protocol 設定内の ID と一致することを確認してください。
    - プロバイダーには適切な npm パッケージが使用されます。たとえば、Cerebras には `@ai-sdk/cerebras` を使用します。他のすべての OpenAI 互換プロバイダーの場合は、`@ai-sdk/openai-compatible` を使用します。
    - `options.baseURL` フィールドで正しい API エンドポイントが使用されていることを確認してください。

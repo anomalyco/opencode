@@ -1,17 +1,17 @@
 ---
 title: CLI
-description: أوامر وخيارات CLI في OpenCode.
+description: أوامر وخيارات CLI في Daemon Protocol.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-يبدأ CLI الخاص بـ OpenCode افتراضيا واجهة [TUI](/docs/tui) عند تشغيله بدون أي معاملات.
+يبدأ CLI الخاص بـ Daemon Protocol افتراضيا واجهة [TUI](/docs/tui) عند تشغيله بدون أي معاملات.
 
 ```bash
 opencode
 ```
 
-كما يدعم أيضا أوامر موثقة في هذه الصفحة، ما يتيح لك التفاعل مع OpenCode برمجيا.
+كما يدعم أيضا أوامر موثقة في هذه الصفحة، ما يتيح لك التفاعل مع Daemon Protocol برمجيا.
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-بدء واجهة المستخدم terminal (TUI) الخاصة بـ OpenCode.
+بدء واجهة المستخدم terminal (TUI) الخاصة بـ Daemon Protocol.
 
 ```bash
 opencode [project]
@@ -44,13 +44,13 @@ opencode [project]
 
 ## الأوامر
 
-يتضمن CLI الخاص بـ OpenCode أيضا الأوامر التالية.
+يتضمن CLI الخاص بـ Daemon Protocol أيضا الأوامر التالية.
 
 ---
 
 ### agent
 
-إدارة وكلاء OpenCode.
+إدارة وكلاء Daemon Protocol.
 
 ```bash
 opencode agent [command]
@@ -60,13 +60,13 @@ opencode agent [command]
 
 ### attach
 
-إرفاق terminal بخادم الواجهة الخلفية لـ OpenCode قيد التشغيل بالفعل، والذي تم تشغيله عبر الأمرين `serve` أو `web`.
+إرفاق terminal بخادم الواجهة الخلفية لـ Daemon Protocol قيد التشغيل بالفعل، والذي تم تشغيله عبر الأمرين `serve` أو `web`.
 
 ```bash
 opencode attach [url]
 ```
 
-يتيح ذلك استخدام واجهة TUI مع واجهة خلفية لـ OpenCode تعمل عن بعد. على سبيل المثال:
+يتيح ذلك استخدام واجهة TUI مع واجهة خلفية لـ Daemon Protocol تعمل عن بعد. على سبيل المثال:
 
 ```bash
 # ابدأ خادم الواجهة الخلفية للوصول عبر الويب/الجوال
@@ -123,13 +123,13 @@ opencode auth [command]
 
 #### login
 
-يعتمد OpenCode على قائمة المزودين في [Models.dev](https://models.dev)، لذا يمكنك استخدام `opencode auth login` لتهيئة مفاتيح API لأي مزود ترغب باستخدامه. يتم حفظ ذلك في `~/.local/share/opencode/auth.json`.
+يعتمد Daemon Protocol على قائمة المزودين في [Models.dev](https://models.dev)، لذا يمكنك استخدام `opencode auth login` لتهيئة مفاتيح API لأي مزود ترغب باستخدامه. يتم حفظ ذلك في `~/.local/share/opencode/auth.json`.
 
 ```bash
 opencode auth login
 ```
 
-عند تشغيل OpenCode يقوم بتحميل المزودين من ملف بيانات الاعتماد، وكذلك أي مفاتيح معرّفة في متغيرات البيئة لديك أو في ملف `.env` ضمن مشروعك.
+عند تشغيل Daemon Protocol يقوم بتحميل المزودين من ملف بيانات الاعتماد، وكذلك أي مفاتيح معرّفة في متغيرات البيئة لديك أو في ملف `.env` ضمن مشروعك.
 
 ---
 
@@ -305,7 +305,7 @@ opencode models anthropic
 | <nobr><code>{"--refresh"}</code></nobr> | تحديث ذاكرة التخزين المؤقت للنماذج من models.dev              |
 | <nobr><code>{"--verbose"}</code></nobr> | استخدام مخرجات أكثر تفصيلا للنماذج (تشمل بيانات مثل التكاليف) |
 
-استخدم الراية `--refresh` لتحديث قائمة النماذج المخزنة مؤقتا. يفيد ذلك عند إضافة نماذج جديدة إلى مزود وتريد رؤيتها في OpenCode.
+استخدم الراية `--refresh` لتحديث قائمة النماذج المخزنة مؤقتا. يفيد ذلك عند إضافة نماذج جديدة إلى مزود وتريد رؤيتها في Daemon Protocol.
 
 ```bash
 opencode models --refresh
@@ -363,7 +363,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### serve
 
-بدء خادم OpenCode بدون واجهة للوصول عبر API. راجع [توثيق الخادم](/docs/server) لواجهة HTTP الكاملة.
+بدء خادم Daemon Protocol بدون واجهة للوصول عبر API. راجع [توثيق الخادم](/docs/server) لواجهة HTTP الكاملة.
 
 ```bash
 opencode serve
@@ -384,7 +384,7 @@ opencode serve
 
 ### session
 
-إدارة جلسات OpenCode.
+إدارة جلسات Daemon Protocol.
 
 ```bash
 opencode session [command]
@@ -394,7 +394,7 @@ opencode session [command]
 
 #### list
 
-عرض جميع جلسات OpenCode.
+عرض جميع جلسات Daemon Protocol.
 
 ```bash
 opencode session list
@@ -411,7 +411,7 @@ opencode session list
 
 ### stats
 
-عرض إحصاءات استخدام الرموز والتكلفة لجلسات OpenCode لديك.
+عرض إحصاءات استخدام الرموز والتكلفة لجلسات Daemon Protocol لديك.
 
 ```bash
 opencode stats
@@ -442,13 +442,13 @@ opencode export [sessionID]
 
 ### import
 
-استيراد بيانات الجلسة من ملف JSON أو رابط مشاركة OpenCode.
+استيراد بيانات الجلسة من ملف JSON أو رابط مشاركة Daemon Protocol.
 
 ```bash
 opencode import <file>
 ```
 
-يمكنك الاستيراد من ملف محلي أو من رابط مشاركة OpenCode.
+يمكنك الاستيراد من ملف محلي أو من رابط مشاركة Daemon Protocol.
 
 ```bash
 opencode import session.json
@@ -459,13 +459,13 @@ opencode import https://opncd.ai/s/abc123
 
 ### web
 
-بدء خادم OpenCode بدون واجهة مع واجهة ويب.
+بدء خادم Daemon Protocol بدون واجهة مع واجهة ويب.
 
 ```bash
 opencode web
 ```
 
-يشغّل هذا خادم HTTP ويفتح متصفح ويب للوصول إلى OpenCode عبر واجهة ويب. اضبط `OPENCODE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `opencode`).
+يشغّل هذا خادم HTTP ويفتح متصفح ويب للوصول إلى Daemon Protocol عبر واجهة ويب. اضبط `OPENCODE_SERVER_PASSWORD` لتفعيل مصادقة HTTP الأساسية (اسم المستخدم الافتراضي `opencode`).
 
 #### الرايات
 
@@ -500,7 +500,7 @@ opencode acp
 
 ### uninstall
 
-إلغاء تثبيت OpenCode وإزالة جميع الملفات ذات الصلة.
+إلغاء تثبيت Daemon Protocol وإزالة جميع الملفات ذات الصلة.
 
 ```bash
 opencode uninstall
@@ -560,7 +560,7 @@ opencode upgrade v0.1.48
 
 ## متغيرات البيئة
 
-يمكن تهيئة OpenCode باستخدام متغيرات البيئة.
+يمكن تهيئة Daemon Protocol باستخدام متغيرات البيئة.
 
 | المتغير                               | النوع   | الوصف                                                     |
 | ------------------------------------- | ------- | --------------------------------------------------------- |

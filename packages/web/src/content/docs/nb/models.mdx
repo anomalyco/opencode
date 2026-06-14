@@ -3,13 +3,13 @@ title: Modeller
 description: Konfigurere en LLM leverandør og modell.
 ---
 
-OpenCode bruker [AI SDK](https://ai-sdk.dev/) og [Models.dev](https://models.dev) for å støtte **75+ LLM leverandører** og den støtter kjøring av lokale modeller.
+Daemon Protocol bruker [AI SDK](https://ai-sdk.dev/) og [Models.dev](https://models.dev) for å støtte **75+ LLM leverandører** og den støtter kjøring av lokale modeller.
 
 ---
 
 ## Leverandører
 
-De fleste populære leverandørene er forhåndslastet som standard. Hvis du har lagt til legitimasjonen for en leverandør gjennom kommandoen `/connect`, vil den være tilgjengelig når du starter OpenCode.
+De fleste populære leverandørene er forhåndslastet som standard. Hvis du har lagt til legitimasjonen for en leverandør gjennom kommandoen `/connect`, vil den være tilgjengelig når du starter Daemon Protocol.
 
 Finn ut mer om [leverandører](/docs/providers).
 
@@ -35,7 +35,7 @@ Vurder å bruke en av modellene vi anbefaler.
 
 Imidlertid er det bare noen få av dem som er gode til både å generere kode og verktøykalling.
 
-Her er flere modeller som fungerer godt med OpenCode, uten spesiell rekkefølge. (Dette er ikke en uttømmende liste og er heller ikke nødvendigvis oppdatert):
+Her er flere modeller som fungerer godt med Daemon Protocol, uten spesiell rekkefølge. (Dette er ikke en uttømmende liste og er heller ikke nødvendigvis oppdatert):
 
 - GPT 5.2
 - GPT 5.1 Codex
@@ -49,7 +49,7 @@ Her er flere modeller som fungerer godt med OpenCode, uten spesiell rekkefølge.
 ## Angi en standard
 
 For å angi en av disse som standardmodell, kan du angi `model`-tasten i din
-OpenCode-konfigurasjon.
+Daemon Protocol-konfigurasjon.
 
 ```json title="opencode.json" {3}
 {
@@ -58,7 +58,7 @@ OpenCode-konfigurasjon.
 }
 ```
 
-Her er hele ID `provider_id/model_id`. For eksempel, hvis du bruker [OpenCode Zen](/docs/zen), vil du bruke `opencode/gpt-5.1-codex` for GPT 5.1 Codex.
+Her er hele ID `provider_id/model_id`. For eksempel, hvis du bruker [Daemon Zen](/docs/zen), vil du bruke `opencode/gpt-5.1-codex` for GPT 5.1 Codex.
 
 Hvis du har konfigurert en [egendefinert leverandør](/docs/providers#custom), er `provider_id` nøkkelen fra `provider`-delen av konfigurasjonen din, og `model_id` er nøkkelen fra `provider.models`.
 
@@ -141,7 +141,7 @@ Mange modeller støtter flere varianter med forskjellige konfigurasjoner. openco
 
 ### Innebygde varianter
 
-OpenCode leveres med standardvarianter for mange leverandører:
+Daemon Protocol leveres med standardvarianter for mange leverandører:
 
 **Anthropic**:
 
@@ -203,11 +203,11 @@ Bruk tastebindingen `variant_cycle` for raskt å bytte mellom varianter. [Finn u
 
 ## Lasting av modeller
 
-Når OpenCode starter opp, ser den etter modeller i følgende prioriterte rekkefølge:
+Når Daemon Protocol starter opp, ser den etter modeller i følgende prioriterte rekkefølge:
 
 1. Kommandolinjeflagget `--model` eller `-m`. Formatet er det samme som i konfigurasjonsfilen: `provider_id/model_id`.
 
-2. Modelllisten i OpenCode-konfigurasjonen.
+2. Modelllisten i Daemon Protocol-konfigurasjonen.
 
    ```json title="opencode.json"
    {

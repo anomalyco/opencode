@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-// This script runs a separate OpenCode server to be used as a remote
+// This script runs a separate Daemon Protocol server to be used as a remote
 // workspace, simulating a remote environment but all local to make
 // debugger easier
 //

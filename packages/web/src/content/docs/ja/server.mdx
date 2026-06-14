@@ -1,12 +1,12 @@
 ---
 title: サーバー
-description: HTTP 経由で OpenCode サーバーと通信します。
+description: HTTP 経由で Daemon Protocol サーバーと通信します。
 ---
 
 import config from "../../../../config.mjs"
 export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
 
-`opencode serve` コマンドは、OpenCode クライアントが使用できる OpenAPI エンドポイントを公開するヘッドレス HTTP サーバーを実行します。
+`opencode serve` コマンドは、Daemon Protocol クライアントが使用できる OpenAPI エンドポイントを公開するヘッドレス HTTP サーバーを実行します。
 
 ---
 
@@ -49,10 +49,10 @@ OPENCODE_SERVER_PASSWORD=your-password opencode serve
 `opencode` を実行すると、TUI とサーバーが起動します。 TUI はサーバーと通信するクライアントです。サーバーは OpenAPI 3.1 仕様のエンドポイントを公開します。このエンドポイントは、[SDK](/docs/sdk) を使用してアクセスできます。
 
 :::tip
-OpenCode サーバーを使用して、プログラムで OpenCode と対話します。
+Daemon Protocol サーバーを使用して、プログラムで Daemon Protocol と対話します。
 :::
 
-`opencode serve` を実行してスタンドアロンサーバーを起動できます。すでに OpenCode TUI を実行している場合でも、`opencode serve` は新しいサーバーを起動します。
+`opencode serve` を実行してスタンドアロンサーバーを起動できます。すでに Daemon Protocol TUI を実行している場合でも、`opencode serve` は新しいサーバーを起動します。
 
 ---
 
@@ -60,7 +60,7 @@ OpenCode サーバーを使用して、プログラムで OpenCode と対話し�
 
 TUI を起動すると、ポートとホスト名がランダムに割り当てられます。代わりに、`--hostname` と `--port` [フラグ](/docs/cli) を使用して固定できます。次に、これを使用してサーバーに接続します。
 
-[`/tui`](#tui) エンドポイントは、サーバー経由で TUI を駆動するために使用できます。たとえば、プロンプトを事前入力したり、実行したりできます。この設定は、OpenCode [IDE](/docs/ide) プラグインによって使用されます。
+[`/tui`](#tui) エンドポイントは、サーバー経由で TUI を駆動するために使用できます。たとえば、プロンプトを事前入力したり、実行したりできます。この設定は、Daemon Protocol [IDE](/docs/ide) プラグインによって使用されます。
 
 ---
 
@@ -78,7 +78,7 @@ http://<hostname>:<port>/doc
 
 ## API
 
-OpenCode サーバーは次の API を公開します。
+Daemon Protocol サーバーは次の API を公開します。
 
 ---
 

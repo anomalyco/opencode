@@ -7,11 +7,11 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Go er et lavprisabonnement — **$5 for din første måned**, derefter **$10/måned** — der giver dig pålidelig adgang til populære åbne kodningsmodeller.
+Daemon Protocol Go er et lavprisabonnement — **$5 for din første måned**, derefter **$10/måned** — der giver dig pålidelig adgang til populære åbne kodningsmodeller.
 
-Go fungerer som enhver anden udbyder i OpenCode. Du abonnerer på OpenCode Go og
+Go fungerer som enhver anden udbyder i Daemon Protocol. Du abonnerer på Daemon Protocol Go og
 får din API-nøgle. Det er **helt valgfrit**, og du behøver ikke at bruge det for at
-bruge OpenCode.
+bruge Daemon Protocol.
 
 Det er primært designet til internationale brugere, med modeller hostet i USA, EU og Singapore for at sikre stabil global adgang.
 
@@ -27,7 +27,7 @@ Det kan dog være svært at få pålidelig adgang til dem med lav latenstid. Udb
 varierer i kvalitet og tilgængelighed.
 
 :::tip
-Vi testede en udvalgt gruppe af modeller og udbydere, der fungerer godt med OpenCode.
+Vi testede en udvalgt gruppe af modeller og udbydere, der fungerer godt med Daemon Protocol.
 :::
 
 For at løse dette, gjorde vi et par ting:
@@ -39,22 +39,22 @@ For at løse dette, gjorde vi et par ting:
 3. Til sidst benchmarkede vi kombinationen af model og udbyder, og kom frem til
    en liste, som vi trygt kan anbefale.
 
-OpenCode Go giver dig adgang til disse modeller for **$5 for din første måned**, derefter **$10/måned**.
+Daemon Protocol Go giver dig adgang til disse modeller for **$5 for din første måned**, derefter **$10/måned**.
 
 ---
 
 ## Sådan fungerer det
 
-OpenCode Go fungerer som enhver anden udbyder i OpenCode.
+Daemon Protocol Go fungerer som enhver anden udbyder i Daemon Protocol.
 
-1. Du logger ind på **<a href={console}>OpenCode Zen</a>**, abonnerer på Go, og
+1. Du logger ind på **<a href={console}>Daemon Zen</a>**, abonnerer på Go, og
    kopierer din API-nøgle.
-2. Du kører kommandoen `/connect` i TUI'en, vælger `OpenCode Go`, og indsætter
+2. Du kører kommandoen `/connect` i TUI'en, vælger `Daemon Protocol Go`, og indsætter
    din API-nøgle.
 3. Kør `/models` i TUI'en for at se listen over tilgængelige modeller gennem Go.
 
 :::note
-Kun ét medlem per arbejdsområde kan abonnere på OpenCode Go.
+Kun ét medlem per arbejdsområde kan abonnere på Daemon Protocol Go.
 :::
 
 Den nuværende liste over modeller inkluderer:
@@ -79,7 +79,7 @@ Listen over modeller kan ændre sig, efterhånden som vi tester og tilføjer nye
 
 ## Forbrugsgrænser
 
-OpenCode Go inkluderer følgende grænser:
+Daemon Protocol Go inkluderer følgende grænser:
 
 - **5-timers grænse** — forbrug for $12
 - **Ugentlig grænse** — forbrug for $30
@@ -179,7 +179,7 @@ Du kan også få adgang til Go-modeller gennem følgende API-endpoints.
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
-Dit [model id](/docs/config/#models) i din OpenCode config
+Dit [model id](/docs/config/#models) i din Daemon Protocol config
 bruger formatet `opencode-go/<model-id>`. For eksempel for Kimi K2.7 Code, vil du
 bruge `opencode-go/kimi-k2.7-code` i din config.
 
@@ -203,9 +203,9 @@ Planen er primært designet til internationale brugere med modeller hostet i US,
 
 ## Mål
 
-Vi skabte OpenCode Go for at:
+Vi skabte Daemon Protocol Go for at:
 
 1. Gøre AI-kodning **tilgængelig** for flere mennesker med et lavprisabonnement.
 2. Give **pålidelig** adgang til de bedste åbne kodningsmodeller.
 3. Kuratere modeller, der er **testet og benchmarkede** til brug med kodningsagenter.
-4. Undgå **lock-in** ved også at lade dig bruge enhver anden udbyder med OpenCode.
+4. Undgå **lock-in** ved også at lade dig bruge enhver anden udbyder med Daemon Protocol.

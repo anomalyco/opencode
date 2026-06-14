@@ -3,7 +3,7 @@ title: MCP serveri
 description: Dodajte lokalne i udaljene MCP alate.
 ---
 
-Možete dodati vanjske alate u OpenCode koristeći _Model Context Protocol_, ili MCP. OpenCode podržava i lokalne i udaljene servere.
+Možete dodati vanjske alate u Daemon Protocol koristeći _Model Context Protocol_, ili MCP. Daemon Protocol podržava i lokalne i udaljene servere.
 Jednom dodani, MCP alati su automatski dostupni LLM-u zajedno sa ugrađenim alatima.
 
 ---
@@ -19,7 +19,7 @@ Određeni MCP serveri, poput GitHub MCP servera, mogu dodati mnogo tokena i lako
 
 ## Omogućavanje
 
-Možete definirati MCP servere u vašoj [OpenCode Config](https://opencode.ai/docs/config/) pod `mcp`. Dodajte svaki MCP sa jedinstvenim imenom. Možete se pozvati na taj MCP po imenu kada tražite LLM.
+Možete definirati MCP servere u vašoj [Daemon Protocol Config](https://opencode.ai/docs/config/) pod `mcp`. Dodajte svaki MCP sa jedinstvenim imenom. Možete se pozvati na taj MCP po imenu kada tražite LLM.
 
 ```jsonc title="opencode.jsonc" {6}
 {
@@ -152,7 +152,7 @@ Dodajte udaljene MCP servere postavljanjem `type` na `"remote"`.
 
 ## OAuth
 
-OpenCode automatski rukuje OAuth autentifikacijom za udaljene MCP servere. Kada server zahtijeva autentifikaciju, OpenCode će:
+Daemon Protocol automatski rukuje OAuth autentifikacijom za udaljene MCP servere. Kada server zahtijeva autentifikaciju, Daemon Protocol će:
 
 1. Otkrijte 401 odgovor i pokrenite OAuth tok
 2. Koristite **Dynamic Client Registration (RFC 7591)** ako podržava server
@@ -176,7 +176,7 @@ Za većinu MCP servera sa omogućenim OAuthom nije potrebna posebna konfiguracij
 }
 ```
 
-Ako server zahtijeva autentifikaciju, OpenCode će vas tražiti prijavu pri prvom korištenju. Ako se to ne desi, možete [ručno pokrenuti tok](#authenticating) naredbom `opencode mcp auth <server-name>`.
+Ako server zahtijeva autentifikaciju, Daemon Protocol će vas tražiti prijavu pri prvom korištenju. Ako se to ne desi, možete [ručno pokrenuti tok](#authenticating) naredbom `opencode mcp auth <server-name>`.
 
 ### Prethodno registrirano
 
@@ -222,7 +222,7 @@ Uklonite pohranjene vjerodajnice:
 opencode mcp logout my-oauth-server
 ```
 
-Komanda `mcp auth` otvara pretraživač za autorizaciju. Nakon odobrenja, OpenCode sigurno čuva tokene u `~/.local/share/opencode/mcp-auth.json`.
+Komanda `mcp auth` otvara pretraživač za autorizaciju. Nakon odobrenja, Daemon Protocol sigurno čuva tokene u `~/.local/share/opencode/mcp-auth.json`.
 
 #### Onemogućavanje OAuth-a
 
@@ -271,7 +271,7 @@ Komanda `mcp debug` prikazuje trenutni auth status, testira HTTP povezanost i po
 
 ## Upravljanje
 
-Vaši MCP serveri su dostupni kao alati u OpenCode, zajedno s ugrađenim alatima. Možete njima upravljati kroz OpenCode konfiguraciju kao i bilo kojim drugim alatom.
+Vaši MCP serveri su dostupni kao alati u Daemon Protocol, zajedno s ugrađenim alatima. Možete njima upravljati kroz Daemon Protocol konfiguraciju kao i bilo kojim drugim alatom.
 
 ### Globalno
 
@@ -396,7 +396,7 @@ Nakon dodavanja konfiguracije, autentifikujte se sa Sentry:
 opencode mcp auth sentry
 ```
 
-Ovo će otvoriti prozor pretraživača da završite OAuth tok i povežete OpenCode sa vašim Sentry nalogom.
+Ovo će otvoriti prozor pretraživača da završite OAuth tok i povežete Daemon Protocol sa vašim Sentry nalogom.
 Nakon provjere autentičnosti, možete koristiti Sentry alate u svojim upitima za upite o problemima, projektima i podacima o greškama.
 
 ```txt "use sentry"

@@ -1,5 +1,5 @@
 {
-  description = "OpenCode development flake";
+  description = "Daemon Protocol development flake";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";

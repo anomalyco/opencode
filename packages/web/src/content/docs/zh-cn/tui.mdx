@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: 使用 OpenCode 终端用户界面。
+description: 使用 Daemon Protocol 终端用户界面。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode 提供了一个交互式终端界面（TUI），用于配合 LLM 处理您的项目。
+Daemon Protocol 提供了一个交互式终端界面（TUI），用于配合 LLM 处理您的项目。
 
-运行 OpenCode 即可启动当前目录的 TUI。
+运行 Daemon Protocol 即可启动当前目录的 TUI。
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## 命令
 
-使用 OpenCode TUI 时，您可以输入 `/` 后跟命令名称来快速执行操作。例如：
+使用 Daemon Protocol TUI 时，您可以输入 `/` 后跟命令名称来快速执行操作。例如：
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### connect
 
-将提供商添加到 OpenCode。允许您从可用的提供商中选择并添加其 API 密钥。
+将提供商添加到 Daemon Protocol。允许您从可用的提供商中选择并添加其 API 密钥。
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### exit
 
-退出 OpenCode。_别名_：`/quit`、`/q`
+退出 Daemon Protocol。_别名_：`/quit`、`/q`
 
 ```bash frame="none"
 /exit
@@ -390,7 +390,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 - `theme` - 设置 UI 主题。[了解更多](/docs/themes)。
 - `keybinds` - 自定义键盘快捷键。[了解更多](/docs/keybinds)。
-- `leader_timeout` - 控制按下 leader key 后 OpenCode 等待后续按键的时间。默认为 `2000`。
+- `leader_timeout` - 控制按下 leader key 后 Daemon Protocol 等待后续按键的时间。默认为 `2000`。
 - `scroll_acceleration.enabled` - 启用 macOS 风格的滚动加速，让滚动更平滑自然。启用后，快速滚动时速度会增加，慢速移动时仍保持精确。**此设置优先于 `scroll_speed`，启用时会覆盖它。**
 - `scroll_speed` - 控制使用滚动命令时 TUI 的滚动速度（最小值：`0.001`，支持小数）。默认为 `3`。**注意：如果 `scroll_acceleration.enabled` 设置为 `true`，则此设置会被忽略。**
 - `diff_style` - 控制 diff 的显示方式。`"auto"` 会根据终端宽度自适应，`"stacked"` 始终显示单列布局。
@@ -401,7 +401,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ### Attention
 
-当 OpenCode 需要你处理问题、批准权限请求、查看会话错误，或想告知会话已完成时，TUI 可以通过声音和桌面通知提醒你。设置 `attention.enabled` 后会启用这些提醒；内置事件触发时会播放声音。桌面通知只会在终端窗口未聚焦时发送，并且不会用于 subagent 事件。
+当 Daemon Protocol 需要你处理问题、批准权限请求、查看会话错误，或想告知会话已完成时，TUI 可以通过声音和桌面通知提醒你。设置 `attention.enabled` 后会启用这些提醒；内置事件触发时会播放声音。桌面通知只会在终端窗口未聚焦时发送，并且不会用于 subagent 事件。
 
 - `enabled` - 开启 Attention 的所有通知和声音。默认为 `false`。
 - `notifications` - 启用 Attention 后，允许 TUI 通过终端发送桌面通知。默认为 `true`。

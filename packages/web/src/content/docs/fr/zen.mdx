@@ -1,15 +1,15 @@
 ---
 title: Zen
-description: Liste organisée de modèles fournis par OpenCode.
+description: Liste organisée de modèles fournis par Daemon Protocol.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Zen est une liste de modèles testés et vérifiés fournie par l'équipe OpenCode.
+Daemon Zen est une liste de modèles testés et vérifiés fournie par l'équipe Daemon Protocol.
 
-Zen fonctionne comme n'importe quel autre fournisseur dans OpenCode. Vous vous connectez à OpenCode Zen et obtenez votre clé API. C'est **entièrement facultatif** et vous n'avez pas besoin de l'utiliser pour utiliser OpenCode.
+Zen fonctionne comme n'importe quel autre fournisseur dans Daemon Protocol. Vous vous connectez à Daemon Zen et obtenez votre clé API. C'est **entièrement facultatif** et vous n'avez pas besoin de l'utiliser pour utiliser Daemon Protocol.
 
 ---
 
@@ -18,7 +18,7 @@ Zen fonctionne comme n'importe quel autre fournisseur dans OpenCode. Vous vous c
 Il existe un grand nombre de modèles, mais seuls quelques-uns fonctionnent bien comme agents de codage. De plus, la plupart des fournisseurs sont configurés très différemment ; vous obtenez donc des performances et une qualité très variables.
 
 :::tip
-Nous avons testé un groupe sélectionné de modèles et de fournisseurs qui fonctionnent bien avec OpenCode.
+Nous avons testé un groupe sélectionné de modèles et de fournisseurs qui fonctionnent bien avec Daemon Protocol.
 :::
 
 Donc, si vous utilisez un modèle via quelque chose comme OpenRouter, vous ne pouvez jamais être sûr d'obtenir la meilleure version du modèle que vous voulez.
@@ -29,16 +29,16 @@ Pour corriger cela, nous avons fait plusieurs choses :
 2. Nous avons ensuite travaillé avec quelques fournisseurs pour nous assurer qu'ils étaient correctement servis.
 3. Enfin, nous avons comparé la combinaison modèle/fournisseur et établi une liste que nous recommandons en toute confiance.
 
-OpenCode Zen est une passerelle AI qui vous donne accès à ces modèles.
+Daemon Zen est une passerelle AI qui vous donne accès à ces modèles.
 
 ---
 
 ## Comment ça marche
 
-OpenCode Zen fonctionne comme n'importe quel autre fournisseur dans OpenCode.
+Daemon Zen fonctionne comme n'importe quel autre fournisseur dans Daemon Protocol.
 
-1. Vous vous connectez à **<a href={console}>OpenCode Zen</a>**, ajoutez vos informations de facturation et copiez votre clé API.
-2. Vous exécutez la commande `/connect` dans le TUI, sélectionnez OpenCode Zen et collez votre clé API.
+1. Vous vous connectez à **<a href={console}>Daemon Zen</a>**, ajoutez vos informations de facturation et copiez votre clé API.
+2. Vous exécutez la commande `/connect` dans le TUI, sélectionnez Daemon Zen et collez votre clé API.
 3. Exécutez `/models` dans le TUI pour voir la liste des modèles que nous recommandons.
 
 La facturation se fait à la requête et vous pouvez ajouter des crédits à votre compte.
@@ -101,7 +101,7 @@ Vous pouvez également accéder à nos modèles via les points de terminaison AP
 | Nemotron 3 Ultra Free  | nemotron-3-ultra-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 
-Le [model id](/docs/config/#models) dans votre configuration OpenCode utilise le format `opencode/<model-id>`. Par exemple, pour GPT 5.5, vous utiliseriez `opencode/gpt-5.5` dans votre configuration.
+Le [model id](/docs/config/#models) dans votre configuration Daemon Protocol utilise le format `opencode/<model-id>`. Par exemple, pour GPT 5.5, vous utiliseriez `opencode/gpt-5.5` dans votre configuration.
 
 ---
 
@@ -183,11 +183,11 @@ Les frais de carte de crédit sont répercutés au prix coûtant (4.4% + $0.30 p
 
 Les modèles gratuits :
 
-- DeepSeek V4 Flash Free est disponible sur OpenCode pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
-- MiMo-V2.5 Free est disponible sur OpenCode pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
-- North Mini Code Free est disponible sur OpenCode pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
-- Nemotron 3 Ultra Free est disponible sur OpenCode pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
-- Big Pickle est un modèle stealth gratuit sur OpenCode pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
+- DeepSeek V4 Flash Free est disponible sur Daemon Protocol pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
+- MiMo-V2.5 Free est disponible sur Daemon Protocol pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
+- North Mini Code Free est disponible sur Daemon Protocol pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
+- Nemotron 3 Ultra Free est disponible sur Daemon Protocol pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
+- Big Pickle est un modèle stealth gratuit sur Daemon Protocol pour une durée limitée. L'équipe utilise cette période pour recueillir des retours et améliorer le modèle.
 
 <a href={email}>Contactez-nous</a> si vous avez des questions.
 
@@ -288,9 +288,9 @@ Par exemple, votre organisation a peut-être déjà une clé pour OpenAI ou Anth
 
 ## Objectifs
 
-Nous avons créé OpenCode Zen pour :
+Nous avons créé Daemon Zen pour :
 
 1. **Benchmark** les meilleurs modèles/fournisseurs pour les agents de codage.
 2. Avoir accès aux options de **la plus haute qualité** sans dégrader les performances ni basculer vers des fournisseurs moins chers.
 3. Répercuter toute **baisse de prix** en vendant au prix coûtant ; la seule marge sert à couvrir nos frais de traitement.
-4. N'avoir **aucun lock-in** en vous permettant de l'utiliser avec n'importe quel autre agent de codage. Et toujours vous permettre d'utiliser n'importe quel autre fournisseur avec OpenCode également.
+4. N'avoir **aucun lock-in** en vous permettant de l'utiliser avec n'importe quel autre agent de codage. Et toujours vous permettre d'utiliser n'importe quel autre fournisseur avec Daemon Protocol également.

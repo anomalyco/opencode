@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: Using the OpenCode terminal user interface.
+description: Using the Daemon Protocol terminal user interface.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode provides an interactive terminal interface or TUI for working on your projects with an LLM.
+Daemon Protocol provides an interactive terminal interface or TUI for working on your projects with an LLM.
 
-Running OpenCode starts the TUI for the current directory.
+Running Daemon Protocol starts the TUI for the current directory.
 
 ```bash
 opencode
@@ -63,7 +63,7 @@ The output of the command is added to the conversation as a tool result.
 
 ## Commands
 
-When using the OpenCode TUI, you can type `/` followed by a command name to quickly execute actions. For example:
+When using the Daemon Protocol TUI, you can type `/` followed by a command name to quickly execute actions. For example:
 
 ```bash frame="none"
 /help
@@ -77,7 +77,7 @@ Here are all available slash commands:
 
 ### connect
 
-Add a provider to OpenCode. Allows you to select from available providers and add their API keys.
+Add a provider to Daemon Protocol. Allows you to select from available providers and add their API keys.
 
 ```bash frame="none"
 /connect
@@ -121,7 +121,7 @@ Open external editor for composing messages. Uses the editor set in your `EDITOR
 
 ### exit
 
-Exit OpenCode. _Aliases_: `/quit`, `/q`
+Exit Daemon Protocol. _Aliases_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -391,7 +391,7 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 
 - `theme` - Sets your UI theme. [Learn more](/docs/themes).
 - `keybinds` - Customizes keyboard shortcuts. [Learn more](/docs/keybinds).
-- `leader_timeout` - Controls how long OpenCode waits after the leader key. Defaults to `2000`.
+- `leader_timeout` - Controls how long Daemon Protocol waits after the leader key. Defaults to `2000`.
 - `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `0.001`, supports decimal values). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.

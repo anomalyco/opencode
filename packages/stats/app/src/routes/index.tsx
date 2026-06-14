@@ -49,11 +49,11 @@ const rangeLabels: Record<UsageRange, string> = {
   "1M": "1 Month",
   "2M": "2 Months",
 }
-const statsHomeTitle = "OpenCode Data"
-const statsHomeDescription = "OpenCode usage data, market share, token cost, and session cost."
+const statsHomeTitle = "Daemon Protocol Data"
+const statsHomeDescription = "Daemon Protocol usage data, market share, token cost, and session cost."
 const statsHomeFallbackUrl = "https://opencode.ai/data/"
 const statsUnfurlPath = "banner.jpg"
-const statsUnfurlAlt = "OpenCode Data wordmark on a dark patterned background"
+const statsUnfurlAlt = "Daemon Protocol Data wordmark on a dark patterned background"
 const usageColors = [
   "#ed6aff",
   "#a684ff",
@@ -144,7 +144,7 @@ export default function StatsHome() {
       <Meta name="description" content={statsHomeDescription} />
       <Link rel="canonical" href={statsHomeUrl} />
       <Meta property="og:type" content="website" />
-      <Meta property="og:site_name" content="OpenCode" />
+      <Meta property="og:site_name" content="Daemon Protocol" />
       <Meta property="og:title" content={statsHomeTitle} />
       <Meta property="og:description" content={statsHomeDescription} />
       <Meta property="og:url" content={statsHomeUrl} />
@@ -401,7 +401,7 @@ function TopModelsSection(props: { data: StatsHomeData["usage"]; leaderboard: St
   return (
     <section id="top-models" data-section="top-models">
       <h2 data-slot="top-models-title">
-        <strong>Top models.</strong> <span>Usage of models across OpenCode Go.</span>
+        <strong>Top models.</strong> <span>Usage of models across Daemon Protocol Go.</span>
       </h2>
       <Show
         when={data().some((item) => usageTotal(item) > 0)}

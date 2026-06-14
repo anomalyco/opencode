@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: OpenCode 터미널 사용자 인터페이스 사용.
+description: Daemon Protocol 터미널 사용자 인터페이스 사용.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode는 LLM과 함께 프로젝트 작업을 하기 위한 대화형 터미널 인터페이스(TUI)를 제공합니다.
+Daemon Protocol는 LLM과 함께 프로젝트 작업을 하기 위한 대화형 터미널 인터페이스(TUI)를 제공합니다.
 
-OpenCode를 실행하면 현재 디렉토리에서 TUI가 시작됩니다.
+Daemon Protocol를 실행하면 현재 디렉토리에서 TUI가 시작됩니다.
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ How is auth handled in @packages/functions/src/api/index.ts?
 
 ## 명령
 
-OpenCode TUI를 사용할 때 `/` 뒤에 명령 이름을 입력하여 작업을 빠르게 실행할 수 있습니다. 예를 들어:
+Daemon Protocol TUI를 사용할 때 `/` 뒤에 명령 이름을 입력하여 작업을 빠르게 실행할 수 있습니다. 예를 들어:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ OpenCode TUI를 사용할 때 `/` 뒤에 명령 이름을 입력하여 작업을
 
 ### connect
 
-OpenCode에 공급자를 추가합니다. 사용 가능한 공급자 중에서 선택하고 API 키를 추가할 수 있습니다.
+Daemon Protocol에 공급자를 추가합니다. 사용 가능한 공급자 중에서 선택하고 API 키를 추가할 수 있습니다.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ OpenCode에 공급자를 추가합니다. 사용 가능한 공급자 중에서 �
 
 ### exit
 
-OpenCode를 종료합니다. _별칭_: `/quit`, `/q`
+Daemon Protocol를 종료합니다. _별칭_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -389,7 +389,7 @@ VS Code와 같은 일부 편집기는 `--wait` 플래그와 함께 시작해야 
 
 - `theme` - UI 테마를 설정합니다. [더 알아보기](/docs/themes).
 - `keybinds` - 키보드 단축키를 사용자 정의합니다. [더 알아보기](/docs/keybinds).
-- `leader_timeout` - leader key를 누른 뒤 OpenCode가 다음 키 입력을 기다리는 시간을 제어합니다. 기본값은 `2000`입니다.
+- `leader_timeout` - leader key를 누른 뒤 Daemon Protocol가 다음 키 입력을 기다리는 시간을 제어합니다. 기본값은 `2000`입니다.
 - `scroll_acceleration.enabled` - 부드럽고 자연스러운 스크롤을 위해 macOS 스타일의 스크롤 가속을 활성화합니다. 활성화하면 빠른 스크롤 제스처로 스크롤 속도가 증가하고 느린 움직임에서는 정밀하게 유지됩니다. **이 설정은 `scroll_speed`보다 우선하며 활성화 시 이를 덮어씁니다.**
 - `scroll_speed` - 스크롤 명령을 사용할 때 TUI 스크롤 속도를 제어합니다 (최소: `0.001`, 소수점 값 지원). 기본값은 `3`입니다. **참고: `scroll_acceleration.enabled`가 `true`로 설정되면 무시됩니다.**
 - `diff_style` - diff 렌더링 방식을 제어합니다. `"auto"`는 터미널 너비에 적응하고, `"stacked"`는 항상 단일 열 레이아웃을 표시합니다.
@@ -400,7 +400,7 @@ VS Code와 같은 일부 편집기는 `--wait` 플래그와 함께 시작해야 
 
 ### Attention
 
-Attention을 사용하면 OpenCode가 답변을 기다리거나, 권한 승인이 필요하거나, 세션 오류가 발생했거나, 세션이 완료되었을 때 TUI가 사운드와 데스크톱 알림으로 알려줍니다. `attention.enabled`로 활성화합니다. 기본 제공 이벤트는 발생할 때 사운드를 재생합니다. 데스크톱 알림은 터미널 창에 포커스가 없을 때만 전송되며 subagent 이벤트에는 사용되지 않습니다.
+Attention을 사용하면 Daemon Protocol가 답변을 기다리거나, 권한 승인이 필요하거나, 세션 오류가 발생했거나, 세션이 완료되었을 때 TUI가 사운드와 데스크톱 알림으로 알려줍니다. `attention.enabled`로 활성화합니다. 기본 제공 이벤트는 발생할 때 사운드를 재생합니다. 데스크톱 알림은 터미널 창에 포커스가 없을 때만 전송되며 subagent 이벤트에는 사용되지 않습니다.
 
 - `enabled` - Attention의 모든 알림과 사운드를 활성화합니다. 기본값은 `false`입니다.
 - `notifications` - Attention이 활성화된 경우 TUI가 터미널을 통해 데스크톱 알림을 보낼 수 있도록 허용합니다. 기본값은 `true`입니다.

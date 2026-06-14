@@ -15,7 +15,7 @@ export const dict = {
   "nav.home": "Início",
   "nav.openMenu": "Abrir menu",
   "nav.getStartedFree": "Começar grátis",
-  "nav.logoAlt": "OpenCode",
+  "nav.logoAlt": "Daemon Protocol",
 
   "nav.context.copyLogo": "Copiar logo como SVG",
   "nav.context.copyWordmark": "Copiar marca como SVG",
@@ -81,9 +81,9 @@ export const dict = {
   "error.reloadAmountMin": "O valor de recarga deve ser de pelo menos ${{amount}}",
   "error.reloadTriggerMin": "O gatilho de saldo deve ser de pelo menos ${{amount}}",
 
-  "app.meta.description": "OpenCode - O agente de codificação de código aberto.",
+  "app.meta.description": "Daemon Protocol - O agente de codificação de código aberto.",
 
-  "home.title": "OpenCode | O agente de codificação de código aberto com IA",
+  "home.title": "Daemon Protocol | O agente de codificação de código aberto com IA",
 
   "temp.title": "opencode | Agente de codificação com IA feito para o terminal",
   "temp.hero.title": "O agente de codificação com IA feito para o terminal",
@@ -96,8 +96,8 @@ export const dict = {
   "temp.feature.zen.afterLink": "fornecida pela opencode",
   "temp.feature.models.beforeLink": "Suporta mais de 75 provedores de LLM através do",
   "temp.feature.models.afterLink": ", incluindo modelos locais",
-  "temp.screenshot.caption": "OpenCode TUI com o tema tokyonight",
-  "temp.screenshot.alt": "OpenCode TUI com tema tokyonight",
+  "temp.screenshot.caption": "Daemon Protocol TUI com o tema tokyonight",
+  "temp.screenshot.alt": "Daemon Protocol TUI com tema tokyonight",
   "temp.logoLightAlt": "logo opencode claro",
   "temp.logoDarkAlt": "logo opencode escuro",
 
@@ -113,9 +113,9 @@ export const dict = {
 
   "home.install.ariaLabel": "Opções de instalação",
 
-  "home.what.title": "O que é OpenCode?",
+  "home.what.title": "O que é Daemon Protocol?",
   "home.what.body":
-    "OpenCode é um agente de código aberto que ajuda você a escrever código no seu terminal, IDE ou desktop.",
+    "Daemon Protocol é um agente de código aberto que ajuda você a escrever código no seu terminal, IDE ou desktop.",
   "home.what.lsp.title": "LSP habilitado",
   "home.what.lsp.body": "Carrega automaticamente os LSPs certos para o LLM",
   "home.what.multiSession.title": "Multissessão",
@@ -134,44 +134,44 @@ export const dict = {
 
   "home.growth.title": "O agente de codificação de código aberto com IA",
   "home.growth.body":
-    "Com mais de <strong>{{stars}}</strong> estrelas no GitHub, <strong>{{contributors}}</strong> colaboradores e mais de <strong>{{commits}}</strong> commits, OpenCode é usado e confiado por mais de <strong>{{monthlyUsers}}</strong> desenvolvedores todos os meses.",
+    "Com mais de <strong>{{stars}}</strong> estrelas no GitHub, <strong>{{contributors}}</strong> colaboradores e mais de <strong>{{commits}}</strong> commits, Daemon Protocol é usado e confiado por mais de <strong>{{monthlyUsers}}</strong> desenvolvedores todos os meses.",
   "home.growth.githubStars": "Estrelas no GitHub",
   "home.growth.contributors": "Colaboradores",
   "home.growth.monthlyDevs": "Devs mensais",
 
   "home.privacy.title": "Feito com privacidade em primeiro lugar",
   "home.privacy.body":
-    "OpenCode não armazena nenhum código seu nem dados de contexto, para que possa operar em ambientes sensíveis à privacidade.",
+    "Daemon Protocol não armazena nenhum código seu nem dados de contexto, para que possa operar em ambientes sensíveis à privacidade.",
   "home.privacy.learnMore": "Saiba mais sobre",
   "home.privacy.link": "privacidade",
 
-  "home.faq.q1": "O que é OpenCode?",
+  "home.faq.q1": "O que é Daemon Protocol?",
   "home.faq.a1":
-    "OpenCode é um agente de código aberto que ajuda você a escrever e executar código com qualquer modelo de IA. Está disponível como interface de terminal, app desktop ou extensão de IDE.",
-  "home.faq.q2": "Como eu uso o OpenCode?",
+    "Daemon Protocol é um agente de código aberto que ajuda você a escrever e executar código com qualquer modelo de IA. Está disponível como interface de terminal, app desktop ou extensão de IDE.",
+  "home.faq.q2": "Como eu uso o Daemon Protocol?",
   "home.faq.a2.before": "A maneira mais fácil de começar é ler a",
   "home.faq.a2.link": "introdução",
-  "home.faq.q3": "Preciso de assinaturas extras de IA para usar o OpenCode?",
+  "home.faq.q3": "Preciso de assinaturas extras de IA para usar o Daemon Protocol?",
   "home.faq.a3.p1":
-    "Não necessariamente, OpenCode vem com um conjunto de modelos grátis que você pode usar sem criar conta.",
+    "Não necessariamente, Daemon Protocol vem com um conjunto de modelos grátis que você pode usar sem criar conta.",
   "home.faq.a3.p2.beforeZen":
     "Além disso, você pode usar qualquer um dos modelos de codificação populares criando uma conta",
   "home.faq.a3.p2.afterZen": ".",
   "home.faq.a3.p3":
-    "Embora incentivemos os usuários a usar o Zen, OpenCode também funciona com todos os provedores populares, como OpenAI, Anthropic, xAI etc.",
+    "Embora incentivemos os usuários a usar o Zen, Daemon Protocol também funciona com todos os provedores populares, como OpenAI, Anthropic, xAI etc.",
   "home.faq.a3.p4.beforeLocal": "Você pode até conectar seus",
   "home.faq.a3.p4.localLink": "modelos locais",
-  "home.faq.q4": "Posso usar minhas assinaturas de IA existentes com o OpenCode?",
+  "home.faq.q4": "Posso usar minhas assinaturas de IA existentes com o Daemon Protocol?",
   "home.faq.a4.p1":
-    "Sim, OpenCode suporta planos de assinatura de todos os principais provedores. Você pode usar suas assinaturas Claude Pro/Max, ChatGPT Plus/Pro ou GitHub Copilot.",
-  "home.faq.q5": "Posso usar o OpenCode apenas no terminal?",
-  "home.faq.a5.beforeDesktop": "Não mais! OpenCode agora está disponível como um app para o seu",
+    "Sim, Daemon Protocol suporta planos de assinatura de todos os principais provedores. Você pode usar suas assinaturas Claude Pro/Max, ChatGPT Plus/Pro ou GitHub Copilot.",
+  "home.faq.q5": "Posso usar o Daemon Protocol apenas no terminal?",
+  "home.faq.a5.beforeDesktop": "Não mais! Daemon Protocol agora está disponível como um app para o seu",
   "home.faq.a5.desktop": "desktop",
   "home.faq.a5.and": "e",
   "home.faq.a5.web": "web",
-  "home.faq.q6": "Quanto custa o OpenCode?",
+  "home.faq.q6": "Quanto custa o Daemon Protocol?",
   "home.faq.a6":
-    "OpenCode é 100% gratuito para usar. Ele também vem com um conjunto de modelos gratuitos. Pode haver custos adicionais se você conectar qualquer outro provedor.",
+    "Daemon Protocol é 100% gratuito para usar. Ele também vem com um conjunto de modelos gratuitos. Pode haver custos adicionais se você conectar qualquer outro provedor.",
   "home.faq.q7": "E sobre dados e privacidade?",
   "home.faq.a7.p1":
     "Seus dados e informações só são armazenados quando você usa nossos modelos gratuitos ou cria links compartilháveis.",
@@ -179,8 +179,8 @@ export const dict = {
   "home.faq.a7.p2.modelsLink": "nossos modelos",
   "home.faq.a7.p2.and": "e",
   "home.faq.a7.p2.shareLink": "páginas de compartilhamento",
-  "home.faq.q8": "OpenCode é código aberto?",
-  "home.faq.a8.p1": "Sim, OpenCode é totalmente open source. O código-fonte é público no",
+  "home.faq.q8": "Daemon Protocol é código aberto?",
+  "home.faq.a8.p1": "Sim, Daemon Protocol é totalmente open source. O código-fonte é público no",
   "home.faq.a8.p2": "sob a",
   "home.faq.a8.mitLicense": "Licença MIT",
   "home.faq.a8.p3":
@@ -188,23 +188,23 @@ export const dict = {
 
   "home.zenCta.title": "Acesse modelos confiáveis e otimizados para agentes de codificação",
   "home.zenCta.body":
-    "O Zen dá acesso a um conjunto selecionado de modelos de IA que a OpenCode testou e avaliou especificamente para agentes de codificação. Não precisa se preocupar com desempenho e qualidade inconsistentes entre provedores, use modelos validados que funcionam.",
+    "O Zen dá acesso a um conjunto selecionado de modelos de IA que a Daemon Protocol testou e avaliou especificamente para agentes de codificação. Não precisa se preocupar com desempenho e qualidade inconsistentes entre provedores, use modelos validados que funcionam.",
   "home.zenCta.link": "Saiba mais sobre o Zen",
 
-  "zen.title": "OpenCode Zen | Um conjunto selecionado de modelos confiáveis e otimizados para agentes de codificação",
+  "zen.title": "Daemon Zen | Um conjunto selecionado de modelos confiáveis e otimizados para agentes de codificação",
   "zen.hero.title": "Modelos confiáveis e otimizados para agentes de codificação",
   "zen.hero.body":
-    "O Zen dá acesso a um conjunto selecionado de modelos de IA que a OpenCode testou e avaliou especificamente para agentes de codificação. Não precisa se preocupar com desempenho e qualidade inconsistentes, use modelos validados que funcionam.",
+    "O Zen dá acesso a um conjunto selecionado de modelos de IA que a Daemon Protocol testou e avaliou especificamente para agentes de codificação. Não precisa se preocupar com desempenho e qualidade inconsistentes, use modelos validados que funcionam.",
 
-  "zen.faq.q1": "O que é OpenCode Zen?",
+  "zen.faq.q1": "O que é Daemon Zen?",
   "zen.faq.a1":
-    "Zen é um conjunto selecionado de modelos de IA testados e avaliados para agentes de codificação, criado pela equipe por trás do OpenCode.",
+    "Zen é um conjunto selecionado de modelos de IA testados e avaliados para agentes de codificação, criado pela equipe por trás do Daemon Protocol.",
   "zen.faq.q2": "O que torna o Zen mais preciso?",
   "zen.faq.a2":
     "O Zen fornece apenas modelos que foram especificamente testados e avaliados para agentes de codificação. Você não usaria uma faca de manteiga para cortar um bife, não use modelos ruins para programar.",
   "zen.faq.q3": "O Zen é mais barato?",
   "zen.faq.a3":
-    "O Zen não tem fins lucrativos. O Zen repassa os custos dos provedores de modelos para você. Quanto maior o uso do Zen, mais a OpenCode pode negociar melhores taxas e repassá-las para você.",
+    "O Zen não tem fins lucrativos. O Zen repassa os custos dos provedores de modelos para você. Quanto maior o uso do Zen, mais a Daemon Protocol pode negociar melhores taxas e repassá-las para você.",
   "zen.faq.q4": "Quanto custa o Zen?",
   "zen.faq.a4.p1.beforePricing": "Zen",
   "zen.faq.a4.p1.pricingLink": "cobra por requisição",
@@ -212,7 +212,7 @@ export const dict = {
   "zen.faq.a4.p2.beforeAccount": "Seu custo total depende do uso, e você pode definir limites de gastos mensais em sua",
   "zen.faq.a4.p2.accountLink": "conta",
   "zen.faq.a4.p3":
-    "Para cobrir custos, a OpenCode adiciona apenas uma pequena taxa de processamento de pagamento de $1,23 por recarga de $20.",
+    "Para cobrir custos, a Daemon Protocol adiciona apenas uma pequena taxa de processamento de pagamento de $1,23 por recarga de $20.",
   "zen.faq.q5": "E sobre dados e privacidade?",
   "zen.faq.a5.beforeExceptions":
     "Todos os modelos Zen são hospedados nos EUA. Os provedores seguem uma política de retenção zero e não usam seus dados para treinamento de modelos, com as",
@@ -223,7 +223,7 @@ export const dict = {
   "zen.faq.a7": "Sim, você pode desativar o faturamento a qualquer momento e usar seu saldo restante.",
   "zen.faq.q8": "Posso usar o Zen com outros agentes de codificação?",
   "zen.faq.a8":
-    "Embora o Zen funcione muito bem com o OpenCode, você pode usar o Zen com qualquer agente. Siga as instruções de configuração no seu agente de codificação preferido.",
+    "Embora o Zen funcione muito bem com o Daemon Protocol, você pode usar o Zen com qualquer agente. Siga as instruções de configuração no seu agente de codificação preferido.",
 
   "zen.cta.start": "Comece com o Zen",
   "zen.pricing.title": "Adicionar $20 de saldo pré-pago",
@@ -232,12 +232,12 @@ export const dict = {
   "zen.problem.title": "Que problema o Zen resolve?",
   "zen.problem.body":
     "Existem muitos modelos disponíveis, mas apenas alguns funcionam bem com agentes de codificação. A maioria dos provedores os configura de maneira diferente, com resultados variados.",
-  "zen.problem.subtitle": "Estamos corrigindo isso para todos, não apenas para os usuários do OpenCode.",
+  "zen.problem.subtitle": "Estamos corrigindo isso para todos, não apenas para os usuários do Daemon Protocol.",
   "zen.problem.item1": "Testando modelos selecionados e consultando suas equipes",
   "zen.problem.item2": "Trabalhando com provedores para garantir que sejam entregues corretamente",
   "zen.problem.item3": "Avaliando todas as combinações de modelo-provedor que recomendamos",
   "zen.how.title": "Como o Zen funciona",
-  "zen.how.body": "Embora sugerimos que você use o Zen com o OpenCode, você pode usá-lo com qualquer agente.",
+  "zen.how.body": "Embora sugerimos que você use o Zen com o Daemon Protocol, você pode usá-lo com qualquer agente.",
   "zen.how.step1.title": "Cadastre-se e adicione $20 de saldo",
   "zen.how.step1.beforeLink": "siga as",
   "zen.how.step1.link": "instruções de configuração",
@@ -251,7 +251,7 @@ export const dict = {
     "Todos os modelos Zen são hospedados nos EUA. Os provedores seguem uma política de retenção zero e não usam seus dados para treinamento de modelo, com as",
   "zen.privacy.exceptionsLink": "seguintes exceções",
 
-  "go.title": "OpenCode Go | Modelos de codificação de baixo custo para todos",
+  "go.title": "Daemon Protocol Go | Modelos de codificação de baixo custo para todos",
   "go.banner.text": "MiniMax M3 tem limite de uso 3x maior por tempo limitado",
   "go.meta.description":
     "O Go começa em $5 no primeiro mês, depois $10/mês, com limites generosos de solicitação de 5 horas para GLM-5.1, GLM-5, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro e DeepSeek V4 Flash.",
@@ -276,7 +276,7 @@ export const dict = {
 
   "go.testimonials.brand.zen": "Zen",
   "go.testimonials.brand.go": "Go",
-  "go.testimonials.handle": "@OpenCode",
+  "go.testimonials.handle": "@Daemon Protocol",
   "go.testimonials.dax.name": "Dax Raad",
   "go.testimonials.dax.title": "ex-CEO, Terminal Products",
   "go.testimonials.dax.quoteAfter": "mudou minha vida, é realmente uma escolha óbvia.",
@@ -298,7 +298,7 @@ export const dict = {
   "go.testimonials.frank.quote": "Eu queria ainda estar na Nvidia.",
   "go.problem.title": "Que problema o Go resolve?",
   "go.problem.body":
-    "Estamos focados em levar a experiência do OpenCode para o maior número de pessoas possível. OpenCode Go é uma assinatura de baixo custo: $5 no primeiro mês, depois $10/mês. Oferece limites generosos e acesso confiável aos modelos open source mais capazes.",
+    "Estamos focados em levar a experiência do Daemon Protocol para o maior número de pessoas possível. Daemon Protocol Go é uma assinatura de baixo custo: $5 no primeiro mês, depois $10/mês. Oferece limites generosos e acesso confiável aos modelos open source mais capazes.",
   "go.problem.subtitle": " ",
   "go.problem.item1": "Preço de assinatura de baixo custo",
   "go.problem.item2": "Limites generosos e acesso confiável",
@@ -307,7 +307,7 @@ export const dict = {
     "Inclui GLM-5.1, GLM-5, Kimi K2.7 Code, Kimi K2.6, MiMo-V2.5-Pro, MiMo-V2.5, Qwen3.7 Max, Qwen3.7 Plus, Qwen3.6 Plus, MiniMax M2.7, MiniMax M3, DeepSeek V4 Pro e DeepSeek V4 Flash",
   "go.how.title": "Como o Go funciona",
   "go.how.body":
-    "O Go começa em $5 no primeiro mês, depois $10/mês. Você pode usá-lo com o OpenCode ou qualquer agente.",
+    "O Go começa em $5 no primeiro mês, depois $10/mês. Você pode usá-lo com o Daemon Protocol ou qualquer agente.",
   "go.how.step1.title": "Crie uma conta",
   "go.how.step1.beforeLink": "siga as",
   "go.how.step1.link": "instruções de configuração",
@@ -323,7 +323,7 @@ export const dict = {
   "go.privacy.beforeExceptions":
     "Os modelos Go são hospedados nos EUA. Os provedores seguem uma política de retenção zero e não usam seus dados para treinamento de modelos, com as",
   "go.privacy.exceptionsLink": "seguintes exceções",
-  "go.faq.q1": "O que é OpenCode Go?",
+  "go.faq.q1": "O que é Daemon Protocol Go?",
   "go.faq.a1":
     "Go é uma assinatura de baixo custo que oferece acesso confiável a modelos de código aberto capazes para codificação com agentes.",
   "go.faq.q2": "Quais modelos o Go inclui?",
@@ -378,13 +378,13 @@ export const dict = {
     "Você atingiu seu limite de gastos mensais de ${{amount}}. Gerencie seus limites aqui: {{membersUrl}}",
   "zen.api.error.modelDisabled": "O modelo está desabilitado",
   "zen.api.error.trialEnded":
-    "A promoção gratuita do {{model}} terminou. Você pode continuar usando o modelo assinando o OpenCode Go - {{link}}",
+    "A promoção gratuita do {{model}} terminou. Você pode continuar usando o modelo assinando o Daemon Protocol Go - {{link}}",
 
-  "black.meta.title": "OpenCode Black | Acesse os melhores modelos de codificação do mundo",
-  "black.meta.description": "Tenha acesso ao Claude, GPT, Gemini e mais com os planos de assinatura OpenCode Black.",
+  "black.meta.title": "Daemon Protocol Black | Acesse os melhores modelos de codificação do mundo",
+  "black.meta.description": "Tenha acesso ao Claude, GPT, Gemini e mais com os planos de assinatura Daemon Protocol Black.",
   "black.hero.title": "Acesse os melhores modelos de codificação do mundo",
   "black.hero.subtitle": "Incluindo Claude, GPT, Gemini e mais",
-  "black.title": "OpenCode Black | Preços",
+  "black.title": "Daemon Protocol Black | Preços",
   "black.paused": "A inscrição no plano Black está temporariamente pausada.",
   "black.plan.icon20": "Plano Black 20",
   "black.plan.icon100": "Plano Black 100",
@@ -403,10 +403,10 @@ export const dict = {
   "black.action.continue": "Continuar",
   "black.finePrint.beforeTerms": "Os preços mostrados não incluem impostos aplicáveis",
   "black.finePrint.terms": "Termos de Serviço",
-  "black.workspace.title": "OpenCode Black | Selecionar Workspace",
+  "black.workspace.title": "Daemon Protocol Black | Selecionar Workspace",
   "black.workspace.selectPlan": "Selecione um workspace para este plano",
   "black.workspace.name": "Workspace {{n}}",
-  "black.subscribe.title": "Assinar OpenCode Black",
+  "black.subscribe.title": "Assinar Daemon Protocol Black",
   "black.subscribe.paymentMethod": "Forma de pagamento",
   "black.subscribe.loadingPaymentForm": "Carregando formulário de pagamento...",
   "black.subscribe.selectWorkspaceToContinue": "Selecione um workspace para continuar",
@@ -418,9 +418,9 @@ export const dict = {
   "black.subscribe.processing": "Processando...",
   "black.subscribe.submit": "Assinar ${{plan}}",
   "black.subscribe.form.chargeNotice": "Você só será cobrado quando sua assinatura for ativada",
-  "black.subscribe.success.title": "Você está na lista de espera do OpenCode Black",
+  "black.subscribe.success.title": "Você está na lista de espera do Daemon Protocol Black",
   "black.subscribe.success.subscriptionPlan": "Plano de assinatura",
-  "black.subscribe.success.planName": "OpenCode Black {{plan}}",
+  "black.subscribe.success.planName": "Daemon Protocol Black {{plan}}",
   "black.subscribe.success.amount": "Valor",
   "black.subscribe.success.amountValue": "${{plan}} por mês",
   "black.subscribe.success.paymentMethod": "Forma de pagamento",
@@ -621,15 +621,15 @@ export const dict = {
   "workspace.black.time.minutes": "minutos",
   "workspace.black.time.fewSeconds": "alguns segundos",
   "workspace.black.subscription.title": "Assinatura",
-  "workspace.black.subscription.message": "Você assina o OpenCode Black por ${{plan}} por mês.",
+  "workspace.black.subscription.message": "Você assina o Daemon Protocol Black por ${{plan}} por mês.",
   "workspace.black.subscription.manage": "Gerenciar Assinatura",
   "workspace.black.subscription.rollingUsage": "Uso de 5 horas",
   "workspace.black.subscription.weeklyUsage": "Uso Semanal",
   "workspace.black.subscription.resetsIn": "Reinicia em",
   "workspace.black.subscription.useBalance": "Use seu saldo disponível após atingir os limites de uso",
   "workspace.black.waitlist.title": "Lista de Espera",
-  "workspace.black.waitlist.joined": "Você está na lista de espera para o plano OpenCode Black de ${{plan}} por mês.",
-  "workspace.black.waitlist.ready": "Estamos prontos para inscrever você no plano OpenCode Black de ${{plan}} por mês.",
+  "workspace.black.waitlist.joined": "Você está na lista de espera para o plano Daemon Protocol Black de ${{plan}} por mês.",
+  "workspace.black.waitlist.ready": "Estamos prontos para inscrever você no plano Daemon Protocol Black de ${{plan}} por mês.",
   "workspace.black.waitlist.leave": "Sair da Lista de Espera",
   "workspace.black.waitlist.leaving": "Saindo...",
   "workspace.black.waitlist.left": "Saiu",
@@ -647,7 +647,7 @@ export const dict = {
   "workspace.lite.time.minute": "minuto",
   "workspace.lite.time.minutes": "minutos",
   "workspace.lite.time.fewSeconds": "alguns segundos",
-  "workspace.lite.subscription.message": "Você assina o OpenCode Go.",
+  "workspace.lite.subscription.message": "Você assina o Daemon Protocol Go.",
   "workspace.lite.subscription.manage": "Gerenciar Assinatura",
   "workspace.lite.subscription.rollingUsage": "Uso Contínuo",
   "workspace.lite.subscription.weeklyUsage": "Uso Semanal",
@@ -655,13 +655,13 @@ export const dict = {
   "workspace.lite.subscription.resetsIn": "Reinicia em",
   "workspace.lite.subscription.useBalance": "Use seu saldo disponível após atingir os limites de uso",
   "workspace.lite.subscription.selectProvider":
-    'Selecione "OpenCode Go" como provedor na sua configuração do opencode para usar os modelos Go.',
+    'Selecione "Daemon Protocol Go" como provedor na sua configuração do opencode para usar os modelos Go.',
   "workspace.lite.black.message":
-    "Você está atualmente inscrito no OpenCode Black ou na lista de espera. Por favor, cancele a assinatura primeiro se desejar mudar para o Go.",
+    "Você está atualmente inscrito no Daemon Protocol Black ou na lista de espera. Por favor, cancele a assinatura primeiro se desejar mudar para o Go.",
   "workspace.lite.other.message":
-    "Outro membro neste workspace já assina o OpenCode Go. Apenas um membro por workspace pode assinar.",
+    "Outro membro neste workspace já assina o Daemon Protocol Go. Apenas um membro por workspace pode assinar.",
   "workspace.lite.promo.description":
-    "O OpenCode Go começa em {{price}}, depois $10/mês, e oferece acesso confiável a modelos de codificação abertos populares com limites de uso generosos.",
+    "O Daemon Protocol Go começa em {{price}}, depois $10/mês, e oferece acesso confiável a modelos de codificação abertos populares com limites de uso generosos.",
   "workspace.lite.promo.price": "$5 no primeiro mês",
   "workspace.lite.promo.modelsTitle": "O que está incluído",
   "workspace.lite.promo.footer":
@@ -705,15 +705,15 @@ export const dict = {
   "workspace.referral.apply.confirmBody": "Aplique {{amount}} para reduzir o uso atual deste workspace.",
   "workspace.referral.apply.confirmAction": "Aplicar",
 
-  "download.title": "OpenCode | Baixar",
-  "download.meta.description": "Baixe o OpenCode para macOS, Windows e Linux",
-  "download.hero.title": "Baixar OpenCode",
+  "download.title": "Daemon Protocol | Baixar",
+  "download.meta.description": "Baixe o Daemon Protocol para macOS, Windows e Linux",
+  "download.hero.title": "Baixar Daemon Protocol",
   "download.hero.subtitle": "Disponível em Beta para macOS, Windows e Linux",
   "download.hero.button": "Baixar para {{os}}",
-  "download.section.terminal": "OpenCode Terminal",
-  "download.section.desktop": "OpenCode Desktop (Beta)",
-  "download.section.extensions": "Extensões OpenCode",
-  "download.section.integrations": "Integrações OpenCode",
+  "download.section.terminal": "Daemon Protocol Terminal",
+  "download.section.desktop": "Daemon Protocol Desktop (Beta)",
+  "download.section.extensions": "Extensões Daemon Protocol",
+  "download.section.integrations": "Integrações Daemon Protocol",
   "download.action.download": "Baixar",
   "download.action.install": "Instalar",
 
@@ -724,27 +724,27 @@ export const dict = {
   "download.platform.linuxRpm": "Linux (.rpm)",
 
   "download.faq.a3.beforeLocal":
-    "Não necessariamente, mas provavelmente. Você precisará de uma assinatura de IA se quiser conectar o OpenCode a um provedor pago, embora você possa trabalhar com",
+    "Não necessariamente, mas provavelmente. Você precisará de uma assinatura de IA se quiser conectar o Daemon Protocol a um provedor pago, embora você possa trabalhar com",
   "download.faq.a3.localLink": "modelos locais",
   "download.faq.a3.afterLocal.beforeZen": "de graça. Embora incentivemos os usuários a usar o",
   "download.faq.a3.afterZen":
-    ", o OpenCode funciona com todos os provedores populares, como OpenAI, Anthropic, xAI etc.",
+    ", o Daemon Protocol funciona com todos os provedores populares, como OpenAI, Anthropic, xAI etc.",
 
-  "download.faq.a5.p1": "O OpenCode é 100% gratuito para usar.",
+  "download.faq.a5.p1": "O Daemon Protocol é 100% gratuito para usar.",
   "download.faq.a5.p2.beforeZen":
-    "Quaisquer custos adicionais virão da sua assinatura de um provedor de modelo. Embora o OpenCode funcione com qualquer provedor de modelo, recomendamos o uso do",
+    "Quaisquer custos adicionais virão da sua assinatura de um provedor de modelo. Embora o Daemon Protocol funcione com qualquer provedor de modelo, recomendamos o uso do",
   "download.faq.a5.p2.afterZen": ".",
 
   "download.faq.a6.p1":
-    "Seus dados e informações só são armazenados quando você cria links compartilháveis no OpenCode.",
+    "Seus dados e informações só são armazenados quando você cria links compartilháveis no Daemon Protocol.",
   "download.faq.a6.p2.beforeShare": "Saiba mais sobre",
   "download.faq.a6.shareLink": "páginas de compartilhamento",
 
-  "enterprise.title": "OpenCode | Soluções empresariais para sua organização",
-  "enterprise.meta.description": "Contate a OpenCode para soluções empresariais",
+  "enterprise.title": "Daemon Protocol | Soluções empresariais para sua organização",
+  "enterprise.meta.description": "Contate a Daemon Protocol para soluções empresariais",
   "enterprise.hero.title": "Seu código é seu",
   "enterprise.hero.body1":
-    "O OpenCode opera com segurança dentro da sua organização, sem dados ou contexto armazenados e sem restrições de licenciamento ou reivindicações de propriedade. Inicie um teste com sua equipe e, em seguida, implante em toda a organização integrando-o ao seu SSO e gateway de IA interno.",
+    "O Daemon Protocol opera com segurança dentro da sua organização, sem dados ou contexto armazenados e sem restrições de licenciamento ou reivindicações de propriedade. Inicie um teste com sua equipe e, em seguida, implante em toda a organização integrando-o ao seu SSO e gateway de IA interno.",
   "enterprise.hero.body2": "Deixe-nos saber como podemos ajudar.",
   "enterprise.form.name.label": "Nome completo",
   "enterprise.form.name.placeholder": "Jeff Bezos",
@@ -766,29 +766,29 @@ export const dict = {
   "enterprise.form.error.invalidEmailFormat": "Formato de e-mail inválido.",
   "enterprise.form.error.internalServer": "Erro interno do servidor.",
   "enterprise.faq.title": "FAQ",
-  "enterprise.faq.q1": "O que é OpenCode Enterprise?",
+  "enterprise.faq.q1": "O que é Daemon Protocol Enterprise?",
   "enterprise.faq.a1":
-    "OpenCode Enterprise é para organizações que desejam garantir que seu código e dados nunca saiam de sua infraestrutura. Isso pode ser feito usando uma configuração centralizada que se integra ao seu SSO e gateway de IA interno.",
-  "enterprise.faq.q2": "Como faço para começar com o OpenCode Enterprise?",
+    "Daemon Protocol Enterprise é para organizações que desejam garantir que seu código e dados nunca saiam de sua infraestrutura. Isso pode ser feito usando uma configuração centralizada que se integra ao seu SSO e gateway de IA interno.",
+  "enterprise.faq.q2": "Como faço para começar com o Daemon Protocol Enterprise?",
   "enterprise.faq.a2":
-    "Basta começar com um teste interno com sua equipe. O OpenCode por padrão não armazena seu código ou dados de contexto, facilitando o início. Em seguida, entre em contato conosco para discutir opções de preços e implementação.",
+    "Basta começar com um teste interno com sua equipe. O Daemon Protocol por padrão não armazena seu código ou dados de contexto, facilitando o início. Em seguida, entre em contato conosco para discutir opções de preços e implementação.",
   "enterprise.faq.q3": "Como funciona o preço empresarial?",
   "enterprise.faq.a3":
     "Oferecemos preços empresariais por assento. Se você tiver seu próprio gateway de LLM, não cobramos pelos tokens usados. Para mais detalhes, entre em contato conosco para um orçamento personalizado com base nas necessidades da sua organização.",
-  "enterprise.faq.q4": "Meus dados estão seguros com o OpenCode Enterprise?",
+  "enterprise.faq.q4": "Meus dados estão seguros com o Daemon Protocol Enterprise?",
   "enterprise.faq.a4":
-    "Sim. O OpenCode não armazena seu código ou dados de contexto. Todo o processamento acontece localmente ou por meio de chamadas de API diretas para seu provedor de IA. Com configuração centralizada e integração de SSO, seus dados permanecem seguros dentro da infraestrutura de sua organização.",
+    "Sim. O Daemon Protocol não armazena seu código ou dados de contexto. Todo o processamento acontece localmente ou por meio de chamadas de API diretas para seu provedor de IA. Com configuração centralizada e integração de SSO, seus dados permanecem seguros dentro da infraestrutura de sua organização.",
 
-  "brand.title": "OpenCode | Marca",
-  "brand.meta.description": "Diretrizes da marca OpenCode",
+  "brand.title": "Daemon Protocol | Marca",
+  "brand.meta.description": "Diretrizes da marca Daemon Protocol",
   "brand.heading": "Diretrizes da marca",
-  "brand.subtitle": "Recursos e ativos para ajudá-lo a trabalhar com a marca OpenCode.",
+  "brand.subtitle": "Recursos e ativos para ajudá-lo a trabalhar com a marca Daemon Protocol.",
   "brand.downloadAll": "Baixar todos os recursos",
 
-  "changelog.title": "OpenCode | Changelog",
-  "changelog.meta.description": "Notas de versão e changelog do OpenCode",
+  "changelog.title": "Daemon Protocol | Changelog",
+  "changelog.meta.description": "Notas de versão e changelog do Daemon Protocol",
   "changelog.hero.title": "Changelog",
-  "changelog.hero.subtitle": "Novas atualizações e melhorias no OpenCode",
+  "changelog.hero.subtitle": "Novas atualizações e melhorias no Daemon Protocol",
   "changelog.empty": "Nenhuma entrada de changelog encontrada.",
   "changelog.viewJson": "Ver JSON",
 

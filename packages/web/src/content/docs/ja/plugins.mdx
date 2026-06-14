@@ -1,9 +1,9 @@
 ---
 title: プラグイン
-description: OpenCode を拡張する独自のプラグインを作成します。
+description: Daemon Protocol を拡張する独自のプラグインを作成します。
 ---
 
-プラグインを使用すると、さまざまなイベントにフックして動作をカスタマイズすることで OpenCode を拡張できます。プラグインを作成して、新しい機能を追加したり、外部サービスと統合したり、OpenCode のデフォルトの動作を変更したりできます。
+プラグインを使用すると、さまざまなイベントにフックして動作をカスタマイズすることで Daemon Protocol を拡張できます。プラグインを作成して、新しい機能を追加したり、外部サービスと統合したり、Daemon Protocol のデフォルトの動作を変更したりできます。
 
 たとえば、コミュニティによって作成された [plugins](/docs/ecosystem#plugins) をチェックしてください。
 
@@ -83,7 +83,7 @@ JavaScript または TypeScript ファイルをプラグインディレクトリ
 }
 ```
 
-OpenCode は起動時に `bun install` を実行してこれらをインストールします。プラグインとツールはそれらをインポートできるようになります。
+Daemon Protocol は起動時に `bun install` を実行してこれらをインストールします。プラグインとツールはそれらをインポートできるようになります。
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -118,7 +118,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 - `project`: 現在のプロジェクト情報。
 - `directory`: 現在の作業ディレクトリ。
 - `worktree`: git ワークツリーのパス。
-- `client`: AI と対話するための OpenCode SDK クライアント。
+- `client`: AI と対話するための Daemon Protocol SDK クライアント。
 - `$`: Bun の [コマンドを実行するためのシェル API](https://bun.com/docs/runtime/shell)。
 
 ---
@@ -211,7 +211,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ## 例
 
-ここでは、OpenCode を拡張するために使用できるプラグインの例をいくつか示します。
+ここでは、Daemon Protocol を拡張するために使用できるプラグインの例をいくつか示します。
 
 ---
 
@@ -318,7 +318,7 @@ Format as a structured prompt that a new agent can use to resume work.
 
 ### .env の保護
 
-OpenCode が `.env` ファイルを読み取らないようにします。
+Daemon Protocol が `.env` ファイルを読み取らないようにします。
 
 ```javascript title=".opencode/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
@@ -353,7 +353,7 @@ export const InjectEnvPlugin = async () => {
 
 ### カスタムツール
 
-プラグインは OpenCode にカスタムツールを追加することもできます。
+プラグインは Daemon Protocol にカスタムツールを追加することもできます。
 
 ```ts title=".opencode/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
@@ -376,13 +376,13 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-`tool` ヘルパーは、OpenCode が呼び出すことができるカスタムツールを作成します。 Zod スキーマ関数を受け取り、次のようなツール定義を返します。
+`tool` ヘルパーは、Daemon Protocol が呼び出すことができるカスタムツールを作成します。 Zod スキーマ関数を受け取り、次のようなツール定義を返します。
 
 - `description`: ツールの機能
 - `args`: ツールの引数の Zod スキーマ
 - `execute`: ツールが呼び出されたときに実行される関数
 
-カスタムツールは、組み込みツールと並行して OpenCode で使用できます。
+カスタムツールは、組み込みツールと並行して Daemon Protocol で使用できます。
 
 ---
 

@@ -1,33 +1,33 @@
 ---
 title: GitLab
-description: GitLab 이슈와 merge request에서 OpenCode를 사용하세요.
+description: GitLab 이슈와 merge request에서 Daemon Protocol를 사용하세요.
 ---
 
-OpenCode는 GitLab CI/CD 파이프라인 또는 GitLab Duo를 통해 GitLab 워크플로에 통합됩니다.
+Daemon Protocol는 GitLab CI/CD 파이프라인 또는 GitLab Duo를 통해 GitLab 워크플로에 통합됩니다.
 
-두 경우 모두 OpenCode는 GitLab runner에서 실행됩니다.
+두 경우 모두 Daemon Protocol는 GitLab runner에서 실행됩니다.
 
 ---
 
 ## GitLab CI
 
-OpenCode는 일반 GitLab 파이프라인에서 작동합니다. [CI component](https://docs.gitlab.com/ee/ci/components/)로 파이프라인에 통합할 수 있습니다.
+Daemon Protocol는 일반 GitLab 파이프라인에서 작동합니다. [CI component](https://docs.gitlab.com/ee/ci/components/)로 파이프라인에 통합할 수 있습니다.
 
-여기서는 OpenCode용 커뮤니티 제작 CI/CD component인 [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode)를 사용합니다.
+여기서는 Daemon Protocol용 커뮤니티 제작 CI/CD component인 [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode)를 사용합니다.
 
 ---
 
 ### 기능
 
-- **job별 custom config 사용**: custom config 디렉터리(예: `./config/#custom-directory`)를 사용해 OpenCode를 각 실행 단위로 설정하고 기능을 켜거나 끌 수 있습니다.
-- **최소 설정**: CI component가 백그라운드에서 OpenCode를 설정하므로 OpenCode config와 초기 prompt만 만들면 됩니다.
+- **job별 custom config 사용**: custom config 디렉터리(예: `./config/#custom-directory`)를 사용해 Daemon Protocol를 각 실행 단위로 설정하고 기능을 켜거나 끌 수 있습니다.
+- **최소 설정**: CI component가 백그라운드에서 Daemon Protocol를 설정하므로 Daemon Protocol config와 초기 prompt만 만들면 됩니다.
 - **유연함**: CI component는 동작을 사용자화할 수 있도록 여러 입력값을 지원합니다.
 
 ---
 
 ### Setup
 
-1. OpenCode 인증 JSON을 **Settings** > **CI/CD** > **Variables** 아래의 File 타입 CI 환경 변수로 저장하세요. 반드시 "Masked and hidden"으로 표시하세요.
+1. Daemon Protocol 인증 JSON을 **Settings** > **CI/CD** > **Variables** 아래의 File 타입 CI 환경 변수로 저장하세요. 반드시 "Masked and hidden"으로 표시하세요.
 2. 아래 내용을 `.gitlab-ci.yml` 파일에 추가하세요.
 
    ```yaml title=".gitlab-ci.yml"
@@ -35,7 +35,7 @@ OpenCode는 일반 GitLab 파이프라인에서 작동합니다. [CI component](
      - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         auth_json: $OPENCODE_AUTH_JSON # The variable name for your Daemon Protocol authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
@@ -46,23 +46,23 @@ OpenCode는 일반 GitLab 파이프라인에서 작동합니다. [CI component](
 
 ## GitLab Duo
 
-OpenCode는 GitLab 워크플로에 통합됩니다.
-댓글에서 `@opencode`를 멘션하면 OpenCode가 GitLab CI 파이프라인 안에서 작업을 실행합니다.
+Daemon Protocol는 GitLab 워크플로에 통합됩니다.
+댓글에서 `@opencode`를 멘션하면 Daemon Protocol가 GitLab CI 파이프라인 안에서 작업을 실행합니다.
 
 ---
 
 ### 기능
 
-- **이슈 분류**: OpenCode에 이슈를 살펴보고 설명해 달라고 요청할 수 있습니다.
-- **수정 및 구현**: OpenCode에 이슈를 수정하거나 기능을 구현해 달라고 요청할 수 있습니다.
-  OpenCode는 새 브랜치를 만들고 변경 사항이 담긴 merge request를 생성합니다.
-- **보안**: OpenCode는 GitLab runner에서 실행됩니다.
+- **이슈 분류**: Daemon Protocol에 이슈를 살펴보고 설명해 달라고 요청할 수 있습니다.
+- **수정 및 구현**: Daemon Protocol에 이슈를 수정하거나 기능을 구현해 달라고 요청할 수 있습니다.
+  Daemon Protocol는 새 브랜치를 만들고 변경 사항이 담긴 merge request를 생성합니다.
+- **보안**: Daemon Protocol는 GitLab runner에서 실행됩니다.
 
 ---
 
 ### Setup
 
-OpenCode는 GitLab CI/CD 파이프라인에서 실행되며, 설정에 필요한 항목은 다음과 같습니다.
+Daemon Protocol는 GitLab CI/CD 파이프라인에서 실행되며, 설정에 필요한 항목은 다음과 같습니다.
 
 :::tip
 [최신 안내는 **GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/)를 확인하세요.
@@ -91,7 +91,7 @@ OpenCode는 GitLab CI/CD 파이프라인에서 실행되며, 설정에 필요한
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
+      - echo "Creating Daemon Protocol auth configuration"
       - mkdir --parents ~/.local/share/opencode
       - |
         cat > ~/.local/share/opencode/auth.json << EOF
@@ -104,10 +104,10 @@ OpenCode는 GitLab CI/CD 파이프라인에서 실행되며, 설정에 필요한
         EOF
       - echo "Configuring git"
       - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.name "Daemon Protocol"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running Daemon Protocol"
       - |
         opencode run "
         You are an AI assistant helping with GitLab operations.
@@ -158,7 +158,7 @@ OpenCode는 GitLab CI/CD 파이프라인에서 실행되며, 설정에 필요한
 
 ### 예제
 
-다음은 GitLab에서 OpenCode를 사용하는 몇 가지 예시입니다.
+다음은 GitLab에서 Daemon Protocol를 사용하는 몇 가지 예시입니다.
 
 :::tip
 `@opencode` 대신 다른 trigger phrase를 사용하도록 설정할 수 있습니다.
@@ -172,7 +172,7 @@ GitLab 이슈에 아래 댓글을 남기세요.
   @opencode explain this issue
 ```
 
-OpenCode가 이슈를 읽고 명확한 설명으로 답변합니다.
+Daemon Protocol가 이슈를 읽고 명확한 설명으로 답변합니다.
 
 - **이슈 해결**
 
@@ -182,7 +182,7 @@ GitLab 이슈에서 다음과 같이 요청하세요.
   @opencode fix this
 ```
 
-OpenCode가 새 브랜치를 만들고 변경 사항을 구현한 뒤, 해당 변경 사항으로 merge request를 엽니다.
+Daemon Protocol가 새 브랜치를 만들고 변경 사항을 구현한 뒤, 해당 변경 사항으로 merge request를 엽니다.
 
 - **머지 리퀘스트 검토**
 
@@ -192,4 +192,4 @@ GitLab merge request에 아래 댓글을 남기세요.
   @opencode review this merge request
 ```
 
-OpenCode가 merge request를 검토하고 피드백을 제공합니다.
+Daemon Protocol가 merge request를 검토하고 피드백을 제공합니다.

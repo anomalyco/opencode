@@ -344,7 +344,7 @@ export function createWslServersController(
       await runJob({ kind: "install-opencode", distro: name, startedAt: Date.now() }, async (abort) => {
         const result = await installWslOpencode(appVersion, name, { signal: abort.signal })
         if (result.code !== 0) {
-          throw new Error(summarize(result.stderr || result.stdout) || "OpenCode installation failed")
+          throw new Error(summarize(result.stderr || result.stdout) || "Daemon Protocol installation failed")
         }
         await refreshOpencodeCheck(name, { signal: abort.signal })
         expectOpencodeVersion(state.opencodeChecks[name]?.version ?? null, appVersion, name)

@@ -1,17 +1,17 @@
 ---
 title: Fournisseurs
-description: Utiliser n’importe quel fournisseur LLM en OpenCode.
+description: Utiliser n’importe quel fournisseur LLM en Daemon Protocol.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode utilise [AI SDK](https://ai-sdk.dev/) et [Models.dev](https://models.dev) pour prendre en charge **75+ fournisseurs LLM** et prend en charge l'exécution de modèles locaux.
+Daemon Protocol utilise [AI SDK](https://ai-sdk.dev/) et [Models.dev](https://models.dev) pour prendre en charge **75+ fournisseurs LLM** et prend en charge l'exécution de modèles locaux.
 
 Pour ajouter un fournisseur, vous devez :
 
 1. Ajoutez les clés API pour le fournisseur à l'aide de la commande `/connect`.
-2. Configurez le fournisseur dans votre configuration OpenCode.
+2. Configurez le fournisseur dans votre configuration Daemon Protocol.
 
 ---
 
@@ -24,7 +24,7 @@ en `~/.local/share/opencode/auth.json`.
 
 ### Configuration
 
-Vous pouvez personnaliser les fournisseurs via la section `provider` de votre OpenCode
+Vous pouvez personnaliser les fournisseurs via la section `provider` de votre Daemon Protocol
 configuration.
 
 ---
@@ -48,13 +48,13 @@ Vous pouvez personnaliser la base URL pour n'importe quel fournisseur en défini
 
 ---
 
-## OpenCode Zen
+## Daemon Zen
 
-OpenCode Zen est une liste de modèles fournis par l'équipe OpenCode qui ont été
-testé et vérifié pour fonctionner correctement avec OpenCode. [En savoir plus](/docs/zen).
+Daemon Zen est une liste de modèles fournis par l'équipe Daemon Protocol qui ont été
+testé et vérifié pour fonctionner correctement avec Daemon Protocol. [En savoir plus](/docs/zen).
 
 :::tip
-Si vous êtes nouveau, nous vous recommandons de commencer par OpenCode Zen.
+Si vous êtes nouveau, nous vous recommandons de commencer par Daemon Zen.
 :::
 
 1. Exécutez la commande `/connect` dans le TUI, sélectionnez opencode et dirigez-vous vers [opencode.ai/auth](https://opencode.ai/auth).
@@ -80,16 +80,16 @@ Si vous êtes nouveau, nous vous recommandons de commencer par OpenCode Zen.
    /models
    ```
 
-Il fonctionne comme n’importe quel autre fournisseur dans OpenCode et son utilisation est totalement facultative.
+Il fonctionne comme n’importe quel autre fournisseur dans Daemon Protocol et son utilisation est totalement facultative.
 
 ---
 
-## OpenCode Go
+## Daemon Protocol Go
 
-OpenCode Go est un plan d'abonnement à faible coût qui offre un accès fiable aux modèles de codage ouverts populaires fournis par l'équipe OpenCode qui ont été
-testé et vérifié pour fonctionner correctement avec OpenCode.
+Daemon Protocol Go est un plan d'abonnement à faible coût qui offre un accès fiable aux modèles de codage ouverts populaires fournis par l'équipe Daemon Protocol qui ont été
+testé et vérifié pour fonctionner correctement avec Daemon Protocol.
 
-1. Exécutez la commande `/connect` dans le TUI, sélectionnez `OpenCode Go` et rendez-vous sur [opencode.ai/auth](https://opencode.ai/zen).
+1. Exécutez la commande `/connect` dans le TUI, sélectionnez `Daemon Protocol Go` et rendez-vous sur [opencode.ai/auth](https://opencode.ai/zen).
 
    ```txt
    /connect
@@ -112,7 +112,7 @@ testé et vérifié pour fonctionner correctement avec OpenCode.
    /models
    ```
 
-Il fonctionne comme n’importe quel autre fournisseur dans OpenCode et son utilisation est totalement facultative.
+Il fonctionne comme n’importe quel autre fournisseur dans Daemon Protocol et son utilisation est totalement facultative.
 
 ---
 
@@ -156,7 +156,7 @@ Vous ne voyez pas de fournisseur ici ? Soumettez un PR.
 
 ### Amazon Bedrock
 
-Pour utiliser Amazon Bedrock avec OpenCode :
+Pour utiliser Amazon Bedrock avec Daemon Protocol :
 
 1. Rendez-vous sur le **Catalogue de modèles** dans la console Amazon Bedrock et demandez
    accédez aux modèles que vous souhaitez.
@@ -314,7 +314,7 @@ Pour les profils d'inférence personnalisés, utilisez le nom du modèle et du f
    ```
 
 :::info
-L'utilisation de votre abonnement Claude Pro/Max dans OpenCode n'est pas officiellement prise en charge par [Anthropic](https://anthropic.com).
+L'utilisation de votre abonnement Claude Pro/Max dans Daemon Protocol n'est pas officiellement prise en charge par [Anthropic](https://anthropic.com).
 :::
 
 ##### Utilisation des clés API
@@ -736,7 +736,7 @@ Sélectionnez **OAuth** et votre navigateur s'ouvrira pour autorisation.
 
 1.  Accédez à [GitLab Paramètres utilisateur > Jetons d'accès](https://gitlab.com/-/user_settings/personal_access_tokens)
 2.  Cliquez sur **Ajouter un nouveau jeton**
-3.  Nom : `OpenCode`, Portées : `api`
+3.  Nom : `Daemon Protocol`, Portées : `api`
 4.  Copiez le jeton (commence par `glpat-`)
 5.  Entrez-le dans le terminal
 
@@ -762,8 +762,8 @@ pour stocker le jeton dans le stockage d'authentification opencode.
 ##### GitLab auto-hébergé
 
 :::note[note de conformité]
-OpenCode utilise un petit modèle pour certaines tâches d'IA telles que la génération du titre de la session.
-Il est configuré pour utiliser gpt-5-nano par défaut, hébergé par Zen. Pour verrouiller OpenCode
+Daemon Protocol utilise un petit modèle pour certaines tâches d'IA telles que la génération du titre de la session.
+Il est configuré pour utiliser gpt-5-nano par défaut, hébergé par Zen. Pour verrouiller Daemon Protocol
 pour utiliser uniquement votre propre instance hébergée par GitLab, ajoutez ce qui suit à votre
 Fichier `opencode.json`. Il est également recommandé de désactiver le partage de session.
 
@@ -896,7 +896,7 @@ Certains modèles doivent être activés manuellement dans vos [GitHub Copilot p
 
 ### Google Vertex AI
 
-Pour utiliser Google Vertex AI avec OpenCode :
+Pour utiliser Google Vertex AI avec Daemon Protocol :
 
 1. Rendez-vous sur **Model Garden** dans Google Cloud Console et vérifiez les
    modèles disponibles dans votre région.
@@ -1078,7 +1078,7 @@ Helicone prend en charge les en-têtes personnalisés pour des fonctionnalités 
 
 ##### Suivi des sessions
 
-La fonctionnalité [Sessions](https://docs.helicone.ai/features/sessions) d'Helicone vous permet de regrouper les requêtes LLM associées. Utilisez le plugin [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) pour enregistrer automatiquement chaque conversation OpenCode en tant que session dans Helicone.
+La fonctionnalité [Sessions](https://docs.helicone.ai/features/sessions) d'Helicone vous permet de regrouper les requêtes LLM associées. Utilisez le plugin [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) pour enregistrer automatiquement chaque conversation Daemon Protocol en tant que session dans Helicone.
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1092,7 +1092,7 @@ Ajoutez-le à votre configuration.
 }
 ```
 
-Le plugin injecte les en-têtes `Helicone-Session-Id` et `Helicone-Session-Name` dans vos requêtes. Sur la page Sessions d'Helicone, vous verrez chaque conversation OpenCode répertoriée comme une session distincte.
+Le plugin injecte les en-têtes `Helicone-Session-Id` et `Helicone-Session-Name` dans vos requêtes. Sur la page Sessions d'Helicone, vous verrez chaque conversation Daemon Protocol répertoriée comme une session distincte.
 
 ##### En-têtes Helicone communs
 
@@ -1296,7 +1296,7 @@ Pour utiliser Kimi K2 de Moonshot AI :
 Vous pouvez configurer opencode pour utiliser des modèles locaux via Ollama.
 
 :::tip
-Ollama peut se configurer automatiquement pour OpenCode. Voir les [documents d'intégration Ollama](https://docs.ollama.com/integrations/opencode) pour plus de détails.
+Ollama peut se configurer automatiquement pour Daemon Protocol. Voir les [documents d'intégration Ollama](https://docs.ollama.com/integrations/opencode) pour plus de détails.
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1335,13 +1335,13 @@ Si les appels d'outils ne fonctionnent pas, essayez d'augmenter `num_ctx` dans O
 
 ### Ollama Cloud
 
-Pour utiliser Ollama Cloud avec OpenCode :
+Pour utiliser Ollama Cloud avec Daemon Protocol :
 
 1. Rendez-vous sur [https://ollama.com/](https://ollama.com/) et connectez-vous ou créez un compte.
 
 2. Accédez à **Paramètres** > **Clés** et cliquez sur **Ajouter une clé API** pour générer une nouvelle clé API.
 
-3. Copiez la clé API à utiliser dans OpenCode.
+3. Copiez la clé API à utiliser dans Daemon Protocol.
 
 4. Exécutez la commande `/connect` et recherchez **Ollama Cloud**.
 
@@ -1358,7 +1358,7 @@ Pour utiliser Ollama Cloud avec OpenCode :
    └ enter
    ```
 
-6. **Important** : Avant d'utiliser des modèles cloud dans OpenCode, vous devez extraire les informations du modèle localement :
+6. **Important** : Avant d'utiliser des modèles cloud dans Daemon Protocol, vous devez extraire les informations du modèle localement :
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1405,19 +1405,19 @@ Si vous disposez déjà d'une clé API, vous pouvez sélectionner **Entrer manue
 
 ---
 
-### OpenCode Zen
+### Daemon Zen
 
-OpenCode Zen est une liste de modèles testés et vérifiés fournie par l'équipe OpenCode. [En savoir plus](/docs/zen).
+Daemon Zen est une liste de modèles testés et vérifiés fournie par l'équipe Daemon Protocol. [En savoir plus](/docs/zen).
 
-1. Connectez-vous à **<a href={console}>OpenCode Zen</a>** et cliquez sur **Créer une clé API**.
+1. Connectez-vous à **<a href={console}>Daemon Zen</a>** et cliquez sur **Créer une clé API**.
 
-2. Exécutez la commande `/connect` et recherchez **OpenCode Zen**.
+2. Exécutez la commande `/connect` et recherchez **Daemon Zen**.
 
    ```txt
    /connect
    ```
 
-3. Entrez votre clé OpenCode API.
+3. Entrez votre clé Daemon Protocol API.
 
    ```txt
    ┌ API key
@@ -1977,7 +1977,7 @@ Détails de configuration :
 - **limit.context** : nombre maximal de jetons d'entrée acceptés par le modèle.
 - **limit.output** : nombre maximal de jetons que le modèle peut générer.
 
-Les champs `limit` permettent à OpenCode de comprendre la quantité de contexte qu'il vous reste. Les fournisseurs standard les extraient automatiquement de models.dev.
+Les champs `limit` permettent à Daemon Protocol de comprendre la quantité de contexte qu'il vous reste. Les fournisseurs standard les extraient automatiquement de models.dev.
 
 ---
 

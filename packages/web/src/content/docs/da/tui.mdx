@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: Brug af OpenCode-terminalbrugergrænsefladen.
+description: Brug af Daemon Protocol-terminalbrugergrænsefladen.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode giver en interaktiv terminalgrænseflade eller TUI til at arbejde med dine projekter med en LLM.
+Daemon Protocol giver en interaktiv terminalgrænseflade eller TUI til at arbejde med dine projekter med en LLM.
 
-At køre OpenCode starter TUI for den nuværende mappe.
+At køre Daemon Protocol starter TUI for den nuværende mappe.
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ Outputtet fra kommandoen tilføjes til samtalen som et værktøjsresultat.
 
 ## Kommandoer
 
-Når du bruger OpenCode TUI, kan du skrive `/` efterfulgt af et kommandonavn for hurtigt at udføre handlinger. For eksempel:
+Når du bruger Daemon Protocol TUI, kan du skrive `/` efterfulgt af et kommandonavn for hurtigt at udføre handlinger. For eksempel:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Her er alle tilgængelige skråstregskommandoer:
 
 ### connect
 
-Tilføj en udbyder til OpenCode. Lader dig vælge fra tilgængelige udbydere og tilføje deres API-nøgler.
+Tilføj en udbyder til Daemon Protocol. Lader dig vælge fra tilgængelige udbydere og tilføje deres API-nøgler.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Skift visning af værktøjsudførelsesdetaljer.
 
 ### exit
 
-Afslut OpenCode. _Aliaser_: `/quit`, `/q`
+Afslut Daemon Protocol. _Aliaser_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -390,7 +390,7 @@ Dette er adskilt fra `opencode.json`, som konfigurerer server-/kørselstidsadfæ
 
 - `theme` - Indstiller dit brugergrænsefladetema. [Læs mere](/docs/themes).
 - `keybinds` - Tilpasser tastaturgenveje. [Læs mere](/docs/keybinds).
-- `leader_timeout` - Styrer hvor længe OpenCode venter efter leader key. Standard er `2000`.
+- `leader_timeout` - Styrer hvor længe Daemon Protocol venter efter leader key. Standard er `2000`.
 - `scroll_acceleration.enabled` - Aktiver rulleacceleration i macOS-stil for jævn, naturlig rulning. Når aktiveret, øger rullehastigheden med hurtige rullebevægelser og forbliver præcis for langsommere bevægelser. **Denne indstilling har forrang over `scroll_speed` og tilsidesætter den, når den er aktiveret.**
 - `scroll_speed` - Styrer hvor hurtigt TUI ruller, når du bruger rullekommandoer (minimum: `0.001`, understøtter decimalværdier). Standard er `3`. **Bemærk: Dette ignoreres hvis `scroll_acceleration.enabled` er sat til `true`.**
 - `diff_style` - Styrer diff-gengivelse. `"auto"` tilpasser sig terminalbredde, `"stacked"` viser altid et enkeltkolonne-layout.
@@ -401,7 +401,7 @@ Brug `OPENCODE_TUI_CONFIG` til at indlæse en brugerdefineret TUI-konfigurations
 
 ### Attention
 
-Attention lader TUI give dig besked, når OpenCode venter på et svar, kræver godkendelse af en tilladelse, rapporterer en sessionsfejl eller har afsluttet en session. Aktivér det med `attention.enabled`; indbyggede hændelser afspiller en lyd, når de sker. Skrivebordsnotifikationer sendes kun, når terminalvinduet ikke er i fokus, og bruges ikke til subagent-hændelser.
+Attention lader TUI give dig besked, når Daemon Protocol venter på et svar, kræver godkendelse af en tilladelse, rapporterer en sessionsfejl eller har afsluttet en session. Aktivér det med `attention.enabled`; indbyggede hændelser afspiller en lyd, når de sker. Skrivebordsnotifikationer sendes kun, når terminalvinduet ikke er i fokus, og bruges ikke til subagent-hændelser.
 
 - `enabled` - Aktiverer alle notifikationer og lyde for Attention. Standard er `false`.
 - `notifications` - Når Attention er aktiveret, lader dette TUI sende skrivebordsnotifikationer via terminalen. Standard er `true`.

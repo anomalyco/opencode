@@ -15,7 +15,7 @@ Możesz przełączać się między agentami podczas sesji lub wywoływać ich za
 
 ## Typy
 
-W OpenCode obowiązuje zasada dwóch typów agentów: Primary (Główni) i Subagents (Subagenci).
+W Daemon Protocol obowiązuje zasada dwóch typów agentów: Primary (Główni) i Subagents (Subagenci).
 
 ---
 
@@ -27,7 +27,7 @@ Główni asystenci, z którymi prowadzisz interakcję. Możesz przełączać si�
 Użyj klawisza **Tab**, aby przełączać się między agentami podczas sesji.
 :::
 
-OpenCode zawiera dwa wbudowane agenty główne: **Build** i **Plan**. Przyjrzymy się im poniżej.
+Daemon Protocol zawiera dwa wbudowane agenty główne: **Build** i **Plan**. Przyjrzymy się im poniżej.
 
 ---
 
@@ -35,13 +35,13 @@ OpenCode zawiera dwa wbudowane agenty główne: **Build** i **Plan**. Przyjrzymy
 
 Subagenci to asystenci pomocniczy, których mogą przywoływać agenci główni w celu wykonania konkretnych zadań. Możesz także wywoływać ich ręcznie, **wzmiankując ich (@)** w swoich wiadomościach.
 
-OpenCode ma trzech wbudowanych subagentów: **General**, **Explore** i **Scout**. Przyjrzymy się im poniżej.
+Daemon Protocol ma trzech wbudowanych subagentów: **General**, **Explore** i **Scout**. Przyjrzymy się im poniżej.
 
 ---
 
 ## Wbudowane
 
-OpenCode ma dwa wbudowane agenty główne i trzech wbudowanych subagentów.
+Daemon Protocol ma dwa wbudowane agenty główne i trzech wbudowanych subagentów.
 
 ---
 
@@ -87,7 +87,7 @@ Szybki agent tylko do odczytu do eksploracji baz kodu. Nie może modyfikować pl
 
 _Mode_: `subagent`
 
-Agent tylko do odczytu do pracy z zewnętrzną dokumentacją i badaniem zależności. Używaj go, gdy chcesz sklonować repozytorium zależności do zarządzanej pamięci podręcznej OpenCode, przejrzeć kod źródłowy biblioteki albo porównać lokalny kod z implementacjami upstream bez modyfikowania swojego workspace.
+Agent tylko do odczytu do pracy z zewnętrzną dokumentacją i badaniem zależności. Używaj go, gdy chcesz sklonować repozytorium zależności do zarządzanej pamięci podręcznej Daemon Protocol, przejrzeć kod źródłowy biblioteki albo porównać lokalny kod z implementacjami upstream bez modyfikowania swojego workspace.
 
 ---
 
@@ -284,7 +284,7 @@ Wartość temperatury zwykle waha się od 0.0 do 1.0:
 }
 ```
 
-Jeśli nie zostanie skonfigurowana, OpenCode używa wartości domyślnej dla danego modelu; 0 dla modeli rozumowania (reasoning models), 0.55 dla modeli Qwen.
+Jeśli nie zostanie skonfigurowana, Daemon Protocol używa wartości domyślnej dla danego modelu; 0 dla modeli rozumowania (reasoning models), 0.55 dla modeli Qwen.
 
 ---
 
@@ -344,7 +344,7 @@ Podaj niestandardowy prompt systemowy dla tego agenta za pomocą konfiguracji `p
 }
 ```
 
-Ścieżka jest względna do miejsca, w którym znajduje się plik konfiguracyjny. Działa to zarówno w przypadku globalnej konfiguracji OpenCode, jak i konfiguracji specyficznej dla projektu.
+Ścieżka jest względna do miejsca, w którym znajduje się plik konfiguracyjny. Działa to zarówno w przypadku globalnej konfiguracji Daemon Protocol, jak i konfiguracji specyficznej dla projektu.
 
 ---
 
@@ -366,7 +366,7 @@ Jeśli model nie zostanie określony, agenci główni używają [modelu skonfigu
 }
 ```
 
-Identyfikator modelu jest taki sam, jak w konfiguracji OpenCode w `provider/model-id`. Na przykład, [OpenCode Zen](/docs/zen), użyj `opencode/gpt-5.1-codex` dla GPT 5.1 Codex.
+Identyfikator modelu jest taki sam, jak w konfiguracji Daemon Protocol w `provider/model-id`. Na przykład, [Daemon Zen](/docs/zen), użyj `opencode/gpt-5.1-codex` dla GPT 5.1 Codex.
 
 ---
 

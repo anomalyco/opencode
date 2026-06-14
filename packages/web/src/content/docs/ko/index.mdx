@@ -1,13 +1,13 @@
 ---
 title: 소개
-description: OpenCode를 시작해 보세요.
+description: Daemon Protocol를 시작해 보세요.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**OpenCode**](/)는 오픈 소스 AI coding agent입니다. 터미널 기반 인터페이스, 데스크톱 앱, IDE 확장으로 사용할 수 있습니다.
+[**Daemon Protocol**](/)는 오픈 소스 AI coding agent입니다. 터미널 기반 인터페이스, 데스크톱 앱, IDE 확장으로 사용할 수 있습니다.
 
 ![opencode TUI with the opencode theme](../../../assets/lander/screenshot.png)
 
@@ -17,7 +17,7 @@ export const console = config.console
 
 #### 사전 준비
 
-터미널에서 OpenCode를 사용하려면 다음이 필요합니다.
+터미널에서 Daemon Protocol를 사용하려면 다음이 필요합니다.
 
 1. 다음과 같은 최신 터미널 에뮬레이터
    - [WezTerm](https://wezterm.org), 크로스 플랫폼
@@ -31,7 +31,7 @@ export const console = config.console
 
 ## 설치
 
-OpenCode를 설치하는 가장 쉬운 방법은 설치 스크립트를 사용하는 것입니다.
+Daemon Protocol를 설치하는 가장 쉬운 방법은 설치 스크립트를 사용하는 것입니다.
 
 ```bash
 curl -fsSL https://opencode.ai/install | bash
@@ -79,7 +79,7 @@ curl -fsSL https://opencode.ai/install | bash
   brew install anomalyco/tap/opencode
   ```
 
-  > 최신 릴리스를 사용하려면 OpenCode tap 사용을 권장합니다. 공식 `brew install opencode` formula는 Homebrew 팀이 관리하며 업데이트 주기가 더 깁니다.
+  > 최신 릴리스를 사용하려면 Daemon Protocol tap 사용을 권장합니다. 공식 `brew install opencode` formula는 Homebrew 팀이 관리하며 업데이트 주기가 더 깁니다.
 
 - **Arch Linux에 설치**
 
@@ -91,7 +91,7 @@ curl -fsSL https://opencode.ai/install | bash
 #### Windows
 
 :::tip[권장: WSL 사용]
-Windows에서는 [Windows Subsystem for Linux (WSL)](/docs/windows-wsl) 사용을 권장합니다. 성능이 더 좋고 OpenCode 기능과의 완전한 호환성을 제공합니다.
+Windows에서는 [Windows Subsystem for Linux (WSL)](/docs/windows-wsl) 사용을 권장합니다. 성능이 더 좋고 Daemon Protocol 기능과의 완전한 호환성을 제공합니다.
 :::
 
 - **Chocolatey 사용**
@@ -124,7 +124,7 @@ Windows에서는 [Windows Subsystem for Linux (WSL)](/docs/windows-wsl) 사용�
   docker run -it --rm ghcr.io/anomalyco/opencode
   ```
 
-현재 Windows에서 Bun을 사용한 OpenCode 설치 지원은 준비 중입니다.
+현재 Windows에서 Bun을 사용한 Daemon Protocol 설치 지원은 준비 중입니다.
 
 [Releases](https://github.com/anomalyco/opencode/releases)에서 바이너리를 직접 받아 설치할 수도 있습니다.
 
@@ -132,10 +132,10 @@ Windows에서는 [Windows Subsystem for Linux (WSL)](/docs/windows-wsl) 사용�
 
 ## 구성
 
-OpenCode는 API 키를 설정하면 원하는 LLM 제공자를 사용할 수 있습니다.
+Daemon Protocol는 API 키를 설정하면 원하는 LLM 제공자를 사용할 수 있습니다.
 
-LLM 제공자를 처음 사용한다면 [OpenCode Zen](/docs/zen) 사용을 권장합니다.
-OpenCode 팀이 테스트하고 검증한 모델 목록입니다.
+LLM 제공자를 처음 사용한다면 [Daemon Zen](/docs/zen) 사용을 권장합니다.
+Daemon Protocol 팀이 테스트하고 검증한 모델 목록입니다.
 
 1. TUI에서 `/connect` 명령을 실행하고 `opencode`를 선택한 다음 [opencode.ai/auth](https://opencode.ai/auth)로 이동합니다.
 
@@ -166,31 +166,31 @@ OpenCode 팀이 테스트하고 검증한 모델 목록입니다.
 cd /path/to/project
 ```
 
-그리고 OpenCode를 실행합니다.
+그리고 Daemon Protocol를 실행합니다.
 
 ```bash
 opencode
 ```
 
-다음 명령을 실행해 프로젝트에서 OpenCode를 초기화합니다.
+다음 명령을 실행해 프로젝트에서 Daemon Protocol를 초기화합니다.
 
 ```bash frame="none"
 /init
 ```
 
-이 명령을 실행하면 OpenCode가 프로젝트를 분석하고 프로젝트 루트에 `AGENTS.md` 파일을 생성합니다.
+이 명령을 실행하면 Daemon Protocol가 프로젝트를 분석하고 프로젝트 루트에 `AGENTS.md` 파일을 생성합니다.
 
 :::tip
 프로젝트의 `AGENTS.md` 파일은 Git에 커밋하는 것을 권장합니다.
 :::
 
-이렇게 하면 OpenCode가 프로젝트 구조와 사용 중인 코딩 패턴을 더 잘 이해할 수 있습니다.
+이렇게 하면 Daemon Protocol가 프로젝트 구조와 사용 중인 코딩 패턴을 더 잘 이해할 수 있습니다.
 
 ---
 
 ## 사용법
 
-이제 OpenCode로 프로젝트 작업을 시작할 준비가 되었습니다. 무엇이든 물어보세요.
+이제 Daemon Protocol로 프로젝트 작업을 시작할 준비가 되었습니다. 무엇이든 물어보세요.
 
 AI coding agent를 처음 사용한다면 도움이 될 수 있는 예시를 소개합니다.
 
@@ -198,7 +198,7 @@ AI coding agent를 처음 사용한다면 도움이 될 수 있는 예시를 소
 
 ### 질문하기
 
-OpenCode에 코드베이스 설명을 요청할 수 있습니다.
+Daemon Protocol에 코드베이스 설명을 요청할 수 있습니다.
 
 :::tip
 프로젝트 파일은 `@` 키로 퍼지 검색할 수 있습니다.
@@ -214,11 +214,11 @@ How is authentication handled in @packages/functions/src/api/index.ts
 
 ### 기능 추가
 
-OpenCode에 프로젝트의 새 기능 추가를 요청할 수 있습니다. 다만 먼저 계획을 만들도록 요청하는 것을 권장합니다.
+Daemon Protocol에 프로젝트의 새 기능 추가를 요청할 수 있습니다. 다만 먼저 계획을 만들도록 요청하는 것을 권장합니다.
 
 1. **계획 만들기**
 
-   OpenCode에는 변경 작업 기능을 비활성화하고 기능을 구현할 방법만 제안하는 *Plan mode*가 있습니다.
+   Daemon Protocol에는 변경 작업 기능을 비활성화하고 기능을 구현할 방법만 제안하는 *Plan mode*가 있습니다.
 
    **Tab** 키를 눌러 전환하세요. 화면 오른쪽 아래에서 모드 표시를 확인할 수 있습니다.
 
@@ -234,10 +234,10 @@ OpenCode에 프로젝트의 새 기능 추가를 요청할 수 있습니다. 다
    From this screen, the user can undelete a note or permanently delete it.
    ```
 
-   OpenCode가 원하는 작업을 이해할 수 있도록 충분한 세부 정보를 제공해야 합니다. 팀의 주니어 개발자에게 말하듯이 설명하면 도움이 됩니다.
+   Daemon Protocol가 원하는 작업을 이해할 수 있도록 충분한 세부 정보를 제공해야 합니다. 팀의 주니어 개발자에게 말하듯이 설명하면 도움이 됩니다.
 
    :::tip
-   OpenCode가 원하는 작업을 이해하도록 충분한 맥락과 예시를 제공하세요.
+   Daemon Protocol가 원하는 작업을 이해하도록 충분한 맥락과 예시를 제공하세요.
    :::
 
 2. **계획 다듬기**
@@ -253,7 +253,7 @@ OpenCode에 프로젝트의 새 기능 추가를 요청할 수 있습니다. 다
    이미지를 터미널에 드래그 앤 드롭해 prompt에 추가하세요.
    :::
 
-   OpenCode는 제공한 이미지를 스캔해 prompt에 추가할 수 있습니다. 이미지를 터미널에 드래그 앤 드롭하면 됩니다.
+   Daemon Protocol는 제공한 이미지를 스캔해 prompt에 추가할 수 있습니다. 이미지를 터미널에 드래그 앤 드롭하면 됩니다.
 
 3. **기능 구현**
 
@@ -281,13 +281,13 @@ handled in the /notes route in @packages/functions/src/notes.ts and implement
 the same logic in @packages/functions/src/settings.ts
 ```
 
-OpenCode가 올바른 변경을 하도록 충분한 세부 정보를 제공해야 합니다.
+Daemon Protocol가 올바른 변경을 하도록 충분한 세부 정보를 제공해야 합니다.
 
 ---
 
 ### 변경 되돌리기
 
-예를 들어 OpenCode에 변경을 요청했다고 해보겠습니다.
+예를 들어 Daemon Protocol에 변경을 요청했다고 해보겠습니다.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -299,7 +299,7 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 /undo
 ```
 
-OpenCode가 방금 적용한 변경을 되돌리고 원래 메시지를 다시 보여줍니다.
+Daemon Protocol가 방금 적용한 변경을 되돌리고 원래 메시지를 다시 보여줍니다.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -321,7 +321,7 @@ Can you refactor the function in @packages/functions/src/api/index.ts?
 
 ## 공유
 
-OpenCode와의 대화는 [팀과 공유](/docs/share)할 수 있습니다.
+Daemon Protocol와의 대화는 [팀과 공유](/docs/share)할 수 있습니다.
 
 ```bash frame="none"
 /share
@@ -333,12 +333,12 @@ OpenCode와의 대화는 [팀과 공유](/docs/share)할 수 있습니다.
 대화는 기본값으로 공유되지 않습니다.
 :::
 
-다음은 OpenCode [대화 예시](https://opencode.ai/s/4XP1fce5)입니다.
+다음은 Daemon Protocol [대화 예시](https://opencode.ai/s/4XP1fce5)입니다.
 
 ---
 
 ## 사용자 지정
 
-이제 OpenCode 사용법을 익혔습니다.
+이제 Daemon Protocol 사용법을 익혔습니다.
 
-원하는 방식에 맞추려면 [테마 선택](/docs/themes), [키바인드 사용자 지정](/docs/keybinds), [코드 formatter 설정](/docs/formatters), [custom command 만들기](/docs/commands), [OpenCode config 설정](/docs/config)을 권장합니다.
+원하는 방식에 맞추려면 [테마 선택](/docs/themes), [키바인드 사용자 지정](/docs/keybinds), [코드 formatter 설정](/docs/formatters), [custom command 만들기](/docs/commands), [Daemon Protocol config 설정](/docs/config)을 권장합니다.

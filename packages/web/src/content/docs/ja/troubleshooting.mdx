@@ -3,7 +3,7 @@ title: トラブルシューティング
 description: よくある問題とその解決方法。
 ---
 
-OpenCode の問題をデバッグするには、まず、ディスク上に保存されているログとローカルデータを確認します。
+Daemon Protocol の問題をデバッグするには、まず、ディスク上に保存されているログとローカルデータを確認します。
 
 ---
 
@@ -22,7 +22,7 @@ OpenCode の問題をデバッグするには、まず、ディスク上に保�
 
 ## ストレージ
 
-OpenCode は、セッションデータとその他のアプリケーションデータをディスク上の次の場所に保存します。
+Daemon Protocol は、セッションデータとその他のアプリケーションデータをディスク上の次の場所に保存します。
 
 - **macOS/Linux**: `~/.local/share/opencode/`
 - **Windows**: `WIN+R` を押して `%USERPROFILE%\.local\share\opencode` を貼り付けます
@@ -39,13 +39,13 @@ OpenCode は、セッションデータとその他のアプリケーション�
 
 ## デスクトップアプリ
 
-OpenCode Desktop は、ローカル OpenCode サーバー (`opencode-cli` サイドカー) をバックグラウンドで実行します。ほとんどの問題は、誤動作しているプラグイン、破損したキャッシュ、または不正なサーバー設定によって発生します。
+Daemon Protocol Desktop は、ローカル Daemon Protocol サーバー (`opencode-cli` サイドカー) をバックグラウンドで実行します。ほとんどの問題は、誤動作しているプラグイン、破損したキャッシュ、または不正なサーバー設定によって発生します。
 
 ### クイックチェック
 
 - アプリを完全に終了して再起動します。
 - アプリにエラー画面が表示された場合は、**再起動** をクリックしてエラーの詳細をコピーします。
-- macOS のみ: `OpenCode` メニュー -> **Webview をリロード** (UI が空白またはフリーズしている場合に役立ちます)。
+- macOS のみ: `Daemon Protocol` メニュー -> **Webview をリロード** (UI が空白またはフリーズしている場合に役立ちます)。
 
 ---
 
@@ -72,7 +72,7 @@ OpenCode Desktop は、ローカル OpenCode サーバー (`opencode-cli` サイ
 
 #### プラグインディレクトリの確認
 
-OpenCode はディスクからローカルプラグインをロードすることもできます。これらを一時的に邪魔にならない場所に移動し (またはフォルダーの名前を変更し)、デスクトップアプリを再起動します。
+Daemon Protocol はディスクからローカルプラグインをロードすることもできます。これらを一時的に邪魔にならない場所に移動し (またはフォルダーの名前を変更し)、デスクトップアプリを再起動します。
 
 - **グローバルプラグイン**
   - **macOS/Linux**: `~/.config/opencode/plugins/`
@@ -86,22 +86,22 @@ OpenCode はディスクからローカルプラグインをロードするこ�
 
 ### キャッシュをクリアする
 
-プラグインを無効にしても解決しない場合 (またはプラグインのインストールが停止した場合)、OpenCode がキャッシュを再構築できるようにキャッシュをクリアします。
+プラグインを無効にしても解決しない場合 (またはプラグインのインストールが停止した場合)、Daemon Protocol がキャッシュを再構築できるようにキャッシュをクリアします。
 
-1. OpenCode Desktop を完全に終了します。
+1. Daemon Protocol Desktop を完全に終了します。
 2. キャッシュディレクトリを削除します。
 
 - **macOS**: Finder -> `Cmd+Shift+G` -> `~/.cache/opencode` を貼り付け
 - **Linux**: `~/.cache/opencode` を削除します (または `rm -rf ~/.cache/opencode` を実行します)。
 - **Windows**: `WIN+R` を押して `%USERPROFILE%\.cache\opencode` を貼り付けます
 
-3. OpenCode デスクトップを再起動します。
+3. Daemon Protocol デスクトップを再起動します。
 
 ---
 
 ### サーバー接続の問題の修正
 
-OpenCode Desktop は、独自のローカルサーバー (デフォルト) を起動することも、構成したサーバー URL に接続することもできます。
+Daemon Protocol Desktop は、独自のローカルサーバー (デフォルト) を起動することも、構成したサーバー URL に接続することもできます。
 
 **「接続に失敗しました」** ダイアログが表示された場合 (またはアプリがスプラッシュ画面を通過できない場合)、カスタムサーバー URL を確認してください。
 
@@ -132,21 +132,21 @@ Linux では、一部の Wayland セットアップにより、空白のウィ�
 
 ### Windows: WebView2 ランタイム
 
-Windows では、OpenCode Desktop には Microsoft Edge **WebView2 ランタイム**が必要です。アプリが空白のウィンドウで開くか、起動しない場合は、WebView2 をインストールまたは更新して、もう一度試してください。
+Windows では、Daemon Protocol Desktop には Microsoft Edge **WebView2 ランタイム**が必要です。アプリが空白のウィンドウで開くか、起動しない場合は、WebView2 をインストールまたは更新して、もう一度試してください。
 
 ---
 
 ### Windows: 一般的なパフォーマンスの問題
 
-Windows でパフォーマンスの低下、ファイルアクセスの問題、またはターミナルの問題が発生している場合は、[WSL (Windows Subsystem for Linux)](/docs/windows-wsl) を使用してみてください。 WSL は、OpenCode の機能とよりシームレスに連携する Linux 環境を提供します。
+Windows でパフォーマンスの低下、ファイルアクセスの問題、またはターミナルの問題が発生している場合は、[WSL (Windows Subsystem for Linux)](/docs/windows-wsl) を使用してみてください。 WSL は、Daemon Protocol の機能とよりシームレスに連携する Linux 環境を提供します。
 
 ---
 
 ### 通知が表示されない
 
-OpenCode Desktop では、次の場合にのみシステム通知が表示されます。
+Daemon Protocol Desktop では、次の場合にのみシステム通知が表示されます。
 
-- OS 設定で OpenCode の通知が有効になっており、
+- OS 設定で Daemon Protocol の通知が有効になっており、
 - アプリウィンドウにフォーカスがありません。
 
 ---
@@ -155,8 +155,8 @@ OpenCode Desktop では、次の場合にのみシステム通知が表示され
 
 アプリが起動せず、UI 内から設定をクリアできない場合は、デスクトップアプリの保存された状態をリセットします。
 
-1. OpenCode デスクトップを終了します。
-2. これらのファイルを見つけて削除します (これらのファイルは OpenCode デスクトップアプリのデータディレクトリにあります)。
+1. Daemon Protocol デスクトップを終了します。
+2. これらのファイルを見つけて削除します (これらのファイルは Daemon Protocol デスクトップアプリのデータディレクトリにあります)。
 
 - `opencode.settings.dat` (デスクトップのデフォルトサーバー URL)
 - `opencode.global.dat` および `opencode.workspace.*.dat` (最近のサーバー/プロジェクトなどの UI 状態)
@@ -171,7 +171,7 @@ OpenCode Desktop では、次の場合にのみシステム通知が表示され
 
 ## ヘルプを求める
 
-OpenCode で問題が発生している場合:
+Daemon Protocol で問題が発生している場合:
 
 1. **GitHub で問題を報告してください**
 
@@ -195,7 +195,7 @@ OpenCode で問題が発生している場合:
 
 ---
 
-### OpenCode が起動しない
+### Daemon Protocol が起動しない
 
 1. ログでエラーメッセージを確認する
 2. `--print-logs` で実行して、ターミナルに出力を確認してください。
@@ -252,7 +252,7 @@ ProviderInitError が発生した場合は、構成が無効または破損し�
 
 ### AI_APICallError とプロバイダーパッケージの問題
 
-API 呼び出しエラーが発生した場合は、プロバイダーパッケージが古いことが原因である可能性があります。 OpenCode は、必要に応じてプロバイダーパッケージ (OpenAI、Anthropic、Google など) を動的にインストールし、ローカルにキャッシュします。
+API 呼び出しエラーが発生した場合は、プロバイダーパッケージが古いことが原因である可能性があります。 Daemon Protocol は、必要に応じてプロバイダーパッケージ (OpenAI、Anthropic、Google など) を動的にインストールし、ローカルにキャッシュします。
 
 プロバイダーパッケージの問題を解決するには:
 
@@ -264,9 +264,9 @@ API 呼び出しエラーが発生した場合は、プロバイダーパッケ�
 
    Windows では、`WIN+R` を押して、`%USERPROFILE%\.cache\opencode` を削除します。
 
-2. OpenCode を再起動して最新のプロバイダーパッケージを再インストールします
+2. Daemon Protocol を再起動して最新のプロバイダーパッケージを再インストールします
 
-これにより、OpenCode はプロバイダーパッケージの最新バージョンを強制的にダウンロードすることになり、多くの場合、モデルパラメーターや API の変更に関する互換性の問題が解決されます。
+これにより、Daemon Protocol はプロバイダーパッケージの最新バージョンを強制的にダウンロードすることになり、多くの場合、モデルパラメーターや API の変更に関する互換性の問題が解決されます。
 
 ---
 
@@ -297,4 +297,4 @@ Xvfb :99 -screen 0 1024x768x24 > /dev/null 2>&1 &
 export DISPLAY=:99.0
 ```
 
-OpenCode は、Wayland を使用していて `wl-clipboard` を優先しているかどうかを検出します。そうでない場合は、`xclip` および `xsel` の順序でクリップボードツールを検索しようとします。
+Daemon Protocol は、Wayland を使用していて `wl-clipboard` を優先しているかどうかを検出します。そうでない場合は、`xclip` および `xsel` の順序でクリップボードツールを検索しようとします。

@@ -21,8 +21,8 @@ body:
   - type: input
     id: opencode-version
     attributes:
-      label: OpenCode version
-      description: What version of OpenCode are you using?
+      label: Daemon Protocol version
+      description: What version of Daemon Protocol are you using?
     validations:
       required: false
 

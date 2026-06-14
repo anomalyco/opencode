@@ -11,7 +11,7 @@ import {
 } from "../../src/acp/tool"
 
 describe("acp tool conversion", () => {
-  test("maps OpenCode tool ids to ACP tool kinds", () => {
+  test("maps Daemon Protocol tool ids to ACP tool kinds", () => {
     expect(toToolKind("bash")).toBe("execute")
     expect(toToolKind("shell")).toBe("execute")
     expect(toToolKind("webfetch")).toBe("fetch")

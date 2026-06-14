@@ -7,11 +7,11 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Go je povoljna pretplata — **$5 za vaš prvi mjesec**, a zatim **$10/mjesečno** — koja vam pruža pouzdan pristup popularnim otvorenim modelima za programiranje.
+Daemon Protocol Go je povoljna pretplata — **$5 za vaš prvi mjesec**, a zatim **$10/mjesečno** — koja vam pruža pouzdan pristup popularnim otvorenim modelima za programiranje.
 
-Go radi kao bilo koji drugi provajder u OpenCode-u. Pretplatite se na OpenCode Go i
+Go radi kao bilo koji drugi provajder u Daemon Protocol-u. Pretplatite se na Daemon Protocol Go i
 dobijete svoj API ključ. On je **potpuno opcionalan** i ne morate ga koristiti da
-biste koristili OpenCode.
+biste koristili Daemon Protocol.
 
 Dizajniran je prvenstveno za međunarodne korisnike, sa modelima hostovanim u SAD-u, EU i Singapuru za stabilan globalni pristup.
 
@@ -27,7 +27,7 @@ Međutim, dobiti pouzdan pristup s niskom latencijom do njih može biti teško. 
 variraju u pogledu kvaliteta i dostupnosti.
 
 :::tip
-Testirali smo odabranu grupu modela i provajdera koji dobro rade sa OpenCode-om.
+Testirali smo odabranu grupu modela i provajdera koji dobro rade sa Daemon Protocol-om.
 :::
 
 Da bismo to popravili, uradili smo nekoliko stvari:
@@ -39,22 +39,22 @@ Da bismo to popravili, uradili smo nekoliko stvari:
 3. Na kraju smo benchmarkovali kombinaciju modela/provajdera i osmislili
    listu koju rado preporučujemo.
 
-OpenCode Go vam daje pristup ovim modelima za **$5 za vaš prvi mjesec**, a zatim **$10/mjesečno**.
+Daemon Protocol Go vam daje pristup ovim modelima za **$5 za vaš prvi mjesec**, a zatim **$10/mjesečno**.
 
 ---
 
 ## Kako funkcioniše
 
-OpenCode Go radi kao bilo koji drugi provajder u OpenCode-u.
+Daemon Protocol Go radi kao bilo koji drugi provajder u Daemon Protocol-u.
 
-1. Prijavite se na **<a href={console}>OpenCode Zen</a>**, pretplatite se na Go i
+1. Prijavite se na **<a href={console}>Daemon Zen</a>**, pretplatite se na Go i
    kopirajte svoj API ključ.
-2. Pokrenite komandu `/connect` u TUI-ju, odaberite `OpenCode Go` i zalijepite
+2. Pokrenite komandu `/connect` u TUI-ju, odaberite `Daemon Protocol Go` i zalijepite
    svoj API ključ.
 3. Pokrenite `/models` u TUI-ju da vidite listu modela dostupnih kroz Go.
 
 :::note
-Samo jedan član po radnom prostoru (workspace) može se pretplatiti na OpenCode Go.
+Samo jedan član po radnom prostoru (workspace) može se pretplatiti na Daemon Protocol Go.
 :::
 
 Trenutna lista modela uključuje:
@@ -79,7 +79,7 @@ Lista modela se može mijenjati dok testiramo i dodajemo nove.
 
 ## Ograničenja upotrebe
 
-OpenCode Go uključuje sljedeća ograničenja:
+Daemon Protocol Go uključuje sljedeća ograničenja:
 
 - **Ograničenje od 5 sati** — $12 potrošnje
 - **Sedmično ograničenje** — $30 potrošnje
@@ -179,7 +179,7 @@ Također možete pristupiti Go modelima putem sljedećih API endpointa.
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
-[Model id](/docs/config/#models) u vašoj OpenCode konfiguraciji
+[Model id](/docs/config/#models) u vašoj Daemon Protocol konfiguraciji
 koristi format `opencode-go/<model-id>`. Na primjer, za Kimi K2.7 Code, koristili biste
 `opencode-go/kimi-k2.7-code` u svojoj konfiguraciji.
 
@@ -203,9 +203,9 @@ Plan je prvenstveno namijenjen međunarodnim korisnicima, a modeli su smješteni
 
 ## Ciljevi
 
-Napravili smo OpenCode Go da bismo:
+Napravili smo Daemon Protocol Go da bismo:
 
 1. Učinili AI programiranje **dostupnim** većem broju ljudi putem povoljne pretplate.
 2. Pružili **pouzdan** pristup najboljim otvorenim modelima za programiranje.
 3. Odabrali modele koji su **testirani i benchmarkovani** za upotrebu od strane agenata za programiranje.
-4. Osigurali da **nema zaključavanja (no lock-in)**, omogućavajući vam da uz OpenCode koristite i bilo kojeg drugog provajdera.
+4. Osigurali da **nema zaključavanja (no lock-in)**, omogućavajući vam da uz Daemon Protocol koristite i bilo kojeg drugog provajdera.

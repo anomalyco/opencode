@@ -1,15 +1,15 @@
 ---
 title: LSP Server
-description: OpenCode lässt sich in Ihren LSP-Server integrieren.
+description: Daemon Protocol lässt sich in Ihren LSP-Server integrieren.
 ---
 
-OpenCode kann sich in Language Server Protocol (LSP)-Server integrieren, um Diagnosen als Feedback für den Agenten zu verwenden.
+Daemon Protocol kann sich in Language Server Protocol (LSP)-Server integrieren, um Diagnosen als Feedback für den Agenten zu verwenden.
 
 ---
 
 ## Integriert
 
-OpenCode verfügt über mehrere integrierte LSP-Server für gängige Sprachen:
+Daemon Protocol verfügt über mehrere integrierte LSP-Server für gängige Sprachen:
 
 | LSP Server         | Erweiterungen                                                       | Anforderungen                                                             |
 | ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------- |
@@ -56,7 +56,7 @@ Sie können LSP-Server-Downloads automatisch deaktivieren, indem Sie die Umgebun
 
 ## Funktionsweise
 
-Wenn LSP aktiviert ist und OpenCode eine Datei öffnet, geschieht Folgendes:
+Wenn LSP aktiviert ist und Daemon Protocol eine Datei öffnet, geschieht Folgendes:
 
 1. Überprüft die Dateierweiterung anhand aller aktivierten LSP-Server.
 2. Startet den entsprechenden LSP-Server, falls er noch nicht ausgeführt wird.
@@ -73,7 +73,7 @@ Sprachserver können aus dem Sync geraten, viel Speicher verwenden, je nach Vers
 
 ## Konfiguration
 
-Sie können LSP-Server über den Abschnitt `lsp` in Ihrer OpenCode-Konfiguration aktivieren und anpassen.
+Sie können LSP-Server über den Abschnitt `lsp` in Ihrer Daemon Protocol-Konfiguration aktivieren und anpassen.
 
 Um alle integrierten LSP-Server zu aktivieren, setzen Sie `lsp` auf `true`.
 

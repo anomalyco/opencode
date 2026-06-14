@@ -1,17 +1,17 @@
 ---
 title: Providers
-description: Using any LLM provider in OpenCode.
+description: Using any LLM provider in Daemon Protocol.
 ---
 
 import config from "../../../config.mjs"
 export const console = config.console
 
-OpenCode uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support **75+ LLM providers** and it supports running local models.
+Daemon Protocol uses the [AI SDK](https://ai-sdk.dev/) and [Models.dev](https://models.dev) to support **75+ LLM providers** and it supports running local models.
 
 To add a provider you need to:
 
 1. Add the API keys for the provider using the `/connect` command.
-2. Configure the provider in your OpenCode config.
+2. Configure the provider in your Daemon Protocol config.
 
 ---
 
@@ -24,7 +24,7 @@ in `~/.local/share/opencode/auth.json`.
 
 ### Config
 
-You can customize the providers through the `provider` section in your OpenCode
+You can customize the providers through the `provider` section in your Daemon Protocol
 config.
 
 ---
@@ -48,16 +48,16 @@ You can customize the base URL for any provider by setting the `baseURL` option.
 
 ---
 
-## OpenCode Zen
+## Daemon Zen
 
-OpenCode Zen is a list of models provided by the OpenCode team that have been
-tested and verified to work well with OpenCode. [Learn more](/docs/zen).
+Daemon Zen is a list of models provided by the Daemon Protocol team that have been
+tested and verified to work well with Daemon Protocol. [Learn more](/docs/zen).
 
 :::tip
-If you are new, we recommend starting with OpenCode Zen.
+If you are new, we recommend starting with Daemon Zen.
 :::
 
-1. Run the `/connect` command in the TUI, select `OpenCode Zen`, and head to [opencode.ai/auth](https://opencode.ai/zen).
+1. Run the `/connect` command in the TUI, select `Daemon Zen`, and head to [opencode.ai/auth](https://opencode.ai/zen).
 
    ```txt
    /connect
@@ -80,16 +80,16 @@ If you are new, we recommend starting with OpenCode Zen.
    /models
    ```
 
-It works like any other provider in OpenCode and is completely optional to use.
+It works like any other provider in Daemon Protocol and is completely optional to use.
 
 ---
 
-## OpenCode Go
+## Daemon Protocol Go
 
-OpenCode Go is a low cost subscription plan that provides reliable access to popular open coding models provided by the OpenCode team that have been
-tested and verified to work well with OpenCode.
+Daemon Protocol Go is a low cost subscription plan that provides reliable access to popular open coding models provided by the Daemon Protocol team that have been
+tested and verified to work well with Daemon Protocol.
 
-1. Run the `/connect` command in the TUI, select `OpenCode Go`, and head to [opencode.ai/auth](https://opencode.ai/zen).
+1. Run the `/connect` command in the TUI, select `Daemon Protocol Go`, and head to [opencode.ai/auth](https://opencode.ai/zen).
 
    ```txt
    /connect
@@ -112,7 +112,7 @@ tested and verified to work well with OpenCode.
    /models
    ```
 
-It works like any other provider in OpenCode and is completely optional to use.
+It works like any other provider in Daemon Protocol and is completely optional to use.
 
 ---
 
@@ -156,7 +156,7 @@ Don't see a provider here? Submit a PR.
 
 ### Amazon Bedrock
 
-To use Amazon Bedrock with OpenCode:
+To use Amazon Bedrock with Daemon Protocol:
 
 1. Head over to the **Model catalog** in the Amazon Bedrock console and request
    access to the models you want.
@@ -319,13 +319,13 @@ For custom inference profiles, use the model and provider name in the key and se
 
 :::info
 There are plugins that allow you to use your Claude Pro/Max models with
-OpenCode. Anthropic explicitly prohibits this.
+Daemon Protocol. Anthropic explicitly prohibits this.
 
-Previous versions of OpenCode came bundled with these plugins but that is no
+Previous versions of Daemon Protocol came bundled with these plugins but that is no
 longer the case as of 1.3.0
 
 Other companies support freedom of choice with developer tooling - you can use
-the following subscriptions in OpenCode with zero setup:
+the following subscriptions in Daemon Protocol with zero setup:
 
 - ChatGPT Plus
 - Github Copilot
@@ -725,9 +725,9 @@ Cloudflare Workers AI lets you run AI models on Cloudflare's global network dire
 
 DigitalOcean's [Inference Engine](https://docs.digitalocean.com/products/inference/) provides access to open models like GPT-OSS, Llama, Qwen, and DeepSeek, plus custom [Inference Routers](https://docs.digitalocean.com/products/genai-platform/concepts/inference-routers/) that route each request to the cheapest, fastest, or best-fit model for a task.
 
-OpenCode supports two authentication methods:
+Daemon Protocol supports two authentication methods:
 
-- **OAuth (Recommended)** — Sign in to your DigitalOcean account; OpenCode uses your DigitalOcean API token directly for inference and discovers your Inference Routers.
+- **OAuth (Recommended)** — Sign in to your DigitalOcean account; Daemon Protocol uses your DigitalOcean API token directly for inference and discovers your Inference Routers.
 - **Model Access Key** — Paste an existing key from the DigitalOcean console.
 
 #### OAuth (Recommended)
@@ -748,10 +748,10 @@ OpenCode supports two authentication methods:
    └
    ```
 
-3. Your browser opens to authorize OpenCode. Sign in and approve.
+3. Your browser opens to authorize Daemon Protocol. Sign in and approve.
 
    :::note
-   OpenCode requests `genai:read` and `inference:query` OAuth scopes. Your DigitalOcean API token is used directly for inference — no separate Model Access Key is created.
+   Daemon Protocol requests `genai:read` and `inference:query` OAuth scopes. Your DigitalOcean API token is used directly for inference — no separate Model Access Key is created.
    :::
 
    :::note
@@ -801,9 +801,9 @@ export DIGITALOCEAN_ACCESS_TOKEN=your-model-access-key
 
 #### Inference Routers
 
-Inference Routers let you define a routing policy across multiple models — picking the cheapest, fastest, or most appropriate model per request based on the task. After OAuth, OpenCode surfaces each router as `router:<router-name>` in the model picker.
+Inference Routers let you define a routing policy across multiple models — picking the cheapest, fastest, or most appropriate model per request based on the task. After OAuth, Daemon Protocol surfaces each router as `router:<router-name>` in the model picker.
 
-Selecting a router model is a drop-in replacement for any other model — OpenCode forwards your request and DigitalOcean picks the underlying model based on your router's policy. Learn more about [Inference Routers](https://docs.digitalocean.com/products/inference/how-to/use-inference-router/)
+Selecting a router model is a drop-in replacement for any other model — Daemon Protocol forwards your request and DigitalOcean picks the underlying model based on your router's policy. Learn more about [Inference Routers](https://docs.digitalocean.com/products/inference/how-to/use-inference-router/)
 
 ---
 
@@ -864,11 +864,11 @@ Selecting a router model is a drop-in replacement for any other model — OpenCo
 ### GitLab Duo
 
 :::caution[Experimental]
-GitLab Duo support in OpenCode is experimental. Features, configuration, and
+GitLab Duo support in Daemon Protocol is experimental. Features, configuration, and
 behavior may change in future releases.
 :::
 
-OpenCode integrates with the [GitLab Duo Agent Platform](https://docs.gitlab.com/user/duo_agent_platform/),
+Daemon Protocol integrates with the [GitLab Duo Agent Platform](https://docs.gitlab.com/user/duo_agent_platform/),
 providing AI-powered agentic chat with native tool calling capabilities.
 
 :::note[License requirements]
@@ -901,7 +901,7 @@ for full requirements.
    #### Using Personal Access Token
    1. Go to [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. Click **Add new token**
-   3. Name: `OpenCode`, Scopes: `api`
+   3. Name: `Daemon Protocol`, Scopes: `api`
    4. Copy the token (starts with `glpat-`)
    5. Enter it in the terminal
 
@@ -924,8 +924,8 @@ to store token in opencode auth storage.
 ##### Self-Hosted GitLab
 
 :::note[compliance note]
-OpenCode uses a small model for some AI tasks like generating the session title.
-It is configured to use gpt-5-nano by default, hosted by Zen. To lock OpenCode
+Daemon Protocol uses a small model for some AI tasks like generating the session title.
+It is configured to use gpt-5-nano by default, hosted by Zen. To lock Daemon Protocol
 to only use your own GitLab-hosted instance, add the following to your
 `opencode.json` file. It is also recommended to disable session sharing.
 
@@ -1010,12 +1010,12 @@ Customize through `opencode.json`:
 
 DAP workflow models provide an alternative execution path that routes tool calls
 through GitLab's Duo Workflow Service (DWS) instead of the standard agentic chat.
-When a `duo-workflow-*` model is selected, OpenCode will:
+When a `duo-workflow-*` model is selected, Daemon Protocol will:
 
 1. Discover available models from your GitLab namespace
 2. Present a selection picker if multiple models are available
 3. Cache the selected model to disk for fast subsequent startups
-4. Route tool execution requests through OpenCode's permission-gated tool system
+4. Route tool execution requests through Daemon Protocol's permission-gated tool system
 
 Available DAP workflow models follow the `duo-workflow-*` naming convention and
 are dynamically discovered from your GitLab instance.
@@ -1072,7 +1072,7 @@ subscription](https://github.com/features/copilot/plans) to use.
 
 ### Google Vertex AI
 
-To use Google Vertex AI with OpenCode:
+To use Google Vertex AI with Daemon Protocol:
 
 1. Head over to the **Model Garden** in the Google Cloud Console and check the
    models available in your region.
@@ -1254,7 +1254,7 @@ Helicone supports custom headers for features like caching, user tracking, and s
 
 ##### Session tracking
 
-Helicone's [Sessions](https://docs.helicone.ai/features/sessions) feature lets you group related LLM requests together. Use the [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin to automatically log each OpenCode conversation as a session in Helicone.
+Helicone's [Sessions](https://docs.helicone.ai/features/sessions) feature lets you group related LLM requests together. Use the [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin to automatically log each Daemon Protocol conversation as a session in Helicone.
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1268,7 +1268,7 @@ Add it to your config.
 }
 ```
 
-The plugin injects `Helicone-Session-Id` and `Helicone-Session-Name` headers into your requests. In Helicone's Sessions page, you'll see each OpenCode conversation listed as a separate session.
+The plugin injects `Helicone-Session-Id` and `Helicone-Session-Name` headers into your requests. In Helicone's Sessions page, you'll see each Daemon Protocol conversation listed as a separate session.
 
 ##### Common Helicone headers
 
@@ -1526,7 +1526,7 @@ export NVIDIA_API_KEY=nvapi-your-key-here
 You can configure opencode to use local models through Ollama.
 
 :::tip
-Ollama can automatically configure itself for OpenCode. See the [Ollama integration docs](https://docs.ollama.com/integrations/opencode) for details.
+Ollama can automatically configure itself for Daemon Protocol. See the [Ollama integration docs](https://docs.ollama.com/integrations/opencode) for details.
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1565,13 +1565,13 @@ If tool calls aren't working, try increasing `num_ctx` in Ollama. Start around 1
 
 ### Ollama Cloud
 
-To use Ollama Cloud with OpenCode:
+To use Ollama Cloud with Daemon Protocol:
 
 1. Head over to [https://ollama.com/](https://ollama.com/) and sign in or create an account.
 
 2. Navigate to **Settings** > **Keys** and click **Add API Key** to generate a new API key.
 
-3. Copy the API key for use in OpenCode.
+3. Copy the API key for use in Daemon Protocol.
 
 4. Run the `/connect` command and search for **Ollama Cloud**.
 
@@ -1588,7 +1588,7 @@ To use Ollama Cloud with OpenCode:
    └ enter
    ```
 
-6. **Important**: Before using cloud models in OpenCode, you must pull the model information locally:
+6. **Important**: Before using cloud models in Daemon Protocol, you must pull the model information locally:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1635,19 +1635,19 @@ If you already have an API key, you can select **Manually enter API Key** and pa
 
 ---
 
-### OpenCode Zen
+### Daemon Zen
 
-OpenCode Zen is a list of tested and verified models provided by the OpenCode team. [Learn more](/docs/zen).
+Daemon Zen is a list of tested and verified models provided by the Daemon Protocol team. [Learn more](/docs/zen).
 
-1. Sign in to **<a href={console}>OpenCode Zen</a>** and click **Create API Key**.
+1. Sign in to **<a href={console}>Daemon Zen</a>** and click **Create API Key**.
 
-2. Run the `/connect` command and search for **OpenCode Zen**.
+2. Run the `/connect` command and search for **Daemon Zen**.
 
    ```txt
    /connect
    ```
 
-3. Enter your OpenCode API key.
+3. Enter your Daemon Protocol API key.
 
    ```txt
    ┌ API key
@@ -1948,7 +1948,7 @@ Don't have a Snowflake account? [Sign up for a free trial](https://signup.snowfl
 
 opencode's core workflow for coding, editing files, and running commands relies on tool calling. Only the Claude and OpenAI families within Snowflake Cortex support this. The provider is limited to those families to support the core workflow.
 
-OpenCode supports two authentication methods:
+Daemon Protocol supports two authentication methods:
 
 - **Browser OAuth (Recommended)** — sign in with your IdP/SSO; no secrets to manage, tokens refresh automatically.
 - **Manual bearer token** — paste a PAT or JWT from the Snowflake console.
@@ -1982,7 +1982,7 @@ OpenCode supports two authentication methods:
 
 4. Optionally enter a Snowflake role to scope the session (e.g. `SYSADMIN`). Leave blank to use your default role.
 
-5. Complete sign-in in the browser that opens. OpenCode captures the OAuth callback automatically and stores the token — no copy/paste needed.
+5. Complete sign-in in the browser that opens. Daemon Protocol captures the OAuth callback automatically and stores the token — no copy/paste needed.
 
 6. Run the `/models` command to select a model.
 
@@ -2165,7 +2165,7 @@ Three ways to authenticate: a SuperGrok subscription via browser OAuth, the same
    /connect
    ```
 
-2. Select **xAI Grok OAuth (SuperGrok Subscription)**. OpenCode opens xAI's consent screen in your browser and waits for the callback on `http://127.0.0.1:56121/callback`.
+2. Select **xAI Grok OAuth (SuperGrok Subscription)**. Daemon Protocol opens xAI's consent screen in your browser and waits for the callback on `http://127.0.0.1:56121/callback`.
 
 3. Run the `/models` command to select a Grok model.
 
@@ -2173,11 +2173,11 @@ Three ways to authenticate: a SuperGrok subscription via browser OAuth, the same
    /models
    ```
 
-OpenCode refreshes the OAuth access token automatically. Any Grok or X Premium plan that includes Grok API access works; you do not need a separate `XAI_API_KEY`.
+Daemon Protocol refreshes the OAuth access token automatically. Any Grok or X Premium plan that includes Grok API access works; you do not need a separate `XAI_API_KEY`.
 
 #### Option B — SuperGrok device-code (headless / remote server / VPS)
 
-Use this when OpenCode is running somewhere a browser can't reach the loopback redirect: a VPS, a remote dev box over SSH, inside Docker, in CI, etc. No callback port is opened on the host running OpenCode — instead xAI hands the CLI a short code that you type into a browser on any other device (laptop, phone, …).
+Use this when Daemon Protocol is running somewhere a browser can't reach the loopback redirect: a VPS, a remote dev box over SSH, inside Docker, in CI, etc. No callback port is opened on the host running Daemon Protocol — instead xAI hands the CLI a short code that you type into a browser on any other device (laptop, phone, …).
 
 1. Run the `/connect` command on the remote host and search for **xAI**.
 
@@ -2185,13 +2185,13 @@ Use this when OpenCode is running somewhere a browser can't reach the loopback r
    /connect
    ```
 
-2. Select **xAI Grok OAuth (Headless / Remote / VPS)**. OpenCode prints a verification URL and a short user code.
+2. Select **xAI Grok OAuth (Headless / Remote / VPS)**. Daemon Protocol prints a verification URL and a short user code.
 
    ```txt
    Open https://x.ai/device on any device and enter code: ABCD-1234
    ```
 
-3. Open the URL on a device that has a browser (your laptop or phone), enter the code, and approve the consent screen. OpenCode polls xAI's token endpoint and stores the resulting OAuth tokens once you approve. Token refresh works the same as Option A.
+3. Open the URL on a device that has a browser (your laptop or phone), enter the code, and approve the consent screen. Daemon Protocol polls xAI's token endpoint and stores the resulting OAuth tokens once you approve. Token refresh works the same as Option A.
 
 #### Option C — API key
 
@@ -2417,7 +2417,7 @@ Configuration details:
 - **limit.context**: Maximum input tokens the model accepts.
 - **limit.output**: Maximum tokens the model can generate.
 
-The `limit` fields allow OpenCode to understand how much context you have left. Standard providers pull these from models.dev automatically.
+The `limit` fields allow Daemon Protocol to understand how much context you have left. Standard providers pull these from models.dev automatically.
 
 ---
 

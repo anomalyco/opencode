@@ -1,17 +1,17 @@
 ---
 title: Zen
-description: 由 OpenCode 提供的精選模型列表。
+description: 由 Daemon Protocol 提供的精選模型列表。
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Zen 是由 OpenCode 團隊提供、經過測試與驗證的模型清單。
+Daemon Zen 是由 Daemon Protocol 團隊提供、經過測試與驗證的模型清單。
 
-Zen 的運作方式和 OpenCode 中的其他供應商一樣。你登入 OpenCode Zen 並取得
+Zen 的運作方式和 Daemon Protocol 中的其他供應商一樣。你登入 Daemon Zen 並取得
 你的 API 金鑰。它是 **完全可選的**，你不需要使用它也能使用
-OpenCode。
+Daemon Protocol。
 
 ---
 
@@ -21,7 +21,7 @@ OpenCode。
 設定方式差異很大，因此你得到的效能與品質也會非常不同。
 
 :::tip
-我們測試了一組與 OpenCode 搭配良好的精選模型與供應商。
+我們測試了一組與 Daemon Protocol 搭配良好的精選模型與供應商。
 :::
 
 所以如果你是透過 OpenRouter 之類的服務使用模型，你永遠無法確定自己拿到的是不是
@@ -33,16 +33,16 @@ OpenCode。
 2. 接著我們與幾家供應商合作，確保這些模型能被正確提供。
 3. 最後，我們針對模型與供應商的組合進行基準測試，整理出一份我們有信心推薦的清單。
 
-OpenCode Zen 是一個 AI 閘道，讓你可以存取這些模型。
+Daemon Zen 是一個 AI 閘道，讓你可以存取這些模型。
 
 ---
 
 ## 運作方式
 
-OpenCode Zen 的運作方式和 OpenCode 中的其他供應商一樣。
+Daemon Zen 的運作方式和 Daemon Protocol 中的其他供應商一樣。
 
-1. 你登入 **<a href={console}>OpenCode Zen</a>**，加入帳單資訊，然後複製你的 API 金鑰。
-2. 你在 TUI 中執行 `/connect` 指令，選擇 OpenCode Zen，然後貼上你的 API 金鑰。
+1. 你登入 **<a href={console}>Daemon Zen</a>**，加入帳單資訊，然後複製你的 API 金鑰。
+2. 你在 TUI 中執行 `/connect` 指令，選擇 Daemon Zen，然後貼上你的 API 金鑰。
 3. 在 TUI 中執行 `/models`，查看我們推薦的模型清單。
 
 你會依請求計費，也可以為帳戶儲值。
@@ -105,7 +105,7 @@ OpenCode Zen 的運作方式和 OpenCode 中的其他供應商一樣。
 | Nemotron 3 Ultra Free  | nemotron-3-ultra-free  | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Free | deepseek-v4-flash-free | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 
-OpenCode 設定中的 [模型 ID](/docs/config/#models) 會使用 `opencode/<model-id>`
+Daemon Protocol 設定中的 [模型 ID](/docs/config/#models) 會使用 `opencode/<model-id>`
 格式。例如，如果是 GPT 5.5，你會在設定中使用 `opencode/gpt-5.5`。
 
 ---
@@ -189,11 +189,11 @@ https://opencode.ai/zen/v1/models
 
 免費模型：
 
-- DeepSeek V4 Flash Free 在 OpenCode 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
-- MiMo-V2.5 Free 在 OpenCode 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
-- North Mini Code Free 在 OpenCode 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
-- Nemotron 3 Ultra Free 在 OpenCode 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
-- Big Pickle 是一個隱身模型，在 OpenCode 上限時免費提供。團隊正在利用這段時間收集回饋並改進模型。
+- DeepSeek V4 Flash Free 在 Daemon Protocol 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
+- MiMo-V2.5 Free 在 Daemon Protocol 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
+- North Mini Code Free 在 Daemon Protocol 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
+- Nemotron 3 Ultra Free 在 Daemon Protocol 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
+- Big Pickle 是一個隱身模型，在 Daemon Protocol 上限時免費提供。團隊正在利用這段時間收集回饋並改進模型。
 
 如果你有任何問題，請<a href={email}>聯絡我們</a>。
 
@@ -295,9 +295,9 @@ Admin 可以為工作區啟用或停用特定模型。對已停用模型發出�
 
 ## 目標
 
-我們建立 OpenCode Zen，是為了：
+我們建立 Daemon Zen，是為了：
 
 1. 為編碼代理對最佳模型與供應商進行 **基準測試**。
 2. 取得 **最高品質** 的選項，而不是降低效能或改路由到更便宜的供應商。
 3. 透過以成本價銷售，把任何 **降價** 回饋給你；唯一的加價只用來支付我們的處理費。
-4. 保持 **無鎖定**，讓你能把它與任何其他編碼代理一起使用，同時也始終能在 OpenCode 中使用任何其他供應商。
+4. 保持 **無鎖定**，讓你能把它與任何其他編碼代理一起使用，同時也始終能在 Daemon Protocol 中使用任何其他供應商。

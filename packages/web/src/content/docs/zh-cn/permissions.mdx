@@ -3,7 +3,7 @@ title: 权限
 description: 控制哪些操作需要审批才能运行。
 ---
 
-OpenCode 使用 `permission` 配置来决定某个操作是否应自动运行、提示你审批，还是被阻止。
+Daemon Protocol 使用 `permission` 配置来决定某个操作是否应自动运行、提示你审批，还是被阻止。
 
 从 `v1.1.1` 开始，旧版 `tools` 布尔配置已被弃用，并已合并到 `permission` 中。旧版 `tools` 配置仍然支持，以保持向后兼容。
 
@@ -88,7 +88,7 @@ OpenCode 使用 `permission` 配置来决定某个操作是否应自动运行、
 
 ### 外部目录
 
-使用 `external_directory` 允许工具调用访问 OpenCode 启动时工作目录之外的路径。这适用于任何接受路径作为输入的工具（例如 `read`、`edit`、`glob`、`grep` 以及许多 `bash` 命令）。
+使用 `external_directory` 允许工具调用访问 Daemon Protocol 启动时工作目录之外的路径。这适用于任何接受路径作为输入的工具（例如 `read`、`edit`、`glob`、`grep` 以及许多 `bash` 命令）。
 
 主目录展开（如 `~/...`）仅影响模式的书写方式。它不会将外部路径纳入当前工作空间，因此工作目录之外的路径仍然必须通过 `external_directory` 来允许。
 
@@ -127,7 +127,7 @@ OpenCode 使用 `permission` 配置来决定某个操作是否应自动运行、
 
 ## 可用权限
 
-OpenCode 的权限以工具名称为键，外加几个安全防护项：
+Daemon Protocol 的权限以工具名称为键，外加几个安全防护项：
 
 - `read` — 读取文件（匹配文件路径）
 - `edit` — 所有文件修改（涵盖 `edit`、`write`、`patch`）
@@ -146,7 +146,7 @@ OpenCode 的权限以工具名称为键，外加几个安全防护项：
 
 ## 默认值
 
-如果你未指定任何配置，OpenCode 将使用宽松的默认值：
+如果你未指定任何配置，Daemon Protocol 将使用宽松的默认值：
 
 - 大多数权限默认为 `"allow"`。
 - `doom_loop` 和 `external_directory` 默认为 `"ask"`。
@@ -169,10 +169,10 @@ OpenCode 的权限以工具名称为键，外加几个安全防护项：
 
 ## "Ask"的作用
 
-当 OpenCode 提示审批时，界面提供三种选择：
+当 Daemon Protocol 提示审批时，界面提供三种选择：
 
 - `once` — 仅批准本次请求
-- `always` — 批准与建议模式匹配的后续请求（在当前 OpenCode 会话的剩余时间内有效）
+- `always` — 批准与建议模式匹配的后续请求（在当前 Daemon Protocol 会话的剩余时间内有效）
 - `reject` — 拒绝请求
 
 `always` 所批准的模式集合由工具提供（例如，bash 审批通常会将安全的命令前缀如 `git status*` 加入白名单）。

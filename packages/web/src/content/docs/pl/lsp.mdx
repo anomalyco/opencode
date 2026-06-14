@@ -1,15 +1,15 @@
 ---
 title: Serwery LSP
-description: OpenCode integruje się z serwerami LSP.
+description: Daemon Protocol integruje się z serwerami LSP.
 ---
 
-OpenCode może integrować się z serwerami Language Server Protocol (LSP), aby używać diagnostyki jako informacji zwrotnej dla agenta.
+Daemon Protocol może integrować się z serwerami Language Server Protocol (LSP), aby używać diagnostyki jako informacji zwrotnej dla agenta.
 
 ---
 
 ## Wbudowane
 
-OpenCode posiada kilka wbudowanych serwerów LSP dla następujących języków:
+Daemon Protocol posiada kilka wbudowanych serwerów LSP dla następujących języków:
 
 | Serwer LSP         | Rozszerzenia                                                        | Wymagania                                                                |
 | ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------ |
@@ -57,7 +57,7 @@ Możesz wyłączyć automatyczne pobieranie serwerów LSP, ustawiając zmienną 
 
 ## Jak to działa
 
-Gdy LSP jest włączony i OpenCode otwiera plik:
+Gdy LSP jest włączony i Daemon Protocol otwiera plik:
 
 1. Sprawdza plik pod kątem wszystkich dostępnych serwerów LSP.
 2. Uruchamia odpowiedni serwer LSP, jeśli jeszcze nie działa.
@@ -74,7 +74,7 @@ Serwery językowe mogą wypaść z synchronizacji, zużywać dużo pamięci, ró
 
 ## Konfiguracja
 
-Możesz włączać i dostosowywać serwery LSP poprzez sekcję `lsp` w konfiguracji OpenCode.
+Możesz włączać i dostosowywać serwery LSP poprzez sekcję `lsp` w konfiguracji Daemon Protocol.
 
 Aby włączyć wszystkie wbudowane serwery LSP, ustaw `lsp` na `true`.
 

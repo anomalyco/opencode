@@ -101,7 +101,7 @@ export function make(input: {
         "terminal-auth": {
           command: "opencode",
           args: ["auth", "login"],
-          label: "OpenCode Login",
+          label: "Daemon Protocol Login",
         },
       }
     }
@@ -127,7 +127,7 @@ export function make(input: {
       },
       authMethods: [authMethod],
       agentInfo: {
-        name: "OpenCode",
+        name: "Daemon Protocol",
         version: InstallationVersion,
       },
     }
@@ -1010,7 +1010,7 @@ function fromUnknownError(error: unknown, service?: string): Error {
   if (isAuthRequired(error)) {
     return new ACPError.AuthRequiredError({ providerId: findProviderID(error) })
   }
-  return new ACPError.ServiceFailureError({ safeMessage: "OpenCode service failure", service })
+  return new ACPError.ServiceFailureError({ safeMessage: "Daemon Protocol service failure", service })
 }
 
 function isACPError(error: unknown): error is Error {

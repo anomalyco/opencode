@@ -3,7 +3,7 @@ title: エージェントスキル
 description: SKILL.md 定義による再利用可能な動作の定義
 ---
 
-エージェントスキルにより、OpenCode はリポジトリまたはホームディレクトリから再利用可能な命令を検出できます。
+エージェントスキルにより、Daemon Protocol はリポジトリまたはホームディレクトリから再利用可能な命令を検出できます。
 スキルはネイティブの `skill` ツールを介してオンデマンドでロードされます。エージェントは利用可能なスキルを確認し、必要に応じて完全なコンテンツをロードできます。
 
 ---
@@ -11,7 +11,7 @@ description: SKILL.md 定義による再利用可能な動作の定義
 ## ファイルの配置
 
 スキル名ごとにフォルダーを 1 つ作成し、その中に `SKILL.md` を置きます。
-OpenCode は次の場所を検索します。
+Daemon Protocol は次の場所を検索します。
 
 - プロジェクト設定: `.opencode/skills/<name>/SKILL.md`
 - グローバル設定: `~/.config/opencode/skills/<name>/SKILL.md`
@@ -24,7 +24,7 @@ OpenCode は次の場所を検索します。
 
 ## 検出の仕組み
 
-プロジェクトのローカルパスの場合、OpenCode は現在の作業ディレクトリから git ワークツリーに到達するまで進みます。
+プロジェクトのローカルパスの場合、Daemon Protocol は現在の作業ディレクトリから git ワークツリーに到達するまで進みます。
 途中で、一致する `skills/*/SKILL.md` を `.opencode/` に読み込み、一致する `.claude/skills/*/SKILL.md` または `.agents/skills/*/SKILL.md` を読み込みます。
 
 グローバル定義は、`~/.config/opencode/skills/*/SKILL.md`、`~/.claude/skills/*/SKILL.md`、および `~/.agents/skills/*/SKILL.md` からもロードされます。
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## ツールの説明認識
 
-OpenCode では、`skill` ツールの説明に利用可能なスキルがリストされています。
+Daemon Protocol では、`skill` ツールの説明に利用可能なスキルがリストされています。
 各エントリにはスキル名と説明が含まれます。
 
 ```xml
