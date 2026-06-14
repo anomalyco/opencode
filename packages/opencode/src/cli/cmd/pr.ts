@@ -5,14 +5,31 @@ import { Git } from "@/git"
 import { InstanceRef } from "@/effect/instance-ref"
 import { Process } from "@/util/process"
 
+export function parsePrNumber(input: string | number): number | undefined {
+  const normalized = String(input).trim().replace(/^#/, "")
+  if (!/^\d+$/.test(normalized)) return undefined
+  const value = Number(normalized)
+  if (!Number.isSafeInteger(value)) return undefined
+  if (value <= 0) return undefined
+  return value
+}
+
+export function formatInvalidPrNumber(input: string | number) {
+  return `Invalid PR number ${JSON.stringify(String(input))}. Pass a positive integer, optionally prefixed with "#".`
+}
+
 export const PrCommand = effectCmd({
   command: "pr <number>",
   describe: "fetch and checkout a GitHub PR branch, then run opencode",
   builder: (yargs) =>
     yargs.positional("number", {
-      type: "number",
+      type: "string",
       describe: "PR number to checkout",
       demandOption: true,
+      coerce: (value: string | number) => {
+        const parsed = parsePrNumber(value)
+        return parsed ?? value
+      },
     }),
   handler: Effect.fn("Cli.pr")(function* (args) {
     const ctx = yield* InstanceRef
@@ -24,7 +41,8 @@ export const PrCommand = effectCmd({
     const git = yield* Git.Service
     const worktree = ctx.worktree
 
-    const prNumber = args.number
+    const prNumber = parsePrNumber(args.number)
+    if (prNumber === undefined) return yield* fail(formatInvalidPrNumber(args.number))
     const localBranchName = `pr/${prNumber}`
     UI.println(`Fetching and checking out PR #${prNumber}...`)
 
@@ -111,5 +129,6 @@ export const PrCommand = effectCmd({
     // Match legacy throw semantics — propagate as a defect so the top-level
     // index.ts catch handles it identically (exit 1, "Unexpected error" banner).
     if (code !== 0) return yield* Effect.die(new Error(`opencode exited with code ${code}`))
+    return undefined
   }),
 })
