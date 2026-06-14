@@ -7,7 +7,7 @@ import { Agent } from "../../src/agent/agent"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Truncate } from "@/tool/truncate"
 import { testEffect } from "../lib/effect"
-import { Bus } from "../../src/bus"
+import { EventV2Bridge } from "../../src/event-v2-bridge"
 
 const ctx = {
   sessionID: SessionID.make("ses_test-session"),
@@ -22,7 +22,7 @@ const ctx = {
 
 const it = testEffect(
   Layer.mergeAll(
-    Question.layer.pipe(Layer.provideMerge(Bus.layer)),
+    Question.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer)),
     CrossSpawnSpawner.defaultLayer,
     Truncate.defaultLayer,
     Agent.defaultLayer,
@@ -30,10 +30,13 @@ const it = testEffect(
 )
 
 const pending = Effect.fn("QuestionToolTest.pending")(function* (question: Question.Interface) {
-  const bus = yield* Bus.Service
+  const events = yield* EventV2Bridge.Service
   const asked = yield* Queue.unbounded<void>()
-  const off = yield* bus.subscribeCallback(Question.Event.Asked, () => Queue.offerUnsafe(asked, undefined))
-  yield* Effect.addFinalizer(() => Effect.sync(off))
+  const off = yield* events.listen((event) => {
+    if (event.type === Question.Event.Asked.type) Queue.offerUnsafe(asked, undefined)
+    return Effect.void
+  })
+  yield* Effect.addFinalizer(() => off)
 
   for (;;) {
     const items = yield* question.list()

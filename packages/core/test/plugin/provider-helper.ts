@@ -3,11 +3,12 @@ import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { expect } from "bun:test"
 import { Effect, Layer, Option } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { Integration } from "@opencode-ai/core/integration"
+import { Credential } from "@opencode-ai/core/credential"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Location } from "@opencode-ai/core/location"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
-import { Policy } from "@opencode-ai/core/policy"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "../fixture/location"
@@ -47,53 +48,74 @@ export const catalogLayer = Layer.succeed(
   }),
 )
 
+const integrations = Integration.locationLayer.pipe(
+  Layer.provide(EventV2.defaultLayer),
+  Layer.provide(
+    Layer.mock(Credential.Service)({
+      create: () => Effect.die("unexpected credential creation"),
+      all: () => Effect.succeed([]),
+      list: () => Effect.succeed([]),
+    }),
+  ),
+)
+
 export const it = testEffect(
-  Catalog.layer.pipe(
-    Layer.provideMerge(PluginV2.defaultLayer),
+  Catalog.locationLayer.pipe(
+    Layer.provideMerge(integrations),
+    Layer.provideMerge(
+      Layer.mock(Credential.Service)({
+        all: () => Effect.succeed([]),
+      }),
+    ),
     Layer.provideMerge(EventV2.defaultLayer),
-    Layer.provide(Policy.defaultLayer),
     Layer.provideMerge(locationLayer),
     Layer.provideMerge(npmLayer),
   ),
 )
 
-export function provider(providerID: string, options?: Partial<ProviderV2.Info>) {
+type ProviderInput = Partial<Omit<ProviderV2.Info, "api" | "request">> & {
+  api?: ProviderV2.Api
+  request?: ProviderV2.Request
+}
+
+type ModelInput = Partial<Omit<ModelV2.Info, "api" | "request">> & {
+  api?: (ProviderV2.Api & { id?: ModelV2.ID }) | { id: ModelV2.ID }
+  request?: ModelV2.Info["request"]
+}
+
+export function provider(providerID: string, options?: ProviderInput) {
   return new ProviderV2.Info({
     ...ProviderV2.Info.empty(ProviderV2.ID.make(providerID)),
-    endpoint: {
+    api: options?.api ?? {
       type: "aisdk",
       package: "test-provider",
     },
     ...options,
-    options: {
+    request: {
       headers: {},
       body: {},
-      aisdk: {
-        provider: {},
-        request: {},
-      },
-      ...options?.options,
+      ...options?.request,
     },
   })
 }
 
-export function model(providerID: string, modelID: string, options?: Partial<ModelV2.Info>) {
+export function model(providerID: string, modelID: string, options?: ModelInput) {
   return new ModelV2.Info({
     ...ModelV2.Info.empty(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID)),
-    apiID: ModelV2.ID.make(modelID),
-    endpoint: {
-      type: "aisdk",
-      package: "test-provider",
-    },
     ...options,
-    options: {
+    api:
+      options?.api && "type" in options.api
+        ? { id: ModelV2.ID.make(modelID), ...options.api }
+        : {
+            id: ModelV2.ID.make(modelID),
+            ...options?.api,
+            type: "aisdk",
+            package: "test-provider",
+          },
+    request: {
       headers: {},
       body: {},
-      aisdk: {
-        provider: {},
-        request: {},
-      },
-      ...options?.options,
+      ...options?.request,
     },
   })
 }

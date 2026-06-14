@@ -3,10 +3,29 @@
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
 import * as NodeServices from "@effect/platform-node/NodeServices"
 import * as Effect from "effect/Effect"
-import * as Command from "effect/unstable/cli/Command"
+import { Commands } from "./commands/commands"
+import { Runtime } from "./framework/runtime"
+import { Daemon } from "./services/daemon"
 
-const cli = Command.make("opencode", {}, () => Effect.void).pipe(
-  Command.withDescription("OpenCode command line interface"),
+const Handlers = Runtime.handlers(Commands, {
+  $: () => import("./commands/handlers/default"),
+  debug: {
+    agents: () => import("./commands/handlers/debug/agents"),
+  },
+  migrate: () => import("./commands/handlers/migrate"),
+  service: {
+    start: () => import("./commands/handlers/service/start"),
+    restart: () => import("./commands/handlers/service/restart"),
+    status: () => import("./commands/handlers/service/status"),
+    stop: () => import("./commands/handlers/service/stop"),
+    password: () => import("./commands/handlers/service/password"),
+  },
+  serve: () => import("./commands/handlers/serve"),
+})
+
+Runtime.run(Commands, Handlers, { version: "local" }).pipe(
+  Effect.provide(Daemon.defaultLayer),
+  Effect.provide(NodeServices.layer),
+  Effect.scoped,
+  NodeRuntime.runMain,
 )
-
-Command.run(cli, { version: "local" }).pipe(Effect.provide(NodeServices.layer), NodeRuntime.runMain)

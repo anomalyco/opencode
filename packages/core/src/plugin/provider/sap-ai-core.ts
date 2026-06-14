@@ -37,7 +37,7 @@ export const SapAICorePlugin = PluginV2.define({
       }),
       "aisdk.language": Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("sap-ai-core")) return
-        evt.language = evt.sdk(evt.model.apiID)
+        evt.language = evt.sdk(evt.model.api.id)
       }),
     }
   }),

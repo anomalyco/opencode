@@ -3,6 +3,8 @@ import { createServer, type Server } from "node:http"
 import { streamText } from "ai"
 import { Effect, Layer } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { disposeAllInstances, provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { testProviderConfig } from "../lib/test-provider"
@@ -10,7 +12,6 @@ import { Env } from "@/env"
 import { Plugin } from "@/plugin"
 import { Provider } from "@/provider/provider"
 import { ProviderError } from "@/provider/error"
-import { ModelID, ProviderID } from "@/provider/schema"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -23,7 +24,7 @@ const it = testEffect(
 it.live("headerTimeout does not abort delayed SSE body after headers arrive", () =>
   Effect.gen(function* () {
     const server = yield* Effect.acquireRelease(
-      Effect.promise(() => delayedBodyServer(250)),
+      Effect.promise(() => delayedBodyServer(1_000)),
       (server) => Effect.sync(() => server.server.close()),
     )
 
@@ -31,7 +32,7 @@ it.live("headerTimeout does not abort delayed SSE body after headers arrive", ()
       () =>
         Effect.gen(function* () {
           const provider = yield* Provider.Service
-          const model = yield* provider.getModel(ProviderID.make("test"), ModelID.make("test-model"))
+          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
           const result = streamText({
             model: yield* provider.getLanguage(model),
             messages: [{ role: "user", content: "hello" }],
@@ -39,7 +40,7 @@ it.live("headerTimeout does not abort delayed SSE body after headers arrive", ()
 
           expect(yield* Effect.promise(() => result.text)).toBe("late")
         }),
-      { config: providerConfig(server.url, { headerTimeout: 50 }) },
+      { config: providerConfig(server.url, { headerTimeout: 500 }) },
     )
   }),
 )
@@ -55,7 +56,7 @@ it.live("chunkTimeout raises a response stream error when SSE body stalls", () =
       () =>
         Effect.gen(function* () {
           const provider = yield* Provider.Service
-          const model = yield* provider.getModel(ProviderID.make("test"), ModelID.make("test-model"))
+          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
           const result = streamText({
             model: yield* provider.getLanguage(model),
             onError() {},
@@ -89,7 +90,7 @@ it.live("headerTimeout aborts when response headers do not arrive", () =>
       () =>
         Effect.gen(function* () {
           const provider = yield* Provider.Service
-          const model = yield* provider.getModel(ProviderID.make("test"), ModelID.make("test-model"))
+          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
           const result = streamText({
             model: yield* provider.getLanguage(model),
             onError() {},
@@ -121,7 +122,7 @@ it.live("headerTimeout is opt-in for non-OpenAI providers", () =>
       () =>
         Effect.gen(function* () {
           const provider = yield* Provider.Service
-          const model = yield* provider.getModel(ProviderID.make("test"), ModelID.make("test-model"))
+          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
           const result = streamText({
             model: yield* provider.getLanguage(model),
             messages: [{ role: "user", content: "hello" }],
@@ -142,7 +143,7 @@ it.live("OpenAI Codex headerTimeout default can be disabled by config", () =>
           () =>
             Effect.gen(function* () {
               const provider = yield* Provider.Service
-              const openai = yield* provider.getProvider(ProviderID.openai)
+              const openai = yield* provider.getProvider(ProviderV2.ID.openai)
               expect(openai.options.headerTimeout).toBe(false)
             }),
           { config: { provider: { openai: { options: { headerTimeout: false } } } } },
@@ -159,7 +160,7 @@ it.live("OpenAI API auth gets default headerTimeout", () =>
         yield* provideTmpdirInstance(() =>
           Effect.gen(function* () {
             const provider = yield* Provider.Service
-            const openai = yield* provider.getProvider(ProviderID.openai)
+            const openai = yield* provider.getProvider(ProviderV2.ID.openai)
             expect(openai.options.headerTimeout).toBe(10_000)
           }),
         )

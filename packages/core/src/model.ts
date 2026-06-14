@@ -1,6 +1,7 @@
 import { DateTime, Schema } from "effect"
 import { DateTimeUtcFromMillis } from "effect/Schema"
 import { ProviderV2 } from "./provider"
+import { ModelRequest } from "./model-request"
 
 export const ID = Schema.String.pipe(Schema.brand("ModelV2.ID"))
 export type ID = typeof ID.Type
@@ -40,21 +41,32 @@ export const Ref = Schema.Struct({
 })
 export type Ref = typeof Ref.Type
 
+export const Api = Schema.Union([
+  Schema.Struct({
+    id: ID,
+    ...ProviderV2.AISDK.fields,
+  }),
+  Schema.Struct({
+    id: ID,
+    ...ProviderV2.Native.fields,
+  }),
+]).pipe(Schema.toTaggedUnion("type"))
+export type Api = typeof Api.Type
+
 export class Info extends Schema.Class<Info>("ModelV2.Info")({
   id: ID,
-  apiID: ID,
   providerID: ProviderV2.ID,
   family: Family.pipe(Schema.optional),
   name: Schema.String,
-  endpoint: ProviderV2.Endpoint,
+  api: Api,
   capabilities: Capabilities,
-  options: Schema.Struct({
-    ...ProviderV2.Options.fields,
+  request: Schema.Struct({
+    ...ModelRequest.Request.fields,
     variant: Schema.String.pipe(Schema.optional),
   }),
   variants: Schema.Struct({
     id: VariantID,
-    ...ProviderV2.Options.fields,
+    ...ModelRequest.Request.fields,
   }).pipe(Schema.Array),
   time: Schema.Struct({
     released: DateTimeUtcFromMillis,
@@ -68,27 +80,26 @@ export class Info extends Schema.Class<Info>("ModelV2.Info")({
     output: Schema.Int,
   }),
 }) {
-  static empty(providerID: ProviderV2.ID, modelID: ID) {
+  static empty(providerID: ProviderV2.ID, modelID: ID): Info {
     return new Info({
       id: modelID,
-      apiID: modelID,
       providerID,
       name: modelID,
-      endpoint: {
-        type: "unknown",
+      api: {
+        id: modelID,
+        type: "native",
+        settings: {},
       },
       capabilities: {
         tools: false,
         input: [],
         output: [],
       },
-      options: {
+      request: {
         headers: {},
         body: {},
-        aisdk: {
-          provider: {},
-          request: {},
-        },
+        generation: {},
+        options: {},
       },
       variants: [],
       time: {

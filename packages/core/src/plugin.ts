@@ -6,6 +6,7 @@ import { Context, Effect, Exit, Layer, Schema, Scope } from "effect"
 import type { ModelV2 } from "./model"
 import type { Catalog } from "./catalog"
 import { EventV2 } from "./event"
+import { KeyedMutex } from "./effect/keyed-mutex"
 
 export const ID = Schema.String.pipe(Schema.brand("Plugin.ID"))
 export type ID = typeof ID.Type
@@ -22,14 +23,6 @@ export const Event = {
 type HookSpec = {
   "catalog.transform": {
     input: Catalog.Editor
-    output: {}
-  }
-  "account.switched": {
-    input: {
-      serviceID: import("./account").AccountV2.ServiceID
-      from?: import("./account").AccountV2.ID
-      to?: import("./account").AccountV2.ID
-    }
     output: {}
   }
   "aisdk.language": {
@@ -105,22 +98,36 @@ export const layer = Layer.effect(
       scope: Scope.Closeable
     }[] = []
     const events = yield* EventV2.Service
+    const scope = yield* Scope.Scope
+    const locks = KeyedMutex.makeUnsafe<ID>()
 
     const svc = Service.of({
       add: Effect.fn("Plugin.add")(function* (input) {
-        const existing = hooks.find((item) => item.id === input.id)
-        if (existing) yield* Scope.close(existing.scope, Exit.void).pipe(Effect.ignore)
-        const scope = yield* Scope.make()
-        const result = yield* input.effect.pipe(Scope.provide(scope))
-        hooks = [
-          ...hooks.filter((item) => item.id !== input.id),
-          {
-            id: input.id,
-            hooks: result ?? {},
-            scope,
-          },
-        ]
-        yield* events.publish(Event.Added, { id: input.id })
+        yield* locks.withLock(input.id)(
+          Effect.gen(function* () {
+            const existing = hooks.find((item) => item.id === input.id)
+            if (existing) yield* Scope.close(existing.scope, Exit.void).pipe(Effect.ignore)
+            const childScope = yield* Scope.fork(scope)
+            const result = yield* input.effect.pipe(
+              Scope.provide(childScope),
+              Effect.withSpan("Plugin.load", {
+                attributes: {
+                  "plugin.id": input.id,
+                },
+              }),
+              Effect.onExit((exit) => (Exit.isFailure(exit) ? Scope.close(childScope, exit) : Effect.void)),
+            )
+            hooks = [
+              ...hooks.filter((item) => item.id !== input.id),
+              {
+                id: input.id,
+                hooks: result ?? {},
+                scope: childScope,
+              },
+            ]
+            yield* events.publish(Event.Added, { id: input.id })
+          }),
+        )
       }),
       trigger: Effect.fn("Plugin.trigger")(function* (name, input, output) {
         return yield* svc.triggerFor(ID.make("*"), name, input, output)
@@ -160,16 +167,20 @@ export const layer = Layer.effect(
         return event as any
       }),
       remove: Effect.fn("Plugin.remove")(function* (id) {
-        const existing = hooks.find((item) => item.id === id)
-        hooks = hooks.filter((item) => item.id !== id)
-        if (existing) yield* Scope.close(existing.scope, Exit.void).pipe(Effect.ignore)
+        yield* locks.withLock(id)(
+          Effect.gen(function* () {
+            const existing = hooks.find((item) => item.id === id)
+            hooks = hooks.filter((item) => item.id !== id)
+            if (existing) yield* Scope.close(existing.scope, Exit.void).pipe(Effect.ignore)
+          }),
+        )
       }),
     })
     return svc
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(EventV2.defaultLayer))
+export const locationLayer = layer
 
 // opencode
 // sdcok

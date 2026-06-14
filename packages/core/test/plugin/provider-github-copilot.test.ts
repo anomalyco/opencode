@@ -61,7 +61,7 @@ describe("GithubCopilotPlugin", () => {
       yield* plugin.trigger(
         "aisdk.language",
         {
-          model: model("github-copilot", "alias", { apiID: ModelV2.ID.make("claude-sonnet-4") }),
+          model: model("github-copilot", "alias", { api: { id: ModelV2.ID.make("claude-sonnet-4") } }),
           sdk: { languageModel: fakeSelectorSdk(calls).languageModel },
           options: {},
         },
@@ -119,7 +119,7 @@ describe("GithubCopilotPlugin", () => {
       yield* plugin.trigger(
         "aisdk.language",
         {
-          model: model("github-copilot", "default", { apiID: ModelV2.ID.make("gpt-5") }),
+          model: model("github-copilot", "default", { api: { id: ModelV2.ID.make("gpt-5") } }),
           sdk: fakeSelectorSdk(calls),
           options: {},
         },
@@ -128,7 +128,7 @@ describe("GithubCopilotPlugin", () => {
       yield* plugin.trigger(
         "aisdk.language",
         {
-          model: model("github-copilot", "small", { apiID: ModelV2.ID.make("gpt-5-mini") }),
+          model: model("github-copilot", "small", { api: { id: ModelV2.ID.make("gpt-5-mini") } }),
           sdk: fakeSelectorSdk(calls),
           options: {},
         },
@@ -137,7 +137,7 @@ describe("GithubCopilotPlugin", () => {
       yield* plugin.trigger(
         "aisdk.language",
         {
-          model: model("github-copilot", "sonnet", { apiID: ModelV2.ID.make("claude-sonnet-4") }),
+          model: model("github-copilot", "sonnet", { api: { id: ModelV2.ID.make("claude-sonnet-4") } }),
           sdk: fakeSelectorSdk(calls),
           options: {},
         },

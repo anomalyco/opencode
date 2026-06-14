@@ -6,6 +6,9 @@ import { PositiveInt } from "../schema"
 export class Local extends Schema.Class<Local>("ConfigV2.MCP.Local")({
   type: Schema.Literal("local"),
   command: Schema.String.pipe(Schema.Array),
+  cwd: Schema.String.pipe(Schema.optional).annotate({
+    description: "Working directory for the MCP server process. Relative paths resolve from the workspace directory.",
+  }),
   environment: Schema.Record(Schema.String, Schema.String).pipe(Schema.optional),
   disabled: Schema.Boolean.pipe(Schema.optional),
   timeout: PositiveInt.pipe(Schema.optional),

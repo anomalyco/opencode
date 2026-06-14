@@ -1,13 +1,13 @@
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/components/icon-button-v2.jsx"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/components/icon.jsx"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { Popover } from "@opencode-ai/ui/popover"
 import { Suspense, createMemo, createSignal, lazy, Show, type JSX } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
-import { useServers } from "@/context/servers"
+import { useGlobal } from "@/context/global"
 
 const Body = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverBody })))
 const ServerBody = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverServerBody })))
@@ -15,19 +15,19 @@ const ServerBody = lazy(() => import("./status-popover-body").then((x) => ({ def
 export function StatusPopover() {
   const language = useLanguage()
   const server = useServer()
-  const servers = useServers()
+  const global = useGlobal()
   const sync = useSync()
   const [shown, setShown] = createSignal(false)
-  const ready = createMemo(() => servers.health[server.key]?.healthy === false || sync.data.mcp_ready)
+  const ready = createMemo(() => global.servers.health[server.key]?.healthy === false || sync().data.mcp_ready)
   const mcpIssue = createMemo(() => {
-    const mcp = Object.values(sync.data.mcp ?? {})
+    const mcp = Object.values(sync().data.mcp ?? {})
     const failed = mcp.some((item) => item.status === "failed" || item.status === "needs_client_registration")
     const warn = mcp.some((item) => item.status === "needs_auth")
     if (failed) return "critical" as const
     if (warn) return "warning" as const
   })
-  const serverHealthy = () => servers.health[server.key]?.healthy === true
-  const healthy = createMemo(() => servers.health[server.key]?.healthy === true && !mcpIssue())
+  const serverHealthy = () => global.servers.health[server.key]?.healthy === true
+  const healthy = createMemo(() => global.servers.health[server.key]?.healthy === true && !mcpIssue())
 
   return (
     <Popover
@@ -82,13 +82,13 @@ export function StatusPopoverV2(props: { scope?: "server" }) {
 function DirectoryStatusPopover() {
   const language = useLanguage()
   const server = useServer()
-  const servers = useServers()
+  const global = useGlobal()
   const sync = useSync()
   const [shown, setShown] = createSignal(false)
-  const serverHealth = () => servers.health[server.key]?.healthy
-  const ready = createMemo(() => serverHealth() === false || sync.data.mcp_ready)
+  const serverHealth = () => global.servers.health[server.key]?.healthy
+  const ready = createMemo(() => serverHealth() === false || sync().data.mcp_ready)
   const mcpIssue = createMemo(() => {
-    const mcp = Object.values(sync.data.mcp ?? {})
+    const mcp = Object.values(sync().data.mcp ?? {})
     const failed = mcp.some((item) => item.status === "failed" || item.status === "needs_client_registration")
     const warn = mcp.some((item) => item.status === "needs_auth")
     if (failed) return "critical" as const
@@ -116,9 +116,9 @@ function DirectoryStatusPopover() {
 function ServerStatusPopover() {
   const language = useLanguage()
   const server = useServer()
-  const servers = useServers()
+  const global = useGlobal()
   const [shown, setShown] = createSignal(false)
-  const serverHealth = () => servers.health[server.key]?.healthy
+  const serverHealth = () => global.servers.health[server.key]?.healthy
   const state = createMemo<StatusPopoverState>(() => ({
     shown: shown(),
     ready: serverHealth() !== undefined,

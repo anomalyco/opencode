@@ -1,13 +1,11 @@
 import type { AgentSideConnection, Usage } from "@agentclientprotocol/sdk"
-import * as Log from "@opencode-ai/core/util/log"
 import type { AssistantMessage as OpenCodeAssistantMessage, Message } from "@opencode-ai/sdk/v2"
 import { InstanceRef } from "@/effect/instance-ref"
 import { InstanceStore } from "@/project/instance-store"
-import { ModelID, ProviderID } from "@/provider/schema"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { Provider } from "@/provider/provider"
 import { Context, Effect, Layer, SynchronizedRef } from "effect"
-
-const log = Log.create({ service: "acp-usage" })
 
 export type AssistantTokenCost = Pick<OpenCodeAssistantMessage, "cost" | "tokens">
 
@@ -38,7 +36,7 @@ export interface MessageLoaderInterface {
 }
 
 export interface ContextLimitLoaderInterface {
-  readonly providers: (directory: string) => Effect.Effect<Record<ProviderID, Provider.Info>, unknown>
+  readonly providers: (directory: string) => Effect.Effect<Record<ProviderV2.ID, Provider.Info>, unknown>
 }
 
 export type UsageConnection = Pick<AgentSideConnection, "sessionUpdate">
@@ -49,8 +47,8 @@ export interface Interface {
   readonly totalSessionCost: (messages: readonly SessionMessage[]) => number
   readonly contextLimit: (input: {
     readonly directory: string
-    readonly providerID: ProviderID
-    readonly modelID: ModelID
+    readonly providerID: ProviderV2.ID
+    readonly modelID: ModelV2.ID
   }) => Effect.Effect<number | undefined>
   readonly sendUpdate: (input: {
     readonly connection: UsageConnection
@@ -110,9 +108,9 @@ export function totalSessionCost(messages: readonly SessionMessage[]): number {
 }
 
 export function findContextLimit(
-  providers: Record<ProviderID, Provider.Info>,
-  providerID: ProviderID,
-  modelID: ModelID,
+  providers: Record<ProviderV2.ID, Provider.Info>,
+  providerID: ProviderV2.ID,
+  modelID: ModelV2.ID,
 ): number | undefined {
   return providers[providerID]?.models[modelID]?.limit.context
 }
@@ -143,8 +141,8 @@ export const layer = Layer.effect(
 
     const cachedLimit = Effect.fnUntraced(function* (input: {
       readonly directory: string
-      readonly providerID: ProviderID
-      readonly modelID: ModelID
+      readonly providerID: ProviderV2.ID
+      readonly modelID: ModelV2.ID
     }) {
       return yield* SynchronizedRef.modifyEffect(
         limits,
@@ -156,10 +154,9 @@ export const layer = Layer.effect(
             contextLimitLoader.providers(input.directory).pipe(
               Effect.map((providers) => findContextLimit(providers, input.providerID, input.modelID)),
               Effect.catch((error) =>
-                Effect.sync(() => {
-                  log.error("failed to get providers for usage context limit", { error })
-                  return undefined
-                }),
+                Effect.logError("failed to get providers for usage context limit", { error: error }).pipe(
+                  Effect.as(undefined),
+                ),
               ),
             ),
           )
@@ -170,8 +167,8 @@ export const layer = Layer.effect(
 
     const contextLimit = Effect.fn("ACPUsage.contextLimit")(function* (input: {
       readonly directory: string
-      readonly providerID: ProviderID
-      readonly modelID: ModelID
+      readonly providerID: ProviderV2.ID
+      readonly modelID: ModelV2.ID
     }) {
       return yield* yield* cachedLimit(input)
     })
@@ -181,14 +178,13 @@ export const layer = Layer.effect(
       readonly sessionID: string
       readonly directory: string
     }) {
-      const messages = yield* messageLoader.messages({ sessionID: input.sessionID, directory: input.directory }).pipe(
-        Effect.catch((error) =>
-          Effect.sync(() => {
-            log.error("failed to fetch messages for usage update", { error })
-            return undefined
-          }),
-        ),
-      )
+      const messages = yield* messageLoader
+        .messages({ sessionID: input.sessionID, directory: input.directory })
+        .pipe(
+          Effect.catch((error) =>
+            Effect.logError("failed to fetch messages for usage update", { error: error }).pipe(Effect.as(undefined)),
+          ),
+        )
       if (!messages) return
 
       const message = latestAssistantMessage(messages)
@@ -197,8 +193,8 @@ export const layer = Layer.effect(
 
       const size = yield* contextLimit({
         directory: input.directory,
-        providerID: ProviderID.make(message.providerID),
-        modelID: ModelID.make(message.modelID),
+        providerID: ProviderV2.ID.make(message.providerID),
+        modelID: ModelV2.ID.make(message.modelID),
       })
       if (!size) return
 
@@ -213,9 +209,7 @@ export const layer = Layer.effect(
               cost: { amount: totalSessionCost(messages), currency: "USD" },
             },
           })
-          .catch((error) => {
-            log.error("failed to send usage update", { error })
-          }),
+          .catch(() => {}),
       )
     })
 

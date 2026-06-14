@@ -1,31 +1,33 @@
 import { describe, expect } from "bun:test"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { Database } from "@opencode-ai/core/database/database"
+import { EventV2 } from "@opencode-ai/core/event"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Deferred, Effect, Exit, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
-import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
-import * as Log from "@opencode-ai/core/util/log"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { provideInstance, tmpdirScoped } from "../fixture/fixture"
+import { provideInstance, testInstanceStoreLayer, tmpdirScoped } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { Bus } from "@/bus"
 import { Storage } from "@/storage/storage"
-import { SyncEvent } from "@/sync"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { BackgroundJob } from "@/background/job"
-
-void Log.init({ print: false })
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { GlobalBus } from "@/bus/global"
 
 const it = testEffect(
   Layer.mergeAll(
     SessionNs.layer.pipe(
-      Layer.provide(Bus.layer),
       Layer.provide(Storage.defaultLayer),
-      Layer.provide(SyncEvent.defaultLayer),
+      Layer.provide(Database.defaultLayer),
+      Layer.provideMerge(EventV2Bridge.defaultLayer),
+      Layer.provide(SessionProjector.defaultLayer),
       Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces: false })),
       Layer.provide(BackgroundJob.defaultLayer),
     ),
     CrossSpawnSpawner.defaultLayer,
+    testInstanceStoreLayer,
   ),
 )
 
@@ -37,24 +39,22 @@ const awaitDeferred = <T>(deferred: Deferred.Deferred<T>, message: string) =>
 
 const remove = (id: SessionID) => SessionNs.use.remove(id)
 
-const subscribeGlobal = (type: string, callback: (event: NonNullable<GlobalEvent["payload"]>) => void) => {
-  const listener = (event: GlobalEvent) => {
-    if (event.payload?.type === type) callback(event.payload)
-  }
-  GlobalBus.on("event", listener)
-  return () => GlobalBus.off("event", listener)
-}
-
 describe("session.created event", () => {
   it.instance("should emit session.created event when session is created", () =>
     Effect.gen(function* () {
       const session = yield* SessionNs.Service
+      const events = yield* EventV2Bridge.Service
       const received = yield* Deferred.make<SessionNs.Info>()
 
-      const unsub = subscribeGlobal(SessionNs.Event.Created.type, (event) => {
-        Deferred.doneUnsafe(received, Effect.succeed(event.properties.info as SessionNs.Info))
+      const unsub = yield* events.listen((event) => {
+        if (event.type === SessionNs.Event.Created.type)
+          Deferred.doneUnsafe(
+            received,
+            Effect.succeed((event.data as typeof SessionNs.Event.Created.data.Type).info as SessionNs.Info),
+          )
+        return Effect.void
       })
-      yield* Effect.addFinalizer(() => Effect.sync(unsub))
+      yield* Effect.addFinalizer(() => unsub)
 
       const info = yield* session.create({})
       const receivedInfo = yield* awaitDeferred(received, "timed out waiting for session.created")
@@ -72,6 +72,7 @@ describe("session.created event", () => {
   it.instance("session.created event should be emitted before session.updated", () =>
     Effect.gen(function* () {
       const session = yield* SessionNs.Service
+      const source = yield* EventV2Bridge.Service
       const events: string[] = []
       const received = yield* Deferred.make<string[]>()
       const push = (event: string) => {
@@ -81,17 +82,15 @@ describe("session.created event", () => {
         }
       }
 
-      const unsubCreated = subscribeGlobal(SessionNs.Event.Created.type, () => {
-        push("created")
+      const unsubscribe = yield* source.listen((event) => {
+        if (event.type === SessionNs.Event.Created.type) push("created")
+        if (event.type === SessionNs.Event.Updated.type) push("updated")
+        return Effect.void
       })
-      yield* Effect.addFinalizer(() => Effect.sync(unsubCreated))
-
-      const unsubUpdated = subscribeGlobal(SessionNs.Event.Updated.type, () => {
-        push("updated")
-      })
-      yield* Effect.addFinalizer(() => Effect.sync(unsubUpdated))
+      yield* Effect.addFinalizer(() => unsubscribe)
 
       const info = yield* session.create({})
+      yield* session.setTitle({ sessionID: info.id, title: "updated" })
       const receivedEvents = yield* awaitDeferred(received, "timed out waiting for session created/updated events")
 
       expect(receivedEvents).toContain("created")
@@ -101,14 +100,40 @@ describe("session.created event", () => {
       yield* session.remove(info.id)
     }),
   )
+
+  it.instance("emits legacy global sync payload", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const received = yield* Deferred.make<{ syncEvent: EventV2.SerializedEvent }>()
+      const listener = (event: { payload: { type?: string; syncEvent?: EventV2.SerializedEvent } }) => {
+        if (event.payload.type === "sync" && event.payload.syncEvent)
+          Deferred.doneUnsafe(received, Effect.succeed({ syncEvent: event.payload.syncEvent }))
+      }
+      GlobalBus.on("event", listener)
+      yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", listener)))
+
+      const info = yield* session.create({})
+      const event = yield* awaitDeferred(received, "timed out waiting for legacy global sync event")
+
+      expect(event.syncEvent).toMatchObject({
+        type: EventV2.versionedType(SessionNs.Event.Created.type, 1),
+        seq: 0,
+        aggregateID: info.id,
+        data: { sessionID: info.id },
+      })
+
+      yield* session.remove(info.id)
+    }),
+  )
 })
 
-describe("step-finish token propagation via Bus event", () => {
+describe("step-finish token propagation via event", () => {
   it.instance(
     "non-zero tokens propagate through PartUpdated event",
     () =>
       Effect.gen(function* () {
         const session = yield* SessionNs.Service
+        const events = yield* EventV2Bridge.Service
         const info = yield* session.create({})
 
         const messageID = MessageID.ascending()
@@ -121,16 +146,21 @@ describe("step-finish token propagation via Bus event", () => {
           model: { providerID: "test", modelID: "test" },
           tools: {},
           mode: "",
-        } as unknown as MessageV2.Info)
+        } as unknown as SessionV1.Info)
 
-        // Bus subscribers receive readonly Schema.Type payloads; `MessageV2.Part`
+        // Event subscribers receive readonly Schema.Type payloads; `SessionV1.Part`
         // is the mutable domain type. Cast bridges the two — safe because the
         // test only reads the value afterwards.
-        const received = yield* Deferred.make<MessageV2.Part>()
-        const unsub = subscribeGlobal(MessageV2.Event.PartUpdated.type, (event) => {
-          Deferred.doneUnsafe(received, Effect.succeed(event.properties.part as MessageV2.Part))
+        const received = yield* Deferred.make<SessionV1.Part>()
+        const unsub = yield* events.listen((event) => {
+          if (event.type === MessageV2.Event.PartUpdated.type)
+            Deferred.doneUnsafe(
+              received,
+              Effect.succeed((event.data as typeof MessageV2.Event.PartUpdated.data.Type).part as SessionV1.Part),
+            )
+          return Effect.void
         })
-        yield* Effect.addFinalizer(() => Effect.sync(unsub))
+        yield* Effect.addFinalizer(() => unsub)
 
         const tokens = {
           total: 1500,
@@ -154,7 +184,7 @@ describe("step-finish token propagation via Bus event", () => {
         const receivedPart = yield* awaitDeferred(received, "timed out waiting for message.part.updated")
 
         expect(receivedPart.type).toBe("step-finish")
-        const finish = receivedPart as MessageV2.StepFinishPart
+        const finish = receivedPart as SessionV1.StepFinishPart
         expect(finish.tokens.input).toBe(500)
         expect(finish.tokens.output).toBe(800)
         expect(finish.tokens.reasoning).toBe(200)
@@ -182,6 +212,37 @@ describe("Session", () => {
 
       const getExit = yield* session.get(info.id).pipe(Effect.exit)
       expect(Exit.isFailure(getExit)).toBe(true)
+    }),
+  )
+
+  it.instance("persists metadata and copies it on fork by default", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const meta = { source: "sdk", trace: { id: "abc" } }
+      const created = yield* Effect.acquireRelease(session.create({ title: "with-meta", metadata: meta }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      const saved = yield* session.get(created.id)
+      const fork = yield* Effect.acquireRelease(session.fork({ sessionID: created.id }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+
+      expect(saved.metadata).toEqual(meta)
+      expect(fork.metadata).toEqual(meta)
+      expect(fork.metadata).not.toBe(meta)
+    }),
+  )
+
+  it.instance("omits metadata when not provided", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const created = yield* Effect.acquireRelease(session.create({ title: "empty-meta" }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      const saved = yield* session.get(created.id)
+
+      expect(created.metadata).toBeUndefined()
+      expect(saved.metadata).toBeUndefined()
     }),
   )
 })
