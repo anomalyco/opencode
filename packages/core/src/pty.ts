@@ -278,8 +278,7 @@ export const layer = Layer.effect(
     const update = Effect.fn("Pty.update")(function* (id: PtyID, input: UpdateInput) {
       const session = yield* requireSession(id)
       if (input.title) session.info.title = input.title
-      if (input.size && session.info.status === "running")
-        session.process.resize(input.size.cols, input.size.rows)
+      if (input.size && session.info.status === "running") session.process.resize(input.size.cols, input.size.rows)
       yield* events.publish(Event.Updated, { info: session.info })
       return session.info
     })
