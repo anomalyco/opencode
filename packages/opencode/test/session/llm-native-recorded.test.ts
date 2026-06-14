@@ -1,9 +1,9 @@
-import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { ModelsDev } from "@opencode-ai/core/models-dev"
-import { HttpRecorder } from "@opencode-ai/http-recorder"
-import { HttpRecorderInternal } from "@opencode-ai/http-recorder/internal"
+import { ConfigV1 } from "@daemon-protocol/core/v1/config/config"
+import { SessionV1 } from "@daemon-protocol/core/v1/session"
+import { FSUtil } from "@daemon-protocol/core/fs-util"
+import { ModelsDev } from "@daemon-protocol/core/models-dev"
+import { HttpRecorder } from "@daemon-protocol/http-recorder"
+import { HttpRecorderInternal } from "@daemon-protocol/http-recorder/internal"
 import { describe, expect, test } from "bun:test"
 import { tool, type ModelMessage, type JSONValue } from "ai"
 import { Effect, Layer, Option, Schema, Stream } from "effect"
@@ -15,8 +15,8 @@ import { Plugin } from "@/plugin"
 import { Provider } from "@/provider/provider"
 
 import { Filesystem } from "@/util/filesystem"
-import { LLMEvent, LLMResponse } from "@opencode-ai/llm"
-import { LLMClient, RequestExecutor, WebSocketExecutor } from "@opencode-ai/llm/route"
+import { LLMEvent, LLMResponse } from "@daemon-protocol/llm"
+import { LLMClient, RequestExecutor, WebSocketExecutor } from "@daemon-protocol/llm/route"
 import { Env } from "@/env"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import type { Agent } from "../../src/agent/agent"
@@ -24,12 +24,12 @@ import { LLM } from "../../src/session/llm"
 import { MessageID, SessionID } from "../../src/session/schema"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@daemon-protocol/core/provider"
+import { ModelV2 } from "@daemon-protocol/core/model"
 
 const FIXTURES_DIR = path.join(import.meta.dir, "../fixtures/recordings")
 
-const zenURL = (connection: string) => `https://console.opencode.ai/proxy/connections/${connection}/v1`
+const zenURL = (connection: string) => `https://console.daemonprotocol.com/proxy/connections/${connection}/v1`
 
 const replayOpenAIOAuth = {
   type: "oauth",
@@ -311,7 +311,7 @@ const writeConfig = (directory: string, scenario: RecordedScenario, model: Model
   Effect.promise(() =>
     Bun.write(
       path.join(directory, "opencode.json"),
-      JSON.stringify({ $schema: "https://opencode.ai/config.json", ...scenario.config(model) }),
+      JSON.stringify({ $schema: "https://daemonprotocol.com/config.json", ...scenario.config(model) }),
     ),
   )
 

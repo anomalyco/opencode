@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from "bun:test"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@daemon-protocol/core/flag/flag"
 import { withTimeout } from "../../src/util/timeout"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances } from "../fixture/fixture"

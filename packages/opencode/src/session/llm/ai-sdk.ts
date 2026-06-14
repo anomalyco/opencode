@@ -1,4 +1,4 @@
-import { FinishReason, LLMEvent, ProviderMetadata, ToolResultValue } from "@opencode-ai/llm"
+import { FinishReason, LLMEvent, ProviderMetadata, ToolResultValue } from "@daemon-protocol/llm"
 import { Effect, Schema } from "effect"
 import { type streamText } from "ai"
 import { errorMessage } from "@/util/error"
@@ -28,7 +28,7 @@ function providerMetadata(value: unknown): ProviderMetadata | undefined {
 }
 
 // Temporary AI SDK bridge: Copilot billing survives only in raw provider chunks here.
-// Move this extraction into @opencode-ai/llm when Copilot is handled by the native runtime.
+// Move this extraction into @daemon-protocol/llm when Copilot is handled by the native runtime.
 function copilotTotalNanoAiu(value: unknown) {
   if (!value || typeof value !== "object") return
   const raw = value as Record<string, unknown>

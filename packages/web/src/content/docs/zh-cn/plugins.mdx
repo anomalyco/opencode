@@ -32,7 +32,7 @@ description: 编写自己的插件来扩展 Daemon Protocol。
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
 }
 ```
@@ -127,7 +127,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 对于 TypeScript 插件，你可以从插件包中导入类型：
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -279,7 +279,7 @@ export const InjectEnvPlugin = async () => {
 插件还可以为 Daemon Protocol 添加自定义工具：
 
 ```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+import { type Plugin, tool } from "@daemon-protocol/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -330,7 +330,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-日志级别：`debug`、`info`、`warn`、`error`。详情请参阅 [SDK 文档](https://opencode.ai/docs/sdk)。
+日志级别：`debug`、`info`、`warn`、`error`。详情请参阅 [SDK 文档](https://daemonprotocol.com/docs/sdk)。
 
 ---
 
@@ -339,7 +339,7 @@ export const MyPlugin = async ({ client }) => {
 自定义会话压缩时包含的上下文：
 
 ```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -363,7 +363,7 @@ Include any state that should persist across compaction:
 你还可以通过设置 `output.prompt` 来完全替换压缩提示词：
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

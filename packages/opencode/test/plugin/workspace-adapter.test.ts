@@ -1,11 +1,11 @@
 import { afterEach, describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Database } from "@opencode-ai/core/database/database"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Ripgrep } from "@opencode-ai/core/ripgrep"
-import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { CrossSpawnSpawner } from "@daemon-protocol/core/cross-spawn-spawner"
+import { Database } from "@daemon-protocol/core/database/database"
+import { FSUtil } from "@daemon-protocol/core/fs-util"
+import { Ripgrep } from "@daemon-protocol/core/ripgrep"
+import { EffectFlock } from "@daemon-protocol/core/util/effect-flock"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Auth } from "../../src/auth"
@@ -103,7 +103,7 @@ describe("plugin.workspace", () => {
           path.join(dir, "opencode.json"),
           JSON.stringify(
             {
-              $schema: "https://opencode.ai/config.json",
+              $schema: "https://daemonprotocol.com/config.json",
               plugin: [pathToFileURL(file).href],
             },
             null,

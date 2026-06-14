@@ -64,7 +64,7 @@ To enable all built-in formatters, set `formatter` to `true`.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": true
 }
 ```
@@ -73,7 +73,7 @@ Use an object to keep built-ins enabled while configuring overrides or custom fo
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {}
 }
 ```
@@ -97,7 +97,7 @@ If `formatter` is omitted, all formatters are disabled. To disable all formatter
 
 ```json title="opencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": false
 }
 ```
@@ -106,7 +106,7 @@ To disable a **specific** formatter, set `disabled` to `true`:
 
 ```json title="opencode.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -123,7 +123,7 @@ You can configure built-in formatters with options like `environment` or `extens
 
 ```json title="opencode.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "command": ["npx", "prettier", "--write", "$FILE"],

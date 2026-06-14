@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://opencode.ai">
+  <a href="https://daemonprotocol.com">
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
       <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
@@ -9,9 +9,9 @@
 </p>
 <p align="center">Açık kaynaklı yapay zeka kodlama asistanı.</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+  <a href="https://daemonprotocol.com/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+  <a href="https://www.npmjs.com/package/daemoncode"><img alt="npm" src="https://img.shields.io/npm/v/daemoncode?style=flat-square" /></a>
+  <a href="https://github.com/daemon-blockint-tech/daemoncode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/daemon-blockint-tech/daemoncode/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
 <p align="center">
@@ -39,7 +39,7 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![Daemon Protocol Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![Daemon Protocol Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://daemonprotocol.com)
 
 ---
 
@@ -47,18 +47,18 @@
 
 ```bash
 # YOLO
-curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://daemonprotocol.com/install | bash
 
 # Paket yöneticileri
-npm i -g opencode-ai@latest        # veya bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS ve Linux (önerilir, her zaman güncel)
-brew install opencode              # macOS ve Linux (resmi brew formülü, daha az güncellenir)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Tüm işletim sistemleri
-nix run nixpkgs#opencode           # veya en güncel geliştirme dalı için github:anomalyco/opencode
+npm i -g daemoncode@latest        # veya bun/pnpm/yarn
+scoop install daemoncode             # Windows
+choco install daemoncode             # Windows
+brew install daemon-blockint-tech/tap/daemoncode # macOS ve Linux (önerilir, her zaman güncel)
+brew install daemoncode              # macOS ve Linux (resmi brew formülü, daha az güncellenir)
+sudo pacman -S daemoncode            # Arch Linux (Stable)
+paru -S daemoncode-bin               # Arch Linux (Latest from AUR)
+mise use -g daemoncode               # Tüm işletim sistemleri
+nix run nixpkgs#daemoncode           # veya en güncel geliştirme dalı için github:daemon-blockint-tech/daemoncode
 ```
 
 > [!TIP]
@@ -66,20 +66,20 @@ nix run nixpkgs#opencode           # veya en güncel geliştirme dalı için git
 
 ### Masaüstü Uygulaması (BETA)
 
-Daemon Protocol ayrıca masaüstü uygulaması olarak da mevcuttur. Doğrudan [sürüm sayfasından](https://github.com/anomalyco/opencode/releases) veya [opencode.ai/download](https://opencode.ai/download) adresinden indirebilirsiniz.
+Daemon Protocol ayrıca masaüstü uygulaması olarak da mevcuttur. Doğrudan [sürüm sayfasından](https://github.com/daemon-blockint-tech/daemoncode/releases) veya [daemonprotocol.com/download](https://daemonprotocol.com/download) adresinden indirebilirsiniz.
 
 | Platform              | İndirme                            |
 | --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe` |
+| macOS (Apple Silicon) | `daemoncode-desktop-mac-arm64.dmg`   |
+| macOS (Intel)         | `daemoncode-desktop-mac-x64.dmg`     |
+| Windows               | `daemoncode-desktop-windows-x64.exe` |
 | Linux                 | `.deb`, `.rpm` veya AppImage       |
 
 ```bash
 # macOS (Homebrew)
-brew install --cask opencode-desktop
+brew install --cask daemoncode-desktop
 # Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
+scoop bucket add extras; scoop install extras/daemoncode-desktop
 ```
 
 #### Kurulum Dizini (Installation Directory)
@@ -93,8 +93,8 @@ Kurulum betiği (install script), kurulum yolu (installation path) için aşağ�
 
 ```bash
 # Örnekler
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://daemonprotocol.com/install | bash
+XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://daemonprotocol.com/install | bash
 ```
 
 ### Ajanlar
@@ -110,11 +110,11 @@ Daemon Protocol, `Tab` tuşuyla aralarında geçiş yapabileceğiniz iki yerleş
 Ayrıca, karmaşık aramalar ve çok adımlı görevler için bir **genel** alt ajan bulunmaktadır.
 Bu dahili olarak kullanılır ve mesajlarda `@general` ile çağrılabilir.
 
-[Ajanlar](https://opencode.ai/docs/agents) hakkında daha fazla bilgi edinin.
+[Ajanlar](https://daemonprotocol.com/docs/agents) hakkında daha fazla bilgi edinin.
 
 ### Dokümantasyon
 
-Daemon Protocol'u nasıl yapılandıracağınız hakkında daha fazla bilgi için [**dokümantasyonumuza göz atın**](https://opencode.ai/docs).
+Daemon Protocol'u nasıl yapılandıracağınız hakkında daha fazla bilgi için [**dokümantasyonumuza göz atın**](https://daemonprotocol.com/docs).
 
 ### Katkıda Bulunma
 

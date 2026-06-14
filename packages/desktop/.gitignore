@@ -25,5 +25,6 @@ dist-ssr
 out/
 
 resources/opencode-cli*
+resources/daemoncode-cli*
 resources/icons
 resources/*.metainfo.xml

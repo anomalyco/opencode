@@ -53,7 +53,7 @@ Daemon Protocol config.
 
 ```json title="opencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
 }
 ```
@@ -70,7 +70,7 @@ Sie können die Optionen eines Modells global über die Konfiguration konfigurie
 
 ```jsonc title="opencode.jsonc" {7-12,19-24}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -109,7 +109,7 @@ Sie können auch benutzerdefinierte Varianten definieren, die integrierte Varian
 
 ```jsonc title="opencode.jsonc" {6-21}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "opencode": {
       "models": {
@@ -174,7 +174,7 @@ Sie können vorhandene Varianten überschreiben oder eigene hinzufügen:
 
 ```jsonc title="opencode.jsonc" {7-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -211,7 +211,7 @@ Wenn Daemon Protocol startet, sucht es nach Modellen in der folgenden Priorität
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"
    }
    ```

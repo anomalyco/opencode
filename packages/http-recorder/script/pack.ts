@@ -26,7 +26,7 @@ export const pack = async () => {
   await Bun.write("package.json", JSON.stringify(pkg, null, 2))
   try {
     await $`bun pm pack`
-    return fileURLToPath(new URL(`../opencode-ai-http-recorder-${pkg.version}.tgz`, import.meta.url))
+    return fileURLToPath(new URL(`../daemoncode-http-recorder-${pkg.version}.tgz`, import.meta.url))
   } finally {
     await Bun.write("package.json", original)
   }

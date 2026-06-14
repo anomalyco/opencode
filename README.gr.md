@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="https://opencode.ai">
+  <a href="https://daemonprotocol.com">
     <picture>
       <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
       <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
@@ -9,9 +9,9 @@
 </p>
 <p align="center">Ο πράκτορας τεχνητής νοημοσύνης ανοικτού κώδικα για προγραμματισμό.</p>
 <p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
+  <a href="https://daemonprotocol.com/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
+  <a href="https://www.npmjs.com/package/daemoncode"><img alt="npm" src="https://img.shields.io/npm/v/daemoncode?style=flat-square" /></a>
+  <a href="https://github.com/daemon-blockint-tech/daemoncode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/daemon-blockint-tech/daemoncode/publish.yml?style=flat-square&branch=dev" /></a>
 </p>
 
 <p align="center">
@@ -39,7 +39,7 @@
   <a href="README.vi.md">Tiếng Việt</a>
 </p>
 
-[![Daemon Protocol Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+[![Daemon Protocol Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://daemonprotocol.com)
 
 ---
 
@@ -47,18 +47,18 @@
 
 ```bash
 # YOLO
-curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://daemonprotocol.com/install | bash
 
 # Διαχειριστές πακέτων
-npm i -g opencode-ai@latest        # ή bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS και Linux (προτείνεται, πάντα ενημερωμένο)
-brew install opencode              # macOS και Linux (επίσημος τύπος brew, λιγότερο συχνές ενημερώσεις)
-sudo pacman -S opencode            # Arch Linux (Σταθερό)
-paru -S opencode-bin               # Arch Linux (Τελευταία έκδοση από AUR)
-mise use -g opencode               # Οποιοδήποτε λειτουργικό σύστημα
-nix run nixpkgs#opencode           # ή github:anomalyco/opencode με βάση την πιο πρόσφατη αλλαγή από το dev branch
+npm i -g daemoncode@latest        # ή bun/pnpm/yarn
+scoop install daemoncode             # Windows
+choco install daemoncode             # Windows
+brew install daemon-blockint-tech/tap/daemoncode # macOS και Linux (προτείνεται, πάντα ενημερωμένο)
+brew install daemoncode              # macOS και Linux (επίσημος τύπος brew, λιγότερο συχνές ενημερώσεις)
+sudo pacman -S daemoncode            # Arch Linux (Σταθερό)
+paru -S daemoncode-bin               # Arch Linux (Τελευταία έκδοση από AUR)
+mise use -g daemoncode               # Οποιοδήποτε λειτουργικό σύστημα
+nix run nixpkgs#daemoncode           # ή github:daemon-blockint-tech/daemoncode με βάση την πιο πρόσφατη αλλαγή από το dev branch
 ```
 
 > [!TIP]
@@ -66,20 +66,20 @@ nix run nixpkgs#opencode           # ή github:anomalyco/opencode με βάση 
 
 ### Εφαρμογή Desktop (BETA)
 
-Το Daemon Protocol είναι επίσης διαθέσιμο ως εφαρμογή. Κατέβασε το απευθείας από τη [σελίδα εκδόσεων](https://github.com/anomalyco/opencode/releases) ή το [opencode.ai/download](https://opencode.ai/download).
+Το Daemon Protocol είναι επίσης διαθέσιμο ως εφαρμογή. Κατέβασε το απευθείας από τη [σελίδα εκδόσεων](https://github.com/daemon-blockint-tech/daemoncode/releases) ή το [daemonprotocol.com/download](https://daemonprotocol.com/download).
 
 | Πλατφόρμα             | Λήψη                               |
 | --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe` |
+| macOS (Apple Silicon) | `daemoncode-desktop-mac-arm64.dmg`   |
+| macOS (Intel)         | `daemoncode-desktop-mac-x64.dmg`     |
+| Windows               | `daemoncode-desktop-windows-x64.exe` |
 | Linux                 | `.deb`, `.rpm`, ή AppImage         |
 
 ```bash
 # macOS (Homebrew)
-brew install --cask opencode-desktop
+brew install --cask daemoncode-desktop
 # Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
+scoop bucket add extras; scoop install extras/daemoncode-desktop
 ```
 
 #### Κατάλογος Εγκατάστασης
@@ -93,8 +93,8 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 ```bash
 # Παραδείγματα
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://daemonprotocol.com/install | bash
+XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://daemonprotocol.com/install | bash
 ```
 
 ### Πράκτορες
@@ -110,11 +110,11 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 Περιλαμβάνεται επίσης ένας **general** υποπράκτορας για σύνθετες αναζητήσεις και πολυβηματικές διεργασίες.
 Χρησιμοποιείται εσωτερικά και μπορεί να κληθεί χρησιμοποιώντας `@general` στα μηνύματα.
 
-Μάθετε περισσότερα για τους [πράκτορες](https://opencode.ai/docs/agents).
+Μάθετε περισσότερα για τους [πράκτορες](https://daemonprotocol.com/docs/agents).
 
 ### Οδηγός Χρήσης
 
-Για περισσότερες πληροφορίες σχετικά με τη ρύθμιση του Daemon Protocol, [**πλοηγήσου στον οδηγό χρήσης μας**](https://opencode.ai/docs).
+Για περισσότερες πληροφορίες σχετικά με τη ρύθμιση του Daemon Protocol, [**πλοηγήσου στον οδηγό χρήσης μας**](https://daemonprotocol.com/docs).
 
 ### Συνεισφορά
 

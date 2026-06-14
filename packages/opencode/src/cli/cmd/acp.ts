@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { effectCmd } from "../effect-cmd"
 import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
 import { ServerAuth } from "@/server/auth"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import { createDaemonCodeClient } from "@daemon-protocol/sdk/v2"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
 import { ACPProfile } from "@/acp/profile"
 
@@ -24,7 +24,7 @@ export const AcpCommand = effectCmd({
     const opts = yield* resolveNetworkOptions(args)
     const server = yield* Effect.promise(() => ACPProfile.measure("cli.acp.server.listen", () => Server.listen(opts)))
 
-    const sdk = createOpencodeClient({
+    const sdk = createDaemonCodeClient({
       baseUrl: `http://${server.hostname}:${server.port}`,
       headers: ServerAuth.headers(),
     })

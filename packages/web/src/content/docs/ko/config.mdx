@@ -13,7 +13,7 @@ Daemon Protocol는 **JSON**과 **JSONC**(주석이 포함된 JSON) 형식을 모
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
   "server": {
@@ -147,9 +147,9 @@ custom 디렉토리는 전역 config와 `.opencode` 디렉토리 뒤에 로드�
 
 ## Schema
 
-server/runtime config schema는 [**`opencode.ai/config.json`**](https://opencode.ai/config.json)에 정의되어 있습니다.
+server/runtime config schema는 [**`daemonprotocol.com/config.json`**](https://daemonprotocol.com/config.json)에 정의되어 있습니다.
 
-TUI config는 [**`opencode.ai/tui.json`**](https://opencode.ai/tui.json)을 사용합니다.
+TUI config는 [**`daemonprotocol.com/tui.json`**](https://daemonprotocol.com/tui.json)을 사용합니다.
 
 편집기에서 이 schema를 기반으로 validation과 autocomplete를 사용할 수 있습니다.
 
@@ -161,7 +161,7 @@ TUI 관련 설정에는 전용 `tui.json` (또는 `tui.jsonc`) 파일을 사용�
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://daemonprotocol.com/tui.json",
   "scroll_speed": 3,
   "scroll_acceleration": {
     "enabled": true
@@ -184,7 +184,7 @@ TUI 관련 설정에는 전용 `tui.json` (또는 `tui.jsonc`) 파일을 사용�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
@@ -213,7 +213,7 @@ TUI 관련 설정에는 전용 `tui.json` (또는 `tui.jsonc`) 파일을 사용�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "tools": {
     "write": false,
     "bash": false
@@ -231,7 +231,7 @@ Daemon Protocol config의 `provider`, `model`, `small_model` 옵션으로 사용
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {},
   "model": "anthropic/claude-sonnet-4-5",
   "small_model": "anthropic/claude-haiku-4-5"
@@ -244,7 +244,7 @@ provider 옵션에는 `timeout`, `setCacheKey`를 포함할 수 있습니다.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -273,7 +273,7 @@ Amazon Bedrock은 AWS 전용 config를 지원합니다.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -304,7 +304,7 @@ Bearer token(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 profile 기반 인
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://daemonprotocol.com/tui.json",
   "theme": "tokyonight"
 }
 ```
@@ -319,7 +319,7 @@ Bearer token(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 profile 기반 인
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
@@ -345,7 +345,7 @@ Bearer token(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 profile 기반 인
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "default_agent": "plan"
 }
 ```
@@ -362,7 +362,7 @@ Bearer token(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 profile 기반 인
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "share": "manual"
 }
 ```
@@ -383,7 +383,7 @@ Bearer token(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 profile 기반 인
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "command": {
     "test": {
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
@@ -409,7 +409,7 @@ Bearer token(`AWS_BEARER_TOKEN_BEDROCK` 또는 `/connect`)은 profile 기반 인
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://daemonprotocol.com/tui.json",
   "keybinds": {}
 }
 ```
@@ -424,7 +424,7 @@ Daemon Protocol는 시작 시 새 업데이트를 자동으로 다운로드합�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "autoupdate": false
 }
 ```
@@ -440,7 +440,7 @@ Daemon Protocol는 시작 시 새 업데이트를 자동으로 다운로드합�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -468,7 +468,7 @@ Daemon Protocol는 시작 시 새 업데이트를 자동으로 다운로드합�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "edit": "ask",
     "bash": "ask"
@@ -486,7 +486,7 @@ Daemon Protocol는 시작 시 새 업데이트를 자동으로 다운로드합�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "compaction": {
     "auto": true,
     "prune": false,
@@ -507,7 +507,7 @@ Daemon Protocol는 시작 시 새 업데이트를 자동으로 다운로드합�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "watcher": {
     "ignore": ["node_modules/**", "dist/**", ".git/**"]
   }
@@ -524,7 +524,7 @@ Daemon Protocol는 시작 시 새 업데이트를 자동으로 다운로드합�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {}
 }
 ```
@@ -541,7 +541,7 @@ plugin 파일은 `.opencode/plugins/` 또는 `~/.config/opencode/plugins/`에 �
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
 }
 ```
@@ -556,7 +556,7 @@ plugin 파일은 `.opencode/plugins/` 또는 `~/.config/opencode/plugins/`에 �
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
@@ -571,7 +571,7 @@ plugin 파일은 `.opencode/plugins/` 또는 `~/.config/opencode/plugins/`에 �
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "disabled_providers": ["openai", "gemini"]
 }
 ```
@@ -594,7 +594,7 @@ plugin 파일은 `.opencode/plugins/` 또는 `~/.config/opencode/plugins/`에 �
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "enabled_providers": ["anthropic", "openai"]
 }
 ```
@@ -615,7 +615,7 @@ provider를 하나씩 비활성화하는 대신, Daemon Protocol가 특정 provi
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "experimental": {}
 }
 ```
@@ -638,7 +638,7 @@ config 파일에서 환경 변수와 파일 내용을 참조할 수 있도록 �
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "model": "{env:OPENCODE_MODEL}",
   "provider": {
     "anthropic": {
@@ -661,7 +661,7 @@ config 파일에서 환경 변수와 파일 내용을 참조할 수 있도록 �
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "instructions": ["./custom-instructions.md"],
   "provider": {
     "openai": {

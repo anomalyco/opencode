@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { SessionV1 } from "@daemon-protocol/core/v1/session"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
@@ -9,11 +9,11 @@ import { SessionRevert } from "../../src/session/revert"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Snapshot } from "../../src/snapshot"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { CrossSpawnSpawner } from "@daemon-protocol/core/cross-spawn-spawner"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@daemon-protocol/core/provider"
+import { ModelV2 } from "@daemon-protocol/core/model"
 
 const env = Layer.mergeAll(
   Session.defaultLayer,

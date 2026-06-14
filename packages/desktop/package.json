@@ -1,13 +1,13 @@
 {
-  "name": "@opencode-ai/desktop",
+  "name": "@daemon-protocol/desktop",
   "private": true,
   "version": "1.17.6",
   "type": "module",
   "license": "MIT",
-  "homepage": "https://opencode.ai",
+  "homepage": "https://daemonprotocol.com",
   "author": {
     "name": "Daemon Protocol",
-    "email": "hello@opencode.ai"
+    "email": "hello@daemonprotocol.com"
   },
   "scripts": {
     "typecheck": "tsgo -b",
@@ -36,8 +36,8 @@
   "devDependencies": {
     "@actions/artifact": "4.0.0",
     "@lydell/node-pty": "catalog:",
-    "@opencode-ai/app": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@daemon-protocol/app": "workspace:*",
+    "@daemon-protocol/ui": "workspace:*",
     "@sentry/solid": "catalog:",
     "@sentry/vite-plugin": "catalog:",
     "@solid-primitives/i18n": "2.2.1",

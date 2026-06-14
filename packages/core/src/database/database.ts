@@ -1,6 +1,6 @@
 export * as Database from "./database"
 
-import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
+import { EffectDrizzleSqlite } from "@daemon-protocol/effect-drizzle-sqlite"
 import { layer as sqliteLayer } from "#sqlite"
 import { Context, Effect, Layer } from "effect"
 import { Global } from "../global"

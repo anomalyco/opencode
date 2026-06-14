@@ -22,7 +22,7 @@ export const dict = {
 
   "desktop.cli.installed.title": "CLI installeret",
   "desktop.cli.installed.message":
-    "CLI installeret i {{path}}\n\nGenstart din terminal for at bruge 'opencode'-kommandoen.",
+    "CLI installeret i {{path}}\n\nGenstart din terminal for at bruge 'daemoncode'-kommandoen.",
   "desktop.cli.failed.title": "Installation mislykkedes",
   "desktop.cli.failed.message": "Kunne ikke installere CLI: {{error}}",
 }

@@ -53,7 +53,7 @@ opencode konfiguracja
 
 ```json title="opencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
 }
 ```
@@ -70,7 +70,7 @@ Można globalnie skorzystać z opcji modelu poprzez plik config.
 
 ```jsonc title="opencode.jsonc" {7-12,19-24}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -109,7 +109,7 @@ Można również zastosować alternatywne warianty, które wykluczają. Warianty
 
 ```jsonc title="opencode.jsonc" {6-21}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "opencode": {
       "models": {
@@ -174,7 +174,7 @@ Można uwzględnić warianty lub dodać własne:
 
 ```jsonc title="opencode.jsonc" {7-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -211,7 +211,7 @@ Po uruchomieniu opencode sprawdzanie modeli w następującej kolejności:
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"
    }
    ```

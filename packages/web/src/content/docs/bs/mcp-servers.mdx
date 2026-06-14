@@ -19,11 +19,11 @@ Određeni MCP serveri, poput GitHub MCP servera, mogu dodati mnogo tokena i lako
 
 ## Omogućavanje
 
-Možete definirati MCP servere u vašoj [Daemon Protocol Config](https://opencode.ai/docs/config/) pod `mcp`. Dodajte svaki MCP sa jedinstvenim imenom. Možete se pozvati na taj MCP po imenu kada tražite LLM.
+Možete definirati MCP servere u vašoj [Daemon Protocol Config](https://daemonprotocol.com/docs/config/) pod `mcp`. Dodajte svaki MCP sa jedinstvenim imenom. Možete se pozvati na taj MCP po imenu kada tražite LLM.
 
 ```jsonc title="opencode.jsonc" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "name-of-mcp-server": {
       // ...
@@ -45,7 +45,7 @@ Da omogućite određeni server iz udaljene konfiguracije vaše organizacije, dod
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "jira": {
       "type": "remote",
@@ -64,7 +64,7 @@ Dodajte lokalne MCP servere koristeći `type` u `"local"` unutar MCP objekta.
 
 ```jsonc title="opencode.jsonc" {15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-local-mcp-server": {
       "type": "local",
@@ -84,7 +84,7 @@ Na primjer, evo kako možete dodati testni [`@modelcontextprotocol/server-everyt
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "mcp_everything": {
       "type": "local",
@@ -121,7 +121,7 @@ Dodajte udaljene MCP servere postavljanjem `type` na `"remote"`.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-remote-mcp": {
       "type": "remote",
@@ -166,7 +166,7 @@ Za većinu MCP servera sa omogućenim OAuthom nije potrebna posebna konfiguracij
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -184,7 +184,7 @@ Ako imate klijentske vjerodajnice od dobavljača MCP servera, možete ih konfigu
 
 ```json title="opencode.json" {7-11}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -230,7 +230,7 @@ Ako želite onemogućiti automatski OAuth za server (npr. za servere koji umjest
 
 ```json title="opencode.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-api-key-server": {
       "type": "remote",
@@ -279,7 +279,7 @@ To znači da ih možete omogućiti ili onemogućiti globalno.
 
 ```json title="opencode.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -300,7 +300,7 @@ Također možemo koristiti glob obrazac da onemogućimo sve odgovarajuće MCP-ov
 
 ```json title="opencode.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -328,7 +328,7 @@ Ako imate veliki broj MCP servera, možda ćete želeti da ih omogućite samo po
 
 ```json title="opencode.json" {11, 14-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-mcp": {
       "type": "local",
@@ -379,7 +379,7 @@ Dodajte [Sentry MCP server](https://mcp.sentry.dev) za interakciju sa vašim Sen
 
 ```json title="opencode.json" {4-8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "sentry": {
       "type": "remote",
@@ -411,7 +411,7 @@ Dodajte [Context7 MCP server](https://github.com/upstash/context7) za pretraživ
 
 ```json title="opencode.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -425,7 +425,7 @@ Ako ste se prijavili za besplatni račun, možete koristiti svoj API ključ i do
 
 ```json title="opencode.json" {7-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -459,7 +459,7 @@ Dodajte [Grep by Vercel](https://grep.app) MCP server za pretraživanje isječak
 
 ```json title="opencode.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "gh_grep": {
       "type": "remote",

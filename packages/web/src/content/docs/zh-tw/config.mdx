@@ -13,7 +13,7 @@ Daemon Protocol 支援 **JSON** 和 **JSONC**（帶註解的 JSON）格式。
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
   "server": {
@@ -143,7 +143,7 @@ opencode run "Hello world"
 
 ## Schema
 
-設定檔具有在 [**`opencode.ai/config.json`**](https://opencode.ai/config.json) 中定義的 Schema。
+設定檔具有在 [**`daemonprotocol.com/config.json`**](https://daemonprotocol.com/config.json) 中定義的 Schema。
 
 您的編輯器應該能夠基於該 Schema 進行驗證和自動補全。
 
@@ -155,7 +155,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {
@@ -186,7 +186,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
@@ -215,7 +215,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "tools": {
     "write": false,
     "bash": false
@@ -233,7 +233,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {},
   "model": "anthropic/claude-sonnet-4-5",
   "small_model": "anthropic/claude-haiku-4-5"
@@ -246,7 +246,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -275,7 +275,7 @@ Amazon Bedrock 支援 AWS 特定設定：
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -306,7 +306,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://daemonprotocol.com/tui.json",
   "theme": "tokyonight"
 }
 ```
@@ -321,7 +321,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
@@ -347,7 +347,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "default_agent": "plan"
 }
 ```
@@ -364,7 +364,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "share": "manual"
 }
 ```
@@ -385,7 +385,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "command": {
     "test": {
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
@@ -411,7 +411,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）優先於基於設定
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://daemonprotocol.com/tui.json",
   "keybinds": {}
 }
 ```
@@ -426,7 +426,7 @@ Daemon Protocol 啟動時會自動下載新版本。您可以使用 `autoupdate`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "autoupdate": false
 }
 ```
@@ -442,7 +442,7 @@ Daemon Protocol 啟動時會自動下載新版本。您可以使用 `autoupdate`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -470,7 +470,7 @@ Daemon Protocol 啟動時會自動下載新版本。您可以使用 `autoupdate`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "edit": "ask",
     "bash": "ask"
@@ -488,7 +488,7 @@ Daemon Protocol 啟動時會自動下載新版本。您可以使用 `autoupdate`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "compaction": {
     "auto": true,
     "prune": false,
@@ -509,7 +509,7 @@ Daemon Protocol 啟動時會自動下載新版本。您可以使用 `autoupdate`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "watcher": {
     "ignore": ["node_modules/**", "dist/**", ".git/**"]
   }
@@ -526,7 +526,7 @@ Daemon Protocol 啟動時會自動下載新版本。您可以使用 `autoupdate`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {}
 }
 ```
@@ -543,7 +543,7 @@ Daemon Protocol 啟動時會自動下載新版本。您可以使用 `autoupdate`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
 }
 ```
@@ -558,7 +558,7 @@ Daemon Protocol 啟動時會自動下載新版本。您可以使用 `autoupdate`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
@@ -573,7 +573,7 @@ Daemon Protocol 啟動時會自動下載新版本。您可以使用 `autoupdate`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "disabled_providers": ["openai", "gemini"]
 }
 ```
@@ -596,7 +596,7 @@ Daemon Protocol 啟動時會自動下載新版本。您可以使用 `autoupdate`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "enabled_providers": ["anthropic", "openai"]
 }
 ```
@@ -617,7 +617,7 @@ Daemon Protocol 啟動時會自動下載新版本。您可以使用 `autoupdate`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "experimental": {}
 }
 ```
@@ -640,7 +640,7 @@ Daemon Protocol 啟動時會自動下載新版本。您可以使用 `autoupdate`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "model": "{env:OPENCODE_MODEL}",
   "provider": {
     "anthropic": {
@@ -663,7 +663,7 @@ Daemon Protocol 啟動時會自動下載新版本。您可以使用 `autoupdate`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "instructions": ["./custom-instructions.md"],
   "provider": {
     "openai": {

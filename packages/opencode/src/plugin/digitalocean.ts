@@ -1,6 +1,6 @@
-import type { Hooks, PluginInput } from "@opencode-ai/plugin"
-import type { Model } from "@opencode-ai/sdk/v2"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import type { Hooks, PluginInput } from "@daemon-protocol/plugin"
+import type { Model } from "@daemon-protocol/sdk/v2"
+import { InstallationVersion } from "@daemon-protocol/core/installation/version"
 import { createServer } from "http"
 import open from "open"
 

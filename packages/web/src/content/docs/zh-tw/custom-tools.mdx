@@ -27,7 +27,7 @@ description: 建立 LLM 可在 Daemon Protocol 中呼叫的工具。
 建立工具最簡單的方式是使用 `tool()` 輔助函式，它提供型別安全和參數校驗。
 
 ```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -50,7 +50,7 @@ export default tool({
 您也可以從單個檔案中匯出多個工具。每個匯出都會成為**一個獨立的工具**，命名格式為 **`<filename>_<exportname>`**：
 
 ```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 
 export const add = tool({
   description: "Add two numbers",
@@ -86,7 +86,7 @@ export const multiply = tool({
 例如，此檔案將替換內建的 `bash` 工具：
 
 ```ts title=".opencode/tools/bash.ts"
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 
 export default tool({
   description: "Restricted bash wrapper",
@@ -139,7 +139,7 @@ export default {
 工具會接收當前工作階段的上下文資訊：
 
 ```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 
 export default tool({
   description: "Get project information",
@@ -176,7 +176,7 @@ print(a + b)
 然後建立呼叫該指令碼的工具定義：
 
 ```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 import path from "path"
 
 export default tool({

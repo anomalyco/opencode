@@ -13,7 +13,7 @@ description: استخدام ملف إعدادات Daemon Protocol بصيغة JSO
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   // إعدادات السمة
   "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-5",
@@ -145,7 +145,7 @@ opencode run "Hello world"
 
 ## المخطط
 
-يحتوي ملف الإعدادات على مخطط مُعرَّف في [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
+يحتوي ملف الإعدادات على مخطط مُعرَّف في [**`daemonprotocol.com/config.json`**](https://daemonprotocol.com/config.json).
 
 يفترض أن يتمكن محررك من التحقق والإكمال التلقائي اعتمادًا على هذا المخطط.
 
@@ -157,7 +157,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {
@@ -184,7 +184,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
@@ -213,7 +213,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "tools": {
     "write": false,
     "bash": false
@@ -231,7 +231,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {},
   "model": "anthropic/claude-sonnet-4-5",
   "small_model": "anthropic/claude-haiku-4-5"
@@ -244,7 +244,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -273,7 +273,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -304,7 +304,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "theme": ""
 }
 ```
@@ -319,7 +319,7 @@ opencode run "Hello world"
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
@@ -345,7 +345,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "default_agent": "plan"
 }
 ```
@@ -362,7 +362,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "share": "manual"
 }
 ```
@@ -383,7 +383,7 @@ opencode run "Hello world"
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "command": {
     "test": {
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
@@ -409,7 +409,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "keybinds": {}
 }
 ```
@@ -424,7 +424,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "autoupdate": false
 }
 ```
@@ -440,7 +440,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -468,7 +468,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "edit": "ask",
     "bash": "ask"
@@ -486,7 +486,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "compaction": {
     "auto": true,
     "prune": false
@@ -506,7 +506,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "watcher": {
     "ignore": ["node_modules/**", "dist/**", ".git/**"]
   }
@@ -523,7 +523,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {}
 }
 ```
@@ -540,7 +540,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
 }
 ```
@@ -555,7 +555,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
@@ -571,7 +571,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "disabled_providers": ["openai", "gemini"]
 }
 ```
@@ -594,7 +594,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "enabled_providers": ["anthropic", "openai"]
 }
 ```
@@ -615,7 +615,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "experimental": {}
 }
 ```
@@ -638,7 +638,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "model": "{env:OPENCODE_MODEL}",
   "provider": {
     "anthropic": {
@@ -661,7 +661,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "instructions": ["./custom-instructions.md"],
   "provider": {
     "openai": {

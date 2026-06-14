@@ -12,7 +12,7 @@ const build = await Bun.build({
   format: "esm",
   packages: "external",
 })
-if (!build.success) throw new AggregateError(build.logs, "Failed to build @opencode-ai/http-recorder")
+if (!build.success) throw new AggregateError(build.logs, "Failed to build @daemon-protocol/http-recorder")
 
 const publicFiles = new Set(["index.js", "index.d.ts", "effect.d.ts", "socket.d.ts", "types.d.ts"])
 await Promise.all(

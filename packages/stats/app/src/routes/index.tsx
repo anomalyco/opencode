@@ -1,6 +1,6 @@
 import "./index.css"
 import { Link, Meta, Title } from "@solidjs/meta"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
+import { ProviderIcon } from "@daemon-protocol/ui/provider-icon"
 import { geoEquirectangular, geoPath } from "d3-geo"
 import { scaleSqrt } from "d3-scale"
 import countryCodesSource from "i18n-iso-countries/codes.json?raw"
@@ -20,8 +20,8 @@ import {
   type SessionCostEntry,
   type TokenCostEntry,
   type UsagePoint,
-} from "@opencode-ai/stats-core/domain/home"
-import { runtime } from "@opencode-ai/stats-core/runtime"
+} from "@daemon-protocol/stats-core/domain/home"
+import { runtime } from "@daemon-protocol/stats-core/runtime"
 import { createAsync, query } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
@@ -51,7 +51,7 @@ const rangeLabels: Record<UsageRange, string> = {
 }
 const statsHomeTitle = "Daemon Protocol Data"
 const statsHomeDescription = "Daemon Protocol usage data, market share, token cost, and session cost."
-const statsHomeFallbackUrl = "https://opencode.ai/data/"
+const statsHomeFallbackUrl = "https://daemonprotocol.com/data/"
 const statsUnfurlPath = "banner.jpg"
 const statsUnfurlAlt = "Daemon Protocol Data wordmark on a dark patterned background"
 const usageColors = [
@@ -187,8 +187,8 @@ export default function StatsHome() {
 
 function getStatsHomeUrl(base: string, requestUrl: string) {
   const url = new URL(base, requestUrl)
-  if (url.hostname === "stats.opencode.ai") return "https://opencode.ai/data/"
-  if (url.hostname === "stats.dev.opencode.ai") return "https://dev.opencode.ai/data/"
+  if (url.hostname === "stats.daemonprotocol.com") return "https://daemonprotocol.com/data/"
+  if (url.hostname === "stats.dev.daemonprotocol.com") return "https://dev.daemonprotocol.com/data/"
   return url.toString()
 }
 

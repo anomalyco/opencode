@@ -18,7 +18,7 @@ opencode JS/TS SDK는 서버와 상호 작용을 위한 유형 안전한 클라�
 npm에서 SDK 설치:
 
 ```bash
-npm install @opencode-ai/sdk
+npm install @daemon-protocol/sdk
 ```
 
 ---
@@ -28,9 +28,9 @@ npm install @opencode-ai/sdk
 opencode의 인스턴스 만들기:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createDaemonCode } from "@daemon-protocol/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createDaemonCode()
 ```
 
 서버와 클라이언트 모두 시작
@@ -52,9 +52,9 @@ const { client } = await createOpencode()
 구성 객체를 전달할 수 있습니다. 인스턴스는 여전히 `opencode.json`를 선택하지만 구성 인라인을 추가 할 수 있습니다.
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createDaemonCode } from "@daemon-protocol/sdk"
 
-const opencode = await createOpencode({
+const opencode = await createDaemonCode({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -72,9 +72,9 @@ opencode.server.close()
 opencode의 실행 인스턴스가 이미 있다면 클라이언트 인스턴스를 만들 수 있습니다.
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createDaemonCodeClient } from "@daemon-protocol/sdk"
 
-const client = createOpencodeClient({
+const client = createDaemonCodeClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -96,7 +96,7 @@ const client = createOpencodeClient({
 SDK에는 모든 API 유형의 TypeScript 정의가 포함되어 있습니다. 직접 가져 오기 :
 
 ```typescript
-import type { Session, Message, Part } from "@opencode-ai/sdk"
+import type { Session, Message, Part } from "@daemon-protocol/sdk"
 ```
 
 모든 유형은 서버의 OpenAPI 사양에서 생성되며 <a href={typesUrl}>types 파일</a>에서 사용할 수 있습니다.

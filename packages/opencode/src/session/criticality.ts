@@ -1,4 +1,4 @@
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@daemon-protocol/core/effect/layer-node"
 import { Config } from "@/config/config"
 import { BackgroundJob } from "@/background/job"
 import { Effect, Layer, Context } from "effect"

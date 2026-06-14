@@ -1,5 +1,5 @@
 import { Project } from "@/project/project"
-import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectV2 } from "@daemon-protocol/core/project"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ProjectNotFoundError } from "../errors"
@@ -86,7 +86,7 @@ export const ProjectApi = HttpApi.make("project")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "opencode experimental HttpApi",
+      title: "DaemonCode experimental HttpApi",
       version: "0.0.1",
       description: "Experimental HttpApi surface for selected instance routes.",
     }),

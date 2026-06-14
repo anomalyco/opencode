@@ -3,7 +3,7 @@
 // (2025-12-07) so types may be stale, but runtime calls should still work
 // for endpoints the v1 SDK was generated against.
 import { afterEach, describe, expect, test } from "bun:test"
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createDaemonCodeClient } from "@daemon-protocol/sdk"
 import { Server } from "../../src/server/server"
 import { tmpdir, disposeAllInstances } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
@@ -14,7 +14,7 @@ afterEach(async () => {
 })
 
 function client(directory: string) {
-  return createOpencodeClient({
+  return createDaemonCodeClient({
     baseUrl: "http://test",
     directory,
     fetch: ((req: Request) => Server.Default().app.fetch(req)) as unknown as typeof fetch,

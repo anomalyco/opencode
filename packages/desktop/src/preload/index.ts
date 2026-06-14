@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron"
 import type { ElectronAPI, WslServersEvent } from "./types"
-import type { UpdaterState } from "@opencode-ai/app/updater"
+import type { UpdaterState } from "@daemon-protocol/app/updater"
 
 const updaterCallbacks = new Set<(state: UpdaterState) => void>()
 let updaterState: UpdaterState | undefined

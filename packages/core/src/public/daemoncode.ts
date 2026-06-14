@@ -1,4 +1,4 @@
-export * as OpenCode from "./opencode"
+export * as DaemonCode from "./daemoncode"
 
 import { Context, Effect, Layer } from "effect"
 import { Catalog } from "../catalog"
@@ -21,7 +21,7 @@ export interface Interface {
 }
 
 /** Intentional public native API for Effect applications embedding Daemon Protocol. */
-export class Service extends Context.Service<Service, Interface>()("@opencode/public/OpenCode") {}
+export class Service extends Context.Service<Service, Interface>()("@daemon-protocol/public/DaemonCode") {}
 
 class SessionModelValidation extends Context.Service<
   SessionModelValidation,
@@ -30,7 +30,7 @@ class SessionModelValidation extends Context.Service<
       input: Session.SwitchModelInput & { readonly location: Session.Info["location"] },
     ) => Effect.Effect<void, Session.ModelUnavailableError | Session.VariantUnavailableError>
   }
->()("@opencode/public/OpenCode/SessionModelValidation") {}
+>()("@daemon-protocol/public/DaemonCode/SessionModelValidation") {}
 
 const ApplicationToolsLayer = ApplicationTools.layer
 const LocationServicesLayer = LocationServiceMap.layer.pipe(Layer.provide(ApplicationToolsLayer))
@@ -39,7 +39,7 @@ const SessionModelValidationLayer = Layer.effect(
   Effect.gen(function* () {
     const locations = yield* LocationServiceMap
     return SessionModelValidation.of({
-      validate: Effect.fn("OpenCode.sessions.validateModel")(function* (input) {
+      validate: Effect.fn("DaemonCode.sessions.validateModel")(function* (input) {
         yield* Effect.gen(function* () {
           yield* (yield* PluginBoot.Service).wait()
           const catalog = yield* Catalog.Service
@@ -98,7 +98,7 @@ export const layer = Layer.effect(
           }),
         get: sessions.get,
         list: sessions.list,
-        switchModel: Effect.fn("OpenCode.sessions.switchModel")(function* (input) {
+        switchModel: Effect.fn("DaemonCode.sessions.switchModel")(function* (input) {
           const session = yield* sessions.get(input.sessionID)
           yield* validation.validate({ ...input, location: session.location })
           yield* sessions.switchModel(input)

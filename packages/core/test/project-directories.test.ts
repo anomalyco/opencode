@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Schema } from "effect"
-import { Database } from "@opencode-ai/core/database/database"
-import { EventV2 } from "@opencode-ai/core/event"
-import { Project } from "@opencode-ai/core/project"
-import { ProjectDirectories } from "@opencode-ai/core/project/directories"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
-import { AbsolutePath } from "@opencode-ai/core/schema"
+import { Database } from "@daemon-protocol/core/database/database"
+import { EventV2 } from "@daemon-protocol/core/event"
+import { Project } from "@daemon-protocol/core/project"
+import { ProjectDirectories } from "@daemon-protocol/core/project/directories"
+import { ProjectTable } from "@daemon-protocol/core/project/sql"
+import { AbsolutePath } from "@daemon-protocol/core/schema"
 import { testEffect } from "./lib/effect"
 
 const database = Database.layerFromPath(":memory:")

@@ -34,7 +34,7 @@ Daemon Protocol 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://mo
 
 ```json title="opencode.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -55,7 +55,7 @@ Daemon Zen 是由 Daemon Protocol 團隊提供的模型列表，這些模型已�
 如果您是新使用者，我們建議從 Daemon Zen 開始。
 :::
 
-1. 在 TUI 中執行 `/connect` 指令，選擇 `Daemon Zen`，然後前往 [opencode.ai/auth](https://opencode.ai/zen)。
+1. 在 TUI 中執行 `/connect` 指令，選擇 `Daemon Zen`，然後前往 [daemonprotocol.com/auth](https://daemonprotocol.com/zen)。
 
    ```txt
    /connect
@@ -86,7 +86,7 @@ Daemon Zen 是由 Daemon Protocol 團隊提供的模型列表，這些模型已�
 
 Daemon Protocol Go 是一個低成本的訂閱計畫，提供對 Daemon Protocol 團隊提供的流行開放編碼模型的可靠存取，這些模型已經過測試和驗證，能夠與 Daemon Protocol 良好配合使用。
 
-1. 在 TUI 中執行 `/connect` 指令，選擇 `Daemon Protocol Go`，然後前往 [opencode.ai/auth](https://opencode.ai/zen)。
+1. 在 TUI 中執行 `/connect` 指令，選擇 `Daemon Protocol Go`，然後前往 [daemonprotocol.com/auth](https://daemonprotocol.com/zen)。
 
    ```txt
    /connect
@@ -190,7 +190,7 @@ Daemon Protocol Go 是一個低成本的訂閱計畫，提供對 Daemon Protocol
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "provider": {
        "amazon-bedrock": {
          "options": {
@@ -217,7 +217,7 @@ Daemon Protocol Go 是一個低成本的訂閱計畫，提供對 Daemon Protocol
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "provider": {
        "amazon-bedrock": {
          "options": {
@@ -261,7 +261,7 @@ Daemon Protocol Go 是一個低成本的訂閱計畫，提供對 Daemon Protocol
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "amazon-bedrock": {
       // ...
@@ -322,7 +322,7 @@ Daemon Protocol Go 是一個低成本的訂閱計畫，提供對 Daemon Protocol
 
 ```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "atomic-chat": {
       "npm": "@ai-sdk/openai-compatible",
@@ -550,7 +550,7 @@ Cloudflare AI Gateway 允許您透過統一端點存取來自 OpenAI、Anthropic
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
@@ -752,7 +752,7 @@ Daemon Protocol 會使用一個小模型來執行部分 AI 任務，例如產生
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "small_model": "gitlab/duo-chat-haiku-4-5",
   "share": "disabled"
 }
@@ -812,7 +812,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "gitlab": {
       "options": {
@@ -829,7 +829,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "plugin": ["opencode-gitlab-plugin"]
 }
 ```
@@ -1008,7 +1008,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1036,7 +1036,7 @@ Helicone 支援用於快取、使用者追蹤和工作階段管理等功能的�
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1090,7 +1090,7 @@ npm install -g opencode-helicone-session
 
 ```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1157,7 +1157,7 @@ IO.NET 提供 17 個針對不同使用情境最佳化的模型：
 
 ```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "lmstudio": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1278,7 +1278,7 @@ Ollama 可以自動為 Daemon Protocol 進行設定。詳見 [Ollama 整合文�
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1439,7 +1439,7 @@ Daemon Zen 是由 Daemon Protocol 團隊提供的經過測試和驗證的模型�
 
    ```json title="opencode.json" {6}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1454,7 +1454,7 @@ Daemon Zen 是由 Daemon Protocol 團隊提供的經過測試和驗證的模型�
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1703,7 +1703,7 @@ Vercel AI Gateway 允許您透過統一端點存取來自 OpenAI、Anthropic、G
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "vercel": {
       "models": {
@@ -1813,7 +1813,7 @@ Vercel AI Gateway 允許您透過統一端點存取來自 OpenAI、Anthropic、G
 
    ```json title="opencode.json" {6}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "provider": {
        "zenmux": {
          "models": {
@@ -1881,7 +1881,7 @@ Vercel AI Gateway 允許您透過統一端點存取來自 OpenAI、Anthropic、G
 
    ```json title="opencode.json" ""myprovider"" {5-15}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
@@ -1919,7 +1919,7 @@ Vercel AI Gateway 允許您透過統一端點存取來自 OpenAI、Anthropic、G
 
 ```json title="opencode.json" {9,11,17-20}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",

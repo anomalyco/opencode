@@ -1,7 +1,7 @@
 import * as Tool from "./tool"
 import DESCRIPTION from "./task.txt"
 import { ToolJsonSchema } from "./json-schema"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { SessionV1 } from "@daemon-protocol/core/v1/session"
 import { BackgroundJob } from "@/background/job"
 import { Session } from "@/session/session"
 import { Criticality } from "@/session/criticality"
@@ -16,7 +16,7 @@ import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ACE, Headless, Profiles } from "@/ace"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { Database } from "@opencode-ai/core/database/database"
+import { Database } from "@daemon-protocol/core/database/database"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -100,7 +100,7 @@ function renderOutput(input: {
   ].join("\n")
 }
 
-const CASCADE_DOCS_URL = "https://opencode.ai/docs/cascade-control"
+const CASCADE_DOCS_URL = "https://daemonprotocol.com/docs/cascade-control"
 
 // Build an operator-friendly explanation for a blocked sub-agent spawn. Plain
 // language first, then contextualized metrics, then concrete next steps. The

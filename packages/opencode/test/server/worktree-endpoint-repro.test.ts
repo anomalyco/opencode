@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Queue } from "effect"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@daemon-protocol/core/flag/flag"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Worktree } from "@/worktree"
 import { Server } from "../../src/server/server"

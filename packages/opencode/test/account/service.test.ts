@@ -16,7 +16,7 @@ import {
   RefreshToken,
   UserCode,
 } from "../../src/account/schema"
-import { Database } from "@opencode-ai/core/database/database"
+import { Database } from "@daemon-protocol/core/database/database"
 import { testEffect } from "../lib/effect"
 
 const truncate = Layer.effectDiscard(

@@ -80,7 +80,7 @@ Aby włączyć wszystkie wbudowane serwery LSP, ustaw `lsp` na `true`.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "lsp": true
 }
 ```
@@ -89,7 +89,7 @@ Użyj obiektu, aby pozostawić wbudowane serwery włączone i jednocześnie skon
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "lsp": {}
 }
 ```
@@ -114,7 +114,7 @@ Użyj `env`, aby ustawić zmienne środowiskowe podczas uruchamiania serwera LSP
 
 ```json title="opencode.json" {5-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "lsp": {
     "rust": {
       "env": {
@@ -133,7 +133,7 @@ Użyj właściwości `initialization`, aby przekazać niestandardowe opcje inicj
 
 ```json title="opencode.json" {5-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "lsp": {
     "typescript": {
       "initialization": {
@@ -158,7 +158,7 @@ Jeśli `lsp` zostanie pominięte, wszystkie serwery LSP są wyłączone. Aby wy�
 
 ```json title="opencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "lsp": false
 }
 ```
@@ -167,7 +167,7 @@ Aby wyłączyć **określony** serwer LSP, ustaw `disabled` na `true`:
 
 ```json title="opencode.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "lsp": {
     "typescript": {
       "disabled": true
@@ -184,7 +184,7 @@ Możesz dodać niestandardowe serwery LSP, podając polecenie i rozszerzenia pli
 
 ```json title="opencode.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "lsp": {
     "custom-lsp": {
       "command": ["custom-lsp-server", "--stdio"],

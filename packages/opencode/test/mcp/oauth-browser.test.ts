@@ -119,8 +119,8 @@ const { EventV2Bridge } = await import("../../src/event-v2-bridge")
 const { Config } = await import("../../src/config/config")
 const { McpAuth } = await import("../../src/mcp/auth")
 const { McpOAuthCallback } = await import("../../src/mcp/oauth-callback")
-const { FSUtil } = await import("@opencode-ai/core/fs-util")
-const { CrossSpawnSpawner } = await import("@opencode-ai/core/cross-spawn-spawner")
+const { FSUtil } = await import("@daemon-protocol/core/fs-util")
+const { CrossSpawnSpawner } = await import("@daemon-protocol/core/cross-spawn-spawner")
 const mcpTest = testEffect(
   MCP.layer.pipe(
     Layer.provide(McpAuth.defaultLayer),

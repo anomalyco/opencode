@@ -1,5 +1,5 @@
 import { Agent } from "@/agent/agent"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { SessionV1 } from "@daemon-protocol/core/v1/session"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { MCP } from "@/mcp"
@@ -21,8 +21,8 @@ import { SessionProcessor } from "./processor"
 import { PartID } from "./schema"
 import { EffectBridge } from "@/effect/bridge"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@daemon-protocol/core/provider"
+import { ModelV2 } from "@daemon-protocol/core/model"
 
 export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info

@@ -19,7 +19,7 @@ export const verifyPackage = async (archive: string) => {
     )
     await writeFile(
       path.join(directory, "consumer.ts"),
-      `import { HttpRecorder } from "@opencode-ai/http-recorder"
+      `import { HttpRecorder } from "@daemon-protocol/http-recorder"
 import { NodeSocket } from "@effect/platform-node"
 import { Layer } from "effect"
 import { HttpClient } from "effect/unstable/http"
@@ -55,7 +55,7 @@ HttpRecorder.socket("consumer/socket", options).pipe(
         "node",
         "--input-type=module",
         "-e",
-        'import("@opencode-ai/http-recorder").then((module) => { const root = Object.keys(module).sort(); const namespace = Object.keys(module.HttpRecorder).sort(); if (JSON.stringify(root) !== JSON.stringify(["HttpRecorder"])) throw new Error(`Unexpected root exports: ${root}`); if (JSON.stringify(namespace) !== JSON.stringify(["http", "socket"])) throw new Error(`Unexpected namespace exports: ${namespace}`) })',
+        'import("@daemon-protocol/http-recorder").then((module) => { const root = Object.keys(module).sort(); const namespace = Object.keys(module.HttpRecorder).sort(); if (JSON.stringify(root) !== JSON.stringify(["HttpRecorder"])) throw new Error(`Unexpected root exports: ${root}`); if (JSON.stringify(namespace) !== JSON.stringify(["http", "socket"])) throw new Error(`Unexpected namespace exports: ${namespace}`) })',
       ],
       directory,
     )

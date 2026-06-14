@@ -18,7 +18,7 @@ Brug den til at bygge integrasjoner og kontrollere opencode programmatisk.
 Installer SDK fra npm:
 
 ```bash
-npm install @opencode-ai/sdk
+npm install @daemon-protocol/sdk
 ```
 
 ---
@@ -28,9 +28,9 @@ npm install @opencode-ai/sdk
 Opret en forekomst av opencode:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createDaemonCode } from "@daemon-protocol/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createDaemonCode()
 ```
 
 Dette starter både en server og en klient
@@ -52,9 +52,9 @@ Dette starter både en server og en klient
 Du kan sende et konfigurasjonsobjekt for at tilpasse virkemåten. Forekomsten henter fortsatt din `opencode.json`, men du kan overstyre eller tilføje til konfigurasjon inline:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createDaemonCode } from "@daemon-protocol/sdk"
 
-const opencode = await createOpencode({
+const opencode = await createDaemonCode({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -72,9 +72,9 @@ opencode.server.close()
 Hvis du allerede har en kjørende forekomst av opencode, kan du oprete en klientforekomst for at koble til den:
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createDaemonCodeClient } from "@daemon-protocol/sdk"
 
-const client = createOpencodeClient({
+const client = createDaemonCodeClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -96,7 +96,7 @@ const client = createOpencodeClient({
 SDK inkluderer TypeScript-definisjoner for alle API-typer. Importer dem direkte:
 
 ```typescript
-import type { Session, Message, Part } from "@opencode-ai/sdk"
+import type { Session, Message, Part } from "@daemon-protocol/sdk"
 ```
 
 Alle typer er generert fra serverens OpenAPI-spesifikasjon og tilgængelig i <a href={typesUrl}>types-filen</a>.

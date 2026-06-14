@@ -32,7 +32,7 @@ Spesifiser npm-pakker i konfigurasjonsfilen.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
 }
 ```
@@ -128,7 +128,7 @@ Plugin-funksjonen mottar:
 For TypeScript-plugins kan du importere typer fra plugin-pakken:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -280,7 +280,7 @@ export const InjectEnvPlugin = async () => {
 Plugins kan også legge til egendefinerte verktøy til Daemon Protocol:
 
 ```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+import { type Plugin, tool } from "@daemon-protocol/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -331,7 +331,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-Nivåer: `debug`, `info`, `warn`, `error`. Se [SDK dokumentasjon](https://opencode.ai/docs/sdk) for detaljer.
+Nivåer: `debug`, `info`, `warn`, `error`. Se [SDK dokumentasjon](https://daemonprotocol.com/docs/sdk) for detaljer.
 
 ---
 
@@ -340,7 +340,7 @@ Nivåer: `debug`, `info`, `warn`, `error`. Se [SDK dokumentasjon](https://openco
 Tilpass konteksten inkludert når en økt komprimeres:
 
 ```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -364,7 +364,7 @@ Include any state that should persist across compaction:
 Du kan også erstatte komprimeringsprompten helt ved å stille inn `output.prompt`:
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

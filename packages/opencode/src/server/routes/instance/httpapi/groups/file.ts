@@ -1,5 +1,5 @@
-import { FileSystem } from "@opencode-ai/core/filesystem"
-import { NonNegativeInt } from "@opencode-ai/core/schema"
+import { FileSystem } from "@daemon-protocol/core/filesystem"
+import { NonNegativeInt } from "@daemon-protocol/core/schema"
 import { LSP } from "@/lsp/lsp"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
@@ -178,7 +178,7 @@ export const FileApi = HttpApi.make("file")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "opencode experimental HttpApi",
+      title: "DaemonCode experimental HttpApi",
       version: "0.0.1",
       description: "Experimental HttpApi surface for selected instance routes.",
     }),

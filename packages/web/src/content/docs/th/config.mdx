@@ -13,7 +13,7 @@ Daemon Protocol รองรับทั้งรูปแบบ **JSON** แล
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
   "server": {
@@ -151,9 +151,9 @@ opencode run "Hello world"
 
 ## สคีมา
 
-ไฟล์กำหนดค่ามีสคีมาที่กำหนดไว้ใน [**`opencode.ai/config.json`**](https://opencode.ai/config.json)
+ไฟล์กำหนดค่ามีสคีมาที่กำหนดไว้ใน [**`daemonprotocol.com/config.json`**](https://daemonprotocol.com/config.json)
 
-การกำหนดค่า TUI ใช้ [**`opencode.ai/tui.json`**](https://opencode.ai/tui.json)
+การกำหนดค่า TUI ใช้ [**`daemonprotocol.com/tui.json`**](https://daemonprotocol.com/tui.json)
 
 ผู้แก้ไขของคุณควรสามารถตรวจสอบและเติมข้อความอัตโนมัติตามสคีมาได้
 
@@ -165,7 +165,7 @@ opencode run "Hello world"
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://daemonprotocol.com/tui.json",
   "scroll_speed": 3,
   "scroll_acceleration": {
     "enabled": true
@@ -188,7 +188,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
@@ -217,7 +217,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "tools": {
     "write": false,
     "bash": false
@@ -235,7 +235,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {},
   "model": "anthropic/claude-sonnet-4-5",
   "small_model": "anthropic/claude-haiku-4-5"
@@ -248,7 +248,7 @@ opencode run "Hello world"
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -277,7 +277,7 @@ Amazon Bedrock รองรับ AWS-การกำหนดค่าเฉพ
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -308,7 +308,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://daemonprotocol.com/tui.json",
   "theme": "tokyonight"
 }
 ```
@@ -323,7 +323,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
@@ -349,7 +349,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "default_agent": "plan"
 }
 ```
@@ -366,7 +366,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "share": "manual"
 }
 ```
@@ -387,7 +387,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "command": {
     "test": {
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
@@ -413,7 +413,7 @@ Bearer Token (`AWS_BEARER_TOKEN_BEDROCK` หรือ `/connect`) มีคว�
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://daemonprotocol.com/tui.json",
   "keybinds": {}
 }
 ```
@@ -428,7 +428,7 @@ Daemon Protocol จะดาวน์โหลดการอัปเดตใ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "autoupdate": false
 }
 ```
@@ -444,7 +444,7 @@ Daemon Protocol จะดาวน์โหลดการอัปเดตใ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -472,7 +472,7 @@ Daemon Protocol จะดาวน์โหลดการอัปเดตใ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "edit": "ask",
     "bash": "ask"
@@ -490,7 +490,7 @@ Daemon Protocol จะดาวน์โหลดการอัปเดตใ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "compaction": {
     "auto": true,
     "prune": false,
@@ -511,7 +511,7 @@ Daemon Protocol จะดาวน์โหลดการอัปเดตใ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "watcher": {
     "ignore": ["node_modules/**", "dist/**", ".git/**"]
   }
@@ -528,7 +528,7 @@ Daemon Protocol จะดาวน์โหลดการอัปเดตใ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {}
 }
 ```
@@ -545,7 +545,7 @@ Daemon Protocol จะดาวน์โหลดการอัปเดตใ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
 }
 ```
@@ -560,7 +560,7 @@ Daemon Protocol จะดาวน์โหลดการอัปเดตใ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
@@ -576,7 +576,7 @@ Daemon Protocol จะดาวน์โหลดการอัปเดตใ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "disabled_providers": ["openai", "gemini"]
 }
 ```
@@ -599,7 +599,7 @@ Daemon Protocol จะดาวน์โหลดการอัปเดตใ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "enabled_providers": ["anthropic", "openai"]
 }
 ```
@@ -620,7 +620,7 @@ Daemon Protocol จะดาวน์โหลดการอัปเดตใ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "experimental": {}
 }
 ```
@@ -643,7 +643,7 @@ Daemon Protocol จะดาวน์โหลดการอัปเดตใ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "model": "{env:OPENCODE_MODEL}",
   "provider": {
     "anthropic": {
@@ -666,7 +666,7 @@ Daemon Protocol จะดาวน์โหลดการอัปเดตใ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "instructions": ["./custom-instructions.md"],
   "provider": {
     "openai": {

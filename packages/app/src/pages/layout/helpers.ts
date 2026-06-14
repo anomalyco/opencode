@@ -1,5 +1,5 @@
-import { getFilename } from "@opencode-ai/core/util/path"
-import { type Session } from "@opencode-ai/sdk/v2/client"
+import { getFilename } from "@daemon-protocol/core/util/path"
+import { type Session } from "@daemon-protocol/sdk/v2/client"
 import { pathKey } from "@/utils/path-key"
 import type { ServerConnection } from "@/context/server"
 
@@ -96,7 +96,7 @@ export function homeSessionServerStatus(active: boolean, status: () => { working
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
 export function getProjectAvatarSource(id?: string, icon?: { color?: string; url?: string; override?: string }) {
-  if (id === OPENCODE_PROJECT_ID) return "https://opencode.ai/favicon.svg"
+  if (id === OPENCODE_PROJECT_ID) return "https://daemonprotocol.com/favicon.svg"
   if (icon?.override) return icon.override
   if (icon?.color) return undefined
   return icon?.url

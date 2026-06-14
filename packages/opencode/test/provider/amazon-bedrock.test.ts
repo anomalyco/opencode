@@ -2,15 +2,15 @@ import { afterEach, describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
 import path from "path"
 import { unlink } from "fs/promises"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@daemon-protocol/core/global"
 import { Filesystem } from "@/util/filesystem"
 import { Env } from "../../src/env"
 import { Provider } from "@/provider/provider"
 
 import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@daemon-protocol/core/provider"
+import { ModelV2 } from "@daemon-protocol/core/model"
 
 const it = testEffect(Layer.mergeAll(Provider.defaultLayer, Env.defaultLayer))
 

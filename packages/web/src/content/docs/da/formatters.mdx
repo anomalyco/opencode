@@ -61,7 +61,7 @@ Du kan tilpasse formatere gennem afsnittet `formatter` i din Daemon Protocol-kon
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {}
 }
 ```
@@ -85,7 +85,7 @@ For at deaktivere **alle** formatere globalt, skal du indstille `formatter` til 
 
 ```json title="opencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": false
 }
 ```
@@ -94,7 +94,7 @@ For at deaktivere en **specifik** formatter, skal du indstille `disabled` til `t
 
 ```json title="opencode.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -111,7 +111,7 @@ Du kan tilsidesætte de indbyggede formattere eller tilføje nye ved at angive k
 
 ```json title="opencode.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "command": ["npx", "prettier", "--write", "$FILE"],

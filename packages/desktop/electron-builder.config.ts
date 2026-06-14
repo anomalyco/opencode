@@ -39,7 +39,7 @@ const APP_IDS = {
 } as const
 
 const getBase = (appId: string): Configuration => ({
-  artifactName: "opencode-desktop-${os}-${arch}.${ext}",
+  artifactName: "daemoncode-desktop-${os}-${arch}.${ext}",
   directories: {
     output: "dist",
     buildResources: "resources",
@@ -75,7 +75,7 @@ const getBase = (appId: string): Configuration => ({
   },
   protocols: {
     name: "Daemon Protocol",
-    schemes: ["opencode"],
+    schemes: ["daemoncode", "opencode"],
   },
   win: {
     icon: `resources/icons/icon.ico`,
@@ -116,7 +116,7 @@ function getConfig() {
         ...base,
         appId,
         productName: "Daemon Protocol Dev",
-        rpm: { packageName: "opencode-dev" },
+        rpm: { packageName: "daemoncode-dev" },
       }
     }
     case "beta": {
@@ -124,9 +124,9 @@ function getConfig() {
         ...base,
         appId,
         productName: "Daemon Protocol Beta",
-        protocols: { name: "Daemon Protocol Beta", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode-beta", channel: "latest" },
-        rpm: { packageName: "opencode-beta" },
+        protocols: { name: "Daemon Protocol Beta", schemes: ["daemoncode", "opencode"] },
+        publish: { provider: "github", owner: "daemon-blockint-tech", repo: "daemoncode-beta", channel: "latest" },
+        rpm: { packageName: "daemoncode-beta" },
       }
     }
     case "prod": {
@@ -134,10 +134,10 @@ function getConfig() {
         ...base,
         appId,
         productName: "Daemon Protocol",
-        protocols: { name: "Daemon Protocol", schemes: ["opencode"] },
-        publish: { provider: "github", owner: "anomalyco", repo: "opencode", channel: "latest" },
+        protocols: { name: "Daemon Protocol", schemes: ["daemoncode", "opencode"] },
+        publish: { provider: "github", owner: "daemon-blockint-tech", repo: "daemoncode", channel: "latest" },
         deb: { fpm: [legacyDesktopEntryFpm] },
-        rpm: { packageName: "opencode", fpm: [legacyDesktopEntryFpm] },
+        rpm: { packageName: "daemoncode", fpm: [legacyDesktopEntryFpm] },
       }
     }
   }

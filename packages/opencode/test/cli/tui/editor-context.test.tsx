@@ -3,11 +3,11 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, expect, spyOn, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { EditorContextProvider, useEditorContext, type EditorIntegration } from "@opencode-ai/tui/context/editor"
+import { EditorContextProvider, useEditorContext, type EditorIntegration } from "@daemon-protocol/tui/context/editor"
 import { tmpdir } from "../../fixture/fixture"
 import { FakeWebSocket } from "../../lib/websocket"
 import { TestTuiContexts } from "../../fixture/tui-environment"
-import { discoverEditorConnection } from "@opencode-ai/tui/editor"
+import { discoverEditorConnection } from "@daemon-protocol/tui/editor"
 
 const originalClaudePort = process.env.CLAUDE_CODE_SSE_PORT
 const originalOpencodePort = process.env.OPENCODE_EDITOR_SSE_PORT

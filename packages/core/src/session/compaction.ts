@@ -1,6 +1,6 @@
 export * as SessionCompaction from "./compaction"
 
-import { LLM, LLMError, LLMEvent, Message, type LLMRequest, type Model } from "@opencode-ai/llm"
+import { LLM, LLMError, LLMEvent, Message, type LLMRequest, type Model } from "@daemon-protocol/llm"
 import { DateTime, Effect, Stream } from "effect"
 import type { Config } from "../config"
 import type { EventV2 } from "../event"

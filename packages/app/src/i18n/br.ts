@@ -125,7 +125,7 @@ export const dict = {
   "provider.connect.opencodeZen.line2":
     "Com uma única chave de API você terá acesso a modelos como Claude, GPT, Gemini, GLM e mais.",
   "provider.connect.opencodeZen.visit.prefix": "Visite ",
-  "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
+  "provider.connect.opencodeZen.visit.link": "daemonprotocol.com/zen",
   "provider.connect.opencodeZen.visit.suffix": " para obter sua chave de API.",
   "provider.connect.oauth.code.visit.prefix": "Visite ",
   "provider.connect.oauth.code.visit.link": "este link",

@@ -1,15 +1,15 @@
 // Opencode publish boundary for core events. Attach routed instance location
 // so direct EventV2 consumers can isolate directory/workspace streams.
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@daemon-protocol/core/effect/layer-node"
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { GlobalBus } from "@/bus/global"
-import { EventV2 } from "@opencode-ai/core/event"
-import { Location } from "@opencode-ai/core/location"
-import { Project } from "@opencode-ai/core/project"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import "@opencode-ai/core/account"
-import "@opencode-ai/core/catalog"
-import "@opencode-ai/core/session/event"
+import { EventV2 } from "@daemon-protocol/core/event"
+import { Location } from "@daemon-protocol/core/location"
+import { Project } from "@daemon-protocol/core/project"
+import { AbsolutePath } from "@daemon-protocol/core/schema"
+import "@daemon-protocol/core/account"
+import "@daemon-protocol/core/catalog"
+import "@daemon-protocol/core/session/event"
 import { Context, Effect, Layer } from "effect"
 
 export class Service extends Context.Service<Service, EventV2.Interface>()("@opencode/EventV2Bridge") {}

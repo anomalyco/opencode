@@ -1,8 +1,8 @@
 import { expect, mock, test } from "bun:test"
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiPluginApi } from "@daemon-protocol/plugin/tui"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect } from "effect"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@daemon-protocol/core/global"
 import { createTuiResolvedConfig } from "./fixture/tui-runtime"
 import { createEventSource, createFetch, directory, json } from "./fixture/tui-sdk"
 

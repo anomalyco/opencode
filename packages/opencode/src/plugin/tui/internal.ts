@@ -1,4 +1,4 @@
-import { createBuiltinPlugins, type BuiltinTuiPlugin } from "@opencode-ai/tui/builtins"
+import { createBuiltinPlugins, type BuiltinTuiPlugin } from "@daemon-protocol/tui/builtins"
 import type { RuntimeFlags } from "@/effect/runtime-flags"
 
 export type InternalTuiPlugin = BuiltinTuiPlugin

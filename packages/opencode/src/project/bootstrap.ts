@@ -1,4 +1,4 @@
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@daemon-protocol/core/effect/layer-node"
 import { Plugin } from "../plugin"
 import { Format } from "../format"
 import { LSP } from "@/lsp/lsp"

@@ -14,8 +14,8 @@ export const headerLinks = [
   { href: "#geo-breakdown", label: "Geo Breakdown" },
 ] as const
 export const githubLink = {
-  href: "https://github.com/anomalyco/opencode",
-  apiHref: "https://api.github.com/repos/anomalyco/opencode",
+  href: "https://github.com/daemon-blockint-tech/daemoncode",
+  apiHref: "https://api.github.com/repos/daemon-blockint-tech/daemoncode",
   label: "GitHub",
   fallbackStars: "150K",
   ariaLabel: "Star Daemon Protocol on GitHub",
@@ -127,7 +127,7 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
             <strong>{githubLink.label}</strong>
             <span>[{props.githubStars}]</span>
           </a>
-          <a data-slot="header-button" data-variant="contrast" href="https://opencode.ai/">
+          <a data-slot="header-button" data-variant="contrast" href="https://daemonprotocol.com/">
             <strong>Try Daemon Protocol</strong>
           </a>
           <button
@@ -218,12 +218,12 @@ export function Footer(props: {
     { href: "#geo-breakdown", label: "Geo Breakdown" },
   ]
   const legal = [
-    { href: "https://opencode.ai/legal/terms-of-service", label: "Terms of service" },
-    { href: "https://opencode.ai/legal/privacy-policy", label: "Privacy policy" },
+    { href: "https://daemonprotocol.com/legal/terms-of-service", label: "Terms of service" },
+    { href: "https://daemonprotocol.com/legal/privacy-policy", label: "Privacy policy" },
   ]
   const connect = [
-    { href: "mailto:hello@opencode.ai", label: "Contact us" },
-    { href: "https://opencode.ai/discord", label: "Community" },
+    { href: "mailto:hello@daemonprotocol.com", label: "Contact us" },
+    { href: "https://daemonprotocol.com/discord", label: "Community" },
     { href: "https://x.com/opencode", label: "X" },
     githubLink,
     { href: "https://www.youtube.com/@anomaly-co", label: "YouTube" },
@@ -233,7 +233,7 @@ export function Footer(props: {
     <footer data-component="footer">
       <SectionBridge label="GEO BREAKDOWN" href="#geo-breakdown" />
       <div data-slot="footer-grid">
-        <a data-slot="footer-mark" href="https://opencode.ai" aria-label="Daemon Protocol home">
+        <a data-slot="footer-mark" href="https://daemonprotocol.com" aria-label="Daemon Protocol home">
           <DaemonProtocolMark />
         </a>
         <FooterColumn title="Model Data" links={modelStats} />

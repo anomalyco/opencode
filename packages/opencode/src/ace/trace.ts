@@ -1,6 +1,6 @@
 import { DateTime, Effect } from "effect"
-import { SessionEvent } from "@opencode-ai/core/session/event"
-import type { ID, Interface } from "@opencode-ai/core/event"
+import { SessionEvent } from "@daemon-protocol/core/session/event"
+import type { ID, Interface } from "@daemon-protocol/core/event"
 import type { AceDecision, AcePolicy, AcePressure } from "./policy"
 
 export const emitDecision = Effect.fn("ACE.emitDecision")(function* (

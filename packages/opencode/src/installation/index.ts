@@ -1,18 +1,18 @@
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
+import { LayerNode } from "@daemon-protocol/core/effect/layer-node"
+import { httpClient } from "@daemon-protocol/core/effect/layer-node-platform"
 import { Effect, Layer, Schema, Context, Stream } from "effect"
-import { serviceUse } from "@opencode-ai/core/effect/service-use"
+import { serviceUse } from "@daemon-protocol/core/effect/service-use"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { errorMessage } from "@/util/error"
 import { ChildProcess } from "effect/unstable/process"
-import { AppProcess } from "@opencode-ai/core/process"
+import { AppProcess } from "@daemon-protocol/core/process"
 import path from "path"
-import { EventV2 } from "@opencode-ai/core/event"
-import { makeRuntime } from "@opencode-ai/core/effect/runtime"
+import { EventV2 } from "@daemon-protocol/core/event"
+import { makeRuntime } from "@daemon-protocol/core/effect/runtime"
 import semver from "semver"
-import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
-import { NpmConfig } from "@opencode-ai/core/npm-config"
+import { InstallationChannel, InstallationVersion } from "@daemon-protocol/core/installation/version"
+import { NpmConfig } from "@daemon-protocol/core/npm-config"
 
 export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
 
@@ -51,7 +51,7 @@ export const Info = Schema.Struct({
 export type Info = Schema.Schema.Type<typeof Info>
 
 export function userAgent(client = "cli") {
-  return `opencode/${InstallationChannel}/${InstallationVersion}/${client}`
+  return `daemoncode/${InstallationChannel}/${InstallationVersion}/${client}`
 }
 
 export const USER_AGENT = userAgent()
@@ -135,12 +135,18 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
     )
 
     const getBrewFormula = Effect.fnUntraced(function* () {
+      const newTap = yield* text(["brew", "list", "--formula", "daemon-blockint-tech/tap/daemoncode"])
+      if (newTap.includes("daemoncode")) return "daemon-blockint-tech/tap/daemoncode"
+      const newCore = yield* text(["brew", "list", "--formula", "daemoncode"])
+      if (newCore.includes("daemoncode")) return "daemoncode"
       const tapFormula = yield* text(["brew", "list", "--formula", "anomalyco/tap/opencode"])
       if (tapFormula.includes("opencode")) return "anomalyco/tap/opencode"
       const coreFormula = yield* text(["brew", "list", "--formula", "opencode"])
       if (coreFormula.includes("opencode")) return "opencode"
-      return "opencode"
+      return "daemoncode"
     })
+
+    const listsPackage = (output: string, names: string[]) => names.some((name) => output.includes(name))
 
     const upgradeFailure = (method: Method, result?: { code: number; stdout: string; stderr: string }) => {
       if (method === "choco") return "not running from an elevated command shell"
@@ -156,7 +162,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
 
     const upgradeCurl = Effect.fnUntraced(
       function* (target: string) {
-        const response = yield* httpOk.execute(HttpClientRequest.get("https://opencode.ai/install"))
+        const response = yield* httpOk.execute(HttpClientRequest.get("https://daemonprotocol.com/install"))
         const body = yield* response.text
         const bodyBytes = new TextEncoder().encode(body)
         const shell = yield* upgradeScriptShell()
@@ -184,18 +190,19 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
         }
       }),
       method: Effect.fn("Installation.method")(function* () {
+        if (process.execPath.includes(path.join(".daemoncode", "bin"))) return "curl" as Method
         if (process.execPath.includes(path.join(".opencode", "bin"))) return "curl" as Method
         if (process.execPath.includes(path.join(".local", "bin"))) return "curl" as Method
         const exec = process.execPath.toLowerCase()
 
-        const checks: Array<{ name: Method; command: () => Effect.Effect<string> }> = [
-          { name: "npm", command: () => text(["npm", "list", "-g", "--depth=0"]) },
-          { name: "yarn", command: () => text(["yarn", "global", "list"]) },
-          { name: "pnpm", command: () => text(["pnpm", "list", "-g", "--depth=0"]) },
-          { name: "bun", command: () => text(["bun", "pm", "ls", "-g"]) },
-          { name: "brew", command: () => text(["brew", "list", "--formula", "opencode"]) },
-          { name: "scoop", command: () => text(["scoop", "list", "opencode"]) },
-          { name: "choco", command: () => text(["choco", "list", "--limit-output", "opencode"]) },
+        const checks: Array<{ name: Method; command: () => Effect.Effect<string>; names: string[] }> = [
+          { name: "npm", command: () => text(["npm", "list", "-g", "--depth=0"]), names: ["daemoncode", "opencode-ai", "opencode"] },
+          { name: "yarn", command: () => text(["yarn", "global", "list"]), names: ["daemoncode", "opencode-ai", "opencode"] },
+          { name: "pnpm", command: () => text(["pnpm", "list", "-g", "--depth=0"]), names: ["daemoncode", "opencode-ai", "opencode"] },
+          { name: "bun", command: () => text(["bun", "pm", "ls", "-g"]), names: ["daemoncode", "opencode-ai", "opencode"] },
+          { name: "brew", command: () => text(["brew", "list", "--formula"]), names: ["daemoncode", "opencode"] },
+          { name: "scoop", command: () => text(["scoop", "list"]), names: ["daemoncode", "opencode"] },
+          { name: "choco", command: () => text(["choco", "list", "--limit-output"]), names: ["daemoncode", "opencode"] },
         ]
 
         checks.sort((a, b) => {
@@ -208,9 +215,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
 
         for (const check of checks) {
           const output = yield* check.command()
-          const installedName =
-            check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
-          if (output.includes(installedName)) {
+          if (listsPackage(output, check.names)) {
             return check.name
           }
         }
@@ -227,19 +232,27 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
             const info = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(BrewInfoV2))(infoJson)
             return info.formulae[0].versions.stable
           }
-          const response = yield* httpOk.execute(
-            HttpClientRequest.get("https://formulae.brew.sh/api/formula/opencode.json").pipe(
-              HttpClientRequest.acceptJson,
-            ),
-          )
-          const data = yield* HttpClientResponse.schemaBodyJson(BrewFormula)(response)
-          return data.versions.stable
+          for (const formulaName of ["daemoncode", "opencode"]) {
+            const response = yield* httpOk
+              .execute(
+                HttpClientRequest.get(`https://formulae.brew.sh/api/formula/${formulaName}.json`).pipe(
+                  HttpClientRequest.acceptJson,
+                ),
+              )
+              .pipe(Effect.catchAll(() => Effect.succeed(null)))
+            if (!response) continue
+            const data = yield* HttpClientResponse.schemaBodyJson(BrewFormula)(response).pipe(
+              Effect.catchAll(() => Effect.succeed(null)),
+            )
+            if (data) return data.versions.stable
+          }
+          return yield* Effect.die(new Error("brew formula not found"))
         }
 
         if (detectedMethod === "npm" || detectedMethod === "bun" || detectedMethod === "pnpm") {
           const response = yield* httpOk.execute(
             HttpClientRequest.get(
-              `${yield* NpmConfig.registry(process.cwd())}/opencode-ai/${InstallationChannel}`,
+              `${yield* NpmConfig.registry(process.cwd())}/daemoncode/${InstallationChannel}`,
             ).pipe(HttpClientRequest.acceptJson),
           )
           const data = yield* HttpClientResponse.schemaBodyJson(NpmPackage)(response)
@@ -247,27 +260,43 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
         }
 
         if (detectedMethod === "choco") {
-          const response = yield* httpOk.execute(
-            HttpClientRequest.get(
-              "https://community.chocolatey.org/api/v2/Packages?$filter=Id%20eq%20%27opencode%27%20and%20IsLatestVersion&$select=Version",
-            ).pipe(HttpClientRequest.setHeaders({ Accept: "application/json;odata=verbose" })),
-          )
-          const data = yield* HttpClientResponse.schemaBodyJson(ChocoPackage)(response)
-          return data.d.results[0].Version
+          for (const id of ["daemoncode", "opencode"]) {
+            const response = yield* httpOk
+              .execute(
+                HttpClientRequest.get(
+                  `https://community.chocolatey.org/api/v2/Packages?$filter=Id%20eq%20%27${id}%27%20and%20IsLatestVersion&$select=Version`,
+                ).pipe(HttpClientRequest.setHeaders({ Accept: "application/json;odata=verbose" })),
+              )
+              .pipe(Effect.catchAll(() => Effect.succeed(null)))
+            if (!response) continue
+            const data = yield* HttpClientResponse.schemaBodyJson(ChocoPackage)(response).pipe(
+              Effect.catchAll(() => Effect.succeed(null)),
+            )
+            if (data?.d.results[0]?.Version) return data.d.results[0].Version
+          }
+          return yield* Effect.die(new Error("choco package not found"))
         }
 
         if (detectedMethod === "scoop") {
-          const response = yield* httpOk.execute(
-            HttpClientRequest.get(
-              "https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/opencode.json",
-            ).pipe(HttpClientRequest.setHeaders({ Accept: "application/json" })),
-          )
-          const data = yield* HttpClientResponse.schemaBodyJson(ScoopManifest)(response)
-          return data.version
+          for (const id of ["daemoncode", "opencode"]) {
+            const response = yield* httpOk
+              .execute(
+                HttpClientRequest.get(
+                  `https://raw.githubusercontent.com/ScoopInstaller/Main/master/bucket/${id}.json`,
+                ).pipe(HttpClientRequest.setHeaders({ Accept: "application/json" })),
+              )
+              .pipe(Effect.catchAll(() => Effect.succeed(null)))
+            if (!response) continue
+            const data = yield* HttpClientResponse.schemaBodyJson(ScoopManifest)(response).pipe(
+              Effect.catchAll(() => Effect.succeed(null)),
+            )
+            if (data?.version) return data.version
+          }
+          return yield* Effect.die(new Error("scoop package not found"))
         }
 
         const response = yield* httpOk.execute(
-          HttpClientRequest.get("https://api.github.com/repos/anomalyco/opencode/releases/latest").pipe(
+          HttpClientRequest.get("https://api.github.com/repos/daemon-blockint-tech/daemoncode/releases/latest").pipe(
             HttpClientRequest.acceptJson,
           ),
         )
@@ -281,25 +310,29 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
             upgradeResult = yield* upgradeCurl(target)
             break
           case "npm":
-            upgradeResult = yield* run(["npm", "install", "-g", `opencode-ai@${target}`])
+            upgradeResult = yield* run(["npm", "install", "-g", `daemoncode@${target}`])
             break
           case "pnpm":
-            upgradeResult = yield* run(["pnpm", "install", "-g", `opencode-ai@${target}`])
+            upgradeResult = yield* run(["pnpm", "install", "-g", `daemoncode@${target}`])
             break
           case "bun":
-            upgradeResult = yield* run(["bun", "install", "-g", `opencode-ai@${target}`])
+            upgradeResult = yield* run(["bun", "install", "-g", `daemoncode@${target}`])
             break
           case "brew": {
             const formula = yield* getBrewFormula()
             const env = { HOMEBREW_NO_AUTO_UPDATE: "1" }
             if (formula.includes("/")) {
-              const tap = yield* run(["brew", "tap", "anomalyco/tap"], { env })
+              let tap = yield* run(["brew", "tap", "daemon-blockint-tech/tap"], { env })
+              let repo = "daemon-blockint-tech/tap"
+              if (tap.code !== 0) {
+                tap = yield* run(["brew", "tap", "anomalyco/tap"], { env })
+                repo = "anomalyco/tap"
+              }
               if (tap.code !== 0) {
                 upgradeResult = tap
                 break
               }
-              const repo = yield* text(["brew", "--repo", "anomalyco/tap"])
-              const dir = repo.trim()
+              const dir = (yield* text(["brew", "--repo", repo])).trim()
               if (dir) {
                 const pull = yield* run(["git", "pull", "--ff-only"], { cwd: dir, env })
                 if (pull.code !== 0) {
@@ -312,10 +345,16 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
             break
           }
           case "choco":
-            upgradeResult = yield* run(["choco", "upgrade", "opencode", `--version=${target}`, "-y"])
+            upgradeResult = yield* run(["choco", "upgrade", "daemoncode", `--version=${target}`, "-y"])
+            if (upgradeResult.code !== 0) {
+              upgradeResult = yield* run(["choco", "upgrade", "opencode", `--version=${target}`, "-y"])
+            }
             break
           case "scoop":
-            upgradeResult = yield* run(["scoop", "install", `opencode@${target}`])
+            upgradeResult = yield* run(["scoop", "install", `daemoncode@${target}`])
+            if (upgradeResult.code !== 0) {
+              upgradeResult = yield* run(["scoop", "install", `opencode@${target}`])
+            }
             break
           default:
             return yield* new UpgradeFailedError({ stderr: `Unknown installation method: ${m}` })

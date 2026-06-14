@@ -28,7 +28,7 @@ jobs:
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Install Daemon Protocol
-        run: bun i -g opencode-ai
+        run: bun i -g daemoncode
 
       - name: Sync beta branch
         env:

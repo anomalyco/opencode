@@ -13,7 +13,7 @@ Daemon Protocol unterstützt die Formate **JSON** und **JSONC** (JSON mit Kommen
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   // Theme configuration
   "theme": "opencode",
   "model": "anthropic/claude-sonnet-4-5",
@@ -146,7 +146,7 @@ Das benutzerdefinierte Verzeichnis wird nach den Verzeichnissen global config un
 
 ## Schema
 
-Die Konfigurationsdatei verfügt über ein Schema, das in [**`opencode.ai/config.json`**](https://opencode.ai/config.json) definiert ist.
+Die Konfigurationsdatei verfügt über ein Schema, das in [**`daemonprotocol.com/config.json`**](https://daemonprotocol.com/config.json) definiert ist.
 
 Ihr Editor sollte in der Lage sein, basierend auf dem Schema zu validieren und automatisch zu vervollständigen.
 
@@ -158,7 +158,7 @@ Sie können TUI-spezifische Einstellungen über die Option `tui` konfigurieren.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {
@@ -185,7 +185,7 @@ Sie können Servereinstellungen für die Befehle `opencode serve` und `opencode 
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
@@ -214,7 +214,7 @@ Sie können die Tools, die ein LLM verwenden kann, über die Option `tools` verw
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "tools": {
     "write": false,
     "bash": false
@@ -232,7 +232,7 @@ Sie können die Anbieter und Modelle, die Sie in Ihrer Daemon Protocol-Konfigura
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {},
   "model": "anthropic/claude-sonnet-4-5",
   "small_model": "anthropic/claude-haiku-4-5"
@@ -245,7 +245,7 @@ Zu den Anbieteroptionen können `timeout` und `setCacheKey` gehören:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -274,7 +274,7 @@ Amazon Bedrock unterstützt AWS-spezifische Konfigurationen:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -305,7 +305,7 @@ Sie können das Thema, das Sie in Ihrer Daemon Protocol-Konfiguration verwenden 
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "theme": ""
 }
 ```
@@ -320,7 +320,7 @@ Sie können das Thema, das Sie in Ihrer Daemon Protocol-Konfiguration verwenden 
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
@@ -346,7 +346,7 @@ Sie können den Standardagenten mit der Option `default_agent` festlegen. Dadurc
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "default_agent": "plan"
 }
 ```
@@ -363,7 +363,7 @@ Sie können die Funktion [share](/docs/share) über die Option `share` konfiguri
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "share": "manual"
 }
 ```
@@ -384,7 +384,7 @@ Sie können benutzerdefinierte Befehle für sich wiederholende Aufgaben über di
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "command": {
     "test": {
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
@@ -410,7 +410,7 @@ Sie können Ihre Tastenkombinationen über die Option `keybinds` anpassen.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "keybinds": {}
 }
 ```
@@ -425,7 +425,7 @@ Daemon Protocol lädt beim Start automatisch alle neuen Updates herunter. Sie k�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "autoupdate": false
 }
 ```
@@ -441,7 +441,7 @@ Sie können Codeformatierer über die Option `formatter` konfigurieren.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -469,7 +469,7 @@ Um beispielsweise sicherzustellen, dass die Tools `edit` und `bash` eine Benutze
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "edit": "ask",
     "bash": "ask"
@@ -487,7 +487,7 @@ Sie können das Verhalten der Kontextkomprimierung über die Option `compaction`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "compaction": {
     "auto": true,
     "prune": false
@@ -506,7 +506,7 @@ Sie können Datei-Watcher-Ignoriermuster über die Option `watcher` konfiguriere
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "watcher": {
     "ignore": ["node_modules/**", "dist/**", ".git/**"]
   }
@@ -523,7 +523,7 @@ Sie können den MCP-Server, den Sie verwenden möchten, über die Option `mcp` k
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {}
 }
 ```
@@ -540,7 +540,7 @@ Platzieren Sie Ihre Plugin-Dateien in `.opencode/plugins/` oder `~/.config/openc
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
 }
 ```
@@ -555,7 +555,7 @@ Sie können die Anweisungen für das von Ihnen verwendete Modell über die Optio
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
@@ -570,7 +570,7 @@ Sie können Anbieter, die automatisch geladen werden, über die Option `disabled
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "disabled_providers": ["openai", "gemini"]
 }
 ```
@@ -593,7 +593,7 @@ Sie können über die Option `enabled_providers` eine Zulassungsliste für Anbie
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "enabled_providers": ["anthropic", "openai"]
 }
 ```
@@ -614,7 +614,7 @@ Der Schlüssel `experimental` enthält Optionen, die sich in der aktiven Entwick
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "experimental": {}
 }
 ```
@@ -637,7 +637,7 @@ Verwenden Sie `{env:VARIABLE_NAME}`, um Umgebungsvariablen zu ersetzen:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "model": "{env:OPENCODE_MODEL}",
   "provider": {
     "anthropic": {
@@ -660,7 +660,7 @@ Verwenden Sie `{file:path/to/file}`, um den Inhalt einer Datei zu ersetzen:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "instructions": ["./custom-instructions.md"],
   "provider": {
     "openai": {

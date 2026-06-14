@@ -1,6 +1,6 @@
-import { NonNegativeInt } from "@opencode-ai/core/schema"
-import { ConfigACEV1 } from "@opencode-ai/core/v1/config/ace"
-import { EventV2 } from "@opencode-ai/core/event"
+import { NonNegativeInt } from "@daemon-protocol/core/schema"
+import { ConfigACEV1 } from "@daemon-protocol/core/v1/config/ace"
+import { EventV2 } from "@daemon-protocol/core/event"
 import { SessionID } from "@/session/schema"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
@@ -153,7 +153,7 @@ export const SyncApi = HttpApi.make("sync")
   )
   .annotateMerge(
     OpenApi.annotations({
-      title: "opencode experimental HttpApi",
+      title: "DaemonCode experimental HttpApi",
       version: "0.0.1",
       description: "Experimental HttpApi surface for selected instance routes.",
     }),

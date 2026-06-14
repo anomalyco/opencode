@@ -13,7 +13,7 @@ Daemon Protocol understøtter både **JSON** og **JSONC** (JSON med kommentarer)
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
   "server": {
@@ -147,7 +147,7 @@ Den brugerdefinerede mappe indlæses efter den globale konfig og `.opencode` map
 
 ## Skema
 
-Konfigurationsfilen har et skema, der defineres i [**`opencode.ai/config.json`**](https://opencode.ai/config.json).
+Konfigurationsfilen har et skema, der defineres i [**`daemonprotocol.com/config.json`**](https://daemonprotocol.com/config.json).
 
 Din editor skal være i stand til at validere og autofuldføre baseret på skemaet.
 
@@ -159,7 +159,7 @@ Du kan konfigurere TUI-specifikke indstillinger gennem indstillingen `tui`.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "tui": {
     "scroll_speed": 3,
     "scroll_acceleration": {
@@ -186,7 +186,7 @@ Du kan konfigurere serverindstillinger for kommandoerne `opencode serve` og `ope
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
@@ -215,7 +215,7 @@ Du kan administrere de værktøjer, en LLM kan bruge, gennem indstillingen `tool
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "tools": {
     "write": false,
     "bash": false
@@ -233,7 +233,7 @@ Du kan konfigurere de udbydere og modeller, du vil bruge i din Daemon Protocol-k
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {},
   "model": "anthropic/claude-sonnet-4-5",
   "small_model": "anthropic/claude-haiku-4-5"
@@ -246,7 +246,7 @@ Udbydermuligheder kan omfatte `timeout` og `setCacheKey`:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -275,7 +275,7 @@ Amazon Bedrock understøtter AWS-specifik konfiguration:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -306,7 +306,7 @@ Du kan konfigurere det tema, du vil bruge i din Daemon Protocol-konfiguration, g
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "theme": ""
 }
 ```
@@ -321,7 +321,7 @@ Du kan konfigurere opgaver specialiserede agenter til specifikke indstillinger g
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
@@ -347,7 +347,7 @@ Du kan indstille standardagenten ved at bruge indstillingen `default_agent`. Det
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "default_agent": "plan"
 }
 ```
@@ -364,7 +364,7 @@ Du kan konfigurere funktionen [share](/docs/share) gennem indstillingen `share`.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "share": "manual"
 }
 ```
@@ -385,7 +385,7 @@ Du kan konfigurere brugerdefinerede kommandoer til gentagne opgaver gennem indst
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "command": {
     "test": {
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
@@ -411,7 +411,7 @@ Du kan tilpasse dine nøglebindinger gennem indstillingen `keybinds`.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "keybinds": {}
 }
 ```
@@ -426,7 +426,7 @@ Daemon Protocol vil automatisk downloade alle nye opdateringer, når den starter
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "autoupdate": false
 }
 ```
@@ -442,7 +442,7 @@ Du kan konfigurere kodeformatere gennem indstillingen `formatter`.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -470,7 +470,7 @@ For at sikre, at værktøjerne `edit` og `bash` for eksempel kræver brugergodke
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "edit": "ask",
     "bash": "ask"
@@ -488,7 +488,7 @@ Du kan styre kontekstkomprimeringsadfærd gennem indstillingen `compaction`.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "compaction": {
     "auto": true,
     "prune": false,
@@ -509,7 +509,7 @@ Du kan konfigurere ignoreringsmønstre for filovervåger gennem indstillingen `w
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "watcher": {
     "ignore": ["node_modules/**", "dist/**", ".git/**"]
   }
@@ -526,7 +526,7 @@ Du kan konfigurere MCP-servere, som du vil bruge, gennem indstillingen `mcp`.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {}
 }
 ```
@@ -543,7 +543,7 @@ Placer plugin-filer i `.opencode/plugins/` eller `~/.config/opencode/plugins/`. 
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
 }
 ```
@@ -558,7 +558,7 @@ Du kan konfigurere brugervejledningen til den model, du kan gennem indstillingen
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
@@ -574,7 +574,7 @@ Du kan deaktivere udbydere, der indlæses automatisk gennem `disabled_providers`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "disabled_providers": ["openai", "gemini"]
 }
 ```
@@ -597,7 +597,7 @@ Du kan angive en tilladelsesliste over udbydere gennem muligheden `enabled_provi
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "enabled_providers": ["anthropic", "openai"]
 }
 ```
@@ -618,7 +618,7 @@ Nøglen `experimental` indeholder muligheder, der er under aktiv udvikling.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "experimental": {}
 }
 ```
@@ -641,7 +641,7 @@ Brug `{env:VARIABLE_NAME}` til at erstatte miljøvariabler:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "model": "{env:OPENCODE_MODEL}",
   "provider": {
     "anthropic": {
@@ -664,7 +664,7 @@ Brug `{file:path/to/file}` til at erstatte indholdet af en fil:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "instructions": ["./custom-instructions.md"],
   "provider": {
     "openai": {

@@ -1,4 +1,4 @@
-import { centsToMicroCents } from "@opencode-ai/console-core/util/price.js"
+import { centsToMicroCents } from "@daemon-protocol/console-core/util/price.js"
 import { buildRateLimitKey, getRedis } from "./redis"
 
 export function createProviderBudgetTracker(

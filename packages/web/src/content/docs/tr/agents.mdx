@@ -147,7 +147,7 @@ Agent'ları `opencode.json` yapılandırma dosyanızda yapılandırın:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "build": {
       "mode": "primary",
@@ -376,7 +376,7 @@ opencode yapılandırmanızdaki model kimliği `provider/model-id` biçimini kul
 
 ```json title="opencode.json" {3-6,9-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "tools": {
     "write": true,
     "bash": true
@@ -400,7 +400,7 @@ Aynı anda birden fazla aracı kontrol etmek için joker karakterleri de kullana
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "readonly": {
       "tools": {
@@ -427,7 +427,7 @@ Bir agent'ın gerçekleştirebileceği eylemleri yönetmek için izinleri yapıl
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "edit": "deny"
   }
@@ -438,7 +438,7 @@ Bu izinleri agent başına geçersiz kılabilirsiniz.
 
 ```json title="opencode.json" {3-5,8-10}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "edit": "deny"
   },
@@ -475,7 +475,7 @@ Belirli bash komutları için izinleri ayarlayabilirsiniz.
 
 ```json title="opencode.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -493,7 +493,7 @@ Bu küresel bir desen alabilir.
 
 ```json title="opencode.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -511,7 +511,7 @@ Son eşleşen kural öncelikli olduğundan, `*` joker karakterini ilk sıraya ve
 
 ```json title="opencode.json" {8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -704,7 +704,7 @@ Farklı agent'lara yönelik bazı yaygın kullanım senaryoları aşağıda veri
 Yararlı bulabileceğiniz bazı örnek agent'ları burada bulabilirsiniz.
 
 :::tip
-Paylaşmak istediğiniz bir agent'ınız var mı? [Submit a PR](https://github.com/anomalyco/opencode).
+Paylaşmak istediğiniz bir agent'ınız var mı? [Submit a PR](https://github.com/daemon-blockint-tech/daemoncode).
 :::
 
 ---

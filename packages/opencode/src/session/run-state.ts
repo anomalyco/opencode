@@ -1,6 +1,6 @@
-import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { LayerNode } from "@daemon-protocol/core/effect/layer-node"
 import { InstanceState } from "@/effect/instance-state"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { SessionV1 } from "@daemon-protocol/core/v1/session"
 import { Runner } from "@/effect/runner"
 import { BackgroundJob } from "@/background/job"
 import { Effect, Latch, Layer, Scope, Context } from "effect"

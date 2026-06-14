@@ -61,7 +61,7 @@ Puede personalizar los formateadores a través de la sección `formatter` en su 
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {}
 }
 ```
@@ -85,7 +85,7 @@ Para deshabilitar **todos** los formateadores globalmente, configure `formatter`
 
 ```json title="opencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": false
 }
 ```
@@ -94,7 +94,7 @@ Para deshabilitar un formateador **específico**, establezca `disabled` en `true
 
 ```json title="opencode.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -111,7 +111,7 @@ Puede anular los formateadores integrados o agregar otros nuevos especificando e
 
 ```json title="opencode.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "command": ["npx", "prettier", "--write", "$FILE"],

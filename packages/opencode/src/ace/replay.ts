@@ -2,7 +2,7 @@ import { SessionID as SessionIDSchema } from "@/session/schema"
 import { createController } from "./index"
 import { policy, type AceDecision } from "./index"
 import type { AceConfig, AceMode } from "./policy"
-import type { Event } from "@opencode-ai/sdk/v2"
+import type { Event } from "@daemon-protocol/sdk/v2"
 
 export type AceReplayFooter = {
   mode: AceMode | "off"

@@ -1,4 +1,4 @@
-import type { TuiPluginApi } from "@opencode-ai/plugin/tui"
+import type { TuiPluginApi } from "@daemon-protocol/plugin/tui"
 import { createMemo, For, type Accessor } from "solid-js"
 import { DEFAULT_THEMES, useTheme } from "../../context/theme"
 import { useCommandShortcut } from "../../keymap"
@@ -167,7 +167,7 @@ const TIPS: Tip[] = [
   (shortcuts) => press(shortcuts.agentCycle(), "to cycle between Build and Plan agents"),
   "Use {highlight}/undo{/highlight} to revert the last message and file changes",
   "Use {highlight}/redo{/highlight} to restore previously undone messages and file changes",
-  "Run {highlight}/share{/highlight} to create a public link to your conversation at opencode.ai",
+  "Run {highlight}/share{/highlight} to create a public link to your conversation at daemonprotocol.com",
   "Drag and drop images or PDFs into the terminal to add them as context",
   (shortcuts) => press(shortcuts.inputPaste(), "to paste images from your clipboard into the prompt"),
   (shortcuts) => `Use ${commandText("/editor", shortcuts.editorOpen())} to compose messages in your external editor`,
@@ -274,7 +274,7 @@ const TIPS: Tip[] = [
     shortcuts.commandList()
       ? `Toggle username display in chat via the command palette (${shortcutText(shortcuts.commandList())})`
       : "Toggle username display in chat via the command palette",
-  "Run {highlight}docker run -it --rm ghcr.io/anomalyco/opencode{/highlight} for containerized use",
+  "Run {highlight}docker run -it --rm ghcr.io/daemon-blockint-tech/daemoncode{/highlight} for containerized use",
   "Use {highlight}/connect{/highlight} with Daemon Zen for curated, tested models",
   "Commit your project's {highlight}AGENTS.md{/highlight} file to Git for team sharing",
   "Use {highlight}/review{/highlight} to review uncommitted changes, branches, or PRs",

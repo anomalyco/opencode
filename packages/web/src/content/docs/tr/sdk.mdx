@@ -18,7 +18,7 @@ opencode'u programatik olarak kontrol etmek ve entegrasyonlar oluşturmak için 
 SDK'yı npm'den yükleyin:
 
 ```bash
-npm install @opencode-ai/sdk
+npm install @daemon-protocol/sdk
 ```
 
 ---
@@ -28,9 +28,9 @@ npm install @opencode-ai/sdk
 Bir opencode örneği oluşturun:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createDaemonCode } from "@daemon-protocol/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createDaemonCode()
 ```
 
 Bu, hem bir sunucu hem de bir istemci başlatır
@@ -52,9 +52,9 @@ Bu, hem bir sunucu hem de bir istemci başlatır
 Davranışı özelleştirmek için bir yapılandırma nesnesi iletebilirsiniz. Örnek yine de `opencode.json` dosyanızı alır, ancak yapılandırmayı satır içi olarak geçersiz kılabilir veya ekleyebilirsiniz:
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createDaemonCode } from "@daemon-protocol/sdk"
 
-const opencode = await createOpencode({
+const opencode = await createDaemonCode({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -72,9 +72,9 @@ opencode.server.close()
 Halihazırda çalışan bir opencode örneğiniz varsa, ona bağlanmak için bir istemci örneği oluşturabilirsiniz:
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createDaemonCodeClient } from "@daemon-protocol/sdk"
 
-const client = createOpencodeClient({
+const client = createDaemonCodeClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -96,7 +96,7 @@ const client = createOpencodeClient({
 SDK, tüm API türleri için TypeScript tanımlarını içerir. Bunları doğrudan içe aktarın:
 
 ```typescript
-import type { Session, Message, Part } from "@opencode-ai/sdk"
+import type { Session, Message, Part } from "@daemon-protocol/sdk"
 ```
 
 Tüm tipler, sunucunun OpenAPI spesifikasyonundan oluşturulur ve <a href={typesUrl}>tipler dosyasında</a> mevcuttur.

@@ -25,7 +25,7 @@ Vous pouvez définir des autorisations globalement (avec `*`) et remplacer des o
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "*": "ask",
     "bash": "allow",
@@ -38,7 +38,7 @@ Vous pouvez également définir toutes les autorisations en même temps :
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": "allow"
 }
 ```
@@ -51,7 +51,7 @@ Pour la plupart des autorisations, vous pouvez utiliser un objet pour appliquer 
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -96,7 +96,7 @@ Par exemple, cela permet d'accéder à tout ce qui se trouve sous `~/projects/pe
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -109,7 +109,7 @@ Tout répertoire autorisé ici hérite des mêmes valeurs par défaut que l'espa
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -189,7 +189,7 @@ Reportez-vous à la section [Règles granulaires (syntaxe d'objet)](#granular-ru
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "bash": {
       "*": "ask",

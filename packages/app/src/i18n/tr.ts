@@ -141,7 +141,7 @@ export const dict = {
   "provider.connect.opencodeZen.line2":
     "Tek bir API anahtarıyla Claude, GPT, Gemini, GLM ve daha fazlası gibi modellere erişebilirsiniz.",
   "provider.connect.opencodeZen.visit.prefix": "",
-  "provider.connect.opencodeZen.visit.link": "opencode.ai/zen",
+  "provider.connect.opencodeZen.visit.link": "daemonprotocol.com/zen",
   "provider.connect.opencodeZen.visit.suffix": " adresini ziyaret ederek API anahtarınızı alın.",
   "provider.connect.oauth.code.visit.prefix":
     "Hesabınızı bağlamak ve Daemon Protocol'da {{provider}} modellerini kullanmak için ",
