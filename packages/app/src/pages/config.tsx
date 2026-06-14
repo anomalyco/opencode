@@ -838,6 +838,13 @@ function SectionButton(props: { current: boolean; title: string; icon: IconProps
   )
 }
 
+const CONFIG_MIDDLE_ITEM_CLASS =
+  "group flex w-full cursor-pointer items-start justify-between gap-4 rounded-[14px] border px-4 py-4 text-left transition-all duration-150 focus:outline-none focus-visible:border-border-strong focus-visible:bg-surface-base-hover"
+const CONFIG_MIDDLE_ITEM_ACTIVE_CLASS =
+  "border-border-base bg-surface-base-active shadow-[inset_0_1px_0_color-mix(in_srgb,white_7%,transparent)]"
+const CONFIG_MIDDLE_ITEM_INACTIVE_CLASS =
+  "border-border-weak-base/70 bg-background-base/45 hover:border-border-base hover:bg-surface-base/85"
+
 function ListButton(props: {
   active: boolean
   title: string
@@ -914,29 +921,16 @@ function SkillListButton(props: {
   return (
     <button
       type="button"
-      class="group relative w-full overflow-hidden rounded-2xl border px-3.5 py-3 text-left transition-all duration-200 focus:outline-none focus-visible:border-border-strong focus-visible:bg-surface-base-hover"
+      class={CONFIG_MIDDLE_ITEM_CLASS}
       classList={{
-        "border-border-danger-base/50 bg-surface-danger-base/10 shadow-[inset_0_1px_0_color-mix(in_srgb,white_7%,transparent)]":
-          props.active && !!props.warn,
-        "border-border-base bg-surface-base-active shadow-[0_14px_30px_-26px_rgba(0,0,0,0.9),inset_0_1px_0_color-mix(in_srgb,white_7%,transparent)]":
-          props.active && !props.warn,
-        "border-border-danger-base/35 bg-background-base/55 hover:border-border-danger-base/70 hover:bg-surface-danger-base/10":
-          !props.active && !!props.warn,
-        "border-border-weak-base/70 bg-background-base/50 hover:border-border-base hover:bg-surface-base/85 hover:shadow-[0_14px_30px_-28px_rgba(0,0,0,0.9)]":
-          !props.active && !props.warn,
+        [CONFIG_MIDDLE_ITEM_ACTIVE_CLASS]: props.active,
+        [CONFIG_MIDDLE_ITEM_INACTIVE_CLASS]: !props.active,
       }}
       onClick={props.onClick}
     >
-      <div
-        class="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--text-strong)_18%,transparent),transparent)] transition-opacity duration-200"
-        classList={{
-          "opacity-100": props.active,
-          "opacity-0 group-hover:opacity-100": !props.active,
-        }}
-      />
-      <div class="flex items-start gap-3">
+      <div class="flex min-w-0 flex-1 items-start gap-3">
         <div
-          class="mt-1 flex size-7 shrink-0 items-center justify-center rounded-md transition-all duration-200"
+          class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md transition-colors duration-150"
           classList={{
             "bg-surface-danger-base/15 text-text-danger-base": !!props.warn,
             "bg-surface-secondary text-text-strong": props.active && !props.warn,
@@ -949,7 +943,7 @@ function SkillListButton(props: {
         <div class="min-w-0 flex-1">
           <div class="flex min-w-0 flex-wrap items-center gap-2">
             <div
-              class="min-w-0 truncate text-[18px] font-medium leading-[1.35] tracking-tight transition-colors"
+              class="min-w-0 truncate text-15-medium transition-colors"
               classList={{
                 "text-text-danger-base": !!props.warn,
                 "text-text-strong": !props.warn,
@@ -965,7 +959,7 @@ function SkillListButton(props: {
           </div>
           <Show when={props.note}>
             <div
-              class="mt-2 line-clamp-2 text-13-regular leading-5 transition-colors"
+              class="mt-2 line-clamp-2 text-12-regular leading-5 transition-colors"
               classList={{
                 "text-text-base": props.active,
                 "text-text-weak": !props.active,
@@ -980,7 +974,93 @@ function SkillListButton(props: {
   )
 }
 
-function ProjectSkillGroup(props: {
+function PluginListButton(props: {
+  active: boolean
+  title: string
+  note?: string
+  meta?: string
+  warn?: boolean
+  onClick: () => void
+  extra?: JSX.Element
+}) {
+  const press = (event: KeyboardEvent) => {
+    if (event.key !== "Enter" && event.key !== " ") return
+    event.preventDefault()
+    props.onClick()
+  }
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      class={CONFIG_MIDDLE_ITEM_CLASS}
+      classList={{
+        [CONFIG_MIDDLE_ITEM_ACTIVE_CLASS]: props.active,
+        [CONFIG_MIDDLE_ITEM_INACTIVE_CLASS]: !props.active,
+      }}
+      onClick={props.onClick}
+      onKeyDown={press}
+    >
+      <div class="flex min-w-0 flex-1 items-start gap-3">
+        <div
+          class="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-md transition-colors duration-150"
+          classList={{
+            "bg-surface-danger-base/15 text-text-danger-base": !!props.warn,
+            "bg-surface-secondary text-text-strong": props.active && !props.warn,
+            "bg-surface-secondary/70 text-text-base group-hover:bg-surface-secondary group-hover:text-text-strong":
+              !props.active && !props.warn,
+          }}
+        >
+          <Icon name="code" size="small" />
+        </div>
+        <div class="min-w-0 flex-1">
+          <div
+            class="min-w-0 truncate text-15-medium transition-colors"
+            classList={{
+              "text-text-danger-base": !!props.warn,
+              "text-text-strong": !props.warn,
+            }}
+          >
+            {props.title}
+          </div>
+          <Show when={props.note}>
+            <div
+              class="mt-2 line-clamp-2 text-12-regular leading-5 transition-colors"
+              classList={{
+                "text-text-base": props.active,
+                "text-text-weak": !props.active,
+              }}
+            >
+              {props.note}
+            </div>
+          </Show>
+          <Show when={props.meta}>
+            <div
+              class="mt-2 break-all font-mono text-[12px] leading-5 transition-colors"
+              classList={{
+                "text-text-base": props.active,
+                "text-text-weak": !props.active,
+              }}
+            >
+              {props.meta}
+            </div>
+          </Show>
+        </div>
+      </div>
+      <Show when={props.extra}>
+        <div
+          class="shrink-0 pt-0.5"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
+          {props.extra}
+        </div>
+      </Show>
+    </div>
+  )
+}
+
+function ProjectListGroup(props: {
   label: string
   path?: string
   count: number
@@ -989,24 +1069,23 @@ function ProjectSkillGroup(props: {
   children: JSX.Element
 }) {
   return (
-    <div class="relative overflow-hidden rounded-2xl border border-border-weak-base/80 bg-background-base/65 shadow-[inset_0_1px_0_color-mix(in_srgb,white_5%,transparent)] transition-colors hover:border-border-base">
+    <div class="relative overflow-hidden rounded-[14px] border border-border-weak-base/80 bg-background-base/65 shadow-[inset_0_1px_0_color-mix(in_srgb,white_5%,transparent)] transition-colors hover:border-border-base">
       <div class="pointer-events-none absolute inset-x-0 top-0 h-px bg-[linear-gradient(90deg,transparent,color-mix(in_srgb,var(--text-strong)_16%,transparent),transparent)]" />
       <button
         type="button"
         aria-expanded={props.open ? "true" : "false"}
-        class="group flex w-full items-center justify-between gap-3 px-3.5 py-3 text-left transition-colors hover:bg-surface-base/55 focus:outline-none focus-visible:bg-surface-base-hover"
+        class="group flex w-full items-center justify-between gap-3 rounded-[13px] px-3.5 py-3 text-left transition-colors hover:bg-surface-base/55 focus:outline-none focus-visible:bg-surface-base-hover"
         classList={{
-          "border-b border-border-weak-base/70 bg-surface-base/40": props.open,
+          "rounded-b-none border-b border-border-weak-base/70 bg-surface-base/40": props.open,
         }}
         onClick={props.onToggle}
       >
         <div class="flex min-w-0 items-center gap-3">
           <div
-            class="flex size-9 shrink-0 items-center justify-center rounded-xl border text-text-base transition-colors"
+            class="flex size-9 shrink-0 items-center justify-center rounded-xl text-text-base transition-colors"
             classList={{
-              "border-border-base bg-surface-secondary text-text-strong": props.open,
-              "border-border-weak-base bg-surface-secondary/60 group-hover:border-border-base group-hover:text-text-strong":
-                !props.open,
+              "bg-surface-secondary text-text-strong": props.open,
+              "bg-surface-secondary/60 group-hover:bg-surface-secondary group-hover:text-text-strong": !props.open,
             }}
           >
             <Icon name="folder" size="small" />
@@ -1109,12 +1188,10 @@ function ProviderListButton(props: {
     <div
       role="button"
       tabIndex={0}
-      class="group flex w-full cursor-pointer items-start justify-between gap-4 rounded-[14px] border px-4 py-4 text-left transition-all duration-150 focus:outline-none focus-visible:border-border-strong focus-visible:bg-surface-base-hover"
+      class={CONFIG_MIDDLE_ITEM_CLASS}
       classList={{
-        "border-border-base bg-surface-base-active shadow-[inset_0_1px_0_color-mix(in_srgb,white_7%,transparent)]":
-          props.active,
-        "border-border-weak-base/70 bg-background-base/45 hover:border-border-base hover:bg-surface-base/85":
-          !props.active,
+        [CONFIG_MIDDLE_ITEM_ACTIVE_CLASS]: props.active,
+        [CONFIG_MIDDLE_ITEM_INACTIVE_CLASS]: !props.active,
       }}
       onClick={props.onClick}
       onKeyDown={press}
@@ -5112,7 +5189,7 @@ export default function ConfigPage() {
                               <div class="mt-2 flex flex-col gap-3">
                                 <For each={projectSkills()}>
                                   {(group) => (
-                                    <ProjectSkillGroup
+                                    <ProjectListGroup
                                       label={group.label}
                                       path={group.path}
                                       count={group.items.length}
@@ -5131,7 +5208,7 @@ export default function ConfigPage() {
                                           />
                                         )}
                                       </For>
-                                    </ProjectSkillGroup>
+                                    </ProjectListGroup>
                                   )}
                                 </For>
                               </div>
@@ -5142,94 +5219,71 @@ export default function ConfigPage() {
                     </Match>
 
                     <Match when={state.section === "plugins"}>
-                      <Show when={pluginGlobal().length > 0}>
-                        <div class="flex flex-col">
-                          <div class="flex items-center justify-between gap-3 px-1">
-                            <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
-                              {t("config.plugins.group.global")}
+                      <div class="flex flex-col gap-3">
+                        <Show when={pluginGlobal().length > 0}>
+                          <div class="flex flex-col gap-2">
+                            <div class="flex items-center justify-between gap-3 px-1">
+                              <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                {t("config.plugins.group.global")}
+                              </div>
+                              <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                {pluginGlobal().length}
+                              </div>
                             </div>
-                            <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                              {pluginGlobal().length}
+                            <div class="flex flex-col gap-2.5">
+                              <For each={pluginGlobal()}>
+                                {(item) => (
+                                  <PluginListButton
+                                    active={state.pick === item.id}
+                                    title={item.label}
+                                    note={item.exists ? undefined : t("config.plugins.note.missing")}
+                                    meta={item.path ? short(item.path, space()?.pluginsRoot) : undefined}
+                                    warn={item.enabled && !item.exists}
+                                    onClick={() => {
+                                      setState("pick", item.id)
+                                      const doc = docs().get(item.id)
+                                      if (!doc) return
+                                      void open(doc)
+                                    }}
+                                    extra={
+                                      <Toggle
+                                        checked={item.enabled}
+                                        onChange={(value) => togglePlugin(item, value)}
+                                        hideLabel
+                                      >
+                                        {item.label}
+                                      </Toggle>
+                                    }
+                                  />
+                                )}
+                              </For>
                             </div>
                           </div>
-                          <div class="mt-2 flex flex-col">
-                            <For each={pluginGlobal()}>
-                              {(item) => (
-                                <ListButton
-                                  active={state.pick === item.id}
-                                  title={item.label}
-                                  note={item.exists ? undefined : t("config.plugins.note.missing")}
-                                  meta={item.path ? short(item.path, space()?.pluginsRoot) : undefined}
-                                  warn={item.enabled && !item.exists}
-                                  onClick={() => {
-                                    setState("pick", item.id)
-                                    const doc = docs().get(item.id)
-                                    if (!doc) return
-                                    void open(doc)
-                                  }}
-                                  extra={
-                                    <Toggle
-                                      checked={item.enabled}
-                                      onChange={(value) => togglePlugin(item, value)}
-                                      hideLabel
-                                    >
-                                      {item.label}
-                                    </Toggle>
-                                  }
-                                />
-                              )}
-                            </For>
-                          </div>
-                        </div>
-                      </Show>
+                        </Show>
 
-                      <Show when={pluginProject().length > 0}>
-                        <div class="flex flex-col">
-                          <div class="flex items-center justify-between gap-3 px-1">
-                            <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
-                              {t("config.plugins.group.project")}
+                        <Show when={pluginProject().length > 0}>
+                          <div class="flex flex-col">
+                            <div class="flex items-center justify-between gap-3 px-1">
+                              <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                                {t("config.plugins.group.project")}
+                              </div>
+                              <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
+                                {pluginProject().length}
+                              </div>
                             </div>
-                            <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                              {pluginProject().length}
-                            </div>
-                          </div>
-                          <div class="mt-2 flex flex-col gap-3">
-                            <For each={projectPlugins()}>
-                              {(group) => (
-                                <div class="flex flex-col rounded-xl border border-border-weak-base bg-background-base/70">
-                                  <button
-                                    type="button"
-                                    class="flex items-center justify-between gap-3 border-b border-border-weak-base px-3 py-2 text-left"
-                                    onClick={() => toggleGroup(`plugin-group:${group.path ?? group.label}`)}
+                            <div class="mt-2 flex flex-col gap-3">
+                              <For each={projectPlugins()}>
+                                {(group) => (
+                                  <ProjectListGroup
+                                    label={group.label}
+                                    path={group.path}
+                                    count={group.items.length}
+                                    open={groupOpen(`plugin-group:${group.path ?? group.label}`)}
+                                    onToggle={() => toggleGroup(`plugin-group:${group.path ?? group.label}`)}
                                   >
-                                    <div class="flex min-w-0 items-start gap-2">
-                                      <div class="mt-0.5 text-text-weak">
-                                        <Icon
-                                          name={
-                                            groupOpen(`plugin-group:${group.path ?? group.label}`)
-                                              ? "chevron-down"
-                                              : "chevron-right"
-                                          }
-                                          size="small"
-                                        />
-                                      </div>
-                                      <div class="min-w-0">
-                                        <div class="truncate text-12-medium text-text-strong">{group.label}</div>
-                                        <Show when={group.path}>
-                                          <div class="mt-1 break-all font-mono text-[11px] leading-5 text-text-weak">
-                                            {group.path}
-                                          </div>
-                                        </Show>
-                                      </div>
-                                    </div>
-                                    <div class="rounded-full bg-surface-secondary px-1.5 py-0.5 text-[10px] uppercase tracking-[0.08em] text-text-weak">
-                                      {group.items.length}
-                                    </div>
-                                  </button>
-                                  <Show when={groupOpen(`plugin-group:${group.path ?? group.label}`)}>
                                     <For each={group.items}>
                                       {(item) => (
-                                        <ListButton
+                                        <PluginListButton
                                           active={state.pick === item.id}
                                           title={item.label}
                                           note={item.exists ? undefined : t("config.plugins.note.missing")}
@@ -5253,13 +5307,13 @@ export default function ConfigPage() {
                                         />
                                       )}
                                     </For>
-                                  </Show>
-                                </div>
-                              )}
-                            </For>
+                                  </ProjectListGroup>
+                                )}
+                              </For>
+                            </div>
                           </div>
-                        </div>
-                      </Show>
+                        </Show>
+                      </div>
                     </Match>
                   </Switch>
                 </div>
