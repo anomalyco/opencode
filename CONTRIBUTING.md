@@ -190,6 +190,15 @@ With that said, you may want to try these methods, as they might work for you.
 - Explain the issue and why your change fixes it
 - Before adding new functionality, ensure it doesn't already exist elsewhere in the codebase
 
+### Stacked and Dependent PRs
+
+Some changes are split into a **stack** where later PRs assume earlier ones are already merged (or are opened as drafts stacked on the prior branch, not directly on `dev`).
+
+- Open the **base** PR against `dev` first; stack follow-ups on that branch (GitHub "stacked PR" / dependent branch), not on `dev` alone
+- Cherry-picks or rebases onto `dev` before the base merges often conflict — that is expected; resolve on the stacked branch instead
+- Example (daemoncode rebrand): `pr-cli-packages` applies cleanly only when stacked on `pr-user-visible`, not when cherry-picked straight onto `dev`
+- When two PRs touch the same file (e.g. `packages/app/src/pages/home.tsx` in a user-visible rebrand PR and an app-logo PR), merge the base PR first, then rebase or merge the dependent PR and fix the small overlap locally
+
 ### UI Changes
 
 If your PR includes UI changes, please include screenshots or videos showing the before and after. This helps maintainers review faster and gives you quicker feedback.
