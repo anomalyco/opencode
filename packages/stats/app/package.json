@@ -22,7 +22,7 @@
     "d3-scale": "4.0.2",
     "effect": "catalog:",
     "i18n-iso-countries": "7.14.0",
-    "nitro": "3.0.1-alpha.1",
+    "nitro": "3.0.1-alpha.2",
     "solid-js": "catalog:",
     "sst": "catalog:",
     "topojson-client": "3.1.0",
