@@ -1,13 +1,13 @@
-import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core"
+import { table, text, integer, index, uniqueIndex } from "../database/dialect"
 import type { EventV2 } from "../event"
 
-export const EventSequenceTable = sqliteTable("event_sequence", {
+export const EventSequenceTable = table("event_sequence", {
   aggregate_id: text().notNull().primaryKey(),
   seq: integer().notNull(),
   owner_id: text(),
 })
 
-export const EventTable = sqliteTable(
+export const EventTable = table(
   "event",
   {
     id: text().$type<EventV2.ID>().primaryKey(),

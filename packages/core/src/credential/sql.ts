@@ -1,10 +1,9 @@
 import { sql } from "drizzle-orm"
-import { integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core"
-import { Timestamps } from "../database/schema.sql"
+import { table, integer, text, uniqueIndex, Timestamps } from "../database/dialect"
 import type { ConnectorSchema } from "../connector/schema"
 import type { Credential } from "../credential"
 
-export const CredentialTable = sqliteTable(
+export const CredentialTable = table(
   "credential",
   {
     id: text().$type<Credential.ID>().primaryKey(),

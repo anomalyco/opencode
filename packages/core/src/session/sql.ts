@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, index, primaryKey, real, uniqueIndex } from "drizzle-orm/sqlite-core"
+import { table, text, integer, index, primaryKey, real, uniqueIndex, Timestamps } from "../database/dialect"
 import * as DatabasePath from "../database/path"
 import { ProjectTable } from "../project/sql"
 import type { SessionMessage } from "./message"
@@ -10,7 +10,6 @@ import { ProjectV2 } from "../project"
 import type { SessionSchema } from "./schema"
 import type { MessageID, PartID, SessionV1 } from "../v1/session"
 import { WorkspaceV2 } from "../workspace"
-import { Timestamps } from "../database/schema.sql"
 import type { SystemContext } from "../system-context/index"
 import { AgentV2 } from "../agent"
 
@@ -18,7 +17,7 @@ type SessionMessageData = Omit<(typeof SessionMessage.Message)["Encoded"], "type
 type V1MessageData = Omit<SessionV1.Info, "id" | "sessionID">
 type V1PartData = Omit<SessionV1.Part, "id" | "sessionID" | "messageID">
 
-export const SessionTable = sqliteTable(
+export const SessionTable = table(
   "session",
   {
     id: text().$type<SessionSchema.ID>().primaryKey(),
@@ -64,7 +63,7 @@ export const SessionTable = sqliteTable(
   ],
 )
 
-export const MessageTable = sqliteTable(
+export const MessageTable = table(
   "message",
   {
     id: text().$type<MessageID>().primaryKey(),
@@ -78,7 +77,7 @@ export const MessageTable = sqliteTable(
   (table) => [index("message_session_time_created_id_idx").on(table.session_id, table.time_created, table.id)],
 )
 
-export const PartTable = sqliteTable(
+export const PartTable = table(
   "part",
   {
     id: text().$type<PartID>().primaryKey(),
@@ -96,7 +95,7 @@ export const PartTable = sqliteTable(
   ],
 )
 
-export const TodoTable = sqliteTable(
+export const TodoTable = table(
   "todo",
   {
     session_id: text()
@@ -115,7 +114,7 @@ export const TodoTable = sqliteTable(
   ],
 )
 
-export const SessionMessageTable = sqliteTable(
+export const SessionMessageTable = table(
   "session_message",
   {
     id: text().$type<SessionMessage.ID>().primaryKey(),
@@ -136,7 +135,7 @@ export const SessionMessageTable = sqliteTable(
   ],
 )
 
-export const SessionInputTable = sqliteTable(
+export const SessionInputTable = table(
   "session_input",
   {
     id: text().$type<SessionMessage.ID>().primaryKey(),
@@ -164,7 +163,7 @@ export const SessionInputTable = sqliteTable(
   ],
 )
 
-export const SessionContextEpochTable = sqliteTable("session_context_epoch", {
+export const SessionContextEpochTable = table("session_context_epoch", {
   session_id: text()
     .$type<SessionSchema.ID>()
     .primaryKey()

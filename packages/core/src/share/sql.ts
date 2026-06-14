@@ -1,8 +1,7 @@
-import { sqliteTable, text } from "drizzle-orm/sqlite-core"
+import { table, text, Timestamps } from "../database/dialect"
 import { SessionTable } from "../session/sql"
-import { Timestamps } from "../database/schema.sql"
 
-export const SessionShareTable = sqliteTable("session_share", {
+export const SessionShareTable = table("session_share", {
   session_id: text()
     .primaryKey()
     .references(() => SessionTable.id, { onDelete: "cascade" }),

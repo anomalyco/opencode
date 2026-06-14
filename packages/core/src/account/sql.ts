@@ -1,9 +1,8 @@
-import { sqliteTable, text, integer, primaryKey } from "drizzle-orm/sqlite-core"
+import { table, text, integer, primaryKey, Timestamps } from "../database/dialect"
 
 import { AccountV2 } from "../account"
-import { Timestamps } from "../database/schema.sql"
 
-export const AccountTable = sqliteTable("account", {
+export const AccountTable = table("account", {
   id: text().$type<AccountV2.ID>().primaryKey(),
   email: text().notNull(),
   url: text().notNull(),
@@ -13,7 +12,7 @@ export const AccountTable = sqliteTable("account", {
   ...Timestamps,
 })
 
-export const AccountStateTable = sqliteTable("account_state", {
+export const AccountStateTable = table("account_state", {
   id: integer().primaryKey(),
   active_account_id: text()
     .$type<AccountV2.ID>()
@@ -22,7 +21,7 @@ export const AccountStateTable = sqliteTable("account_state", {
 })
 
 // LEGACY
-export const ControlAccountTable = sqliteTable(
+export const ControlAccountTable = table(
   "control_account",
   {
     email: text().notNull(),

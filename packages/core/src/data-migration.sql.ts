@@ -1,6 +1,6 @@
-import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
+import { table, integer, text } from "./database/dialect"
 
-export const DataMigrationTable = sqliteTable("data_migration", {
+export const DataMigrationTable = table("data_migration", {
   name: text().primaryKey(),
   time_completed: integer().notNull(),
 })
