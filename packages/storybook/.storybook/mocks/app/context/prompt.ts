@@ -1,4 +1,4 @@
-import { createSignal } from "solid-js"
+import { createStore } from "solid-js/store"
 
 interface PartBase {
   content: string
@@ -60,48 +60,50 @@ export function isPromptEqual(a: Prompt, b: Prompt) {
   return a.every((part, i) => JSON.stringify(part) === JSON.stringify(b[i]))
 }
 
-let index = 0
-const [prompt, setPrompt] = createSignal<Prompt>(clonePrompt(DEFAULT_PROMPT))
-const [cursor, setCursor] = createSignal<number>(0)
-const [items, setItems] = createSignal<ContextItem[]>([])
+export function createPromptState() {
+  const [store, setStore] = createStore({
+    prompt: clonePrompt(DEFAULT_PROMPT),
+    cursor: 0,
+    items: [] as ContextItem[],
+  })
+  let index = 0
+  const ready = Object.assign(() => true, { promise: Promise.resolve(true) })
+  const withKey = (item: Omit<ContextItem, "key"> & { key?: string }): ContextItem => ({
+    ...item,
+    key: item.key ?? `ctx:${++index}`,
+  })
 
-const withKey = (item: Omit<ContextItem, "key"> & { key?: string }): ContextItem => ({
-  ...item,
-  key: item.key ?? `ctx:${++index}`,
-})
-
-export function usePrompt() {
   return {
-    ready: () => true,
-    current: prompt,
-    cursor,
-    dirty: () => !isPromptEqual(prompt(), DEFAULT_PROMPT),
+    ready: () => ready,
+    current: () => store.prompt,
+    cursor: () => store.cursor,
+    dirty: () => !isPromptEqual(store.prompt, DEFAULT_PROMPT),
     set(next: Prompt, cursorPosition?: number) {
-      setPrompt(clonePrompt(next))
-      if (cursorPosition !== undefined) setCursor(cursorPosition)
+      setStore("prompt", clonePrompt(next))
+      if (cursorPosition !== undefined) setStore("cursor", cursorPosition)
     },
     reset() {
-      setPrompt(clonePrompt(DEFAULT_PROMPT))
-      setCursor(0)
-      setItems((current) => current.filter((item) => !!item.comment?.trim()))
+      setStore("prompt", clonePrompt(DEFAULT_PROMPT))
+      setStore("cursor", 0)
+      setStore("items", (current) => current.filter((item) => !!item.comment?.trim()))
     },
     context: {
-      items,
+      items: () => store.items,
       add(item: Omit<ContextItem, "key"> & { key?: string }) {
         const next = withKey(item)
-        if (items().some((current) => current.key === next.key)) return
-        setItems((current) => [...current, next])
+        if (store.items.some((current) => current.key === next.key)) return
+        setStore("items", (current) => [...current, next])
       },
       remove(key: string) {
-        setItems((current) => current.filter((item) => item.key !== key))
+        setStore("items", (current) => current.filter((item) => item.key !== key))
       },
       removeComment(path: string, commentID: string) {
-        setItems((current) =>
+        setStore("items", (current) =>
           current.filter((item) => !(item.type === "file" && item.path === path && item.commentID === commentID)),
         )
       },
       updateComment(path: string, commentID: string, next: Partial<ContextItem>) {
-        setItems((current) =>
+        setStore("items", (current) =>
           current.map((item) => {
             if (item.type !== "file" || item.path !== path || item.commentID !== commentID) return item
             return withKey({ ...item, ...next })
@@ -109,9 +111,15 @@ export function usePrompt() {
         )
       },
       replaceComments(next: Array<Omit<ContextItem, "key"> & { key?: string }>) {
-        const nonComment = items().filter((item) => !item.comment?.trim())
-        setItems([...nonComment, ...next.map(withKey)])
+        const nonComment = store.items.filter((item) => !item.comment?.trim())
+        setStore("items", [...nonComment, ...next.map(withKey)])
       },
     },
   }
+}
+
+const prompt = createPromptState()
+
+export function usePrompt() {
+  return prompt
 }
