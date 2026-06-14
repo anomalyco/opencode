@@ -55,6 +55,9 @@ import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
+import { ThreadFooter } from "./thread-footer.tsx"
+import { DialogGraph } from "./dialog-graph"
+import { DialogSessionGraph } from "./dialog-session-graph"
 import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
@@ -138,6 +141,8 @@ const sessionBindingCommands = [
   "session.parent",
   "session.child.next",
   "session.child.previous",
+  "session.thread.new",
+  "session.graph",
 ] as const
 
 const sessionGlobalBindingCommands = [
@@ -232,7 +237,13 @@ export function Session() {
     if (session()?.parentID) return []
     return children().flatMap((x) => sync.data.question[x.id] ?? [])
   })
-  const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
+  const isThread = createMemo(() => session()?.metadata?.type === "thread")
+  const visible = createMemo(() => {
+    if (permissions().length > 0 || questions().length > 0) return false
+    if (!session()?.parentID) return true
+    if (isThread()) return true
+    return false
+  })
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
 
   const pending = createMemo(() => {
@@ -1078,6 +1089,109 @@ export function Session() {
         moveChild(-1)
       }),
     },
+    {
+      title: "Create child thread",
+      value: "session.thread.new",
+      category: "Session",
+      slash: {
+        name: "thread",
+      },
+      run: async () => {
+        dialog.clear()
+
+        const currentSession = session()
+        if (!currentSession) return
+
+        const selectedModel = local.model.current()
+        if (!selectedModel) {
+          toast.show({
+            variant: "warning",
+            message: "Connect a provider to create a thread",
+            duration: 3000,
+          })
+          return
+        }
+
+        const agent = local.agent.current()
+        if (!agent) return
+
+        // Capture selected text before creating the thread
+        const selection = renderer.getSelection()
+        const selectedText = selection?.getSelectedText() ?? ""
+        if (selection) renderer.clearSelection()
+
+        // Gather parent context: last few messages for context
+        const parentMessages = messages()
+        const recentContext = parentMessages
+          .slice(-10)
+          .map((msg) => {
+            const parts = sync.data.part[msg.id] ?? []
+            const textParts = parts
+              .filter((p): p is Extract<typeof p, { type: "text" }> => p.type === "text" && !p.synthetic)
+              .map((p) => p.text)
+              .join("\n")
+            if (!textParts) return null
+            return `${msg.role === "user" ? "User" : "Assistant"}: ${textParts.slice(0, 500)}`
+          })
+          .filter(Boolean)
+          .join("\n\n")
+
+        // Create child session with thread metadata
+        const variant = local.model.variant.current()
+        const res = await sdk.client.session.create({
+          parentID: route.sessionID,
+          title: selectedText.trim().slice(0, 50) || "Thread",
+          agent: agent.name,
+          model: {
+            providerID: selectedModel.providerID,
+            id: selectedModel.modelID,
+            variant,
+          },
+          metadata: {
+            type: "thread",
+            selectedText: selectedText.trim() || undefined,
+            parentTitle: currentSession.title,
+            parentContext: recentContext || undefined,
+          },
+        })
+
+        if (res.error) {
+          toast.show({
+            message: "Failed to create child thread",
+            variant: "error",
+          })
+          return
+        }
+
+        const childSessionID = res.data.id
+
+        // Context is stored in metadata and displayed in ThreadHeader
+        // No initial prompt is sent - user can start chatting directly
+
+        // Navigate to the child session
+        navigate({
+          type: "session",
+          sessionID: childSessionID,
+        })
+
+        toast.show({
+          message: "Child thread created",
+          variant: "success",
+          duration: 2000,
+        })
+      },
+    },
+    {
+      title: "Show session graph",
+      value: "session.graph",
+      category: "Session",
+      slash: {
+        name: "graph",
+      },
+      run: () => {
+        dialog.replace(() => <DialogSessionGraph />)
+      },
+    },
   ])
 
   const sessionCommands = createMemo(() =>
@@ -1294,7 +1408,12 @@ export function Session() {
                   />
                 </Show>
                 <Show when={session()?.parentID}>
-                  <SubagentFooter />
+                  <Show when={isThread()}>
+                    <ThreadFooter />
+                  </Show>
+                  <Show when={!isThread()}>
+                    <SubagentFooter />
+                  </Show>
                 </Show>
                 <Show when={visible()}>
                   <pluginRuntime.Slot
@@ -2558,6 +2677,77 @@ function Diagnostics(props: { diagnostics: unknown; filePath: string }) {
         </For>
       </box>
     </Show>
+  )
+}
+
+function ThreadHeader() {
+  const route = useRouteData("session")
+  const sync = useSync()
+  const { navigate } = useRoute()
+  const { theme } = useTheme()
+  const keymap = useOpencodeKeymap()
+  const parentShortcut = useCommandShortcut("session.parent")
+  const [hover, setHover] = createSignal<"parent" | null>(null)
+
+  const session = createMemo(() => sync.session.get(route.sessionID))
+  const parentSession = createMemo(() => {
+    const parentID = session()?.parentID
+    if (!parentID) return null
+    return sync.session.get(parentID)
+  })
+
+  const selectedText = createMemo(() => session()?.metadata?.selectedText as string | undefined)
+  const parentTitle = createMemo(() => session()?.metadata?.parentTitle as string | undefined)
+
+  return (
+    <box flexShrink={0}>
+      <box
+        paddingTop={1}
+        paddingBottom={1}
+        paddingLeft={2}
+        paddingRight={1}
+        {...SplitBorder}
+        border={["left"]}
+        borderColor={theme.border}
+        flexShrink={0}
+        backgroundColor={theme.backgroundPanel}
+      >
+        <box flexDirection="row" justifyContent="space-between" gap={1}>
+          <box flexDirection="row" gap={1}>
+            <text fg={theme.text}>
+              <b>Thread</b>
+            </text>
+            <Show when={parentTitle()}>
+              <text style={{ fg: theme.textMuted }}> · Child of {parentTitle()}</text>
+            </Show>
+          </box>
+          <box
+            onMouseOver={() => setHover("parent")}
+            onMouseOut={() => setHover(null)}
+            onMouseUp={() => keymap.dispatchCommand("session.parent")}
+            backgroundColor={hover() === "parent" ? theme.backgroundElement : theme.backgroundPanel}
+          >
+            <text fg={theme.text}>
+              Parent <span style={{ fg: theme.textMuted }}>{parentShortcut()}</span>
+            </text>
+          </box>
+        </box>
+        <Show when={selectedText()}>
+          <box
+            marginTop={1}
+            paddingTop={1}
+            paddingBottom={1}
+            paddingLeft={2}
+            border={["left"]}
+            borderColor={theme.primary}
+          >
+            <text fg={theme.textMuted} wrapMode="word">
+              Selected: "{selectedText()}"
+            </text>
+          </box>
+        </Show>
+      </box>
+    </box>
   )
 }
 

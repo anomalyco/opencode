@@ -51,7 +51,7 @@ import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "../../context/args"
-import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
+import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap, useCommandSlashes } from "../../keymap"
 import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
@@ -160,6 +160,7 @@ export function Prompt(props: PromptProps) {
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
+  const commandSlashes = useCommandSlashes()
   const agentShortcut = useCommandShortcut("agent.cycle")
   const paletteShortcut = useCommandShortcut("command.palette.show")
   const renderer = useRenderer()
@@ -1064,27 +1065,70 @@ export function Prompt(props: PromptProps) {
       setStore("mode", "normal")
     } else if (
       inputText.startsWith("/") &&
-      sync.data.command.some((x) => x.name === inputText.split("\n")[0].split(" ")[0].slice(1))
+      (sync.data.command.some((x) => x.name === inputText.split("\n")[0].split(" ")[0].slice(1)) ||
+        commandSlashes().some((x) => x.display === inputText.split("\n")[0].split(" ")[0]))
     ) {
-      move.startSubmit()
-      // Parse command from first line, preserve multi-line content in arguments
-      const firstLineEnd = inputText.indexOf("\n")
-      const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
-      const [command, ...firstLineArgs] = firstLine.split(" ")
-      const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
-      const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
+      // Check if it's a client-side slash command first
+      const commandName = inputText.split("\n")[0].split(" ")[0].slice(1)
+      const clientCommand = commandSlashes().find((x) => x.display === inputText.split("\n")[0].split(" ")[0])
+      
+      if (clientCommand) {
+        // Execute client-side command
+        clientCommand.onSelect()
+      } else {
+        // Execute server-side command
+        move.startSubmit()
+        // Parse command from first line, preserve multi-line content in arguments
+        const firstLineEnd = inputText.indexOf("\n")
+        const firstLine = firstLineEnd === -1 ? inputText : inputText.slice(0, firstLineEnd)
+        const [command, ...firstLineArgs] = firstLine.split(" ")
+        const restOfInput = firstLineEnd === -1 ? "" : inputText.slice(firstLineEnd + 1)
+        const args = firstLineArgs.join(" ") + (restOfInput ? "\n" + restOfInput : "")
 
-      void sdk.client.session.command({
-        sessionID,
-        command: command.slice(1),
-        arguments: args,
-        agent: agent.name,
-        model: `${selectedModel.providerID}/${selectedModel.modelID}`,
-        variant,
-        parts: nonTextParts.filter((x) => x.type === "file"),
-      })
+        void sdk.client.session.command({
+          sessionID,
+          command: command.slice(1),
+          arguments: args,
+          agent: agent.name,
+          model: `${selectedModel.providerID}/${selectedModel.modelID}`,
+          variant,
+          parts: nonTextParts.filter((x) => x.type === "file"),
+        })
+      }
     } else {
       move.startSubmit()
+
+      // Check if this is the first message in a thread session
+      const currentSession = sync.session.get(sessionID)
+      const isThreadSession = currentSession?.metadata?.type === "thread"
+      const existingMessages = sync.data.message[sessionID] ?? []
+      const isFirstMessage = existingMessages.length === 0
+
+      // Build thread context parts for first message in thread sessions
+      const threadContextParts: Array<{ type: "text"; text: string; synthetic: boolean; metadata: Record<string, unknown> }> = []
+      if (isThreadSession && isFirstMessage) {
+        const selectedText = currentSession?.metadata?.selectedText as string | undefined
+        const parentContext = currentSession?.metadata?.parentContext as string | undefined
+
+        if (selectedText) {
+          threadContextParts.push({
+            type: "text",
+            text: `<system-reminder>The user selected the following text from the parent session to explore further:\n\n"""\n${selectedText}\n"""\n\nPlease help explore this selection or answer questions about it.</system-reminder>`,
+            synthetic: true,
+            metadata: { kind: "thread_context" },
+          })
+        }
+
+        if (parentContext) {
+          threadContextParts.push({
+            type: "text",
+            text: `<system-reminder>Here is the recent conversation context from the parent session:\n\n${parentContext}\n\nContinue the exploration from this context.</system-reminder>`,
+            synthetic: true,
+            metadata: { kind: "thread_context" },
+          })
+        }
+      }
+
       sdk.client.session
         .prompt(
           {
@@ -1094,6 +1138,7 @@ export function Prompt(props: PromptProps) {
             model: selectedModel,
             variant,
             parts: [
+              ...threadContextParts,
               ...editorParts,
               {
                 type: "text",
