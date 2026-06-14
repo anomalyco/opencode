@@ -1,3 +1,18 @@
+/**
+ * @spec-handoff
+ * @interface Session.setArchived(input: { sessionID: SessionID; time?: number | null }): Effect<void>
+ * @behavior
+ *   - setArchived({ sessionID, time: <number> }) sets time_archived (session excluded from
+ *     the default listGlobal results)
+ *   - setArchived({ sessionID, time: null }) clears time_archived and restores the session to
+ *     active (it reappears in default listGlobal and info.time.archived === undefined)
+ * @edge-cases
+ *   - The current signature is `time?: number`, so `time: null` is a type error and the test
+ *     fails `bun typecheck`. Fix: widen to `time?: number | null` in both the Interface
+ *     declaration (~line 477) and the implementation (~line 799) of src/session/session.ts.
+ *     The internal `patch` already clears time_archived when archived is null at runtime.
+ * @see ../../src/session/session.ts (setArchived)
+ */
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Layer } from "effect"
 import { Project } from "@/project/project"
@@ -64,6 +79,29 @@ describe("session.listGlobal", () => {
         const allIds = allSessions.map((session) => session.id)
 
         expect(allIds).toContain(archived.id)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "restores an archived session when time is null",
+    () =>
+      Effect.gen(function* () {
+        const session = yield* withSession({ title: "restore-me" })
+
+        yield* SessionNs.Service.use((s) => s.setArchived({ sessionID: session.id, time: Date.now() }))
+
+        const archivedList = yield* SessionNs.Service.use((s) => s.listGlobal({ limit: 200 }))
+        expect(archivedList.map((s) => s.id)).not.toContain(session.id)
+
+        // Unarchive by clearing the timestamp. setArchived must accept null.
+        yield* SessionNs.Service.use((s) => s.setArchived({ sessionID: session.id, time: null }))
+
+        const restoredList = yield* SessionNs.Service.use((s) => s.listGlobal({ limit: 200 }))
+        expect(restoredList.map((s) => s.id)).toContain(session.id)
+
+        const restored = restoredList.find((s) => s.id === session.id)
+        expect(restored?.time.archived).toBeUndefined()
       }),
     { git: true },
   )

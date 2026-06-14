@@ -474,7 +474,7 @@ export interface Interface {
   readonly touch: (sessionID: SessionID) => Effect.Effect<void>
   readonly get: (id: SessionID) => Effect.Effect<Info, NotFound>
   readonly setTitle: (input: { sessionID: SessionID; title: string }) => Effect.Effect<void>
-  readonly setArchived: (input: { sessionID: SessionID; time?: number }) => Effect.Effect<void>
+  readonly setArchived: (input: { sessionID: SessionID; time?: number | null }) => Effect.Effect<void>
   readonly setMetadata: (input: typeof SetMetadataInput.Type) => Effect.Effect<void>
   readonly setPermission: (input: { sessionID: SessionID; permission: PermissionV1.Ruleset }) => Effect.Effect<void>
   readonly setRevert: (input: {
@@ -796,8 +796,11 @@ export const layer: Layer.Layer<
       yield* patch(input.sessionID, { title: input.title }).pipe(Effect.orDie)
     })
 
-    const setArchived = Effect.fn("Session.setArchived")(function* (input: { sessionID: SessionID; time?: number }) {
-      yield* patch(input.sessionID, { time: { archived: input.time } }).pipe(Effect.orDie)
+    const setArchived = Effect.fn("Session.setArchived")(function* (input: { sessionID: SessionID; time?: number | null }) {
+      // Convert null (the "clear" signal from PATCH/unarchive) to undefined so the published
+      // SessionV1.Event.Updated info stays schema-valid (time.archived is number | undefined,
+      // never null). The projector then persists time_archived as null, restoring the session.
+      yield* patch(input.sessionID, { time: { archived: input.time ?? undefined } }).pipe(Effect.orDie)
     })
 
     const setMetadata = Effect.fn("Session.setMetadata")(function* (input: typeof SetMetadataInput.Type) {

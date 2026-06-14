@@ -1,3 +1,19 @@
+/**
+ * @spec-handoff
+ * @interface PATCH /session/:sessionID  body: { time?: { archived?: number | null } }
+ * @behavior
+ *   - PATCH with { time: { archived: <number> } } archives the session (time.archived set)
+ *   - PATCH with { time: { archived: null } } clears the archived timestamp and restores
+ *     the session to active; response is HTTP 200 and the returned info has
+ *     time.archived === undefined (the Info schema omits undefined values)
+ * @edge-cases
+ *   - archived: null does not clear the timestamp today: the UpdatePayload schema in
+ *     groups/session.ts is `Schema.optional(Session.ArchivedTimestamp)` (no null), so the
+ *     null is dropped during decode and the session stays archived. Fix: widen to
+ *     `Schema.optional(Schema.NullOr(Session.ArchivedTimestamp))` so null flows to setArchived.
+ * @see ../../src/server/routes/instance/httpapi/groups/session.ts (UpdatePayload)
+ * @see ../../src/server/routes/instance/httpapi/handlers/session.ts (update handler)
+ */
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { afterEach, describe, expect } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
@@ -833,6 +849,39 @@ describe("session HttpApi", () => {
         })
         expect(response.status).toBe(200)
         expect((yield* json<Session.Info>(response)).time.archived).toBe(-1)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
+    "restores an archived session when archived is null",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+        const session = yield* createSession({ title: "to-restore" })
+
+        const archived = yield* requestJson<Session.Info>(pathFor(SessionPaths.update, { sessionID: session.id }), {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ time: { archived: 1700000000000 } }),
+        })
+        expect(archived.time.archived).toBe(1700000000000)
+
+        // Unarchiving sends archived: null to clear the timestamp. The schema must accept
+        // null (NullOr) and forward it to setArchived; today null is dropped during decode
+        // so the session stays archived.
+        const response = yield* request(pathFor(SessionPaths.update, { sessionID: session.id }), {
+          method: "PATCH",
+          headers,
+          body: JSON.stringify({ time: { archived: null } }),
+        })
+        expect(response.status).toBe(200)
+
+        const restored = yield* json<Session.Info>(response)
+        expect(restored.id).toBe(session.id)
+        // The Info schema omits undefined, so a cleared archived field is absent.
+        expect(restored.time.archived).toBeUndefined()
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )

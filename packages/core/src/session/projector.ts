@@ -55,11 +55,15 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
     agent: info.agent,
     model: info.model,
     version: info.version,
-    share_url: info.share?.url,
-    summary_additions: info.summary?.additions,
-    summary_deletions: info.summary?.deletions,
-    summary_files: info.summary?.files,
-    summary_diffs: info.summary?.diffs ? [...info.summary.diffs] : undefined,
+    // Coerce nullable columns to null (not undefined): Drizzle omits undefined values from the
+    // UPDATE set, so a field cleared on `info` would otherwise leave the column unchanged. Same
+    // clearing bug originally fixed for time_archived — apply it to every genuinely nullable
+    // sibling so a cleared share/summary/permission/compacting value actually persists as NULL.
+    share_url: info.share?.url ?? null,
+    summary_additions: info.summary?.additions ?? null,
+    summary_deletions: info.summary?.deletions ?? null,
+    summary_files: info.summary?.files ?? null,
+    summary_diffs: info.summary?.diffs ? [...info.summary.diffs] : null,
     metadata: info.metadata,
     cost: info.cost ?? 0,
     tokens_input: (info.tokens ?? { input: 0 }).input,
@@ -68,11 +72,11 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
     tokens_cache_read: (info.tokens ?? { cache: { read: 0 } }).cache.read,
     tokens_cache_write: (info.tokens ?? { cache: { write: 0 } }).cache.write,
     revert: info.revert ?? null,
-    permission: info.permission ? [...info.permission] : undefined,
+    permission: info.permission ? [...info.permission] : null,
     time_created: info.time.created,
     time_updated: info.time.updated,
-    time_compacting: info.time.compacting,
-    time_archived: info.time.archived,
+    time_compacting: info.time.compacting ?? null,
+    time_archived: info.time.archived ?? null,
   }
 }
 

@@ -43,6 +43,10 @@ export type State = {
   path: Path
   session: Session[]
   sessionTotal: number
+  // Root session ids currently known to be archived. Populated when a root is archived and
+  // removed from the loaded window so a later genuine archived→active transition can restore the
+  // count exactly once. Keyed off the stable session id, never the nullable time.archived field.
+  archivedRoots?: { [id: string]: true }
   session_status: {
     [sessionID: string]: SessionStatus
   }
