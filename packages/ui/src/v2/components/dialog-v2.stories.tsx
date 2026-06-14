@@ -17,7 +17,7 @@ Dialog content wrapper built on Kobalte's dialog primitive with v2 styling.
 - Focus trapping and aria attributes provided by Kobalte Dialog.
 
 ### Theming/tokens
-- Uses \`data-component="dialog"\` and slot attributes.
+- Uses \`data-component="dialog-v2"\` and slot attributes.
 `
 
 export default {

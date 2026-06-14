@@ -1,4 +1,6 @@
-const key = (directory: string, sessionID: string) => `${directory}\n${sessionID}`
+import { ScopedKey, type ServerScope } from "@/utils/server-scope"
+
+const key = (scope: ServerScope, directory: string, sessionID: string) => ScopedKey.from(scope, directory, sessionID)
 
 export const SESSION_PREFETCH_TTL = 15_000
 
@@ -27,28 +29,32 @@ const rev = new Map<string, number>()
 
 const version = (id: string) => rev.get(id) ?? 0
 
-export function getSessionPrefetch(directory: string, sessionID: string) {
-  return cache.get(key(directory, sessionID))
+export function getSessionPrefetch(scope: ServerScope, directory: string, sessionID: string) {
+  return cache.get(key(scope, directory, sessionID))
 }
 
-export function getSessionPrefetchPromise(directory: string, sessionID: string) {
-  return inflight.get(key(directory, sessionID))
+export function getSessionPrefetchPromise(scope: ServerScope, directory: string, sessionID: string) {
+  return inflight.get(key(scope, directory, sessionID))
 }
 
-export function clearSessionPrefetchInflight() {
-  inflight.clear()
+export function clearSessionPrefetchInflight(scope: ServerScope) {
+  const prefix = ScopedKey.prefix(scope)
+  for (const id of inflight.keys()) {
+    if (id.startsWith(prefix)) inflight.delete(id)
+  }
 }
 
-export function isSessionPrefetchCurrent(directory: string, sessionID: string, value: number) {
-  return version(key(directory, sessionID)) === value
+export function isSessionPrefetchCurrent(scope: ServerScope, directory: string, sessionID: string, value: number) {
+  return version(key(scope, directory, sessionID)) === value
 }
 
 export function runSessionPrefetch(input: {
   directory: string
+  scope: ServerScope
   sessionID: string
   task: (value: number) => Promise<Meta | undefined>
 }) {
-  const id = key(input.directory, input.sessionID)
+  const id = key(input.scope, input.directory, input.sessionID)
   const pending = inflight.get(id)
   if (pending) return pending
 
@@ -64,13 +70,14 @@ export function runSessionPrefetch(input: {
 
 export function setSessionPrefetch(input: {
   directory: string
+  scope: ServerScope
   sessionID: string
   limit: number
   cursor?: string
   complete: boolean
   at?: number
 }) {
-  cache.set(key(input.directory, input.sessionID), {
+  cache.set(key(input.scope, input.directory, input.sessionID), {
     limit: input.limit,
     cursor: input.cursor,
     complete: input.complete,
@@ -78,18 +85,18 @@ export function setSessionPrefetch(input: {
   })
 }
 
-export function clearSessionPrefetch(directory: string, sessionIDs: Iterable<string>) {
+export function clearSessionPrefetch(scope: ServerScope, directory: string, sessionIDs: Iterable<string>) {
   for (const sessionID of sessionIDs) {
     if (!sessionID) continue
-    const id = key(directory, sessionID)
+    const id = key(scope, directory, sessionID)
     rev.set(id, version(id) + 1)
     cache.delete(id)
     inflight.delete(id)
   }
 }
 
-export function clearSessionPrefetchDirectory(directory: string) {
-  const prefix = `${directory}\n`
+export function clearSessionPrefetchDirectory(scope: ServerScope, directory: string) {
+  const prefix = ScopedKey.prefix(scope, directory)
   const keys = new Set([...cache.keys(), ...inflight.keys()])
   for (const id of keys) {
     if (!id.startsWith(prefix)) continue

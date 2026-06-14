@@ -1,11 +1,11 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { useGlobalSDK } from "./global-sdk"
+import { useServerSDK } from "./server-sdk"
 
 export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
   init: (props: { directory: string }) => {
-    const globalSDK = useGlobalSDK()
+    const serverSDK = useServerSDK()
 
-    return globalSDK.createDirSyncContext(props.directory)
+    return serverSDK.createDirSdkContext(props.directory)
   },
 })

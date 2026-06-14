@@ -7,7 +7,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { A, useParams } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
@@ -23,7 +23,7 @@ export const ProjectIcon = (props: {
   notify?: boolean
   working?: boolean
 }): JSX.Element => {
-  const globalSync = useGlobalSync()
+  const serverSync = useServerSync()
   const notification = useNotification()
   const permission = usePermission()
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
@@ -33,7 +33,7 @@ export const ProjectIcon = (props: {
   const hasError = createMemo(() => dirs().some((directory) => notification.project.unseenHasError(directory)))
   const hasPermissions = createMemo(() =>
     dirs().some((directory) => {
-      const [store] = globalSync.child(directory, { bootstrap: false })
+      const [store] = serverSync.child(directory, { bootstrap: false })
       return hasProjectPermissions(store.permission, (item) => !permission.autoResponds(item, directory))
     }),
   )
@@ -146,10 +146,10 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const language = useLanguage()
   const notification = useNotification()
   const permission = usePermission()
-  const globalSync = useGlobalSync()
+  const serverSync = useServerSync()
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
-  const [sessionStore] = globalSync.child(props.session.directory)
+  const [sessionStore] = serverSync.child(props.session.directory)
   const hasPermissions = createMemo(() => {
     return !!sessionPermissionRequest(sessionStore.session, sessionStore.permission, props.session.id, (item) => {
       return !permission.autoResponds(item, props.session.directory)

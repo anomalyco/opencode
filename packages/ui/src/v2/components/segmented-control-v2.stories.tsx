@@ -56,7 +56,7 @@ export const Controlled = {
           <SegmentedControlItemV2 value="b">Grid</SegmentedControlItemV2>
           <SegmentedControlItemV2 value="c">Board</SegmentedControlItemV2>
         </SegmentedControlV2>
-        <div style={{ "font-family": "var(--font-family-sans)", "font-size": "12px", color: "#808080" }}>
+        <div style={{ "font-family": "var(--v2-font-family-sans)", "font-size": "12px", color: "#808080" }}>
           Value: {value()}
         </div>
       </div>
@@ -74,7 +74,7 @@ export const AllowDeselect = {
           <SegmentedControlItemV2 value="b">B</SegmentedControlItemV2>
           <SegmentedControlItemV2 value="c">C</SegmentedControlItemV2>
         </SegmentedControlV2>
-        <div style={{ "font-family": "var(--font-family-sans)", "font-size": "12px", color: "#808080" }}>
+        <div style={{ "font-family": "var(--v2-font-family-sans)", "font-size": "12px", color: "#808080" }}>
           Value: {value() === null ? "none" : value()}
         </div>
       </div>

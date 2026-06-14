@@ -457,7 +457,7 @@ export const dict = {
 
   "error.dev.rootNotFound": "找不到根元素。你是不是忘了把它新增到 index.html? 或者 id 屬性拼錯了?",
 
-  "error.globalSync.connectFailed": "無法連線到伺服器。是否有伺服器正在 `{{url}}` 執行?",
+  "error.serverSync.connectFailed": "無法連線到伺服器。是否有伺服器正在 `{{url}}` 執行?",
   "directory.error.invalidUrl": "URL 中的目錄無效。",
 
   "error.chain.unknown": "未知錯誤",
@@ -907,8 +907,8 @@ export const dict = {
   "common.key.insert": "Insert",
   "common.unknown": "未知",
   "error.page.circular": "[循環]",
-  "error.globalSDK.noServerAvailable": "無可用的伺服器",
-  "error.globalSDK.serverNotAvailable": "伺服器無法使用",
+  "error.serverSDK.noServerAvailable": "無可用的伺服器",
+  "error.serverSDK.serverNotAvailable": "伺服器無法使用",
   "error.childStore.persistedCacheCreateFailed": "建立持續性快取失敗",
   "error.childStore.persistedProjectMetadataCreateFailed": "建立持續性專案中繼資料失敗",
   "error.childStore.persistedProjectIconCreateFailed": "建立持續性專案圖示失敗",

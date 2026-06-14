@@ -6,7 +6,7 @@ export const EnvPlugin = PluginV2.define({
   effect: Effect.gen(function* () {
     return {
       "catalog.transform": Effect.fn(function* (evt) {
-        for (const item of evt.data) {
+        for (const item of evt.provider.list()) {
           const key = item.provider.env.find((env) => process.env[env])
           if (!key) continue
           evt.provider.update(item.provider.id, (provider) => {

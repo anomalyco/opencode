@@ -1,7 +1,7 @@
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { InstanceStore } from "@/project/instance-store"
 import { Effect, Layer } from "effect"
-import { HttpRouter, HttpServerResponse } from "effect/unstable/http"
+import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import { WorkspaceRouteContext } from "./workspace-routing"
 
@@ -39,12 +39,5 @@ export const instanceContextLayer = Layer.effect(
   Effect.gen(function* () {
     const store = yield* InstanceStore.Service
     return InstanceContextMiddleware.of((effect) => provideInstanceContext(effect, store))
-  }),
-)
-
-export const instanceRouterMiddleware = HttpRouter.middleware()(
-  Effect.gen(function* () {
-    const store = yield* InstanceStore.Service
-    return (effect) => provideInstanceContext(effect, store)
   }),
 )

@@ -1,8 +1,10 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import path from "path"
-import { serviceUse } from "@/effect/service-use"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Global } from "@opencode-ai/core/global"
 import { Effect, Layer, Context, Option, Schema } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
 
 export const Tokens = Schema.Struct({
   accessToken: Schema.mutableKey(Schema.String),
@@ -33,6 +35,7 @@ const decodeAuthData = Schema.decodeUnknownOption(Schema.Record(Schema.String, E
 type AuthData = Record<string, Entry>
 
 const filepath = path.join(Global.Path.data, "mcp-auth.json")
+const lockKey = `mcp-auth:${filepath}`
 
 export interface Interface {
   readonly all: () => Effect.Effect<Record<string, Entry>>
@@ -57,13 +60,26 @@ export const use = serviceUse(Service)
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const fs = yield* AppFileSystem.Service
+    const fs = yield* FSUtil.Service
+    const flock = yield* EffectFlock.Service
 
-    const all = Effect.fn("McpAuth.all")(function* () {
+    const read = Effect.fn("McpAuth.read")(function* () {
       return yield* fs.readJson(filepath).pipe(
         Effect.map((data): AuthData => Option.getOrElse(decodeAuthData(data), () => ({}) as AuthData) as AuthData),
         Effect.catch(() => Effect.succeed({} as AuthData)),
       )
+    })
+
+    const all = Effect.fn("McpAuth.all")(function* () {
+      return yield* read().pipe(flock.withLock(lockKey), Effect.orDie)
+    })
+
+    const mutate = Effect.fn("McpAuth.mutate")(function* (update: (data: AuthData) => AuthData | undefined) {
+      yield* Effect.gen(function* () {
+        const next = update(yield* read())
+        if (!next) return
+        yield* fs.writeJson(filepath, next, 0o600).pipe(Effect.orDie)
+      }).pipe(flock.withLock(lockKey), Effect.orDie)
     })
 
     const get = Effect.fn("McpAuth.get")(function* (mcpName: string) {
@@ -80,31 +96,38 @@ export const layer = Layer.effect(
     })
 
     const set = Effect.fn("McpAuth.set")(function* (mcpName: string, entry: Entry, serverUrl?: string) {
-      const data = yield* all()
-      if (serverUrl) entry.serverUrl = serverUrl
-      yield* fs.writeJson(filepath, { ...data, [mcpName]: entry }, 0o600).pipe(Effect.orDie)
+      yield* mutate((data) => ({
+        ...data,
+        [mcpName]: serverUrl ? { ...entry, serverUrl } : entry,
+      }))
     })
 
     const remove = Effect.fn("McpAuth.remove")(function* (mcpName: string) {
-      const data = yield* all()
-      delete data[mcpName]
-      yield* fs.writeJson(filepath, data, 0o600).pipe(Effect.orDie)
+      yield* mutate((data) => {
+        const next = { ...data }
+        delete next[mcpName]
+        return next
+      })
     })
 
     const updateField = <K extends keyof Entry>(field: K, spanName: string) =>
       Effect.fn(`McpAuth.${spanName}`)(function* (mcpName: string, value: NonNullable<Entry[K]>, serverUrl?: string) {
-        const entry = (yield* get(mcpName)) ?? {}
-        entry[field] = value
-        yield* set(mcpName, entry, serverUrl)
+        yield* mutate((data) => {
+          const entry = data[mcpName] ?? {}
+          entry[field] = value
+          if (serverUrl) entry.serverUrl = serverUrl
+          return { ...data, [mcpName]: entry }
+        })
       })
 
     const clearField = (field: keyof Entry, spanName: string) =>
       Effect.fn(`McpAuth.${spanName}`)(function* (mcpName: string) {
-        const entry = yield* get(mcpName)
-        if (entry) {
+        yield* mutate((data) => {
+          const entry = data[mcpName]
+          if (!entry) return undefined
           delete entry[field]
-          yield* set(mcpName, entry)
-        }
+          return { ...data, [mcpName]: entry }
+        })
       })
 
     const updateTokens = updateField("tokens", "updateTokens")
@@ -144,6 +167,8 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer))
+export const defaultLayer = layer.pipe(Layer.provide(EffectFlock.defaultLayer), Layer.provide(FSUtil.defaultLayer))
+
+export const node = LayerNode.make(layer, [FSUtil.node, EffectFlock.node])
 
 export * as McpAuth from "./auth"

@@ -17,6 +17,7 @@ import type { SessionComposerState } from "@/pages/session/composer/session-comp
 import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
 import type { FollowupDraft } from "@/components/prompt-input/submit"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { NEW_SESSION_CONTENT_WIDTH } from "@/pages/session/new-session-layout"
 
 export function SessionComposerRegion(props: {
   state: SessionComposerState
@@ -25,7 +26,6 @@ export function SessionComposerRegion(props: {
   placement?: "dock" | "inline"
   inputRef: (el: HTMLDivElement) => void
   newSessionWorktree: string
-  onNewSessionWorktreeChange?: (worktree: string) => void
   onNewSessionWorktreeReset: () => void
   onSubmit: () => void
   onResponseSubmit: () => void
@@ -151,8 +151,9 @@ export function SessionComposerRegion(props: {
     >
       <div
         classList={{
-          "w-full px-3 pointer-events-auto": true,
-          "max-w-[720px] px-0": props.placement === "inline",
+          "w-full pointer-events-auto": true,
+          "px-3": props.placement !== "inline",
+          [NEW_SESSION_CONTENT_WIDTH]: props.placement === "inline",
           "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered,
         }}
       >
@@ -265,7 +266,6 @@ export function SessionComposerRegion(props: {
                       variant={props.placement === "inline" ? "new-session" : undefined}
                       ref={props.inputRef}
                       newSessionWorktree={props.newSessionWorktree}
-                      onNewSessionWorktreeChange={props.onNewSessionWorktreeChange}
                       onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
                       edit={props.followup?.edit}
                       onEditLoaded={props.followup?.onEditLoaded}
