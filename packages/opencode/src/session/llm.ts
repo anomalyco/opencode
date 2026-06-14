@@ -332,7 +332,7 @@ const live: Layer.Layer<
                     }))
                     const ts = Date.now()
                     const path = `/tmp/opencode-prompt-${ts}.json`
-                    Bun.writeFileSync(path, JSON.stringify(dump, null, 2))
+                    Bun.write(`/tmp/opencode-prompt-${Date.now()}.json`, JSON.stringify(dump, null, 2))
                   }
                   return args.params
                 },
