@@ -9,6 +9,8 @@ import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
+import { SubagentLimits } from "../session/subagent-limits"
+import { TurnBudget } from "../session/turn-budget"
 import { Config } from "@/config/config"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
@@ -18,7 +20,23 @@ import { Database } from "@opencode-ai/core/database/database"
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
   resolvePromptParts(template: string): Effect.Effect<SessionPrompt.PromptInput["parts"]>
-  prompt(input: SessionPrompt.PromptInput): Effect.Effect<SessionV1.WithParts>
+  /**
+   * design-final §4.6: `turnBudgetPool` is the root turn's live TurnBudget.Pool,
+   * shared BY REFERENCE through every nesting level (the non-serializable
+   * intersection follows the LoopOptions pattern — the pool must never ride a
+   * schema). The receiving side (SessionPrompt.prompt) prefers the pool over
+   * creating a fresh one from `turnBudget`, so the child loop charges the same
+   * headroom as the root turn.
+   */
+  prompt(input: SessionPrompt.PromptInput & { turnBudgetPool?: TurnBudget.Pool }): Effect.Effect<SessionV1.WithParts>
+  /**
+   * The session's currently RESOLVED model (session.model → last user message's
+   * model → provider default) — the same chain the prompt loop uses for a turn
+   * with no explicit model. Lets a tool capture the caller's effective model so
+   * subagents without an explicit override can inherit it (Item 12). Optional so
+   * existing prompt-ops stubs keep compiling; consumers read it defensively.
+   */
+  currentModel?(sessionID: SessionID): Effect.Effect<{ providerID: string; modelID: string; variant?: string }>
 }
 
 const id = "task"
@@ -89,6 +107,12 @@ export const TaskTool = Tool.define(
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
 
+    // In-memory lifetime counter of subagents started per session TREE, keyed
+    // by the root session id (design-final §2.2). A safety ceiling against
+    // runaway delegation within one process run — deliberately not persisted;
+    // resumes/extends do not count and workflow dispatches keep their own cap.
+    const treeSpawnCounts = new Map<SessionID, number>()
+
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
       ctx: Tool.Context,
@@ -99,6 +123,19 @@ export const TaskTool = Tool.define(
         return yield* Effect.fail(
           new Error("Background subagents require OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"),
         )
+      }
+
+      // Runtime depth guard (defense line 3, design-final §4.1): depth is
+      // derived from the real parent chain at spawn time, so resumed sessions
+      // keep their stored depth and a lineage failure (cyclic parents) refuses
+      // the spawn with its own typed error. Deliberately BEFORE ctx.ask — the
+      // subtask path calls execute with bypassAgentCheck and skips the ask.
+      const chain = yield* sessions.lineage(ctx.sessionID)
+      const spawnerDepth = chain.length
+      const rootID = chain.at(-1)!.id
+      const depthLimit = SubagentLimits.maxDepth(cfg)
+      if (spawnerDepth >= depthLimit) {
+        return yield* Effect.fail(SubagentLimits.depthError({ depth: spawnerDepth, limit: depthLimit }))
       }
 
       if (!ctx.extra?.bypassAgentCheck) {
@@ -121,6 +158,13 @@ export const TaskTool = Tool.define(
       const session = params.task_id
         ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
+      // task_id may only resume DIRECT children (design-final §4.4): resuming
+      // an ancestor or a foreign session was silently adopted before and could
+      // deadlock (child waiting on its own ancestor's runner). Unknown ids
+      // still fall through to a fresh session below.
+      if (session !== undefined && session.parentID !== ctx.sessionID) {
+        return yield* Effect.fail(SubagentLimits.resumeError({ taskID: session.id }))
+      }
       const parent = yield* sessions.get(ctx.sessionID)
       const childPermission = deriveSubagentSessionPermission({
         parentSessionPermission: parent.permission ?? [],
@@ -141,20 +185,44 @@ export const TaskTool = Tool.define(
       ]
       const nextSession =
         session ??
-        (yield* sessions.create({
-          parentID: ctx.sessionID,
-          title: params.description + ` (@${next.name} subagent)`,
-          agent: next.name,
-          permission: [
-            ...childPermission,
-            ...childToolDenies.filter(
-              (deny) =>
-                !childPermission.some(
-                  (rule) =>
-                    rule.permission === deny.permission && rule.pattern === deny.pattern && rule.action === deny.action,
-                ),
-            ),
-          ],
+        (yield* Effect.gen(function* () {
+          // Tree lifetime cap (design-final §2.2): gates NEW spawns only —
+          // the resume/extend path never reaches this branch. Counted against
+          // the tree's root so every level shares one ceiling.
+          const treeLimit = SubagentLimits.__testHooks.treeLimit ?? SubagentLimits.SUBAGENT_TREE_LIMIT
+          const started = treeSpawnCounts.get(rootID) ?? 0
+          if (started >= treeLimit) {
+            return yield* Effect.fail(SubagentLimits.treeLimitError({ started, limit: treeLimit }))
+          }
+          // Budget spawn gate (design-final §4.6, soft cap): an exhausted
+          // shared turn pool refuses NEW subagents while running ones finish.
+          // No pool (the interactive default) means no gate.
+          const pool = ctx.extra?.turnBudget as TurnBudget.Pool | undefined
+          if (pool !== undefined) {
+            const headroom = TurnBudget.remaining(pool)
+            if (headroom.usd === 0 || headroom.tokens === 0) {
+              return yield* Effect.fail(SubagentLimits.budgetError())
+            }
+          }
+          const created = yield* sessions.create({
+            parentID: ctx.sessionID,
+            title: params.description + ` (@${next.name} subagent)`,
+            agent: next.name,
+            permission: [
+              ...childPermission,
+              ...childToolDenies.filter(
+                (deny) =>
+                  !childPermission.some(
+                    (rule) =>
+                      rule.permission === deny.permission &&
+                      rule.pattern === deny.pattern &&
+                      rule.action === deny.action,
+                  ),
+              ),
+            ],
+          })
+          treeSpawnCounts.set(rootID, started + 1)
+          return created
         }))
 
       const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
@@ -170,6 +238,11 @@ export const TaskTool = Tool.define(
       }
       const metadata = {
         parentSessionId: ctx.sessionID,
+        // Root of the session tree (design-final §4.5 Ü1): second cancel
+        // source for cancelBackgroundJobs — root-level cancels match jobs by
+        // rootSessionId even when the parentSessionId chain has a completed
+        // (non-running) gap in the middle.
+        rootSessionId: rootID,
         sessionId: nextSession.id,
         model,
         ...(runInBackground ? { background: true } : {}),
@@ -188,6 +261,14 @@ export const TaskTool = Tool.define(
         const result = yield* ops.prompt({
           messageID: MessageID.ascending(),
           sessionID: nextSession.id,
+          // Permission asks bubble to the tree ROOT (design-final §4.3): every
+          // level recomputes its own root, so the value is transitively the
+          // same across the whole tree and depth ≤ 2 stays byte-identical to
+          // the previous behavior (rootID === ctx.sessionID).
+          permissionSessionID: rootID,
+          // The shared turn pool travels BY REFERENCE into the child loop so
+          // all nesting levels charge the root turn's budget (§4.6).
+          turnBudgetPool: ctx.extra?.turnBudget as TurnBudget.Pool | undefined,
           model: {
             modelID: model.modelID,
             providerID: model.providerID,
