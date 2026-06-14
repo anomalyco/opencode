@@ -3,7 +3,7 @@ import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createEffect, createMemo, Show } from "solid-js"
 import { bitcostPricing, ensureBitcostPricing } from "../../component/bitcost-binding"
-import { lastTurnModel, localRate, rateSummary, type RateSummary } from "../../component/bitcost-rate"
+import { lastTurnModel, localRate, rateSummary, totalAssistantCost, type RateSummary } from "../../component/bitcost-rate"
 
 const id = "internal:sidebar-context"
 
@@ -16,7 +16,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
   const msg = createMemo(() => props.api.state.session.messages(props.session_id))
   const session = createMemo(() => props.api.state.session.get(props.session_id))
-  const cost = createMemo(() => session()?.cost ?? 0)
+  const cost = createMemo(() => session()?.cost || totalAssistantCost(msg()) || 0)
 
   const state = createMemo(() => {
     const last = msg().findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)

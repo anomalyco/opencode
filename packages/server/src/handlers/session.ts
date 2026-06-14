@@ -141,9 +141,15 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               sessionID: error.sessionID,
               message: `Session not found: ${error.sessionID}`,
             })
+          yield* Effect.logInfo("bitcost.session.bindTask: binding task").pipe(
+            Effect.annotateLogs({ sessionID: ctx.params.sessionID, taskID: ctx.payload.taskID }),
+          )
           yield* session
             .bindTask({ sessionID: ctx.params.sessionID, taskID: ctx.payload.taskID })
             .pipe(Effect.catchTag("Session.NotFoundError", (error) => Effect.fail(notFound(error))))
+          yield* Effect.logInfo("bitcost.session.bindTask: task bound").pipe(
+            Effect.annotateLogs({ sessionID: ctx.params.sessionID, taskID: ctx.payload.taskID }),
+          )
           return {
             data: yield* session
               .get(ctx.params.sessionID)

@@ -9,7 +9,7 @@ import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { TextAttributes } from "@opentui/core"
 import { markBitcostBound, rememberBitcostTasks } from "./bitcost-binding"
-import { bitcostBaseUrl, createBitcostTask, fetchBitcostTasks, type BitcostTask } from "./bitcost-api"
+import { bitcostBaseUrl, bitcostTraceID, createBitcostTask, fetchBitcostTasks, logBitcostEvent, type BitcostTask } from "./bitcost-api"
 
 type State =
   | { phase: "loading" }
@@ -48,6 +48,7 @@ export function DialogBitcostTask(props: { sessionID?: string; onBound?: () => v
   })
 
   async function bind(taskID: string) {
+    const bindTraceID = bitcostTraceID("task-bind", taskID)
     try {
       // No session yet (picked a task from home) → create one now, bound to the
       // task. A session only ever exists once it is attributed to a Task.
@@ -75,13 +76,16 @@ export function DialogBitcostTask(props: { sessionID?: string; onBound?: () => v
         }
         sessionID = res.data.id
       }
+      logBitcostEvent("Bitcost task selected", { traceID: bindTraceID, taskID, sessionID, created })
       await sdk.client.v2.session.bindTask({ sessionID, taskID })
       markBitcostBound(sessionID, taskID)
+      logBitcostEvent("Bitcost task bound", { traceID: bindTraceID, taskID, sessionID })
       if (created) route.navigate({ type: "session", sessionID })
       toast.show({ variant: "success", message: "Task selected" })
       dialog.clear()
       props.onBound?.()
     } catch {
+      logBitcostEvent("Bitcost task bind failed", { traceID: bindTraceID, taskID, sessionID: props.sessionID })
       toast.show({ variant: "error", message: "Failed to select task" })
     }
   }

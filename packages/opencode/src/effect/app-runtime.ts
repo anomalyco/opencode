@@ -51,11 +51,15 @@ import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { BitcostReporter } from "@opencode-ai/core/bitcost/reporter"
 
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
   FSUtil.defaultLayer,
   Database.defaultLayer,
+  // Usage reporter runs HERE (the runtime that publishes Step.Ended), not the
+  // server-group node list — that instance only sees V1 events via sync replay.
+  BitcostReporter.defaultLayer,
   Auth.defaultLayer,
   Account.defaultLayer,
   Config.defaultLayer,

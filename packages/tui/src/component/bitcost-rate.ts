@@ -38,3 +38,17 @@ export function lastTurnModel(
     .find((m): m is AssistantMessage => m.role === "assistant" && (m as AssistantMessage).tokens.output > 0)
   return last ? { provider: last.providerID, model: last.modelID } : undefined
 }
+
+export function userTurnCount(messages: ReadonlyArray<{ role: string }>): number {
+  return messages.filter((message) => message.role === "user").length
+}
+
+export function totalAssistantCost(messages: ReadonlyArray<{ role: string; cost?: number }>): number | undefined {
+  const total = messages.reduce((sum, message) => {
+    if (message.role !== "assistant") return sum
+    const cost = message.cost
+    if (typeof cost !== "number" || !Number.isFinite(cost) || cost <= 0) return sum
+    return sum + cost
+  }, 0)
+  return total > 0 ? total : undefined
+}

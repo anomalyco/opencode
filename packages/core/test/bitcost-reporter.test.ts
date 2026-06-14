@@ -79,7 +79,7 @@ const publishStepEnded = (sessionID: string) =>
       timestamp: created,
       assistantMessageID: SessionMessage.ID.make("msg_step"),
       finish: "stop",
-      cost: 0,
+      cost: 0.0125,
       tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 2, write: 1 } },
     })
     // The reporter forks the POST; give the detached fiber a tick to run.
@@ -99,6 +99,7 @@ describe("BitcostReporter", () => {
         taskID: "1",
         provider: "openai",
         model: "gpt-5.4",
+        cost: 0.0125,
         tokens: { input: 10, output: 5, cache: { read: 2, write: 1 } },
       })
     }),

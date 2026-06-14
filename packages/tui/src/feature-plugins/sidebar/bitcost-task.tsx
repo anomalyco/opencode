@@ -4,12 +4,13 @@ import { createEffect, createMemo, createResource, Show } from "solid-js"
 import {
   bitcostBoundTaskID,
   bitcostPricing,
+  bitcostReportStatus,
   bitcostTaskDetails,
   ensureBitcostPricing,
   rememberBitcostTasks,
 } from "../../component/bitcost-binding"
 import { fetchBitcostTasks } from "../../component/bitcost-api"
-import { lastTurnModel, localRate, rateSummary, type RateSummary } from "../../component/bitcost-rate"
+import { lastTurnModel, localRate, rateSummary, userTurnCount, type RateSummary } from "../../component/bitcost-rate"
 import { Link } from "../../ui/link"
 
 const id = "internal:sidebar-bitcost-task"
@@ -33,6 +34,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     const tid = taskID()
     return tid ? bitcostTaskDetails(tid) : undefined
   })
+  const reportStatus = createMemo(() => bitcostReportStatus(props.session_id))
 
   // When the session's task id is known but its details aren't (e.g. after a
   // restart, before the picker was ever opened this session), fetch the task list
@@ -66,6 +68,15 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     }
     return undefined // not fetched yet
   })
+  const turns = createMemo(() => {
+    const remote = details()?.usage_count
+    const local = userTurnCount(props.api.state.session.messages(props.session_id))
+    if (remote === undefined) {
+      return local > 0 ? local : undefined
+    }
+
+    return Math.max(remote, local)
+  })
 
   return (
     <Show when={taskID()}>
@@ -84,8 +95,13 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
                 <Show when={d().cost_total !== undefined}>
                   <text fg={theme().textMuted}>Cost: {money.format(d().cost_total ?? 0)}</text>
                 </Show>
-                <Show when={d().usage_count !== undefined}>
-                  <text fg={theme().textMuted}>{d().usage_count} turns</text>
+                <Show when={turns() !== undefined}>
+                  <text fg={theme().textMuted}>{turns()} turns</text>
+                </Show>
+                <Show when={reportStatus()}>
+                  <text fg={theme().textMuted}>
+                    Bitcost API: {reportStatus()!.successes} ok · {reportStatus()!.failures} failed
+                  </text>
                 </Show>
                 <Show when={rates()}>{(p) => <text fg={theme().textMuted}>Rate/1M: {rateSummary(p())}</text>}</Show>
                 <Show when={formatDate(d().completed_at) ?? formatDate(d().created_at)}>

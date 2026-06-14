@@ -48,7 +48,14 @@ import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { DialogBitcostLogin, bitcostLoggedIn } from "./component/dialog-bitcost-login"
 import { DialogBitcostTask } from "./component/dialog-bitcost-task"
-import { bitcostBoundLocally, bitcostTaskDetails, markBitcostBound, rememberBitcostTasks } from "./component/bitcost-binding"
+import {
+  bitcostBoundLocally,
+  bitcostTaskDetails,
+  clearBitcostBound,
+  markBitcostBound,
+  rememberBitcostReportStatus,
+  rememberBitcostTasks,
+} from "./component/bitcost-binding"
 import { fetchBitcostTasks } from "./component/bitcost-api"
 import { ThemeProvider, useTheme } from "./context/theme"
 import { Home } from "./routes/home"
@@ -797,8 +804,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           void sdk.client.v2.session
             .complete({ sessionID })
             .then(() => {
+              clearBitcostBound(sessionID)
               toast.show({ variant: "success", message: "Task completed" })
               route.navigate({ type: "home" })
+              dialog.replace(() => <DialogBitcostTask />)
             })
             .catch(() => toast.show({ variant: "error", message: "Failed to complete task" }))
         },
@@ -1042,6 +1051,33 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     route.navigate({
       type: "session",
       sessionID: evt.properties.sessionID,
+    })
+  })
+
+  event.subscribe((evt, { workspace }) => {
+    if (workspace !== project.workspace.current()) return
+    const event = evt as {
+      type: string
+      properties?: {
+        sessionID?: string
+        attempts?: number
+        successes?: number
+        failures?: number
+        last?: "success" | "failure"
+      }
+    }
+    if (event.type !== "bitcost.report.status.updated") return
+    const properties = event.properties
+    if (!properties?.sessionID) return
+    if (typeof properties.attempts !== "number") return
+    if (typeof properties.successes !== "number") return
+    if (typeof properties.failures !== "number") return
+    if (properties.last !== "success" && properties.last !== "failure") return
+    rememberBitcostReportStatus(properties.sessionID, {
+      attempts: properties.attempts,
+      successes: properties.successes,
+      failures: properties.failures,
+      last: properties.last,
     })
   })
 

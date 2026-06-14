@@ -232,6 +232,7 @@ export class Subscription {
   }
 
   private async handleToolPart(sessionId: string, part: ToolPart) {
+    await this.ensureSubagentSession(sessionId, part)
     await this.toolStart(sessionId, part)
 
     switch (part.state.status) {
@@ -273,6 +274,44 @@ export class Subscription {
         })
         return
     }
+  }
+
+  private async ensureSubagentSession(sessionId: string, part: ToolPart) {
+    if (part.tool !== "task") return
+
+    const childSessionId = this.toolMetadata(part, "sessionId") ?? this.toolMetadata(part, "sessionID")
+    if (!childSessionId) return
+
+    const known = await Effect.runPromise(this.input.session.tryGet(childSessionId))
+    if (known) return
+
+    const parent = await Effect.runPromise(this.input.session.tryGet(sessionId))
+    if (!parent) return
+
+    await Effect.runPromise(
+      this.input.session.create({
+        id: childSessionId,
+        cwd: parent.cwd,
+        mcpServers: parent.mcpServers,
+        model: parent.model,
+        variant: parent.variant,
+        modeId: parent.modeId,
+      }),
+    )
+  }
+
+  private toolMetadata(part: ToolPart, key: string) {
+    const stateMetadata = "metadata" in part.state && part.state.metadata && typeof part.state.metadata === "object"
+      ? part.state.metadata
+      : undefined
+    if (stateMetadata && key in stateMetadata) {
+      const value = (stateMetadata as Record<string, unknown>)[key]
+      return typeof value === "string" ? value : undefined
+    }
+
+    if (!part.metadata || typeof part.metadata !== "object" || !(key in part.metadata)) return
+    const value = (part.metadata as Record<string, unknown>)[key]
+    return typeof value === "string" ? value : undefined
   }
 
   private async runningTool(sessionId: string, part: ToolPart) {

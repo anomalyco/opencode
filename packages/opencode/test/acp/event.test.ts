@@ -740,4 +740,38 @@ describe("acp event routing", () => {
       ],
     ])
   })
+
+  it("registers a task child session before forwarding child session updates", async () => {
+    const harness = createHarness({
+      msg_child: assistantMessage("ses_child", "msg_child", "part_child", "text"),
+    })
+    await Effect.runPromise(harness.session.create({ id: "ses_parent", cwd: "/workspace" }))
+
+    await harness.subscription.handle(
+      toolUpdated({
+        id: "part_task",
+        sessionID: "ses_parent",
+        messageID: "msg_task",
+        type: "tool",
+        callID: "call_task",
+        tool: "task",
+        state: {
+          status: "running",
+          input: { description: "trace task", subagent_type: "general" },
+          metadata: { sessionId: "ses_child" },
+          time: { start: Date.now() },
+        },
+      } satisfies ToolPart),
+    )
+
+    await harness.subscription.handle(partUpdated("ses_child", "msg_child", "part_child", "text"))
+    await harness.subscription.handle(textDelta("ses_child", "msg_child", "part_child", "child progress"))
+
+    expect(harness.updates.map((update) => update.sessionId)).toContain("ses_child")
+    expect(harness.updates.at(-1)?.update).toMatchObject({
+      sessionUpdate: "agent_message_chunk",
+      messageId: "msg_child",
+      content: { type: "text", text: "child progress" },
+    })
+  })
 })
