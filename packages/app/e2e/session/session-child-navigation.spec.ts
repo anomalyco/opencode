@@ -20,6 +20,20 @@ test("task tool child-session link does not trigger stale show errors", async ({
     try {
       await gotoSession(session.id)
 
+      const trigger = page.getByTestId("session-child-agent-menu-trigger")
+      await expect(trigger).toBeVisible({ timeout: 30_000 })
+      await trigger.click()
+
+      const item = page
+        .getByTestId("session-child-agent-menu-item")
+        .filter({ hasText: /open child session/i })
+        .first()
+      await expect(item).toBeVisible({ timeout: 30_000 })
+      await item.click()
+
+      await expect(page).toHaveURL(new RegExp(`/session/${child.sessionID}(?:[/?#]|$)`), { timeout: 30_000 })
+      await gotoSession(session.id)
+
       const link = page
         .locator("a.subagent-link")
         .filter({ hasText: /open child session/i })

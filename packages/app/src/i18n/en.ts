@@ -664,6 +664,9 @@ export const dict = {
   "session.messages.jumpToLatest": "Jump to latest",
 
   "session.context.addToContext": "Add {{selection}} to context",
+  "session.childAgents.button": "Subagents ({{count}})",
+  "session.childAgents.open": "Open subagent call",
+  "session.childAgents.menuLabel": "Subagent calls",
   "session.todo.title": "Todos",
   "session.todo.collapse": "Collapse",
   "session.todo.expand": "Expand",

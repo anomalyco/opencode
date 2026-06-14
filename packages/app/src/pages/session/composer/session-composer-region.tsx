@@ -1,7 +1,9 @@
-import { Show, createEffect, createMemo, onCleanup } from "solid-js"
+import { For, Show, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
+import { Icon } from "@opencode-ai/ui/icon"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { PromptInput } from "@/components/prompt-input"
 import { useLanguage } from "@/context/language"
@@ -16,6 +18,76 @@ import { SessionRevertDock } from "@/pages/session/composer/session-revert-dock"
 import type { SessionComposerState } from "@/pages/session/composer/session-composer-state"
 import { SessionTodoDock } from "@/pages/session/composer/session-todo-dock"
 import type { FollowupDraft } from "@/components/prompt-input/submit"
+import type { SessionChildAgentEntry } from "@/pages/session/session-child-agents"
+
+function formatChildAgentTime(value: number, locale: string): string | undefined {
+  if (!Number.isFinite(value) || value <= 0) return
+  return new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(new Date(value))
+}
+
+function SessionChildAgentMenu(props: {
+  entries: SessionChildAgentEntry[]
+  onOpen: (entry: SessionChildAgentEntry) => void
+}) {
+  const language = useLanguage()
+  const meta = (entry: SessionChildAgentEntry): string => {
+    const parts: string[] = []
+    if (entry.agent) parts.push(`@${entry.agent}`)
+    if (entry.status) parts.push(entry.status)
+    const time = formatChildAgentTime(entry.created, language.intl())
+    if (time) parts.push(time)
+    return parts.join(" - ")
+  }
+
+  return (
+    <Show when={props.entries.length > 0}>
+      <DropdownMenu gutter={6} placement="top-start">
+        <DropdownMenu.Trigger
+          as={Button}
+          variant="ghost"
+          size="small"
+          icon="branch"
+          class="h-7 rounded-md px-2 text-text-weak hover:text-text-strong data-[expanded]:bg-surface-base-active"
+          aria-label={language.t("session.childAgents.open")}
+          data-testid="session-child-agent-menu-trigger"
+        >
+          <span>{language.t("session.childAgents.button", { count: props.entries.length })}</span>
+          <Icon name="chevron-down" size="small" class="text-icon-weak" />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Portal>
+          <DropdownMenu.Content class="w-[340px] max-w-[calc(100vw-32px)]">
+            <DropdownMenu.Group>
+              <DropdownMenu.GroupLabel class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
+                {language.t("session.childAgents.menuLabel")}
+              </DropdownMenu.GroupLabel>
+              <For each={props.entries}>
+                {(entry) => (
+                  <DropdownMenu.Item
+                    class="min-w-0"
+                    onSelect={() => props.onOpen(entry)}
+                    data-testid="session-child-agent-menu-item"
+                  >
+                    <div class="min-w-0 flex flex-col gap-0.5">
+                      <DropdownMenu.ItemLabel class="truncate text-13-medium text-text-strong">
+                        {entry.title}
+                      </DropdownMenu.ItemLabel>
+                      <DropdownMenu.ItemDescription class="truncate text-11-regular text-text-weak">
+                        {meta(entry)}
+                      </DropdownMenu.ItemDescription>
+                    </div>
+                  </DropdownMenu.Item>
+                )}
+              </For>
+            </DropdownMenu.Group>
+          </DropdownMenu.Content>
+        </DropdownMenu.Portal>
+      </DropdownMenu>
+    </Show>
+  )
+}
 
 export function SessionComposerRegion(props: {
   state: SessionComposerState
@@ -44,6 +116,8 @@ export function SessionComposerRegion(props: {
     disabled?: boolean
     onRestore: (id: string) => void
   }
+  childAgents?: SessionChildAgentEntry[]
+  onOpenChildAgent?: (entry: SessionChildAgentEntry) => void
   setPromptDockRef: (el: HTMLDivElement) => void
 }) {
   const prompt = usePrompt()
@@ -117,6 +191,14 @@ export function SessionComposerRegion(props: {
   const lift = createMemo(() => (rolled() ? 18 : 36 * value()))
   const full = createMemo(() => Math.max(78, store.height))
   const skippedQuestionCount = createMemo(() => props.state.skippedQuestionRequests().length)
+  const childAgentMenu = createMemo(() => {
+    const onOpen = props.onOpenChildAgent
+    if (!onOpen) return
+    return { entries: props.childAgents ?? [], onOpen }
+  })
+  const showPromptToolbar = createMemo(
+    () => (childAgentMenu()?.entries.length ?? 0) > 0 || skippedQuestionCount() > 0,
+  )
 
   const openSkippedQuestions = () => {
     dialog.show(() => (
@@ -208,6 +290,30 @@ export function SessionComposerRegion(props: {
               </>
             }
           >
+            <Show when={showPromptToolbar()}>
+              <div class="mb-2 flex items-center gap-2">
+                <div class="min-w-0 flex-1">
+                  <Show when={childAgentMenu()} keyed>
+                    {(menu) => <SessionChildAgentMenu entries={menu.entries} onOpen={menu.onOpen} />}
+                  </Show>
+                </div>
+                <Show when={skippedQuestionCount() > 0}>
+                  <Button
+                    variant="ghost"
+                    size="small"
+                    class="h-7 shrink-0 rounded-md px-2 text-text-weak hover:text-text-strong"
+                    onClick={openSkippedQuestions}
+                  >
+                    {language.t(
+                      props.state.skippedQuestionSessionEnded()
+                        ? "session.question.skipped.ended.button"
+                        : "session.question.skipped.button",
+                      { count: skippedQuestionCount() },
+                    )}
+                  </Button>
+                </Show>
+              </div>
+            </Show>
             <Show when={dock()}>
               <div
                 classList={{
@@ -260,18 +366,6 @@ export function SessionComposerRegion(props: {
                   onSend={props.followup!.onSend}
                   onEdit={props.followup!.onEdit}
                 />
-              </Show>
-              <Show when={skippedQuestionCount() > 0}>
-                <div class="mb-2 flex justify-end">
-                  <Button variant="ghost" size="small" onClick={openSkippedQuestions}>
-                    {language.t(
-                      props.state.skippedQuestionSessionEnded()
-                        ? "session.question.skipped.ended.button"
-                        : "session.question.skipped.button",
-                      { count: skippedQuestionCount() },
-                    )}
-                  </Button>
-                </div>
               </Show>
               <PromptInput
                 ref={props.inputRef}

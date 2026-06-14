@@ -8,6 +8,7 @@ import {
   Match,
   Switch,
   createMemo,
+  createSignal,
   createEffect,
   createComputed,
   on,
@@ -66,10 +67,15 @@ import {
   logSessionLayout,
   type SessionLayoutMetrics,
 } from "@/pages/session/session-layout-debug"
+import {
+  collectSessionChildAgentEntries,
+  type SessionChildAgentEntry,
+} from "@/pages/session/session-child-agents"
 import { Identifier } from "@/utils/id"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { same } from "@/utils/same"
 import { formatServerError } from "@/utils/server-errors"
+import type { Session } from "@opencode-ai/sdk/v2/client"
 
 const emptyUserMessages: UserMessage[] = []
 const scrollBottomThreshold = 16
@@ -255,6 +261,53 @@ export default function Page() {
     const limit = explicitMessageLimit()
     return clipMessages(all, limit)
   })
+  const [apiChildSessions, setApiChildSessions] = createSignal<Session[]>([])
+  createEffect(
+    on(
+      () => params.id,
+      (id) => {
+        setApiChildSessions([])
+        if (!id) return
+
+        let cancelled = false
+        void sdk.client.session.children({ sessionID: id }).then(
+          (result) => {
+            if (cancelled) return
+            setApiChildSessions(result.data ?? [])
+          },
+          () => {
+            if (cancelled) return
+            setApiChildSessions([])
+          },
+        )
+        onCleanup(() => {
+          cancelled = true
+        })
+      },
+    ),
+  )
+  const childAgentSessions = createMemo(() => {
+    const id = params.id
+    if (!id) return []
+
+    const byID = new Map<string, Session>()
+    for (const session of sync.data.session) {
+      if (session.parentID !== id) continue
+      byID.set(session.id, session)
+    }
+    for (const session of apiChildSessions()) {
+      byID.set(session.id, session)
+    }
+    return [...byID.values()]
+  })
+  const childAgentEntries = createMemo(() =>
+    collectSessionChildAgentEntries({
+      sessionID: params.id,
+      messages: messages(),
+      parts: sync.data.part,
+      sessions: childAgentSessions(),
+    }),
+  )
   const messagesReady = createMemo(() => {
     const id = params.id
     if (!id) return true
@@ -991,6 +1044,11 @@ export default function Page() {
   }
 
   const focusInput = () => inputRef?.focus()
+  const openChildAgent = (entry: SessionChildAgentEntry): void => {
+    const dir = params.dir
+    if (!dir) return
+    navigate(`/${dir}/session/${entry.sessionID}`)
+  }
 
   useSessionCommands({
     navigateMessageByOffset,
@@ -2224,6 +2282,8 @@ export default function Page() {
                   }
                 : undefined
             }
+            childAgents={childAgentEntries()}
+            onOpenChildAgent={openChildAgent}
             setPromptDockRef={(el) => {
               promptDock = el
             }}
