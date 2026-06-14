@@ -125,6 +125,7 @@ describe("collectSessionChildAgentEntries", () => {
         title: "Only child",
         agent: "general",
         created: 50,
+        usage: "not used",
       },
     ])
   })
@@ -153,6 +154,63 @@ describe("collectSessionChildAgentEntries", () => {
     expect(entries).toHaveLength(1)
     expect(entries[0]?.id).toBe("tool:msg_1:prt_1:ses_child")
     expect(entries[0]?.status).toBeUndefined()
+    expect(entries[0]?.usage).toBeUndefined()
+  })
+
+  test("uses the task description as the title when the child session is not loaded", () => {
+    const message = assistant({ id: "msg_1", sessionID: "ses_parent", created: 10 })
+    const entries = collectSessionChildAgentEntries({
+      sessionID: "ses_parent",
+      messages: [message],
+      parts: {
+        msg_1: [
+          task({
+            id: "prt_1",
+            sessionID: "ses_parent",
+            messageID: "msg_1",
+            childID: "ses_child",
+            description: "inspect bug",
+            agent: "Coder - Implementation Agent",
+            started: 25,
+          }),
+        ],
+      },
+      sessions: [],
+    })
+
+    expect(entries[0]?.title).toBe("inspect bug")
+    expect(entries[0]?.agent).toBe("Coder - Implementation Agent")
+  })
+
+  test("marks direct child sessions not referenced by task metadata as not used", () => {
+    const message = assistant({ id: "msg_1", sessionID: "ses_parent", created: 10 })
+    const entries = collectSessionChildAgentEntries({
+      sessionID: "ses_parent",
+      messages: [message],
+      parts: {
+        msg_1: [
+          task({
+            id: "prt_1",
+            sessionID: "ses_parent",
+            messageID: "msg_1",
+            childID: "ses_used",
+            description: "used task",
+            agent: "general",
+            started: 25,
+          }),
+        ],
+      },
+      sessions: [
+        session({ id: "ses_used", parentID: "ses_parent", title: "Used child", created: 25 }),
+        session({ id: "ses_unused", parentID: "ses_parent", title: "Unused child", agent: "general", created: 30 }),
+      ],
+    })
+
+    expect(entries).toHaveLength(2)
+    expect(entries.map((entry) => [entry.sessionID, entry.usage])).toEqual([
+      ["ses_used", undefined],
+      ["ses_unused", "not used"],
+    ])
   })
 
   test("uses child session activity over completed task tool status", () => {

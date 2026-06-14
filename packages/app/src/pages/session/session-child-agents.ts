@@ -2,6 +2,7 @@ import type { Message, Part, Session, SessionStatus, ToolPart } from "@opencode-
 import { working } from "./session-working"
 
 type SessionChildAgentStatus = Exclude<ToolPart["state"]["status"], "pending">
+type SessionChildAgentUsage = "not used"
 
 export type SessionChildAgentEntry = {
   id: string
@@ -11,6 +12,7 @@ export type SessionChildAgentEntry = {
   description?: string
   created: number
   status?: SessionChildAgentStatus
+  usage?: SessionChildAgentUsage
 }
 
 type CollectChildAgentEntriesInput = {
@@ -52,9 +54,8 @@ const sessionTitle = (
 ): string => {
   const title = text(session?.title)
   if (title) return title
-  if (description && agent) return `${description} (@${agent} subagent)`
   if (description) return description
-  if (agent) return `@${agent} subagent`
+  if (agent) return `@${agent}`
   return "Subagent"
 }
 
@@ -112,6 +113,7 @@ export function collectSessionChildAgentEntries(input: CollectChildAgentEntriesI
       agent: text(session.agent),
       created: session.time.created,
       status: statusFor(session.id),
+      usage: "not used",
       order,
     })
     order += 1

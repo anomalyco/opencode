@@ -33,13 +33,20 @@ function SessionChildAgentMenu(props: {
   onOpen: (entry: SessionChildAgentEntry) => void
 }) {
   const language = useLanguage()
-  const meta = (entry: SessionChildAgentEntry): string => {
-    const parts: string[] = []
-    if (entry.agent) parts.push(`@${entry.agent}`)
-    if (entry.status) parts.push(entry.status)
-    const time = formatChildAgentTime(entry.created, language.intl())
-    if (time) parts.push(time)
-    return parts.join(" - ")
+  const title = (entry: SessionChildAgentEntry): string => {
+    const cleaned = entry.title.replace(/\s+\(@[^)]*\s+subagent\)$/i, "").trim()
+    return cleaned || entry.title
+  }
+  const agent = (entry: SessionChildAgentEntry): string | undefined => {
+    const value = entry.agent?.replace(/^@/, "").split(/\s+-\s+/)[0]?.trim()
+    return value ? `@${value}` : undefined
+  }
+  const status = (entry: SessionChildAgentEntry): string | undefined => entry.usage ?? entry.status
+  const statusClass = (value: string): string => {
+    if (value === "completed") return "text-icon-success-base"
+    if (value === "not used") return "text-icon-warning-base"
+    if (value === "running") return "text-text-weak"
+    return "text-icon-critical-base"
   }
 
   return (
@@ -64,22 +71,51 @@ function SessionChildAgentMenu(props: {
                 {language.t("session.childAgents.menuLabel")}
               </DropdownMenu.GroupLabel>
               <For each={props.entries}>
-                {(entry) => (
-                  <DropdownMenu.Item
-                    class="min-w-0"
-                    onSelect={() => props.onOpen(entry)}
-                    data-testid="session-child-agent-menu-item"
-                  >
-                    <div class="min-w-0 flex flex-col gap-0.5">
-                      <DropdownMenu.ItemLabel class="truncate text-13-medium text-text-strong">
-                        {entry.title}
-                      </DropdownMenu.ItemLabel>
-                      <DropdownMenu.ItemDescription class="truncate text-11-regular text-text-weak">
-                        {meta(entry)}
-                      </DropdownMenu.ItemDescription>
-                    </div>
-                  </DropdownMenu.Item>
-                )}
+                {(entry) => {
+                  const itemAgent = () => agent(entry)
+                  const itemStatus = () => status(entry)
+                  const itemTime = () => formatChildAgentTime(entry.created, language.intl())
+                  const hasPrefix = () => itemAgent() !== undefined || itemStatus() !== undefined
+
+                  return (
+                    <DropdownMenu.Item
+                      class="min-w-0"
+                      onSelect={() => props.onOpen(entry)}
+                      data-testid="session-child-agent-menu-item"
+                    >
+                      <div class="min-w-0 flex flex-col gap-0.5">
+                        <DropdownMenu.ItemLabel class="truncate text-13-medium text-text-strong">
+                          {title(entry)}
+                        </DropdownMenu.ItemLabel>
+                        <DropdownMenu.ItemDescription class="truncate text-11-regular text-text-weak">
+                          <Show when={itemAgent()}>
+                            {(value) => <span>{value()}</span>}
+                          </Show>
+                          <Show when={itemStatus()}>
+                            {(value) => (
+                              <>
+                                <Show when={itemAgent()}>
+                                  <span> - </span>
+                                </Show>
+                                <span class={`font-medium ${statusClass(value())}`}>{value()}</span>
+                              </>
+                            )}
+                          </Show>
+                          <Show when={itemTime()}>
+                            {(time) => (
+                              <>
+                                <Show when={hasPrefix()}>
+                                  <span> - </span>
+                                </Show>
+                                <span>{time()}</span>
+                              </>
+                            )}
+                          </Show>
+                        </DropdownMenu.ItemDescription>
+                      </div>
+                    </DropdownMenu.Item>
+                  )
+                }}
               </For>
             </DropdownMenu.Group>
           </DropdownMenu.Content>
