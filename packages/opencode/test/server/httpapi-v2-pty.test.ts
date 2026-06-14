@@ -174,7 +174,6 @@ describe("v2 pty HttpApi", () => {
         expect(removed.status).toBe(204)
       }),
   )
-
   ;(process.platform === "win32" ? effectIt.live.skip : effectIt.live)(
     "applies plugin shell environment before forced PTY values",
     () =>
@@ -210,10 +209,7 @@ describe("v2 pty HttpApi", () => {
           directoryHeader(dir),
           HttpClientRequest.bodyJson({
             command: "/bin/sh",
-            args: [
-              "-c",
-              'printf "%s|%s|%s|%s|%s\\n" "$CALLER" "$SHARED" "$PLUGIN" "$TERM" "$HOOK_CWD"; sleep 5',
-            ],
+            args: ["-c", 'printf "%s|%s|%s|%s|%s\\n" "$CALLER" "$SHARED" "$PLUGIN" "$TERM" "$HOOK_CWD"; sleep 5'],
             cwd,
             env: { CALLER: "caller", SHARED: "caller", TERM: "caller" },
           }),
@@ -231,7 +227,10 @@ describe("v2 pty HttpApi", () => {
           .runRaw((message) =>
             Queue.offer(messages, typeof message === "string" ? message : new TextDecoder().decode(message)),
           )
-          .pipe(Effect.catch(() => Effect.void), Effect.forkScoped)
+          .pipe(
+            Effect.catch(() => Effect.void),
+            Effect.forkScoped,
+          )
         const write = yield* socket.writer
 
         const takeUntil = (expected: string, seen = ""): Effect.Effect<string, unknown> =>
