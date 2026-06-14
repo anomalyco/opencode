@@ -15,6 +15,7 @@ import {
   PTY_CONNECT_TOKEN_HEADER_VALUE,
 } from "../groups/pty"
 import { response } from "../groups/location"
+import { PtyEnvironment } from "../pty-environment"
 
 const ticketScope = Effect.gen(function* () {
   const location = yield* Location.Service
@@ -25,6 +26,7 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
   Effect.gen(function* () {
     const tickets = yield* PtyTicket.Service
     const cors = yield* CorsConfig
+    const environment = yield* PtyEnvironment.Service
 
     return handlers
       .handle(
@@ -37,11 +39,17 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
         "pty.create",
         Effect.fn(function* (ctx) {
           const pty = yield* Pty.Service
+          const location = yield* Location.Service
+          const cwd = ctx.payload.cwd || location.directory
           return yield* response(
             pty.create({
               ...ctx.payload,
               args: ctx.payload.args ? [...ctx.payload.args] : undefined,
-              env: ctx.payload.env ? { ...ctx.payload.env } : undefined,
+              cwd,
+              env: {
+                ...ctx.payload.env,
+                ...(yield* environment.get({ directory: location.directory, cwd })),
+              },
             }),
           )
         }),
