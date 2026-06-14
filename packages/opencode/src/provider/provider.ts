@@ -32,6 +32,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { Log } from "@/util/log"
 
 const log = Log.create({ service: "provider" })
 

@@ -1,5 +1,5 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
-import * as Log from "@opencode-ai/core/util/log"
+import { Log } from "@/util/log"
 
 const log = Log.create({ service: "plugin.bedrock" })
 
