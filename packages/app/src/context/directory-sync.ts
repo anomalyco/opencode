@@ -182,11 +182,12 @@ export const createDirSyncContext = (
   type Setter = Child[1]
 
   const current = createMemo(() => serverSync.child(directory, { mcp: true }))
-  const target = (directory?: string) => {
-    if (!directory || directory === directory) return current()
-    return serverSync.child(directory)
+  const currentChild = () => current() ?? serverSync.child(directory, { mcp: true })
+  const target = (nextDirectory?: string) => {
+    if (!nextDirectory || nextDirectory === directory) return currentChild()
+    return serverSync.child(nextDirectory)
   }
-  const absolute = (path: string) => (current()[0].path.directory + "/" + path).replace("//", "/")
+  const absolute = (path: string) => (currentChild()[0].path.directory + "/" + path).replace("//", "/")
   const initialMessagePageSize = 80
   const historyMessagePageSize = 200
   const inflight = new Map<string, Promise<void>>()
@@ -203,7 +204,7 @@ export const createDirSyncContext = (
   })
 
   const getSession = (sessionID: string) => {
-    const store = current()[0]
+    const store = currentChild()[0]
     const match = Binary.search(store.session, sessionID, (s) => s.id)
     if (match.found) return store.session[match.index]
     return undefined
@@ -376,19 +377,19 @@ export const createDirSyncContext = (
 
   return {
     get data() {
-      return current()[0]
+      return currentChild()[0]
     },
     get set(): Setter {
-      return current()[1]
+      return currentChild()[1]
     },
     get status() {
-      return current()[0].status
+      return currentChild()[0].status
     },
     get ready() {
-      return current()[0].status !== "loading"
+      return currentChild()[0].status !== "loading"
     },
     get project() {
-      const store = current()[0]
+      const store = currentChild()[0]
       const match = Binary.search(serverSync.data.project, store.project, (p) => p.id)
       if (match.found) return serverSync.data.project[match.index]
       return undefined
@@ -549,7 +550,7 @@ export const createDirSyncContext = (
       },
       history: {
         more(sessionID: string) {
-          const store = current()[0]
+          const store = currentChild()[0]
           const key = keyFor(directory, sessionID)
           if (store.message[sessionID] === undefined) return false
           if (meta.limit[key] === undefined) return false
@@ -597,7 +598,7 @@ export const createDirSyncContext = (
           setStore("session", reconcile(sessions, { key: "id" }))
         })
       },
-      more: createMemo(() => current()[0].session.length >= current()[0].limit),
+      more: createMemo(() => currentChild()[0].session.length >= currentChild()[0].limit),
       archive: async (sessionID: string) => {
         const [, setStore] = serverSync.child(directory)
         await client.session.update({ sessionID, time: { archived: Date.now() } })
@@ -614,7 +615,7 @@ export const createDirSyncContext = (
     },
     absolute,
     get directory() {
-      return current()[0].path.directory
+      return currentChild()[0].path.directory
     },
   }
 }

@@ -119,14 +119,15 @@ export namespace Timeline {
     const rows: TimelineRow.TimelineRow[] = []
 
     const previousUserMessage = index > 0
-    const userParts = getMessageParts(userMessage.id)
+    const userParts = getMessageParts(userMessage.id) ?? []
+    const assistantList = assistantMessages ?? []
     const comments = userParts.flatMap((p) => MessageComment.fromPart(p) ?? [])
     const compaction = userParts.some((p) => p.type === "compaction")
-    const interruptedMessageIndex = assistantMessages.findIndex((m) => m.error?.name === "MessageAbortedError")
+    const interruptedMessageIndex = assistantList.findIndex((m) => m.error?.name === "MessageAbortedError")
     const interrupted = interruptedMessageIndex !== -1
-    const error = assistantMessages.find((m) => m.error && m.error.name !== "MessageAbortedError")?.error
+    const error = assistantList.find((m) => m.error && m.error.name !== "MessageAbortedError")?.error
 
-    const assistantPartRefs = assistantMessages.flatMap((message, messageIndex) =>
+    const assistantPartRefs = assistantList.flatMap((message, messageIndex) =>
       getMessageParts(message.id)
         .filter((part) => renderable(part, showReasoning))
         .map((part) => ({ messageID: message.id, messageIndex, part })),
