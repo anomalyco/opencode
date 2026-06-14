@@ -27,8 +27,14 @@ const ALLOWED_MODELS = new Set(["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gp
 export function isModelSupportedForChatGPTAccount(apiID: string): boolean {
   if (ALLOWED_MODELS.has(apiID)) return true
   if (apiID.endsWith("-pro")) return false
-  const match = apiID.match(/^gpt-(\d+\.\d+)/)
-  return match ? parseFloat(match[1]) > 5.4 : false
+  // Allow newer `gpt-<major>.<minor>` models (> 5.4). Compare major/minor as
+  // integers rather than `parseFloat` so e.g. `gpt-5.10` orders after `gpt-5.4`
+  // (parseFloat would read "5.10" as 5.1 and wrongly exclude it).
+  const match = apiID.match(/^gpt-(\d+)\.(\d+)/)
+  if (!match) return false
+  const major = parseInt(match[1], 10)
+  const minor = parseInt(match[2], 10)
+  return major > 5 || (major === 5 && minor > 4)
 }
 
 interface PkceCodes {

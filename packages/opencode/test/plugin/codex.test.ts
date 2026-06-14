@@ -146,6 +146,13 @@ describe("plugin.codex", () => {
       expect(isModelSupportedForChatGPTAccount("gpt-6.0")).toBe(true)
     })
 
+    test("orders multi-digit minor versions numerically, not as floats", () => {
+      // `parseFloat("5.10")` is 5.1 (< 5.4); integer major/minor comparison
+      // must still treat gpt-5.10 as newer than gpt-5.4.
+      expect(isModelSupportedForChatGPTAccount("gpt-5.10")).toBe(true)
+      expect(isModelSupportedForChatGPTAccount("gpt-5.20-codex")).toBe(true)
+    })
+
     test("excludes -pro models that the Codex backend rejects for ChatGPT accounts", () => {
       // Regression: the version heuristic (> 5.4) used to let these through, so
       // they appeared as available but failed at request time with
