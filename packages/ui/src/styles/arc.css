@@ -447,8 +447,7 @@ html[data-theme="arc"] [data-action="project-switch"][data-rail-hue="6"] {
 }
 
 /* ───────────────────────────────────────────────────────────── */
-/* Floating panels — bigger radii, softer/deeper shadows,        */
-/* stronger backdrop blur to feel like Arc Browser overlays      */
+/* Floating panels — bigger radii, stronger blur, compact lift    */
 /* ───────────────────────────────────────────────────────────── */
 
 html[data-theme="arc"] [data-component="dropdown-menu-content"],
@@ -459,14 +458,14 @@ html[data-theme="arc"] [data-component="popover-content"],
 html[data-theme="arc"] [data-component="hover-card-content"],
 html[data-theme="arc"] [data-component="select-content"] {
   border-radius: var(--radius-2xl);
+  background-color: color-mix(in srgb, var(--background-stronger) 82%, transparent);
   backdrop-filter: blur(60px) saturate(180%);
   -webkit-backdrop-filter: blur(60px) saturate(180%);
   box-shadow:
-    0 0 0 1px color-mix(in oklch, var(--border-weak-base) 58%, transparent) inset,
-    0 1px 0 color-mix(in srgb, white 14%, transparent) inset,
-    0 32px 72px rgba(0, 0, 0, 0.28),
-    0 14px 32px rgba(0, 0, 0, 0.18),
-    0 6px 14px rgba(0, 0, 0, 0.12);
+    0 0 0 1px color-mix(in oklch, var(--border-weak-base) 72%, transparent) inset,
+    0 1px 0 color-mix(in srgb, white 10%, transparent) inset,
+    0 18px 36px -28px rgba(0, 0, 0, 0.55),
+    0 6px 14px -10px rgba(0, 0, 0, 0.35);
 }
 
 /* Tooltip — match the same softness, smaller radius proportional */
@@ -480,14 +479,14 @@ html[data-theme="arc"] [data-component="tooltip-content"] {
    visually the most prominent floating surface */
 html[data-theme="arc"] [data-component="dialog"] [data-slot="dialog-content"] {
   border-radius: var(--radius-2xl);
+  background-color: color-mix(in srgb, var(--background-stronger) 82%, transparent);
   backdrop-filter: blur(72px) saturate(180%);
   -webkit-backdrop-filter: blur(72px) saturate(180%);
   box-shadow:
-    0 0 0 1px color-mix(in oklch, var(--border-weak-base) 50%, transparent) inset,
-    0 1px 0 color-mix(in srgb, white 16%, transparent) inset,
-    0 40px 96px rgba(0, 0, 0, 0.32),
-    0 18px 40px rgba(0, 0, 0, 0.2),
-    0 8px 18px rgba(0, 0, 0, 0.14);
+    0 0 0 1px color-mix(in oklch, var(--border-weak-base) 72%, transparent) inset,
+    0 1px 0 color-mix(in srgb, white 10%, transparent) inset,
+    0 18px 36px -28px rgba(0, 0, 0, 0.55),
+    0 6px 14px -10px rgba(0, 0, 0, 0.35);
 }
 
 @media (prefers-color-scheme: light) {
