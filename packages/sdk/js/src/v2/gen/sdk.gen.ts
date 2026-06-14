@@ -3588,13 +3588,14 @@ export class Session2 extends HeyApiClient {
   /**
    * Get session children
    *
-   * Retrieve all child sessions that were forked from the specified parent session.
+   * Retrieve child sessions of the specified parent session. Pass recursive=true to return the entire descendant subtree instead of only direct children.
    */
   public children<ThrowOnError extends boolean = false>(
     parameters: {
       sessionID: string
       directory?: string
       workspace?: string
+      recursive?: "true" | "false"
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -3606,6 +3607,7 @@ export class Session2 extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "query", key: "recursive" },
           ],
         },
       ],
@@ -3729,6 +3731,7 @@ export class Session2 extends HeyApiClient {
       sessionID: string
       directory?: string
       workspace?: string
+      permissionSessionID?: string
       messageID?: string
       model?: {
         providerID: string
@@ -3742,6 +3745,10 @@ export class Session2 extends HeyApiClient {
       format?: OutputFormat
       system?: string
       variant?: string
+      turnBudget?: {
+        usd?: number
+        tokens?: number
+      }
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -3754,6 +3761,7 @@ export class Session2 extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "permissionSessionID" },
             { in: "body", key: "messageID" },
             { in: "body", key: "model" },
             { in: "body", key: "agent" },
@@ -3762,6 +3770,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "format" },
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
+            { in: "body", key: "turnBudget" },
             { in: "body", key: "parts" },
           ],
         },
@@ -4082,6 +4091,7 @@ export class Session2 extends HeyApiClient {
       sessionID: string
       directory?: string
       workspace?: string
+      permissionSessionID?: string
       messageID?: string
       model?: {
         providerID: string
@@ -4095,6 +4105,10 @@ export class Session2 extends HeyApiClient {
       format?: OutputFormat
       system?: string
       variant?: string
+      turnBudget?: {
+        usd?: number
+        tokens?: number
+      }
       parts?: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
     },
     options?: Options<never, ThrowOnError>,
@@ -4107,6 +4121,7 @@ export class Session2 extends HeyApiClient {
             { in: "path", key: "sessionID" },
             { in: "query", key: "directory" },
             { in: "query", key: "workspace" },
+            { in: "body", key: "permissionSessionID" },
             { in: "body", key: "messageID" },
             { in: "body", key: "model" },
             { in: "body", key: "agent" },
@@ -4115,6 +4130,7 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "format" },
             { in: "body", key: "system" },
             { in: "body", key: "variant" },
+            { in: "body", key: "turnBudget" },
             { in: "body", key: "parts" },
           ],
         },

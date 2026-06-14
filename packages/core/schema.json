@@ -1101,6 +1101,26 @@
       "table": "session"
     },
     {
+      "type": "integer",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "1",
+      "generated": null,
+      "name": "depth",
+      "entityType": "columns",
+      "table": "session"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "root_id",
+      "entityType": "columns",
+      "table": "session"
+    },
+    {
       "type": "text",
       "notNull": true,
       "autoincrement": false,
@@ -2049,6 +2069,20 @@
       "where": null,
       "origin": "manual",
       "name": "session_parent_idx",
+      "entityType": "indexes",
+      "table": "session"
+    },
+    {
+      "columns": [
+        {
+          "value": "root_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_root_idx",
       "entityType": "indexes",
       "table": "session"
     },
