@@ -15,7 +15,7 @@ import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
-import { SkillTool } from "./skill"
+import { ReloadSkillsTool, SkillTool } from "./skill"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -105,6 +105,7 @@ export const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const reloadSkillsTool = yield* ReloadSkillsTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -208,6 +209,7 @@ export const layer = Layer.effect(
           todo: Tool.init(todo),
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
+          reloadSkills: Tool.init(reloadSkillsTool),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -230,6 +232,7 @@ export const layer = Layer.effect(
             tool.todo,
             tool.search,
             tool.skill,
+            tool.reloadSkills,
             tool.patch,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),

@@ -483,6 +483,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
         providers: () => state.providers,
         footer,
         trace: log,
+        onCatalogUpdated: () => void loadCatalog(),
       })
       if (footer.isClosed) {
         await handle.close()

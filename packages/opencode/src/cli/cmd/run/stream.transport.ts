@@ -18,6 +18,7 @@
 import type { Event, GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Context, Deferred, Effect, Exit, Layer, Scope, Stream } from "effect"
 import { makeRuntime } from "@/effect/run-service"
+import { Command } from "@/command"
 import {
   blockerStatus,
   bootstrapSessionData,
@@ -78,6 +79,7 @@ type StreamInput = {
   footer: FooterApi
   trace?: Trace
   signal?: AbortSignal
+  onCatalogUpdated?: () => void
 }
 
 type Wait = {
@@ -204,6 +206,22 @@ function isMatchingDisposeEvent(value: unknown, directory: string | undefined): 
   }
 
   return value.payload.type === "server.instance.disposed"
+}
+
+/**
+ * Returns true only when `item` is a command.catalog.updated global event for
+ * the given `directory`. When `directory` is undefined, returns false — guards
+ * against cross-instance leakage from directionless transport connections.
+ *
+ * Exported for unit-testing (E3/E4 in catalog-event.test.ts).
+ */
+export function isCatalogUpdateForDirectory(item: unknown, directory: string | undefined): boolean {
+  return (
+    isGlobalEvent(item) &&
+    (item.payload as { type: string }).type === Command.Event.CatalogUpdated.type &&
+    !!directory &&
+    item.directory === directory
+  )
 }
 
 function active(event: Event, sessionID: string): boolean {
@@ -1139,6 +1157,11 @@ function createLayer(input: StreamInput) {
                 if (isMatchingDisposeEvent(item, input.directory)) {
                   yield* fail(new Error("instance disposed"))
                   yield* closeScope()
+                  return
+                }
+
+                if (isCatalogUpdateForDirectory(item, input.directory)) {
+                  input.onCatalogUpdated?.()
                   return
                 }
 

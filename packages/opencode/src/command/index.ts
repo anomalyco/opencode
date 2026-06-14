@@ -25,6 +25,10 @@ export const Event = {
       messageID: MessageID,
     },
   }),
+  CatalogUpdated: EventV2.define({
+    type: "command.catalog.updated" as const,
+    schema: {},
+  }),
 }
 
 export const Info = Schema.Struct({
@@ -73,7 +77,7 @@ export const layer = Layer.effect(
     const init = Effect.fn("Command.state")(function* (ctx: InstanceContext) {
       const cfg = yield* config.get()
       const bridge = yield* EffectBridge.make()
-      const commands: Record<string, Info> = {}
+      const commands: Record<string, Info> = Object.create(null) as Record<string, Info>
 
       commands[Default.INIT] = {
         name: Default.INIT,
@@ -139,19 +143,6 @@ export const layer = Layer.effect(
         }
       }
 
-      for (const item of yield* skill.all()) {
-        if (commands[item.name]) continue
-        commands[item.name] = {
-          name: item.name,
-          description: item.description,
-          source: "skill",
-          get template() {
-            return item.content
-          },
-          hints: [],
-        }
-      }
-
       return {
         commands,
       }
@@ -161,12 +152,35 @@ export const layer = Layer.effect(
 
     const get = Effect.fn("Command.get")(function* (name: string) {
       const s = yield* InstanceState.get(state)
-      return s.commands[name]
+      if (Object.hasOwn(s.commands, name)) return s.commands[name]
+      const item = yield* skill.get(name)
+      if (!item) return undefined
+      return {
+        name: item.name,
+        description: item.description ?? "",
+        source: "skill" as const,
+        get template() {
+          return item.content
+        },
+        hints: [] as string[],
+      }
     })
 
     const list = Effect.fn("Command.list")(function* () {
       const s = yield* InstanceState.get(state)
-      return Object.values(s.commands)
+      const skills = yield* skill.all()
+      const skillCmds = skills
+        .filter((item) => !Object.hasOwn(s.commands, item.name) && item.description)
+        .map((item) => ({
+          name: item.name,
+          description: item.description ?? "",
+          source: "skill" as const,
+          get template() {
+            return item.content
+          },
+          hints: [] as string[],
+        }))
+      return [...Object.values(s.commands), ...skillCmds]
     })
 
     return Service.of({ get, list })
