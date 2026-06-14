@@ -59,6 +59,7 @@ import { eq } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
+import { TurnBudget } from "./turn-budget"
 import { LLMEvent } from "@opencode-ai/llm"
 
 // @ts-ignore
@@ -105,8 +106,8 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
-  readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
-  readonly loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts>
+  readonly prompt: (input: PromptOptions) => Effect.Effect<SessionV1.WithParts, Image.Error>
+  readonly loop: (input: LoopOptions) => Effect.Effect<SessionV1.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError>
   readonly command: (input: CommandInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
@@ -149,7 +150,11 @@ export const layer = Layer.effect(
       return {
         cancel: (sessionID: SessionID) => cancel(sessionID),
         resolvePromptParts: (template: string) => resolvePromptParts(template),
-        prompt: (input: PromptInput) => prompt(input).pipe(Effect.catch(Effect.die)),
+        prompt: (input: PromptOptions) => prompt(input).pipe(Effect.catch(Effect.die)),
+        // Item 12: expose the session's resolved model through the ops seam (the
+        // local `currentModel` below already implements the session.model → last
+        // user-message model → provider default chain).
+        currentModel: (sessionID: SessionID) => currentModel(sessionID),
       } satisfies TaskPromptOps
     })
 
@@ -263,6 +268,18 @@ export const layer = Layer.effect(
       sessionID: SessionID
       session: Session.Info
       msgs: SessionV1.WithParts[]
+      /**
+       * Nested subagents (design-final §4.3): the session permission asks are
+       * routed to. The subtask path must see the SAME routing target as a
+       * model-initiated task call so asks bubble to the tree root.
+       */
+      permissionSessionID?: SessionID
+      /**
+       * The loop's shared turn pool (design-final §4.6). Threaded into the
+       * task tool context (ctx.extra.turnBudget) so the @agent/subtask path
+       * cannot silently bypass the budget gates of nested spawns.
+       */
+      turnBudget?: TurnBudget.Pool
     }) {
       const { task, model, lastUser, sessionID, session, msgs } = input
       const ctx = yield* InstanceState.context
@@ -323,6 +340,26 @@ export const layer = Layer.effect(
         throw error
       }
 
+      // Mirrors the ctx.ask wiring in tools.ts (design-final §4.3, Ü3): when
+      // this subtask's asks are routed to another session (the root), attach
+      // the origin so UIs keep the asker. A failed lineage walk only omits
+      // originDepth — an ask must never fail on attribution.
+      const askOrigin = yield* Effect.gen(function* () {
+        if (input.permissionSessionID === undefined || input.permissionSessionID === session.id) return undefined
+        const originDepth =
+          session.parentID === undefined
+            ? 1
+            : yield* sessions.lineage(session.id).pipe(
+                Effect.map((chain) => chain.length),
+                Effect.catch(() => Effect.succeed(undefined)),
+              )
+        return {
+          originSessionID: session.id,
+          originAgent: taskAgent.name,
+          ...(originDepth !== undefined ? { originDepth } : {}),
+        }
+      })
+
       let error: Error | undefined
       const taskAbort = new AbortController()
       const result = yield* taskTool
@@ -332,7 +369,7 @@ export const layer = Layer.effect(
           sessionID,
           abort: taskAbort.signal,
           callID: part.callID,
-          extra: { bypassAgentCheck: true, promptOps },
+          extra: { bypassAgentCheck: true, promptOps, turnBudget: input.turnBudget },
           messages: msgs,
           metadata: (val: { title?: string; metadata?: Record<string, any> }) =>
             Effect.gen(function* () {
@@ -346,7 +383,8 @@ export const layer = Layer.effect(
             permission
               .ask({
                 ...req,
-                sessionID,
+                ...(askOrigin ? { metadata: { ...req.metadata, ...askOrigin } } : {}),
+                sessionID: input.permissionSessionID ?? sessionID,
                 ruleset: Permission.merge(taskAgent.permission, session.permission ?? []),
               })
               .pipe(Effect.orDie),
@@ -1152,9 +1190,9 @@ export const layer = Layer.effect(
       return { info, parts }
     }, Effect.scoped)
 
-    const prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error> = Effect.fn(
+    const prompt: (input: PromptOptions) => Effect.Effect<SessionV1.WithParts, Image.Error> = Effect.fn(
       "SessionPrompt.prompt",
-    )(function* (input: PromptInput) {
+    )(function* (input: PromptOptions) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       yield* revert.cleanup(session)
       const message = yield* createUserMessage(input)
@@ -1170,7 +1208,20 @@ export const layer = Layer.effect(
       }
 
       if (input.noReply === true) return message
-      return yield* loop({ sessionID: input.sessionID })
+      // Item 24: ONE pool per turn. Created here (not in the loop) so re-entrant
+      // loop steps share it; threaded by reference into the processor (main-loop
+      // charging) and the tool context.
+      // Nested subagents (design-final §4.6): a caller that already holds a
+      // pool — the task tool hands down the root turn's — passes it as
+      // `turnBudgetPool` and this turn REUSES it instead of creating its own,
+      // so every nesting level competes for the same headroom.
+      const turnBudget =
+        input.turnBudgetPool ?? (input.turnBudget !== undefined ? TurnBudget.make(input.turnBudget) : undefined)
+      return yield* loop({
+        sessionID: input.sessionID,
+        permissionSessionID: input.permissionSessionID,
+        turnBudget,
+      })
     })
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
@@ -1181,8 +1232,9 @@ export const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
-    const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
-      function* (sessionID: SessionID) {
+    const runLoop: (input: LoopOptions) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
+      function* (input: LoopOptions) {
+        const sessionID = input.sessionID
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
@@ -1245,7 +1297,19 @@ export const layer = Layer.effect(
           const task = tasks.pop()
 
           if (task?.type === "subtask") {
-            yield* handleSubtask({ task, model, lastUser, sessionID, session, msgs })
+          yield* handleSubtask({
+            task,
+            model,
+            lastUser,
+            sessionID,
+            session,
+            msgs,
+            // Nested subagents: the subtask path must see the SAME routing and
+            // budget context as a model-initiated task call — the loop's
+            // permission routing target and the shared turn pool.
+            permissionSessionID: input.permissionSessionID,
+            turnBudget: input.turnBudget,
+          })
             continue
           }
 
@@ -1329,17 +1393,25 @@ export const layer = Layer.effect(
             const tools = yield* SessionTools.resolve({
               agent,
               session,
+              permissionSessionID: input.permissionSessionID,
               model,
               processor: handle,
               bypassAgentCheck,
               messages: msgs,
               promptOps,
+              // Item 24: the shared turn pool rides into the tool context
+              // (ctx.extra.turnBudget) so a tool can hand it to every run this
+              // turn starts.
+              turnBudget: input.turnBudget,
             }).pipe(
               Effect.provideService(Plugin.Service, plugin),
               Effect.provideService(Permission.Service, permission),
               Effect.provideService(ToolRegistry.Service, registry),
               Effect.provideService(MCP.Service, mcp),
               Effect.provideService(Truncate.Service, truncate),
+              // Nested subagents: resolve walks the session lineage for the
+              // origin attribution of routed permission asks.
+              Effect.provideService(Session.Service, sessions),
             )
 
             if (lastUser.format?.type === "json_schema") {
@@ -1436,10 +1508,10 @@ export const layer = Layer.effect(
       },
     )
 
-    const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
-      input: LoopInput,
+    const loop: (input: LoopOptions) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
+      input: LoopOptions,
     ) {
-      return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
+      return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input))
     })
 
     const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError> = Effect.fn(
@@ -1626,8 +1698,20 @@ const ModelRef = Schema.Struct({
   modelID: ModelV2.ID,
 })
 
+// Nested subagents (design-final §4.6): the schema'd PromptInput plus the
+// NON-serializable shared turn pool — the same intersection pattern as
+// LoopOptions below (a live mutable object must never ride a schema). When
+// set, prompt() reuses this pool BY REFERENCE instead of creating one from
+// the schema'd `turnBudget` numbers, so a subagent turn charges its root
+// turn's budget.
+export type PromptOptions = PromptInput & { turnBudgetPool?: TurnBudget.Pool }
+
 export const PromptInput = Schema.Struct({
   sessionID: SessionID,
+  // Nested subagents (design-final §4.3): the session permission asks are
+  // routed to. Roots leave it undefined (asks stay local); subagents pass the
+  // tree root so every level's asks bubble to the same session.
+  permissionSessionID: Schema.optional(SessionID),
   messageID: Schema.optional(MessageID),
   model: Schema.optional(ModelRef),
   agent: Schema.optional(Schema.String),
@@ -1639,6 +1723,16 @@ export const PromptInput = Schema.Struct({
   format: Schema.optional(SessionV1.Format),
   system: Schema.optional(Schema.String),
   variant: Schema.optional(Schema.String),
+  // Item 24: optional shared TURN budget. When set, the prompt creates ONE
+  // TurnBudget.Pool for this turn: the main loop charges it directly (never
+  // gated) and every run started by this turn reserves/settles against it — so
+  // multiple runs of one turn share a single cap. Non-negative finite.
+  turnBudget: Schema.optional(
+    Schema.Struct({
+      usd: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+      tokens: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+    }),
+  ),
   parts: Schema.Array(
     Schema.Union([
       SessionV1.TextPartInput,
@@ -1652,7 +1746,13 @@ export type PromptInput = Schema.Schema.Type<typeof PromptInput>
 
 export class LoopInput extends Schema.Class<LoopInput>("SessionPrompt.LoopInput")({
   sessionID: SessionID,
+  permissionSessionID: Schema.optional(SessionID),
 }) {}
+
+// Item 24: the loop's full options — the schema'd LoopInput plus the
+// NON-serializable turn pool (a live, shared mutable object; it must never
+// ride a schema, so it travels as a plain intersection field).
+export type LoopOptions = LoopInput & { turnBudget?: TurnBudget.Pool }
 
 export const ShellInput = Schema.Struct({
   sessionID: SessionID,

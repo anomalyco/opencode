@@ -56,6 +56,7 @@ import { reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { TurnBudget } from "../../src/session/turn-budget"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -159,7 +160,10 @@ const processorCreateStarted: Array<() => void> = []
 const blockingProcessor = Layer.succeed(
   SessionProcessor.Service,
   SessionProcessor.Service.of({
-    create: () => Effect.sync(() => processorCreateStarted.shift()?.()).pipe(Effect.andThen(Effect.never)),
+    create: () =>
+      Effect.sync(() => {
+        processorCreateStarted.shift()?.()
+      }).pipe(Effect.andThen(Effect.never)),
   }),
 )
 
@@ -2313,4 +2317,144 @@ noLLMServer.instance(
       }
     }),
   30_000,
+)
+
+// Turn budget pool threading (design-final §4.6): ONE pool per root turn,
+// shared by reference through every nesting level. `turnBudgetPool` rides the
+// prompt input as a plain intersection field (the LoopOptions pattern — a
+// live mutable object must never ride a schema). The main-loop processor
+// charging path (chargeDirect / create-input threading) is out of scope for
+// this branch, so those assertions are covered elsewhere; here we pin the
+// nested-subagent threading that this branch DOES carry: the pool reaching the
+// task tool context by reference.
+
+it.instance("subtask path threads the loop's turn pool into the task tool context", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const registry = yield* ToolRegistry.Service
+    const { task } = yield* registry.named()
+    const original = task.execute
+    const captured: unknown[] = []
+    task.execute = ((_args, ctx) =>
+      Effect.sync(() => {
+        captured.push(ctx.extra?.turnBudget)
+        return { title: "stubbed", metadata: {}, output: "done" }
+      })) as typeof task.execute
+    yield* Effect.addFinalizer(() => Effect.sync(() => void (task.execute = original)))
+
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* llm.text("done")
+    const msg = yield* user(chat.id, "hello")
+    yield* addSubtask(chat.id, msg.id)
+
+    const pool = TurnBudget.make({ usd: 5 })
+    yield* prompt.loop({ sessionID: chat.id, turnBudget: pool })
+    // The handleSubtask extra carries the loop's pool BY REFERENCE — without
+    // it the @agent/subtask path silently bypasses every budget gate.
+    expect(captured).toHaveLength(1)
+    expect(captured[0]).toBe(pool)
+  }),
+)
+
+// Origin metadata on routed subtask asks (design-final §4.3, Ü3): when a
+// child loop's permission asks are routed to the root session, the
+// handleSubtask ask wiring attaches WHO asked (session, agent, depth).
+
+it.instance(
+  "subtask permission ask routed to the root carries origin metadata",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const registry = yield* ToolRegistry.Service
+      const permission = yield* Permission.Service
+      const { task } = yield* registry.named()
+      const original = task.execute
+      task.execute = ((_args, ctx) =>
+        Effect.gen(function* () {
+          yield* ctx.ask({ permission: "origin_probe", patterns: ["x"], always: [], metadata: { base: "keep" } })
+          return { title: "stubbed", metadata: {}, output: "done" }
+        })) as typeof task.execute
+      yield* Effect.addFinalizer(() => Effect.sync(() => void (task.execute = original)))
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const root = yield* sessions.create({ title: "Root" })
+      const mid = yield* sessions.create({ parentID: root.id })
+      // The agent default ruleset is `'*': allow`; pin the probe to "ask" on
+      // the asking session so the request really pends.
+      const leaf = yield* sessions.create({
+        parentID: mid.id,
+        permission: [{ permission: "origin_probe", pattern: "*", action: "ask" }],
+      })
+      yield* llm.text("done")
+      const msg = yield* user(leaf.id, "hello")
+      yield* addSubtask(leaf.id, msg.id)
+
+      const fiber = yield* prompt
+        .loop({ sessionID: leaf.id, permissionSessionID: root.id })
+        .pipe(Effect.forkChild)
+      const pending = yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const list = yield* permission.list()
+          return list.find((req) => req.permission === "origin_probe")
+        }),
+        "timed out waiting for the routed subtask ask",
+      )
+      expect(pending.sessionID).toBe(root.id)
+      expect(pending.metadata.base).toBe("keep")
+      expect(pending.metadata.originSessionID).toBe(leaf.id)
+      expect(pending.metadata.originAgent).toBe("general")
+      expect(pending.metadata.originDepth).toBe(3)
+      yield* permission.reply({ requestID: pending.id, reply: "once" })
+      yield* Fiber.await(fiber)
+    }),
+  10_000,
+)
+
+it.instance(
+  "subtask permission ask without routing carries no origin metadata",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const registry = yield* ToolRegistry.Service
+      const permission = yield* Permission.Service
+      const { task } = yield* registry.named()
+      const original = task.execute
+      task.execute = ((_args, ctx) =>
+        Effect.gen(function* () {
+          yield* ctx.ask({ permission: "origin_probe", patterns: ["x"], always: [], metadata: { base: "keep" } })
+          return { title: "stubbed", metadata: {}, output: "done" }
+        })) as typeof task.execute
+      yield* Effect.addFinalizer(() => Effect.sync(() => void (task.execute = original)))
+
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      // The agent default ruleset is `'*': allow`; pin the probe to "ask" on
+      // the asking session so the request really pends.
+      const chat = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "origin_probe", pattern: "*", action: "ask" }],
+      })
+      yield* llm.text("done")
+      const msg = yield* user(chat.id, "hello")
+      yield* addSubtask(chat.id, msg.id)
+
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      const pending = yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const list = yield* permission.list()
+          return list.find((req) => req.permission === "origin_probe")
+        }),
+        "timed out waiting for the unrouted subtask ask",
+      )
+      // Byte-identical to today: the ask stays on the asking session and the
+      // request metadata gains NO origin fields.
+      expect(pending.sessionID).toBe(chat.id)
+      expect(pending.metadata).toEqual({ base: "keep" })
+      yield* permission.reply({ requestID: pending.id, reply: "once" })
+      yield* Fiber.await(fiber)
+    }),
+  10_000,
 )

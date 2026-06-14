@@ -11,12 +11,13 @@ import { Truncate } from "@/tool/truncate"
 
 import { Plugin } from "@/plugin"
 import type { TaskPromptOps } from "@/tool/task"
+import type { TurnBudget } from "./turn-budget"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
 import { Effect } from "effect"
 import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import { SessionProcessor } from "./processor"
-import { PartID } from "./schema"
+import { PartID, SessionID } from "./schema"
 import { EffectBridge } from "@/effect/bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -37,10 +38,17 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
   model: Provider.Model
   session: Session.Info
+  permissionSessionID?: SessionID
   processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
   bypassAgentCheck: boolean
   messages: SessionV1.WithParts[]
   promptOps: TaskPromptOps
+  /**
+   * Item 24: the shared turn pool, threaded into every tool context
+   * (ctx.extra.turnBudget — the promptOps pattern) so a tool can hand it to the
+   * runs this turn starts.
+   */
+  turnBudget?: TurnBudget.Pool
 }) {
   const tools: Record<string, AITool> = {}
   const run = yield* EffectBridge.make()
@@ -49,13 +57,42 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const registry = yield* ToolRegistry.Service
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
+  const sessions = yield* Session.Service
+
+  // Nested subagents route their permission asks to the root session
+  // (permissionSessionID); without attribution UIs and third-party clients
+  // would lose WHO asked. Whenever the ask is routed away from this session,
+  // attach the origin (asking session, its agent, its depth) to the request
+  // metadata. ONE lineage walk per resolve (roots skip it); a failed walk only
+  // omits originDepth — an ask must never fail on attribution.
+  const origin = yield* Effect.gen(function* () {
+    if (input.permissionSessionID === undefined || input.permissionSessionID === input.session.id) return undefined
+    const originDepth =
+      input.session.parentID === undefined
+        ? 1
+        : yield* sessions.lineage(input.session.id).pipe(
+            Effect.map((chain) => chain.length),
+            Effect.catch(() => Effect.succeed(undefined)),
+          )
+    return {
+      originSessionID: input.session.id,
+      originAgent: input.agent.name,
+      ...(originDepth !== undefined ? { originDepth } : {}),
+    }
+  })
 
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
     sessionID: input.session.id,
     abort: options.abortSignal!,
     messageID: input.processor.message.id,
     callID: options.toolCallId,
-    extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps: input.promptOps },
+    extra: {
+      model: input.model,
+      bypassAgentCheck: input.bypassAgentCheck,
+      promptOps: input.promptOps,
+      // Item 24: the shared turn pool (undefined when the turn set none).
+      turnBudget: input.turnBudget,
+    },
     agent: input.agent.name,
     messages: input.messages,
     metadata: (val) =>
@@ -76,7 +113,8 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       permission
         .ask({
           ...req,
-          sessionID: input.session.id,
+          ...(origin ? { metadata: { ...req.metadata, ...origin } } : {}),
+          sessionID: input.permissionSessionID ?? input.session.id,
           tool: { messageID: input.processor.message.id, callID: options.toolCallId },
           ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
         })
@@ -295,105 +333,112 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     })
   }
 
-  for (const [key, item] of Object.entries(yield* mcp.tools())) {
-    const execute = item.execute
-    if (!execute) continue
+  // The FULL MCP registration (schema transform + permission-ask wrapper +
+  // content mapping), extracted into a helper from the former inline loop.
+  const registerMcpTool = (key: string, item: AITool) =>
+    Effect.gen(function* () {
+      const execute = item.execute
+      if (!execute) return
 
-    const schema = yield* Effect.promise(() => Promise.resolve(asSchema(item.inputSchema).jsonSchema))
-    const transformed = ProviderTransform.schema(input.model, { ...schema, properties: schema.properties ?? {} })
-    item.inputSchema = jsonSchema(transformed)
-    item.execute = (args, opts) =>
-      run.promise(
-        Effect.gen(function* () {
-          const ctx = context(args, opts)
-          yield* plugin.trigger(
-            "tool.execute.before",
-            { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
-            { args },
-          )
-          const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
-            yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
-            return yield* Effect.promise(() => execute(args, opts))
-          }).pipe(
-            Effect.withSpan("Tool.execute", {
-              attributes: {
-                "tool.name": key,
-                "tool.call_id": opts.toolCallId,
-                "session.id": ctx.sessionID,
-                "message.id": input.processor.message.id,
-              },
-            }),
-          )
-          yield* plugin.trigger(
-            "tool.execute.after",
-            { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
-            result,
-          )
+      const schema = yield* Effect.promise(() => Promise.resolve(asSchema(item.inputSchema).jsonSchema))
+      const transformed = ProviderTransform.schema(input.model, { ...schema, properties: schema.properties ?? {} })
+      item.inputSchema = jsonSchema(transformed)
+      item.execute = (args, opts) =>
+        run.promise(
+          Effect.gen(function* () {
+            const ctx = context(args, opts)
+            yield* plugin.trigger(
+              "tool.execute.before",
+              { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
+              { args },
+            )
+            const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
+              yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
+              return yield* Effect.promise(() => execute(args, opts))
+            }).pipe(
+              Effect.withSpan("Tool.execute", {
+                attributes: {
+                  "tool.name": key,
+                  "tool.call_id": opts.toolCallId,
+                  "session.id": ctx.sessionID,
+                  "message.id": input.processor.message.id,
+                },
+              }),
+            )
+            yield* plugin.trigger(
+              "tool.execute.after",
+              { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
+              result,
+            )
 
-          const textParts: string[] = []
-          const attachments: Omit<SessionV1.FilePart, "id" | "sessionID" | "messageID">[] = []
-          for (const contentItem of result.content) {
-            if (contentItem.type === "text") textParts.push(contentItem.text)
-            else if (contentItem.type === "image") {
-              attachments.push({
-                type: "file",
-                mime: contentItem.mimeType,
-                url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
-              })
-            } else if (contentItem.type === "resource") {
-              const { resource } = contentItem
-              if (resource.text) textParts.push(resource.text)
-              if (resource.blob) {
-                const mime = resource.mimeType ?? "application/octet-stream"
-                const size = base64Size(resource.blob)
-                if (!SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
-                  textParts.push(
-                    `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) is not a supported attachment type]`,
-                  )
-                  continue
-                }
-                if (size > MAX_MCP_RESOURCE_BLOB_BYTES) {
-                  textParts.push(
-                    `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) exceeds ${formatBytes(MAX_MCP_RESOURCE_BLOB_BYTES)}]`,
-                  )
-                  continue
-                }
+            const textParts: string[] = []
+            const attachments: Omit<SessionV1.FilePart, "id" | "sessionID" | "messageID">[] = []
+            for (const contentItem of result.content) {
+              if (contentItem.type === "text") textParts.push(contentItem.text)
+              else if (contentItem.type === "image") {
                 attachments.push({
                   type: "file",
-                  mime,
-                  url: `data:${mime};base64,${resource.blob}`,
-                  filename: resource.uri,
+                  mime: contentItem.mimeType,
+                  url: `data:${contentItem.mimeType};base64,${contentItem.data}`,
                 })
+              } else if (contentItem.type === "resource") {
+                const { resource } = contentItem
+                if (resource.text) textParts.push(resource.text)
+                if (resource.blob) {
+                  const mime = resource.mimeType ?? "application/octet-stream"
+                  const size = base64Size(resource.blob)
+                  if (!SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES.has(mime)) {
+                    textParts.push(
+                      `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) is not a supported attachment type]`,
+                    )
+                    continue
+                  }
+                  if (size > MAX_MCP_RESOURCE_BLOB_BYTES) {
+                    textParts.push(
+                      `[Binary MCP resource omitted: ${resource.uri} (${mime}, ${formatBytes(size)}) exceeds ${formatBytes(MAX_MCP_RESOURCE_BLOB_BYTES)}]`,
+                    )
+                    continue
+                  }
+                  attachments.push({
+                    type: "file",
+                    mime,
+                    url: `data:${mime};base64,${resource.blob}`,
+                    filename: resource.uri,
+                  })
+                }
               }
             }
-          }
 
-          const truncated = yield* truncate.output(textParts.join("\n\n"), {}, input.agent)
-          const metadata = {
-            ...result.metadata,
-            truncated: truncated.truncated,
-            ...(truncated.truncated && { outputPath: truncated.outputPath }),
-          }
+            const truncated = yield* truncate.output(textParts.join("\n\n"), {}, input.agent)
+            const metadata = {
+              ...result.metadata,
+              truncated: truncated.truncated,
+              ...(truncated.truncated && { outputPath: truncated.outputPath }),
+            }
 
-          const output = {
-            title: "",
-            metadata,
-            output: truncated.content,
-            attachments: attachments.map((attachment) => ({
-              ...attachment,
-              id: PartID.ascending(),
-              sessionID: ctx.sessionID,
-              messageID: input.processor.message.id,
-            })),
-            content: result.content,
-          }
-          if (opts.abortSignal?.aborted) {
-            yield* input.processor.completeToolCall(opts.toolCallId, output)
-          }
-          return output
-        }),
-      )
-    tools[key] = item
+            const output = {
+              title: "",
+              metadata,
+              output: truncated.content,
+              attachments: attachments.map((attachment) => ({
+                ...attachment,
+                id: PartID.ascending(),
+                sessionID: ctx.sessionID,
+                messageID: input.processor.message.id,
+              })),
+              content: result.content,
+            }
+            if (opts.abortSignal?.aborted) {
+              yield* input.processor.completeToolCall(opts.toolCallId, output)
+            }
+            return output
+          }),
+        )
+      tools[key] = item
+    })
+
+  for (const [key, item] of Object.entries(yield* mcp.tools())) {
+    yield* registerMcpTool(key, item)
   }
 
   return tools
