@@ -41,7 +41,7 @@ export function DialogConnectProvider(props: { provider: string }) {
   })
 
   const provider = createMemo(
-    () => providers.all().get(props.provider) ?? serverSync.data.provider.all.get(props.provider)!,
+    () => providers.all().get(props.provider) ?? serverSync().data.provider.all.get(props.provider)!,
   )
   const fallback = createMemo<ProviderAuthMethod[]>(() => [
     {
@@ -52,16 +52,16 @@ export function DialogConnectProvider(props: { provider: string }) {
   const [auth] = createResource(
     () => props.provider,
     async () => {
-      const cached = serverSync.data.provider_auth[props.provider]
+      const cached = serverSync().data.provider_auth[props.provider]
       if (cached) return cached
-      const res = await serverSDK.client.provider.auth()
+      const res = await serverSDK().client.provider.auth()
       if (!alive.value) return fallback()
-      serverSync.set("provider_auth", res.data ?? {})
+      serverSync().set("provider_auth", res.data ?? {})
       return res.data?.[props.provider] ?? fallback()
     },
   )
-  const loading = createMemo(() => auth.loading && !serverSync.data.provider_auth[props.provider])
-  const methods = createMemo(() => auth.latest ?? serverSync.data.provider_auth[props.provider] ?? fallback())
+  const loading = createMemo(() => auth.loading && !serverSync().data.provider_auth[props.provider])
+  const methods = createMemo(() => auth.latest ?? serverSync().data.provider_auth[props.provider] ?? fallback())
   const [store, setStore] = createStore({
     methodIndex: undefined as undefined | number,
     authorization: undefined as undefined | ProviderAuthAuthorization,
@@ -158,8 +158,8 @@ export function DialogConnectProvider(props: { provider: string }) {
       }
       dispatch({ type: "auth.pending" })
       const start = Date.now()
-      await serverSDK.client.provider.oauth
-        .authorize(
+      await serverSDK()
+        .client.provider.oauth.authorize(
           {
             providerID: props.provider,
             method: index,
@@ -331,7 +331,7 @@ export function DialogConnectProvider(props: { provider: string }) {
   })
 
   async function complete() {
-    await serverSDK.client.global.dispose()
+    await serverSDK().client.global.dispose()
     dialog.close()
     showToast({
       variant: "success",
@@ -409,7 +409,7 @@ export function DialogConnectProvider(props: { provider: string }) {
       }
 
       setFormStore("error", undefined)
-      await serverSDK.client.auth.set({
+      await serverSDK().client.auth.set({
         providerID: props.provider,
         auth: {
           type: "api",
@@ -480,8 +480,8 @@ export function DialogConnectProvider(props: { provider: string }) {
       }
 
       setFormStore("error", undefined)
-      const result = await serverSDK.client.provider.oauth
-        .callback({
+      const result = await serverSDK()
+        .client.provider.oauth.callback({
           providerID: props.provider,
           method: store.methodIndex,
           code,
@@ -533,8 +533,8 @@ export function DialogConnectProvider(props: { provider: string }) {
 
     onMount(() => {
       void (async () => {
-        const result = await serverSDK.client.provider.oauth
-          .callback({
+        const result = await serverSDK()
+          .client.provider.oauth.callback({
             providerID: props.provider,
             method: store.methodIndex,
           })

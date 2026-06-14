@@ -272,7 +272,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
 
       const entry = createRoot(
         (dispose) => ({
-          value: createPromptSession(serverSDK.scope, scope),
+          value: createPromptSession(serverSDK().scope, scope),
           dispose,
         }),
         owner,
