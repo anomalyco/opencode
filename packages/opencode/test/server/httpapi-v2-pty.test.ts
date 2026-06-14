@@ -164,7 +164,10 @@ describe("v2 pty HttpApi", () => {
         expect(yield* takeUntil("ping-v2")).toContain("ping-v2")
         yield* write(new Socket.CloseEvent(1000, "done")).pipe(Effect.catch(() => Effect.void))
 
-        const removed = yield* HttpClientRequest.delete(`/api/pty/${info.id}`).pipe(directoryHeader(dir), HttpClient.execute)
+        const removed = yield* HttpClientRequest.delete(`/api/pty/${info.id}`).pipe(
+          directoryHeader(dir),
+          HttpClient.execute,
+        )
         expect(removed.status).toBe(204)
       }),
   )
