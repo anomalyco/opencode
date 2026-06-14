@@ -117,7 +117,7 @@ const defaultSettings: Settings = {
     shellToolPartsExpanded: false,
     editToolPartsExpanded: false,
     showSessionProgressBar: true,
-    showCustomAgents: false,
+    showCustomAgents: true,
   },
   appearance: {
     fontSize: 14,
