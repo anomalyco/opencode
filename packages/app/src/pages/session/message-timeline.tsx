@@ -326,7 +326,7 @@ export function MessageTimeline(props: {
     if (!id) return idle
     return sync().data.session_status[id] ?? idle
   })
-  const working = createMemo(() => sessionStatus().type !== "idle")
+  const working = createMemo(() => (sessionStatus()?.type ?? idle.type) !== "idle")
   const tint = createMemo(() => messageAgentColor(sessionMessages(), sync().data.agent))
 
   const [timeoutDone, setTimeoutDone] = createSignal(true)
@@ -354,7 +354,7 @@ export function MessageTimeline(props: {
     }
 
     const status = sessionStatus()
-    if (status.type !== "idle") {
+    if ((status?.type ?? idle.type) !== "idle") {
       const messages = sessionMessages()
       for (let i = messages.length - 1; i >= 0; i--) {
         if (messages[i].role === "user") return messages[i].id
@@ -388,7 +388,7 @@ export function MessageTimeline(props: {
   const childTaskDescription = createMemo(() => {
     const id = sessionID()
     if (!id) return
-    return parentMessages()
+    return (parentMessages() ?? emptyMessages)
       .flatMap((message) => getMsgParts(message.id))
       .map((part) => taskDescription(part, id))
       .findLast((value): value is string => !!value)
@@ -401,19 +401,20 @@ export function MessageTimeline(props: {
     return language.t("command.session.new")
   })
   const showHeader = createMemo(() => !!(titleValue() || parentID()))
+  const userMessages = createMemo(() => props.userMessages ?? emptyMessages)
 
   const messageRowMemos = createMemo(
     mapArray(
-      () => props.userMessages,
+      userMessages,
       (userMessage, indexAccessor) => {
         return createMemo((previous: TimelineRow.TimelineRow[] | undefined) => {
           const rows = Timeline.constructMessageRows(
             userMessage,
             getMsgParts,
-            assistantMessagesByParent().get(userMessage.id) ?? emptyAssistantMessages,
+            assistantMessagesByParent()?.get(userMessage.id) ?? emptyAssistantMessages,
             indexAccessor(),
             settings.general.showReasoningSummaries(),
-            sessionStatus().type,
+            sessionStatus()?.type ?? idle.type,
             activeMessageID() === userMessage.id,
           )
 
@@ -424,7 +425,7 @@ export function MessageTimeline(props: {
   )
 
   const timelineRows = createMemo((previous: TimelineRow.TimelineRow[] | undefined) => {
-    const rows = messageRowMemos().flatMap((memo) => memo())
+    const rows = (messageRowMemos() ?? []).flatMap((memo) => memo() ?? [])
     if (rows.length === 0) return rows
     return reuseTimelineRows(previous, [...rows, new TimelineRow.BottomSpacer()])
   })
@@ -456,12 +457,13 @@ export function MessageTimeline(props: {
     return [index]
   })
   const activeAssistantMessages = createMemo(() => {
-    const id = activeMessageID() ?? props.userMessages[props.userMessages.length - 1]?.id
+    const messages = userMessages()
+    const id = activeMessageID() ?? messages[messages.length - 1]?.id
     if (!id) return emptyAssistantMessages
-    return assistantMessagesByParent().get(id) ?? emptyAssistantMessages
+    return assistantMessagesByParent()?.get(id) ?? emptyAssistantMessages
   })
   const activeAssistantContentVersion = createMemo(() =>
-    activeAssistantMessages()
+    (activeAssistantMessages() ?? emptyAssistantMessages)
       .flatMap((message) => [
         `${message.id}:${message.time.completed ?? ""}:${message.error?.name ?? ""}`,
         ...getMsgParts(message.id).map((part) => {
@@ -484,7 +486,7 @@ export function MessageTimeline(props: {
 
   createEffect(
     on(
-      () => [timelineRowKeys(), activeAssistantContentVersion(), sessionStatus().type] as const,
+      () => [timelineRowKeys(), activeAssistantContentVersion(), sessionStatus()?.type ?? idle.type] as const,
       () => {
         if (!virtualizer) return
         if (!props.shouldAnchorBottom() && !measuredBottomAnchored) return
@@ -974,12 +976,13 @@ export function MessageTimeline(props: {
     )
   }
 
-  const workingTurn = (userMessageID: string) => sessionStatus().type !== "idle" && activeMessageID() === userMessageID
+  const workingTurn = (userMessageID: string) =>
+    (sessionStatus()?.type ?? idle.type) !== "idle" && activeMessageID() === userMessageID
 
   const turnDurationMs = (userMessageID: string) => {
     const message = messageByID().get(userMessageID)
     if (!message || message.role !== "user") return
-    const end = (assistantMessagesByParent().get(userMessageID) ?? emptyAssistantMessages).reduce<number | undefined>(
+    const end = (assistantMessagesByParent()?.get(userMessageID) ?? emptyAssistantMessages).reduce<number | undefined>(
       (max, item) => {
         const completed = item.time.completed
         if (typeof completed !== "number") return max
@@ -995,7 +998,7 @@ export function MessageTimeline(props: {
 
   const assistantCopyPartID = (userMessageID: string) => {
     if (workingTurn(userMessageID)) return null
-    const messages = assistantMessagesByParent().get(userMessageID) ?? emptyAssistantMessages
+    const messages = assistantMessagesByParent()?.get(userMessageID) ?? emptyAssistantMessages
 
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i]
