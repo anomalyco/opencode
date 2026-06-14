@@ -140,7 +140,7 @@ Start: Bug discovered
 |   +-- No, spec was missing -> Preventable (add specs first)
 |
 |-- Is this a race condition / timing issue?
-|   |-- Yes -> Often preventable (atomic operations, locks)
+|   |-- Yes -> Often preventable (atomic operations, locks, explicit lifecycle settlement)
 |   +-- No -> Continue
 |
 +-- Is this a React state timing issue?
@@ -161,6 +161,7 @@ Start: Bug discovered
 | Did I skip reading the existing implementation?         | Missing Specification (self-imposed) |
 | Did I use state immediately after setState?             | React State Timing Issue             |
 | Did a third-party hook fallback to unexpected behavior? | Third-Party + Implicit Assumption    |
+| Did cleanup assume async work had already settled?      | Implicit Assumption + Timing Race    |
 
 ---
 
@@ -332,6 +333,37 @@ const { doAction } = useLibraryHook({
 
 ---
 
+### Pattern 6: Async Cleanup Races
+
+**Symptom**: Cleanup marks an operation failed even though the underlying async work succeeds shortly afterward.
+
+**Example**:
+
+```typescript
+// Stream finished, but the local tool promise is still finalizing.
+await Promise.race([toolDone, sleep(250)]);
+
+if (!toolDoneSettled) {
+  markToolError("Tool execution aborted");
+}
+```
+
+**Prevention Rule**:
+
+> Cleanup must distinguish normal stream completion from interruption/error cleanup.
+> Normal completion should wait for explicit async lifecycle settlement; interruption
+> cleanup may use a short timeout and mark remaining work aborted.
+
+**Checklist**:
+
+- [ ] Does the async operation expose explicit `start`, `complete`, and `fail` transitions?
+- [ ] Does every success and error path settle the lifecycle handle exactly once?
+- [ ] Is normal cleanup timeout long enough for expected local work finalization?
+- [ ] Is the short aborted timeout used only for real interruption/error cleanup?
+- [ ] Is there a regression test where the stream finishes before local async work settles?
+
+---
+
 ## Post-Bug Analysis Template
 
 When you fix a bug, document it:
@@ -384,5 +416,6 @@ After analyzing a bug, add lessons to the appropriate guide:
 | Missing Specification     | Yes          | Specs before coding                                      |
 | React State Timing        | Yes          | Use refs for cross-render data, understand async updates |
 | Third-Party Hook Fallback | Yes          | Check fallback behavior when params are undefined        |
+| Async Cleanup Race        | Yes          | Explicit lifecycle settlement + normal-vs-abort timeouts |
 
 **Core Principle**: Most preventable bugs come from **implicit assumptions**. Make assumptions explicit.

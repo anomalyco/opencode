@@ -25,7 +25,10 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
   model: Provider.Model
   session: Session.Info
-  processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
+  processor: Pick<
+    SessionProcessor.Handle,
+    "message" | "startToolCall" | "updateToolCall" | "completeToolCall" | "failToolCall"
+  >
   bypassAgentCheck: boolean
   messages: MessageV2.WithParts[]
   promptOps: TaskPromptOps
@@ -85,6 +88,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         return run.promise(
           Effect.gen(function* () {
             const ctx = context(args, options)
+            yield* input.processor.startToolCall(options.toolCallId, item.id, args)
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
@@ -108,7 +112,9 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             // Do not rely solely on AI SDK fullStream replaying a tool-result before finish.
             yield* input.processor.completeToolCall(options.toolCallId, output)
             return output
-          }),
+          }).pipe(
+            Effect.tapError((error) => input.processor.failToolCall(options.toolCallId, error).pipe(Effect.ignore)),
+          ),
         )
       },
     })
@@ -125,6 +131,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       run.promise(
         Effect.gen(function* () {
           const ctx = context(args, opts)
+          yield* input.processor.startToolCall(opts.toolCallId, key, args)
           yield* plugin.trigger(
             "tool.execute.before",
             { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
@@ -195,7 +202,9 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           // Do not rely solely on AI SDK fullStream replaying a tool-result before finish.
           yield* input.processor.completeToolCall(opts.toolCallId, output)
           return output
-        }),
+        }).pipe(
+          Effect.tapError((error) => input.processor.failToolCall(opts.toolCallId, error).pipe(Effect.ignore)),
+        ),
       )
     tools[key] = item
   }

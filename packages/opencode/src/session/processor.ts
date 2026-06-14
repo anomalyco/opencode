@@ -30,12 +30,19 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
+const TOOL_SETTLE_TIMEOUT = "10 seconds"
+const INTERRUPTED_TOOL_SETTLE_TIMEOUT = "250 millis"
 const log = Log.create({ service: "session.processor" })
 
 export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
   readonly message: MessageV2.Assistant
+  readonly startToolCall: (
+    toolCallID: string,
+    name: string,
+    input: Record<string, unknown>,
+  ) => Effect.Effect<MessageV2.ToolPart | undefined>
   readonly updateToolCall: (
     toolCallID: string,
     update: (part: MessageV2.ToolPart) => MessageV2.ToolPart,
@@ -49,6 +56,7 @@ export interface Handle {
       attachments?: MessageV2.FilePart[]
     },
   ) => Effect.Effect<void>
+  readonly failToolCall: (toolCallID: string, error: unknown) => Effect.Effect<boolean>
   readonly process: (streamInput: LLM.StreamInput) => Effect.Effect<Result>
 }
 
@@ -275,6 +283,33 @@ export const layer = Layer.effect(
           inputEnded: false,
         }
         return { call: ctx.toolcalls[input.id], part }
+      })
+
+      const startToolCall = Effect.fn("SessionProcessor.startToolCall")(function* (
+        toolCallID: string,
+        name: string,
+        input: Record<string, unknown>,
+      ) {
+        const match = yield* ensureToolCall({ id: toolCallID, name })
+        const part = yield* session.updatePart({
+          ...match.part,
+          tool: name,
+          state:
+            match.part.state.status === "running"
+              ? { ...match.part.state, input }
+              : {
+                  status: "running",
+                  input,
+                  time: { start: Date.now() },
+                },
+        })
+        ctx.toolcalls[toolCallID] = {
+          ...match.call,
+          partID: part.id,
+          messageID: part.messageID,
+          sessionID: part.sessionID,
+        }
+        return part
       })
 
       const isFilePart = (value: unknown): value is MessageV2.FilePart => Schema.is(MessageV2.FilePart)(value)
@@ -720,9 +755,11 @@ export const layer = Layer.effect(
         }
         ctx.reasoningMap = {}
 
+        const settleTimeout =
+          aborted || ctx.assistantMessage.error ? INTERRUPTED_TOOL_SETTLE_TIMEOUT : TOOL_SETTLE_TIMEOUT
         yield* Effect.forEach(
           Object.values(ctx.toolcalls),
-          (call) => Deferred.await(call.done).pipe(Effect.timeout("250 millis"), Effect.ignore),
+          (call) => Deferred.await(call.done).pipe(Effect.timeout(settleTimeout), Effect.ignore),
           { concurrency: "unbounded" },
         )
 
@@ -852,8 +889,10 @@ export const layer = Layer.effect(
         get message() {
           return ctx.assistantMessage
         },
+        startToolCall,
         updateToolCall,
         completeToolCall,
+        failToolCall,
         process,
       } satisfies Handle
     })

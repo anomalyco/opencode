@@ -6,7 +6,7 @@ import { Plugin } from "@/plugin"
 import type { Provider } from "@/provider/provider"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { MessageV2 } from "@/session/message-v2"
-import { MessageID, PartID, SessionID } from "@/session/schema"
+import { MessageID, SessionID } from "@/session/schema"
 import { Session } from "@/session/session"
 import { SessionTools } from "@/session/tools"
 import { Tool } from "@/tool/tool"
@@ -170,6 +170,7 @@ type ExecutableTool<Input, Output> = {
 
 it.instance("session tools settle processor tool calls after successful local execution", () =>
   Effect.gen(function* () {
+    const started: Array<{ toolCallID: string; name: string; input: unknown }> = []
     const completed: Array<{ toolCallID: string; output: unknown }> = []
     const promptOps = {
       cancel: () => Effect.void,
@@ -188,11 +189,17 @@ it.instance("session tools settle processor tool calls after successful local ex
       session,
       processor: {
         message: assistant,
+        startToolCall: (toolCallID, name, input) =>
+          Effect.sync(() => {
+            started.push({ toolCallID, name, input })
+            return undefined
+          }),
         updateToolCall: () => Effect.succeed(undefined),
         completeToolCall: (toolCallID, output) =>
           Effect.sync(() => {
             completed.push({ toolCallID, output })
           }),
+        failToolCall: () => Effect.succeed(false),
       },
       bypassAgentCheck: false,
       messages: [],
@@ -212,6 +219,7 @@ it.instance("session tools settle processor tool calls after successful local ex
       output: "result:weather",
       metadata: { source: "unit" },
     })
+    expect(started).toEqual([{ toolCallID: "call_1", name: "lookup", input: { query: "weather" } }])
     expect(completed).toHaveLength(1)
     expect(completed[0]?.toolCallID).toBe("call_1")
     expect(completed[0]?.output).toMatchObject({

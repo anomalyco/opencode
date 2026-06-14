@@ -728,6 +728,71 @@ it.live("session.processor effect tests complete AI SDK tool calls when native f
   ),
 )
 
+it.live("session.processor effect tests wait for late local tool completion after stream finish", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.tool("lookup", { query: "slow" })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "late tool")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies MessageV2.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "late tool" }],
+          tools: {
+            lookup: tool({
+              description: "Look up information slowly",
+              inputSchema: z.object({ query: z.string() }),
+              execute: async (input) => {
+                await new Promise((resolve) => setTimeout(resolve, 500))
+                return {
+                  title: "Delayed lookup",
+                  output: `result:${input.query}`,
+                  metadata: { source: "late" },
+                }
+              },
+            }),
+          },
+        })
+
+        const parts = MessageV2.parts(msg.id)
+        const call = parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+
+        expect(value).toBe("continue")
+        expect(call?.callID).toBe("call_1")
+        expect(call?.tool).toBe("lookup")
+        expect(call?.state.status).toBe("completed")
+        if (call?.state.status !== "completed") return
+        expect(call.state.input).toEqual({ query: "slow" })
+        expect(call.state.output).toBe("result:slow")
+        expect(call.state.title).toBe("Delayed lookup")
+        expect(call.state.metadata).toEqual({ source: "late" })
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
 it.live("session.processor effect tests mark pending tools as aborted on cleanup", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
