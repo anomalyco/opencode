@@ -354,6 +354,7 @@ function child(id: string): SessionChild {
     slug: id,
     projectID: "project-1",
     directory: "/tmp",
+    depth: 1,
     title: id,
     version: "1",
     time: {

@@ -80,6 +80,8 @@ export function fromRow(row: SessionRow): Info {
     directory: row.directory,
     path: row.path ?? undefined,
     parentID: row.parent_id ?? undefined,
+    depth: row.depth,
+    rootID: row.root_id ?? undefined,
     title: row.title,
     agent: row.agent ?? undefined,
     model: row.model
@@ -120,6 +122,8 @@ export function toRow(info: Info) {
     project_id: info.projectID,
     workspace_id: info.workspaceID,
     parent_id: info.parentID,
+    depth: info.depth,
+    root_id: info.rootID,
     slug: info.slug,
     directory: info.directory,
     path: info.path,
@@ -219,6 +223,13 @@ export const Info = Schema.Struct({
   directory: Schema.String,
   path: optionalOmitUndefined(Schema.String),
   parentID: optionalOmitUndefined(SessionID),
+  // Convenience wire fields derived from the parentID chain (nested-agents
+  // Issue 3, additive — old clients ignore them safely). `depth` is the 1-based
+  // nesting level (root = 1, always present). `rootID` is the topmost ancestor;
+  // omitted for roots/orphans (a root is its own root, so read `rootID ?? id`).
+  // Both are derived at create time, never client-settable.
+  depth: NonNegativeInt,
+  rootID: optionalOmitUndefined(SessionID),
   summary: optionalOmitUndefined(Summary),
   cost: optionalOmitUndefined(Schema.Finite),
   tokens: optionalOmitUndefined(Tokens),
@@ -574,6 +585,15 @@ export const layer: Layer.Layer<
       // typed error at the (clamped, ≤10) configured limit, so tripping this
       // is an invariant violation and surfaces as a defect carrying the typed
       // error; the public create() contract stays Effect<Info>.
+      // Derived wire fields (nested-agents Issue 3). For a root session depth is
+      // 1 and rootID is omitted (a root is its own root: callers read
+      // `rootID ?? id`). For a child we already walk the parent's lineage for
+      // the hard-cap check below, so reuse it: depth = parent chain length + 1,
+      // rootID = the topmost ancestor (the parent chain is ordered self → root).
+      // An orphaned parent (vanished row) yields an empty chain, so the child is
+      // stamped as a fresh root — matching the migration backfill and lineage().
+      let depth = 1
+      let rootID: SessionID | undefined = undefined
       if (input.parentID !== undefined) {
         const chain = yield* lineage(input.parentID).pipe(
           // An unknown parent is an orphan and orphans count as roots.
@@ -584,6 +604,12 @@ export const layer: Layer.Layer<
           yield* Effect.die(
             SubagentLimits.depthError({ depth: chain.length + 1, limit: SubagentLimits.HARD_MAX_DEPTH }),
           )
+        if (chain.length > 0) {
+          depth = chain.length + 1
+          // chain is ordered self → root; the root is its rootID ?? id.
+          const root = chain.at(-1)!
+          rootID = root.rootID ?? root.id
+        }
       }
       const ctx = yield* InstanceState.context
       const result: Info = {
@@ -595,6 +621,8 @@ export const layer: Layer.Layer<
         path: input.path,
         workspaceID: input.workspaceID,
         parentID: input.parentID,
+        depth,
+        rootID,
         title: input.title ?? (input.parentID ? childTitlePrefix : parentTitlePrefix) + new Date().toISOString(),
         agent: input.agent,
         model: input.model,

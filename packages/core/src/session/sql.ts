@@ -28,6 +28,15 @@ export const SessionTable = sqliteTable(
       .references(() => ProjectTable.id, { onDelete: "cascade" }),
     workspace_id: text().$type<WorkspaceV2.ID>(),
     parent_id: text().$type<SessionSchema.ID>(),
+    // Convenience wire fields derived from the parent_id chain (nested-agents
+    // Issue 3). `depth` is the 1-based nesting level (root = 1, never null —
+    // legacy rows backfilled by migration, new rows stamped at create time).
+    // `root_id` is the topmost ancestor's id; null for roots/orphans (a root is
+    // its own root, so callers read `root_id ?? id`). These are additive: the
+    // wire format stays backward compatible and clients that ignore them break
+    // nothing. Depth is derived, never client-settable.
+    depth: integer().notNull().default(1),
+    root_id: text().$type<SessionSchema.ID>(),
     slug: text().notNull(),
     directory: DatabasePath.directoryColumn().notNull(),
     path: DatabasePath.pathColumn(),
@@ -61,6 +70,7 @@ export const SessionTable = sqliteTable(
     index("session_project_idx").on(table.project_id),
     index("session_workspace_idx").on(table.workspace_id),
     index("session_parent_idx").on(table.parent_id),
+    index("session_root_idx").on(table.root_id),
   ],
 )
 
