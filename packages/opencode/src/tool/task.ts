@@ -131,7 +131,6 @@ function criticalityRejectionText(m: Criticality.Metrics): string {
   return lines.join("\n")
 }
 
-export const TaskTool = Tool.define(
 type TaskModel = {
   modelID: string
   providerID: string
