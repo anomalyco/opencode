@@ -20,6 +20,7 @@ import { AzureAuthPlugin } from "./azure"
 import { DigitalOceanAuthPlugin } from "./digitalocean"
 import { XaiAuthPlugin } from "./xai"
 import { OmniRouteAuthPlugin } from "./omniroute"
+import { SnowflakeCortexAuthPlugin } from "./snowflake-cortex"
 import { Effect, Layer, Context } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
@@ -76,6 +77,7 @@ function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
     CloudflareAIGatewayAuthPlugin,
     AzureAuthPlugin,
     DigitalOceanAuthPlugin,
+    SnowflakeCortexAuthPlugin,
     XaiAuthPlugin,
     OmniRouteAuthPlugin,
   ]

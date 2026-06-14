@@ -72,6 +72,48 @@ describe("SnowflakeCortexPlugin", () => {
     ),
   )
 
+  it.effect("uses SNOWFLAKE_CORTEX_TOKEN env var", () =>
+    withEnv({ SNOWFLAKE_CORTEX_TOKEN: "oauth-token", SNOWFLAKE_CORTEX_PAT: undefined }, () =>
+      Effect.gen(function* () {
+        const plugin = yield* PluginV2.Service
+        yield* plugin.add(SnowflakeCortexPlugin)
+        const result = yield* plugin.trigger(
+          "aisdk.sdk",
+          {
+            model: model("snowflake-cortex", "claude-sonnet-4-6"),
+            package: "@ai-sdk/openai-compatible",
+            options: { name: "snowflake-cortex", baseURL: "https://test.snowflakecomputing.com/api/v2/cortex/v1" },
+          },
+          {},
+        )
+        expect(result.sdk).toBeDefined()
+      }),
+    ),
+  )
+
+  it.effect("falls back to options.token when no Snowflake env token is set", () =>
+    withEnv({ SNOWFLAKE_CORTEX_TOKEN: undefined, SNOWFLAKE_CORTEX_PAT: undefined }, () =>
+      Effect.gen(function* () {
+        const plugin = yield* PluginV2.Service
+        yield* plugin.add(SnowflakeCortexPlugin)
+        const result = yield* plugin.trigger(
+          "aisdk.sdk",
+          {
+            model: model("snowflake-cortex", "claude-sonnet-4-6"),
+            package: "@ai-sdk/openai-compatible",
+            options: {
+              name: "snowflake-cortex",
+              baseURL: "https://test.snowflakecomputing.com/api/v2/cortex/v1",
+              token: "options-token",
+            },
+          },
+          {},
+        )
+        expect(result.sdk).toBeDefined()
+      }),
+    ),
+  )
+
   it.effect("sets includeUsage on the SDK options", () =>
     withEnv({ SNOWFLAKE_CORTEX_PAT: "test-pat" }, () =>
       Effect.gen(function* () {
