@@ -4,7 +4,6 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { createStore } from "solid-js/store"
 import { useQuery } from "@tanstack/solid-query"
 import { Button } from "@opencode-ai/ui/button"
-import { Logo } from "@opencode-ai/ui/logo"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
 import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
@@ -368,6 +367,11 @@ function HomeDesign() {
           class="min-h-0 min-w-0 flex-1 flex flex-col pt-12"
           aria-label={language.t("sidebar.project.recentSessions")}
         >
+          <img
+            src="/daemon-protocol-logo.png"
+            alt="Daemon Protocol"
+            class="mb-6 h-7 w-auto max-w-[220px] object-contain object-left opacity-70 invert dark:invert-0"
+          />
           <HomeSessionSearch
             value={state.search}
             placeholder={language.t("home.sessions.search.placeholder")}
@@ -1148,7 +1152,11 @@ function LegacyHome() {
 
   return (
     <div class="mx-auto mt-55 w-full md:w-auto px-4">
-      <Logo class="md:w-xl opacity-12" />
+      <img
+        src="/daemon-protocol-logo.png"
+        alt="Daemon Protocol"
+        class="h-auto w-full max-w-xs object-contain opacity-12 invert dark:invert-0 md:max-w-xl"
+      />
       <Button
         size="large"
         variant="ghost"
