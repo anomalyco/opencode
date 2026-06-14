@@ -3,11 +3,11 @@
  */
 export const config = {
   // Base URL
-  baseUrl: "https://opencode.ai",
+  baseUrl: "https://daemonprotocol.com",
 
   // GitHub
   github: {
-    repoUrl: "https://github.com/anomalyco/opencode",
+    repoUrl: "https://github.com/daemon-blockint-tech/daemoncode",
     starsFormatted: {
       compact: "160K",
       full: "160,000",

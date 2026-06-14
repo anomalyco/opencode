@@ -3,7 +3,7 @@ import type {
   TuiPluginInstallOptions,
   TuiPluginInstallResult,
   TuiPluginStatus,
-} from "@opencode-ai/plugin/tui"
+} from "@daemon-protocol/plugin/tui"
 import type { TuiConfig } from "../config"
 import { createContext, createSignal, useContext, type JSX, type ParentProps } from "solid-js"
 import { createPluginRoutes } from "./api"

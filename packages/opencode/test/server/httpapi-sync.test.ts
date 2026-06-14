@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock } from "bun:test"
 import { Context, Effect, Layer } from "effect"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@daemon-protocol/core/flag/flag"
 import { SyncPaths } from "../../src/server/routes/instance/httpapi/groups/sync"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { Session } from "@/session/session"

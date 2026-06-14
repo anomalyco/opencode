@@ -20,7 +20,7 @@ jobs:
       - uses: ./.github/actions/setup-bun
 
       - name: Install opencode
-        run: curl -fsSL https://opencode.ai/install | bash
+        run: curl -fsSL https://daemonprotocol.com/install | bash
 
       - name: Check duplicates and compliance
         env:
@@ -132,7 +132,7 @@ jobs:
       - uses: ./.github/actions/setup-bun
 
       - name: Install opencode
-        run: curl -fsSL https://opencode.ai/install | bash
+        run: curl -fsSL https://daemonprotocol.com/install | bash
 
       - name: Recheck compliance
         env:

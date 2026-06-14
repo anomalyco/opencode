@@ -39,7 +39,7 @@ export type ChangelogData = {
 }
 
 export async function loadChangelog(): Promise<ChangelogData> {
-  const response = await fetch("https://api.github.com/repos/anomalyco/opencode/releases?per_page=20", {
+  const response = await fetch("https://api.github.com/repos/daemon-blockint-tech/daemoncode/releases?per_page=20", {
     headers: {
       Accept: "application/vnd.github.v3+json",
       "User-Agent": "Daemon Protocol-Console",

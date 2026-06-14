@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
-import { PtyID } from "@opencode-ai/core/pty/schema"
+import { PtyID } from "@daemon-protocol/core/pty/schema"
 import { Server } from "../../src/server/server"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { resetDatabase } from "../fixture/db"
@@ -9,7 +9,7 @@ import { Config, Effect, Layer, Queue, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServer } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
-import { Pty } from "@opencode-ai/core/pty"
+import { Pty } from "@daemon-protocol/core/pty"
 import { testEffect } from "../lib/effect"
 
 const testPty = process.platform === "win32" ? test.skip : test

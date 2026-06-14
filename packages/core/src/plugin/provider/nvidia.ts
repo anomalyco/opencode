@@ -11,7 +11,7 @@ export const NvidiaPlugin = PluginV2.define({
           if (item.provider.api.package !== "@ai-sdk/openai-compatible") continue
           if (item.provider.api.url !== "https://integrate.api.nvidia.com/v1") continue
           evt.provider.update(item.provider.id, (provider) => {
-            provider.request.headers["HTTP-Referer"] = "https://opencode.ai/"
+            provider.request.headers["HTTP-Referer"] = "https://daemonprotocol.com/"
             provider.request.headers["X-Title"] = "opencode"
             provider.request.headers["X-BILLING-INVOKE-ORIGIN"] ??= "Daemon Protocol"
           })

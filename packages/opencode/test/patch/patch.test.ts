@@ -4,7 +4,7 @@ import * as fs from "fs/promises"
 import * as path from "path"
 import { tmpdir } from "os"
 import { Patch } from "../../src/patch"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { FSUtil } from "@daemon-protocol/core/fs-util"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(FSUtil.defaultLayer)

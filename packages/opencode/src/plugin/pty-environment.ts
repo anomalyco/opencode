@@ -1,6 +1,6 @@
 export * as PluginPtyEnvironment from "./pty-environment"
 
-import { PtyEnvironment } from "@opencode-ai/server/pty-environment"
+import { PtyEnvironment } from "@daemon-protocol/server/pty-environment"
 import { Effect, Layer } from "effect"
 import { InstanceStore } from "@/project/instance-store"
 import { Plugin } from "."

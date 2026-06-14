@@ -41,7 +41,7 @@ export const Api = HttpApi.make("server")
   .add(ProjectCopyGroup)
   .annotateMerge(
     OpenApi.annotations({
-      title: "opencode HttpApi",
+      title: "DaemonCode HttpApi",
       version: "0.0.1",
       description: "Experimental HttpApi surface for selected instance routes.",
     }),

@@ -32,7 +32,7 @@ JavaScript または TypeScript ファイルをプラグインディレクトリ
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
 }
 ```
@@ -128,7 +128,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 TypeScript プラグインの場合、プラグインパッケージから型をインポートできます。
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -257,7 +257,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-レベル: `debug`、`info`、`warn`、`error`。詳細については、[SDK ドキュメント](https://opencode.ai/docs/sdk) を参照してください。
+レベル: `debug`、`info`、`warn`、`error`。詳細については、[SDK ドキュメント](https://daemonprotocol.com/docs/sdk) を参照してください。
 
 ---
 
@@ -266,7 +266,7 @@ export const MyPlugin = async ({ client }) => {
 セッションが圧縮されたときに含まれるコンテキストをカスタマイズします。
 
 ```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -290,7 +290,7 @@ Include any state that should persist across compaction:
 `output.prompt` を設定することで、圧縮プロンプトを完全に置き換えることもできます。
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -356,7 +356,7 @@ export const InjectEnvPlugin = async () => {
 プラグインは Daemon Protocol にカスタムツールを追加することもできます。
 
 ```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+import { type Plugin, tool } from "@daemon-protocol/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -403,7 +403,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-レベル: `debug`、`info`、`warn`、`error`。詳細については、[SDK ドキュメント](https://opencode.ai/docs/sdk) を参照してください。
+レベル: `debug`、`info`、`warn`、`error`。詳細については、[SDK ドキュメント](https://daemonprotocol.com/docs/sdk) を参照してください。
 
 ---
 
@@ -412,7 +412,7 @@ export const MyPlugin = async ({ client }) => {
 セッションが圧縮されたときに含まれるコンテキストをカスタマイズします。
 
 ```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -436,7 +436,7 @@ Include any state that should persist across compaction:
 `output.prompt` を設定することで、圧縮プロンプトを完全に置き換えることもできます。
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

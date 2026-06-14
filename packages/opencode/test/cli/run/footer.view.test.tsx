@@ -4,8 +4,8 @@ import { BoxRenderable, RGBA, type RootRenderable } from "@opentui/core"
 import { testRender, useRenderer } from "@opentui/solid"
 import { createSignal } from "solid-js"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
-import type { QuestionRequest } from "@opencode-ai/sdk/v2"
-import { OpencodeKeymapProvider, registerOpencodeKeymap } from "@opencode-ai/tui/keymap"
+import type { QuestionRequest } from "@daemon-protocol/sdk/v2"
+import { OpencodeKeymapProvider, registerOpencodeKeymap } from "@daemon-protocol/tui/keymap"
 import {
   RUN_COMMAND_PANEL_ROWS,
   RUN_SUBAGENT_PANEL_ROWS,
@@ -59,7 +59,7 @@ function model(input: {
     providerID: "opencode",
     api: {
       id: "opencode",
-      url: "https://opencode.ai",
+      url: "https://daemonprotocol.com",
       npm: "@ai-sdk/openai-compatible",
     },
     name: input.name,

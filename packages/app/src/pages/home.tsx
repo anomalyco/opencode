@@ -1,24 +1,24 @@
-import type { Session } from "@opencode-ai/sdk/v2/client"
+import type { Session } from "@daemon-protocol/sdk/v2/client"
 import { batch, createEffect, createMemo, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createStore } from "solid-js/store"
 import { useQuery } from "@tanstack/solid-query"
-import { Button } from "@opencode-ai/ui/button"
-import { Logo } from "@opencode-ai/ui/logo"
-import { Spinner } from "@opencode-ai/ui/spinner"
-import { ScrollView } from "@opencode-ai/ui/scroll-view"
-import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
-import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
-import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
+import { Button } from "@daemon-protocol/ui/button"
+import { Logo } from "@daemon-protocol/ui/logo"
+import { Spinner } from "@daemon-protocol/ui/spinner"
+import { ScrollView } from "@daemon-protocol/ui/scroll-view"
+import { ProjectAvatar } from "@daemon-protocol/ui/v2/project-avatar-v2"
+import { ButtonV2 } from "@daemon-protocol/ui/v2/button-v2"
+import { Icon as IconV2 } from "@daemon-protocol/ui/v2/icon"
+import { IconButtonV2 } from "@daemon-protocol/ui/v2/icon-button-v2"
+import { MenuV2 } from "@daemon-protocol/ui/v2/menu-v2"
 import { getProjectAvatarVariant, useLayout, type LocalProject } from "@/context/layout"
 import { useNavigate } from "@solidjs/router"
-import { base64Encode } from "@opencode-ai/core/util/encode"
-import { Icon } from "@opencode-ai/ui/icon"
+import { base64Encode } from "@daemon-protocol/core/util/encode"
+import { Icon } from "@daemon-protocol/ui/icon"
 import { usePlatform } from "@/context/platform"
 import { DateTime } from "luxon"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@daemon-protocol/ui/context/dialog"
 import { useDirectoryPicker } from "@/components/directory-picker"
 import { DialogSelectServer, useServerManagementController } from "@/components/dialog-select-server"
 import { DialogServerV2 } from "@/components/settings-v2/dialog-server-v2"
@@ -360,7 +360,7 @@ function HomeDesign() {
           clearNotifications={clearNotifications}
           unseenCount={unseenCount}
           openSettings={openSettings}
-          openHelp={() => platform.openLink("https://opencode.ai/desktop-feedback")}
+          openHelp={() => platform.openLink("https://daemonprotocol.com/desktop-feedback")}
           language={language}
         />
 

@@ -1,10 +1,10 @@
 # opencode VS Code Extension
 
-A Visual Studio Code extension that integrates [opencode](https://opencode.ai) directly into your development workflow.
+A Visual Studio Code extension that integrates [opencode](https://daemonprotocol.com) directly into your development workflow.
 
 ## Prerequisites
 
-This extension requires the [opencode CLI](https://opencode.ai) to be installed on your system. Visit [opencode.ai](https://opencode.ai) for installation instructions.
+This extension requires the [opencode CLI](https://daemonprotocol.com) to be installed on your system. Visit [daemonprotocol.com](https://daemonprotocol.com) for installation instructions.
 
 ## Features
 
@@ -15,7 +15,7 @@ This extension requires the [opencode CLI](https://opencode.ai) to be installed 
 
 ## Support
 
-This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/anomalyco/opencode/issues.
+This is an early release. If you encounter issues or have feedback, please create an issue at https://github.com/daemon-blockint-tech/daemoncode/issues.
 
 ## Development
 

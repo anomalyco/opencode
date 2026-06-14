@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { FSUtil } from "@daemon-protocol/core/fs-util"
 import { Effect, Layer } from "effect"
 import path from "path"
 import { resetDatabase } from "../fixture/db"

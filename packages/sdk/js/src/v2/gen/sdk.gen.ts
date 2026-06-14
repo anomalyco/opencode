@@ -414,7 +414,7 @@ class HeyApiRegistry<T> {
   get(key?: string): T {
     const instance = this.instances.get(key ?? this.defaultKey)
     if (!instance) {
-      throw new Error(`No SDK client found. Create one with "new OpencodeClient()" to fix this error.`)
+      throw new Error(`No SDK client found. Create one with "new DaemonCodeClient()" to fix this error.`)
     }
     return instance
   }
@@ -6719,12 +6719,12 @@ export class V2 extends HeyApiClient {
   }
 }
 
-export class OpencodeClient extends HeyApiClient {
-  public static readonly __registry = new HeyApiRegistry<OpencodeClient>()
+export class DaemonCodeClient extends HeyApiClient {
+  public static readonly __registry = new HeyApiRegistry<DaemonCodeClient>()
 
   constructor(args?: { client?: Client; key?: string }) {
     super(args)
-    OpencodeClient.__registry.set(this, args?.key)
+    DaemonCodeClient.__registry.set(this, args?.key)
   }
 
   private _auth?: Auth

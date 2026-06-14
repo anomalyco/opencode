@@ -1,8 +1,8 @@
-import { Database } from "@opencode-ai/core/database/database"
+import { Database } from "@daemon-protocol/core/database/database"
 import { inArray } from "drizzle-orm"
-import { EventSequenceTable } from "@opencode-ai/core/event/sql"
+import { EventSequenceTable } from "@daemon-protocol/core/event/sql"
 import { Workspace } from "@/control-plane/workspace"
-import type { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import type { WorkspaceV2 } from "@daemon-protocol/core/workspace"
 import { Effect } from "effect"
 
 export const HEADER = "x-opencode-sync"

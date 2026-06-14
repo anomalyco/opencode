@@ -32,7 +32,7 @@ config 파일에 npm 패키지를 지정합니다.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
 }
 ```
@@ -127,7 +127,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 TypeScript 플러그인의 경우 플러그인 패키지에서 타입을 가져올 수 있습니다.
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -279,7 +279,7 @@ export const InjectEnvPlugin = async () => {
 플러그인은 opencode에 사용자 정의 도구를 추가할 수 있습니다:
 
 ```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+import { type Plugin, tool } from "@daemon-protocol/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -330,7 +330,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-레벨: `debug`, `info`, `warn`, `error`. [SDK 문서](https://opencode.ai/docs/sdk)를 참고하세요.
+레벨: `debug`, `info`, `warn`, `error`. [SDK 문서](https://daemonprotocol.com/docs/sdk)를 참고하세요.
 
 ---
 
@@ -339,7 +339,7 @@ export const MyPlugin = async ({ client }) => {
 세션이 압축될 때 포함되는 컨텍스트를 사용자 지정할 수 있습니다:
 
 ```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -363,7 +363,7 @@ Include any state that should persist across compaction:
 또한 `output.prompt`를 설정하여 압축 프롬프트를 완전히 대체할 수도 있습니다:
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/app",
+  "name": "@daemon-protocol/app",
   "version": "1.17.6",
   "description": "",
   "type": "module",
@@ -43,9 +43,9 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@daemon-protocol/core": "workspace:*",
+    "@daemon-protocol/sdk": "workspace:*",
+    "@daemon-protocol/ui": "workspace:*",
     "@sentry/solid": "catalog:",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/active-element": "2.1.3",

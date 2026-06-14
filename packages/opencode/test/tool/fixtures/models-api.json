@@ -28004,9 +28004,9 @@
     "id": "opencode-go",
     "env": ["OPENCODE_API_KEY"],
     "npm": "@ai-sdk/openai-compatible",
-    "api": "https://opencode.ai/zen/go/v1",
+    "api": "https://daemonprotocol.com/zen/go/v1",
     "name": "Daemon Protocol Go",
-    "doc": "https://opencode.ai/docs/zen",
+    "doc": "https://daemonprotocol.com/docs/zen",
     "models": {
       "minimax-m2.7": {
         "id": "minimax-m2.7",
@@ -57814,9 +57814,9 @@
     "id": "opencode",
     "env": ["OPENCODE_API_KEY"],
     "npm": "@ai-sdk/openai-compatible",
-    "api": "https://opencode.ai/zen/v1",
+    "api": "https://daemonprotocol.com/zen/v1",
     "name": "Daemon Zen",
-    "doc": "https://opencode.ai/docs/zen",
+    "doc": "https://daemonprotocol.com/docs/zen",
     "models": {
       "minimax-m2.7": {
         "id": "minimax-m2.7",

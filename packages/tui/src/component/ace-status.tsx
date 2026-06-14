@@ -1,4 +1,4 @@
-import type { Event } from "@opencode-ai/sdk/v2"
+import type { Event } from "@daemon-protocol/sdk/v2"
 import { createMemo, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useEvent } from "../context/event"

@@ -13,7 +13,7 @@ Daemon Protocol は、**JSON** と **JSONC** (コメント付きの JSON) 形式
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "model": "anthropic/claude-sonnet-4-5",
   "autoupdate": true,
   "server": {
@@ -150,9 +150,9 @@ opencode run "Hello world"
 
 ## スキーマ
 
-サーバー/ランタイム構成スキーマは [**`opencode.ai/config.json`**](https://opencode.ai/config.json) で定義されています。
+サーバー/ランタイム構成スキーマは [**`daemonprotocol.com/config.json`**](https://daemonprotocol.com/config.json) で定義されています。
 
-TUI 設定は [**`opencode.ai/tui.json`**](https://opencode.ai/tui.json) を使用します。
+TUI 設定は [**`daemonprotocol.com/tui.json`**](https://daemonprotocol.com/tui.json) を使用します。
 
 エディターはスキーマに基づいて検証し、オートコンプリートできる必要があります。
 
@@ -164,7 +164,7 @@ TUI 固有の設定には、専用の `tui.json` (または `tui.jsonc`) ファ�
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://daemonprotocol.com/tui.json",
   "scroll_speed": 3,
   "scroll_acceleration": {
     "enabled": true
@@ -187,7 +187,7 @@ TUI 固有の設定には、専用の `tui.json` (または `tui.jsonc`) ファ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "server": {
     "port": 4096,
     "hostname": "0.0.0.0",
@@ -216,7 +216,7 @@ LLM が使用できるツールは、`tools` オプションを通じて管理�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "tools": {
     "write": false,
     "bash": false
@@ -234,7 +234,7 @@ LLM が使用できるツールは、`tools` オプションを通じて管理�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {},
   "model": "anthropic/claude-sonnet-4-5",
   "small_model": "anthropic/claude-haiku-4-5"
@@ -247,7 +247,7 @@ LLM が使用できるツールは、`tools` オプションを通じて管理�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -276,7 +276,7 @@ Amazon Bedrock は、AWS 固有の設定をサポートしています。
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -307,7 +307,7 @@ UI テーマを `tui.json` で設定します。
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://daemonprotocol.com/tui.json",
   "theme": "tokyonight"
 }
 ```
@@ -322,7 +322,7 @@ UI テーマを `tui.json` で設定します。
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "code-reviewer": {
       "description": "Reviews code for best practices and potential issues",
@@ -348,7 +348,7 @@ UI テーマを `tui.json` で設定します。
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "default_agent": "plan"
 }
 ```
@@ -365,7 +365,7 @@ UI テーマを `tui.json` で設定します。
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "share": "manual"
 }
 ```
@@ -386,7 +386,7 @@ UI テーマを `tui.json` で設定します。
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "command": {
     "test": {
       "template": "Run the full test suite with coverage report and show any failures.\nFocus on the failing tests and suggest fixes.",
@@ -412,7 +412,7 @@ UI テーマを `tui.json` で設定します。
 
 ```json title="tui.json"
 {
-  "$schema": "https://opencode.ai/tui.json",
+  "$schema": "https://daemonprotocol.com/tui.json",
   "keybinds": {}
 }
 ```
@@ -427,7 +427,7 @@ Daemon Protocol は起動時に新しいアップデートを自動的にダウ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "autoupdate": false
 }
 ```
@@ -443,7 +443,7 @@ Daemon Protocol は起動時に新しいアップデートを自動的にダウ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -471,7 +471,7 @@ Daemon Protocol は起動時に新しいアップデートを自動的にダウ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "edit": "ask",
     "bash": "ask"
@@ -489,7 +489,7 @@ Daemon Protocol は起動時に新しいアップデートを自動的にダウ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "compaction": {
     "auto": true,
     "prune": false
@@ -508,7 +508,7 @@ Daemon Protocol は起動時に新しいアップデートを自動的にダウ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "watcher": {
     "ignore": ["node_modules/**", "dist/**", ".git/**"]
   }
@@ -525,7 +525,7 @@ Daemon Protocol は起動時に新しいアップデートを自動的にダウ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {}
 }
 ```
@@ -542,7 +542,7 @@ Daemon Protocol は起動時に新しいアップデートを自動的にダウ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "plugin": ["opencode-helicone-session", "@my-org/custom-plugin"]
 }
 ```
@@ -557,7 +557,7 @@ Daemon Protocol は起動時に新しいアップデートを自動的にダウ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "instructions": ["CONTRIBUTING.md", "docs/guidelines.md", ".cursor/rules/*.md"]
 }
 ```
@@ -572,7 +572,7 @@ Daemon Protocol は起動時に新しいアップデートを自動的にダウ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "disabled_providers": ["openai", "gemini"]
 }
 ```
@@ -594,7 +594,7 @@ Daemon Protocol は起動時に新しいアップデートを自動的にダウ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "enabled_providers": ["anthropic", "openai"]
 }
 ```
@@ -614,7 +614,7 @@ Daemon Protocol は起動時に新しいアップデートを自動的にダウ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "experimental": {}
 }
 ```
@@ -637,7 +637,7 @@ Daemon Protocol は起動時に新しいアップデートを自動的にダウ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "model": "{env:OPENCODE_MODEL}",
   "provider": {
     "anthropic": {
@@ -660,7 +660,7 @@ Daemon Protocol は起動時に新しいアップデートを自動的にダウ�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "instructions": ["./custom-instructions.md"],
   "provider": {
     "openai": {

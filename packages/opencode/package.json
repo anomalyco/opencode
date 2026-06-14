@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.17.6",
-  "name": "opencode",
+  "name": "daemoncode",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -16,7 +16,7 @@
     "dev:temporary": "bun run --conditions=browser ./src/temporary.ts"
   },
   "bin": {
-    "opencode": "./bin/opencode"
+    "daemoncode": "./bin/daemoncode"
   },
   "exports": {
     "./*": "./src/*.ts"
@@ -31,9 +31,9 @@
   "devDependencies": {
     "@babel/core": "7.28.4",
     "@octokit/webhooks-types": "7.6.1",
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/http-recorder": "workspace:*",
-    "@opencode-ai/script": "workspace:*",
+    "@daemon-protocol/core": "workspace:*",
+    "@daemon-protocol/http-recorder": "workspace:*",
+    "@daemon-protocol/script": "workspace:*",
     "@standard-schema/spec": "1.0.0",
     "@tsconfig/bun": "catalog:",
     "@types/babel__core": "7.20.5",
@@ -84,12 +84,12 @@
     "@octokit/graphql": "9.0.2",
     "@octokit/rest": "catalog:",
     "@openauthjs/openauth": "catalog:",
-    "@opencode-ai/llm": "workspace:*",
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/script": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/server": "workspace:*",
-    "@opencode-ai/tui": "workspace:*",
+    "@daemon-protocol/llm": "workspace:*",
+    "@daemon-protocol/plugin": "workspace:*",
+    "@daemon-protocol/script": "workspace:*",
+    "@daemon-protocol/sdk": "workspace:*",
+    "@daemon-protocol/server": "workspace:*",
+    "@daemon-protocol/tui": "workspace:*",
     "@openrouter/ai-sdk-provider": "2.9.0",
     "@opentelemetry/api": "1.9.0",
     "@opentelemetry/context-async-hooks": "2.6.1",

@@ -6,7 +6,7 @@
 // the run footer + scrollback color model. Falls back to a hardcoded dark-mode
 // palette if detection fails.
 import { RGBA, SyntaxStyle, type CliRenderer, type ColorInput, type TerminalColors } from "@opentui/core"
-import type { TuiThemeCurrent } from "@opencode-ai/plugin/tui"
+import type { TuiThemeCurrent } from "@daemon-protocol/plugin/tui"
 import type { EntryKind } from "./types"
 
 type Tone = {
@@ -671,7 +671,7 @@ export async function resolveRunTheme(renderer: CliRenderer): Promise<RunTheme> 
     const footerTheme = resolveTheme(generateSystem(colors, pick), pick)
     const indexed = indexedPalette(colors, 256)
     const scrollbackTheme = quantizeTheme(footerTheme, indexed)
-    const shared = await import("@opencode-ai/tui/context/theme")
+    const shared = await import("@daemon-protocol/tui/context/theme")
     const syntaxTheme: SharedSyntaxTheme = {
       ...scrollbackTheme,
       _hasSelectedListItemText: true,

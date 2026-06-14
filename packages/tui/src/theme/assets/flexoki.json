@@ -1,5 +1,5 @@
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://daemonprotocol.com/theme.json",
   "defs": {
     "black": "#100F0F",
     "base950": "#1C1B1A",

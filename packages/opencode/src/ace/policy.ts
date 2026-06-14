@@ -1,4 +1,4 @@
-import type { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import type { ConfigV1 } from "@daemon-protocol/core/v1/config/config"
 import type { SessionID } from "@/session/schema"
 
 export type AceMode = "monitor" | "fixed-cap" | "reject-escalate"

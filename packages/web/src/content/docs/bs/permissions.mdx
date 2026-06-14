@@ -24,7 +24,7 @@ Dozvole možete postaviti globalno (sa `*`) i nadjačati određene alate.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "*": "ask",
     "bash": "allow",
@@ -37,7 +37,7 @@ Također možete postaviti sve dozvole odjednom:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": "allow"
 }
 ```
@@ -50,7 +50,7 @@ Za većinu dozvola, možete koristiti objekt za primjenu različitih radnji na o
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "bash": {
       "*": "ask",
@@ -93,7 +93,7 @@ Na primjer, ovo omogućava pristup svemu pod `~/projects/personal/`:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -106,7 +106,7 @@ Svaki direktorij koji je ovdje dozvoljen nasljeđuje iste zadane postavke kao tr
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "external_directory": {
       "~/projects/personal/**": "allow"
@@ -182,7 +182,7 @@ Pogledajte gornji odjeljak [Granularna pravila (sintaksa objekata)](#granular-ru
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "bash": {
       "*": "ask",

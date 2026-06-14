@@ -1,5 +1,5 @@
 import { NodeFileSystem, NodePath } from "@effect/platform-node"
-import { LLMClient, RequestExecutor } from "@opencode-ai/llm/route"
+import { LLMClient, RequestExecutor } from "@daemon-protocol/llm/route"
 import { FetchHttpClient } from "effect/unstable/http"
 import { LayerNode } from "./layer-node"
 

@@ -1,4 +1,4 @@
-import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
+import { MoveSession } from "@daemon-protocol/core/control-plane/move-session"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { described } from "./metadata"

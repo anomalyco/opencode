@@ -64,7 +64,7 @@ Ou você pode configurá-lo manualmente.
               persist-credentials: false
 
           - name: Run Daemon Protocol
-           uses: anomalyco/opencode/github@latest
+           uses: daemon-blockint-tech/daemoncode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
@@ -140,7 +140,7 @@ jobs:
           persist-credentials: false
 
        - name: Run Daemon Protocol
-         uses: anomalyco/opencode/github@latest
+         uses: daemon-blockint-tech/daemoncode/github@latest
          env:
            ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
          with:
@@ -177,7 +177,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-       - uses: anomalyco/opencode/github@latest
+       - uses: daemon-blockint-tech/daemoncode/github@latest
          env:
            ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -233,7 +233,7 @@ jobs:
         with:
           persist-credentials: false
 
-       - uses: anomalyco/opencode/github@latest
+       - uses: daemon-blockint-tech/daemoncode/github@latest
          if: steps.check.outputs.result == 'true'
          env:
            ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -255,7 +255,7 @@ Para eventos de `issues`, a entrada `prompt` é **obrigatória** uma vez que nã
 Substitua o prompt padrão para personalizar o comportamento do opencode para seu fluxo de trabalho.
 
 ```yaml title=".github/workflows/opencode.yml"
-- uses: anomalyco/opencode/github@latest
+- uses: daemon-blockint-tech/daemoncode/github@latest
   with:
     model: anthropic/claude-sonnet-4-5
     prompt: |

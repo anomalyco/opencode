@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Logger } from "effect"
-import { logFailure } from "@opencode-ai/core/session/logging"
-import { SessionSchema } from "@opencode-ai/core/session/schema"
+import { logFailure } from "@daemon-protocol/core/session/logging"
+import { SessionSchema } from "@daemon-protocol/core/session/schema"
 
 describe("Session logging", () => {
   for (const message of ["Failed to drain Session", "Failed to wake Session"] as const) {

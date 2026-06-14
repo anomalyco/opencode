@@ -35,7 +35,7 @@ Možete prilagoditi osnovni URL za bilo kojeg provajdera postavljanjem opcije `b
 
 ```json title="opencode.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -57,7 +57,7 @@ testirano i potvrđeno da dobro radi sa Daemon Protocol. [Saznajte više](/docs/
 Ako ste novi, preporučujemo da počnete sa Daemon Zen.
 :::
 
-1. Pokrenite naredbu `/connect` u TUI-u, odaberite opencode i idite na [opencode.ai/auth](https://opencode.ai/auth).
+1. Pokrenite naredbu `/connect` u TUI-u, odaberite opencode i idite na [daemonprotocol.com/auth](https://daemonprotocol.com/auth).
 
 ```txt
    /connect
@@ -88,7 +88,7 @@ Radi kao i svaki drugi provajder u Daemon Protocol i potpuno je opcionalan za ko
 
 Daemon Protocol Go je jeftin plan pretplate koji pruža pouzdan pristup popularnim modelima otvorenog kodiranja koje pruža Daemon Protocol tim i koji su testirani i verificirani da dobro rade s Daemon Protocol-om.
 
-1. Pokrenite naredbu `/connect` u TUI-u, odaberite `Daemon Protocol Go` i idite na [opencode.ai/auth](https://opencode.ai/zen).
+1. Pokrenite naredbu `/connect` u TUI-u, odaberite `Daemon Protocol Go` i idite na [daemonprotocol.com/auth](https://daemonprotocol.com/zen).
 
    ```txt
    /connect
@@ -194,7 +194,7 @@ Za konfiguraciju specifičnu za projekat ili trajnu konfiguraciju, koristite `op
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -222,7 +222,7 @@ Ako koristite VPC krajnje tačke za Bedrock:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -268,7 +268,7 @@ Za prilagođene profile zaključivanja, koristite ime modela i dobavljača u klj
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "amazon-bedrock": {
       // ...
@@ -330,7 +330,7 @@ Možete konfigurirati opencode za korištenje lokalnih modela preko [Atomic Chat
 
 ```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "atomic-chat": {
       "npm": "@ai-sdk/openai-compatible",
@@ -558,7 +558,7 @@ Također možete dodati modele kroz svoju opencode konfiguraciju.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "cloudflare-ai-gateway": {
       "models": {
@@ -766,7 +766,7 @@ da biste koristili samo svoju vlastitu instancu koju hostuje GitLab, dodajte slj
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "small_model": "gitlab/duo-chat-haiku-4-5",
   "share": "disabled"
 }
@@ -828,7 +828,7 @@ Prilagodite putem `opencode.json`:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "gitlab": {
       "options": {
@@ -845,7 +845,7 @@ Za pristup GitLab alatima (zahtjevi za spajanje, problemi, cjevovodi, CI/CD, itd
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "plugin": ["opencode-gitlab-plugin"]
 }
 ```
@@ -1028,7 +1028,7 @@ Evo [Heliconeov katalog modela](https://helicone.ai/models), ovo će vam trebati
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1056,7 +1056,7 @@ Helicone podržava prilagođena zaglavlja za funkcije kao što su keširanje, pr
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1110,7 +1110,7 @@ Možete konfigurirati opencode za korištenje lokalnih modela putem [llama.cpp's
 
 ```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1177,7 +1177,7 @@ Možete konfigurirati opencode za korištenje lokalnih modela preko LM Studio.
 
 ```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "lmstudio": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1298,7 +1298,7 @@ Ollama se može automatski konfigurirati za Daemon Protocol. Pogledajte [Ollama 
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1460,7 +1460,7 @@ Također možete dodati dodatne modele putem vaše opencode konfiguracije.
 
 ```json title="opencode.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "openrouter": {
       "models": {
@@ -1475,7 +1475,7 @@ Također možete dodati dodatne modele putem vaše opencode konfiguracije.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "openrouter": {
       "models": {
@@ -1724,7 +1724,7 @@ Također možete prilagoditi modele kroz svoju opencode konfiguraciju. Evo primj
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "vercel": {
       "models": {
@@ -1834,7 +1834,7 @@ Također možete dodati dodatne modele putem vaše opencode konfiguracije.
 
 ```json title="opencode.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "zenmux": {
       "models": {
@@ -1902,7 +1902,7 @@ Odaberite ID koji se pamti, to ćete koristiti u svom konfiguracijskom fajlu.
 
 ```json title="opencode.json" ""myprovider"" {5-15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1941,7 +1941,7 @@ Evo primjera postavljanja opcija `apiKey`, `headers` i modela `limit`.
 
 ```json title="opencode.json" {9,11,17-20}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",

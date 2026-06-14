@@ -1,7 +1,7 @@
-import { EventV2 } from "@opencode-ai/core/event"
+import { EventV2 } from "@daemon-protocol/core/event"
 import { SessionID, MessageID, PartID } from "./schema"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { ProviderV2 } from "@opencode-ai/core/provider"
+import { SessionV1 } from "@daemon-protocol/core/v1/session"
+import { ProviderV2 } from "@daemon-protocol/core/provider"
 import {
   APIError,
   AbortedError,
@@ -17,11 +17,11 @@ import {
   User,
   WithParts,
   type ToolPart,
-} from "@opencode-ai/core/v1/session"
+} from "@daemon-protocol/core/v1/session"
 
-import { NamedError } from "@opencode-ai/core/util/error"
+import { NamedError } from "@daemon-protocol/core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
-import { Database } from "@opencode-ai/core/database/database"
+import { Database } from "@daemon-protocol/core/database/database"
 import { NotFoundError } from "@/storage/storage"
 import { and } from "drizzle-orm"
 import { desc } from "drizzle-orm"
@@ -29,7 +29,7 @@ import { eq } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
-import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { MessageTable, PartTable, SessionTable } from "@daemon-protocol/core/session/sql"
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
 import { errorMessage } from "@/util/error"

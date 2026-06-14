@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { WslServersState } from "@opencode-ai/app/wsl/types"
+import type { WslServersState } from "@daemon-protocol/app/wsl/types"
 import { availableStartupServer, readyWslConnections } from "./connections"
 
 const state = (kind: "starting" | "ready" | "failed" | "stopped"): WslServersState => ({

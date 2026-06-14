@@ -1,5 +1,5 @@
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://daemonprotocol.com/theme.json",
   "defs": {
     "frappeRosewater": "#f2d5cf",
     "frappeFlamingo": "#eebebe",

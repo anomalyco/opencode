@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { SessionCompaction } from "@opencode-ai/core/session/compaction"
+import { SessionCompaction } from "@daemon-protocol/core/session/compaction"
 
 test("compaction describes tool media without embedding base64", () => {
   const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"

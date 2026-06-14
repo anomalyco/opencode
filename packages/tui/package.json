@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/tui",
+  "name": "@daemon-protocol/tui",
   "version": "1.17.6",
   "private": true,
   "type": "module",
@@ -47,10 +47,10 @@
     "./component/spinner": "./src/component/spinner.tsx"
   },
   "dependencies": {
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/plugin": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
-    "@opencode-ai/ui": "workspace:*",
+    "@daemon-protocol/core": "workspace:*",
+    "@daemon-protocol/plugin": "workspace:*",
+    "@daemon-protocol/sdk": "workspace:*",
+    "@daemon-protocol/ui": "workspace:*",
     "@opentui/core": "catalog:",
     "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",

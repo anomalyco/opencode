@@ -1,6 +1,6 @@
-import { EventV2 } from "@opencode-ai/core/event"
+import { EventV2 } from "@daemon-protocol/core/event"
 import { Schema } from "effect"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { NamedError } from "@daemon-protocol/core/util/error"
 import { Process } from "@/util/process"
 
 const SUPPORTED_IDES = [

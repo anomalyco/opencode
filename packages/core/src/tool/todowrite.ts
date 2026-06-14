@@ -1,6 +1,6 @@
 export * as TodoWriteTool from "./todowrite"
 
-import { ToolFailure } from "@opencode-ai/llm"
+import { ToolFailure } from "@daemon-protocol/llm"
 import { Effect, Layer, Schema } from "effect"
 import { PermissionV2 } from "../permission"
 import { SessionTodo } from "../session/todo"

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber } from "effect"
-import { KeyedMutex } from "@opencode-ai/core/effect/keyed-mutex"
+import { KeyedMutex } from "@daemon-protocol/core/effect/keyed-mutex"
 import { it } from "../lib/effect"
 
 describe("KeyedMutex", () => {

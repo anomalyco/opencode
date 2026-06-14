@@ -1,4 +1,4 @@
-import type { Interface } from "@opencode-ai/core/event"
+import type { Interface } from "@daemon-protocol/core/event"
 import type { SessionID } from "@/session/schema"
 import { Effect } from "effect"
 import { blockedOutput, acceptSpawn, gateSpawn as evaluateSpawn, gateToolCall, policy } from "./index"

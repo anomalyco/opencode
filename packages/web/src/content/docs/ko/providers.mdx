@@ -34,7 +34,7 @@ Daemon Protocol 설정의 `provider` 섹션을 통해 공급자를 사용자 정
 
 ```json title="opencode.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -55,7 +55,7 @@ Daemon Zen은 Daemon Protocol 팀이 Daemon Protocol와 잘 작동하도록 테�
 처음이라면 Daemon Zen으로 시작하는 것이 좋습니다.
 :::
 
-1. TUI에서 `/connect` 명령을 실행하고 `Daemon Zen`을 선택한 뒤, [opencode.ai/auth](https://opencode.ai/zen)로 이동합니다.
+1. TUI에서 `/connect` 명령을 실행하고 `Daemon Zen`을 선택한 뒤, [daemonprotocol.com/auth](https://daemonprotocol.com/zen)로 이동합니다.
 
    ```txt
    /connect
@@ -86,7 +86,7 @@ Daemon Protocol의 다른 공급자처럼 작동하며 사용은 완전히 선�
 
 Daemon Protocol Go는 Daemon Protocol 팀이 테스트하고 검증하여 Daemon Protocol와 잘 작동하는 인기 있는 오픈 코딩 모델에 안정적으로 액세스할 수 있는 저렴한 구독 요금제입니다.
 
-1. TUI에서 `/connect` 명령을 실행하고 `Daemon Protocol Go`를 선택한 뒤 [opencode.ai/auth](https://opencode.ai/zen)로 이동하십시오.
+1. TUI에서 `/connect` 명령을 실행하고 `Daemon Protocol Go`를 선택한 뒤 [daemonprotocol.com/auth](https://daemonprotocol.com/zen)로 이동하십시오.
 
    ```txt
    /connect
@@ -194,7 +194,7 @@ Daemon Protocol로 Amazon Bedrock을 사용하려면:
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "provider": {
        "amazon-bedrock": {
          "options": {
@@ -223,7 +223,7 @@ Daemon Protocol로 Amazon Bedrock을 사용하려면:
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "provider": {
        "amazon-bedrock": {
          "options": {
@@ -272,7 +272,7 @@ Daemon Protocol로 Amazon Bedrock을 사용하려면:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "amazon-bedrock": {
       // ...
@@ -331,7 +331,7 @@ OpenAI 호환 API 서버 뒤에서 로컬 LLM을 실행하는 데스크톱 애�
 
 ```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "atomic-chat": {
       "npm": "@ai-sdk/openai-compatible",
@@ -559,7 +559,7 @@ Cloudflare AI Gateway는 OpenAI, Anthropic, Workers AI 등의 모델에 액세�
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "provider": {
        "cloudflare-ai-gateway": {
          "models": {
@@ -764,7 +764,7 @@ Daemon Protocol를 자체 호스팅 GitLab 인스턴스만 사용하도록 제�
 
 ```json
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "small_model": "gitlab/duo-chat-haiku-4-5",
   "share": "disabled"
 }
@@ -825,7 +825,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "gitlab": {
       "options": {
@@ -842,7 +842,7 @@ GitLab 도구(병합 요청, 이슈, 파이프라인, CI/CD 등)에 액세스하
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "plugin": ["opencode-gitlab-plugin"]
 }
 ```
@@ -1022,7 +1022,7 @@ Daemon Protocol를 통해 자동으로 구성되지 않는 Helicone의 기능이
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1050,7 +1050,7 @@ Helicone는 캐싱, 사용자 추적 및 세션 관리와 같은 기능을 위�
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1104,7 +1104,7 @@ npm install -g opencode-helicone-session
 
 ```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1171,7 +1171,7 @@ LM Studio를 통해 로컬 모델을 사용하도록 구성할 수 있습니다.
 
 ```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "lmstudio": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1292,7 +1292,7 @@ Ollama는 Daemon Protocol에 대해 자동으로 구성될 수 있습니다. 자
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1453,7 +1453,7 @@ Daemon Zen은 Daemon Protocol 팀에서 제공하는 테스트 및 검증된 모
 
    ```json title="opencode.json" {6}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1468,7 +1468,7 @@ Daemon Zen은 Daemon Protocol 팀에서 제공하는 테스트 및 검증된 모
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1717,7 +1717,7 @@ Daemon Protocol 구성을 통해 모델을 사용자 정의할 수도 있습니�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "vercel": {
       "models": {
@@ -1827,7 +1827,7 @@ Daemon Protocol 구성을 통해 모델을 사용자 정의할 수도 있습니�
 
    ```json title="opencode.json" {6}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "provider": {
        "zenmux": {
          "models": {
@@ -1895,7 +1895,7 @@ Daemon Protocol에서 모든 OpenAI 호환 공급자를 사용할 수 있습니�
 
    ```json title="opencode.json" ""myprovider"" {5-15}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
@@ -1933,7 +1933,7 @@ Daemon Protocol에서 모든 OpenAI 호환 공급자를 사용할 수 있습니�
 
 ```json title="opencode.json" {9,11,17-20}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",

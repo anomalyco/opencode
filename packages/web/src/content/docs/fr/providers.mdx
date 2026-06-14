@@ -35,7 +35,7 @@ Vous pouvez personnaliser la base URL pour n'importe quel fournisseur en défini
 
 ```json title="opencode.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "anthropic": {
       "options": {
@@ -57,7 +57,7 @@ testé et vérifié pour fonctionner correctement avec Daemon Protocol. [En savo
 Si vous êtes nouveau, nous vous recommandons de commencer par Daemon Zen.
 :::
 
-1. Exécutez la commande `/connect` dans le TUI, sélectionnez opencode et dirigez-vous vers [opencode.ai/auth](https://opencode.ai/auth).
+1. Exécutez la commande `/connect` dans le TUI, sélectionnez opencode et dirigez-vous vers [daemonprotocol.com/auth](https://daemonprotocol.com/auth).
 
    ```txt
    /connect
@@ -89,7 +89,7 @@ Il fonctionne comme n’importe quel autre fournisseur dans Daemon Protocol et s
 Daemon Protocol Go est un plan d'abonnement à faible coût qui offre un accès fiable aux modèles de codage ouverts populaires fournis par l'équipe Daemon Protocol qui ont été
 testé et vérifié pour fonctionner correctement avec Daemon Protocol.
 
-1. Exécutez la commande `/connect` dans le TUI, sélectionnez `Daemon Protocol Go` et rendez-vous sur [opencode.ai/auth](https://opencode.ai/zen).
+1. Exécutez la commande `/connect` dans le TUI, sélectionnez `Daemon Protocol Go` et rendez-vous sur [daemonprotocol.com/auth](https://daemonprotocol.com/zen).
 
    ```txt
    /connect
@@ -195,7 +195,7 @@ Pour une configuration spécifique au projet ou persistante, utilisez `opencode.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -223,7 +223,7 @@ Si vous utilisez des points de terminaison d'un VPC pour Bedrock :
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "amazon-bedrock": {
       "options": {
@@ -269,7 +269,7 @@ Pour les profils d'inférence personnalisés, utilisez le nom du modèle et du f
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "amazon-bedrock": {
       // ...
@@ -331,7 +331,7 @@ Vous pouvez configurer opencode pour utiliser des modèles locaux via [Atomic Ch
 
 ```json title="opencode.json" "atomic-chat" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "atomic-chat": {
       "npm": "@ai-sdk/openai-compatible",
@@ -559,7 +559,7 @@ Vous pouvez également ajouter des modèles via votre configuration opencode.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "cloudflare-ai-gateway": {
       "models": {
@@ -769,7 +769,7 @@ Fichier `opencode.json`. Il est également recommandé de désactiver le partage
 
 ```json
 {
-"$schema": "https://opencode.ai/config.json",
+"$schema": "https://daemonprotocol.com/config.json",
 "small_model": "gitlab/duo-chat-haiku-4-5",
 "share": "disabled"
 }
@@ -831,7 +831,7 @@ Personnalisez via `opencode.json` :
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "gitlab": {
       "options": {
@@ -848,7 +848,7 @@ Pour accéder aux outils GitLab (demandes de fusion, tickets, pipelines, CI/CD, 
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "plugin": ["opencode-gitlab-plugin"]
 }
 ```
@@ -1031,7 +1031,7 @@ Voici le [Répertoire des modèles d'Helicone](https://helicone.ai/models), vous
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1059,7 +1059,7 @@ Helicone prend en charge les en-têtes personnalisés pour des fonctionnalités 
 
 ```jsonc title="~/.config/opencode/opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "helicone": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1113,7 +1113,7 @@ Vous pouvez configurer opencode pour utiliser des modèles locaux via l'utilitai
 
 ```json title="opencode.json" "llama.cpp" {5, 6, 8, 10-15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "llama.cpp": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1180,7 +1180,7 @@ Vous pouvez configurer opencode pour utiliser des modèles locaux via LM Studio.
 
 ```json title="opencode.json" "lmstudio" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "lmstudio": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1301,7 +1301,7 @@ Ollama peut se configurer automatiquement pour Daemon Protocol. Voir les [docume
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "ollama": {
       "npm": "@ai-sdk/openai-compatible",
@@ -1463,7 +1463,7 @@ Vous pouvez également ajouter des modèles supplémentaires via votre configura
 
 ```json title="opencode.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "openrouter": {
       "models": {
@@ -1478,7 +1478,7 @@ Vous pouvez également ajouter des modèles supplémentaires via votre configura
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "provider": {
        "openrouter": {
          "models": {
@@ -1727,7 +1727,7 @@ Vous pouvez également personnaliser les modèles via votre configuration openco
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "vercel": {
       "models": {
@@ -1837,7 +1837,7 @@ Vous pouvez également ajouter des modèles supplémentaires via votre configura
 
 ```json title="opencode.json" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "zenmux": {
       "models": {
@@ -1905,7 +1905,7 @@ Vous pouvez utiliser n'importe quel fournisseur compatible OpenAI avec opencode.
 
    ```json title="opencode.json" ""myprovider"" {5-15}
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "provider": {
        "myprovider": {
          "npm": "@ai-sdk/openai-compatible",
@@ -1944,7 +1944,7 @@ Voici un exemple de définition des options `apiKey`, `headers` et modèle `limi
 
 ```json title="opencode.json" {9,11,17-20}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "myprovider": {
       "npm": "@ai-sdk/openai-compatible",

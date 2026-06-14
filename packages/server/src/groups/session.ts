@@ -1,10 +1,10 @@
-import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionInput } from "@opencode-ai/core/session/input"
-import { Prompt } from "@opencode-ai/core/session/prompt"
-import { SessionV2 } from "@opencode-ai/core/session"
-import { ProjectV2 } from "@opencode-ai/core/project"
-import { AbsolutePath, PositiveInt, RelativePath, withStatics } from "@opencode-ai/core/schema"
-import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { SessionMessage } from "@daemon-protocol/core/session/message"
+import { SessionInput } from "@daemon-protocol/core/session/input"
+import { Prompt } from "@daemon-protocol/core/session/prompt"
+import { SessionV2 } from "@daemon-protocol/core/session"
+import { ProjectV2 } from "@daemon-protocol/core/project"
+import { AbsolutePath, PositiveInt, RelativePath, withStatics } from "@daemon-protocol/core/schema"
+import { WorkspaceV2 } from "@daemon-protocol/core/workspace"
 import { Schema, Struct } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
@@ -16,9 +16,9 @@ import {
   UnknownError,
 } from "../errors"
 import { SessionLocationMiddleware } from "../middleware/session-location"
-import { AgentV2 } from "@opencode-ai/core/agent"
-import { ModelV2 } from "@opencode-ai/core/model"
-import { Location } from "@opencode-ai/core/location"
+import { AgentV2 } from "@daemon-protocol/core/agent"
+import { ModelV2 } from "@daemon-protocol/core/model"
+import { Location } from "@daemon-protocol/core/location"
 
 const SessionsQueryFields = {
   workspace: WorkspaceV2.ID.pipe(Schema.optional),

@@ -18,7 +18,7 @@ Utilisez-le pour créer des intégrations et contrôler opencode par programme.
 Installez le SDK à partir de npm :
 
 ```bash
-npm install @opencode-ai/sdk
+npm install @daemon-protocol/sdk
 ```
 
 ---
@@ -28,9 +28,9 @@ npm install @opencode-ai/sdk
 Créez une instance de opencode :
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createDaemonCode } from "@daemon-protocol/sdk"
 
-const { client } = await createOpencode()
+const { client } = await createDaemonCode()
 ```
 
 Cela démarre à la fois un serveur et un client
@@ -52,9 +52,9 @@ Cela démarre à la fois un serveur et un client
 Vous pouvez transmettre un objet de configuration pour personnaliser le comportement. L'instance récupère toujours votre `opencode.json`, mais vous pouvez remplacer ou ajouter une configuration en ligne :
 
 ```javascript
-import { createOpencode } from "@opencode-ai/sdk"
+import { createDaemonCode } from "@daemon-protocol/sdk"
 
-const opencode = await createOpencode({
+const opencode = await createDaemonCode({
   hostname: "127.0.0.1",
   port: 4096,
   config: {
@@ -72,9 +72,9 @@ opencode.server.close()
 Si vous disposez déjà d'une instance en cours d'exécution de opencode, vous pouvez créer une instance client pour vous y connecter :
 
 ```javascript
-import { createOpencodeClient } from "@opencode-ai/sdk"
+import { createDaemonCodeClient } from "@daemon-protocol/sdk"
 
-const client = createOpencodeClient({
+const client = createDaemonCodeClient({
   baseUrl: "http://localhost:4096",
 })
 ```
@@ -96,7 +96,7 @@ const client = createOpencodeClient({
 Le SDK inclut des définitions TypeScript pour tous les types API. Importez-les directement :
 
 ```typescript
-import type { Session, Message, Part } from "@opencode-ai/sdk"
+import type { Session, Message, Part } from "@daemon-protocol/sdk"
 ```
 
 Tous les types sont générés à partir de la spécification OpenAPI du serveur et disponibles dans le <a href={typesUrl}>fichier de types</a>.

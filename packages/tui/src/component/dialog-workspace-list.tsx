@@ -1,4 +1,4 @@
-import type { Workspace } from "@opencode-ai/sdk/v2"
+import type { Workspace } from "@daemon-protocol/sdk/v2"
 import { useDialog } from "../ui/dialog"
 import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { useProject } from "../context/project"

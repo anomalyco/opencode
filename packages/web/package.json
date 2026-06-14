@@ -1,11 +1,11 @@
 {
-  "name": "@opencode-ai/web",
+  "name": "@daemon-protocol/web",
   "type": "module",
   "license": "MIT",
   "version": "1.17.6",
   "scripts": {
     "dev": "astro dev",
-    "dev:remote": "VITE_API_URL=https://api.opencode.ai astro dev",
+    "dev:remote": "VITE_API_URL=https://api.daemonprotocol.com astro dev",
     "start": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
@@ -36,7 +36,7 @@
     "vscode-languageserver-types": "3.17.5"
   },
   "devDependencies": {
-    "opencode": "workspace:*",
+    "daemoncode": "workspace:*",
     "@types/node": "catalog:",
     "@astrojs/check": "0.9.6",
     "typescript": "catalog:"

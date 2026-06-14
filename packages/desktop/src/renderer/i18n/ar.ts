@@ -20,7 +20,7 @@ export const dict = {
   "desktop.updater.installFailed.message": "فشل تثبيت التحديث",
 
   "desktop.cli.installed.title": "تم تثبيت CLI",
-  "desktop.cli.installed.message": "تم تثبيت CLI في {{path}}\n\nأعد تشغيل الطرفية لاستخدام الأمر 'opencode'.",
+  "desktop.cli.installed.message": "تم تثبيت CLI في {{path}}\n\nأعد تشغيل الطرفية لاستخدام الأمر 'daemoncode'.",
   "desktop.cli.failed.title": "فشل التثبيت",
   "desktop.cli.failed.message": "فشل تثبيت CLI: {{error}}",
 }

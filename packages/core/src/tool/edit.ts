@@ -6,7 +6,7 @@
  */
 export * as EditTool from "./edit"
 
-import { ToolFailure } from "@opencode-ai/llm"
+import { ToolFailure } from "@daemon-protocol/llm"
 import { Effect, Layer, Schema } from "effect"
 import { FileMutation } from "../file-mutation"
 import { FSUtil } from "../fs-util"

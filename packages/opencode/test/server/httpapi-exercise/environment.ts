@@ -1,4 +1,4 @@
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@daemon-protocol/core/flag/flag"
 import { Effect } from "effect"
 import path from "path"
 

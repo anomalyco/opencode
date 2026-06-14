@@ -21,7 +21,7 @@ export const dict = {
 
   "desktop.cli.installed.title": "CLI 설치됨",
   "desktop.cli.installed.message":
-    "CLI가 {{path}}에 설치되었습니다\n\n터미널을 다시 시작하여 'opencode' 명령을 사용하세요.",
+    "CLI가 {{path}}에 설치되었습니다\n\n터미널을 다시 시작하여 'daemoncode' 명령을 사용하세요.",
   "desktop.cli.failed.title": "설치 실패",
   "desktop.cli.failed.message": "CLI 설치 실패: {{error}}",
 }

@@ -20,7 +20,7 @@ export const dict = {
   "desktop.updater.installFailed.message": "无法安装更新",
 
   "desktop.cli.installed.title": "CLI 已安装",
-  "desktop.cli.installed.message": "CLI 已安装到 {{path}}\n\n重启终端以使用 'opencode' 命令。",
+  "desktop.cli.installed.message": "CLI 已安装到 {{path}}\n\n重启终端以使用 'daemoncode' 命令。",
   "desktop.cli.failed.title": "安装失败",
   "desktop.cli.failed.message": "无法安装 CLI: {{error}}",
 }

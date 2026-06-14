@@ -27,7 +27,7 @@ Se pueden definir:
 La forma más sencilla de crear herramientas es utilizar el asistente `tool()` que proporciona seguridad de tipos y validación.
 
 ```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -50,7 +50,7 @@ El **nombre de archivo** se convierte en el **nombre de la herramienta**. Lo ant
 También puede exportar varias herramientas desde un solo archivo. Cada exportación se convierte en **una herramienta independiente** con el nombre **`<filename>_<exportname>`**:
 
 ```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 
 export const add = tool({
   description: "Add two numbers",
@@ -86,7 +86,7 @@ Las herramientas personalizadas están codificadas por el nombre de la herramien
 Por ejemplo, este archivo reemplaza la herramienta `bash` integrada:
 
 ```ts title=".opencode/tools/bash.ts"
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 
 export default tool({
   description: "Restricted bash wrapper",
@@ -139,7 +139,7 @@ export default {
 Las herramientas reciben contexto sobre la sesión actual:
 
 ```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 
 export default tool({
   description: "Get project information",
@@ -176,7 +176,7 @@ print(a + b)
 Luego cree la definición de herramienta que la invoca:
 
 ```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 import path from "path"
 
 export default tool({

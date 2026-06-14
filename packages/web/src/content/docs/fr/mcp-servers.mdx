@@ -23,11 +23,11 @@ Certains serveurs MCP, comme le serveur GitHub MCP, ont tendance à ajouter beau
 
 ## Activation
 
-Vous pouvez définir des serveurs MCP dans votre [Daemon Protocol Config](https://opencode.ai/docs/config/) sous `mcp`. Ajoutez chaque MCP avec un nom unique. Vous pouvez faire référence à ce MCP par son nom lorsque vous demandez le LLM.
+Vous pouvez définir des serveurs MCP dans votre [Daemon Protocol Config](https://daemonprotocol.com/docs/config/) sous `mcp`. Ajoutez chaque MCP avec un nom unique. Vous pouvez faire référence à ce MCP par son nom lorsque vous demandez le LLM.
 
 ```jsonc title="opencode.jsonc" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "name-of-mcp-server": {
       // ...
@@ -52,7 +52,7 @@ Pour activer un serveur spécifique à partir de la configuration distante de vo
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "jira": {
       "type": "remote",
@@ -73,7 +73,7 @@ Ajoutez des serveurs MCP locaux en définissant `type` sur `"local"` dans l'obje
 
 ```jsonc title="opencode.jsonc" {15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-local-mcp-server": {
       "type": "local",
@@ -94,7 +94,7 @@ Par exemple, voici comment ajouter le serveur de test [`@modelcontextprotocol/se
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "mcp_everything": {
       "type": "local",
@@ -132,7 +132,7 @@ Ajoutez des serveurs MCP distants en définissant `type` sur `"remote"`.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-remote-mcp": {
       "type": "remote",
@@ -179,7 +179,7 @@ Pour la plupart des serveurs MCP compatibles OAuth, aucune configuration particu
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -199,7 +199,7 @@ Si vous disposez des informations d'identification client du fournisseur de serv
 
 ```json title="opencode.json" {7-11}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -248,7 +248,7 @@ Si vous souhaitez désactiver le OAuth automatique pour un serveur (par exemple,
 
 ```json title="opencode.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-api-key-server": {
       "type": "remote",
@@ -301,7 +301,7 @@ Cela signifie que vous pouvez les activer ou les désactiver globalement.
 
 ```json title="opencode.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -322,7 +322,7 @@ Nous pouvons également utiliser un modèle global pour désactiver tous les MCP
 
 ```json title="opencode.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -352,7 +352,7 @@ Si vous disposez d'un grand nombre de serveurs MCP, vous souhaiterez peut-être 
 
 ```json title="opencode.json" {11, 14-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-mcp": {
       "type": "local",
@@ -406,7 +406,7 @@ Ajoutez le [serveur Sentry MCP](https://mcp.sentry.dev) pour interagir avec vos 
 
 ```json title="opencode.json" {4-8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "sentry": {
       "type": "remote",
@@ -439,7 +439,7 @@ Ajoutez le [Context7 MCP server](https://github.com/upstash/context7) pour effec
 
 ```json title="opencode.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -453,7 +453,7 @@ Si vous avez créé un compte gratuit, vous pouvez utiliser votre clé API et ob
 
 ```json title="opencode.json" {7-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -488,7 +488,7 @@ Ajoutez le serveur [Grep by Vercel](https://grep.app) MCP pour rechercher des ex
 
 ```json title="opencode.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "gh_grep": {
       "type": "remote",

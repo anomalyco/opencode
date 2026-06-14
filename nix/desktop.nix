@@ -14,7 +14,7 @@ let
   electron = electron_41;
 in
 stdenv.mkDerivation (finalAttrs: {
-  pname = "opencode-desktop";
+  pname = "daemoncode-desktop";
   inherit (opencode)
     version
     src
@@ -49,7 +49,7 @@ stdenv.mkDerivation (finalAttrs: {
     FILES=(src/main/windows.ts)
     for file in "''${FILES[@]}"; do
       substituteInPlace $BASE_PATH/$file \
-        --replace-fail "process.resourcesPath" "'$out/opt/opencode-desktop/resources'"
+        --replace-fail "process.resourcesPath" "'$out/opt/daemoncode-desktop/resources'"
     done
   '';
 
@@ -83,16 +83,18 @@ stdenv.mkDerivation (finalAttrs: {
     + lib.optionalString stdenv.hostPlatform.isDarwin ''
       mkdir -p $out/Applications
       mv dist/mac*/*.app $out/Applications
-      makeWrapper "$out/Applications/OpenCode.app/Contents/MacOS/OpenCode" $out/bin/opencode-desktop
+      makeWrapper "$out/Applications/DaemonCode.app/Contents/MacOS/DaemonCode" $out/bin/daemoncode-desktop
+      ln -sf daemoncode-desktop $out/bin/opencode-desktop
     ''
     + lib.optionalString stdenv.hostPlatform.isLinux ''
-      mkdir -p $out/opt/opencode-desktop
-      cp -r dist/linux*-unpacked/{resources,LICENSE*} $out/opt/opencode-desktop
-      makeWrapper ${lib.getExe electron} $out/bin/opencode-desktop \
+      mkdir -p $out/opt/daemoncode-desktop
+      cp -r dist/linux*-unpacked/{resources,LICENSE*} $out/opt/daemoncode-desktop
+      makeWrapper ${lib.getExe electron} $out/bin/daemoncode-desktop \
         --inherit-argv0 \
         --set ELECTRON_FORCE_IS_PACKAGED 1 \
-        --add-flags $out/opt/opencode-desktop/resources/app.asar \
+        --add-flags $out/opt/daemoncode-desktop/resources/app.asar \
         --add-flags "\''${NIXOS_OZONE_WL:+\''${WAYLAND_DISPLAY:+--ozone-platform-hint=auto --enable-features=WaylandWindowDecorations --enable-wayland-ime=true}}"
+      ln -sf daemoncode-desktop $out/bin/opencode-desktop
     ''
     + ''
       runHook postInstall
@@ -104,7 +106,7 @@ stdenv.mkDerivation (finalAttrs: {
 
   meta = {
     description = "Daemon Protocol Desktop App";
-    mainProgram = "opencode-desktop";
+    mainProgram = "daemoncode-desktop";
     inherit (opencode.meta) homepage license platforms;
   };
 })

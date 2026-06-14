@@ -3,16 +3,16 @@ import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { createTestKeymap } from "@opentui/keymap/testing"
-import type { TuiAttentionSoundPack } from "@opencode-ai/plugin/tui"
+import type { TuiAttentionSoundPack } from "@daemon-protocol/plugin/tui"
 import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { createTuiResolvedConfig, mockTuiRuntime } from "../../fixture/tui-runtime"
-import { Global } from "@opencode-ai/core/global"
+import { Global } from "@daemon-protocol/core/global"
 import { TuiConfig } from "../../../src/config/tui"
 import { Filesystem } from "@/util/filesystem"
 import { PluginLoader } from "../../../src/plugin/loader"
 
-const { allThemes, addTheme } = await import("@opencode-ai/tui/context/theme")
+const { allThemes, addTheme } = await import("@daemon-protocol/tui/context/theme")
 const { TuiPluginRuntime } = await import("../../../src/plugin/tui/runtime")
 
 type Row = Record<string, unknown>

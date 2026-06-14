@@ -2,10 +2,10 @@ import { afterEach, expect, test } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
-import { ModelsDev } from "@opencode-ai/core/models-dev"
-import { FSUtil } from "@opencode-ai/core/fs-util"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Global } from "@opencode-ai/core/global"
+import { ModelsDev } from "@daemon-protocol/core/models-dev"
+import { FSUtil } from "@daemon-protocol/core/fs-util"
+import { CrossSpawnSpawner } from "@daemon-protocol/core/cross-spawn-spawner"
+import { Global } from "@daemon-protocol/core/global"
 import { disposeAllInstances, provideInstanceEffect, tmpdirScoped, TestInstance } from "../fixture/fixture"
 import { markPluginDependenciesReady } from "../fixture/plugin"
 import { Auth } from "@/auth"
@@ -18,8 +18,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Filesystem } from "@/util/filesystem"
 import { InstanceLayer } from "@/project/instance-layer"
 import { testEffect } from "../lib/effect"
-import { ProviderV2 } from "@opencode-ai/core/provider"
-import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@daemon-protocol/core/provider"
+import { ModelV2 } from "@daemon-protocol/core/model"
 
 const originalEnv = new Map<string, string | undefined>()
 
@@ -1121,7 +1121,7 @@ it.instance(
   Effect.gen(function* () {
     const providers = yield* list
     expect(providers[ProviderV2.ID.make("nvidia")].options.headers).toEqual({
-      "HTTP-Referer": "https://opencode.ai/",
+      "HTTP-Referer": "https://daemonprotocol.com/",
       "X-Title": "opencode",
       "X-BILLING-INVOKE-ORIGIN": "Daemon Protocol",
     })
@@ -1134,7 +1134,7 @@ it.instance(
   Effect.gen(function* () {
     const providers = yield* list
     expect(providers[ProviderV2.ID.make("nvidia")].options.headers).toEqual({
-      "HTTP-Referer": "https://opencode.ai/",
+      "HTTP-Referer": "https://daemonprotocol.com/",
       "X-Title": "opencode",
       "X-BILLING-INVOKE-ORIGIN": "Daemon Protocol",
     })
