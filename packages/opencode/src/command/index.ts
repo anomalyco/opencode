@@ -98,6 +98,15 @@ export const layer = Layer.effect(
         subtask: true,
         hints: hints(PROMPT_REVIEW),
       }
+      commands["reload"] = {
+        name: "reload",
+        description: "Reload available skills from disk without restarting",
+        source: "command",
+        get template() {
+          return "Run reload_skills."
+        },
+        hints: [],
+      }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
         commands[name] = {
