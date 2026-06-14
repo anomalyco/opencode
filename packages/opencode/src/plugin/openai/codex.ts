@@ -14,6 +14,23 @@ const OAUTH_PORT = 1455
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3000
 const ALLOWED_MODELS = new Set(["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini"])
 
+/**
+ * Whether a model may be served through the Codex backend for a ChatGPT
+ * (OAuth) account. Explicitly allow-listed ids always pass; otherwise newer
+ * `gpt-<version>` models are allowed by version heuristic.
+ *
+ * `*-pro` models are excluded: they are only available through an OpenAI API
+ * key, not a ChatGPT account. Requesting one with a ChatGPT account fails with
+ * "The '<model>' model is not supported when using Codex with a ChatGPT
+ * account.", so they must not appear as available options for OAuth sessions.
+ */
+export function isModelSupportedForChatGPTAccount(apiID: string): boolean {
+  if (ALLOWED_MODELS.has(apiID)) return true
+  if (apiID.endsWith("-pro")) return false
+  const match = apiID.match(/^gpt-(\d+\.\d+)/)
+  return match ? parseFloat(match[1]) > 5.4 : false
+}
+
 interface PkceCodes {
   verifier: string
   challenge: string
@@ -368,11 +385,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
 
         return Object.fromEntries(
           Object.entries(provider.models)
-            .filter(([, model]) => {
-              if (ALLOWED_MODELS.has(model.api.id)) return true
-              const match = model.api.id.match(/^gpt-(\d+\.\d+)/)
-              return match ? parseFloat(match[1]) > 5.4 : false
-            })
+            .filter(([, model]) => isModelSupportedForChatGPTAccount(model.api.id))
             .map(([modelID, model]) => [
               modelID,
               {

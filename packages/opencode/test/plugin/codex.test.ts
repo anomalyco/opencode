@@ -5,6 +5,7 @@ import {
   extractAccountIdFromClaims,
   extractAccountId,
   renderOAuthError,
+  isModelSupportedForChatGPTAccount,
   type IdTokenClaims,
 } from "../../src/plugin/openai/codex"
 
@@ -128,6 +129,36 @@ describe("plugin.codex", () => {
           refresh_token: "rt",
         }),
       ).toBe("acc-123")
+    })
+  })
+
+  describe("isModelSupportedForChatGPTAccount", () => {
+    test("allows explicitly allow-listed models", () => {
+      expect(isModelSupportedForChatGPTAccount("gpt-5.5")).toBe(true)
+      expect(isModelSupportedForChatGPTAccount("gpt-5.4")).toBe(true)
+      expect(isModelSupportedForChatGPTAccount("gpt-5.4-mini")).toBe(true)
+      expect(isModelSupportedForChatGPTAccount("gpt-5.3-codex-spark")).toBe(true)
+    })
+
+    test("allows newer gpt models by version heuristic", () => {
+      expect(isModelSupportedForChatGPTAccount("gpt-5.5-codex")).toBe(true)
+      expect(isModelSupportedForChatGPTAccount("gpt-5.6")).toBe(true)
+      expect(isModelSupportedForChatGPTAccount("gpt-6.0")).toBe(true)
+    })
+
+    test("excludes -pro models that the Codex backend rejects for ChatGPT accounts", () => {
+      // Regression: the version heuristic (> 5.4) used to let these through, so
+      // they appeared as available but failed at request time with
+      // "The '<model>' model is not supported when using Codex with a ChatGPT account."
+      expect(isModelSupportedForChatGPTAccount("gpt-5.5-pro")).toBe(false)
+      expect(isModelSupportedForChatGPTAccount("gpt-5.4-pro")).toBe(false)
+      expect(isModelSupportedForChatGPTAccount("gpt-6.0-pro")).toBe(false)
+    })
+
+    test("rejects older and non-gpt models", () => {
+      expect(isModelSupportedForChatGPTAccount("gpt-5.4-codex")).toBe(false)
+      expect(isModelSupportedForChatGPTAccount("gpt-4o")).toBe(false)
+      expect(isModelSupportedForChatGPTAccount("o3")).toBe(false)
     })
   })
 
