@@ -36,12 +36,12 @@ describe("CatalogV2", () => {
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
       const events = yield* EventV2.Service
-      const updated = yield* events.subscribe(Catalog.Event.Updated).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      const updated = yield* events
+        .subscribe(Catalog.Event.Updated)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
-      yield* (yield* catalog.transform())((editor) =>
-        editor.provider.update(ProviderV2.ID.make("test"), () => {}),
-      )
+      yield* (yield* catalog.transform())((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
 
       expect((yield* Fiber.join(updated)).length).toBe(1)
     }),
