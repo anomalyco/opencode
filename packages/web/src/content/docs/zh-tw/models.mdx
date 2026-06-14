@@ -3,13 +3,13 @@ title: 模型
 description: 設定 LLM 提供商和模型。
 ---
 
-OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.dev) 支援 **75+ LLM 提供商**，並支援執行本地模型。
+Daemon Protocol 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.dev) 支援 **75+ LLM 提供商**，並支援執行本地模型。
 
 ---
 
 ## 提供商
 
-大多數熱門提供商已預設預先載入。如果您透過 `/connect` 指令新增了提供商的憑證，它們將在您啟動 OpenCode 時自動可用。
+大多數熱門提供商已預設預先載入。如果您透過 `/connect` 指令新增了提供商的憑證，它們將在您啟動 Daemon Protocol 時自動可用。
 
 了解更多關於[提供商](/docs/providers)的資訊。
 
@@ -35,7 +35,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 然而，真正擅長程式碼生成和工具呼叫的模型只有少數幾個。
 
-以下是與 OpenCode 配合良好的幾個模型，排名不分先後（此列表並非詳盡無遺，也不一定是最新的）：
+以下是與 Daemon Protocol 配合良好的幾個模型，排名不分先後（此列表並非詳盡無遺，也不一定是最新的）：
 
 - GPT 5.2
 - GPT 5.1 Codex
@@ -48,7 +48,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 ## 設定預設模型
 
-要將某個模型設為預設模型，可以在 OpenCode 設定中設定 `model` 欄位。
+要將某個模型設為預設模型，可以在 Daemon Protocol 設定中設定 `model` 欄位。
 
 ```json title="opencode.json" {3}
 {
@@ -57,7 +57,7 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 }
 ```
 
-這裡完整的 ID 格式為 `provider_id/model_id`。例如，如果您使用 [OpenCode Zen](/docs/zen)，則 GPT 5.1 Codex 對應的值為 `opencode/gpt-5.1-codex`。
+這裡完整的 ID 格式為 `provider_id/model_id`。例如，如果您使用 [Daemon Zen](/docs/zen)，則 GPT 5.1 Codex 對應的值為 `opencode/gpt-5.1-codex`。
 
 如果您設定了[自訂提供商](/docs/providers#custom)，`provider_id` 是設定中 `provider` 部分的鍵名，`model_id` 是 `provider.models` 中的鍵名。
 
@@ -136,11 +136,11 @@ OpenCode 使用 [AI SDK](https://ai-sdk.dev/) 和 [Models.dev](https://models.de
 
 ## 變體
 
-許多模型支援具有不同設定的多種變體。OpenCode 為熱門提供商內建了預設變體。
+許多模型支援具有不同設定的多種變體。Daemon Protocol 為熱門提供商內建了預設變體。
 
 ### 內建變體
 
-OpenCode 為許多提供商提供了預設變體：
+Daemon Protocol 為許多提供商提供了預設變體：
 
 **Anthropic**：
 
@@ -202,11 +202,11 @@ OpenCode 為許多提供商提供了預設變體：
 
 ## 載入模型
 
-OpenCode 啟動時，會按以下優先順序載入模型：
+Daemon Protocol 啟動時，會按以下優先順序載入模型：
 
 1. `--model` 或 `-m` 命令列旗標。格式與設定檔中相同：`provider_id/model_id`。
 
-2. OpenCode 設定中的 model 欄位。
+2. Daemon Protocol 設定中的 model 欄位。
 
    ```json title="opencode.json"
    {

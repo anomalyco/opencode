@@ -1,17 +1,17 @@
 ---
 title: CLI
-description: Opzioni e comandi della CLI di OpenCode.
+description: Opzioni e comandi della CLI di Daemon Protocol.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-La CLI di OpenCode, per impostazione predefinita, avvia la [TUI](/docs/tui) quando viene eseguita senza argomenti.
+La CLI di Daemon Protocol, per impostazione predefinita, avvia la [TUI](/docs/tui) quando viene eseguita senza argomenti.
 
 ```bash
 opencode
 ```
 
-Ma accetta anche i comandi documentati in questa pagina. Questo ti permette di interagire con OpenCode in modo programmatico.
+Ma accetta anche i comandi documentati in questa pagina. Questo ti permette di interagire con Daemon Protocol in modo programmatico.
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-Avvia l'interfaccia testuale di OpenCode (interfaccia utente da terminale).
+Avvia l'interfaccia testuale di Daemon Protocol (interfaccia utente da terminale).
 
 ```bash
 opencode [project]
@@ -44,13 +44,13 @@ opencode [project]
 
 ## Comandi
 
-La CLI di OpenCode include anche i seguenti comandi.
+La CLI di Daemon Protocol include anche i seguenti comandi.
 
 ---
 
 ### agent
 
-Gestisci gli agenti per OpenCode.
+Gestisci gli agenti per Daemon Protocol.
 
 ```bash
 opencode agent [command]
@@ -60,13 +60,13 @@ opencode agent [command]
 
 ### attach
 
-Collega un terminale a un backend server di OpenCode già in esecuzione avviato tramite i comandi `serve` o `web`.
+Collega un terminale a un backend server di Daemon Protocol già in esecuzione avviato tramite i comandi `serve` o `web`.
 
 ```bash
 opencode attach [url]
 ```
 
-Questo consente di usare la TUI con un backend OpenCode remoto. Per esempio:
+Questo consente di usare la TUI con un backend Daemon Protocol remoto. Per esempio:
 
 ```bash
 # Start the backend server for web/mobile access
@@ -123,13 +123,13 @@ opencode auth [command]
 
 #### login
 
-OpenCode si basa sull'elenco provider di [Models.dev](https://models.dev), quindi puoi usare `opencode auth login` per configurare le API key per qualunque provider tu voglia usare. Le credenziali vengono salvate in `~/.local/share/opencode/auth.json`.
+Daemon Protocol si basa sull'elenco provider di [Models.dev](https://models.dev), quindi puoi usare `opencode auth login` per configurare le API key per qualunque provider tu voglia usare. Le credenziali vengono salvate in `~/.local/share/opencode/auth.json`.
 
 ```bash
 opencode auth login
 ```
 
-Quando OpenCode si avvia, carica i provider dal file delle credenziali e, se presenti, anche eventuali key definite nell'ambiente o in un file `.env` nel progetto.
+Quando Daemon Protocol si avvia, carica i provider dal file delle credenziali e, se presenti, anche eventuali key definite nell'ambiente o in un file `.env` nel progetto.
 
 ---
 
@@ -305,7 +305,7 @@ opencode models anthropic
 | <nobr><code>{"--refresh"}</code></nobr> | Aggiorna la cache modelli da models.dev            |
 | <nobr><code>{"--verbose"}</code></nobr> | Output più verboso (include metadati come i costi) |
 
-Usa `--refresh` per aggiornare l'elenco modelli in cache. È utile quando nuovi modelli vengono aggiunti a un provider e vuoi vederli in OpenCode.
+Usa `--refresh` per aggiornare l'elenco modelli in cache. È utile quando nuovi modelli vengono aggiunti a un provider e vuoi vederli in Daemon Protocol.
 
 ```bash
 opencode models --refresh
@@ -363,7 +363,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### serve
 
-Avvia un server OpenCode headless per accesso via API. Vedi le [server docs](/docs/server) per l'interfaccia HTTP completa.
+Avvia un server Daemon Protocol headless per accesso via API. Vedi le [server docs](/docs/server) per l'interfaccia HTTP completa.
 
 ```bash
 opencode serve
@@ -384,7 +384,7 @@ Avvia un server HTTP che espone accesso API alle funzionalità di opencode senza
 
 ### session
 
-Gestisci le sessioni OpenCode.
+Gestisci le sessioni Daemon Protocol.
 
 ```bash
 opencode session [command]
@@ -394,7 +394,7 @@ opencode session [command]
 
 #### list
 
-Elenca tutte le sessioni OpenCode.
+Elenca tutte le sessioni Daemon Protocol.
 
 ```bash
 opencode session list
@@ -411,7 +411,7 @@ opencode session list
 
 ### stats
 
-Mostra statistiche di utilizzo token e costo per le sessioni OpenCode.
+Mostra statistiche di utilizzo token e costo per le sessioni Daemon Protocol.
 
 ```bash
 opencode stats
@@ -442,13 +442,13 @@ Se non fornisci un ID sessione, ti verrà chiesto di selezionare tra le sessioni
 
 ### import
 
-Importa i dati di sessione da un file JSON o da un URL di condivisione OpenCode.
+Importa i dati di sessione da un file JSON o da un URL di condivisione Daemon Protocol.
 
 ```bash
 opencode import <file>
 ```
 
-Puoi importare da un file locale o da un URL di condivisione OpenCode.
+Puoi importare da un file locale o da un URL di condivisione Daemon Protocol.
 
 ```bash
 opencode import session.json
@@ -459,13 +459,13 @@ opencode import https://opncd.ai/s/abc123
 
 ### web
 
-Avvia un server OpenCode headless con interfaccia web.
+Avvia un server Daemon Protocol headless con interfaccia web.
 
 ```bash
 opencode web
 ```
 
-Avvia un server HTTP e apre un browser per accedere a OpenCode tramite interfaccia web. Imposta `OPENCODE_SERVER_PASSWORD` per abilitare HTTP basic auth (username di default `opencode`).
+Avvia un server HTTP e apre un browser per accedere a Daemon Protocol tramite interfaccia web. Imposta `OPENCODE_SERVER_PASSWORD` per abilitare HTTP basic auth (username di default `opencode`).
 
 #### Flag
 
@@ -500,7 +500,7 @@ Questo comando avvia un server ACP che comunica via stdin/stdout usando nd-JSON.
 
 ### uninstall
 
-Disinstalla OpenCode e rimuove tutti i file correlati.
+Disinstalla Daemon Protocol e rimuove tutti i file correlati.
 
 ```bash
 opencode uninstall
@@ -560,7 +560,7 @@ La CLI di opencode accetta i seguenti flag globali.
 
 ## Variabili d'ambiente
 
-OpenCode può essere configurato tramite variabili d'ambiente.
+Daemon Protocol può essere configurato tramite variabili d'ambiente.
 
 | Variabile                             | Tipo    | Descrizione                                                 |
 | ------------------------------------- | ------- | ----------------------------------------------------------- |

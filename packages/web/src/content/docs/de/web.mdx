@@ -1,11 +1,11 @@
 ---
 title: Web
-description: Verwenden Sie OpenCode in Ihrem Browser.
+description: Verwenden Sie Daemon Protocol in Ihrem Browser.
 ---
 
-OpenCode kann als Webanwendung in Ihrem Browser ausgeführt werden und bietet das gleiche leistungsstarke KI-Codierungserlebnis, ohne dass ein Terminal erforderlich ist.
+Daemon Protocol kann als Webanwendung in Ihrem Browser ausgeführt werden und bietet das gleiche leistungsstarke KI-Codierungserlebnis, ohne dass ein Terminal erforderlich ist.
 
-![OpenCode Web – Neue Sitzung](../../../assets/web/web-homepage-new-session.png)
+![Daemon Protocol Web – Neue Sitzung](../../../assets/web/web-homepage-new-session.png)
 
 ## Erste Schritte
 
@@ -15,7 +15,7 @@ Starten Sie die Weboberfläche, indem Sie Folgendes ausführen:
 opencode web
 ```
 
-Dadurch wird ein lokaler Server auf `127.0.0.1` mit einem zufällig verfügbaren Port gestartet und OpenCode automatisch in Ihrem Standardbrowser geöffnet.
+Dadurch wird ein lokaler Server auf `127.0.0.1` mit einem zufällig verfügbaren Port gestartet und Daemon Protocol automatisch in Ihrem Standardbrowser geöffnet.
 
 :::caution
 Wenn `OPENCODE_SERVER_PASSWORD` nicht gesetzt ist, ist der Server ungesichert. Dies ist für den lokalen Gebrauch in Ordnung, sollte aber für den Netzwerkzugriff eingestellt werden.
@@ -33,7 +33,7 @@ Sie können den Webserver mithilfe von Befehlszeilen-Flags oder in Ihrer [Konfig
 
 ### Port
 
-Standardmäßig wählt OpenCode einen verfügbaren Port aus. Sie können einen Port angeben:
+Standardmäßig wählt Daemon Protocol einen verfügbaren Port aus. Sie können einen Port angeben:
 
 ```bash
 opencode web --port 4096
@@ -41,13 +41,13 @@ opencode web --port 4096
 
 ### Hostname
 
-Standardmäßig bindet der Server an `127.0.0.1` (nur localhost). So machen Sie OpenCode in Ihrem Netzwerk zugänglich:
+Standardmäßig bindet der Server an `127.0.0.1` (nur localhost). So machen Sie Daemon Protocol in Ihrem Netzwerk zugänglich:
 
 ```bash
 opencode web --hostname 0.0.0.0
 ```
 
-Bei Verwendung von `0.0.0.0` zeigt OpenCode sowohl lokale als auch Netzwerkadressen an:
+Bei Verwendung von `0.0.0.0` zeigt Daemon Protocol sowohl lokale als auch Netzwerkadressen an:
 
 ```
   Local access:       http://localhost:4096
@@ -92,19 +92,19 @@ Der Benutzername ist standardmäßig `opencode`, kann aber mit `OPENCODE_SERVER_
 
 ## Verwenden der Weboberfläche
 
-Nach dem Start bietet die Weboberfläche Zugriff auf Ihre OpenCode-Sitzungen.
+Nach dem Start bietet die Weboberfläche Zugriff auf Ihre Daemon Protocol-Sitzungen.
 
 ### Sitzungen
 
 Zeigen Sie Ihre Sitzungen auf der Startseite an und verwalten Sie sie. Sie können aktive Sitzungen sehen und neue starten.
 
-![OpenCode Web – Aktive Sitzung](../../../assets/web/web-homepage-active-session.png)
+![Daemon Protocol Web – Aktive Sitzung](../../../assets/web/web-homepage-active-session.png)
 
 ### Serverstatus
 
 Klicken Sie auf „Server anzeigen“, um verbundene Server und deren Status anzuzeigen.
 
-![OpenCode Web – Siehe Server](../../../assets/web/web-homepage-see-servers.png)
+![Daemon Protocol Web – Siehe Server](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 

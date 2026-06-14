@@ -3,7 +3,7 @@ title: Risoluzione dei problemi
 description: Problemi comuni e come risolverli.
 ---
 
-Per diagnosticare problemi con OpenCode, inizia controllando i log e i dati locali che salva su disco.
+Per diagnosticare problemi con Daemon Protocol, inizia controllando i log e i dati locali che salva su disco.
 
 ---
 
@@ -39,13 +39,13 @@ Questa directory contiene:
 
 ## App desktop
 
-OpenCode Desktop esegue in background un server locale di OpenCode (il sidecar `opencode-cli`). La maggior parte dei problemi e causata da un plugin che si comporta male, da una cache corrotta o da un'impostazione del server errata.
+Daemon Protocol Desktop esegue in background un server locale di Daemon Protocol (il sidecar `opencode-cli`). La maggior parte dei problemi e causata da un plugin che si comporta male, da una cache corrotta o da un'impostazione del server errata.
 
 ### Controlli rapidi
 
 - Chiudi completamente l'app e riaprila.
 - Se l'app mostra una schermata di errore, fai clic su **Restart** e copia i dettagli dell'errore.
-- Solo macOS: menu `OpenCode` -> **Reload Webview** (utile se l'interfaccia e vuota o bloccata).
+- Solo macOS: menu `Daemon Protocol` -> **Reload Webview** (utile se l'interfaccia e vuota o bloccata).
 
 ---
 
@@ -72,7 +72,7 @@ Se hai plugin configurati, disabilitali temporaneamente rimuovendo la chiave o i
 
 #### Controlla le directory dei plugin
 
-OpenCode puo anche caricare plugin locali dal disco. Spostali temporaneamente altrove (o rinomina la cartella) e riavvia l'app desktop:
+Daemon Protocol puo anche caricare plugin locali dal disco. Spostali temporaneamente altrove (o rinomina la cartella) e riavvia l'app desktop:
 
 - **Plugin globali**
   - **macOS/Linux**: `~/.config/opencode/plugins/`
@@ -86,22 +86,22 @@ Se l'app ricomincia a funzionare, riabilita i plugin uno alla volta per capire q
 
 ### Svuota la cache
 
-Se disabilitare i plugin non aiuta (o l'installazione di un plugin e bloccata), svuota la cache in modo che OpenCode possa ricostruirla.
+Se disabilitare i plugin non aiuta (o l'installazione di un plugin e bloccata), svuota la cache in modo che Daemon Protocol possa ricostruirla.
 
-1. Chiudi completamente OpenCode Desktop.
+1. Chiudi completamente Daemon Protocol Desktop.
 2. Elimina la directory della cache:
 
 - **macOS**: Finder -> `Cmd+Shift+G` -> paste `~/.cache/opencode`
 - **Linux**: elimina `~/.cache/opencode` (oppure esegui `rm -rf ~/.cache/opencode`)
 - **Windows**: premi `WIN+R` e incolla `%USERPROFILE%\.cache\opencode`
 
-3. Riavvia OpenCode Desktop.
+3. Riavvia Daemon Protocol Desktop.
 
 ---
 
 ### Risolvi problemi di connessione al server
 
-OpenCode Desktop puo avviare il proprio server locale (predefinito) oppure connettersi a un URL server che hai configurato.
+Daemon Protocol Desktop puo avviare il proprio server locale (predefinito) oppure connettersi a un URL server che hai configurato.
 
 Se vedi una finestra **"Connection Failed"** (o l'app non supera mai la schermata di avvio), controlla se hai impostato un URL server personalizzato.
 
@@ -132,21 +132,21 @@ Su Linux, alcune configurazioni Wayland possono causare finestre vuote o errori 
 
 ### Windows: runtime WebView2
 
-Su Windows, OpenCode Desktop richiede **WebView2 Runtime** di Microsoft Edge. Se l'app si apre su una finestra vuota o non parte, installa/aggiorna WebView2 e riprova.
+Su Windows, Daemon Protocol Desktop richiede **WebView2 Runtime** di Microsoft Edge. Se l'app si apre su una finestra vuota o non parte, installa/aggiorna WebView2 e riprova.
 
 ---
 
 ### Windows: problemi generali di prestazioni
 
-Se riscontri prestazioni lente, problemi di accesso ai file o problemi del terminale su Windows, prova a usare [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL fornisce un ambiente Linux che funziona in modo piu fluido con le funzionalita di OpenCode.
+Se riscontri prestazioni lente, problemi di accesso ai file o problemi del terminale su Windows, prova a usare [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL fornisce un ambiente Linux che funziona in modo piu fluido con le funzionalita di Daemon Protocol.
 
 ---
 
 ### Notifiche non visualizzate
 
-OpenCode Desktop mostra le notifiche di sistema solo quando:
+Daemon Protocol Desktop mostra le notifiche di sistema solo quando:
 
-- le notifiche sono abilitate per OpenCode nelle impostazioni del sistema operativo, e
+- le notifiche sono abilitate per Daemon Protocol nelle impostazioni del sistema operativo, e
 - la finestra dell'app non e in primo piano.
 
 ---
@@ -155,8 +155,8 @@ OpenCode Desktop mostra le notifiche di sistema solo quando:
 
 Se l'app non si avvia e non riesci a ripulire le impostazioni dall'interfaccia, reimposta lo stato salvato dell'app desktop.
 
-1. Chiudi OpenCode Desktop.
-2. Trova ed elimina questi file (si trovano nella directory dati dell'app OpenCode Desktop):
+1. Chiudi Daemon Protocol Desktop.
+2. Trova ed elimina questi file (si trovano nella directory dati dell'app Daemon Protocol Desktop):
 
 - `opencode.settings.dat` (desktop default server URL)
 - `opencode.global.dat` e `opencode.workspace.*.dat` (stato dell'interfaccia come server/progetti recenti)
@@ -171,7 +171,7 @@ Per trovare rapidamente la directory:
 
 ## Ottenere aiuto
 
-Se riscontri problemi con OpenCode:
+Se riscontri problemi con Daemon Protocol:
 
 1. **Segnala i problemi su GitHub**
 
@@ -195,7 +195,7 @@ Ecco alcuni problemi comuni e come risolverli.
 
 ---
 
-### OpenCode non si avvia
+### Daemon Protocol non si avvia
 
 1. Controlla i log per eventuali messaggi di errore
 2. Prova a eseguire con `--print-logs` per vedere l'output nel terminale

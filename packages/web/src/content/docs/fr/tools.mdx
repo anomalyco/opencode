@@ -3,7 +3,7 @@ title: Outils
 description: Gérez les outils qu'un LLM peut utiliser.
 ---
 
-Les outils permettent au LLM d'effectuer des actions dans votre base de code. OpenCode est livré avec un ensemble d'outils intégrés, mais vous pouvez l'étendre avec [outils personnalisés](/docs/custom-tools) ou [serveurs MCP](/docs/mcp-servers).
+Les outils permettent au LLM d'effectuer des actions dans votre base de code. Daemon Protocol est livré avec un ensemble d'outils intégrés, mais vous pouvez l'étendre avec [outils personnalisés](/docs/custom-tools) ou [serveurs MCP](/docs/mcp-servers).
 
 Par défaut, tous les outils sont **activés** et n'ont pas besoin d'autorisation pour s'exécuter. Vous pouvez contrôler le comportement de l'outil via [permissions](/docs/permissions).
 
@@ -41,7 +41,7 @@ Vous pouvez également utiliser des caractères génériques pour contrôler plu
 
 ## Intégré
 
-Voici tous les outils intégrés disponibles dans OpenCode.
+Voici tous les outils intégrés disponibles dans Daemon Protocol.
 
 ---
 
@@ -253,9 +253,9 @@ Permet au LLM de récupérer et de lire des pages Web. Utile pour rechercher de 
 Recherchez des informations sur le Web.
 
 :::note
-Cet outil n'est disponible que lors de l'utilisation du fournisseur OpenCode ou lorsque la variable d'environnement `OPENCODE_ENABLE_EXA` est définie sur une valeur véridique (par exemple, `true` ou `1`).
+Cet outil n'est disponible que lors de l'utilisation du fournisseur Daemon Protocol ou lorsque la variable d'environnement `OPENCODE_ENABLE_EXA` est définie sur une valeur véridique (par exemple, `true` ou `1`).
 
-À activer lors du lancement de OpenCode :
+À activer lors du lancement de Daemon Protocol :
 
 ```bash
 OPENCODE_ENABLE_EXA=1 opencode

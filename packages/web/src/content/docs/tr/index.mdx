@@ -1,13 +1,13 @@
 ---
 title: Giriş
-description: OpenCode kullanmaya başlayın.
+description: Daemon Protocol kullanmaya başlayın.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**OpenCode**](/) açık kaynaklı bir AI kodlama ajanıdır. Terminal tabanlı bir arayüz, masaüstü uygulaması veya IDE uzantısı olarak mevcuttur.
+[**Daemon Protocol**](/) açık kaynaklı bir AI kodlama ajanıdır. Terminal tabanlı bir arayüz, masaüstü uygulaması veya IDE uzantısı olarak mevcuttur.
 
 ![opencode TUI with the opencode theme](../../../assets/lander/screenshot.png)
 
@@ -17,7 +17,7 @@ Başlayalım.
 
 #### Ön koşullar
 
-OpenCode'u terminalinizde kullanmak için ihtiyacınız olacak:
+Daemon Protocol'u terminalinizde kullanmak için ihtiyacınız olacak:
 
 1. Şu gibi modern bir terminal emülatörü:
    - [WezTerm](https://wezterm.org), cross-platform (tüm platformlarda)
@@ -31,7 +31,7 @@ OpenCode'u terminalinizde kullanmak için ihtiyacınız olacak:
 
 ## Kurulum
 
-OpenCode'u kurmanın en kolay yolu kurulum betiğidir.
+Daemon Protocol'u kurmanın en kolay yolu kurulum betiğidir.
 
 ```bash
 curl -fsSL https://opencode.ai/install | bash
@@ -79,7 +79,7 @@ Ayrıca aşağıdaki komutlarla da yükleyebilirsiniz:
   brew install anomalyco/tap/opencode
   ```
 
-  > En güncel sürümler için OpenCode tap'ini kullanmanızı öneririz. Resmi `brew install opencode` formülü Homebrew ekibi tarafından korunur ve daha sık güncellenir.
+  > En güncel sürümler için Daemon Protocol tap'ini kullanmanızı öneririz. Resmi `brew install opencode` formülü Homebrew ekibi tarafından korunur ve daha sık güncellenir.
 
 - **Paru'yu Arch Linux'ta kullanma**
 
@@ -91,7 +91,7 @@ Ayrıca aşağıdaki komutlarla da yükleyebilirsiniz:
 #### Windows
 
 :::tip[Önerilen: WSL kullanın]
-Windows'ta en iyi deneyim için [Windows Subsystem for Linux (WSL)](/docs/windows-wsl) kullanılmasını öneririz. Daha iyi performans ve OpenCode'un özellikleriyle tam uyumluluğu sağlar.
+Windows'ta en iyi deneyim için [Windows Subsystem for Linux (WSL)](/docs/windows-wsl) kullanılmasını öneririz. Daha iyi performans ve Daemon Protocol'un özellikleriyle tam uyumluluğu sağlar.
 :::
 
 - **Chocolatey Kullanımı**
@@ -124,7 +124,7 @@ Windows'ta en iyi deneyim için [Windows Subsystem for Linux (WSL)](/docs/window
   docker run -it --rm ghcr.io/anomalyco/opencode
   ```
 
-OpenCode'un Bun kullanılarak Windows'a yüklenmesine yönelik destek şu anda devam etmektedir.
+Daemon Protocol'un Bun kullanılarak Windows'a yüklenmesine yönelik destek şu anda devam etmektedir.
 
 İkili dosyayı [Releases](https://github.com/anomalyco/opencode/releases)'dan da alabilirsiniz.
 
@@ -132,12 +132,12 @@ OpenCode'un Bun kullanılarak Windows'a yüklenmesine yönelik destek şu anda d
 
 ## Yapılandırma
 
-OpenCode ile herhangi bir LLM sağlayıcısının API anahtarlarını yapılandırarak kullanabilirsiniz.
+Daemon Protocol ile herhangi bir LLM sağlayıcısının API anahtarlarını yapılandırarak kullanabilirsiniz.
 
-LLM sağlayıcılarını kullanmaya yeni başlıyorsanız, [OpenCode Zen](/docs/zen) kullanmanızı öneririz.
-OpenCode ekibi tarafından test edilmiş ve doğrulanmış modellerin seçilmiş bir listesidir.
+LLM sağlayıcılarını kullanmaya yeni başlıyorsanız, [Daemon Zen](/docs/zen) kullanmanızı öneririz.
+Daemon Protocol ekibi tarafından test edilmiş ve doğrulanmış modellerin seçilmiş bir listesidir.
 
-1. TUI'de `/connect` komutunu çalıştırın, OpenCode'u seçin ve [opencode.ai/auth](https://opencode.ai/auth)'ye gidin.
+1. TUI'de `/connect` komutunu çalıştırın, Daemon Protocol'u seçin ve [opencode.ai/auth](https://opencode.ai/auth)'ye gidin.
 
    ```txt
    /connect
@@ -166,31 +166,31 @@ Artık bir sağlayıcı yapılandırdığınıza göre, üzerinde çalışmak is
 cd /path/to/project
 ```
 
-Ve OpenCode'u çalıştırın.
+Ve Daemon Protocol'u çalıştırın.
 
 ```bash
 opencode
 ```
 
-Daha sonra aşağıdaki komutu çalıştırarak proje için OpenCode'u başlatın.
+Daha sonra aşağıdaki komutu çalıştırarak proje için Daemon Protocol'u başlatın.
 
 ```bash frame="none"
 /init
 ```
 
-Bu, OpenCode'un projenizi analiz etmesini ve bir `AGENTS.md` proje kökünde dosyası oluşturmasını sağlayacaktır.
+Bu, Daemon Protocol'un projenizi analiz etmesini ve bir `AGENTS.md` proje kökünde dosyası oluşturmasını sağlayacaktır.
 
 :::tip
 Projenizin `AGENTS.md` dosyasını Git'e göndermelisiniz.
 :::
 
-Bu, OpenCode'un proje yapısını ve kullanılan kodlama kalıplarını anlamasına yardımcı olur.
+Bu, Daemon Protocol'un proje yapısını ve kullanılan kodlama kalıplarını anlamasına yardımcı olur.
 
 ---
 
 ## Kullanım
 
-Artık projeniz üzerinde çalışmak için OpenCode'u kullanmaya hazırsınız. Dilediğiniz soruyu sorabilirsiniz.
+Artık projeniz üzerinde çalışmak için Daemon Protocol'u kullanmaya hazırsınız. Dilediğiniz soruyu sorabilirsiniz.
 
 AI kodlama ajanını kullanmaya yeniyseniz aşağıdaki örnekler yardımcı olabilir.
 
@@ -198,7 +198,7 @@ AI kodlama ajanını kullanmaya yeniyseniz aşağıdaki örnekler yardımcı ola
 
 ### Soru Sorma
 
-OpenCode'dan kod tabanını size açıklamasını isteyebilirsiniz.
+Daemon Protocol'dan kod tabanını size açıklamasını isteyebilirsiniz.
 
 :::tip
 Projedeki dosyaları bulanık aramak için `@` tuşunu kullanın.
@@ -214,11 +214,11 @@ Kod tabanının üzerinde çalışmadığınız bir kısmı varsa bu yararlı ol
 
 ### Özellik Ekleme
 
-OpenCode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de öncelikle ondan bir plan oluşturmasını istemenizi öneririz.
+Daemon Protocol'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de öncelikle ondan bir plan oluşturmasını istemenizi öneririz.
 
 1. **Bir plan oluşturun**
 
-   OpenCode, değişiklik yapma özelliğini kapatan bir \_Plan modu\_\na sahiptir.
+   Daemon Protocol, değişiklik yapma özelliğini kapatan bir \_Plan modu\_\na sahiptir.
    Bu modda, özelliğin nasıl uygulanacağını önerir.
 
    **Tab** tuşunu kullanarak buna geçin. Bunun için sağ alt köşede bir gösterge göreceksiniz.
@@ -235,11 +235,11 @@ OpenCode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
    From this screen, the user can undelete a note or permanently delete it.
    ```
 
-   OpenCode'un isteğinizi anlaması için yeterli ayrıntı verin.
+   Daemon Protocol'un isteğinizi anlaması için yeterli ayrıntı verin.
    Ekibinizdeki junior bir geliştiriciyle konuşur gibi yazmak genelde iyi sonuç verir.
 
    :::tip
-   OpenCode'a ne istediğinizi anlamasına yardımcı olacak bol miktarda bağlam ve örnek verin.
+   Daemon Protocol'a ne istediğinizi anlamasına yardımcı olacak bol miktarda bağlam ve örnek verin.
    :::
 
 2. **Planı yineleyin**
@@ -255,7 +255,7 @@ OpenCode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
    İsteme eklemek için görüntüleri terminale sürükleyip bırakın.
    :::
 
-   OpenCode verdiğiniz görselleri tarayıp prompt'a ekleyebilir.
+   Daemon Protocol verdiğiniz görselleri tarayıp prompt'a ekleyebilir.
    Bunu bir görseli terminale sürükleyip bırakarak yapabilirsiniz.
 
 3. **Özelliği oluşturun**
@@ -276,7 +276,7 @@ OpenCode'dan projenize yeni özellikler eklemesini isteyebilirsiniz. Yine de ön
 
 ### Değişiklik Yapma
 
-Daha basit değişikliklerde, önce planı incelemeden OpenCode'dan doğrudan değişiklik yapmasını isteyebilirsiniz.
+Daha basit değişikliklerde, önce planı incelemeden Daemon Protocol'dan doğrudan değişiklik yapmasını isteyebilirsiniz.
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
 We need to add authentication to the /settings route. Take a look at how this is
@@ -284,13 +284,13 @@ handled in the /notes route in @packages/functions/src/notes.ts and implement
 the same logic in @packages/functions/src/settings.ts
 ```
 
-OpenCode'un doğru değişiklikleri yapması için yeterli ayrıntı verdiğinizden emin olun.
+Daemon Protocol'un doğru değişiklikleri yapması için yeterli ayrıntı verdiğinizden emin olun.
 
 ---
 
 ### Değişiklikleri Geri Alma
 
-Diyelim ki OpenCode'dan bazı değişiklikler yapmasını istediniz.
+Diyelim ki Daemon Protocol'dan bazı değişiklikler yapmasını istediniz.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
@@ -302,13 +302,13 @@ Ama istediğinin bu olmadığını anlıyorsun. `/undo` komutunu kullanarak değ
 /undo
 ```
 
-OpenCode değişiklikleri geri alır ve orijinal mesajınızı tekrar gösterir.
+Daemon Protocol değişiklikleri geri alır ve orijinal mesajınızı tekrar gösterir.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 Can you refactor the function in @packages/functions/src/api/index.ts?
 ```
 
-Buradan komut isteminde ince ayar yapabilir ve OpenCode'dan tekrar denemesini isteyebilirsiniz.
+Buradan komut isteminde ince ayar yapabilir ve Daemon Protocol'dan tekrar denemesini isteyebilirsiniz.
 
 :::tip
 Birden çok değişikliği geri almak için `/undo` komutunu birden çok kez çalıştırabilirsiniz.
@@ -324,7 +324,7 @@ Veya `/redo` komutunu kullanarak değişiklikleri **yeniden yapabilirsiniz**.
 
 ## Paylaşma
 
-OpenCode ile yaptığınız görüşmeleri [ekibinizle paylaşabilirsiniz](/docs/share).
+Daemon Protocol ile yaptığınız görüşmeleri [ekibinizle paylaşabilirsiniz](/docs/share).
 
 ```bash frame="none"
 /share
@@ -336,12 +336,12 @@ Bu, mevcut konuşmaya bir bağlantı oluşturacak ve bunu panonuza kopyalayacakt
 Konuşmalar varsayılan olarak paylaşılmaz.
 :::
 
-İşte OpenCode ile bir [örnek konuşma](https://opencode.ai/s/4XP1fce5).
+İşte Daemon Protocol ile bir [örnek konuşma](https://opencode.ai/s/4XP1fce5).
 
 ---
 
 ## Özelleştirme
 
-İşte bu kadar! Artık OpenCode'u kullanma konusunda profesyonelsiniz.
+İşte bu kadar! Artık Daemon Protocol'u kullanma konusunda profesyonelsiniz.
 
-Kendinize göre uyarlamak için [tema seçebilir](/docs/themes), [tuş atamalarını özelleştirebilir](/docs/keybinds), [kod biçimlendirici ayarlayabilir](/docs/formatters), [özel komutlar oluşturabilir](/docs/commands) veya [OpenCode config](/docs/config) ile oynayabilirsiniz.
+Kendinize göre uyarlamak için [tema seçebilir](/docs/themes), [tuş atamalarını özelleştirebilir](/docs/keybinds), [kod biçimlendirici ayarlayabilir](/docs/formatters), [özel komutlar oluşturabilir](/docs/commands) veya [Daemon Protocol config](/docs/config) ile oynayabilirsiniz.

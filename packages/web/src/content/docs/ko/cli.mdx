@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-OpenCode 터미널 사용자 인터페이스를 시작합니다.
+Daemon Protocol 터미널 사용자 인터페이스를 시작합니다.
 
 ```bash
 opencode [project]
@@ -123,13 +123,13 @@ opencode auth [command]
 
 #### login
 
-OpenCode는 [Models.dev](https://models.dev)의 provider 목록을 기반으로 동작하므로, `opencode auth login`으로 원하는 provider의 API 키를 설정할 수 있습니다. 인증 정보는 `~/.local/share/opencode/auth.json`에 저장됩니다.
+Daemon Protocol는 [Models.dev](https://models.dev)의 provider 목록을 기반으로 동작하므로, `opencode auth login`으로 원하는 provider의 API 키를 설정할 수 있습니다. 인증 정보는 `~/.local/share/opencode/auth.json`에 저장됩니다.
 
 ```bash
 opencode auth login
 ```
 
-OpenCode 시작 시 인증 파일에서 provider 정보를 불러오며, 시스템 환경 변수나 프로젝트의 `.env`에 정의된 키도 함께 로드합니다.
+Daemon Protocol 시작 시 인증 파일에서 provider 정보를 불러오며, 시스템 환경 변수나 프로젝트의 `.env`에 정의된 키도 함께 로드합니다.
 
 ---
 
@@ -305,7 +305,7 @@ opencode models anthropic
 | <nobr><code>{"--refresh"}</code></nobr> | models.dev에서 모델 캐시 새로고침                 |
 | <nobr><code>{"--verbose"}</code></nobr> | 더 자세한 모델 출력 사용(비용 등 메타데이터 포함) |
 
-`--refresh` 플래그를 사용하면 캐시된 모델 목록을 갱신할 수 있습니다. provider에 새 모델이 추가된 뒤 OpenCode에서 바로 확인하고 싶을 때 유용합니다.
+`--refresh` 플래그를 사용하면 캐시된 모델 목록을 갱신할 수 있습니다. provider에 새 모델이 추가된 뒤 Daemon Protocol에서 바로 확인하고 싶을 때 유용합니다.
 
 ```bash
 opencode models --refresh
@@ -363,7 +363,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### serve
 
-API 접근용 headless OpenCode 서버를 시작합니다. 전체 HTTP 인터페이스는 [server docs](/docs/server)를 참고하세요.
+API 접근용 headless Daemon Protocol 서버를 시작합니다. 전체 HTTP 인터페이스는 [server docs](/docs/server)를 참고하세요.
 
 ```bash
 opencode serve
@@ -384,7 +384,7 @@ opencode serve
 
 ### session
 
-OpenCode 세션을 관리합니다.
+Daemon Protocol 세션을 관리합니다.
 
 ```bash
 opencode session [command]
@@ -394,7 +394,7 @@ opencode session [command]
 
 #### list
 
-OpenCode 세션 목록을 표시합니다.
+Daemon Protocol 세션 목록을 표시합니다.
 
 ```bash
 opencode session list
@@ -411,7 +411,7 @@ opencode session list
 
 ### stats
 
-OpenCode 세션의 토큰 사용량과 비용 통계를 표시합니다.
+Daemon Protocol 세션의 토큰 사용량과 비용 통계를 표시합니다.
 
 ```bash
 opencode stats
@@ -442,13 +442,13 @@ opencode export [sessionID]
 
 ### import
 
-JSON 파일 또는 OpenCode 공유 URL에서 세션 데이터를 가져옵니다.
+JSON 파일 또는 Daemon Protocol 공유 URL에서 세션 데이터를 가져옵니다.
 
 ```bash
 opencode import <file>
 ```
 
-로컬 파일이나 OpenCode 공유 URL에서 가져올 수 있습니다.
+로컬 파일이나 Daemon Protocol 공유 URL에서 가져올 수 있습니다.
 
 ```bash
 opencode import session.json
@@ -459,13 +459,13 @@ opencode import https://opncd.ai/s/abc123
 
 ### web
 
-웹 인터페이스를 포함한 headless OpenCode 서버를 시작합니다.
+웹 인터페이스를 포함한 headless Daemon Protocol 서버를 시작합니다.
 
 ```bash
 opencode web
 ```
 
-이 명령은 HTTP 서버를 시작하고 웹 브라우저를 열어 웹 인터페이스로 OpenCode에 접속합니다. `OPENCODE_SERVER_PASSWORD`를 설정하면 HTTP basic auth가 활성화됩니다(기본 사용자명: `opencode`).
+이 명령은 HTTP 서버를 시작하고 웹 브라우저를 열어 웹 인터페이스로 Daemon Protocol에 접속합니다. `OPENCODE_SERVER_PASSWORD`를 설정하면 HTTP basic auth가 활성화됩니다(기본 사용자명: `opencode`).
 
 #### 플래그
 
@@ -500,7 +500,7 @@ opencode acp
 
 ### uninstall
 
-OpenCode를 제거하고 관련 파일을 삭제합니다.
+Daemon Protocol를 제거하고 관련 파일을 삭제합니다.
 
 ```bash
 opencode uninstall
@@ -560,7 +560,7 @@ opencode CLI는 아래 전역 플래그를 지원합니다.
 
 ## 환경 변수
 
-OpenCode는 환경 변수로도 구성할 수 있습니다.
+Daemon Protocol는 환경 변수로도 구성할 수 있습니다.
 
 | 변수                                  | 타입    | 설명                                           |
 | ------------------------------------- | ------- | ---------------------------------------------- |

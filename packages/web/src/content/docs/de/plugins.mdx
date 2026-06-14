@@ -1,9 +1,9 @@
 ---
 title: Plugins
-description: Schreiben Sie Ihre eigenen Plugins, um OpenCode zu erweitern.
+description: Schreiben Sie Ihre eigenen Plugins, um Daemon Protocol zu erweitern.
 ---
 
-Mit Plugins können Sie OpenCode erweitern, indem Sie verschiedene Ereignisse einbinden und das Verhalten anpassen. Sie können Plugins erstellen, um neue Funktionen hinzuzufügen, externe Dienste zu integrieren oder das Standardverhalten von OpenCode zu ändern.
+Mit Plugins können Sie Daemon Protocol erweitern, indem Sie verschiedene Ereignisse einbinden und das Verhalten anpassen. Sie können Plugins erstellen, um neue Funktionen hinzuzufügen, externe Dienste zu integrieren oder das Standardverhalten von Daemon Protocol zu ändern.
 
 Beispiele finden Sie im von der Community erstellten [plugins](/docs/ecosystem#plugins).
 
@@ -82,7 +82,7 @@ Lokale Plugins und benutzerdefinierte Tools können externe npm-Pakete verwenden
 }
 ```
 
-OpenCode führt beim Start `bun install` aus, um diese zu installieren. Ihre Plugins und Tools können sie dann importieren.
+Daemon Protocol führt beim Start `bun install` aus, um diese zu installieren. Ihre Plugins und Tools können sie dann importieren.
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -117,7 +117,7 @@ Die Plugin-Funktion erhält:
 - `project`: Die aktuellen Projektinformationen.
 - `directory`: Das aktuelle Arbeitsverzeichnis.
 - `worktree`: Der Git-Worktree-Pfad.
-- `client`: Ein OpenCode-SDK-Client für die Interaktion mit AI.
+- `client`: Ein Daemon Protocol-SDK-Client für die Interaktion mit AI.
 - `$`: Buns [shell API](https://bun.com/docs/runtime/shell) zum Ausführen von Befehlen.
 
 ---
@@ -210,7 +210,7 @@ Plugins können Ereignisse abonnieren, wie unten im Abschnitt „Beispiele“ ge
 
 ## Beispiele
 
-Hier sind einige Beispiele für Plugins, mit denen Sie OpenCode erweitern können.
+Hier sind einige Beispiele für Plugins, mit denen Sie Daemon Protocol erweitern können.
 
 ---
 
@@ -234,14 +234,14 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 Wir verwenden `osascript`, um AppleScript unter macOS auszuführen. Hier verwenden wir es zum Versenden von Benachrichtigungen.
 
 :::note
-Wenn Sie die OpenCode-Desktop-App verwenden, kann diese automatisch Systembenachrichtigungen senden, wenn eine Antwort bereit ist oder wenn in einer Sitzung ein Fehler auftritt.
+Wenn Sie die Daemon Protocol-Desktop-App verwenden, kann diese automatisch Systembenachrichtigungen senden, wenn eine Antwort bereit ist oder wenn in einer Sitzung ein Fehler auftritt.
 :::
 
 ---
 
 ### .env-Schutz
 
-Verhindern Sie, dass OpenCode `.env`-Dateien liest:
+Verhindern Sie, dass Daemon Protocol `.env`-Dateien liest:
 
 ```javascript title=".opencode/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
@@ -276,7 +276,7 @@ export const InjectEnvPlugin = async () => {
 
 ### Benutzerdefinierte Tools
 
-Plugins können OpenCode auch benutzerdefinierte Tools hinzufügen:
+Plugins können Daemon Protocol auch benutzerdefinierte Tools hinzufügen:
 
 ```ts title=".opencode/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
@@ -299,13 +299,13 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-Der `tool`-Helfer erstellt ein benutzerdefiniertes Tool, das OpenCode aufrufen kann. Es verwendet eine Zod-Schemafunktion und gibt eine Tooldefinition zurück mit:
+Der `tool`-Helfer erstellt ein benutzerdefiniertes Tool, das Daemon Protocol aufrufen kann. Es verwendet eine Zod-Schemafunktion und gibt eine Tooldefinition zurück mit:
 
 - `description`: Was das Tool macht
 - `args`: Zod-Schema für die Argumente des Tools
 - `execute`: Funktion, die ausgeführt wird, wenn das Tool aufgerufen wird
 
-Ihre benutzerdefinierten Tools stehen neben den integrierten Tools für OpenCode zur Verfügung.
+Ihre benutzerdefinierten Tools stehen neben den integrierten Tools für Daemon Protocol zur Verfügung.
 
 ---
 

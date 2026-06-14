@@ -43,6 +43,8 @@ export type Event =
   | EventSessionNextToolProgress
   | EventSessionNextToolSuccess
   | EventSessionNextToolFailed
+  | EventSessionNextAceDecision
+  | EventSessionNextAcePressure
   | EventSessionNextRetried
   | EventSessionNextCompactionStarted
   | EventSessionNextCompactionDelta
@@ -1168,6 +1170,41 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.next.ace.decision"
+        properties: {
+          timestamp: number
+          sessionID: string
+          assistantMessageID?: string
+          callID?: string
+          target: "tool" | "spawn"
+          subject: string
+          mode: "monitor" | "fixed-cap" | "reject-escalate"
+          action: "allow" | "observe" | "block" | "escalate"
+          wouldBlock: boolean
+          reason?: string
+          policy: {
+            id?: string
+            arm?: string
+            source?: string
+            limitName?: string
+            limitValue?: number
+          }
+          pressure: SessionAcePressure
+        }
+      }
+    | {
+        id: string
+        type: "session.next.ace.pressure"
+        properties: {
+          timestamp: number
+          sessionID: string
+          mode: "monitor" | "fixed-cap" | "reject-escalate"
+          pressure: SessionAcePressure
+          lastDecisionID?: string
+        }
+      }
+    | {
+        id: string
         type: "session.next.retried"
         properties: {
           timestamp: number
@@ -1656,6 +1693,8 @@ export type GlobalEvent = {
     | SyncEventSessionNextToolProgress
     | SyncEventSessionNextToolSuccess
     | SyncEventSessionNextToolFailed
+    | SyncEventSessionNextAceDecision
+    | SyncEventSessionNextAcePressure
     | SyncEventSessionNextRetried
     | SyncEventSessionNextCompactionStarted
     | SyncEventSessionNextCompactionEnded
@@ -1702,6 +1741,7 @@ export type PermissionConfig =
       websearch?: PermissionActionConfig
       lsp?: PermissionRuleConfig
       doom_loop?: PermissionActionConfig
+      ace?: PermissionActionConfig
       skill?: PermissionRuleConfig
       [key: string]: PermissionRuleConfig | PermissionActionConfig | undefined
     }
@@ -1967,6 +2007,7 @@ export type Config = {
     compaction?: AgentConfig
     [key: string]: AgentConfig | undefined
   }
+  ace?: ConfigV1Ace
   provider?: {
     [key: string]: ProviderConfig
   }
@@ -2877,6 +2918,16 @@ export type ToolFileContent = {
   name?: string
 }
 
+export type SessionAcePressure = {
+  toolCalls: number
+  turnToolCalls: number
+  spawns: number
+  spawnDepth: number
+  activeSubagents: number
+  windowMs: number
+  kEff?: number
+}
+
 export type SessionNextRetryError = {
   message: string
   statusCode?: number
@@ -3533,6 +3584,55 @@ export type SyncEventSessionNextToolFailed = {
   }
 }
 
+export type SyncEventSessionNextAceDecision = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.ace.decision.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      assistantMessageID?: string
+      callID?: string
+      target: "tool" | "spawn"
+      subject: string
+      mode: "monitor" | "fixed-cap" | "reject-escalate"
+      action: "allow" | "observe" | "block" | "escalate"
+      wouldBlock: boolean
+      reason?: string
+      policy: {
+        id?: string
+        arm?: string
+        source?: string
+        limitName?: string
+        limitValue?: number
+      }
+      pressure: SessionAcePressure
+    }
+  }
+}
+
+export type SyncEventSessionNextAcePressure = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.ace.pressure.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      mode: "monitor" | "fixed-cap" | "reject-escalate"
+      pressure: SessionAcePressure
+      lastDecisionID?: string
+    }
+  }
+}
+
 export type SyncEventSessionNextRetried = {
   type: "sync"
   id: string
@@ -3597,6 +3697,64 @@ export type ConfigV2ReferenceLocal = {
   path: string
   description?: string
   hidden?: boolean
+}
+
+export type ConfigV1AceExperiment = {
+  name?: string
+  arm?: string
+}
+
+export type ConfigV1AceLimits = {
+  toolCallsPerSession?: number
+  toolCallsPerTurn?: number
+  spawnsPerSession?: number
+  spawnDepth?: number
+  parallelSubagents?: number
+  windowMs?: number
+}
+
+export type ConfigV1AceTrace = {
+  events?: boolean
+  logs?: boolean
+}
+
+export type ConfigV1AceHeadlessExecutionMode = {
+  type?: "one_click_autonomous" | "require_human_approval"
+  requireHumanApproval?: boolean
+  maxRetriesOnVerifyFail?: number
+  timeoutMs?: number
+}
+
+export type ConfigV1AceHeadlessToolAccessRights = {
+  filesystem?: Array<string>
+  shellExecution?: Array<string>
+  gitOperations?: Array<string>
+  forbiddenCommands?: Array<string>
+}
+
+export type ConfigV1AceHeadlessOutputConstraints = {
+  allowConversationalPreamble?: boolean
+  allowPostExecutionSummary?: boolean
+  requireSelfVerification?: boolean
+  format?: string
+}
+
+export type ConfigV1AceHeadless = {
+  executionMode?: ConfigV1AceHeadlessExecutionMode
+  toolAccessRights?: ConfigV1AceHeadlessToolAccessRights
+  outputConstraints?: ConfigV1AceHeadlessOutputConstraints
+}
+
+export type ConfigV1Ace = {
+  enabled?: boolean
+  mode?: "monitor" | "fixed-cap" | "reject-escalate" | "cap" | "reject"
+  experiment?: ConfigV1AceExperiment
+  limits?: ConfigV1AceLimits
+  trace?: ConfigV1AceTrace
+  headless?: ConfigV1AceHeadless
+  maxSteps?: number
+  maxSpawns?: number
+  message?: string
 }
 
 export type PolicyEffect = "allow" | "deny"
@@ -4687,6 +4845,43 @@ export type EventSessionNextToolFailed = {
         }
       }
     }
+  }
+}
+
+export type EventSessionNextAceDecision = {
+  id: string
+  type: "session.next.ace.decision"
+  properties: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID?: string
+    callID?: string
+    target: "tool" | "spawn"
+    subject: string
+    mode: "monitor" | "fixed-cap" | "reject-escalate"
+    action: "allow" | "observe" | "block" | "escalate"
+    wouldBlock: boolean
+    reason?: string
+    policy: {
+      id?: string
+      arm?: string
+      source?: string
+      limitName?: string
+      limitValue?: number
+    }
+    pressure: SessionAcePressure
+  }
+}
+
+export type EventSessionNextAcePressure = {
+  id: string
+  type: "session.next.ace.pressure"
+  properties: {
+    timestamp: number
+    sessionID: string
+    mode: "monitor" | "fixed-cap" | "reject-escalate"
+    pressure: SessionAcePressure
+    lastDecisionID?: string
   }
 }
 
@@ -8581,6 +8776,72 @@ export type SyncReplayResponses = {
 }
 
 export type SyncReplayResponse = SyncReplayResponses[keyof SyncReplayResponses]
+
+export type SyncAceAblationData = {
+  body?: {
+    directory: string
+    events: Array<{
+      id: string
+      aggregateID: string
+      seq: number
+      type: string
+      data: {
+        [key: string]: unknown
+      }
+    }>
+    policies?: Array<{
+      name?: string
+      arm?: string
+      ace?: ConfigV1Ace
+    }>
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/sync/ace/ablation"
+}
+
+export type SyncAceAblationErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+}
+
+export type SyncAceAblationError = SyncAceAblationErrors[keyof SyncAceAblationErrors]
+
+export type SyncAceAblationResponses = {
+  /**
+   * ACE ablation summary
+   */
+  200: {
+    directory: string
+    sourceSessionID: string
+    eventCount: number
+    arms: Array<{
+      name: string
+      arm?: string
+      mode: "monitor" | "fixed-cap" | "reject-escalate"
+      toolCalls: number
+      spawns: number
+      wouldBlock: number
+      observed: number
+      blocked: number
+      escalated: number
+      completedTools: number
+      failedTools: number
+      stepEnds: number
+      byLimit: {
+        [key: string]: number
+      }
+      firstBlockSeq?: number
+    }>
+  }
+}
+
+export type SyncAceAblationResponse = SyncAceAblationResponses[keyof SyncAceAblationResponses]
 
 export type SyncStealData = {
   body?: {

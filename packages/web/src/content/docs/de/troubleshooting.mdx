@@ -3,7 +3,7 @@ title: Fehlerbehebung
 description: Haeufige Probleme und schnelle Loesungen.
 ---
 
-Wenn OpenCode Probleme macht, starte mit Logs und lokal gespeicherten Daten auf der Festplatte.
+Wenn Daemon Protocol Probleme macht, starte mit Logs und lokal gespeicherten Daten auf der Festplatte.
 
 ---
 
@@ -39,14 +39,14 @@ Dieses Verzeichnis enthaelt:
 
 ## Desktop-App
 
-OpenCode Desktop startet im Hintergrund einen lokalen OpenCode-Server (`opencode-cli`-Sidecar).
+Daemon Protocol Desktop startet im Hintergrund einen lokalen Daemon Protocol-Server (`opencode-cli`-Sidecar).
 Viele Probleme kommen von fehlerhaften Plugins, kaputtem Cache oder falschen Server-Einstellungen.
 
 ### Schnellchecks
 
 - App komplett beenden und neu starten
 - Bei Fehlerbildschirm **Restart** klicken und Details kopieren
-- Nur macOS: `OpenCode`-Menue -> **Reload Webview** (hilft bei leerer/eingefrorener UI)
+- Nur macOS: `Daemon Protocol`-Menue -> **Reload Webview** (hilft bei leerer/eingefrorener UI)
 
 ---
 
@@ -73,7 +73,7 @@ Wenn du Plugins konfiguriert hast, deaktiviere sie voruebergehend, indem du den 
 
 #### Plugin-Verzeichnisse prüfen
 
-OpenCode kann auch lokale Plugins von der Festplatte laden. Verschiebe diese voruebergehend (oder benenne den Ordner um) und starte die Desktop-App neu:
+Daemon Protocol kann auch lokale Plugins von der Festplatte laden. Verschiebe diese voruebergehend (oder benenne den Ordner um) und starte die Desktop-App neu:
 
 - **Globale Plugins**
   - **macOS/Linux**: `~/.config/opencode/plugins/`
@@ -87,22 +87,22 @@ Wenn die App wieder funktioniert, aktiviere Plugins nacheinander, um den Verursa
 
 ### Cache leeren
 
-Wenn das Deaktivieren von Plugins nicht hilft (oder eine Plugin-Installation haengt), leere den Cache, damit OpenCode ihn neu aufbauen kann.
+Wenn das Deaktivieren von Plugins nicht hilft (oder eine Plugin-Installation haengt), leere den Cache, damit Daemon Protocol ihn neu aufbauen kann.
 
-1. Beende OpenCode Desktop komplett.
+1. Beende Daemon Protocol Desktop komplett.
 2. Loesche das Cache-Verzeichnis:
 
 - **macOS**: Finder -> `Cmd+Shift+G` -> einfuegen: `~/.cache/opencode`
 - **Linux**: loesche `~/.cache/opencode` (oder fuehre aus: `rm -rf ~/.cache/opencode`)
 - **Windows**: Druecke `WIN+R` und fuege ein: `%USERPROFILE%\.cache\opencode`
 
-3. Starte OpenCode Desktop neu.
+3. Starte Daemon Protocol Desktop neu.
 
 ---
 
 ### Server-Verbindungsprobleme beheben
 
-OpenCode Desktop kann entweder einen eigenen lokalen Server starten (Standard) oder sich mit einer konfigurierten Server-URL verbinden.
+Daemon Protocol Desktop kann entweder einen eigenen lokalen Server starten (Standard) oder sich mit einer konfigurierten Server-URL verbinden.
 
 Wenn du einen **"Connection Failed"**-Dialog siehst (oder die App beim Splash-Screen haengen bleibt), pruefe auf eine benutzerdefinierte Server-URL.
 
@@ -133,21 +133,21 @@ Unter Linux koennen manche Wayland-Setups leere Fenster oder Compositor-Fehler v
 
 ### Windows: WebView2-Laufzeit
 
-Unter Windows benoetigt OpenCode Desktop die Microsoft Edge **WebView2 Runtime**. Wenn die App ein leeres Fenster zeigt oder nicht startet, installiere/aktualisiere WebView2 und versuche es erneut.
+Unter Windows benoetigt Daemon Protocol Desktop die Microsoft Edge **WebView2 Runtime**. Wenn die App ein leeres Fenster zeigt oder nicht startet, installiere/aktualisiere WebView2 und versuche es erneut.
 
 ---
 
 ### Windows: Allgemeine Performance-Probleme
 
-Wenn du langsame Performance, Dateizugriffsprobleme oder Terminal-Probleme unter Windows hast, versuche [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL bietet eine Linux-Umgebung, die nahtloser mit OpenCode-Features funktioniert.
+Wenn du langsame Performance, Dateizugriffsprobleme oder Terminal-Probleme unter Windows hast, versuche [WSL (Windows Subsystem for Linux)](/docs/windows-wsl). WSL bietet eine Linux-Umgebung, die nahtloser mit Daemon Protocol-Features funktioniert.
 
 ---
 
 ### Benachrichtigungen werden nicht angezeigt
 
-OpenCode Desktop zeigt Systembenachrichtigungen nur wenn:
+Daemon Protocol Desktop zeigt Systembenachrichtigungen nur wenn:
 
-- Benachrichtigungen fuer OpenCode in den OS-Einstellungen aktiviert sind, und
+- Benachrichtigungen fuer Daemon Protocol in den OS-Einstellungen aktiviert sind, und
 - das App-Fenster nicht fokussiert ist.
 
 ---
@@ -156,8 +156,8 @@ OpenCode Desktop zeigt Systembenachrichtigungen nur wenn:
 
 Wenn die App nicht startet und du Einstellungen nicht in der UI loeschen kannst, setze den gespeicherten Zustand der Desktop-App zurueck.
 
-1. Beende OpenCode Desktop.
-2. Finde und loesche diese Dateien (im App-Data-Verzeichnis von OpenCode Desktop):
+1. Beende Daemon Protocol Desktop.
+2. Finde und loesche diese Dateien (im App-Data-Verzeichnis von Daemon Protocol Desktop):
 
 - `opencode.settings.dat` (desktop default server URL)
 - `opencode.global.dat` und `opencode.workspace.*.dat` (UI state like recent servers/projects)
@@ -172,7 +172,7 @@ So findest du das Verzeichnis schnell:
 
 ## Hilfe bekommen
 
-Wenn du Probleme mit OpenCode hast:
+Wenn du Probleme mit Daemon Protocol hast:
 
 1. **Probleme auf GitHub melden**
 
@@ -196,7 +196,7 @@ Hier sind typische Fehlerbilder und wie du sie loest.
 
 ---
 
-### OpenCode startet nicht
+### Daemon Protocol startet nicht
 
 1. Pruefe die Logs auf Fehlermeldungen
 2. Versuche den Start mit `--print-logs`, um Ausgaben im Terminal zu sehen

@@ -7,9 +7,9 @@ import config from "../../../../config.mjs"
 export const console = config.console
 export const email = `mailto:${config.email}`
 
-OpenCode Go, popüler açık kodlama modellerine güvenilir erişim sağlayan düşük maliyetli bir aboneliktir — **ilk ayınız için 5$**, sonrasında **aylık 10$**.
+Daemon Protocol Go, popüler açık kodlama modellerine güvenilir erişim sağlayan düşük maliyetli bir aboneliktir — **ilk ayınız için 5$**, sonrasında **aylık 10$**.
 
-Go, OpenCode'daki diğer sağlayıcılar gibi çalışır. OpenCode Go'ya abone olur ve API anahtarınızı alırsınız. Bu **tamamen isteğe bağlıdır** ve OpenCode'u kullanmak için bunu kullanmanıza gerek yoktur.
+Go, Daemon Protocol'daki diğer sağlayıcılar gibi çalışır. Daemon Protocol Go'ya abone olur ve API anahtarınızı alırsınız. Bu **tamamen isteğe bağlıdır** ve Daemon Protocol'u kullanmak için bunu kullanmanıza gerek yoktur.
 
 Dünya çapında istikrarlı erişim için ABD, AB ve Singapur'da barındırılan modellerle temel olarak uluslararası kullanıcılar için tasarlanmıştır.
 
@@ -22,7 +22,7 @@ Açık modeller gerçekten çok iyi hale geldi. Artık kodlama görevleri için 
 Ancak, bu modellere güvenilir, düşük gecikmeli erişim sağlamak zor olabilir. Sağlayıcılar kalite ve erişilebilirlik açısından farklılık gösterir.
 
 :::tip
-OpenCode ile iyi çalışan seçili bir model ve sağlayıcı grubunu test ettik.
+Daemon Protocol ile iyi çalışan seçili bir model ve sağlayıcı grubunu test ettik.
 :::
 
 Bunu çözmek için birkaç şey yaptık:
@@ -31,20 +31,20 @@ Bunu çözmek için birkaç şey yaptık:
 2. Ardından, bunların doğru şekilde sunulduğundan emin olmak için birkaç sağlayıcıyla birlikte çalıştık.
 3. Son olarak, model/sağlayıcı kombinasyonunu kıyasladık (benchmark) ve gönül rahatlığıyla önerebileceğimiz bir liste oluşturduk.
 
-OpenCode Go, bu modellere **ilk ayınız için 5$**, ardından **aylık 10$** karşılığında erişmenizi sağlar.
+Daemon Protocol Go, bu modellere **ilk ayınız için 5$**, ardından **aylık 10$** karşılığında erişmenizi sağlar.
 
 ---
 
 ## Nasıl çalışır?
 
-OpenCode Go, OpenCode'daki diğer sağlayıcılar gibi çalışır.
+Daemon Protocol Go, Daemon Protocol'daki diğer sağlayıcılar gibi çalışır.
 
-1. **<a href={console}>OpenCode Zen</a>**'e giriş yapın, Go'ya abone olun ve API anahtarınızı kopyalayın.
-2. TUI'de `/connect` komutunu çalıştırın, `OpenCode Go`yu seçin ve API anahtarınızı yapıştırın.
+1. **<a href={console}>Daemon Zen</a>**'e giriş yapın, Go'ya abone olun ve API anahtarınızı kopyalayın.
+2. TUI'de `/connect` komutunu çalıştırın, `Daemon Protocol Go`yu seçin ve API anahtarınızı yapıştırın.
 3. Go üzerinden kullanabileceğiniz modellerin listesini görmek için TUI'de `/models` komutunu çalıştırın.
 
 :::note
-Her çalışma alanından yalnızca bir üye OpenCode Go'ya abone olabilir.
+Her çalışma alanından yalnızca bir üye Daemon Protocol Go'ya abone olabilir.
 :::
 
 Mevcut model listesi şunları içerir:
@@ -69,7 +69,7 @@ Test edip yenilerini ekledikçe model listesi değişebilir.
 
 ## Kullanım limitleri
 
-OpenCode Go aşağıdaki limitleri içerir:
+Daemon Protocol Go aşağıdaki limitleri içerir:
 
 - **5 saatlik limit** — 12$ kullanım
 - **Haftalık limit** — 30$ kullanım
@@ -167,7 +167,7 @@ Go modellerine aşağıdaki API uç noktaları aracılığıyla da erişebilirsi
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
-OpenCode yapılandırmanızdaki [model id](/docs/config/#models) formatı `opencode-go/<model-id>` şeklindedir. Örneğin, Kimi K2.7 Code için yapılandırmanızda `opencode-go/kimi-k2.7-code` kullanmalısınız.
+Daemon Protocol yapılandırmanızdaki [model id](/docs/config/#models) formatı `opencode-go/<model-id>` şeklindedir. Örneğin, Kimi K2.7 Code için yapılandırmanızda `opencode-go/kimi-k2.7-code` kullanmalısınız.
 
 ---
 
@@ -189,9 +189,9 @@ Plan, öncelikle uluslararası kullanıcılar için tasarlanmıştır; dünya ge
 
 ## Hedefler
 
-OpenCode Go'yu şu amaçlarla oluşturduk:
+Daemon Protocol Go'yu şu amaçlarla oluşturduk:
 
 1. Düşük maliyetli bir abonelik ile yapay zeka destekli kodlamayı daha fazla kişi için **erişilebilir** kılmak.
 2. En iyi açık kodlama modellerine **güvenilir** erişim sağlamak.
 3. Kodlama aracısı (agent) kullanımı için **test edilmiş ve kıyaslanmış** modelleri bir araya getirmek.
-4. OpenCode ile diğer sağlayıcıları da kullanmanıza olanak tanıyarak **kilitlenme (vendor lock-in) olmamasını** sağlamak.
+4. Daemon Protocol ile diğer sağlayıcıları da kullanmanıza olanak tanıyarak **kilitlenme (vendor lock-in) olmamasını** sağlamak.

@@ -1,15 +1,15 @@
 ---
 title: Introducción
-description: Comience a usar OpenCode.
+description: Comience a usar Daemon Protocol.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**OpenCode**](/) es un agente de codigo de IA de código abierto. Está disponible como interfaz basada en terminal, aplicación de escritorio o extensión IDE.
+[**Daemon Protocol**](/) es un agente de codigo de IA de código abierto. Está disponible como interfaz basada en terminal, aplicación de escritorio o extensión IDE.
 
-![OpenCode TUI con el tema opencode](../../../assets/lander/screenshot.png)
+![Daemon Protocol TUI con el tema opencode](../../../assets/lander/screenshot.png)
 
 Comencemos.
 
@@ -17,7 +17,7 @@ Comencemos.
 
 #### Requisitos previos
 
-Para usar OpenCode en la terminal, necesitará:
+Para usar Daemon Protocol en la terminal, necesitará:
 
 1. Un emulador de terminal moderno como:
    - [WezTerm](https://wezterm.org), multiplataforma
@@ -31,7 +31,7 @@ Para usar OpenCode en la terminal, necesitará:
 
 ## Instalar
 
-La forma más sencilla de instalar OpenCode es mediante el script de instalación.
+La forma más sencilla de instalar Daemon Protocol es mediante el script de instalación.
 
 ```bash
 curl -fsSL https://opencode.ai/install | bash
@@ -79,7 +79,7 @@ También puedes instalarlo con alguno de los siguientes métodos:
   brew install anomalyco/tap/opencode
   ```
 
-  > Recomendamos utilizar el tap OpenCode para las versiones más actualizadas. La fórmula oficial `brew install opencode` la mantiene el equipo Homebrew y se actualiza con menos frecuencia.
+  > Recomendamos utilizar el tap Daemon Protocol para las versiones más actualizadas. La fórmula oficial `brew install opencode` la mantiene el equipo Homebrew y se actualiza con menos frecuencia.
 
 - **Usando Paru en Arch Linux**
 
@@ -91,7 +91,7 @@ También puedes instalarlo con alguno de los siguientes métodos:
 #### Windows
 
 :::tip[Recomendado: Usar WSL]
-Para obtener la mejor experiencia en Windows, recomendamos utilizar [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). Ofrece mejor rendimiento y compatibilidad total con las funciones de OpenCode.
+Para obtener la mejor experiencia en Windows, recomendamos utilizar [Windows Subsystem for Linux (WSL)](/docs/windows-wsl). Ofrece mejor rendimiento y compatibilidad total con las funciones de Daemon Protocol.
 :::
 
 - **Usando Chocolatey**
@@ -124,7 +124,7 @@ Para obtener la mejor experiencia en Windows, recomendamos utilizar [Windows Sub
   docker run -it --rm ghcr.io/anomalyco/opencode
   ```
 
-El soporte para instalar OpenCode en Windows usando Bun todavía está en desarrollo.
+El soporte para instalar Daemon Protocol en Windows usando Bun todavía está en desarrollo.
 
 También puede obtener el binario desde [Versiones](https://github.com/anomalyco/opencode/releases).
 
@@ -132,10 +132,10 @@ También puede obtener el binario desde [Versiones](https://github.com/anomalyco
 
 ## Configuración
 
-Con OpenCode, puede usar cualquier proveedor de LLM configurando sus claves de API.
+Con Daemon Protocol, puede usar cualquier proveedor de LLM configurando sus claves de API.
 
-Si es nuevo en el uso de proveedores de LLM, le recomendamos usar [OpenCode Zen](/docs/zen).
-Es una selección de modelos probados y verificados por el equipo de OpenCode.
+Si es nuevo en el uso de proveedores de LLM, le recomendamos usar [Daemon Zen](/docs/zen).
+Es una selección de modelos probados y verificados por el equipo de Daemon Protocol.
 
 1. Ejecute el comando `/connect` en la TUI, seleccione opencode y diríjase a [opencode.ai/auth](https://opencode.ai/auth).
 
@@ -166,31 +166,31 @@ Ahora que ya configuró un proveedor, vaya al proyecto en el que quiera trabajar
 cd /path/to/project
 ```
 
-Luego, ejecute OpenCode.
+Luego, ejecute Daemon Protocol.
 
 ```bash
 opencode
 ```
 
-A continuación, inicialice OpenCode para el proyecto con el siguiente comando:
+A continuación, inicialice Daemon Protocol para el proyecto con el siguiente comando:
 
 ```bash frame="none"
 /init
 ```
 
-OpenCode analizará su proyecto y creará un archivo AGENTS.md en la raíz.
+Daemon Protocol analizará su proyecto y creará un archivo AGENTS.md en la raíz.
 
 :::tip
 Asegúrese de versionar en Git el archivo AGENTS.md de su proyecto.
 :::
 
-Esto ayuda a OpenCode a comprender la estructura del proyecto y los patrones de código que se usan en él.
+Esto ayuda a Daemon Protocol a comprender la estructura del proyecto y los patrones de código que se usan en él.
 
 ---
 
 ## Usar
 
-Ahora ya está listo para usar OpenCode en su proyecto. Puede pedirle desde explicaciones del código hasta cambios concretos.
+Ahora ya está listo para usar Daemon Protocol en su proyecto. Puede pedirle desde explicaciones del código hasta cambios concretos.
 
 Si es la primera vez que usa un agente de codigo con IA, estos ejemplos pueden servirle como punto de partida.
 
@@ -198,7 +198,7 @@ Si es la primera vez que usa un agente de codigo con IA, estos ejemplos pueden s
 
 ### Hacer preguntas
 
-Puede pedirle a OpenCode que le explique el código base.
+Puede pedirle a Daemon Protocol que le explique el código base.
 
 :::tip
 Utilice la tecla `@` para realizar una búsqueda aproximada de archivos dentro del proyecto.
@@ -214,11 +214,11 @@ Esto resulta útil cuando hay una parte del código base en la que usted no ha t
 
 ### Agregar funcionalidades
 
-Puede pedirle a OpenCode que agregue nuevas funcionalidades a su proyecto. Aun así, primero recomendamos pedirle que cree un plan.
+Puede pedirle a Daemon Protocol que agregue nuevas funcionalidades a su proyecto. Aun así, primero recomendamos pedirle que cree un plan.
 
 1. **Crear un plan**
 
-   OpenCode tiene un modo Plan que desactiva temporalmente su capacidad de hacer cambios y, en su lugar, propone _cómo_ implementará la funcionalidad.
+   Daemon Protocol tiene un modo Plan que desactiva temporalmente su capacidad de hacer cambios y, en su lugar, propone _cómo_ implementará la funcionalidad.
 
    Cambie a este modo con la tecla **Tab.** Verá un indicador en la esquina inferior derecha.
 
@@ -234,15 +234,15 @@ Puede pedirle a OpenCode que agregue nuevas funcionalidades a su proyecto. Aun a
    Desde esa pantalla, el usuario podrá restaurar una nota o eliminarla de forma permanente.
    ```
 
-   Procure darle a OpenCode suficiente contexto para que entienda exactamente lo que necesita. Ayuda hablarle como si estuviera hablando con un desarrollador junior de su equipo.
+   Procure darle a Daemon Protocol suficiente contexto para que entienda exactamente lo que necesita. Ayuda hablarle como si estuviera hablando con un desarrollador junior de su equipo.
 
    :::tip
-   Déle a OpenCode todo el contexto y los ejemplos que pueda para ayudarle a comprender lo que desea.
+   Déle a Daemon Protocol todo el contexto y los ejemplos que pueda para ayudarle a comprender lo que desea.
    :::
 
 2. **Iterar sobre el plan**
 
-   Una vez que OpenCode le proponga un plan, puede darle comentarios o agregar más detalles.
+   Una vez que Daemon Protocol le proponga un plan, puede darle comentarios o agregar más detalles.
 
    ```txt frame="none"
    Queremos diseñar esta nueva pantalla usando un diseño que ya hemos usado antes.
@@ -253,7 +253,7 @@ Puede pedirle a OpenCode que agregue nuevas funcionalidades a su proyecto. Aun a
    Arrastre y suelte imágenes en la terminal para agregarlas al mensaje.
    :::
 
-   OpenCode puede analizar cualquier imagen que usted le proporcione y añadirla al contexto del mensaje. Puede hacerlo arrastrando y soltando una imagen en la terminal.
+   Daemon Protocol puede analizar cualquier imagen que usted le proporcione y añadirla al contexto del mensaje. Puede hacerlo arrastrando y soltando una imagen en la terminal.
 
 3. **Implementar la funcionalidad**
 
@@ -273,7 +273,7 @@ Puede pedirle a OpenCode que agregue nuevas funcionalidades a su proyecto. Aun a
 
 ### Realizar cambios
 
-Para cambios más sencillos, puede pedirle a OpenCode que los implemente directamente, sin revisar antes un plan.
+Para cambios más sencillos, puede pedirle a Daemon Protocol que los implemente directamente, sin revisar antes un plan.
 
 ```txt frame="none" "@packages/functions/src/settings.ts" "@packages/functions/src/notes.ts"
 Necesitamos agregar autenticación a la ruta /settings. Revise cómo se maneja esto
@@ -281,13 +281,13 @@ en la ruta /notes en @packages/functions/src/notes.ts e implemente
 la misma lógica en @packages/functions/src/settings.ts.
 ```
 
-Procure dar suficientes detalles para que OpenCode pueda tomar las decisiones correctas al hacer los cambios
+Procure dar suficientes detalles para que Daemon Protocol pueda tomar las decisiones correctas al hacer los cambios
 
 ---
 
 ### Deshacer cambios
 
-Supongamos que le pide a OpenCode que haga algunos cambios.
+Supongamos que le pide a Daemon Protocol que haga algunos cambios.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 ¿Puede refactorizar la función en @packages/functions/src/api/index.ts?
@@ -299,13 +299,13 @@ Pero luego se da cuenta de que no era lo que quería. Puede **deshacer** los cam
 /undo
 ```
 
-OpenCode revertirá los cambios que hizo y volverá a mostrar su mensaje original.
+Daemon Protocol revertirá los cambios que hizo y volverá a mostrar su mensaje original.
 
 ```txt frame="none" "@packages/functions/src/api/index.ts"
 ¿Puede refactorizar la función en @packages/functions/src/api/index.ts?
 ```
 
-Desde ahí, puede modificar el mensaje y pedirle a OpenCode que lo intente de nuevo.
+Desde ahí, puede modificar el mensaje y pedirle a Daemon Protocol que lo intente de nuevo.
 
 :::tip
 Puede ejecutar `/undo` varias veces para deshacer varios cambios.
@@ -321,7 +321,7 @@ También puede rehacer los cambios usando el comando `/redo.`
 
 ## Compartir
 
-Las conversaciones que tenga con OpenCode pueden [compartirse con su
+Las conversaciones que tenga con Daemon Protocol pueden [compartirse con su
 equipo](/docs/share).
 
 ```bash frame="none"
@@ -334,12 +334,12 @@ Esto creará un enlace a la conversación actual y lo copiará en su portapapele
 Las conversaciones no se comparten de forma predeterminada.
 :::
 
-Aquí tiene una [conversación de ejemplo](https://opencode.ai/s/4XP1fce5) con OpenCode.
+Aquí tiene una [conversación de ejemplo](https://opencode.ai/s/4XP1fce5) con Daemon Protocol.
 
 ---
 
 ## Personalizar
 
-Y eso es todo. Ya conoce lo básico para empezar a usar OpenCode.
+Y eso es todo. Ya conoce lo básico para empezar a usar Daemon Protocol.
 
-Para personalizarlo, recomendamos [elegir un tema](/docs/themes), [personalizar las combinaciones de teclas](/docs/keybinds), [configurar formateadores de código](/docs/formatters), [crear comandos personalizados](/docs/commands) o explorar la [configuración OpenCode](/docs/config).
+Para personalizarlo, recomendamos [elegir un tema](/docs/themes), [personalizar las combinaciones de teclas](/docs/keybinds), [configurar formateadores de código](/docs/formatters), [crear comandos personalizados](/docs/commands) o explorar la [configuración Daemon Protocol](/docs/config).

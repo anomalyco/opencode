@@ -3,7 +3,7 @@ title: Strumenti
 description: Gestisci gli strumenti che un LLM puo' usare.
 ---
 
-Gli strumenti permettono all'LLM di eseguire azioni nel tuo codebase. OpenCode include un set di strumenti integrati, ma puoi estenderlo con [strumenti personalizzati](/docs/custom-tools) o con [server MCP](/docs/mcp-servers).
+Gli strumenti permettono all'LLM di eseguire azioni nel tuo codebase. Daemon Protocol include un set di strumenti integrati, ma puoi estenderlo con [strumenti personalizzati](/docs/custom-tools) o con [server MCP](/docs/mcp-servers).
 
 Di default, tutti gli strumenti sono **abilitati** e non richiedono permessi per essere eseguiti. Puoi controllare il comportamento degli strumenti tramite i [permessi](/docs/permissions).
 
@@ -41,7 +41,7 @@ Puoi anche usare wildcard per controllare piu' strumenti insieme. Per esempio, p
 
 ## Integrati
 
-Ecco tutti gli strumenti integrati disponibili in OpenCode.
+Ecco tutti gli strumenti integrati disponibili in Daemon Protocol.
 
 ---
 
@@ -253,9 +253,9 @@ Permette all'LLM di recuperare e leggere pagine web. Utile per consultare docume
 Cerca informazioni sul web.
 
 :::note
-Questo strumento e' disponibile solo quando usi il provider OpenCode o quando la variabile d'ambiente `OPENCODE_ENABLE_EXA` e' impostata a un valore truthy (ad esempio `true` o `1`).
+Questo strumento e' disponibile solo quando usi il provider Daemon Protocol o quando la variabile d'ambiente `OPENCODE_ENABLE_EXA` e' impostata a un valore truthy (ad esempio `true` o `1`).
 
-Per abilitarlo all'avvio di OpenCode:
+Per abilitarlo all'avvio di Daemon Protocol:
 
 ```bash
 OPENCODE_ENABLE_EXA=1 opencode

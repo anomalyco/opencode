@@ -49,7 +49,7 @@ jobs:
           opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
           opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
-      - name: Install OpenCode
+      - name: Install Daemon Protocol
         if: inputs.bump || inputs.version
         run: bun i -g opencode-ai
 

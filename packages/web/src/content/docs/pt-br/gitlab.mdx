@@ -35,7 +35,7 @@ Aqui estamos usando um componente CI/CD criado pela comunidade para opencode —
      - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # O nome da variável para seu JSON de autenticação do OpenCode
+         auth_json: $OPENCODE_AUTH_JSON # O nome da variável para seu JSON de autenticação do Daemon Protocol
          command: optional-custom-command
          message: "Seu prompt aqui"
    ```
@@ -91,7 +91,7 @@ Consulte a [**documentação do GitLab**](https://docs.gitlab.com/user/duo_agent
       - apt-get install --yes glab
       - echo "Configurando glab"
       - echo $GITLAB_HOST
-      - echo "Criando configuração de auth do OpenCode"
+      - echo "Criando configuração de auth do Daemon Protocol"
       - mkdir --parents ~/.local/share/opencode
       - |
         cat > ~/.local/share/opencode/auth.json << EOF
@@ -104,10 +104,10 @@ Consulte a [**documentação do GitLab**](https://docs.gitlab.com/user/duo_agent
         EOF
       - echo "Configurando git"
       - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.name "Daemon Protocol"
       - echo "Testando glab"
       - glab issue list
-      - echo "Executando OpenCode"
+      - echo "Executando Daemon Protocol"
       - |
         opencode run "
         Você é um assistente de IA ajudando com operações do GitLab.

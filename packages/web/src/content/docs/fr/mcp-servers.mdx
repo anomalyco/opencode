@@ -3,7 +3,7 @@ title: Serveurs MCP
 description: Ajoutez des outils MCP locaux et distants.
 ---
 
-Vous pouvez ajouter des outils externes à OpenCode à l'aide du _Model Context Protocol_ ou MCP. OpenCode prend en charge les serveurs locaux et distants.
+Vous pouvez ajouter des outils externes à Daemon Protocol à l'aide du _Model Context Protocol_ ou MCP. Daemon Protocol prend en charge les serveurs locaux et distants.
 
 Une fois ajoutés, les outils MCP sont automatiquement disponibles pour le LLM aux côtés des outils intégrés.
 
@@ -23,7 +23,7 @@ Certains serveurs MCP, comme le serveur GitHub MCP, ont tendance à ajouter beau
 
 ## Activation
 
-Vous pouvez définir des serveurs MCP dans votre [OpenCode Config](https://opencode.ai/docs/config/) sous `mcp`. Ajoutez chaque MCP avec un nom unique. Vous pouvez faire référence à ce MCP par son nom lorsque vous demandez le LLM.
+Vous pouvez définir des serveurs MCP dans votre [Daemon Protocol Config](https://opencode.ai/docs/config/) sous `mcp`. Ajoutez chaque MCP avec un nom unique. Vous pouvez faire référence à ce MCP par son nom lorsque vous demandez le LLM.
 
 ```jsonc title="opencode.jsonc" {6}
 {
@@ -165,7 +165,7 @@ Le champ `url` est l'URL du serveur MCP distant et l'option `headers` vous perme
 
 ## OAuth
 
-OpenCode gère automatiquement l'authentification OAuth pour les serveurs MCP distants. Lorsqu'un serveur nécessite une authentification, OpenCode :
+Daemon Protocol gère automatiquement l'authentification OAuth pour les serveurs MCP distants. Lorsqu'un serveur nécessite une authentification, Daemon Protocol :
 
 1. Détecte la réponse 401 et lance le flux OAuth
 2. Utilise **Enregistrement client dynamique (RFC 7591)** s'il est pris en charge par le serveur.
@@ -189,7 +189,7 @@ Pour la plupart des serveurs MCP compatibles OAuth, aucune configuration particu
 }
 ```
 
-Si le serveur nécessite une authentification, OpenCode vous demandera de vous authentifier lorsque vous essayez de l'utiliser pour la première fois. Sinon, vous pouvez [déclencher manuellement le flux](#authenticating) avec `opencode mcp auth <server-name>`.
+Si le serveur nécessite une authentification, Daemon Protocol vous demandera de vous authentifier lorsque vous essayez de l'utiliser pour la première fois. Sinon, vous pouvez [déclencher manuellement le flux](#authenticating) avec `opencode mcp auth <server-name>`.
 
 ---
 
@@ -238,7 +238,7 @@ Supprimez les informations d'identification stockées :
 opencode mcp logout my-oauth-server
 ```
 
-La commande `mcp auth` ouvrira votre navigateur pour autorisation. Après votre autorisation, OpenCode stockera les jetons en toute sécurité dans `~/.local/share/opencode/mcp-auth.json`.
+La commande `mcp auth` ouvrira votre navigateur pour autorisation. Après votre autorisation, Daemon Protocol stockera les jetons en toute sécurité dans `~/.local/share/opencode/mcp-auth.json`.
 
 ---
 
@@ -291,7 +291,7 @@ La commande `mcp debug` affiche l'état d'authentification actuel, teste la conn
 
 ## Gestion
 
-Vos MCP sont disponibles sous forme d'outils dans OpenCode, aux côtés des outils intégrés. Vous pouvez donc les gérer via la configuration OpenCode comme n'importe quel autre outil.
+Vos MCP sont disponibles sous forme d'outils dans Daemon Protocol, aux côtés des outils intégrés. Vous pouvez donc les gérer via la configuration Daemon Protocol comme n'importe quel autre outil.
 
 ---
 
@@ -423,7 +423,7 @@ Après avoir ajouté la configuration, authentifiez-vous auprès de Sentry :
 opencode mcp auth sentry
 ```
 
-Cela ouvrira une fenêtre de navigateur pour terminer le flux OAuth et connecter OpenCode à votre compte Sentry.
+Cela ouvrira une fenêtre de navigateur pour terminer le flux OAuth et connecter Daemon Protocol à votre compte Sentry.
 
 Une fois authentifié, vous pouvez utiliser les outils Sentry dans vos prompts pour interroger les problèmes, les projets et les données d'erreur.
 

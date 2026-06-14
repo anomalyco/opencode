@@ -1,17 +1,17 @@
 ---
 title: المزوّدون
-description: استخدام أي موفّر LLM في OpenCode.
+description: استخدام أي موفّر LLM في Daemon Protocol.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-يستخدم OpenCode ‏[AI SDK](https://ai-sdk.dev/) و[Models.dev](https://models.dev) لدعم **أكثر من 75 موفّر LLM**، كما يدعم تشغيل النماذج المحلية.
+يستخدم Daemon Protocol ‏[AI SDK](https://ai-sdk.dev/) و[Models.dev](https://models.dev) لدعم **أكثر من 75 موفّر LLM**، كما يدعم تشغيل النماذج المحلية.
 
 لإضافة مزوّد تحتاج إلى:
 
 1. أضف مفاتيح API الخاصة بالمزوّد باستخدام الأمر `/connect`.
-2. اضبط المزوّد في ملف إعدادات OpenCode.
+2. اضبط المزوّد في ملف إعدادات Daemon Protocol.
 
 ---
 
@@ -24,7 +24,7 @@ export const console = config.console
 
 ### الإعدادات
 
-يمكنك تخصيص المزوّدات عبر قسم `provider` في ملف إعدادات OpenCode.
+يمكنك تخصيص المزوّدات عبر قسم `provider` في ملف إعدادات Daemon Protocol.
 
 ---
 
@@ -47,13 +47,13 @@ export const console = config.console
 
 ---
 
-## OpenCode Zen
+## Daemon Zen
 
-OpenCode Zen هي قائمة نماذج يوفّرها فريق OpenCode وقد تم
-اختبارها والتحقق من أنها تعمل بشكل جيد مع OpenCode. [اعرف المزيد](/docs/zen).
+Daemon Zen هي قائمة نماذج يوفّرها فريق Daemon Protocol وقد تم
+اختبارها والتحقق من أنها تعمل بشكل جيد مع Daemon Protocol. [اعرف المزيد](/docs/zen).
 
 :::tip
-إذا كنت جديدا، فننصح بالبدء مع OpenCode Zen.
+إذا كنت جديدا، فننصح بالبدء مع Daemon Zen.
 :::
 
 1. شغّل الأمر `/connect` في TUI، واختر opencode، ثم انتقل إلى [opencode.ai/auth](https://opencode.ai/auth).
@@ -79,15 +79,15 @@ OpenCode Zen هي قائمة نماذج يوفّرها فريق OpenCode وقد 
    /models
    ```
 
-يعمل مثل أي مزوّد آخر في OpenCode واستخدامه اختياري بالكامل.
+يعمل مثل أي مزوّد آخر في Daemon Protocol واستخدامه اختياري بالكامل.
 
 ---
 
-## OpenCode Go
+## Daemon Protocol Go
 
-OpenCode Go هي خطة اشتراك منخفضة التكلفة توفّر وصولا موثوقا إلى نماذج البرمجة المفتوحة الشهيرة المقدّمة من فريق OpenCode، والتي تم اختبارها والتحقق من أنها تعمل بشكل جيد مع OpenCode.
+Daemon Protocol Go هي خطة اشتراك منخفضة التكلفة توفّر وصولا موثوقا إلى نماذج البرمجة المفتوحة الشهيرة المقدّمة من فريق Daemon Protocol، والتي تم اختبارها والتحقق من أنها تعمل بشكل جيد مع Daemon Protocol.
 
-1. شغّل الأمر `/connect` في TUI، واختر `OpenCode Go`، ثم انتقل إلى [opencode.ai/auth](https://opencode.ai/zen).
+1. شغّل الأمر `/connect` في TUI، واختر `Daemon Protocol Go`، ثم انتقل إلى [opencode.ai/auth](https://opencode.ai/zen).
 
    ```txt
    /connect
@@ -110,7 +110,7 @@ OpenCode Go هي خطة اشتراك منخفضة التكلفة توفّر وص
    /models
    ```
 
-يعمل مثل أي مزوّد آخر في OpenCode واستخدامه اختياري بالكامل.
+يعمل مثل أي مزوّد آخر في Daemon Protocol واستخدامه اختياري بالكامل.
 
 ---
 
@@ -154,7 +154,7 @@ OpenCode Go هي خطة اشتراك منخفضة التكلفة توفّر وص
 
 ### Amazon Bedrock
 
-لاستخدام Amazon Bedrock مع OpenCode:
+لاستخدام Amazon Bedrock مع Daemon Protocol:
 
 1. توجّه إلى **Model catalog** في Amazon Bedrock console واطلب
    الوصول إلى النماذج التي تريدها.
@@ -308,7 +308,7 @@ OpenCode Go هي خطة اشتراك منخفضة التكلفة توفّر وص
    ```
 
 :::info
-استخدام اشتراك Claude Pro/Max داخل OpenCode غير مدعوم رسميا من [Anthropic](https://anthropic.com).
+استخدام اشتراك Claude Pro/Max داخل Daemon Protocol غير مدعوم رسميا من [Anthropic](https://anthropic.com).
 :::
 
 ##### استخدام مفاتيح API
@@ -728,7 +728,7 @@ OpenCode Go هي خطة اشتراك منخفضة التكلفة توفّر وص
 
    #### استخدام Personal Access Token 1. اذهب إلى [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. انقر **Add new token**
-   3. Name: `OpenCode`، Scopes: `api`
+   3. Name: `Daemon Protocol`، Scopes: `api`
    4. انسخ الرمز (يبدأ بـ `glpat-`)
    5. أدخله في terminal
 
@@ -751,8 +751,8 @@ OpenCode Go هي خطة اشتراك منخفضة التكلفة توفّر وص
 ##### GitLab مستضاف ذاتيا
 
 :::note[ملاحظة امتثال]
-يستخدم OpenCode نموذجا صغيرا لبعض مهام الذكاء الاصطناعي مثل إنشاء عنوان الجلسة.
-تم ضبطه لاستخدام gpt-5-nano افتراضيا، مستضافا عبر Zen. لحصر OpenCode
+يستخدم Daemon Protocol نموذجا صغيرا لبعض مهام الذكاء الاصطناعي مثل إنشاء عنوان الجلسة.
+تم ضبطه لاستخدام gpt-5-nano افتراضيا، مستضافا عبر Zen. لحصر Daemon Protocol
 على استخدام مثيل GitLab المستضاف لديك فقط، أضف ما يلي إلى ملف
 `opencode.json` لديك. يوصى أيضا بتعطيل مشاركة الجلسات.
 
@@ -884,7 +884,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ### Google Vertex AI
 
-لاستخدام Google Vertex AI مع OpenCode:
+لاستخدام Google Vertex AI مع Daemon Protocol:
 
 1. توجّه إلى **Model Garden** في Google Cloud Console وتحقق من
    النماذج المتاحة في منطقتك.
@@ -1066,7 +1066,7 @@ export GITLAB_OAUTH_CLIENT_ID=your_application_id_here
 
 ##### تتبع الجلسات
 
-تتيح ميزة [Sessions](https://docs.helicone.ai/features/sessions) في Helicone تجميع طلبات LLM المرتبطة معا. استخدم ملحق [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) لتسجيل كل محادثة OpenCode تلقائيا كجلسة في Helicone.
+تتيح ميزة [Sessions](https://docs.helicone.ai/features/sessions) في Helicone تجميع طلبات LLM المرتبطة معا. استخدم ملحق [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) لتسجيل كل محادثة Daemon Protocol تلقائيا كجلسة في Helicone.
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1080,7 +1080,7 @@ npm install -g opencode-helicone-session
 }
 ```
 
-يقوم الملحق بحقن ترويسات `Helicone-Session-Id` و`Helicone-Session-Name` ضمن طلباتك. في صفحة Sessions داخل Helicone، سترى كل محادثة OpenCode مدرجة كجلسة مستقلة.
+يقوم الملحق بحقن ترويسات `Helicone-Session-Id` و`Helicone-Session-Name` ضمن طلباتك. في صفحة Sessions داخل Helicone، سترى كل محادثة Daemon Protocol مدرجة كجلسة مستقلة.
 
 ##### ترويسات Helicone الشائعة
 
@@ -1284,7 +1284,7 @@ npm install -g opencode-helicone-session
 يمكنك ضبط opencode لاستخدام نماذج محلية عبر Ollama.
 
 :::tip
-يمكن لـ Ollama ضبط نفسه تلقائيا للعمل مع OpenCode. راجع [توثيق تكامل Ollama](https://docs.ollama.com/integrations/opencode) للتفاصيل.
+يمكن لـ Ollama ضبط نفسه تلقائيا للعمل مع Daemon Protocol. راجع [توثيق تكامل Ollama](https://docs.ollama.com/integrations/opencode) للتفاصيل.
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1323,13 +1323,13 @@ npm install -g opencode-helicone-session
 
 ### Ollama Cloud
 
-لاستخدام Ollama Cloud مع OpenCode:
+لاستخدام Ollama Cloud مع Daemon Protocol:
 
 1. توجّه إلى [https://ollama.com/](https://ollama.com/) وسجّل الدخول أو أنشئ حسابا.
 
 2. انتقل إلى **Settings** > **Keys** وانقر **Add API Key** لإنشاء مفتاح API جديد.
 
-3. انسخ مفتاح API لاستخدامه في OpenCode.
+3. انسخ مفتاح API لاستخدامه في Daemon Protocol.
 
 4. شغّل الأمر `/connect` وابحث عن **Ollama Cloud**.
 
@@ -1346,7 +1346,7 @@ npm install -g opencode-helicone-session
    └ enter
    ```
 
-6. **مهم**: قبل استخدام نماذج السحابة في OpenCode، يجب سحب معلومات النموذج محليا:
+6. **مهم**: قبل استخدام نماذج السحابة في Daemon Protocol، يجب سحب معلومات النموذج محليا:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1393,19 +1393,19 @@ npm install -g opencode-helicone-session
 
 ---
 
-### OpenCode Zen
+### Daemon Zen
 
-OpenCode Zen هي قائمة من النماذج التي تم اختبارها والتحقق منها مقدّمة من فريق OpenCode. [اعرف المزيد](/docs/zen).
+Daemon Zen هي قائمة من النماذج التي تم اختبارها والتحقق منها مقدّمة من فريق Daemon Protocol. [اعرف المزيد](/docs/zen).
 
-1. سجّل الدخول إلى **<a href={console}>OpenCode Zen</a>** وانقر **Create API Key**.
+1. سجّل الدخول إلى **<a href={console}>Daemon Zen</a>** وانقر **Create API Key**.
 
-2. شغّل الأمر `/connect` وابحث عن **OpenCode Zen**.
+2. شغّل الأمر `/connect` وابحث عن **Daemon Zen**.
 
    ```txt
    /connect
    ```
 
-3. أدخل مفتاح API الخاص بـ OpenCode.
+3. أدخل مفتاح API الخاص بـ Daemon Protocol.
 
    ```txt
    ┌ API key
@@ -1964,7 +1964,7 @@ OpenCode Zen هي قائمة من النماذج التي تم اختبارها 
 - **limit.context**: الحد الأقصى لرموز الإدخال التي يقبلها النموذج.
 - **limit.output**: الحد الأقصى للرموز التي يمكن للنموذج توليدها.
 
-تسمح حقول `limit` لـ OpenCode بفهم مقدار السياق المتبقي لديك. تسحب المزوّدات القياسية هذه القيم تلقائيا من models.dev.
+تسمح حقول `limit` لـ Daemon Protocol بفهم مقدار السياق المتبقي لديك. تسحب المزوّدات القياسية هذه القيم تلقائيا من models.dev.
 
 ---
 

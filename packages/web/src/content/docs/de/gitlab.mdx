@@ -1,33 +1,33 @@
 ---
 title: GitLab
-description: Verwenden Sie OpenCode in GitLab-Issues und Merge Requests.
+description: Verwenden Sie Daemon Protocol in GitLab-Issues und Merge Requests.
 ---
 
-OpenCode lässt sich über Ihre GitLab CI/CD-Pipeline oder mit GitLab Duo in Ihren GitLab-Workflow integrieren.
+Daemon Protocol lässt sich über Ihre GitLab CI/CD-Pipeline oder mit GitLab Duo in Ihren GitLab-Workflow integrieren.
 
-In beiden Fällen läuft OpenCode auf Ihren GitLab Runners.
+In beiden Fällen läuft Daemon Protocol auf Ihren GitLab Runners.
 
 ---
 
 ## GitLab CI
 
-OpenCode funktioniert in einer regulären GitLab-Pipeline. Sie können es als [CI component](https://docs.gitlab.com/ee/ci/components/) in eine Pipeline einbauen.
+Daemon Protocol funktioniert in einer regulären GitLab-Pipeline. Sie können es als [CI component](https://docs.gitlab.com/ee/ci/components/) in eine Pipeline einbauen.
 
-Hier verwenden wir eine von der Community erstellte CI/CD-Komponente für OpenCode – [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
+Hier verwenden wir eine von der Community erstellte CI/CD-Komponente für Daemon Protocol – [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode).
 
 ---
 
 ### Funktionen
 
-- **Benutzerdefinierte Konfiguration pro Job verwenden**: Konfigurieren Sie OpenCode mit einem benutzerdefinierten Konfigurationsverzeichnis, zum Beispiel `./config/#custom-directory`, um die Funktionalität pro OpenCode-Aufruf zu aktivieren oder zu deaktivieren.
-- **Minimale Einrichtung**: Die CI-Komponente richtet OpenCode im Hintergrund ein. Sie müssen lediglich die OpenCode-Konfiguration und die erste Eingabeaufforderung erstellen.
+- **Benutzerdefinierte Konfiguration pro Job verwenden**: Konfigurieren Sie Daemon Protocol mit einem benutzerdefinierten Konfigurationsverzeichnis, zum Beispiel `./config/#custom-directory`, um die Funktionalität pro Daemon Protocol-Aufruf zu aktivieren oder zu deaktivieren.
+- **Minimale Einrichtung**: Die CI-Komponente richtet Daemon Protocol im Hintergrund ein. Sie müssen lediglich die Daemon Protocol-Konfiguration und die erste Eingabeaufforderung erstellen.
 - **Flexibel**: Die CI-Komponente unterstützt mehrere Eingaben zum Anpassen ihres Verhaltens
 
 ---
 
 ### Einrichtung
 
-1. Speichern Sie Ihre OpenCode-Authentifizierung JSON als Umgebungsvariablen vom Dateityp CI unter **Einstellungen** > **CI/CD** > **Variablen**. Stellen Sie sicher, dass Sie sie als „Maskiert und ausgeblendet“ markieren.
+1. Speichern Sie Ihre Daemon Protocol-Authentifizierung JSON als Umgebungsvariablen vom Dateityp CI unter **Einstellungen** > **CI/CD** > **Variablen**. Stellen Sie sicher, dass Sie sie als „Maskiert und ausgeblendet“ markieren.
 2. Fügen Sie Folgendes zu Ihrer `.gitlab-ci.yml`-Datei hinzu.
 
    ```yaml title=".gitlab-ci.yml"
@@ -35,7 +35,7 @@ Hier verwenden wir eine von der Community erstellte CI/CD-Komponente für OpenCo
      - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # Die variable name für ihre OpenCode authentifizierung JSON
+         auth_json: $OPENCODE_AUTH_JSON # Die variable name für ihre Daemon Protocol authentifizierung JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
@@ -46,23 +46,23 @@ Weitere Eingaben und Anwendungsfälle finden Sie unter [check out the docs](http
 
 ## GitLab Duo
 
-OpenCode lässt sich in Ihren GitLab-Workflow integrieren.
-Erwähnen Sie `@opencode` in einem Kommentar und OpenCode führt Aufgaben innerhalb Ihrer GitLab CI-Pipeline aus.
+Daemon Protocol lässt sich in Ihren GitLab-Workflow integrieren.
+Erwähnen Sie `@opencode` in einem Kommentar und Daemon Protocol führt Aufgaben innerhalb Ihrer GitLab CI-Pipeline aus.
 
 ---
 
 ### Funktionen
 
-- **Issue Triage**: Bitten Sie OpenCode, ein Problem zu untersuchen und es Ihnen zu erklären.
-- **Reparieren und implementieren**: Bitten Sie OpenCode, ein Problem zu beheben oder eine Funktion zu implementieren.
+- **Issue Triage**: Bitten Sie Daemon Protocol, ein Problem zu untersuchen und es Ihnen zu erklären.
+- **Reparieren und implementieren**: Bitten Sie Daemon Protocol, ein Problem zu beheben oder eine Funktion zu implementieren.
   Es wird ein neuer Branch erstellt und eine Merge Request mit den Änderungen ausgelöst.
-- **Sicher**: OpenCode läuft auf Ihren GitLab Runners.
+- **Sicher**: Daemon Protocol läuft auf Ihren GitLab Runners.
 
 ---
 
 ### Einrichtung
 
-OpenCode wird in Ihrer GitLab CI/CD-Pipeline ausgeführt. Folgendes müssen Sie zum Einrichten benötigen:
+Daemon Protocol wird in Ihrer GitLab CI/CD-Pipeline ausgeführt. Folgendes müssen Sie zum Einrichten benötigen:
 
 :::tip
 Aktuelle Anweisungen finden Sie im [**GitLab docs**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/).
@@ -91,7 +91,7 @@ Aktuelle Anweisungen finden Sie im [**GitLab docs**](https://docs.gitlab.com/use
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
+      - echo "Creating Daemon Protocol auth configuration"
       - mkdir --parents ~/.local/share/opencode
       - |
         cat > ~/.local/share/opencode/auth.json << EOF
@@ -104,10 +104,10 @@ Aktuelle Anweisungen finden Sie im [**GitLab docs**](https://docs.gitlab.com/use
         EOF
       - echo "Configuring git"
       - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.name "Daemon Protocol"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running Daemon Protocol"
       - |
         opencode run "
         You are an AI assistant helping with GitLab operations.
@@ -158,7 +158,7 @@ Ausführliche Anweisungen finden Sie unter [GitLab CLI agents docs](https://docs
 
 ### Beispiele
 
-Hier sind einige Beispiele, wie Sie OpenCode in GitLab verwenden können.
+Hier sind einige Beispiele, wie Sie Daemon Protocol in GitLab verwenden können.
 
 :::tip
 Sie können die Verwendung einer anderen Triggerphrase als `@opencode` konfigurieren.
@@ -172,7 +172,7 @@ Sie können die Verwendung einer anderen Triggerphrase als `@opencode` konfiguri
   @opencode explain this issue
   ```
 
-  OpenCode liest das Problem und antwortet mit einer klaren Erklärung.
+  Daemon Protocol liest das Problem und antwortet mit einer klaren Erklärung.
 
 - **Ein Problem beheben**
 
@@ -182,7 +182,7 @@ Sie können die Verwendung einer anderen Triggerphrase als `@opencode` konfiguri
   @opencode fix this
   ```
 
-  OpenCode erstellt einen neuen Branch, implementiert die Änderungen und öffnet eine Merge Request mit den Änderungen.
+  Daemon Protocol erstellt einen neuen Branch, implementiert die Änderungen und öffnet eine Merge Request mit den Änderungen.
 
 - **Merge Requests prüfen**
 
@@ -192,4 +192,4 @@ Sie können die Verwendung einer anderen Triggerphrase als `@opencode` konfiguri
   @opencode review this merge request
   ```
 
-  OpenCode prüft die Merge Request und gibt Feedback.
+  Daemon Protocol prüft die Merge Request und gibt Feedback.

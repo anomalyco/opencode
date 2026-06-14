@@ -1,33 +1,33 @@
 ---
 title: GitLab
-description: 在 GitLab Issue 和合併請求中使用 OpenCode。
+description: 在 GitLab Issue 和合併請求中使用 Daemon Protocol。
 ---
 
-OpenCode 透過 GitLab CI/CD 管線或 GitLab Duo 與您的 GitLab 工作流程整合。
+Daemon Protocol 透過 GitLab CI/CD 管線或 GitLab Duo 與您的 GitLab 工作流程整合。
 
-在這兩種情況下，OpenCode 都將在您的 GitLab Runner 上執行。
+在這兩種情況下，Daemon Protocol 都將在您的 GitLab Runner 上執行。
 
 ---
 
 ## GitLab CI
 
-OpenCode 可以在常規的 GitLab 管線中執行。您可以將其作為 [CI 元件](https://docs.gitlab.com/ee/ci/components/) 整合到管線中。
+Daemon Protocol 可以在常規的 GitLab 管線中執行。您可以將其作為 [CI 元件](https://docs.gitlab.com/ee/ci/components/) 整合到管線中。
 
-這裡我們使用的是社群建立的 OpenCode CI/CD 元件 — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode)。
+這裡我們使用的是社群建立的 Daemon Protocol CI/CD 元件 — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode)。
 
 ---
 
 ### 功能特性
 
-- **按任務自訂設定**：使用自訂設定目錄來設定 OpenCode，例如 `./config/#custom-directory`，以便為每次 OpenCode 呼叫啟用或停用特定功能。
-- **最小化設定**：CI 元件會在背景完成 OpenCode 的設定，您只需建立 OpenCode 設定和初始提示詞即可。
+- **按任務自訂設定**：使用自訂設定目錄來設定 Daemon Protocol，例如 `./config/#custom-directory`，以便為每次 Daemon Protocol 呼叫啟用或停用特定功能。
+- **最小化設定**：CI 元件會在背景完成 Daemon Protocol 的設定，您只需建立 Daemon Protocol 設定和初始提示詞即可。
 - **靈活可自訂**：CI 元件支援多種輸入參數來自訂其行為。
 
 ---
 
 ### 設定
 
-1. 將您的 OpenCode 身分驗證 JSON 作為檔案類型的 CI 環境變數儲存在 **Settings** > **CI/CD** > **Variables** 下。請確保將其標記為「Masked and hidden」。
+1. 將您的 Daemon Protocol 身分驗證 JSON 作為檔案類型的 CI 環境變數儲存在 **Settings** > **CI/CD** > **Variables** 下。請確保將其標記為「Masked and hidden」。
 2. 將以下內容新增到您的 `.gitlab-ci.yml` 檔案中。
 
    ```yaml title=".gitlab-ci.yml"
@@ -35,7 +35,7 @@ OpenCode 可以在常規的 GitLab 管線中執行。您可以將其作為 [CI �
      - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         auth_json: $OPENCODE_AUTH_JSON # The variable name for your Daemon Protocol authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
@@ -46,22 +46,22 @@ OpenCode 可以在常規的 GitLab 管線中執行。您可以將其作為 [CI �
 
 ## GitLab Duo
 
-OpenCode 與您的 GitLab 工作流程整合。
-在評論中提及 `@opencode`，OpenCode 將在您的 GitLab CI 管線中執行任務。
+Daemon Protocol 與您的 GitLab 工作流程整合。
+在評論中提及 `@opencode`，Daemon Protocol 將在您的 GitLab CI 管線中執行任務。
 
 ---
 
 ### 功能特性
 
-- **Issue 分類**：讓 OpenCode 調查某個 Issue 並為您解釋。
-- **修復與實作**：讓 OpenCode 修復 Issue 或實作某個功能。它會建立一個新分支，並提交包含變更的合併請求。
-- **安全可靠**：OpenCode 在您的 GitLab Runner 上執行。
+- **Issue 分類**：讓 Daemon Protocol 調查某個 Issue 並為您解釋。
+- **修復與實作**：讓 Daemon Protocol 修復 Issue 或實作某個功能。它會建立一個新分支，並提交包含變更的合併請求。
+- **安全可靠**：Daemon Protocol 在您的 GitLab Runner 上執行。
 
 ---
 
 ### 設定
 
-OpenCode 在您的 GitLab CI/CD 管線中執行，以下是設定所需的步驟：
+Daemon Protocol 在您的 GitLab CI/CD 管線中執行，以下是設定所需的步驟：
 
 :::tip
 請查看 [**GitLab 文件**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) 取得最新說明。
@@ -90,7 +90,7 @@ OpenCode 在您的 GitLab CI/CD 管線中執行，以下是設定所需的步驟
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
+      - echo "Creating Daemon Protocol auth configuration"
       - mkdir --parents ~/.local/share/opencode
       - |
         cat > ~/.local/share/opencode/auth.json << EOF
@@ -103,10 +103,10 @@ OpenCode 在您的 GitLab CI/CD 管線中執行，以下是設定所需的步驟
         EOF
       - echo "Configuring git"
       - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.name "Daemon Protocol"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running Daemon Protocol"
       - |
         opencode run "
         You are an AI assistant helping with GitLab operations.
@@ -157,7 +157,7 @@ OpenCode 在您的 GitLab CI/CD 管線中執行，以下是設定所需的步驟
 
 ### 範例
 
-以下是在 GitLab 中使用 OpenCode 的一些範例。
+以下是在 GitLab 中使用 Daemon Protocol 的一些範例。
 
 :::tip
 您可以設定使用不同於 `@opencode` 的觸發詞。
@@ -171,7 +171,7 @@ OpenCode 在您的 GitLab CI/CD 管線中執行，以下是設定所需的步驟
   @opencode explain this issue
   ```
 
-  OpenCode 會閱讀該 Issue 並回覆清晰的解釋。
+  Daemon Protocol 會閱讀該 Issue 並回覆清晰的解釋。
 
 - **修復 Issue**
 
@@ -181,7 +181,7 @@ OpenCode 在您的 GitLab CI/CD 管線中執行，以下是設定所需的步驟
   @opencode fix this
   ```
 
-  OpenCode 會建立一個新分支，實作變更，並提交包含變更的合併請求。
+  Daemon Protocol 會建立一個新分支，實作變更，並提交包含變更的合併請求。
 
 - **審查合併請求**
 
@@ -191,4 +191,4 @@ OpenCode 在您的 GitLab CI/CD 管線中執行，以下是設定所需的步驟
   @opencode review this merge request
   ```
 
-  OpenCode 會審查合併請求並提供回饋。
+  Daemon Protocol 會審查合併請求並提供回饋。

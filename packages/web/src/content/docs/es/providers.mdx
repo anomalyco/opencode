@@ -1,17 +1,17 @@
 ---
 title: Proveedores
-description: Usando cualquier proveedor LLM en OpenCode.
+description: Usando cualquier proveedor LLM en Daemon Protocol.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode usa el [AI SDK](https://ai-sdk.dev/) y [Models.dev](https://models.dev) para admitir **75+ proveedores LLM** y admite la ejecución de modelos locales.
+Daemon Protocol usa el [AI SDK](https://ai-sdk.dev/) y [Models.dev](https://models.dev) para admitir **75+ proveedores LLM** y admite la ejecución de modelos locales.
 
 Para agregar un proveedor necesita:
 
 1. Agregue las claves API para el proveedor usando el comando `/connect`.
-2. Configure el proveedor en su configuración OpenCode.
+2. Configure el proveedor en su configuración Daemon Protocol.
 
 ---
 
@@ -24,7 +24,7 @@ en `~/.local/share/opencode/auth.json`.
 
 ### Configuración
 
-Puedes personalizar los proveedores a través de la sección `provider` en tu OpenCode
+Puedes personalizar los proveedores a través de la sección `provider` en tu Daemon Protocol
 configuración.
 
 ---
@@ -48,13 +48,13 @@ Puede personalizar la URL base para cualquier proveedor configurando la opción 
 
 ---
 
-## OpenCode Zen
+## Daemon Zen
 
-OpenCode Zen es una lista de modelos proporcionados por el equipo OpenCode que han sido
-probado y verificado para funcionar bien con OpenCode. [Más información](/docs/zen).
+Daemon Zen es una lista de modelos proporcionados por el equipo Daemon Protocol que han sido
+probado y verificado para funcionar bien con Daemon Protocol. [Más información](/docs/zen).
 
 :::tip
-Si eres nuevo, te recomendamos comenzar con OpenCode Zen.
+Si eres nuevo, te recomendamos comenzar con Daemon Zen.
 :::
 
 1. Ejecute el comando `/connect` en TUI, seleccione opencode y diríjase a [opencode.ai/auth](https://opencode.ai/auth).
@@ -80,16 +80,16 @@ Si eres nuevo, te recomendamos comenzar con OpenCode Zen.
    /models
    ```
 
-Funciona como cualquier otro proveedor en OpenCode y su uso es completamente opcional.
+Funciona como cualquier otro proveedor en Daemon Protocol y su uso es completamente opcional.
 
 ---
 
-## OpenCode Go
+## Daemon Protocol Go
 
-OpenCode Go es un plan de suscripción de bajo costo que brinda acceso confiable a modelos de codificación abiertos populares proporcionados por el equipo de OpenCode que han sido
-probado y verificado para funcionar bien con OpenCode.
+Daemon Protocol Go es un plan de suscripción de bajo costo que brinda acceso confiable a modelos de codificación abiertos populares proporcionados por el equipo de Daemon Protocol que han sido
+probado y verificado para funcionar bien con Daemon Protocol.
 
-1. Ejecute el comando `/connect` en TUI, seleccione `OpenCode Go` y diríjase a [opencode.ai/auth](https://opencode.ai/zen).
+1. Ejecute el comando `/connect` en TUI, seleccione `Daemon Protocol Go` y diríjase a [opencode.ai/auth](https://opencode.ai/zen).
 
    ```txt
    /connect
@@ -112,7 +112,7 @@ probado y verificado para funcionar bien con OpenCode.
    /models
    ```
 
-Funciona como cualquier otro proveedor en OpenCode y su uso es completamente opcional.
+Funciona como cualquier otro proveedor en Daemon Protocol y su uso es completamente opcional.
 
 ---
 
@@ -156,7 +156,7 @@ lista, no dude en abrir un PR.
 
 ### Amazon Bedrock
 
-Para usar Amazon Bedrock con OpenCode:
+Para usar Amazon Bedrock con Daemon Protocol:
 
 1. Dirígete al **Catálogo de modelos** en la consola Amazon Bedrock y solicita
    Accede a los modelos que desees.
@@ -311,7 +311,7 @@ Para perfiles de inferencia personalizados, utilice el modelo y el nombre del pr
    ```
 
 :::info
-El uso de su suscripción Claude Pro/Max en OpenCode no está oficialmente respaldado por [Anthropic](https://anthropic.com).
+El uso de su suscripción Claude Pro/Max en Daemon Protocol no está oficialmente respaldado por [Anthropic](https://anthropic.com).
 :::
 
 ##### Usando las teclas API
@@ -733,7 +733,7 @@ GitLab Duo proporciona chat agente basado en IA con capacidades de llamada de he
    #### Uso del token de acceso personal
    1. Vaya a [GitLab Configuración de usuario > Tokens de acceso](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. Haga clic en **Agregar nuevo token**
-   3. Nombre: `OpenCode`, Alcances: `api`
+   3. Nombre: `Daemon Protocol`, Alcances: `api`
    4. Copie el token (comienza con `glpat-`)
    5. Introdúcelo en la terminal.
 
@@ -756,8 +756,8 @@ para almacenar el token en el almacenamiento de autenticación opencode.
 ##### Autohospedado GitLab
 
 :::note[nota de cumplimiento]
-OpenCode utiliza un modelo pequeño para algunas tareas de IA, como generar el título de la sesión.
-Está configurado para usar gpt-5-nano de forma predeterminada, alojado por Zen. Para bloquear OpenCode
+Daemon Protocol utiliza un modelo pequeño para algunas tareas de IA, como generar el título de la sesión.
+Está configurado para usar gpt-5-nano de forma predeterminada, alojado por Zen. Para bloquear Daemon Protocol
 Para usar solo su propia instancia alojada en GitLab, agregue lo siguiente a su
 Archivo `opencode.json`. También se recomienda desactivar el uso compartido de sesiones.
 
@@ -889,7 +889,7 @@ suscripción](https://github.com/features/copilot/plans) para usar.
 
 ### Google Vertex AI
 
-Para utilizar Google Vertex AI con OpenCode:
+Para utilizar Google Vertex AI con Daemon Protocol:
 
 1. Dirígete a **Model Garden** en Google Cloud Console y verifica el
    Modelos disponibles en su región.
@@ -1071,7 +1071,7 @@ Helicone admite encabezados personalizados para funciones como almacenamiento en
 
 ##### Seguimiento de sesión
 
-La función [Sesiones](https://docs.helicone.ai/features/sessions) de Helicone le permite agrupar solicitudes LLM relacionadas. Utilice el complemento [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) para registrar automáticamente cada conversación OpenCode como una sesión en Helicone.
+La función [Sesiones](https://docs.helicone.ai/features/sessions) de Helicone le permite agrupar solicitudes LLM relacionadas. Utilice el complemento [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) para registrar automáticamente cada conversación Daemon Protocol como una sesión en Helicone.
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1085,7 +1085,7 @@ Agréguelo a su configuración.
 }
 ```
 
-El complemento inyecta encabezados `Helicone-Session-Id` y `Helicone-Session-Name` en sus solicitudes. En la página Sesiones de Helicone, verá cada conversación OpenCode enumerada como una sesión separada.
+El complemento inyecta encabezados `Helicone-Session-Id` y `Helicone-Session-Name` en sus solicitudes. En la página Sesiones de Helicone, verá cada conversación Daemon Protocol enumerada como una sesión separada.
 
 ##### Cabeceras comunes de Helicone
 
@@ -1289,7 +1289,7 @@ Para usar Kimi K2 de Moonshot AI:
 Puedes configurar opencode para usar modelos locales a través de Ollama.
 
 :::tip
-Ollama puede configurarse automáticamente para OpenCode. Consulte los [documentos de integración de Ollama](https://docs.ollama.com/integrations/opencode) para obtener más detalles.
+Ollama puede configurarse automáticamente para Daemon Protocol. Consulte los [documentos de integración de Ollama](https://docs.ollama.com/integrations/opencode) para obtener más detalles.
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1328,13 +1328,13 @@ Si las llamadas a herramientas no funcionan, intente aumentar `num_ctx` en Ollam
 
 ### Ollama Cloud
 
-Para usar Ollama Cloud con OpenCode:
+Para usar Ollama Cloud con Daemon Protocol:
 
 1. Dirígete a [https://ollama.com/](https://ollama.com/) e inicia sesión o crea una cuenta.
 
 2. Vaya a **Configuración** > **Claves** y haga clic en **Agregar clave API** para generar una nueva clave API.
 
-3. Copie la clave API para usarla en OpenCode.
+3. Copie la clave API para usarla en Daemon Protocol.
 
 4. Ejecute el comando `/connect` y busque **Ollama Cloud**.
 
@@ -1351,7 +1351,7 @@ Para usar Ollama Cloud con OpenCode:
    └ enter
    ```
 
-6. **Importante**: Antes de usar modelos en la nube en OpenCode, debe obtener la información del modelo localmente:
+6. **Importante**: Antes de usar modelos en la nube en Daemon Protocol, debe obtener la información del modelo localmente:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1399,19 +1399,19 @@ Si ya tiene una clave API, puede seleccionar **Ingresar manualmente la clave API
 
 ---
 
-### OpenCode Zen
+### Daemon Zen
 
-OpenCode Zen es una lista de modelos probados y verificados proporcionada por el equipo OpenCode. [Más información](/docs/zen).
+Daemon Zen es una lista de modelos probados y verificados proporcionada por el equipo Daemon Protocol. [Más información](/docs/zen).
 
-1. Inicie sesión en **<a href={console}>OpenCode Zen</a>** y haga clic en **Crear API clave**.
+1. Inicie sesión en **<a href={console}>Daemon Zen</a>** y haga clic en **Crear API clave**.
 
-2. Ejecute el comando `/connect` y busque **OpenCode Zen**.
+2. Ejecute el comando `/connect` y busque **Daemon Zen**.
 
    ```txt
    /connect
    ```
 
-3. Ingrese su clave OpenCode API.
+3. Ingrese su clave Daemon Protocol API.
 
    ```txt
    ┌ API key
@@ -1609,7 +1609,7 @@ STACKIT AI Model Serving proporciona un entorno de alojamiento soberano totalmen
 
 ### Scaleway
 
-Para utilizar [API generativas de Scaleway](https://www.scaleway.com/en/docs/generative-apis/) con OpenCode:
+Para utilizar [API generativas de Scaleway](https://www.scaleway.com/en/docs/generative-apis/) con Daemon Protocol:
 
 1. Dirígete a la [Configuración de IAM de la consola Scaleway](https://console.scaleway.com/iam/api-keys) para generar una nueva clave API.
 
@@ -1970,7 +1970,7 @@ Detalles de configuración:
 - **limit.context**: tokens de entrada máximos que acepta el modelo.
 - **limit.output**: tokens máximos que el modelo puede generar.
 
-Los campos `limit` le permiten a OpenCode comprender cuánto contexto le queda. Los proveedores estándar los extraen de models.dev automáticamente.
+Los campos `limit` le permiten a Daemon Protocol comprender cuánto contexto le queda. Los proveedores estándar los extraen de models.dev automáticamente.
 
 ---
 

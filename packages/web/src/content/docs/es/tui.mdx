@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: Usando la interfaz de usuario del terminal OpenCode.
+description: Usando la interfaz de usuario del terminal Daemon Protocol.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode proporciona una interfaz de terminal interactiva o TUI para trabajar en sus proyectos con un LLM.
+Daemon Protocol proporciona una interfaz de terminal interactiva o TUI para trabajar en sus proyectos con un LLM.
 
-Al ejecutar OpenCode se inicia TUI para el directorio actual.
+Al ejecutar Daemon Protocol se inicia TUI para el directorio actual.
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ El resultado del comando se agrega a la conversación como resultado de la herra
 
 ## Comandos
 
-Cuando utilice OpenCode TUI, puede escribir `/` seguido de un nombre de comando para ejecutar acciones rápidamente. Por ejemplo:
+Cuando utilice Daemon Protocol TUI, puede escribir `/` seguido de un nombre de comando para ejecutar acciones rápidamente. Por ejemplo:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Aquí están todos los comandos de barra diagonal disponibles:
 
 ### connect
 
-Agregue un proveedor a OpenCode. Le permite seleccionar entre proveedores disponibles y agregar sus claves API.
+Agregue un proveedor a Daemon Protocol. Le permite seleccionar entre proveedores disponibles y agregar sus claves API.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Abra un editor externo para redactar mensajes. Utiliza el editor configurado en 
 
 ### exit
 
-Salga de OpenCode. _Alias_: `/quit`, `/q`
+Salga de Daemon Protocol. _Alias_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -393,7 +393,7 @@ Esto es independiente de `opencode.json`, que configura el comportamiento del se
 
 - `theme`: establece su tema de interfaz de usuario. [Más información](/docs/themes).
 - `keybinds`: personaliza los atajos de teclado. [Más información](/docs/keybinds).
-- `leader_timeout`: controla cuánto tiempo espera OpenCode después de la leader key. El valor predeterminado es `2000`.
+- `leader_timeout`: controla cuánto tiempo espera Daemon Protocol después de la leader key. El valor predeterminado es `2000`.
 - `scroll_acceleration.enabled`: habilite la aceleración de desplazamiento estilo macOS para un desplazamiento suave y natural. Cuando está habilitado, la velocidad de desplazamiento aumenta con gestos de desplazamiento rápido y se mantiene precisa para movimientos más lentos. **Esta configuración tiene prioridad sobre `scroll_speed` y la anula cuando está habilitada.**
 - `scroll_speed`: controla la rapidez con la que se desplaza el TUI cuando se utilizan comandos de desplazamiento (mínimo: `0.001`, admite valores decimales). El valor predeterminado es `3`. **Nota: Esto se ignora si `scroll_acceleration.enabled` está configurado en `true`.**
 - `diff_style`: controla la representación de diferencias. `"auto"` se adapta al ancho del terminal, `"stacked"` siempre muestra un diseño de una sola columna.
@@ -404,7 +404,7 @@ Utilice `OPENCODE_TUI_CONFIG` para cargar una ruta de configuración de TUI pers
 
 ### Attention
 
-Attention permite que el TUI te avise cuando OpenCode necesita que respondas una pregunta, apruebes un permiso, revises un error de sesión o sepas que una sesión terminó. Actívalo con `attention.enabled`; los eventos integrados reproducen sonidos al ocurrir. Las notificaciones de escritorio solo se envían cuando la ventana del terminal no está enfocada y no se usan para eventos de subagent.
+Attention permite que el TUI te avise cuando Daemon Protocol necesita que respondas una pregunta, apruebes un permiso, revises un error de sesión o sepas que una sesión terminó. Actívalo con `attention.enabled`; los eventos integrados reproducen sonidos al ocurrir. Las notificaciones de escritorio solo se envían cuando la ventana del terminal no está enfocada y no se usan para eventos de subagent.
 
 - `enabled`: activa todas las notificaciones y sonidos de Attention. El valor predeterminado es `false`.
 - `notifications`: cuando Attention está activo, permite que el TUI envíe notificaciones de escritorio a través del terminal. El valor predeterminado es `true`.

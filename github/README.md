@@ -1,8 +1,8 @@
-# opencode GitHub Action
+# Daemon Protocol GitHub Action
 
-A GitHub Action that integrates [opencode](https://opencode.ai) directly into your GitHub workflow.
+A GitHub Action that integrates [Daemon Protocol](https://opencode.ai) directly into your GitHub workflow.
 
-Mention `/opencode` in your comment, and opencode will execute tasks within your GitHub Actions runner.
+Mention `/opencode` in your comment, and Daemon Protocol will execute tasks within your GitHub Actions runner.
 
 ## Features
 
@@ -16,7 +16,7 @@ Leave the following comment on a GitHub issue. `opencode` will read the entire t
 
 #### Fix an issue
 
-Leave the following comment on a GitHub issue. opencode will create a new branch, implement the changes, and open a PR with the changes.
+Leave the following comment on a GitHub issue. Daemon Protocol will create a new branch, implement the changes, and open a PR with the changes.
 
 ```
 /opencode fix this
@@ -24,7 +24,7 @@ Leave the following comment on a GitHub issue. opencode will create a new branch
 
 #### Review PRs and make changes
 
-Leave the following comment on a GitHub PR. opencode will implement the requested change and commit it to the same PR.
+Leave the following comment on a GitHub PR. Daemon Protocol will implement the requested change and commit it to the same PR.
 
 ```
 Delete the attachment from S3 when the note is removed /oc
@@ -32,14 +32,14 @@ Delete the attachment from S3 when the note is removed /oc
 
 #### Review specific code lines
 
-Leave a comment directly on code lines in the PR's "Files" tab. opencode will automatically detect the file, line numbers, and diff context to provide precise responses.
+Leave a comment directly on code lines in the PR's "Files" tab. Daemon Protocol will automatically detect the file, line numbers, and diff context to provide precise responses.
 
 ```
 [Comment on specific lines in Files tab]
 /oc add error handling here
 ```
 
-When commenting on specific lines, opencode receives:
+When commenting on specific lines, Daemon Protocol receives:
 
 - The exact file being reviewed
 - The specific lines of code

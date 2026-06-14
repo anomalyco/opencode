@@ -1,17 +1,17 @@
 ---
 title: Udbydere
-description: Brug en hvilken som helst LLM-udbyder i OpenCode.
+description: Brug en hvilken som helst LLM-udbyder i Daemon Protocol.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode bruger [AI SDK](https://ai-sdk.dev/) og [Models.dev](https://models.dev) til at understøtte **75+ LLM-udbydere** og understøtter kørsel af lokale modeller.
+Daemon Protocol bruger [AI SDK](https://ai-sdk.dev/) og [Models.dev](https://models.dev) til at understøtte **75+ LLM-udbydere** og understøtter kørsel af lokale modeller.
 
 For at tilføje en udbyder skal du:
 
 1. Tilføje API-nøglerne for udbyderen ved at bruge kommandoen `/connect`.
-2. Konfigurere udbyderen i OpenCode-konfigurationen.
+2. Konfigurere udbyderen i Daemon Protocol-konfigurationen.
 
 ---
 
@@ -23,7 +23,7 @@ Når du tilføjer en udbyders API-nøgler med `/connect`-kommandoen, gemmes de i
 
 ### Konfiguration
 
-Du kan tilpasse udbyderne gennem `provider`-delen i OpenCode-konfigurationen.
+Du kan tilpasse udbyderne gennem `provider`-delen i Daemon Protocol-konfigurationen.
 
 ---
 
@@ -46,12 +46,12 @@ Du kan tilpasse base URL for enhver udbyder ved at angive muligheden `baseURL`. 
 
 ---
 
-## OpenCode Zen
+## Daemon Zen
 
-OpenCode Zen er en liste over modeller leveret af OpenCode-teamet, som er blevet testet og verificeret til at fungere godt med OpenCode. [Læs mere](/docs/zen).
+Daemon Zen er en liste over modeller leveret af Daemon Protocol-teamet, som er blevet testet og verificeret til at fungere godt med Daemon Protocol. [Læs mere](/docs/zen).
 
 :::tip
-Hvis du er ny, anbefaler vi at starte med OpenCode Zen.
+Hvis du er ny, anbefaler vi at starte med Daemon Zen.
 :::
 
 1. Kør kommandoen `/connect` i TUI, vælg opencode og gå til [opencode.ai/auth](https://opencode.ai/auth).
@@ -77,15 +77,15 @@ Hvis du er ny, anbefaler vi at starte med OpenCode Zen.
    /models
    ```
 
-Det fungerer som alle andre udbydere i OpenCode og er helt valgfrit at bruge.
+Det fungerer som alle andre udbydere i Daemon Protocol og er helt valgfrit at bruge.
 
 ---
 
-## OpenCode Go
+## Daemon Protocol Go
 
-OpenCode Go er en billig abonnementsplan, der giver pålidelig adgang til populære åbne kodningsmodeller leveret af OpenCode-teamet, som er testet og verificeret til at fungere godt med OpenCode.
+Daemon Protocol Go er en billig abonnementsplan, der giver pålidelig adgang til populære åbne kodningsmodeller leveret af Daemon Protocol-teamet, som er testet og verificeret til at fungere godt med Daemon Protocol.
 
-1. Kør kommandoen `/connect` i TUI, vælg `OpenCode Go`, og gå til [opencode.ai/auth](https://opencode.ai/zen).
+1. Kør kommandoen `/connect` i TUI, vælg `Daemon Protocol Go`, og gå til [opencode.ai/auth](https://opencode.ai/zen).
 
    ```txt
    /connect
@@ -108,7 +108,7 @@ OpenCode Go er en billig abonnementsplan, der giver pålidelig adgang til popul�
    /models
    ```
 
-Det fungerer som alle andre udbydere i OpenCode og er helt valgfrit at bruge.
+Det fungerer som alle andre udbydere i Daemon Protocol og er helt valgfrit at bruge.
 
 ---
 
@@ -151,7 +151,7 @@ Ser du ikke en udbyder her? Indsend en PR.
 
 ### Amazon Bedrock
 
-Sådan bruger du Amazon Bedrock med OpenCode:
+Sådan bruger du Amazon Bedrock med Daemon Protocol:
 
 1. Gå til **modelkataloget** i Amazon Bedrock-konsollen og anmod om adgang til de modeller, du ønsker.
 
@@ -304,7 +304,7 @@ For brugerdefinerede inferensprofiler, brug modellen og udbydernavnet i nøglen 
    ```
 
 :::info
-At bruge dit Claude Pro/Max-abonnement i OpenCode understøttes ikke officielt af [Anthropic](https://anthropic.com).
+At bruge dit Claude Pro/Max-abonnement i Daemon Protocol understøttes ikke officielt af [Anthropic](https://anthropic.com).
 :::
 
 ##### Brug API-nøgler
@@ -725,7 +725,7 @@ GitLab Duo giver AI-drevet agentchat med native værktøjskaldsfunktioner gennem
    #### Brug personlig adgangstoken
    1. Gå til [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. Klik på **Add new token**
-   3. Navn: `OpenCode`, omfang: `api`
+   3. Navn: `Daemon Protocol`, omfang: `api`
    4. Kopier tokenet (starter med `glpat-`)
    5. Indtast den i terminalen
 
@@ -748,8 +748,8 @@ gemme tokenet i opencode auth-lagring.
 ##### Selvhostet GitLab
 
 :::note[overholdelsesbemærkning]
-OpenCode bruger en lille model til nogle AI-opgaver som at generere sessionstitlen.
-Den er konfigureret til at bruge gpt-5-nano som standard, hostet af Zen. For at låse OpenCode
+Daemon Protocol bruger en lille model til nogle AI-opgaver som at generere sessionstitlen.
+Den er konfigureret til at bruge gpt-5-nano som standard, hostet af Zen. For at låse Daemon Protocol
 til kun at bruge din egen GitLab-hostede instans, tilføj følgende i din
 `opencode.json` fil. Det anbefales også at deaktivere sessionsdeling.
 
@@ -845,7 +845,7 @@ Denne plugin giver omfattende GitLab-repository-administrationsfunktioner, inklu
 
 ### GitHub Copilot
 
-Sådan bruger du GitHub Copilot-abonnementet med OpenCode:
+Sådan bruger du GitHub Copilot-abonnementet med Daemon Protocol:
 
 :::note
 Nogle modeller kan kræve et [Pro+
@@ -882,7 +882,7 @@ Nogle modeller skal aktiveres manuelt i [GitHub Copilot-indstillingerne](https:/
 
 ### Google Vertex AI
 
-Sådan bruger du Google Vertex AI med OpenCode:
+Sådan bruger du Google Vertex AI med Daemon Protocol:
 
 1. Gå til **Model Garden** i Google Cloud Console og tjek
    modeller tilgængelig i din region.
@@ -1064,7 +1064,7 @@ Helicone understøtter tilpassede headers for funktioner som caching, brugerspor
 
 ##### Sessionssporing
 
-Helicones [Sessions](https://docs.helicone.ai/features/sessions) funktion lader dig gruppe relaterede LLM anmodninger sammen. Brug [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin for automatisk at logge hver OpenCode-samtale som en session i Helicone.
+Helicones [Sessions](https://docs.helicone.ai/features/sessions) funktion lader dig gruppe relaterede LLM anmodninger sammen. Brug [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) plugin for automatisk at logge hver Daemon Protocol-samtale som en session i Helicone.
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1078,7 +1078,7 @@ Tilføj den til din konfiguration.
 }
 ```
 
-Programmatisk injicerer `Helicone-Session-Id` og `Helicone-Session-Name` headers i dine anmodninger. På Helicones Sessions-side vil du se hver OpenCode-samtale opført som en separat session.
+Programmatisk injicerer `Helicone-Session-Id` og `Helicone-Session-Name` headers i dine anmodninger. På Helicones Sessions-side vil du se hver Daemon Protocol-samtale opført som en separat session.
 
 ##### Almindelige Helicone-headers
 
@@ -1282,7 +1282,7 @@ Sådan bruger du Kimi K2 fra Moonshot AI:
 Du kan konfigurere opencode til at bruge lokale modeller gennem Ollama.
 
 :::tip
-Ollama kan automatisk konfigurere sig selv for OpenCode. Se [Ollama-integrationsdokumenterne](https://docs.ollama.com/integrations/opencode) for detaljer.
+Ollama kan automatisk konfigurere sig selv for Daemon Protocol. Se [Ollama-integrationsdokumenterne](https://docs.ollama.com/integrations/opencode) for detaljer.
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1321,13 +1321,13 @@ Hvis værktøjskald ikke fungerer, prøv at øge `num_ctx` i Ollama. Start omkri
 
 ### Ollama Cloud
 
-Sådan bruger du Ollama Cloud med OpenCode:
+Sådan bruger du Ollama Cloud med Daemon Protocol:
 
 1. Gå til [https://ollama.com/](https://ollama.com/) og log på eller opret en konto.
 
 2. Naviger til **Settings** > **Keys** og klik på **Add API Key** for at generere en ny API-nøgle.
 
-3. Kopier API-nøglen til brug i OpenCode.
+3. Kopier API-nøglen til brug i Daemon Protocol.
 
 4. Kør kommandoen `/connect` og søg efter **Ollama Cloud**.
 
@@ -1344,7 +1344,7 @@ Sådan bruger du Ollama Cloud med OpenCode:
    └ enter
    ```
 
-6. **Vigtigt**: Før du bruger skymodeller i OpenCode, skal du hente modelinformationen lokalt:
+6. **Vigtigt**: Før du bruger skymodeller i Daemon Protocol, skal du hente modelinformationen lokalt:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1391,19 +1391,19 @@ Hvis du allerede har en API-nøgle, kan du vælge **Manually enter API Key** og 
 
 ---
 
-### OpenCode Zen
+### Daemon Zen
 
-OpenCode Zen er en liste over testede og verificerede modeller leveret af OpenCode-teamet. [Læs mere](/docs/zen).
+Daemon Zen er en liste over testede og verificerede modeller leveret af Daemon Protocol-teamet. [Læs mere](/docs/zen).
 
-1. Log på **<a href={console}>OpenCode Zen</a>** og klik på **Create API Key**.
+1. Log på **<a href={console}>Daemon Zen</a>** og klik på **Create API Key**.
 
-2. Kør kommandoen `/connect` og søg efter **OpenCode Zen**.
+2. Kør kommandoen `/connect` og søg efter **Daemon Zen**.
 
    ```txt
    /connect
    ```
 
-3. Indtast OpenCode API-nøglen.
+3. Indtast Daemon Protocol API-nøglen.
 
    ```txt
    ┌ API key
@@ -1601,7 +1601,7 @@ STACKIT AI Model Serving leverer fuldt administreret suverænt hostingmiljø til
 
 ### Scaleway
 
-Sådan bruger du [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) med OpenCode:
+Sådan bruger du [Scaleway Generative APIs](https://www.scaleway.com/en/docs/generative-apis/) med Daemon Protocol:
 
 1. Gå til [Scaleway Console IAM indstillinger](https://console.scaleway.com/iam/api-keys) for at generere en ny API-nøgle.
 
@@ -1962,7 +1962,7 @@ Konfigurationsdetaljer:
 - **limit.context**: Maksimalt input-tokens som modellen accepterer.
 - **limit.output**: Maksimalt antal tokens modellen kan generere.
 
-`limit`-felterne lader OpenCode forstå hvor meget kontekst du har tilbage. Standardudbydere henter disse automatisk fra models.dev.
+`limit`-felterne lader Daemon Protocol forstå hvor meget kontekst du har tilbage. Standardudbydere henter disse automatisk fra models.dev.
 
 ---
 

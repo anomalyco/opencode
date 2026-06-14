@@ -3,7 +3,7 @@ title: Autorisations
 description: Contrôlez quelles actions nécessitent une approbation pour être exécutées.
 ---
 
-OpenCode utilise la configuration `permission` pour décider si une action donnée doit s'exécuter automatiquement, vous inviter ou être bloquée.
+Daemon Protocol utilise la configuration `permission` pour décider si une action donnée doit s'exécuter automatiquement, vous inviter ou être bloquée.
 
 Depuis `v1.1.1`, l'ancienne configuration booléenne `tools` est obsolète et a été fusionnée dans `permission`. L'ancienne configuration `tools` est toujours prise en charge pour des raisons de compatibilité ascendante.
 
@@ -88,7 +88,7 @@ Vous pouvez utiliser `~` ou `$HOME` au début d'un modèle pour référencer vot
 
 ### Répertoires externes
 
-Utilisez `external_directory` pour autoriser les appels d'outils qui touchent des chemins en dehors du répertoire de travail où OpenCode a été démarré. Cela s'applique à tout outil qui prend un chemin en entrée (par exemple `read`, `edit`, `glob`, `grep` et de nombreuses commandes `bash`).
+Utilisez `external_directory` pour autoriser les appels d'outils qui touchent des chemins en dehors du répertoire de travail où Daemon Protocol a été démarré. Cela s'applique à tout outil qui prend un chemin en entrée (par exemple `read`, `edit`, `glob`, `grep` et de nombreuses commandes `bash`).
 
 L'expansion du répertoire personnel (comme `~/...`) n'affecte que la façon dont un modèle est écrit. Cela n'intègre pas un chemin externe à l'espace de travail actuel, donc les chemins en dehors du répertoire de travail doivent toujours être autorisés via `external_directory`.
 
@@ -127,7 +127,7 @@ Gardez la liste centrée sur les chemins approuvés et superposez des règles d'
 
 ## Autorisations disponibles
 
-Les autorisations OpenCode sont classées par nom d'outil, plus quelques garde-fous de sécurité :
+Les autorisations Daemon Protocol sont classées par nom d'outil, plus quelques garde-fous de sécurité :
 
 - `read` — lecture d'un fichier (correspond au chemin du fichier)
 - `edit` — toutes les modifications de fichiers (couvre `edit`, `write`, `patch`)
@@ -146,7 +146,7 @@ Les autorisations OpenCode sont classées par nom d'outil, plus quelques garde-f
 
 ## Valeurs par défaut
 
-Si vous ne spécifiez rien, OpenCode démarre avec les valeurs par défaut permissives :
+Si vous ne spécifiez rien, Daemon Protocol démarre avec les valeurs par défaut permissives :
 
 - La plupart des autorisations sont par défaut `"allow"`.
 - `doom_loop` et `external_directory` sont par défaut `"ask"`.
@@ -169,10 +169,10 @@ Si vous ne spécifiez rien, OpenCode démarre avec les valeurs par défaut permi
 
 ## Que fait « Demander » ?
 
-Lorsque OpenCode demande l'approbation, l'interface utilisateur propose trois résultats :
+Lorsque Daemon Protocol demande l'approbation, l'interface utilisateur propose trois résultats :
 
 - `once` — approuve uniquement cette demande
-- `always` — approuve les futures demandes correspondant aux modèles suggérés (pour le reste de la session OpenCode en cours)
+- `always` — approuve les futures demandes correspondant aux modèles suggérés (pour le reste de la session Daemon Protocol en cours)
 - `reject` — refuser la demande
 
 L'ensemble des modèles que `always` approuverait est fourni par l'outil (par exemple, les approbations bash mettent généralement sur liste blanche un préfixe de commande sûr comme `git status*`).

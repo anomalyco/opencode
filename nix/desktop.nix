@@ -103,7 +103,7 @@ stdenv.mkDerivation (finalAttrs: {
   ];
 
   meta = {
-    description = "OpenCode Desktop App";
+    description = "Daemon Protocol Desktop App";
     mainProgram = "opencode-desktop";
     inherit (opencode.meta) homepage license platforms;
   };

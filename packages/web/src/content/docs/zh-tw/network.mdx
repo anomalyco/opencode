@@ -3,13 +3,13 @@ title: 網路
 description: 設定代理伺服器和自訂憑證。
 ---
 
-OpenCode 支援標準代理環境變數和自訂憑證，適用於企業網路環境。
+Daemon Protocol 支援標準代理環境變數和自訂憑證，適用於企業網路環境。
 
 ---
 
 ## 代理伺服器
 
-OpenCode 遵循標準代理環境變數。
+Daemon Protocol 遵循標準代理環境變數。
 
 ```bash
 # HTTPS proxy (recommended)
@@ -48,7 +48,7 @@ export HTTPS_PROXY=http://username:password@proxy.example.com:8080
 
 ## 自訂憑證
 
-如果您的企業使用自訂 CA 進行 HTTPS 連線，請設定 OpenCode 以信任這些憑證。
+如果您的企業使用自訂 CA 進行 HTTPS 連線，請設定 Daemon Protocol 以信任這些憑證。
 
 ```bash
 export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem

@@ -36,7 +36,7 @@ Core opencode server and harness issues, including sqlite, snapshots, memory, AP
 
 ### Inference
 
-OpenCode Zen, OpenCode Go, and billing issues.
+Daemon Zen, Daemon Protocol Go, and billing issues.
 
 ### Windows
 

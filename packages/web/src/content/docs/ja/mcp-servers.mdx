@@ -3,7 +3,7 @@ title: MCPサーバー
 description: ローカルおよびリモートの MCP ツールを追加します。
 ---
 
-_Model Context Protocol_ (MCP) を使用して、OpenCode に外部ツールを追加できます。 OpenCode は、ローカルサーバーとリモートサーバーの両方をサポートします。
+_Model Context Protocol_ (MCP) を使用して、Daemon Protocol に外部ツールを追加できます。 Daemon Protocol は、ローカルサーバーとリモートサーバーの両方をサポートします。
 
 MCP ツールを追加すると、組み込みツールとともに LLM で自動的に使用できるようになります。
 
@@ -23,7 +23,7 @@ MCP サーバーはコンテキストに追加されるため、どのサーバ�
 
 ## 有効化
 
-MCP サーバーは、`mcp` の下の [OpenCode 設定](https://opencode.ai/docs/config/) で定義できます。各 MCP を一意の名前で追加します。 LLM にプロンプ​​トを表示するときに、その MCP を名前で参照できます。
+MCP サーバーは、`mcp` の下の [Daemon Protocol 設定](https://opencode.ai/docs/config/) で定義できます。各 MCP を一意の名前で追加します。 LLM にプロンプ​​トを表示するときに、その MCP を名前で参照できます。
 
 ```jsonc title="opencode.jsonc" {6}
 {
@@ -165,7 +165,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 ## OAuth
 
-OpenCode は、リモート MCP サーバーの OAuth 認証を自動的に処理します。サーバーが認証を必要とする場合、OpenCode は次のことを行います。
+Daemon Protocol は、リモート MCP サーバーの OAuth 認証を自動的に処理します。サーバーが認証を必要とする場合、Daemon Protocol は次のことを行います。
 
 1. 401 応答を検出し、OAuth フローを開始します。
 2. サーバーでサポートされている場合は **動的クライアント登録 (RFC 7591)** を使用します
@@ -189,7 +189,7 @@ OpenCode は、リモート MCP サーバーの OAuth 認証を自動的に処�
 }
 ```
 
-サーバーが認証を必要とする場合、OpenCode を初めて使用しようとすると、認証を求めるプロンプトが表示されます。そうでない場合は、`opencode mcp auth <server-name>` を使用して [flow](#authenticating) を手動でトリガーできます。
+サーバーが認証を必要とする場合、Daemon Protocol を初めて使用しようとすると、認証を求めるプロンプトが表示されます。そうでない場合は、`opencode mcp auth <server-name>` を使用して [flow](#authenticating) を手動でトリガーできます。
 
 ---
 
@@ -238,7 +238,7 @@ opencode mcp list
 opencode mcp logout my-oauth-server
 ```
 
-`mcp auth` コマンドは、認証のためにブラウザを開きます。承認後、OpenCode はトークンを `~/.local/share/opencode/mcp-auth.json` に安全に保存します。
+`mcp auth` コマンドは、認証のためにブラウザを開きます。承認後、Daemon Protocol はトークンを `~/.local/share/opencode/mcp-auth.json` に安全に保存します。
 
 ---
 
@@ -291,7 +291,7 @@ opencode mcp debug my-oauth-server
 
 ## 管理
 
-MCP は、組み込みツールと並んで、OpenCode のツールとして利用できます。したがって、他のツールと同様に、OpenCode 設定を通じてそれらを管理できます。
+MCP は、組み込みツールと並んで、Daemon Protocol のツールとして利用できます。したがって、他のツールと同様に、Daemon Protocol 設定を通じてそれらを管理できます。
 
 ---
 
@@ -423,7 +423,7 @@ MCP サーバーツールはサーバー名をプレフィックスとして登�
 opencode mcp auth sentry
 ```
 
-これにより、ブラウザウィンドウが開き、OAuth フローが完了し、OpenCode が Sentry アカウントに接続されます。
+これにより、ブラウザウィンドウが開き、OAuth フローが完了し、Daemon Protocol が Sentry アカウントに接続されます。
 
 認証が完了すると、プロンプトで Sentry ツールを使用して、問題、プロジェクト、エラーデータをクエリできるようになります。
 

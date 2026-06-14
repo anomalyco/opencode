@@ -13,7 +13,7 @@ export const NvidiaPlugin = PluginV2.define({
           evt.provider.update(item.provider.id, (provider) => {
             provider.request.headers["HTTP-Referer"] = "https://opencode.ai/"
             provider.request.headers["X-Title"] = "opencode"
-            provider.request.headers["X-BILLING-INVOKE-ORIGIN"] ??= "OpenCode"
+            provider.request.headers["X-BILLING-INVOKE-ORIGIN"] ??= "Daemon Protocol"
           })
         }
       }),

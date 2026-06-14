@@ -1,14 +1,14 @@
 ---
 title: Windows (WSL)
-description: WSL を使って Windows で OpenCode を使う。
+description: WSL を使って Windows で Daemon Protocol を使う。
 ---
 
 import { Steps } from "@astrojs/starlight/components"
 
-OpenCode は Windows で直接実行できますが、より快適に使うには [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) の利用をおすすめします。WSL は OpenCode の機能とスムーズに連携する Linux 環境を提供します。
+Daemon Protocol は Windows で直接実行できますが、より快適に使うには [Windows Subsystem for Linux (WSL)](https://learn.microsoft.com/en-us/windows/wsl/install) の利用をおすすめします。WSL は Daemon Protocol の機能とスムーズに連携する Linux 環境を提供します。
 
 :::tip[WSL を使う理由]
-WSL を使うと、ファイルシステム性能、ターミナルサポート、OpenCode が依存する開発ツールとの互換性が向上します。
+WSL を使うと、ファイルシステム性能、ターミナルサポート、Daemon Protocol が依存する開発ツールとの互換性が向上します。
 :::
 
 ---
@@ -21,17 +21,17 @@ WSL を使うと、ファイルシステム性能、ターミナルサポート�
 
    まだの場合は、Microsoft 公式ガイドを使って [WSL をインストール](https://learn.microsoft.com/en-us/windows/wsl/install) します。
 
-2. **WSL で OpenCode をインストールする**
+2. **WSL で Daemon Protocol をインストールする**
 
-   WSL の準備ができたら WSL のターミナルを開き、[インストール方法](/docs/) のいずれかで OpenCode をインストールします。
+   WSL の準備ができたら WSL のターミナルを開き、[インストール方法](/docs/) のいずれかで Daemon Protocol をインストールします。
 
    ```bash
    curl -fsSL https://opencode.ai/install | bash
    ```
 
-3. **WSL から OpenCode を使う**
+3. **WSL から Daemon Protocol を使う**
 
-   プロジェクトディレクトリに移動し（Windows ファイルは `/mnt/c/` や `/mnt/d/` などからアクセス）、OpenCode を実行します。
+   プロジェクトディレクトリに移動し（Windows ファイルは `/mnt/c/` や `/mnt/d/` などからアクセス）、Daemon Protocol を実行します。
 
    ```bash
    cd /mnt/c/Users/YourName/project
@@ -44,7 +44,7 @@ WSL を使うと、ファイルシステム性能、ターミナルサポート�
 
 ## デスクトップアプリ + WSL サーバー
 
-OpenCode デスクトップアプリを使いつつ、サーバーは WSL で動かしたい場合は次の手順です。
+Daemon Protocol デスクトップアプリを使いつつ、サーバーは WSL で動かしたい場合は次の手順です。
 
 1. **WSL でサーバーを起動する**
 
@@ -82,7 +82,7 @@ Windows で Web 利用を快適にするには:
 
 2. **Windows のブラウザからアクセスする**
 
-   `http://localhost:<port>` にアクセスします（URL は OpenCode が表示します）。
+   `http://localhost:<port>` にアクセスします（URL は Daemon Protocol が表示します）。
 
 WSL から `opencode web` を実行すると、適切なファイルシステムアクセスとターミナル統合を維持したまま、Windows ブラウザから利用できます。
 
@@ -104,13 +104,13 @@ opencode
 ```
 
 :::tip
-よりスムーズに使うには、リポジトリを WSL のファイルシステム（例: `~/code/`）にクローンまたはコピーして、そこで OpenCode を実行することをおすすめします。
+よりスムーズに使うには、リポジトリを WSL のファイルシステム（例: `~/code/`）にクローンまたはコピーして、そこで Daemon Protocol を実行することをおすすめします。
 :::
 
 ---
 
 ## ヒント
 
-- Windows ドライブ上のプロジェクトでも、OpenCode は WSL で実行するとファイルアクセスがスムーズです
-- OpenCode と一緒に VS Code の [WSL 拡張機能](https://code.visualstudio.com/docs/remote/wsl) を使うと統合的な開発フローを構築できます
-- OpenCode の設定とセッションは WSL 環境内の `~/.local/share/opencode/` に保存されます
+- Windows ドライブ上のプロジェクトでも、Daemon Protocol は WSL で実行するとファイルアクセスがスムーズです
+- Daemon Protocol と一緒に VS Code の [WSL 拡張機能](https://code.visualstudio.com/docs/remote/wsl) を使うと統合的な開発フローを構築できます
+- Daemon Protocol の設定とセッションは WSL 環境内の `~/.local/share/opencode/` に保存されます

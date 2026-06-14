@@ -3,7 +3,7 @@ title: Vještine agenata
 description: "Definisite ponasanje koje se moze ponovo koristiti"
 ---
 
-Agent skills omogucavaju OpenCode da pronade uputstva koja se mogu ponovo koristiti iz repozitorija ili home direktorija.
+Agent skills omogucavaju Daemon Protocol da pronade uputstva koja se mogu ponovo koristiti iz repozitorija ili home direktorija.
 Skills se ucitavaju po potrebi kroz ugradeni `skill` alat - agenti vide dostupne skills i ucitavaju puni sadrzaj kad zatreba.
 
 ---
@@ -11,7 +11,7 @@ Skills se ucitavaju po potrebi kroz ugradeni `skill` alat - agenti vide dostupne
 ## Postavite datoteke
 
 Kreirajte jedan folder po nazivu skill-a i stavite `SKILL.md` unutar njega.
-OpenCode pretrazuje ove lokacije:
+Daemon Protocol pretrazuje ove lokacije:
 
 - Konfiguracija projekta: `.opencode/skills/<name>/SKILL.md`
 - Globalna konfiguracija: `~/.config/opencode/skills/<name>/SKILL.md`
@@ -24,7 +24,7 @@ OpenCode pretrazuje ove lokacije:
 
 ## Razumijte otkrivanje
 
-Za projektne lokalne putanje, OpenCode ide prema gore od trenutnog radnog direktorija dok ne dode do git worktree-ja.
+Za projektne lokalne putanje, Daemon Protocol ide prema gore od trenutnog radnog direktorija dok ne dode do git worktree-ja.
 Usput ucitava sve odgovarajuce `skills/*/SKILL.md` u `.opencode/` i odgovarajuce `.claude/skills/*/SKILL.md` ili `.agents/skills/*/SKILL.md`.
 
 Globalne definicije se takoder ucitavaju iz `~/.config/opencode/skills/*/SKILL.md`, `~/.claude/skills/*/SKILL.md` i `~/.agents/skills/*/SKILL.md`.
@@ -102,7 +102,7 @@ Ask clarifying questions if the target versioning scheme is unclear.
 
 ## Opis alata
 
-OpenCode navodi dostupne skills u opisu `skill` alata.
+Daemon Protocol navodi dostupne skills u opisu `skill` alata.
 Svaki unos sadrzi naziv i opis skill-a:
 
 ```xml

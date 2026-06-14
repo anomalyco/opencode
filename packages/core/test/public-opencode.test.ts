@@ -8,7 +8,7 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(OpenCode.layer)
 
-describe("public native OpenCode API", () => {
+describe("public native Daemon Protocol API", () => {
   it.effect("exposes only the intentional Session capabilities", () =>
     Effect.gen(function* () {
       const opencode = yield* OpenCode.Service

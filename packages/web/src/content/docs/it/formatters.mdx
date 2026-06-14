@@ -1,15 +1,15 @@
 ---
 title: Formattatori
-description: OpenCode usa formattatori specifici per linguaggio.
+description: Daemon Protocol usa formattatori specifici per linguaggio.
 ---
 
-OpenCode formatta automaticamente i file dopo che vengono scritti o modificati usando formattatori specifici per linguaggio. Questo assicura che il codice generato segua lo stile del tuo progetto.
+Daemon Protocol formatta automaticamente i file dopo che vengono scritti o modificati usando formattatori specifici per linguaggio. Questo assicura che il codice generato segua lo stile del tuo progetto.
 
 ---
 
 ## Integrati
 
-OpenCode include diversi formattatori integrati per linguaggi e framework popolari. Qui sotto trovi la lista dei formattatori, delle estensioni supportate e dei comandi o opzioni di config richiesti.
+Daemon Protocol include diversi formattatori integrati per linguaggi e framework popolari. Qui sotto trovi la lista dei formattatori, delle estensioni supportate e dei comandi o opzioni di config richiesti.
 
 | Formattatore         | Estensioni                                                                                               | Requisiti                                                                                                    |
 | -------------------- | -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
@@ -40,13 +40,13 @@ OpenCode include diversi formattatori integrati per linguaggi e framework popola
 | uv                   | .py, .pyi                                                                                                | comando `uv` disponibile                                                                                     |
 | zig                  | .zig, .zon                                                                                               | comando `zig` disponibile                                                                                    |
 
-Quindi, se il progetto ha `prettier` in `package.json`, OpenCode lo usera automaticamente.
+Quindi, se il progetto ha `prettier` in `package.json`, Daemon Protocol lo usera automaticamente.
 
 ---
 
 ## Come funziona
 
-Quando OpenCode scrive o modifica un file:
+Quando Daemon Protocol scrive o modifica un file:
 
 1. Controlla l'estensione del file rispetto a tutti i formattatori abilitati.
 2. Esegue il comando del formattatore appropriato sul file.
@@ -58,7 +58,7 @@ Questo processo avviene in background, mantenendo lo stile del codice senza pass
 
 ## Configurazione
 
-Puoi personalizzare i formattatori nella sezione `formatter` della config di OpenCode.
+Puoi personalizzare i formattatori nella sezione `formatter` della config di Daemon Protocol.
 
 ```json title="opencode.json"
 {

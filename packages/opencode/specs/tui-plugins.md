@@ -184,7 +184,7 @@ npm plugins can declare a version compatibility range in `package.json` using th
 }
 ```
 
-- The value is a semver range checked against the running OpenCode version.
+- The value is a semver range checked against the running Daemon Protocol version.
 - If the range is not satisfied, the plugin is skipped with a warning and a session error.
 - If `engines.opencode` is absent, no check is performed (backward compatible).
 - File plugins are never checked; only npm package plugins are validated.
@@ -213,7 +213,7 @@ npm plugins can declare a version compatibility range in `package.json` using th
 - There is no uninstall, list, or update CLI command for external plugins.
 - Local file plugins are configured directly in `tui.json`.
 
-When `plugin` entries exist in a writable `.opencode` dir or `OPENCODE_CONFIG_DIR`, OpenCode installs `@opencode-ai/plugin` into that dir and writes:
+When `plugin` entries exist in a writable `.opencode` dir or `OPENCODE_CONFIG_DIR`, Daemon Protocol installs `@opencode-ai/plugin` into that dir and writes:
 
 - `package.json`
 - `bun.lock`
@@ -247,7 +247,7 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 ### Keymap
 
 - `api.keymap` exposes the raw `Keymap<Renderable, KeyEvent>` instance from the host.
-- The host already installs the default OpenTUI bundle (`default keys`, metadata fields, and enabled fields) plus OpenCode's comma bindings, leader token, base layout fallback, pending-sequence helpers, and managed textarea layer.
+- The host already installs the default OpenTUI bundle (`default keys`, metadata fields, and enabled fields) plus Daemon Protocol's comma bindings, leader token, base layout fallback, pending-sequence helpers, and managed textarea layer.
 - Register commands with `api.keymap.registerLayer({ commands: [...] })`.
 - Register key bindings with `bindings: [{ key, cmd, desc }]` in the same layer or a separate layer.
 - Use `api.keymap.acquireResource(...)` for shared plugin addon setup that should ref-count against the host keymap.
@@ -258,7 +258,7 @@ Top-level API groups exposed to `tui(api, options, meta)`:
 
 #### Mode-aware layers
 
-OpenCode registers a `mode` layer field on the host keymap. Plugins can use it to keep bindings active only in the relevant UI state.
+Daemon Protocol registers a `mode` layer field on the host keymap. Plugins can use it to keep bindings active only in the relevant UI state.
 
 Built-in modes:
 
@@ -316,7 +316,7 @@ api.keymap.registerLayer({
 })
 ```
 
-Mode pushes are automatically tracked by the plugin runtime. If a plugin is disabled, fails during activation, or the TUI shuts down before the plugin calls the disposer, OpenCode pops the plugin's pushed modes during plugin cleanup. Calling the disposer yourself is still recommended for component lifetimes; cleanup remains idempotent.
+Mode pushes are automatically tracked by the plugin runtime. If a plugin is disabled, fails during activation, or the TUI shuts down before the plugin calls the disposer, Daemon Protocol pops the plugin's pushed modes during plugin cleanup. Calling the disposer yourself is still recommended for component lifetimes; cleanup remains idempotent.
 
 ### Keys
 

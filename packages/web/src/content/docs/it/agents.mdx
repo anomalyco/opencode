@@ -15,7 +15,7 @@ Puoi passare da un agente all'altro durante una sessione oppure invocarli con la
 
 ## Tipi
 
-In OpenCode esistono due tipi di agenti: agenti primari e subagenti.
+In Daemon Protocol esistono due tipi di agenti: agenti primari e subagenti.
 
 ---
 
@@ -27,7 +27,7 @@ Gli agenti primari sono gli assistenti principali con cui interagisci direttamen
 Puoi usare **Tab** per passare tra gli agenti primari durante una sessione.
 :::
 
-OpenCode include due agenti primari integrati: **Build** e **Plan**. Li vediamo sotto.
+Daemon Protocol include due agenti primari integrati: **Build** e **Plan**. Li vediamo sotto.
 
 ---
 
@@ -35,13 +35,13 @@ OpenCode include due agenti primari integrati: **Build** e **Plan**. Li vediamo 
 
 I subagenti sono assistenti specializzati che gli agenti primari possono invocare per task specifici. Puoi anche invocarli manualmente **menzionandoli con @** nei tuoi messaggi.
 
-OpenCode include tre subagenti integrati: **General**, **Explore** e **Scout**. Li vediamo sotto.
+Daemon Protocol include tre subagenti integrati: **General**, **Explore** e **Scout**. Li vediamo sotto.
 
 ---
 
 ## Integrati
 
-OpenCode include due agenti primari integrati e tre subagenti integrati.
+Daemon Protocol include due agenti primari integrati e tre subagenti integrati.
 
 ---
 
@@ -87,7 +87,7 @@ Un agente rapido in sola lettura per esplorare codebase. Non può modificare fil
 
 _Mode_: `subagent`
 
-Un agente in sola lettura per la ricerca su documentazione esterna e dipendenze. Usalo quando devi clonare il repository di una dipendenza nella cache gestita di OpenCode, ispezionare il codice sorgente di una libreria o confrontare il codice locale con implementazioni upstream senza modificare il tuo workspace.
+Un agente in sola lettura per la ricerca su documentazione esterna e dipendenze. Usalo quando devi clonare il repository di una dipendenza nella cache gestita di Daemon Protocol, ispezionare il codice sorgente di una libreria o confrontare il codice locale con implementazioni upstream senza modificare il tuo workspace.
 
 ---
 
@@ -283,7 +283,7 @@ I valori di temperature tipicamente vanno da 0.0 a 1.0:
 }
 ```
 
-Se non specifichi una temperature, OpenCode usa i default specifici del modello; tipicamente 0 per la maggior parte dei modelli e 0.55 per i modelli Qwen.
+Se non specifichi una temperature, Daemon Protocol usa i default specifici del modello; tipicamente 0 per la maggior parte dei modelli e 0.55 per i modelli Qwen.
 
 ---
 
@@ -343,7 +343,7 @@ Specifica un file di system prompt personalizzato per questo agente tramite la c
 }
 ```
 
-Questo path è relativo alla posizione del file di configurazione. Quindi funziona sia per la config globale di OpenCode sia per la config specifica del progetto.
+Questo path è relativo alla posizione del file di configurazione. Quindi funziona sia per la config globale di Daemon Protocol sia per la config specifica del progetto.
 
 ---
 
@@ -365,7 +365,7 @@ Se non specifichi un modello, gli agenti primari usano il [modello configurato g
 }
 ```
 
-L'ID modello nella configurazione OpenCode usa il formato `provider/model-id`. Per esempio, se stai usando [OpenCode Zen](/docs/zen), useresti `opencode/gpt-5.1-codex` per GPT 5.1 Codex.
+L'ID modello nella configurazione Daemon Protocol usa il formato `provider/model-id`. Per esempio, se stai usando [Daemon Zen](/docs/zen), useresti `opencode/gpt-5.1-codex` per GPT 5.1 Codex.
 
 ---
 

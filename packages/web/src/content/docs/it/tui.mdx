@@ -1,13 +1,13 @@
 ---
 title: TUI
-description: Usa l'interfaccia utente da terminale (TUI) di OpenCode.
+description: Usa l'interfaccia utente da terminale (TUI) di Daemon Protocol.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode fornisce un'interfaccia interattiva da terminale (TUI) per lavorare sui tuoi progetti con un LLM.
+Daemon Protocol fornisce un'interfaccia interattiva da terminale (TUI) per lavorare sui tuoi progetti con un LLM.
 
-Eseguire OpenCode avvia la TUI per la directory corrente.
+Eseguire Daemon Protocol avvia la TUI per la directory corrente.
 
 ```bash
 opencode
@@ -57,7 +57,7 @@ L'output del comando viene aggiunto alla conversazione come risultato di uno str
 
 ## Comandi
 
-Quando usi la TUI di OpenCode, puoi digitare `/` seguito dal nome di un comando per eseguire rapidamente azioni. Per esempio:
+Quando usi la TUI di Daemon Protocol, puoi digitare `/` seguito dal nome di un comando per eseguire rapidamente azioni. Per esempio:
 
 ```bash frame="none"
 /help
@@ -71,7 +71,7 @@ Ecco tutti i comandi slash disponibili:
 
 ### connetti
 
-Aggiunge un provider a OpenCode. Ti permette di selezionare tra i provider disponibili e aggiungere le relative chiavi API.
+Aggiunge un provider a Daemon Protocol. Ti permette di selezionare tra i provider disponibili e aggiungere le relative chiavi API.
 
 ```bash frame="none"
 /connect
@@ -117,7 +117,7 @@ Apre un editor esterno per comporre messaggi. Usa l'editor impostato nella varia
 
 ### esci
 
-Esce da OpenCode. _Alias_: `/quit`, `/q`
+Esce da Daemon Protocol. _Alias_: `/quit`, `/q`
 
 ```bash frame="none"
 /exit
@@ -390,7 +390,7 @@ Questo è separato da `opencode.json`, che configura il comportamento di server/
 
 - `theme` - Imposta il tema della UI. [Scopri di più](/docs/themes).
 - `keybinds` - Personalizza le scorciatoie da tastiera. [Scopri di più](/docs/keybinds).
-- `leader_timeout` - Controlla per quanto tempo OpenCode attende dopo il leader key. Default: `2000`.
+- `leader_timeout` - Controlla per quanto tempo Daemon Protocol attende dopo il leader key. Default: `2000`.
 - `scroll_acceleration.enabled` - Abilita l'accelerazione di scroll in stile macOS per uno scorrimento fluido e naturale. Quando abilitata, la velocità aumenta con gesture rapide e resta precisa con movimenti lenti. **Questa impostazione ha precedenza su `scroll_speed` e lo sovrascrive quando attiva.**
 - `scroll_speed` - Controlla la velocità di scorrimento della TUI quando usi i comandi di scroll (minimo: `0.001`, supporta valori decimali). Default: `3`. **Nota: viene ignorata se `scroll_acceleration.enabled` è impostato a `true`.**
 - `diff_style` - Controlla il rendering delle diff. `"auto"` si adatta alla larghezza del terminale, `"stacked"` mostra sempre un layout a colonna singola.
@@ -401,7 +401,7 @@ Usa `OPENCODE_TUI_CONFIG` per caricare un path di configurazione TUI personalizz
 
 ### Attention
 
-Attention permette alla TUI di avvisarti quando OpenCode aspetta una risposta, richiede l'approvazione di un permesso, incontra un errore di sessione o completa una sessione. Abilitala con `attention.enabled`; gli eventi integrati riproducono un suono quando si verificano. Le notifiche desktop vengono inviate solo quando la finestra del terminale non è in primo piano e non vengono usate per gli eventi subagent.
+Attention permette alla TUI di avvisarti quando Daemon Protocol aspetta una risposta, richiede l'approvazione di un permesso, incontra un errore di sessione o completa una sessione. Abilitala con `attention.enabled`; gli eventi integrati riproducono un suono quando si verificano. Le notifiche desktop vengono inviate solo quando la finestra del terminale non è in primo piano e non vengono usate per gli eventi subagent.
 
 - `enabled` - Abilita tutte le notifiche e i suoni di Attention. Default: `false`.
 - `notifications` - Quando Attention è abilitato, consente alla TUI di inviare notifiche desktop tramite il terminale. Default: `true`.

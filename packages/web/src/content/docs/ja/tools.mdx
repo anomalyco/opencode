@@ -3,7 +3,7 @@ title: ツール
 description: LLM が使用できるツールを管理します。
 ---
 
-ツールを使用すると、LLM がコードベースでアクションを実行できるようになります。 OpenCode には一連の組み込みツールが付属していますが、[カスタムツール](/docs/custom-tools) または [MCP サーバー](/docs/mcp-servers) を使用して拡張できます。
+ツールを使用すると、LLM がコードベースでアクションを実行できるようになります。 Daemon Protocol には一連の組み込みツールが付属していますが、[カスタムツール](/docs/custom-tools) または [MCP サーバー](/docs/mcp-servers) を使用して拡張できます。
 
 デフォルトでは、すべてのツールは**有効**になっており、実行するための権限は必要ありません。 [権限](/docs/permissions).
 
@@ -41,7 +41,7 @@ description: LLM が使用できるツールを管理します。
 
 ## 組み込み
 
-OpenCode で利用可能なすべての組み込みツールを次に示します。
+Daemon Protocol で利用可能なすべての組み込みツールを次に示します。
 
 ---
 
@@ -253,9 +253,9 @@ LLM が Web ページをフェッチして読み取ることを許可します�
 ウェブで情報を検索してください。
 
 :::note
-このツールは、OpenCode プロバイダーを使用している場合、または `OPENCODE_ENABLE_EXA` 環境変数が真実の値 (`true` または `1` など) に設定されている場合にのみ使用できます。
+このツールは、Daemon Protocol プロバイダーを使用している場合、または `OPENCODE_ENABLE_EXA` 環境変数が真実の値 (`true` または `1` など) に設定されている場合にのみ使用できます。
 
-OpenCode の起動時に有効にするには:
+Daemon Protocol の起動時に有効にするには:
 
 ```bash
 OPENCODE_ENABLE_EXA=1 opencode

@@ -15,7 +15,7 @@ agent는 특정 작업과 워크플로에 맞게 설정할 수 있는 전문 AI 
 
 ## 유형
 
-OpenCode의 agent는 primary agent와 subagent, 두 가지 유형으로 나뉩니다.
+Daemon Protocol의 agent는 primary agent와 subagent, 두 가지 유형으로 나뉩니다.
 
 ---
 
@@ -27,7 +27,7 @@ primary agent는 사용자가 직접 상호작용하는 메인 assistant입니�
 세션 중 **Tab** 키로 primary agent를 빠르게 전환할 수 있습니다.
 :::
 
-OpenCode에는 기본 제공 primary agent인 **Build**와 **Plan**이 포함되어 있습니다. 아래에서 각각 살펴보겠습니다.
+Daemon Protocol에는 기본 제공 primary agent인 **Build**와 **Plan**이 포함되어 있습니다. 아래에서 각각 살펴보겠습니다.
 
 ---
 
@@ -35,13 +35,13 @@ OpenCode에는 기본 제공 primary agent인 **Build**와 **Plan**이 포함되
 
 subagent는 primary agent가 특정 작업을 위해 호출하는 전문 assistant입니다. 메시지에서 **@ mention**으로 직접 호출할 수도 있습니다.
 
-OpenCode에는 기본 제공 subagent인 **General**, **Explore**, **Scout**가 포함되어 있습니다. 아래에서 살펴보겠습니다.
+Daemon Protocol에는 기본 제공 subagent인 **General**, **Explore**, **Scout**가 포함되어 있습니다. 아래에서 살펴보겠습니다.
 
 ---
 
 ## 기본 제공
 
-OpenCode는 기본적으로 primary agent 2개와 subagent 3개를 제공합니다.
+Daemon Protocol는 기본적으로 primary agent 2개와 subagent 3개를 제공합니다.
 
 ---
 
@@ -87,7 +87,7 @@ _Mode_: `subagent`
 
 _Mode_: `subagent`
 
-외부 docs와 dependency 리서치를 위한 읽기 전용 agent입니다. dependency repository를 OpenCode의 관리형 cache에 clone하거나, 라이브러리 소스를 살펴보거나, workspace를 수정하지 않고 로컬 코드를 upstream 구현과 교차 확인해야 할 때 사용하세요.
+외부 docs와 dependency 리서치를 위한 읽기 전용 agent입니다. dependency repository를 Daemon Protocol의 관리형 cache에 clone하거나, 라이브러리 소스를 살펴보거나, workspace를 수정하지 않고 로컬 코드를 upstream 구현과 교차 확인해야 할 때 사용하세요.
 
 ---
 
@@ -284,7 +284,7 @@ Temperature 값은 일반적으로 0.0~1.0 범위를 사용합니다.
 }
 ```
 
-temperature를 지정하지 않으면 OpenCode는 model별 기본값을 사용합니다. 일반적으로 대부분의 model은 0, Qwen model은 0.55를 사용합니다.
+temperature를 지정하지 않으면 Daemon Protocol는 model별 기본값을 사용합니다. 일반적으로 대부분의 model은 0, Qwen model은 0.55를 사용합니다.
 
 ---
 
@@ -344,7 +344,7 @@ agent가 텍스트 응답만 하도록 강제되기 전까지 수행할 수 있�
 }
 ```
 
-이 경로는 config 파일 위치 기준의 상대 경로입니다. 따라서 전역 OpenCode config와 프로젝트별 config 모두에서 동일하게 동작합니다.
+이 경로는 config 파일 위치 기준의 상대 경로입니다. 따라서 전역 Daemon Protocol config와 프로젝트별 config 모두에서 동일하게 동작합니다.
 
 ---
 
@@ -366,7 +366,7 @@ model을 지정하지 않으면 primary agent는 [전역으로 설정한 model](
 }
 ```
 
-OpenCode config의 model ID는 `provider/model-id` 형식을 사용합니다. 예를 들어 [OpenCode Zen](/docs/zen)을 사용한다면 GPT 5.1 Codex에 `opencode/gpt-5.1-codex`를 사용합니다.
+Daemon Protocol config의 model ID는 `provider/model-id` 형식을 사용합니다. 예를 들어 [Daemon Zen](/docs/zen)을 사용한다면 GPT 5.1 Codex에 `opencode/gpt-5.1-codex`를 사용합니다.
 
 ---
 

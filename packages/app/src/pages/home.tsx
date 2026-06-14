@@ -368,6 +368,7 @@ function HomeDesign() {
           class="min-h-0 min-w-0 flex-1 flex flex-col pt-12"
           aria-label={language.t("sidebar.project.recentSessions")}
         >
+          <Logo class="mb-6 h-7 w-auto max-w-[220px] opacity-70" />
           <HomeSessionSearch
             value={state.search}
             placeholder={language.t("home.sessions.search.placeholder")}
@@ -1148,7 +1149,7 @@ function LegacyHome() {
 
   return (
     <div class="mx-auto mt-55 w-full md:w-auto px-4">
-      <Logo class="md:w-xl opacity-12" />
+      <Logo class="h-auto w-full max-w-xs opacity-12 md:max-w-xl" />
       <Button
         size="large"
         variant="ghost"

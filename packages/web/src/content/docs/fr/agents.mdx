@@ -15,7 +15,7 @@ Vous pouvez basculer entre les agents au cours d'une session ou les appeler avec
 
 ## Types
 
-Il existe deux types d'agents dans OpenCode ; agents primaires et sous-agents.
+Il existe deux types d'agents dans Daemon Protocol ; agents primaires et sous-agents.
 
 ---
 
@@ -27,7 +27,7 @@ Les agents primaires sont les principaux assistants avec lesquels vous interagis
 Vous pouvez utiliser la touche **Tab** pour basculer entre les agents primaires au cours d'une session.
 :::
 
-OpenCode est livré avec deux agents primaires intégrés, **Build** et **Plan**.
+Daemon Protocol est livré avec deux agents primaires intégrés, **Build** et **Plan**.
 Nous les verrons ci-dessous.
 
 ---
@@ -36,13 +36,13 @@ Nous les verrons ci-dessous.
 
 Les sous-agents sont des assistants spécialisés que les agents primaires peuvent appeler pour des tâches spécifiques. Vous pouvez également les invoquer manuellement en **@ les mentionnant** dans vos messages.
 
-OpenCode est livré avec trois sous-agents intégrés, **General**, **Explore** et **Scout**. Nous les verrons ci-dessous.
+Daemon Protocol est livré avec trois sous-agents intégrés, **General**, **Explore** et **Scout**. Nous les verrons ci-dessous.
 
 ---
 
 ## Agents intégrés
 
-OpenCode est livré avec deux agents primaires intégrés et trois sous-agents intégrés.
+Daemon Protocol est livré avec deux agents primaires intégrés et trois sous-agents intégrés.
 
 ---
 
@@ -88,7 +88,7 @@ Un agent rapide en lecture seule pour explorer les bases de code. Impossible de 
 
 _Mode_ : `subagent`
 
-Un agent en lecture seule pour la recherche sur la documentation externe et les dépendances. Utilisez-le lorsque vous devez cloner le dépôt d'une dépendance dans le cache géré d'OpenCode, inspecter le code source d'une bibliothèque ou recouper le code local avec les implémentations upstream sans modifier votre espace de travail.
+Un agent en lecture seule pour la recherche sur la documentation externe et les dépendances. Utilisez-le lorsque vous devez cloner le dépôt d'une dépendance dans le cache géré d'Daemon Protocol, inspecter le code source d'une bibliothèque ou recouper le code local avec les implémentations upstream sans modifier votre espace de travail.
 
 ---
 
@@ -285,7 +285,7 @@ Les valeurs de température varient généralement de 0,0 à 1,0 :
 }
 ```
 
-Si aucune température n'est spécifiée, OpenCode utilise les valeurs par défaut spécifiques au modèle ; généralement 0 pour la plupart des modèles, 0,55 pour les modèles Qwen.
+Si aucune température n'est spécifiée, Daemon Protocol utilise les valeurs par défaut spécifiques au modèle ; généralement 0 pour la plupart des modèles, 0,55 pour les modèles Qwen.
 
 ---
 
@@ -345,7 +345,7 @@ Spécifiez un fichier de prompt système personnalisé pour cet agent avec la co
 }
 ```
 
-Ce chemin est relatif à l'emplacement du fichier de configuration. Cela fonctionne donc à la fois pour la configuration globale OpenCode et pour la configuration spécifique au projet.
+Ce chemin est relatif à l'emplacement du fichier de configuration. Cela fonctionne donc à la fois pour la configuration globale Daemon Protocol et pour la configuration spécifique au projet.
 
 ---
 
@@ -367,7 +367,7 @@ Si vous ne spécifiez pas de modèle, les agents primaires utilisent le [modèle
 }
 ```
 
-L'ID de modèle dans votre configuration OpenCode utilise le format `provider/model-id`. Par exemple, si vous utilisez [OpenCode Zen](/docs/zen), vous utiliserez `opencode/gpt-5.1-codex` pour GPT 5.1 Codex.
+L'ID de modèle dans votre configuration Daemon Protocol utilise le format `provider/model-id`. Par exemple, si vous utilisez [Daemon Zen](/docs/zen), vous utiliserez `opencode/gpt-5.1-codex` pour GPT 5.1 Codex.
 
 ---
 

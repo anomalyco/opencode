@@ -1,9 +1,9 @@
 ---
 title: 外掛
-description: 編寫自己的外掛來擴展 OpenCode。
+description: 編寫自己的外掛來擴展 Daemon Protocol。
 ---
 
-外掛允許您透過掛鉤各種事件和自訂行為來擴展 OpenCode。您可以建立外掛來新增新功能、整合外部服務，或修改 OpenCode 的預設行為。
+外掛允許您透過掛鉤各種事件和自訂行為來擴展 Daemon Protocol。您可以建立外掛來新增新功能、整合外部服務，或修改 Daemon Protocol 的預設行為。
 
 如需了解範例，請查看社群建立的[外掛](/docs/ecosystem#plugins)。
 
@@ -82,7 +82,7 @@ description: 編寫自己的外掛來擴展 OpenCode。
 }
 ```
 
-OpenCode 會在啟動時執行 `bun install` 來安裝這些相依套件。之後您的外掛和工具就可以匯入它們了。
+Daemon Protocol 會在啟動時執行 `bun install` 來安裝這些相依套件。之後您的外掛和工具就可以匯入它們了。
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -117,7 +117,7 @@ export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
 - `project`：當前專案資訊。
 - `directory`：當前工作目錄。
 - `worktree`：git 工作樹路徑。
-- `client`：用於與 AI 互動的 OpenCode SDK 用戶端。
+- `client`：用於與 AI 互動的 Daemon Protocol SDK 用戶端。
 - `$`：Bun 的 [Shell API](https://bun.com/docs/runtime/shell)，用於執行指令。
 
 ---
@@ -210,7 +210,7 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
 
 ## 範例
 
-以下是一些可用於擴展 OpenCode 的外掛範例。
+以下是一些可用於擴展 Daemon Protocol 的外掛範例。
 
 ---
 
@@ -234,14 +234,14 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 這裡使用 `osascript` 在 macOS 上執行 AppleScript 來傳送通知。
 
 :::note
-如果您使用 OpenCode 桌面應用程式，它可以在回應就緒或工作階段出錯時自動傳送系統通知。
+如果您使用 Daemon Protocol 桌面應用程式，它可以在回應就緒或工作階段出錯時自動傳送系統通知。
 :::
 
 ---
 
 ### .env 保護
 
-阻止 OpenCode 讀取 `.env` 檔案：
+阻止 Daemon Protocol 讀取 `.env` 檔案：
 
 ```javascript title=".opencode/plugins/env-protection.js"
 export const EnvProtection = async ({ project, client, $, directory, worktree }) => {
@@ -276,7 +276,7 @@ export const InjectEnvPlugin = async () => {
 
 ### 自訂工具
 
-外掛還可以為 OpenCode 新增自訂工具：
+外掛還可以為 Daemon Protocol 新增自訂工具：
 
 ```ts title=".opencode/plugins/custom-tools.ts"
 import { type Plugin, tool } from "@opencode-ai/plugin"
@@ -299,13 +299,13 @@ export const CustomToolsPlugin: Plugin = async (ctx) => {
 }
 ```
 
-`tool` 輔助函式用於建立 OpenCode 可呼叫的自訂工具。它接受一個 Zod schema 函式，並回傳一個工具定義，包含：
+`tool` 輔助函式用於建立 Daemon Protocol 可呼叫的自訂工具。它接受一個 Zod schema 函式，並回傳一個工具定義，包含：
 
 - `description`：工具的功能描述
 - `args`：工具參數的 Zod schema
 - `execute`：工具被呼叫時執行的函式
 
-您的自訂工具將與內建工具一起在 OpenCode 中可用。
+您的自訂工具將與內建工具一起在 Daemon Protocol 中可用。
 
 :::note
 如果外掛工具使用與內建工具相同的名稱，則外掛工具具有優先權。

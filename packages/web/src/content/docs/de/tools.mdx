@@ -4,7 +4,7 @@ description: Verwalte, welche Tools ein LLM nutzen darf.
 ---
 
 Tools erlauben dem LLM Aktionen in deiner Codebasis.
-OpenCode bringt eingebaute Tools mit und laesst sich ueber [Custom Tools](/docs/custom-tools) oder [MCP-Server](/docs/mcp-servers) erweitern.
+Daemon Protocol bringt eingebaute Tools mit und laesst sich ueber [Custom Tools](/docs/custom-tools) oder [MCP-Server](/docs/mcp-servers) erweitern.
 
 Standardmaessig sind alle Tools **aktiviert** und brauchen keine Freigabe.
 Das Verhalten steuerst du ueber [Berechtigungen](/docs/permissions).
@@ -45,7 +45,7 @@ Zum Beispiel, um fuer alle Tools eines MCP-Servers eine Freigabe zu verlangen:
 
 ## Eingebaut
 
-Hier sind alle in OpenCode verfuegbaren eingebauten Tools.
+Hier sind alle in Daemon Protocol verfuegbaren eingebauten Tools.
 
 ---
 
@@ -260,9 +260,9 @@ Erlaubt dem LLM, Webseiten abzurufen und zu lesen. Nuetzlich zum Nachschlagen vo
 Durchsucht das Web nach Informationen.
 
 :::note
-Dieses Tool ist nur verfuegbar, wenn der OpenCode-Provider genutzt wird oder die Umgebungsvariable `OPENCODE_ENABLE_EXA` auf einen 'truthy' Wert (z. B. `true` oder `1`) gesetzt ist.
+Dieses Tool ist nur verfuegbar, wenn der Daemon Protocol-Provider genutzt wird oder die Umgebungsvariable `OPENCODE_ENABLE_EXA` auf einen 'truthy' Wert (z. B. `true` oder `1`) gesetzt ist.
 
-Zum Aktivieren beim Start von OpenCode:
+Zum Aktivieren beim Start von Daemon Protocol:
 
 ```bash
 OPENCODE_ENABLE_EXA=1 opencode

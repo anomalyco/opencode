@@ -1,9 +1,9 @@
 ---
 title: Plugins
-description: Écrivez vos propres plugins pour étendre OpenCode.
+description: Écrivez vos propres plugins pour étendre Daemon Protocol.
 ---
 
-Les plugins vous permettent d'étendre OpenCode en vous connectant à divers événements et en personnalisant le comportement. Vous pouvez créer des plugins pour ajouter de nouvelles fonctionnalités, intégrer des services externes ou modifier le comportement par défaut de OpenCode.
+Les plugins vous permettent d'étendre Daemon Protocol en vous connectant à divers événements et en personnalisant le comportement. Vous pouvez créer des plugins pour ajouter de nouvelles fonctionnalités, intégrer des services externes ou modifier le comportement par défaut de Daemon Protocol.
 
 Pour des exemples, consultez les [plugins](/docs/ecosystem#plugins) créés par la communauté.
 
@@ -82,7 +82,7 @@ Les plugins locaux et les outils personnalisés peuvent utiliser des packages np
 }
 ```
 
-OpenCode exécute `bun install` au démarrage pour les installer. Vos plugins et outils peuvent ensuite les importer.
+Daemon Protocol exécute `bun install` au démarrage pour les installer. Vos plugins et outils peuvent ensuite les importer.
 
 ```ts title=".opencode/plugins/my-plugin.ts"
 import { escape } from "shescape"
@@ -234,7 +234,7 @@ export const NotificationPlugin = async ({ project, client, $, directory, worktr
 Nous utilisons `osascript` pour exécuter AppleScript sur macOS. Ici, nous l'utilisons pour envoyer des notifications.
 
 :::note
-Si vous utilisez l'application de bureau OpenCode, elle peut envoyer automatiquement des notifications système lorsqu'une réponse est prête ou en cas d'erreur de session.
+Si vous utilisez l'application de bureau Daemon Protocol, elle peut envoyer automatiquement des notifications système lorsqu'une réponse est prête ou en cas d'erreur de session.
 :::
 
 ---

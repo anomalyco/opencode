@@ -2,7 +2,7 @@
 import { Avatar } from "./avatar-v2"
 
 const docs = `### Overview
-Avatar matching OpenCode DS variants from Figma.
+Avatar matching Daemon Protocol DS variants from Figma.
 
 Use in user lists and headers.
 

@@ -1,17 +1,17 @@
 ---
 title: CLI
-description: OpenCode CLI-alternativer og kommandoer.
+description: Daemon Protocol CLI-alternativer og kommandoer.
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode CLI starter som standard [TUI](/docs/tui) når den kjøres uten noen argumenter.
+Daemon Protocol CLI starter som standard [TUI](/docs/tui) når den kjøres uten noen argumenter.
 
 ```bash
 opencode
 ```
 
-Men den godtar også kommandoer som dokumentert på denne siden. Dette lar deg samhandle med OpenCode programmatisk.
+Men den godtar også kommandoer som dokumentert på denne siden. Dette lar deg samhandle med Daemon Protocol programmatisk.
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-Start OpenCode-terminalbrukergrensesnittet.
+Start Daemon Protocol-terminalbrukergrensesnittet.
 
 ```bash
 opencode [project]
@@ -44,13 +44,13 @@ opencode [project]
 
 ## Kommandoer
 
-OpenCode CLI har også følgende kommandoer.
+Daemon Protocol CLI har også følgende kommandoer.
 
 ---
 
 ### agent
 
-Administrer agenter for OpenCode.
+Administrer agenter for Daemon Protocol.
 
 ```bash
 opencode agent [command]
@@ -60,13 +60,13 @@ opencode agent [command]
 
 ### attach
 
-Koble en terminal til en allerede kjørende OpenCode-backend-server startet via `serve` eller `web` kommandoer.
+Koble en terminal til en allerede kjørende Daemon Protocol-backend-server startet via `serve` eller `web` kommandoer.
 
 ```bash
 opencode attach [url]
 ```
 
-Dette gjør det mulig å bruke TUI med en ekstern OpenCode-backend. For eksempel:
+Dette gjør det mulig å bruke TUI med en ekstern Daemon Protocol-backend. For eksempel:
 
 ```bash
 # Start the backend server for web/mobile access
@@ -123,13 +123,13 @@ opencode auth [command]
 
 #### login
 
-OpenCode drives av leverandørlisten på [Models.dev](https://models.dev), så du kan bruke `opencode auth login` til å konfigurere API-nøkler for enhver leverandør du vil bruke. Dette er lagret i `~/.local/share/opencode/auth.json`.
+Daemon Protocol drives av leverandørlisten på [Models.dev](https://models.dev), så du kan bruke `opencode auth login` til å konfigurere API-nøkler for enhver leverandør du vil bruke. Dette er lagret i `~/.local/share/opencode/auth.json`.
 
 ```bash
 opencode auth login
 ```
 
-Når OpenCode starter opp, laster den leverandørene fra filen med påloggingsinformasjon. Og hvis det er noen nøkler definert i miljøene dine eller en `.env`-fil i prosjektet ditt.
+Når Daemon Protocol starter opp, laster den leverandørene fra filen med påloggingsinformasjon. Og hvis det er noen nøkler definert i miljøene dine eller en `.env`-fil i prosjektet ditt.
 
 ---
 
@@ -305,7 +305,7 @@ opencode models anthropic
 | <nobr><code>{"--refresh"}</code></nobr> | Oppdater modellbufferen fra models.dev                              |
 | <nobr><code>{"--verbose"}</code></nobr> | Bruk mer detaljert modellutdata (inkluderer metadata som kostnader) |
 
-Bruk `--refresh`-flagget for å oppdatere den bufrede modelllisten. Dette er nyttig når nye modeller er lagt til en leverandør og du vil se dem i OpenCode.
+Bruk `--refresh`-flagget for å oppdatere den bufrede modelllisten. Dette er nyttig når nye modeller er lagt til en leverandør og du vil se dem i Daemon Protocol.
 
 ```bash
 opencode models --refresh
@@ -315,7 +315,7 @@ opencode models --refresh
 
 ### run
 
-Kjør OpenCode i ikke-interaktiv modus ved å sende en melding direkte.
+Kjør Daemon Protocol i ikke-interaktiv modus ved å sende en melding direkte.
 
 ```bash
 opencode run [message..]
@@ -351,7 +351,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--file"}</code></nobr>     | `-f` | Fil(er) som skal legges ved meldingen                                                              |
 | <nobr><code>{"--format"}</code></nobr>   |      | Format: standard (formatert) eller json (rå JSON hendelser)                                        |
 | <nobr><code>{"--title"}</code></nobr>    |      | Tittel for økten (bruker avkortet ledetekst hvis ingen verdi er oppgitt)                           |
-| <nobr><code>{"--attach"}</code></nobr>   |      | Koble til en kjørende OpenCode-server (f.eks. http://localhost:4096)                               |
+| <nobr><code>{"--attach"}</code></nobr>   |      | Koble til en kjørende Daemon Protocol-server (f.eks. http://localhost:4096)                               |
 | <nobr><code>{"--password"}</code></nobr> | `-p` | Passord for grunnleggende autentisering (standard: `OPENCODE_SERVER_PASSWORD`)                     |
 | <nobr><code>{"--username"}</code></nobr> | `-u` | Brukernavn for grunnleggende autentisering (standard: `OPENCODE_SERVER_USERNAME` eller `opencode`) |
 | <nobr><code>{"--dir"}</code></nobr>      |      | Katalog å kjøre i, eller sti på fjernserveren ved tilkobling                                       |
@@ -363,13 +363,13 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### serve
 
-Start en headless OpenCode-server for API-tilgang. Sjekk ut [server-dokumentene](/docs/server) for hele HTTP-grensesnittet.
+Start en headless Daemon Protocol-server for API-tilgang. Sjekk ut [server-dokumentene](/docs/server) for hele HTTP-grensesnittet.
 
 ```bash
 opencode serve
 ```
 
-Dette starter en HTTP-server som gir API tilgang til OpenCode-funksjonalitet uten TUI-grensesnittet. Sett `OPENCODE_SERVER_PASSWORD` for å aktivere HTTP grunnleggende autentisering (brukernavn er standard til `opencode`).
+Dette starter en HTTP-server som gir API tilgang til Daemon Protocol-funksjonalitet uten TUI-grensesnittet. Sett `OPENCODE_SERVER_PASSWORD` for å aktivere HTTP grunnleggende autentisering (brukernavn er standard til `opencode`).
 
 #### Flagg
 
@@ -384,7 +384,7 @@ Dette starter en HTTP-server som gir API tilgang til OpenCode-funksjonalitet ute
 
 ### session
 
-Administrer OpenCode-økter.
+Administrer Daemon Protocol-økter.
 
 ```bash
 opencode session [command]
@@ -394,7 +394,7 @@ opencode session [command]
 
 #### list
 
-List opp alle OpenCode-økter.
+List opp alle Daemon Protocol-økter.
 
 ```bash
 opencode session list
@@ -411,7 +411,7 @@ opencode session list
 
 ### stats
 
-Vis tokenbruk og kostnadsstatistikk for OpenCode-øktene dine.
+Vis tokenbruk og kostnadsstatistikk for Daemon Protocol-øktene dine.
 
 ```bash
 opencode stats
@@ -442,13 +442,13 @@ Hvis du ikke gir en økt ID, blir du bedt om å velge fra tilgjengelige økter.
 
 ### import
 
-Importer øktdata fra en JSON-fil eller en OpenCode share-URL.
+Importer øktdata fra en JSON-fil eller en Daemon Protocol share-URL.
 
 ```bash
 opencode import <file>
 ```
 
-Du kan importere fra en lokal fil eller en OpenCode share-URL.
+Du kan importere fra en lokal fil eller en Daemon Protocol share-URL.
 
 ```bash
 opencode import session.json
@@ -459,13 +459,13 @@ opencode import https://opncd.ai/s/abc123
 
 ### web
 
-Start en headless OpenCode-server med et webgrensesnitt.
+Start en headless Daemon Protocol-server med et webgrensesnitt.
 
 ```bash
 opencode web
 ```
 
-Dette starter en HTTP-server og åpner en nettleser for å få tilgang til OpenCode via et nettgrensesnitt. Sett `OPENCODE_SERVER_PASSWORD` for å aktivere HTTP grunnleggende autentisering (brukernavn er standard til `opencode`).
+Dette starter en HTTP-server og åpner en nettleser for å få tilgang til Daemon Protocol via et nettgrensesnitt. Sett `OPENCODE_SERVER_PASSWORD` for å aktivere HTTP grunnleggende autentisering (brukernavn er standard til `opencode`).
 
 #### Flagg
 
@@ -500,7 +500,7 @@ Denne kommandoen starter en ACP-server som kommuniserer via stdin/stdout ved å 
 
 ### uninstall
 
-Avinstaller OpenCode og fjern alle relaterte filer.
+Avinstaller Daemon Protocol og fjern alle relaterte filer.
 
 ```bash
 opencode uninstall
@@ -519,7 +519,7 @@ opencode uninstall
 
 ### upgrade
 
-Oppdaterer OpenCode til siste versjon eller en spesifikk versjon.
+Oppdaterer Daemon Protocol til siste versjon eller en spesifikk versjon.
 
 ```bash
 opencode upgrade [target]
@@ -547,7 +547,7 @@ opencode upgrade v0.1.48
 
 ## Globale flagg
 
-OpenCode CLI bruker følgende globale flagg.
+Daemon Protocol CLI bruker følgende globale flagg.
 
 | Flagg                                      | Kort | Beskrivelse                         |
 | ------------------------------------------ | ---- | ----------------------------------- |
@@ -560,7 +560,7 @@ OpenCode CLI bruker følgende globale flagg.
 
 ## Miljøvariabler
 
-OpenCode kan konfigureres ved hjelp av miljøvariabler.
+Daemon Protocol kan konfigureres ved hjelp av miljøvariabler.
 
 | Variabel                              | Type   | Beskrivelse                                                           |
 | ------------------------------------- | ------ | --------------------------------------------------------------------- |

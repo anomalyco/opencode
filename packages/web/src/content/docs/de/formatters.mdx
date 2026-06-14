@@ -1,15 +1,15 @@
 ---
 title: Formatierer
-description: OpenCode verwendet sprachspezifische Formatierer.
+description: Daemon Protocol verwendet sprachspezifische Formatierer.
 ---
 
-OpenCode formatiert Dateien automatisch, nachdem sie mit sprachspezifischen Formatierern geschrieben oder bearbeitet wurden. Dadurch wird sichergestellt, dass der generierte Code dem Codestil Ihres Projekts entspricht.
+Daemon Protocol formatiert Dateien automatisch, nachdem sie mit sprachspezifischen Formatierern geschrieben oder bearbeitet wurden. Dadurch wird sichergestellt, dass der generierte Code dem Codestil Ihres Projekts entspricht.
 
 ---
 
 ## Integriert
 
-OpenCode verfügt über mehrere integrierte Formatierer für gängige Sprachen und Frameworks. Nachfolgend finden Sie eine Liste der Formatierer, unterstützten Dateierweiterungen und benötigten Befehle oder Konfigurationsoptionen.
+Daemon Protocol verfügt über mehrere integrierte Formatierer für gängige Sprachen und Frameworks. Nachfolgend finden Sie eine Liste der Formatierer, unterstützten Dateierweiterungen und benötigten Befehle oder Konfigurationsoptionen.
 
 | Formatierer          | Erweiterungen                                                                                            | Anforderungen                                                                                              |
 | -------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
@@ -39,13 +39,13 @@ OpenCode verfügt über mehrere integrierte Formatierer für gängige Sprachen u
 | oxfmt (Experimental) | .js, .jsx, .ts, .tsx                                                                                     | `oxfmt`-Abhängigkeit in `package.json` und einer [experimental env variable flag](/docs/cli/#experimental) |
 | Ormolu               | .hs                                                                                                      | `ormolu`-Befehl verfügbar                                                                                  |
 
-Wenn Ihr Projekt auch `prettier` in Ihrem `package.json` hat, wird OpenCode automatisch verwendet.
+Wenn Ihr Projekt auch `prettier` in Ihrem `package.json` hat, wird Daemon Protocol automatisch verwendet.
 
 ---
 
 ## Funktionsweise
 
-Wenn OpenCode eine Datei schreibt oder bearbeitet, geschieht Folgendes:
+Wenn Daemon Protocol eine Datei schreibt oder bearbeitet, geschieht Folgendes:
 
 1. Überprüft die Dateierweiterung anhand aller aktivierten Formatierer.
 2. Führt den entsprechenden Formatierungsbefehl für die Datei aus.
@@ -57,7 +57,7 @@ Dieser Prozess findet im Hintergrund statt und stellt sicher, dass Ihr Codestile
 
 ## Konfiguration
 
-Sie können Formatierer über den Abschnitt `formatter` in Ihrer OpenCode-Konfiguration anpassen.
+Sie können Formatierer über den Abschnitt `formatter` in Ihrer Daemon Protocol-Konfiguration anpassen.
 
 ```json title="opencode.json"
 {

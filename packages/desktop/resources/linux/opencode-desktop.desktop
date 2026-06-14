@@ -1,6 +1,6 @@
 [Desktop Entry]
-Name=OpenCode
-Exec=/opt/OpenCode/ai.opencode.desktop %U
+Name=Daemon Protocol
+Exec=/opt/Daemon Protocol/ai.opencode.desktop %U
 Terminal=false
 Type=Application
 Icon=ai.opencode.desktop

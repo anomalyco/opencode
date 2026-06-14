@@ -1,15 +1,15 @@
 ---
 title: Konfiguracija
-description: Korištenje OpenCode JSON konfiguracije.
+description: Korištenje Daemon Protocol JSON konfiguracije.
 ---
 
-Možete konfigurirati OpenCode koristeći JSON konfiguracijski fajl.
+Možete konfigurirati Daemon Protocol koristeći JSON konfiguracijski fajl.
 
 ---
 
 ## Format
 
-OpenCode podržava i **JSON** i **JSONC** (JSON sa komentarima) formate.
+Daemon Protocol podržava i **JSON** i **JSONC** (JSON sa komentarima) formate.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -95,7 +95,7 @@ Možete omogućiti određene servere u vašoj lokalnoj konfiguraciji:
 
 ### Globalno
 
-Postavite svoju globalnu OpenCode konfiguraciju u `~/.config/opencode/opencode.json`. Koristite globalnu konfiguraciju za korisničke preferencije kao što su provajderi, modeli i dozvole.
+Postavite svoju globalnu Daemon Protocol konfiguraciju u `~/.config/opencode/opencode.json`. Koristite globalnu konfiguraciju za korisničke preferencije kao što su provajderi, modeli i dozvole.
 
 Za postavke specifične za TUI, koristite `~/.config/opencode/tui.json`.
 
@@ -113,7 +113,7 @@ Za TUI postavke specifične za projekat, dodajte `tui.json` pored njega.
 Postavite specifičnu konfiguraciju projekta u korijen vašeg projekta.
 :::
 
-Kada se OpenCode pokrene, traži konfiguracijsku datoteku u trenutnom direktoriju ili prelazi do najbližeg Git direktorija.
+Kada se Daemon Protocol pokrene, traži konfiguracijsku datoteku u trenutnom direktoriju ili prelazi do najbližeg Git direktorija.
 
 Ovo je također sigurno provjeriti u Git i koristi istu shemu kao globalna.
 
@@ -199,7 +199,7 @@ Dostupne opcije:
 
 - `port` - Port za slušanje.
 - `hostname` - Hostname za slušanje. Kada je `mdns` omogućen i nije postavljeno ime hosta, podrazumevano je `0.0.0.0`.
-- `mdns` - Omogući mDNS otkrivanje servisa. Ovo omogućava drugim uređajima na mreži da otkriju vaš OpenCode server.
+- `mdns` - Omogući mDNS otkrivanje servisa. Ovo omogućava drugim uređajima na mreži da otkriju vaš Daemon Protocol server.
 - `mdnsDomain` - Prilagođeno ime domene za mDNS servis. Zadano je `opencode.local`. Korisno za pokretanje više instanci na istoj mreži.
 - `cors` - Dodatni origini koji omogućavaju CORS kada koristite HTTP server iz klijenta baziranog na pretraživaču. Vrijednosti moraju biti puni origin (shema + host + opcijski port), npr. `https://app.example.com`.
 
@@ -227,7 +227,7 @@ Možete upravljati alatima koje LLM može koristiti putem opcije `tools`.
 
 ### Model
 
-Možete konfigurirati dobavljače i modele koje želite koristiti u svojoj OpenCode konfiguraciji kroz opcije `provider`, `model` i `small_model`.
+Možete konfigurirati dobavljače i modele koje želite koristiti u svojoj Daemon Protocol konfiguraciji kroz opcije `provider`, `model` i `small_model`.
 
 ```json title="opencode.json"
 {
@@ -238,7 +238,7 @@ Možete konfigurirati dobavljače i modele koje želite koristiti u svojoj OpenC
 }
 ```
 
-Opcija `small_model` konfigurira poseban model za lagane zadatke poput generiranja naslova. Podrazumevano, OpenCode pokušava da koristi jeftiniji model ako je dostupan od vašeg provajdera, inače se vraća na vaš glavni model.
+Opcija `small_model` konfigurira poseban model za lagane zadatke poput generiranja naslova. Podrazumevano, Daemon Protocol pokušava da koristi jeftiniji model ako je dostupan od vašeg provajdera, inače se vraća na vaš glavni model.
 
 Opcije provajdera mogu uključivati ​​`timeout` i `setCacheKey`:
 
@@ -350,7 +350,7 @@ Možete postaviti zadanog agenta koristeći opciju `default_agent`. Ovo određuj
 }
 ```
 
-Zadani agent mora biti primarni agent (ne podagent). Ovo može biti ugrađeni agent kao što je `"build"` ili `"plan"`, ili [prilagođeni agent](/docs/agents) koji ste definirali. Ako navedeni agent ne postoji ili je podagent, OpenCode će se vratiti na `"build"` s upozorenjem.
+Zadani agent mora biti primarni agent (ne podagent). Ovo može biti ugrađeni agent kao što je `"build"` ili `"plan"`, ili [prilagođeni agent](/docs/agents) koji ste definirali. Ako navedeni agent ne postoji ili je podagent, Daemon Protocol će se vratiti na `"build"` s upozorenjem.
 
 Ova postavka se primjenjuje na sva sučelja: TUI, CLI (`opencode run`), desktop aplikaciju i GitHub Action.
 
@@ -420,7 +420,7 @@ Prilagodite prečice tipki u `tui.json`.
 
 ### Automatsko ažuriranje
 
-OpenCode će automatski preuzeti sva nova ažuriranja kada se pokrene. Ovo možete onemogućiti opcijom `autoupdate`.
+Daemon Protocol će automatski preuzeti sva nova ažuriranja kada se pokrene. Ovo možete onemogućiti opcijom `autoupdate`.
 
 ```json title="opencode.json"
 {
@@ -462,7 +462,7 @@ Možete konfigurirati formatere koda putem opcije `formatter`.
 
 ### Dozvole
 
-Prema zadanim postavkama, OpenCode **dopušta sve operacije** bez potrebe za eksplicitnim dopuštenjem. Ovo možete promijeniti koristeći opciju `permission`.
+Prema zadanim postavkama, Daemon Protocol **dopušta sve operacije** bez potrebe za eksplicitnim dopuštenjem. Ovo možete promijeniti koristeći opciju `permission`.
 
 Na primjer, da osigurate da alati `edit` i `bash` zahtijevaju odobrenje korisnika:
 
@@ -535,7 +535,7 @@ Možete konfigurirati MCP servere koje želite koristiti putem opcije `mcp`.
 
 ### Dodaci
 
-[Plugins](/docs/plugins) proširuju OpenCode sa prilagođenim alatima, kukicama i integracijama.
+[Plugins](/docs/plugins) proširuju Daemon Protocol sa prilagođenim alatima, kukicama i integracijama.
 
 Postavite datoteke dodataka u `.opencode/plugins/` ili `~/.config/opencode/plugins/`. Također možete učitati dodatke iz npm-a preko opcije `plugin`.
 
@@ -599,7 +599,7 @@ Možete odrediti listu dozvoljenih dobavljača putem opcije `enabled_providers`.
 }
 ```
 
-Ovo je korisno kada želite da ograničite OpenCode da koristi samo određene provajdere umjesto da ih onemogućavate jednog po jednog.
+Ovo je korisno kada želite da ograničite Daemon Protocol da koristi samo određene provajdere umjesto da ih onemogućavate jednog po jednog.
 
 :::note
 `disabled_providers` ima prioritet nad `enabled_providers`.

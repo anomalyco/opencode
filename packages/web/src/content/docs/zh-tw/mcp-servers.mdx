@@ -3,7 +3,7 @@ title: MCP 伺服器
 description: 新增本地和遠端 MCP 工具。
 ---
 
-您可以透過 _Model Context Protocol_（MCP）為 OpenCode 新增外部工具。OpenCode 同時支援本地和遠端伺服器。
+您可以透過 _Model Context Protocol_（MCP）為 Daemon Protocol 新增外部工具。Daemon Protocol 同時支援本地和遠端伺服器。
 
 新增後，MCP 工具會自動與內建工具一起提供給 LLM 使用。
 
@@ -23,7 +23,7 @@ MCP 伺服器會佔用您的上下文空間，所以請謹慎選擇啟用哪些�
 
 ## 啟用
 
-您可以在 [OpenCode 設定](https://opencode.ai/docs/config/)的 `mcp` 欄位下定義 MCP 伺服器。為每個 MCP 指定一個唯一的名稱，在提示詞中可以透過該名稱來參照對應的 MCP。
+您可以在 [Daemon Protocol 設定](https://opencode.ai/docs/config/)的 `mcp` 欄位下定義 MCP 伺服器。為每個 MCP 指定一個唯一的名稱，在提示詞中可以透過該名稱來參照對應的 MCP。
 
 ```jsonc title="opencode.jsonc" {6}
 {
@@ -165,7 +165,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 ## OAuth
 
-OpenCode 會自動處理遠端 MCP 伺服器的 OAuth 身分驗證。當伺服器需要身分驗證時，OpenCode 將：
+Daemon Protocol 會自動處理遠端 MCP 伺服器的 OAuth 身分驗證。當伺服器需要身分驗證時，Daemon Protocol 將：
 
 1. 偵測 401 回應並啟動 OAuth 流程
 2. 在伺服器支援的情況下使用**動態用戶端註冊（RFC 7591）**
@@ -189,7 +189,7 @@ OpenCode 會自動處理遠端 MCP 伺服器的 OAuth 身分驗證。當伺服�
 }
 ```
 
-如果伺服器需要身分驗證，OpenCode 會在您首次使用時提示您進行認證。您也可以使用 `opencode mcp auth <server-name>` [手動觸發認證流程](#authenticating)。
+如果伺服器需要身分驗證，Daemon Protocol 會在您首次使用時提示您進行認證。您也可以使用 `opencode mcp auth <server-name>` [手動觸發認證流程](#authenticating)。
 
 ---
 
@@ -238,7 +238,7 @@ opencode mcp list
 opencode mcp logout my-oauth-server
 ```
 
-`mcp auth` 指令會開啟瀏覽器進行授權。授權完成後，OpenCode 會將 Token 安全地儲存在 `~/.local/share/opencode/mcp-auth.json` 中。
+`mcp auth` 指令會開啟瀏覽器進行授權。授權完成後，Daemon Protocol 會將 Token 安全地儲存在 `~/.local/share/opencode/mcp-auth.json` 中。
 
 ---
 
@@ -291,7 +291,7 @@ opencode mcp debug my-oauth-server
 
 ## 管理
 
-您的 MCP 在 OpenCode 中作為工具使用，與內建工具並列。因此，您可以像管理其他工具一樣，透過 OpenCode 設定來管理它們。
+您的 MCP 在 Daemon Protocol 中作為工具使用，與內建工具並列。因此，您可以像管理其他工具一樣，透過 Daemon Protocol 設定來管理它們。
 
 ---
 
@@ -423,7 +423,7 @@ MCP 伺服器工具在註冊時以伺服器名稱作為前綴，因此要停用�
 opencode mcp auth sentry
 ```
 
-這會開啟瀏覽器視窗完成 OAuth 流程，將 OpenCode 連結到您的 Sentry 帳號。
+這會開啟瀏覽器視窗完成 OAuth 流程，將 Daemon Protocol 連結到您的 Sentry 帳號。
 
 認證完成後，您可以在提示詞中使用 Sentry 工具來查詢問題、專案和錯誤資料。
 

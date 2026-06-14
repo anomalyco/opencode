@@ -1,17 +1,17 @@
 ---
 title: Provider
-description: Usa qualsiasi provider LLM in OpenCode.
+description: Usa qualsiasi provider LLM in Daemon Protocol.
 ---
 
 import config from "../../../../config.mjs"
 export const console = config.console
 
-OpenCode usa [AI SDK](https://ai-sdk.dev/) e [Models.dev](https://models.dev) per supportare **oltre 75 provider LLM** e anche modelli locali.
+Daemon Protocol usa [AI SDK](https://ai-sdk.dev/) e [Models.dev](https://models.dev) per supportare **oltre 75 provider LLM** e anche modelli locali.
 
 Per aggiungere un provider devi:
 
 1. Aggiungere le API key del provider con il comando `/connect`.
-2. Configurare il provider nella configurazione di OpenCode.
+2. Configurare il provider nella configurazione di Daemon Protocol.
 
 ---
 
@@ -25,7 +25,7 @@ in `~/.local/share/opencode/auth.json`.
 ### Configurazione
 
 Puoi personalizzare i provider tramite la sezione `provider` nella
-configurazione di OpenCode.
+configurazione di Daemon Protocol.
 
 ---
 
@@ -48,13 +48,13 @@ Puoi personalizzare l'URL base per qualsiasi provider impostando l'opzione `base
 
 ---
 
-## OpenCode Zen
+## Daemon Zen
 
-OpenCode Zen e una lista di modelli forniti dal team OpenCode, testati e
-verificati per funzionare bene con OpenCode. [Scopri di piu](/docs/zen).
+Daemon Zen e una lista di modelli forniti dal team Daemon Protocol, testati e
+verificati per funzionare bene con Daemon Protocol. [Scopri di piu](/docs/zen).
 
 :::tip
-Se sei all'inizio, ti consigliamo di partire da OpenCode Zen.
+Se sei all'inizio, ti consigliamo di partire da Daemon Zen.
 :::
 
 1. Esegui `/connect` nella TUI, seleziona opencode e vai su [opencode.ai/auth](https://opencode.ai/auth).
@@ -80,7 +80,7 @@ Se sei all'inizio, ti consigliamo di partire da OpenCode Zen.
    /models
    ```
 
-Funziona come qualsiasi altro provider in OpenCode ed e totalmente opzionale.
+Funziona come qualsiasi altro provider in Daemon Protocol ed e totalmente opzionale.
 
 ---
 
@@ -124,7 +124,7 @@ Non vedi un provider qui? Invia una PR.
 
 ### Amazon Bedrock
 
-Per usare Amazon Bedrock con OpenCode:
+Per usare Amazon Bedrock con Daemon Protocol:
 
 1. Vai al **Model catalog** nella console Amazon Bedrock e richiedi
    accesso ai modelli che vuoi usare.
@@ -288,7 +288,7 @@ Per profili di inferenza personalizzati, usa il nome del modello e del provider 
    ```
 
 :::info
-L'uso dell'abbonamento Claude Pro/Max in OpenCode non è ufficialmente supportato da [Anthropic](https://anthropic.com).
+L'uso dell'abbonamento Claude Pro/Max in Daemon Protocol non è ufficialmente supportato da [Anthropic](https://anthropic.com).
 :::
 
 ##### Usare chiavi API
@@ -709,7 +709,7 @@ GitLab Duo fornisce una chat agentic basata su AI con capacità di chiamata stru
    #### Usando Personal Access Token
    1. Vai a [GitLab User Settings > Access Tokens](https://gitlab.com/-/user_settings/personal_access_tokens)
    2. Clicca **Add new token**
-   3. Nome: `OpenCode`, Scopes: `api`
+   3. Nome: `Daemon Protocol`, Scopes: `api`
    4. Copia il token (inizia con `glpat-`)
    5. Inseriscilo nel terminale
 
@@ -732,8 +732,8 @@ salvare il token nello storage di auth di opencode.
 ##### GitLab Self-Hosted
 
 :::note[nota di compliance]
-OpenCode usa un modello piccolo per alcuni task AI come generare il titolo della sessione.
-È configurato per usare gpt-5-nano di default, ospitato da Zen. Per bloccare OpenCode
+Daemon Protocol usa un modello piccolo per alcuni task AI come generare il titolo della sessione.
+È configurato per usare gpt-5-nano di default, ospitato da Zen. Per bloccare Daemon Protocol
 a usare solo la tua istanza GitLab self-hosted, aggiungi quanto segue al tuo
 file `opencode.json`. Si raccomanda anche di disabilitare la condivisione sessioni.
 
@@ -865,7 +865,7 @@ Alcuni modelli devono essere abilitati manualmente nelle tue [impostazioni GitHu
 
 ### Google Vertex AI
 
-Per usare Google Vertex AI con OpenCode:
+Per usare Google Vertex AI con Daemon Protocol:
 
 1. Vai al **Model Garden** nella Google Cloud Console e controlla i
    modelli disponibili nella tua regione.
@@ -1047,7 +1047,7 @@ Helicone supporta header personalizzati per funzionalità come caching, user tra
 
 ##### Tracciamento sessioni
 
-La funzionalità [Sessions](https://docs.helicone.ai/features/sessions) di Helicone ti permette di raggruppare richieste LLM correlate. Usa il plugin [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) per loggare automaticamente ogni conversazione di OpenCode come una sessione in Helicone.
+La funzionalità [Sessions](https://docs.helicone.ai/features/sessions) di Helicone ti permette di raggruppare richieste LLM correlate. Usa il plugin [opencode-helicone-session](https://github.com/H2Shami/opencode-helicone-session) per loggare automaticamente ogni conversazione di Daemon Protocol come una sessione in Helicone.
 
 ```bash
 npm install -g opencode-helicone-session
@@ -1061,7 +1061,7 @@ Aggiungilo alla tua configurazione.
 }
 ```
 
-Il plugin inietta gli header `Helicone-Session-Id` e `Helicone-Session-Name` nelle tue richieste. Nella pagina Sessions di Helicone, vedrai ogni conversazione di OpenCode elencata come sessione separata.
+Il plugin inietta gli header `Helicone-Session-Id` e `Helicone-Session-Name` nelle tue richieste. Nella pagina Sessions di Helicone, vedrai ogni conversazione di Daemon Protocol elencata come sessione separata.
 
 ##### Header Helicone comuni
 
@@ -1265,7 +1265,7 @@ Per usare Kimi K2 di Moonshot AI:
 Puoi configurare opencode per usare modelli locali tramite Ollama.
 
 :::tip
-Ollama può auto-configurarsi per OpenCode. Vedi la [documentazione di integrazione Ollama](https://docs.ollama.com/integrations/opencode) per dettagli.
+Ollama può auto-configurarsi per Daemon Protocol. Vedi la [documentazione di integrazione Ollama](https://docs.ollama.com/integrations/opencode) per dettagli.
 :::
 
 ```json title="opencode.json" "ollama" {5, 6, 8, 10-14}
@@ -1304,13 +1304,13 @@ Se le chiamate agli strumenti non funzionano, prova ad aumentare `num_ctx` in Ol
 
 ### Ollama Cloud
 
-Per usare Ollama Cloud con OpenCode:
+Per usare Ollama Cloud con Daemon Protocol:
 
 1. Vai su [https://ollama.com/](https://ollama.com/) e accedi o crea un account.
 
 2. Naviga in **Settings** > **Keys** e clicca **Add API Key** per generare una nuova chiave API.
 
-3. Copia la chiave API da usare in OpenCode.
+3. Copia la chiave API da usare in Daemon Protocol.
 
 4. Esegui il comando `/connect` e cerca **Ollama Cloud**.
 
@@ -1327,7 +1327,7 @@ Per usare Ollama Cloud con OpenCode:
    └ enter
    ```
 
-6. **Importante**: Prima di usare modelli cloud in OpenCode, devi scaricare le informazioni del modello localmente:
+6. **Importante**: Prima di usare modelli cloud in Daemon Protocol, devi scaricare le informazioni del modello localmente:
 
    ```bash
    ollama pull gpt-oss:20b-cloud
@@ -1374,19 +1374,19 @@ Se hai già una chiave API, puoi selezionare **Manually enter API Key** e incoll
 
 ---
 
-### OpenCode Zen
+### Daemon Zen
 
-OpenCode Zen è una lista di modelli testati e verificati forniti dal team OpenCode. [Scopri di più](/docs/zen).
+Daemon Zen è una lista di modelli testati e verificati forniti dal team Daemon Protocol. [Scopri di più](/docs/zen).
 
-1. Accedi a **<a href={console}>OpenCode Zen</a>** e clicca **Create API Key**.
+1. Accedi a **<a href={console}>Daemon Zen</a>** e clicca **Create API Key**.
 
-2. Esegui il comando `/connect` e cerca **OpenCode Zen**.
+2. Esegui il comando `/connect` e cerca **Daemon Zen**.
 
    ```txt
    /connect
    ```
 
-3. Inserisci la tua chiave API di OpenCode.
+3. Inserisci la tua chiave API di Daemon Protocol.
 
    ```txt
    ┌ API key
@@ -1945,7 +1945,7 @@ Dettagli configurazione:
 - **limit.context**: Massimi token di input accettati dal modello.
 - **limit.output**: Massimi token che il modello può generare.
 
-I campi `limit` permettono a OpenCode di capire quanto contesto rimane. I provider standard recuperano questi dati da models.dev automaticamente.
+I campi `limit` permettono a Daemon Protocol di capire quanto contesto rimane. I provider standard recuperano questi dati da models.dev automaticamente.
 
 ---
 

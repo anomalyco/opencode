@@ -1,15 +1,15 @@
 ---
 title: Formattere
-description: OpenCode bruker språkspesifikke formattere.
+description: Daemon Protocol bruker språkspesifikke formattere.
 ---
 
-OpenCode formaterer automatisk filer etter at de er skrevet eller redigert ved hjelp av språkspesifikke formattere. Dette sikrer at koden som genereres følger kodestilene til prosjektet ditt.
+Daemon Protocol formaterer automatisk filer etter at de er skrevet eller redigert ved hjelp av språkspesifikke formattere. Dette sikrer at koden som genereres følger kodestilene til prosjektet ditt.
 
 ---
 
 ## Innebygde formattere
 
-OpenCode kommer med flere innebygde formattere for populære språk og rammeverk. Nedenfor er en liste over formattere, støttede filendelser og kommandoer eller konfigurasjonsalternativer den krever.
+Daemon Protocol kommer med flere innebygde formattere for populære språk og rammeverk. Nedenfor er en liste over formattere, støttede filendelser og kommandoer eller konfigurasjonsalternativer den krever.
 
 | Formatter              | Filendelser                                                                                             | Krav                                                                                                    |
 | ---------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -39,13 +39,13 @@ OpenCode kommer med flere innebygde formattere for populære språk og rammeverk
 | oxfmt (Eksperimentell) | .js, .jsx, .ts, .tsx                                                                                    | `oxfmt` avhengighet i `package.json` og et [eksperimentelt env variabel flagg](/docs/cli/#experimental) |
 | ormolu                 | .hs                                                                                                     | `ormolu` kommando tilgjengelig                                                                          |
 
-Så hvis prosjektet ditt har `prettier` i `package.json`, vil OpenCode automatisk bruke det.
+Så hvis prosjektet ditt har `prettier` i `package.json`, vil Daemon Protocol automatisk bruke det.
 
 ---
 
 ## Slik fungerer det
 
-Når OpenCode skriver eller redigerer en fil, gjør den:
+Når Daemon Protocol skriver eller redigerer en fil, gjør den:
 
 1. Kontrollerer filtypen mot alle aktiverte formattere.
 2. Kjører riktig formateringskommando på filen.
@@ -57,7 +57,7 @@ Denne prosessen skjer i bakgrunnen, og sikrer at kodestilene dine opprettholdes 
 
 ## Konfigurasjon
 
-Du kan tilpasse formattere gjennom `formatter`-delen i OpenCode-konfigurasjonen.
+Du kan tilpasse formattere gjennom `formatter`-delen i Daemon Protocol-konfigurasjonen.
 
 ```json title="opencode.json"
 {

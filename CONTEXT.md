@@ -1,6 +1,6 @@
-# OpenCode Session Runtime
+# Daemon Protocol Session Runtime
 
-OpenCode sessions preserve durable conversational history while assembling the runtime context an agent needs to act correctly in its current environment.
+Daemon Protocol sessions preserve durable conversational history while assembling the runtime context an agent needs to act correctly in its current environment.
 
 ## Language
 
@@ -43,7 +43,7 @@ The point immediately before a provider call, after durable input promotion and 
 The bounded projection of a Core-executed tool result persisted in Session history and replayed to the model. A tool may shape this projection semantically, but the Tool Registry enforces the final size limit.
 
 **Managed Tool Output File**:
-A temporary file created under OpenCode's shared tool-output directory to retain complete output that was too large for Session history.
+A temporary file created under Daemon Protocol's shared tool-output directory to retain complete output that was too large for Session history.
 
 **Model Request Options**:
 Provider-semantic model settings selected from the Catalog and active Session variant before the LLM protocol adapter encodes them for a provider request.

@@ -393,7 +393,7 @@ Jest to oddzielny plik od `opencode.json`, który konfiguruje zachowanie serwera
 
 - `theme` - Ustawia motyw interfejsu. [Dowiedz się więcej](/docs/themes).
 - `keybinds` - Dostosowuje skróty klawiszowe. [Dowiedz się więcej](/docs/keybinds).
-- `leader_timeout` - Określa, jak długo OpenCode czeka po naciśnięciu leader key. Domyślnie `2000`.
+- `leader_timeout` - Określa, jak długo Daemon Protocol czeka po naciśnięciu leader key. Domyślnie `2000`.
 - `scroll_acceleration.enabled` — Włącz przyspieszenie przewijania w stylu macOS, aby zapewnić płynne, naturalne przewijanie. Po włączeniu prędkość przewijania wzrasta wraz z szybkimi gestami przewijania i pozostaje precyzyjna w przypadku wolniejszych ruchów. **To ustawienie ma pierwszeństwo przed `scroll_speed` i zastępuje je, gdy jest włączone.**
 - `scroll_speed` - Kontroluje szybkość przewijania TUI podczas korzystania z poleceń przewijania (minimum: `0.001`, obsługuje wartości dziesiętne). Wartość domyślna to `3`. **Uwaga: jest to ignorowane, jeśli `scroll_acceleration.enabled` jest ustawione na `true`.**
 - `diff_style` - Steruje renderowaniem różnic. `"auto"` dostosowuje się do szerokości terminala, `"stacked"` zawsze pokazuje układ jednokolumnowy.
@@ -404,7 +404,7 @@ Użyj `OPENCODE_TUI_CONFIG`, aby załadować niestandardową ścieżkę konfigur
 
 ### Attention
 
-Attention pozwala TUI powiadomić Cię, gdy OpenCode czeka na odpowiedź, wymaga zatwierdzenia uprawnienia, zgłasza błąd sesji albo informuje o zakończeniu sesji. Włącz tę funkcję za pomocą `attention.enabled`; wbudowane zdarzenia odtwarzają dźwięk, gdy wystąpią. Powiadomienia pulpitu są wysyłane tylko wtedy, gdy okno terminala nie jest aktywne, i nie są używane dla zdarzeń subagent.
+Attention pozwala TUI powiadomić Cię, gdy Daemon Protocol czeka na odpowiedź, wymaga zatwierdzenia uprawnienia, zgłasza błąd sesji albo informuje o zakończeniu sesji. Włącz tę funkcję za pomocą `attention.enabled`; wbudowane zdarzenia odtwarzają dźwięk, gdy wystąpią. Powiadomienia pulpitu są wysyłane tylko wtedy, gdy okno terminala nie jest aktywne, i nie są używane dla zdarzeń subagent.
 
 - `enabled` - Włącza wszystkie powiadomienia i dźwięki Attention. Domyślnie `false`.
 - `notifications` - Gdy Attention jest włączone, pozwala TUI wysyłać powiadomienia pulpitu przez terminal. Domyślnie `true`.

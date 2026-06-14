@@ -3,15 +3,15 @@ title: GitHub
 description: Bruk opencode i GitHub-problemer og pull-forespørsler.
 ---
 
-OpenCode integreres med GitHub-arbeidsflyten din. Nevn `/opencode` eller `/oc` i kommentaren din, og OpenCode vil utføre oppgaver i din GitHub Actions-løper.
+Daemon Protocol integreres med GitHub-arbeidsflyten din. Nevn `/opencode` eller `/oc` i kommentaren din, og Daemon Protocol vil utføre oppgaver i din GitHub Actions-løper.
 
 ---
 
 ## Funksjoner
 
-- **Triage saker**: Be OpenCode se på en sak og forklare den for deg.
-- **Fiks og implementer**: Be OpenCode om å fikse en sak eller implementere en funksjon. Den vil jobbe i en ny gren og sende inn en PR med alle endringene.
-- **Sikkert**: OpenCode kjører i GitHub-runners.
+- **Triage saker**: Be Daemon Protocol se på en sak og forklare den for deg.
+- **Fiks og implementer**: Be Daemon Protocol om å fikse en sak eller implementere en funksjon. Den vil jobbe i en ny gren og sende inn en PR med alle endringene.
+- **Sikkert**: Daemon Protocol kjører i GitHub-runners.
 
 ---
 
@@ -63,7 +63,7 @@ Eller du kan sette den opp manuelt.
               fetch-depth: 1
               persist-credentials: false
 
-          - name: Run OpenCode
+          - name: Run Daemon Protocol
            uses: anomalyco/opencode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -81,13 +81,13 @@ Eller du kan sette den opp manuelt.
 
 ## Konfigurasjon
 
-- `model`: Modellen som skal brukes med OpenCode. Tar formatet `provider/model`. Dette er **obligatorisk**.
+- `model`: Modellen som skal brukes med Daemon Protocol. Tar formatet `provider/model`. Dette er **obligatorisk**.
 - `agent`: Agenten som skal brukes. Må være en primær agent. Faller tilbake til `default_agent` fra config eller `"build"` hvis ikke funnet.
-- `share`: Om OpenCode-økten skal deles. Standard er **true** for offentlige depoter.
-- `prompt`: Valgfri egendefinert melding for å overstyre standard oppførsel. Bruk dette til å tilpasse hvordan OpenCode behandler forespørsler.
-- `token`: Valgfritt GitHub-tilgangstoken for å utføre operasjoner som å lage kommentarer, foreta endringer og åpne pull-forespørsler. Som standard bruker OpenCode installasjonstilgangstokenet fra OpenCode GitHub-appen, så commits, kommentarer og pull-forespørsler ser ut til å komme fra appen.
+- `share`: Om Daemon Protocol-økten skal deles. Standard er **true** for offentlige depoter.
+- `prompt`: Valgfri egendefinert melding for å overstyre standard oppførsel. Bruk dette til å tilpasse hvordan Daemon Protocol behandler forespørsler.
+- `token`: Valgfritt GitHub-tilgangstoken for å utføre operasjoner som å lage kommentarer, foreta endringer og åpne pull-forespørsler. Som standard bruker Daemon Protocol installasjonstilgangstokenet fra Daemon Protocol GitHub-appen, så commits, kommentarer og pull-forespørsler ser ut til å komme fra appen.
 
-  Alternativt kan du bruke GitHub Action-løperens [innebygde `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) uten å installere OpenCode GitHub-appen. Bare sørg for å gi de nødvendige tillatelsene i arbeidsflyten din:
+  Alternativt kan du bruke GitHub Action-løperens [innebygde `GITHUB_TOKEN`](https://docs.github.com/en/actions/tutorials/authenticate-with-github_token) uten å installere Daemon Protocol GitHub-appen. Bare sørg for å gi de nødvendige tillatelsene i arbeidsflyten din:
 
   ```yaml
   permissions:
@@ -103,23 +103,23 @@ Eller du kan sette den opp manuelt.
 
 ## Støttede hendelser
 
-OpenCode kan utløses av følgende GitHub-hendelser:
+Daemon Protocol kan utløses av følgende GitHub-hendelser:
 
 | Hendelsestype                 | Utløst av                               | Detaljer                                                                                                                |
 | ----------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `issue_comment`               | Kommentar på sak eller PR               | Nevn `/opencode` eller `/oc` i kommentaren din. OpenCode leser kontekst og kan opprette grener, åpne PR-er eller svare. |
-| `pull_request_review_comment` | Kommenter spesifikke kodelinjer i en PR | Nevn `/opencode` eller `/oc` mens du ser gjennom koden. OpenCode mottar filbane, linjenummer og diff-kontekst.          |
-| `issues`                      | Sak åpnet eller redigert                | Utløs OpenCode automatisk når saker opprettes eller endres. Krever `prompt` inngang.                                    |
-| `pull_request`                | PR åpnet eller oppdatert                | Utløs OpenCode automatisk når PR-er åpnes, synkroniseres eller gjenåpnes. Nyttig for automatiserte anmeldelser.         |
-| `schedule`                    | Cron-basert tidsplan                    | Kjør OpenCode etter en tidsplan. Krever `prompt` inngang. Utdata går til logger og PR (ingen sak å kommentere).         |
-| `workflow_dispatch`           | Manuell utløser fra GitHub UI           | Utløs OpenCode på forespørsel via fanen Handlinger. Krever `prompt` inngang. Utdata går til logger og PR-er.            |
+| `issue_comment`               | Kommentar på sak eller PR               | Nevn `/opencode` eller `/oc` i kommentaren din. Daemon Protocol leser kontekst og kan opprette grener, åpne PR-er eller svare. |
+| `pull_request_review_comment` | Kommenter spesifikke kodelinjer i en PR | Nevn `/opencode` eller `/oc` mens du ser gjennom koden. Daemon Protocol mottar filbane, linjenummer og diff-kontekst.          |
+| `issues`                      | Sak åpnet eller redigert                | Utløs Daemon Protocol automatisk når saker opprettes eller endres. Krever `prompt` inngang.                                    |
+| `pull_request`                | PR åpnet eller oppdatert                | Utløs Daemon Protocol automatisk når PR-er åpnes, synkroniseres eller gjenåpnes. Nyttig for automatiserte anmeldelser.         |
+| `schedule`                    | Cron-basert tidsplan                    | Kjør Daemon Protocol etter en tidsplan. Krever `prompt` inngang. Utdata går til logger og PR (ingen sak å kommentere).         |
+| `workflow_dispatch`           | Manuell utløser fra GitHub UI           | Utløs Daemon Protocol på forespørsel via fanen Handlinger. Krever `prompt` inngang. Utdata går til logger og PR-er.            |
 
 ### Eksempel på tidsplan
 
-Kjør OpenCode på en tidsplan for å utføre automatiserte oppgaver:
+Kjør Daemon Protocol på en tidsplan for å utføre automatiserte oppgaver:
 
 ```yaml title=".github/workflows/opencode-scheduled.yml"
-name: Scheduled OpenCode Task
+name: Scheduled Daemon Protocol Task
 
 on:
   schedule:
@@ -139,7 +139,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run OpenCode
+      - name: Run Daemon Protocol
         uses: anomalyco/opencode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -150,7 +150,7 @@ jobs:
             If you find issues worth addressing, open an issue to track them.
 ```
 
-For planlagte arrangementer er `prompt`-inngangen **påkrevd** siden det ikke er noen kommentarer å trekke ut instruksjoner fra. Planlagte workflows kjører uten brukerkontekst for tillatelsessjekking, så arbeidsflyten må gi `contents: write` og `pull-requests: write` hvis du forventer at OpenCode oppretter grener eller PR-er.
+For planlagte arrangementer er `prompt`-inngangen **påkrevd** siden det ikke er noen kommentarer å trekke ut instruksjoner fra. Planlagte workflows kjører uten brukerkontekst for tillatelsessjekking, så arbeidsflyten må gi `contents: write` og `pull-requests: write` hvis du forventer at Daemon Protocol oppretter grener eller PR-er.
 
 ---
 
@@ -191,7 +191,7 @@ jobs:
             - Suggest improvements
 ```
 
-For `pull_request`-hendelser, hvis ingen `prompt` er oppgitt, går OpenCode som standard gjennom PR-en.
+For `pull_request`-hendelser, hvis ingen `prompt` er oppgitt, går Daemon Protocol som standard gjennom PR-en.
 
 ---
 
@@ -252,7 +252,7 @@ For `issues`-hendelser er `prompt`-inngangen **påkrevd** siden det ikke er noen
 
 ## Egendefinerte prompter
 
-Overstyr standardprompten for å tilpasse oppførselen til OpenCode for arbeidsflyten din.
+Overstyr standardprompten for å tilpasse oppførselen til Daemon Protocol for arbeidsflyten din.
 
 ```yaml title=".github/workflows/opencode.yml"
 - uses: anomalyco/opencode/github@latest
@@ -271,7 +271,7 @@ Dette er nyttig for å håndheve spesifikke vurderingskriterier, kodestandarder 
 
 ## Eksempler
 
-Her er noen eksempler på hvordan du kan bruke OpenCode i GitHub.
+Her er noen eksempler på hvordan du kan bruke Daemon Protocol i GitHub.
 
 :::tip
 Du kan konfigurere til å bruke en annen triggerfrase enn `@opencode`.
@@ -285,7 +285,7 @@ Du kan konfigurere til å bruke en annen triggerfrase enn `@opencode`.
   /opencode explain this issue
   ```
 
-  OpenCode vil lese hele tråden, inkludert alle kommentarer, og svare med en tydelig forklaring.
+  Daemon Protocol vil lese hele tråden, inkludert alle kommentarer, og svare med en tydelig forklaring.
 
 - **Fiks en sak**
 
@@ -295,7 +295,7 @@ Du kan konfigurere til å bruke en annen triggerfrase enn `@opencode`.
   /opencode fix this
   ```
 
-  Og OpenCode vil opprette en ny gren, implementere endringene og åpne en PR med endringene.
+  Og Daemon Protocol vil opprette en ny gren, implementere endringene og åpne en PR med endringene.
 
 - **Se gjennom PR-er og gjør endringer**
 
@@ -305,18 +305,18 @@ Du kan konfigurere til å bruke en annen triggerfrase enn `@opencode`.
   Delete the attachment from S3 when the note is removed /oc
   ```
 
-  OpenCode vil implementere den forespurte endringen og committe den til samme PR.
+  Daemon Protocol vil implementere den forespurte endringen og committe den til samme PR.
 
 - **Review av spesifikke kodelinjer**
 
-  Legg igjen en kommentar direkte på kodelinjer i PRs "Filer"-fane. OpenCode oppdager automatisk filen, linjenumrene og diff-konteksten for å gi presise svar.
+  Legg igjen en kommentar direkte på kodelinjer i PRs "Filer"-fane. Daemon Protocol oppdager automatisk filen, linjenumrene og diff-konteksten for å gi presise svar.
 
   ```
   [Comment on specific lines in Files tab]
   /oc add error handling here
   ```
 
-  Når du kommenterer spesifikke linjer, mottar OpenCode:
+  Når du kommenterer spesifikke linjer, mottar Daemon Protocol:
   - Den nøyaktige filen blir gjennomgått
   - De spesifikke kodelinjene
   - Den omkringliggende diff-konteksten

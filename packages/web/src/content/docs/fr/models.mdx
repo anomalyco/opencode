@@ -3,13 +3,13 @@ title: Modèles
 description: Configuration d'un fournisseur et d'un modèle LLM.
 ---
 
-OpenCode utilise [AI SDK](https://ai-sdk.dev/) et [Models.dev](https://models.dev) pour prendre en charge **75+ fournisseurs LLM** et prend en charge l'exécution de modèles locaux.
+Daemon Protocol utilise [AI SDK](https://ai-sdk.dev/) et [Models.dev](https://models.dev) pour prendre en charge **75+ fournisseurs LLM** et prend en charge l'exécution de modèles locaux.
 
 ---
 
 ## Fournisseurs
 
-Les fournisseurs les plus populaires sont préchargés par défaut. Si vous avez ajouté les informations d'identification d'un fournisseur via la commande `/connect`, elles seront disponibles lorsque vous démarrerez OpenCode.
+Les fournisseurs les plus populaires sont préchargés par défaut. Si vous avez ajouté les informations d'identification d'un fournisseur via la commande `/connect`, elles seront disponibles lorsque vous démarrerez Daemon Protocol.
 
 En savoir plus sur [fournisseurs](/docs/providers).
 
@@ -35,7 +35,7 @@ Pensez à utiliser l’un des modèles que nous recommandons.
 
 Cependant, seuls quelques-uns d’entre eux savent à la fois générer du code et appeler des outils.
 
-Voici plusieurs modèles qui fonctionnent bien avec OpenCode, sans ordre particulier. (Cette liste n’est pas exhaustive et n’est pas nécessairement à jour) :
+Voici plusieurs modèles qui fonctionnent bien avec Daemon Protocol, sans ordre particulier. (Cette liste n’est pas exhaustive et n’est pas nécessairement à jour) :
 
 - GPT 5.2
 - Codex GPT 5.1
@@ -48,7 +48,7 @@ Voici plusieurs modèles qui fonctionnent bien avec OpenCode, sans ordre particu
 
 ## Définir une valeur par défaut
 
-Pour définir l'un d'entre eux comme modèle par défaut, vous pouvez définir la clé `model` dans votre configuration OpenCode.
+Pour définir l'un d'entre eux comme modèle par défaut, vous pouvez définir la clé `model` dans votre configuration Daemon Protocol.
 
 ```json title="opencode.json" {3}
 {
@@ -57,7 +57,7 @@ Pour définir l'un d'entre eux comme modèle par défaut, vous pouvez définir l
 }
 ```
 
-Ici, l'identifiant complet est `provider_id/model_id`. Par exemple, si vous utilisez [OpenCode Zen](/docs/zen), vous utiliserez `opencode/gpt-5.1-codex` pour GPT 5.1 Codex.
+Ici, l'identifiant complet est `provider_id/model_id`. Par exemple, si vous utilisez [Daemon Zen](/docs/zen), vous utiliserez `opencode/gpt-5.1-codex` pour GPT 5.1 Codex.
 
 Si vous avez configuré un [fournisseur personnalisé](/docs/providers#custom), le `provider_id` est la clé de la partie `provider` de votre configuration et le `model_id` est la clé de `provider.models`.
 
@@ -136,11 +136,11 @@ Vous pouvez également définir des variantes personnalisées qui étendent cell
 
 ## Variantes
 
-De nombreux modèles prennent en charge plusieurs variantes avec différentes configurations. OpenCode est livré avec des variantes par défaut intégrées pour les fournisseurs populaires.
+De nombreux modèles prennent en charge plusieurs variantes avec différentes configurations. Daemon Protocol est livré avec des variantes par défaut intégrées pour les fournisseurs populaires.
 
 ### Variantes intégrées
 
-OpenCode est livré avec des variantes par défaut pour de nombreux fournisseurs :
+Daemon Protocol est livré avec des variantes par défaut pour de nombreux fournisseurs :
 
 **Anthropic** :
 
@@ -202,11 +202,11 @@ Utilisez le raccourci clavier `variant_cycle` pour basculer rapidement entre les
 
 ## Chargement des modèles
 
-Lorsque OpenCode démarre, il recherche les modèles dans l'ordre de priorité suivant :
+Lorsque Daemon Protocol démarre, il recherche les modèles dans l'ordre de priorité suivant :
 
 1. Le flag de ligne de commande `--model` ou `-m`. Le format est le même que dans le fichier de configuration : `provider_id/model_id`.
 
-2. La liste des modèles dans la configuration OpenCode.
+2. La liste des modèles dans la configuration Daemon Protocol.
 
    ```json title="opencode.json"
    {

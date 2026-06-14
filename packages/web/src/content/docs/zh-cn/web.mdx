@@ -1,11 +1,11 @@
 ---
 title: Web
-description: 在浏览器中使用 OpenCode。
+description: 在浏览器中使用 Daemon Protocol。
 ---
 
-OpenCode 可以作为 Web 应用在浏览器中运行，无需终端即可获得同样强大的 AI 编码体验。
+Daemon Protocol 可以作为 Web 应用在浏览器中运行，无需终端即可获得同样强大的 AI 编码体验。
 
-![OpenCode Web - New Session](../../../assets/web/web-homepage-new-session.png)
+![Daemon Protocol Web - New Session](../../../assets/web/web-homepage-new-session.png)
 
 ## 快速开始
 
@@ -15,7 +15,7 @@ OpenCode 可以作为 Web 应用在浏览器中运行，无需终端即可获得
 opencode web
 ```
 
-这会在 `127.0.0.1` 上启动一个本地服务器，使用随机可用端口，并自动在默认浏览器中打开 OpenCode。
+这会在 `127.0.0.1` 上启动一个本地服务器，使用随机可用端口，并自动在默认浏览器中打开 Daemon Protocol。
 
 :::caution
 如果未设置 `OPENCODE_SERVER_PASSWORD`，服务器将没有安全保护。本地使用没有问题，但在网络访问时应当设置密码。
@@ -33,7 +33,7 @@ opencode web
 
 ### 端口
 
-默认情况下，OpenCode 会选择一个可用端口。你也可以指定端口：
+默认情况下，Daemon Protocol 会选择一个可用端口。你也可以指定端口：
 
 ```bash
 opencode web --port 4096
@@ -41,13 +41,13 @@ opencode web --port 4096
 
 ### 主机名
 
-默认情况下，服务器绑定到 `127.0.0.1`（仅限本地访问）。要使 OpenCode 在网络中可访问：
+默认情况下，服务器绑定到 `127.0.0.1`（仅限本地访问）。要使 Daemon Protocol 在网络中可访问：
 
 ```bash
 opencode web --hostname 0.0.0.0
 ```
 
-使用 `0.0.0.0` 时，OpenCode 会同时显示本地地址和网络地址：
+使用 `0.0.0.0` 时，Daemon Protocol 会同时显示本地地址和网络地址：
 
 ```
   Local access:       http://localhost:4096
@@ -92,19 +92,19 @@ OPENCODE_SERVER_PASSWORD=secret opencode web
 
 ## 使用 Web 界面
 
-启动后，Web 界面提供对 OpenCode 会话的访问。
+启动后，Web 界面提供对 Daemon Protocol 会话的访问。
 
 ### 会话
 
 在主页上查看和管理你的会话。你可以查看活跃的会话，也可以创建新的会话。
 
-![OpenCode Web - Active Session](../../../assets/web/web-homepage-active-session.png)
+![Daemon Protocol Web - Active Session](../../../assets/web/web-homepage-active-session.png)
 
 ### 服务器状态
 
 点击"See Servers"可以查看已连接的服务器及其状态。
 
-![OpenCode Web - See Servers](../../../assets/web/web-homepage-see-servers.png)
+![Daemon Protocol Web - See Servers](../../../assets/web/web-homepage-see-servers.png)
 
 ---
 

@@ -1,33 +1,33 @@
 ---
 title: GitLab
-description: ใช้ OpenCode ในปัญหา GitLab และรวมคำขอ
+description: ใช้ Daemon Protocol ในปัญหา GitLab และรวมคำขอ
 ---
 
-OpenCode ทำงานร่วมกับเวิร์กโฟลว์ GitLab ของคุณผ่านไปป์ไลน์ GitLab CI/CD หรือกับ GitLab Duo
+Daemon Protocol ทำงานร่วมกับเวิร์กโฟลว์ GitLab ของคุณผ่านไปป์ไลน์ GitLab CI/CD หรือกับ GitLab Duo
 
-ในทั้งสองกรณี OpenCode จะทำงานบน GitLab runners ของคุณ
+ในทั้งสองกรณี Daemon Protocol จะทำงานบน GitLab runners ของคุณ
 
 ---
 
 ## GitLab CI
 
-OpenCode ทำงานในไปป์ไลน์ GitLab ปกติ คุณสามารถสร้างมันลงในไปป์ไลน์เป็น [องค์ประกอบ CI](https://docs.gitlab.com/ee/ci/components/)
+Daemon Protocol ทำงานในไปป์ไลน์ GitLab ปกติ คุณสามารถสร้างมันลงในไปป์ไลน์เป็น [องค์ประกอบ CI](https://docs.gitlab.com/ee/ci/components/)
 
-ที่นี่เรากำลังใช้คอมโพเนนต์ CI/CD ที่สร้างโดยชุมชนสำหรับ OpenCode — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode)
+ที่นี่เรากำลังใช้คอมโพเนนต์ CI/CD ที่สร้างโดยชุมชนสำหรับ Daemon Protocol — [nagyv/gitlab-opencode](https://gitlab.com/nagyv/gitlab-opencode)
 
 ---
 
 ### คุณสมบัติ
 
-- **ใช้การกำหนดค่าแบบกำหนดเองต่องาน**: กำหนดค่า OpenCode ด้วยไดเร็กทอรีการกำหนดค่าแบบกำหนดเอง เช่น `./config/#custom-directory` เพื่อเปิดหรือปิดฟังก์ชันการทำงานต่อการเรียกใช้ OpenCode
-- **การตั้งค่าขั้นต่ำ**: องค์ประกอบ CI จะตั้งค่า OpenCode ในเบื้องหลัง คุณเพียงแค่ต้องสร้างการกำหนดค่า OpenCode และข้อความแจ้งเริ่มต้นเท่านั้น
+- **ใช้การกำหนดค่าแบบกำหนดเองต่องาน**: กำหนดค่า Daemon Protocol ด้วยไดเร็กทอรีการกำหนดค่าแบบกำหนดเอง เช่น `./config/#custom-directory` เพื่อเปิดหรือปิดฟังก์ชันการทำงานต่อการเรียกใช้ Daemon Protocol
+- **การตั้งค่าขั้นต่ำ**: องค์ประกอบ CI จะตั้งค่า Daemon Protocol ในเบื้องหลัง คุณเพียงแค่ต้องสร้างการกำหนดค่า Daemon Protocol และข้อความแจ้งเริ่มต้นเท่านั้น
 - **ยืดหยุ่น**: ส่วนประกอบ CI รองรับอินพุตหลายอินพุตเพื่อปรับแต่งลักษณะการทำงาน
 
 ---
 
 ### ตั้งค่า
 
-1. จัดเก็บการรับรองความถูกต้อง OpenCode ของคุณ JSON เป็นประเภทไฟล์ CI ตัวแปรสภาพแวดล้อมภายใต้ **การตั้งค่า** > **CI/CD** > **ตัวแปร** ตรวจสอบให้แน่ใจว่าได้ทำเครื่องหมายว่าเป็น "ปิดบังและซ่อนไว้"
+1. จัดเก็บการรับรองความถูกต้อง Daemon Protocol ของคุณ JSON เป็นประเภทไฟล์ CI ตัวแปรสภาพแวดล้อมภายใต้ **การตั้งค่า** > **CI/CD** > **ตัวแปร** ตรวจสอบให้แน่ใจว่าได้ทำเครื่องหมายว่าเป็น "ปิดบังและซ่อนไว้"
 2. เพิ่มสิ่งต่อไปนี้ในไฟล์ `.gitlab-ci.yml` ของคุณ
 
    ```yaml title=".gitlab-ci.yml"
@@ -35,7 +35,7 @@ OpenCode ทำงานในไปป์ไลน์ GitLab ปกติ ค�
      - component: $CI_SERVER_FQDN/nagyv/gitlab-opencode/opencode@2
        inputs:
          config_dir: ${CI_PROJECT_DIR}/opencode-config
-         auth_json: $OPENCODE_AUTH_JSON # The variable name for your OpenCode authentication JSON
+         auth_json: $OPENCODE_AUTH_JSON # The variable name for your Daemon Protocol authentication JSON
          command: optional-custom-command
          message: "Your prompt here"
    ```
@@ -46,23 +46,23 @@ OpenCode ทำงานในไปป์ไลน์ GitLab ปกติ ค�
 
 ## GitLab Duo
 
-OpenCode ทำงานร่วมกับเวิร์กโฟลว์ GitLab ของคุณ
-พูดถึง `@opencode` ในความคิดเห็น แล้ว OpenCode จะดำเนินการงานภายในไปป์ไลน์ GitLab CI ของคุณ
+Daemon Protocol ทำงานร่วมกับเวิร์กโฟลว์ GitLab ของคุณ
+พูดถึง `@opencode` ในความคิดเห็น แล้ว Daemon Protocol จะดำเนินการงานภายในไปป์ไลน์ GitLab CI ของคุณ
 
 ---
 
 ### คุณสมบัติ
 
-- **Issue Triage**: ขอให้ OpenCode ตรวจสอบปัญหาและอธิบายให้คุณทราบ
-- **แก้ไขและนำไปใช้**: ขอให้ OpenCode แก้ไขปัญหาหรือใช้ฟีเจอร์
+- **Issue Triage**: ขอให้ Daemon Protocol ตรวจสอบปัญหาและอธิบายให้คุณทราบ
+- **แก้ไขและนำไปใช้**: ขอให้ Daemon Protocol แก้ไขปัญหาหรือใช้ฟีเจอร์
   มันจะสร้างสาขาใหม่และขอรวมการเปลี่ยนแปลง
-- **ปลอดภัย**: OpenCode ทำงานบนนักวิ่ง GitLab ของคุณ
+- **ปลอดภัย**: Daemon Protocol ทำงานบนนักวิ่ง GitLab ของคุณ
 
 ---
 
 ### ตั้งค่า
 
-OpenCode ทำงานในไปป์ไลน์ GitLab CI/CD ของคุณ นี่คือสิ่งที่คุณจะต้องตั้งค่า:
+Daemon Protocol ทำงานในไปป์ไลน์ GitLab CI/CD ของคุณ นี่คือสิ่งที่คุณจะต้องตั้งค่า:
 
 :::tip
 ตรวจสอบ [**เอกสาร GitLab**](https://docs.gitlab.com/user/duo_agent_platform/agent_assistant/) เพื่อดูคำแนะนำล่าสุด
@@ -91,7 +91,7 @@ OpenCode ทำงานในไปป์ไลน์ GitLab CI/CD ของค
       - apt-get install --yes glab
       - echo "Configuring glab"
       - echo $GITLAB_HOST
-      - echo "Creating OpenCode auth configuration"
+      - echo "Creating Daemon Protocol auth configuration"
       - mkdir --parents ~/.local/share/opencode
       - |
         cat > ~/.local/share/opencode/auth.json << EOF
@@ -104,10 +104,10 @@ OpenCode ทำงานในไปป์ไลน์ GitLab CI/CD ของค
         EOF
       - echo "Configuring git"
       - git config --global user.email "opencode@gitlab.com"
-      - git config --global user.name "OpenCode"
+      - git config --global user.name "Daemon Protocol"
       - echo "Testing glab"
       - glab issue list
-      - echo "Running OpenCode"
+      - echo "Running Daemon Protocol"
       - |
         opencode run "
         You are an AI assistant helping with GitLab operations.
@@ -158,7 +158,7 @@ OpenCode ทำงานในไปป์ไลน์ GitLab CI/CD ของค
 
 ### ตัวอย่าง
 
-นี่คือตัวอย่างบางส่วนของวิธีที่คุณสามารถใช้ OpenCode ใน GitLab
+นี่คือตัวอย่างบางส่วนของวิธีที่คุณสามารถใช้ Daemon Protocol ใน GitLab
 
 :::tip
 คุณสามารถกำหนดค่าให้ใช้วลีทริกเกอร์ที่แตกต่างจาก `@opencode`
@@ -172,7 +172,7 @@ OpenCode ทำงานในไปป์ไลน์ GitLab CI/CD ของค
   @opencode explain this issue
   ```
 
-  OpenCode จะอ่านปัญหาและตอบกลับพร้อมคำอธิบายที่ชัดเจน
+  Daemon Protocol จะอ่านปัญหาและตอบกลับพร้อมคำอธิบายที่ชัดเจน
 
 - **แก้ไขปัญหา**
 
@@ -182,7 +182,7 @@ OpenCode ทำงานในไปป์ไลน์ GitLab CI/CD ของค
   @opencode fix this
   ```
 
-  OpenCode จะสร้างสาขาใหม่ ดำเนินการเปลี่ยนแปลง และเปิดคำขอรวมที่มีการเปลี่ยนแปลง
+  Daemon Protocol จะสร้างสาขาใหม่ ดำเนินการเปลี่ยนแปลง และเปิดคำขอรวมที่มีการเปลี่ยนแปลง
 
 - **ตรวจสอบคำขอรวม**
 
@@ -192,4 +192,4 @@ OpenCode ทำงานในไปป์ไลน์ GitLab CI/CD ของค
   @opencode review this merge request
   ```
 
-  OpenCode จะตรวจสอบคำขอรวมและให้ข้อเสนอแนะ
+  Daemon Protocol จะตรวจสอบคำขอรวมและให้ข้อเสนอแนะ

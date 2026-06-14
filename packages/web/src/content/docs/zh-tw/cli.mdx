@@ -1,17 +1,17 @@
 ---
 title: CLI
-description: OpenCode CLI 選項和指令。
+description: Daemon Protocol CLI 選項和指令。
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode CLI 在不帶任何參數執行時，預設啟動 [TUI](/docs/tui)。
+Daemon Protocol CLI 在不帶任何參數執行時，預設啟動 [TUI](/docs/tui)。
 
 ```bash
 opencode
 ```
 
-但它也接受本頁面中記錄的指令，使您可以透過程式方式與 OpenCode 進行互動。
+但它也接受本頁面中記錄的指令，使您可以透過程式方式與 Daemon Protocol 進行互動。
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-啟動 OpenCode 終端機使用者介面。
+啟動 Daemon Protocol 終端機使用者介面。
 
 ```bash
 opencode [project]
@@ -44,13 +44,13 @@ opencode [project]
 
 ## 指令
 
-OpenCode CLI 還提供以下指令。
+Daemon Protocol CLI 還提供以下指令。
 
 ---
 
 ### agent
 
-管理 OpenCode 的代理。
+管理 Daemon Protocol 的代理。
 
 ```bash
 opencode agent [command]
@@ -60,13 +60,13 @@ opencode agent [command]
 
 ### attach
 
-將終端機連接到已透過 `serve` 或 `web` 指令啟動的 OpenCode 後端伺服器。
+將終端機連接到已透過 `serve` 或 `web` 指令啟動的 Daemon Protocol 後端伺服器。
 
 ```bash
 opencode attach [url]
 ```
 
-這允許將 TUI 與遠端 OpenCode 後端搭配使用。例如：
+這允許將 TUI 與遠端 Daemon Protocol 後端搭配使用。例如：
 
 ```bash
 # Start the backend server for web/mobile access
@@ -123,13 +123,13 @@ opencode auth [command]
 
 #### login
 
-OpenCode 基於 [Models.dev](https://models.dev) 的供應商列表運作，因此您可以使用 `opencode auth login` 為任何想要使用的供應商設定 API 金鑰。金鑰儲存在 `~/.local/share/opencode/auth.json` 中。
+Daemon Protocol 基於 [Models.dev](https://models.dev) 的供應商列表運作，因此您可以使用 `opencode auth login` 為任何想要使用的供應商設定 API 金鑰。金鑰儲存在 `~/.local/share/opencode/auth.json` 中。
 
 ```bash
 opencode auth login
 ```
 
-OpenCode 啟動時會從憑證檔案載入供應商資訊，同時也會載入環境變數或專案中 `.env` 檔案中定義的金鑰。
+Daemon Protocol 啟動時會從憑證檔案載入供應商資訊，同時也會載入環境變數或專案中 `.env` 檔案中定義的金鑰。
 
 ---
 
@@ -305,7 +305,7 @@ opencode models anthropic
 | <nobr><code>{"--refresh"}</code></nobr> | 從 models.dev 重新整理模型快取             |
 | <nobr><code>{"--verbose"}</code></nobr> | 使用更詳細的模型輸出（包含費用等中繼資料） |
 
-使用 `--refresh` 旗標可以更新快取的模型列表。當供應商新增了模型並且您希望在 OpenCode 中看到它們時，此功能非常有用。
+使用 `--refresh` 旗標可以更新快取的模型列表。當供應商新增了模型並且您希望在 Daemon Protocol 中看到它們時，此功能非常有用。
 
 ```bash
 opencode models --refresh
@@ -315,7 +315,7 @@ opencode models --refresh
 
 ### run
 
-以非互動模式執行 OpenCode，直接傳入提示詞。
+以非互動模式執行 Daemon Protocol，直接傳入提示詞。
 
 ```bash
 opencode run [message..]
@@ -363,13 +363,13 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### serve
 
-啟動無介面的 OpenCode 伺服器以提供 API 存取。查看[伺服器文件](/docs/server)了解完整的 HTTP 介面。
+啟動無介面的 Daemon Protocol 伺服器以提供 API 存取。查看[伺服器文件](/docs/server)了解完整的 HTTP 介面。
 
 ```bash
 opencode serve
 ```
 
-此指令啟動一個 HTTP 伺服器，提供對 OpenCode 功能的 API 存取，無需 TUI 介面。設定 `OPENCODE_SERVER_PASSWORD` 可啟用 HTTP 基本認證（使用者名稱預設為 `opencode`）。
+此指令啟動一個 HTTP 伺服器，提供對 Daemon Protocol 功能的 API 存取，無需 TUI 介面。設定 `OPENCODE_SERVER_PASSWORD` 可啟用 HTTP 基本認證（使用者名稱預設為 `opencode`）。
 
 #### 旗標
 
@@ -384,7 +384,7 @@ opencode serve
 
 ### session
 
-管理 OpenCode 工作階段。
+管理 Daemon Protocol 工作階段。
 
 ```bash
 opencode session [command]
@@ -394,7 +394,7 @@ opencode session [command]
 
 #### list
 
-列出所有 OpenCode 工作階段。
+列出所有 Daemon Protocol 工作階段。
 
 ```bash
 opencode session list
@@ -411,7 +411,7 @@ opencode session list
 
 ### stats
 
-顯示 OpenCode 工作階段的 Token 用量和費用統計資訊。
+顯示 Daemon Protocol 工作階段的 Token 用量和費用統計資訊。
 
 ```bash
 opencode stats
@@ -442,13 +442,13 @@ opencode export [sessionID]
 
 ### import
 
-從 JSON 檔案或 OpenCode 分享連結匯入工作階段資料。
+從 JSON 檔案或 Daemon Protocol 分享連結匯入工作階段資料。
 
 ```bash
 opencode import <file>
 ```
 
-您可以從本地檔案或 OpenCode 分享連結匯入。
+您可以從本地檔案或 Daemon Protocol 分享連結匯入。
 
 ```bash
 opencode import session.json
@@ -459,13 +459,13 @@ opencode import https://opncd.ai/s/abc123
 
 ### web
 
-啟動帶有 Web 介面的無介面 OpenCode 伺服器。
+啟動帶有 Web 介面的無介面 Daemon Protocol 伺服器。
 
 ```bash
 opencode web
 ```
 
-此指令啟動一個 HTTP 伺服器並開啟瀏覽器，透過 Web 介面存取 OpenCode。設定 `OPENCODE_SERVER_PASSWORD` 可啟用 HTTP 基本認證（使用者名稱預設為 `opencode`）。
+此指令啟動一個 HTTP 伺服器並開啟瀏覽器，透過 Web 介面存取 Daemon Protocol。設定 `OPENCODE_SERVER_PASSWORD` 可啟用 HTTP 基本認證（使用者名稱預設為 `opencode`）。
 
 #### 旗標
 
@@ -500,7 +500,7 @@ opencode acp
 
 ### uninstall
 
-解除安裝 OpenCode 並刪除所有相關檔案。
+解除安裝 Daemon Protocol 並刪除所有相關檔案。
 
 ```bash
 opencode uninstall
@@ -519,7 +519,7 @@ opencode uninstall
 
 ### upgrade
 
-將 OpenCode 更新到最新版本或指定版本。
+將 Daemon Protocol 更新到最新版本或指定版本。
 
 ```bash
 opencode upgrade [target]
@@ -547,7 +547,7 @@ opencode upgrade v0.1.48
 
 ## 全域旗標
 
-OpenCode CLI 接受以下全域旗標。
+Daemon Protocol CLI 接受以下全域旗標。
 
 | 旗標                                       | 簡寫 | 說明                                 |
 | ------------------------------------------ | ---- | ------------------------------------ |
@@ -560,7 +560,7 @@ OpenCode CLI 接受以下全域旗標。
 
 ## 環境變數
 
-OpenCode 可以透過環境變數進行設定。
+Daemon Protocol 可以透過環境變數進行設定。
 
 | 變數                                  | 類型    | 說明                                        |
 | ------------------------------------- | ------- | ------------------------------------------- |

@@ -6,9 +6,9 @@ import { bundledLanguages, type BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
 import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/diffs"
 
-registerCustomTheme("OpenCode", () => {
+registerCustomTheme("Daemon Protocol", () => {
   return Promise.resolve({
-    name: "OpenCode",
+    name: "Daemon Protocol",
     colors: {
       "editor.background": "var(--color-background-stronger)",
       "editor.foreground": "var(--text-base)",
@@ -429,7 +429,7 @@ async function highlightCodeBlocks(html: string): Promise<string> {
   if (matches.length === 0) return html
 
   const highlighter = await getSharedHighlighter({
-    themes: ["OpenCode"],
+    themes: ["Daemon Protocol"],
     langs: [],
     preferredHighlighter: "shiki-wasm",
   })
@@ -454,7 +454,7 @@ async function highlightCodeBlocks(html: string): Promise<string> {
 
     const highlighted = highlighter.codeToHtml(code, {
       lang: language,
-      theme: "OpenCode",
+      theme: "Daemon Protocol",
       tabindex: false,
     })
     result = result.replace(fullMatch, () => highlighted)
@@ -484,7 +484,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
       markedShiki({
         async highlight(code, lang) {
           const highlighter = await getSharedHighlighter({
-            themes: ["OpenCode"],
+            themes: ["Daemon Protocol"],
             langs: [],
             preferredHighlighter: "shiki-wasm",
           })
@@ -496,7 +496,7 @@ export const { use: useMarked, provider: MarkedProvider } = createSimpleContext(
           }
           return highlighter.codeToHtml(code, {
             lang: lang || "text",
-            theme: "OpenCode",
+            theme: "Daemon Protocol",
             tabindex: false,
           })
         },

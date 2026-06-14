@@ -44,13 +44,13 @@ Focus on the failing tests and suggest fixes.
 
 ## 구성
 
-커스텀 명령은 OpenCode 설정으로 추가하거나, `commands/` 디렉터리에 Markdown 파일을 만들어 추가할 수 있습니다.
+커스텀 명령은 Daemon Protocol 설정으로 추가하거나, `commands/` 디렉터리에 Markdown 파일을 만들어 추가할 수 있습니다.
 
 ---
 
 ### JSON
 
-OpenCode [config](/docs/config)의 `command` 옵션을 사용합니다.
+Daemon Protocol [config](/docs/config)의 `command` 옵션을 사용합니다.
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -314,7 +314,7 @@ Check for performance issues and suggest improvements.
 
 ## 내장 명령
 
-OpenCode는 `/init`, `/undo`, `/redo`, `/share`, `/help` 등 여러 내장 명령을 제공합니다. [더 알아보기](/docs/tui#commands).
+Daemon Protocol는 `/init`, `/undo`, `/redo`, `/share`, `/help` 등 여러 내장 명령을 제공합니다. [더 알아보기](/docs/tui#commands).
 
 :::note
 커스텀 명령은 내장 명령을 덮어쓸 수 있습니다.

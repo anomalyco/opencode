@@ -40,13 +40,13 @@ Koristite komandu tako što ćete upisati `/` nakon čega slijedi naziv komande.
 
 ## Konfiguracija
 
-Možete dodati prilagođene komande kroz OpenCode konfiguraciju ili kreiranjem markdown datoteka u direktoriju `commands/`.
+Možete dodati prilagođene komande kroz Daemon Protocol konfiguraciju ili kreiranjem markdown datoteka u direktoriju `commands/`.
 
 ---
 
 ### JSON
 
-Koristite opciju `command` u svom OpenCode [config](/docs/config):
+Koristite opciju `command` u svom Daemon Protocol [config](/docs/config):
 
 ```json title="opencode.jsonc" {4-12}
 {
@@ -309,7 +309,7 @@ Ovo je **opciona** opcija konfiguracije.
 
 ## Ugrađene naredbe
 
-OpenCode uključuje nekoliko ugrađenih naredbi kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`; [saznaj više](/docs/tui#commands).
+Daemon Protocol uključuje nekoliko ugrađenih naredbi kao što su `/init`, `/undo`, `/redo`, `/share`, `/help`; [saznaj više](/docs/tui#commands).
 :::note
 Prilagođene komande mogu nadjačati ugrađene komande.
 :::

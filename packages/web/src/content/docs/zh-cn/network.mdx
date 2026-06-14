@@ -3,13 +3,13 @@ title: 网络
 description: 配置代理和自定义证书。
 ---
 
-OpenCode 支持标准代理环境变量和自定义证书，适用于企业网络环境。
+Daemon Protocol 支持标准代理环境变量和自定义证书，适用于企业网络环境。
 
 ---
 
 ## 代理
 
-OpenCode 遵循标准代理环境变量。
+Daemon Protocol 遵循标准代理环境变量。
 
 ```bash
 # HTTPS proxy (recommended)
@@ -48,7 +48,7 @@ export HTTPS_PROXY=http://username:password@proxy.example.com:8080
 
 ## 自定义证书
 
-如果你的企业使用自定义 CA 进行 HTTPS 连接，请配置 OpenCode 以信任这些证书。
+如果你的企业使用自定义 CA 进行 HTTPS 连接，请配置 Daemon Protocol 以信任这些证书。
 
 ```bash
 export NODE_EXTRA_CA_CERTS=/path/to/ca-cert.pem

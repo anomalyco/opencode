@@ -1,17 +1,17 @@
 ---
 title: CLI
-description: สัญญาณและคำสั่งของ OpenCode CLI
+description: สัญญาณและคำสั่งของ Daemon Protocol CLI
 ---
 
 import { Tabs, TabItem } from "@astrojs/starlight/components"
 
-OpenCode CLI จะเริ่มต้น [TUI](/docs/tui) เป็นค่าเริ่มต้นเมื่อเรียกใช้โดยไม่มีอาร์กิวเมนต์
+Daemon Protocol CLI จะเริ่มต้น [TUI](/docs/tui) เป็นค่าเริ่มต้นเมื่อเรียกใช้โดยไม่มีอาร์กิวเมนต์
 
 ```bash
 opencode
 ```
 
-นอกจากนี้ยังรับคำสั่งและแฟล็ก ซึ่งช่วยให้คุณใช้ OpenCode ผ่านโปรแกรมได้
+นอกจากนี้ยังรับคำสั่งและแฟล็ก ซึ่งช่วยให้คุณใช้ Daemon Protocol ผ่านโปรแกรมได้
 
 ```bash
 opencode run "Explain how closures work in JavaScript"
@@ -21,7 +21,7 @@ opencode run "Explain how closures work in JavaScript"
 
 ### tui
 
-เริ่ม TUI เพื่อใช้ OpenCode แบบโต้ตอบ
+เริ่ม TUI เพื่อใช้ Daemon Protocol แบบโต้ตอบ
 
 ```bash
 opencode [project]
@@ -44,13 +44,13 @@ opencode [project]
 
 ## คำสั่ง
 
-OpenCode CLI ยังมีคำสั่งย่อยอีกมากมาย
+Daemon Protocol CLI ยังมีคำสั่งย่อยอีกมากมาย
 
 ---
 
 ### agent
 
-จัดการเอเจนต์สำหรับ OpenCode
+จัดการเอเจนต์สำหรับ Daemon Protocol
 
 ```bash
 opencode agent [command]
@@ -60,13 +60,13 @@ opencode agent [command]
 
 ### attach
 
-เชื่อมต่อกับเซิร์ฟเวอร์แบ็กเอนด์ OpenCode ที่กำลังทำงานอยู่ ซึ่งเริ่มต้นผ่านคำสั่ง `serve` หรือ `web`
+เชื่อมต่อกับเซิร์ฟเวอร์แบ็กเอนด์ Daemon Protocol ที่กำลังทำงานอยู่ ซึ่งเริ่มต้นผ่านคำสั่ง `serve` หรือ `web`
 
 ```bash
 opencode attach [url]
 ```
 
-วิธีนี้ช่วยให้คุณใช้ TUI กับแบ็กเอนด์ OpenCode ระยะไกลได้ ตัวอย่าง:
+วิธีนี้ช่วยให้คุณใช้ TUI กับแบ็กเอนด์ Daemon Protocol ระยะไกลได้ ตัวอย่าง:
 
 ```bash
 # Start the backend server for web/mobile access
@@ -123,13 +123,13 @@ opencode auth [command]
 
 #### login
 
-OpenCode ได้รับการกำหนดค่าไว้ล่วงหน้าด้วยรายชื่อผู้ให้บริการทั่วไปที่ [Models.dev](https://models.dev) ดังนั้นคุณเพียงแค่ต้องใส่คีย์ API สำหรับผู้ให้บริการที่คุณต้องการใช้ ข้อมูลนี้จะถูกเก็บไว้ที่ `~/.local/share/opencode/auth.json`
+Daemon Protocol ได้รับการกำหนดค่าไว้ล่วงหน้าด้วยรายชื่อผู้ให้บริการทั่วไปที่ [Models.dev](https://models.dev) ดังนั้นคุณเพียงแค่ต้องใส่คีย์ API สำหรับผู้ให้บริการที่คุณต้องการใช้ ข้อมูลนี้จะถูกเก็บไว้ที่ `~/.local/share/opencode/auth.json`
 
 ```bash
 opencode auth login
 ```
 
-เมื่อ OpenCode เริ่มต้น ระบบจะโหลดข้อมูลรับรองจากไฟล์นี้ ดังนั้นคุณจึงไม่ต้องกังวลกับการตั้งค่าตัวแปรสภาพแวดล้อมหรือไฟล์ `.env` ในโปรเจ็กต์ของคุณ
+เมื่อ Daemon Protocol เริ่มต้น ระบบจะโหลดข้อมูลรับรองจากไฟล์นี้ ดังนั้นคุณจึงไม่ต้องกังวลกับการตั้งค่าตัวแปรสภาพแวดล้อมหรือไฟล์ `.env` ในโปรเจ็กต์ของคุณ
 
 ---
 
@@ -306,7 +306,7 @@ opencode models anthropic
 | <nobr><code>{"--verbose"}</code></nobr> | แสดงรายละเอียดโมเดลเพิ่มเติม (รวมข้อมูลเมตาเช่นต้นทุน) |
 | <nobr><code>{"--json"}</code></nobr>    | แสดงผลลัพธ์เป็น JSON                                   |
 
-ใช้แฟล็ก `--refresh` เพื่ออัปเดตรายการโมเดลที่แคชไว้ มีประโยชน์เมื่อมีการเพิ่มโมเดลใหม่ให้กับผู้ให้บริการและคุณต้องการเห็นใน OpenCode
+ใช้แฟล็ก `--refresh` เพื่ออัปเดตรายการโมเดลที่แคชไว้ มีประโยชน์เมื่อมีการเพิ่มโมเดลใหม่ให้กับผู้ให้บริการและคุณต้องการเห็นใน Daemon Protocol
 
 ```bash
 opencode models --refresh
@@ -316,7 +316,7 @@ opencode models --refresh
 
 ### run
 
-รัน OpenCode โดยไม่ต้องใช้ TUI โดยส่งพรอมต์โดยตรง
+รัน Daemon Protocol โดยไม่ต้องใช้ TUI โดยส่งพรอมต์โดยตรง
 
 ```bash
 opencode run [message..]
@@ -364,13 +364,13 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 
 ### serve
 
-เริ่มต้นเซิร์ฟเวอร์ OpenCode headless ที่ให้บริการ API HTTP ดู [เอกสารเซิร์ฟเวอร์](/docs/server) สำหรับรายละเอียด API เต็มรูปแบบ
+เริ่มต้นเซิร์ฟเวอร์ Daemon Protocol headless ที่ให้บริการ API HTTP ดู [เอกสารเซิร์ฟเวอร์](/docs/server) สำหรับรายละเอียด API เต็มรูปแบบ
 
 ```bash
 opencode serve
 ```
 
-คำสั่งนี้จะเริ่มต้นเซิร์ฟเวอร์ HTTP ให้ API เข้าถึงฟังก์ชันการทำงานของ OpenCode ได้โดยไม่ต้องมี TUI นอกจากนี้ยังรองรับการตรวจสอบสิทธิ์พื้นฐาน HTTP (ชื่อผู้ใช้เริ่มต้นคือ `opencode` และรหัสผ่านระบุโดย `OPENCODE_SERVER_PASSWORD`)
+คำสั่งนี้จะเริ่มต้นเซิร์ฟเวอร์ HTTP ให้ API เข้าถึงฟังก์ชันการทำงานของ Daemon Protocol ได้โดยไม่ต้องมี TUI นอกจากนี้ยังรองรับการตรวจสอบสิทธิ์พื้นฐาน HTTP (ชื่อผู้ใช้เริ่มต้นคือ `opencode` และรหัสผ่านระบุโดย `OPENCODE_SERVER_PASSWORD`)
 
 #### แฟล็ก
 
@@ -385,7 +385,7 @@ opencode serve
 
 ### session
 
-จัดการเซสชัน OpenCode
+จัดการเซสชัน Daemon Protocol
 
 ```bash
 opencode session [command]
@@ -395,7 +395,7 @@ opencode session [command]
 
 #### list
 
-แสดงรายการเซสชัน OpenCode ทั้งหมด
+แสดงรายการเซสชัน Daemon Protocol ทั้งหมด
 
 ```bash
 opencode session list
@@ -412,7 +412,7 @@ opencode session list
 
 ### stats
 
-แสดงสถิติการใช้งานและค่าใช้จ่ายสำหรับ OpenCode ของคุณ
+แสดงสถิติการใช้งานและค่าใช้จ่ายสำหรับ Daemon Protocol ของคุณ
 
 ```bash
 opencode stats
@@ -443,7 +443,7 @@ opencode export [sessionID]
 
 ### import
 
-นำเข้าเซสชันจากไฟล์ JSON หรือ URL ที่แชร์ของ OpenCode
+นำเข้าเซสชันจากไฟล์ JSON หรือ URL ที่แชร์ของ Daemon Protocol
 
 ```bash
 opencode import <file>
@@ -460,13 +460,13 @@ opencode import https://opncd.ai/s/abc123
 
 ### web
 
-เริ่ม OpenCode ในโหมดเซิร์ฟเวอร์พร้อมเว็บอินเตอร์เฟส
+เริ่ม Daemon Protocol ในโหมดเซิร์ฟเวอร์พร้อมเว็บอินเตอร์เฟส
 
 ```bash
 opencode web
 ```
 
-คำสั่งนี้จะเริ่มต้นเซิร์ฟเวอร์ HTTP และเปิดเว็บเบราว์เซอร์เพื่อเข้าถึง OpenCode ผ่านทางเว็บอินเตอร์เฟส รองรับการตรวจสอบสิทธิ์พื้นฐาน HTTP (ชื่อผู้ใช้เริ่มต้นคือ `opencode` และรหัสผ่านระบุโดย `OPENCODE_SERVER_PASSWORD`)
+คำสั่งนี้จะเริ่มต้นเซิร์ฟเวอร์ HTTP และเปิดเว็บเบราว์เซอร์เพื่อเข้าถึง Daemon Protocol ผ่านทางเว็บอินเตอร์เฟส รองรับการตรวจสอบสิทธิ์พื้นฐาน HTTP (ชื่อผู้ใช้เริ่มต้นคือ `opencode` และรหัสผ่านระบุโดย `OPENCODE_SERVER_PASSWORD`)
 
 #### แฟล็ก
 
@@ -501,7 +501,7 @@ opencode acp
 
 ### uninstall
 
-ถอนการติดตั้ง OpenCode และลบข้อมูลการกำหนดค่าทั้งหมด
+ถอนการติดตั้ง Daemon Protocol และลบข้อมูลการกำหนดค่าทั้งหมด
 
 ```bash
 opencode uninstall
@@ -520,7 +520,7 @@ opencode uninstall
 
 ### upgrade
 
-อัปเกรด OpenCode เป็นเวอร์ชันล่าสุดหรือเวอร์ชันที่ระบุ
+อัปเกรด Daemon Protocol เป็นเวอร์ชันล่าสุดหรือเวอร์ชันที่ระบุ
 
 ```bash
 opencode upgrade [target]
@@ -548,7 +548,7 @@ opencode upgrade v0.1.48
 
 ## แฟล็กระดับโลก
 
-OpenCode CLI ยอมรับแฟล็กสากลต่อไปนี้สำหรับทุกคำสั่ง
+Daemon Protocol CLI ยอมรับแฟล็กสากลต่อไปนี้สำหรับทุกคำสั่ง
 
 | แฟล็ก                                      | สั้น | คำอธิบาย                                  |
 | ------------------------------------------ | ---- | ----------------------------------------- |
@@ -561,7 +561,7 @@ OpenCode CLI ยอมรับแฟล็กสากลต่อไปนี�
 
 ## ตัวแปรสภาพแวดล้อม
 
-OpenCode สามารถกำหนดค่าโดยใช้ตัวแปรสภาพแวดล้อม
+Daemon Protocol สามารถกำหนดค่าโดยใช้ตัวแปรสภาพแวดล้อม
 
 | ตัวแปร                                | ชนิด    | คำอธิบาย                                                         |
 | ------------------------------------- | ------- | ---------------------------------------------------------------- |

@@ -390,7 +390,7 @@ Isso é separado do `opencode.json`, que configura o comportamento do servidor/r
 
 - `theme` - Define o tema da sua interface. [Saiba mais](/docs/themes).
 - `keybinds` - Personaliza atalhos de teclado. [Saiba mais](/docs/keybinds).
-- `leader_timeout` - Controla por quanto tempo o OpenCode espera depois da leader key. O padrão é `2000`.
+- `leader_timeout` - Controla por quanto tempo o Daemon Protocol espera depois da leader key. O padrão é `2000`.
 - `scroll_acceleration.enabled` - Ative a aceleração de rolagem no estilo macOS para uma rolagem suave e natural. Quando ativado, a velocidade de rolagem aumenta com gestos de rolagem rápidos e permanece precisa para movimentos mais lentos. **Esta configuração tem precedência sobre `scroll_speed` e a substitui quando ativada.**
 - `scroll_speed` - Controla quão rápido o TUI rola ao usar comandos de rolagem (mínimo: `0.001`, suporta valores decimais). O padrão é `3`. **Nota: Isso é ignorado se `scroll_acceleration.enabled` estiver definido como `true`.**
 - `diff_style` - Controla a renderização de diffs. `"auto"` se adapta à largura do terminal, `"stacked"` sempre mostra um layout de coluna única.
@@ -401,7 +401,7 @@ Use `OPENCODE_TUI_CONFIG` para carregar um caminho de configuração TUI persona
 
 ### Attention
 
-Attention permite que o TUI avise você quando o OpenCode espera uma resposta, precisa da aprovação de uma permissão, encontra um erro de sessão ou conclui uma sessão. Ative com `attention.enabled`; eventos integrados reproduzem sons quando acontecem. As notificações de desktop só são enviadas quando a janela do terminal não está em foco e não são usadas para eventos de subagent.
+Attention permite que o TUI avise você quando o Daemon Protocol espera uma resposta, precisa da aprovação de uma permissão, encontra um erro de sessão ou conclui uma sessão. Ative com `attention.enabled`; eventos integrados reproduzem sons quando acontecem. As notificações de desktop só são enviadas quando a janela do terminal não está em foco e não são usadas para eventos de subagent.
 
 - `enabled` - Ativa todas as notificações e sons de Attention. O padrão é `false`.
 - `notifications` - Quando Attention está ativo, permite que o TUI envie notificações de desktop pelo terminal. O padrão é `true`.

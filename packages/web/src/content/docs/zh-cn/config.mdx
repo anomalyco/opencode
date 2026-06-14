@@ -1,15 +1,15 @@
 ---
 title: 配置
-description: 使用 OpenCode JSON 配置。
+description: 使用 Daemon Protocol JSON 配置。
 ---
 
-您可以使用 JSON 配置文件来配置 OpenCode。
+您可以使用 JSON 配置文件来配置 Daemon Protocol。
 
 ---
 
 ## 格式
 
-OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
+Daemon Protocol 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -95,7 +95,7 @@ OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 
 ### 全局
 
-将全局 OpenCode 配置放在 `~/.config/opencode/opencode.json` 中。使用全局配置来设置用户级别的偏好，例如主题、提供商或快捷键。
+将全局 Daemon Protocol 配置放在 `~/.config/opencode/opencode.json` 中。使用全局配置来设置用户级别的偏好，例如主题、提供商或快捷键。
 
 全局配置覆盖远程组织默认值。
 
@@ -109,7 +109,7 @@ OpenCode 支持 **JSON** 和 **JSONC**（带注释的 JSON）格式。
 将项目特定配置放在项目的根目录中。
 :::
 
-当 OpenCode 启动时，它会在当前目录中查找配置文件，或向上遍历到最近的 Git 目录。
+当 Daemon Protocol 启动时，它会在当前目录中查找配置文件，或向上遍历到最近的 Git 目录。
 
 该配置文件也可以安全地提交到 Git 中，并使用与全局配置相同的 Schema。
 
@@ -197,7 +197,7 @@ opencode run "Hello world"
 
 - `port` - 监听端口。
 - `hostname` - 监听主机名。当 `mdns` 启用且未设置主机名时，默认为 `0.0.0.0`。
-- `mdns` - 启用 mDNS 服务发现。这允许网络上的其他设备发现您的 OpenCode 服务器。
+- `mdns` - 启用 mDNS 服务发现。这允许网络上的其他设备发现您的 Daemon Protocol 服务器。
 - `mdnsDomain` - mDNS 服务的自定义域名。默认为 `opencode.local`。适用于在同一网络上运行多个实例的场景。
 - `cors` - 从基于浏览器的客户端使用 HTTP 服务器时允许 CORS 的额外来源。值必须是完整的来源（协议 + 主机 + 可选端口），例如 `https://app.example.com`。
 
@@ -225,7 +225,7 @@ opencode run "Hello world"
 
 ### 模型
 
-您可以通过 `provider`、`model` 和 `small_model` 选项在 OpenCode 配置中设置要使用的提供商和模型。
+您可以通过 `provider`、`model` 和 `small_model` 选项在 Daemon Protocol 配置中设置要使用的提供商和模型。
 
 ```json title="opencode.json"
 {
@@ -236,7 +236,7 @@ opencode run "Hello world"
 }
 ```
 
-`small_model` 选项为标题生成等轻量级任务配置单独的模型。默认情况下，如果您的提供商有更便宜的模型可用，OpenCode 会尝试使用该模型，否则会回退到您的主模型。
+`small_model` 选项为标题生成等轻量级任务配置单独的模型。默认情况下，如果您的提供商有更便宜的模型可用，Daemon Protocol 会尝试使用该模型，否则会回退到您的主模型。
 
 提供商选项可以包括 `timeout` 和 `setCacheKey`：
 
@@ -298,7 +298,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）优先于基于配置
 
 ### 主题
 
-您可以通过 OpenCode 配置中的 `theme` 选项设置要使用的主题。
+您可以通过 Daemon Protocol 配置中的 `theme` 选项设置要使用的主题。
 
 ```json title="opencode.json"
 {
@@ -348,7 +348,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）优先于基于配置
 }
 ```
 
-默认代理必须是主代理（不能是子代理）。可以是内置代理（如 `"build"` 或 `"plan"`），也可以是您定义的[自定义代理](/docs/agents)。如果指定的代理不存在或是子代理，OpenCode 将回退到 `"build"` 并发出警告。
+默认代理必须是主代理（不能是子代理）。可以是内置代理（如 `"build"` 或 `"plan"`），也可以是您定义的[自定义代理](/docs/agents)。如果指定的代理不存在或是子代理，Daemon Protocol 将回退到 `"build"` 并发出警告。
 
 此设置适用于所有界面：TUI、CLI（`opencode run`）、桌面应用和 GitHub Action。
 
@@ -418,7 +418,7 @@ Bearer Token（`AWS_BEARER_TOKEN_BEDROCK` 或 `/connect`）优先于基于配置
 
 ### 自动更新
 
-OpenCode 启动时会自动下载新版本。您可以使用 `autoupdate` 选项禁用此功能。
+Daemon Protocol 启动时会自动下载新版本。您可以使用 `autoupdate` 选项禁用此功能。
 
 ```json title="opencode.json"
 {
@@ -460,7 +460,7 @@ OpenCode 启动时会自动下载新版本。您可以使用 `autoupdate` 选项
 
 ### 权限
 
-默认情况下，OpenCode **允许所有操作**，无需明确批准。您可以使用 `permission` 选项更改此行为。
+默认情况下，Daemon Protocol **允许所有操作**，无需明确批准。您可以使用 `permission` 选项更改此行为。
 
 例如，要让 `edit` 和 `bash` 工具需要用户确认：
 
@@ -533,7 +533,7 @@ OpenCode 启动时会自动下载新版本。您可以使用 `autoupdate` 选项
 
 ### 插件
 
-[插件](/docs/plugins)通过自定义工具、钩子和集成来扩展 OpenCode。
+[插件](/docs/plugins)通过自定义工具、钩子和集成来扩展 Daemon Protocol。
 
 将插件文件放置在 `.opencode/plugins/` 或 `~/.config/opencode/plugins/` 中。您还可以通过 `plugin` 选项从 npm 加载插件。
 
@@ -597,7 +597,7 @@ OpenCode 启动时会自动下载新版本。您可以使用 `autoupdate` 选项
 }
 ```
 
-当您希望限制 OpenCode 仅使用特定提供商，而不是逐一禁用其他提供商时，此选项非常有用。
+当您希望限制 Daemon Protocol 仅使用特定提供商，而不是逐一禁用其他提供商时，此选项非常有用。
 
 :::note
 `disabled_providers` 优先于 `enabled_providers`。

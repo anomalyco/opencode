@@ -21,9 +21,9 @@ const betaAssetNames: Record<string, string> = {
 
 // Doing this on the server lets us preserve the original name for platforms we don't care to rename for
 const downloadNames: Record<string, string> = {
-  "darwin-aarch64-dmg": "OpenCode Desktop.dmg",
-  "darwin-x64-dmg": "OpenCode Desktop.dmg",
-  "windows-x64-nsis": "OpenCode Desktop Installer.exe",
+  "darwin-aarch64-dmg": "Daemon Protocol Desktop.dmg",
+  "darwin-x64-dmg": "Daemon Protocol Desktop.dmg",
+  "windows-x64-nsis": "Daemon Protocol Desktop Installer.exe",
 } satisfies { [K in DownloadPlatform]?: string }
 
 export async function GET({ params: { platform, channel } }: APIEvent) {

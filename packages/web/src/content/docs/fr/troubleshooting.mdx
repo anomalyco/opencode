@@ -3,7 +3,7 @@ title: Dépannage
 description: Problèmes courants et comment les résoudre.
 ---
 
-Pour déboguer les problèmes avec OpenCode, commencez par vérifier les journaux et les données locales qu'il stocke sur le disque.
+Pour déboguer les problèmes avec Daemon Protocol, commencez par vérifier les journaux et les données locales qu'il stocke sur le disque.
 
 ---
 
@@ -39,13 +39,13 @@ Ce répertoire contient :
 
 ## Application de bureau
 
-OpenCode Desktop exécute un serveur OpenCode local (le side-car `opencode-cli`) en arrière-plan. La plupart des problèmes sont causés par un plugin qui se comporte mal, un cache corrompu ou un mauvais paramètre du serveur.
+Daemon Protocol Desktop exécute un serveur Daemon Protocol local (le side-car `opencode-cli`) en arrière-plan. La plupart des problèmes sont causés par un plugin qui se comporte mal, un cache corrompu ou un mauvais paramètre du serveur.
 
 ### Vérifications rapides
 
 - Quittez complètement et relancez l'application.
 - Si l'application affiche un écran d'erreur, cliquez sur **Redémarrer** et copiez les détails de l'erreur.
-- macOS uniquement : menu `OpenCode` -> **Recharger la vue Web** (aide si l'interface utilisateur est vide/gelée).
+- macOS uniquement : menu `Daemon Protocol` -> **Recharger la vue Web** (aide si l'interface utilisateur est vide/gelée).
 
 ---
 
@@ -72,7 +72,7 @@ Si vous avez configuré des plugins, désactivez-les temporairement en suppriman
 
 #### Vérifiez les répertoires des plugins
 
-OpenCode peut également charger des plugins locaux à partir du disque. Écartez-les temporairement (ou renommez le dossier) et redémarrez l'application de bureau :
+Daemon Protocol peut également charger des plugins locaux à partir du disque. Écartez-les temporairement (ou renommez le dossier) et redémarrez l'application de bureau :
 
 - **Plugins mondiaux**
   - **macOS/Linux** : `~/.config/opencode/plugins/`
@@ -86,22 +86,22 @@ Si l'application recommence à fonctionner, réactivez les plugins un par un pou
 
 ### Vider le cache
 
-Si la désactivation des plugins ne résout pas le problème (ou si l'installation d'un plugin est bloquée), videz le cache afin que OpenCode puisse le reconstruire.
+Si la désactivation des plugins ne résout pas le problème (ou si l'installation d'un plugin est bloquée), videz le cache afin que Daemon Protocol puisse le reconstruire.
 
-1. Quittez complètement OpenCode Desktop.
+1. Quittez complètement Daemon Protocol Desktop.
 2. Supprimez le répertoire cache :
 
 - **macOS** : Finder -> `Cmd+Shift+G` -> coller `~/.cache/opencode`
 - **Linux** : supprimez `~/.cache/opencode` (ou exécutez `rm -rf ~/.cache/opencode`)
 - **Windows** : appuyez sur `WIN+R` et collez `%USERPROFILE%\.cache\opencode`
 
-3. Redémarrez le bureau OpenCode.
+3. Redémarrez le bureau Daemon Protocol.
 
 ---
 
 ### Résoudre les problèmes de connexion au serveur
 
-OpenCode Desktop peut soit démarrer son propre serveur local (par défaut), soit se connecter à un serveur URL que vous avez configuré.
+Daemon Protocol Desktop peut soit démarrer son propre serveur local (par défaut), soit se connecter à un serveur URL que vous avez configuré.
 
 Si vous voyez une boîte de dialogue **« Échec de la connexion »** (ou si l'application ne dépasse jamais l'écran de démarrage), recherchez un serveur personnalisé URL.
 
@@ -132,21 +132,21 @@ Sur Linux, certaines configurations Wayland peuvent provoquer des fenêtres vide
 
 ### Windows : exécution WebView2
 
-Sur Windows, OpenCode Desktop nécessite Microsoft Edge **WebView2 Runtime**. Si l'application s'ouvre sur une fenêtre vide ou ne démarre pas, installez/mettez à jour WebView2 et réessayez.
+Sur Windows, Daemon Protocol Desktop nécessite Microsoft Edge **WebView2 Runtime**. Si l'application s'ouvre sur une fenêtre vide ou ne démarre pas, installez/mettez à jour WebView2 et réessayez.
 
 ---
 
 ### Windows : problèmes de performances généraux
 
-Si vous rencontrez des performances lentes, des problèmes d'accès aux fichiers ou des problèmes de terminal sur Windows, essayez d'utiliser [WSL (Windows Sous-système pour Linux)](/docs/windows-wsl). WSL fournit un environnement Linux qui fonctionne de manière plus transparente avec les fonctionnalités de OpenCode.
+Si vous rencontrez des performances lentes, des problèmes d'accès aux fichiers ou des problèmes de terminal sur Windows, essayez d'utiliser [WSL (Windows Sous-système pour Linux)](/docs/windows-wsl). WSL fournit un environnement Linux qui fonctionne de manière plus transparente avec les fonctionnalités de Daemon Protocol.
 
 ---
 
 ### Les notifications ne s'affichent pas
 
-OpenCode Desktop affiche uniquement les notifications système lorsque :
+Daemon Protocol Desktop affiche uniquement les notifications système lorsque :
 
-- les notifications sont activées pour OpenCode dans les paramètres de votre système d'exploitation, et
+- les notifications sont activées pour Daemon Protocol dans les paramètres de votre système d'exploitation, et
 - la fenêtre de l'application n'est pas ciblée.
 
 ---
@@ -155,8 +155,8 @@ OpenCode Desktop affiche uniquement les notifications système lorsque :
 
 Si l'application ne démarre pas et que vous ne pouvez pas effacer les paramètres depuis l'interface utilisateur, réinitialisez l'état enregistré de l'application de bureau.
 
-1. Quittez le bureau OpenCode.
-2. Recherchez et supprimez ces fichiers (ils se trouvent dans le répertoire de données de l'application OpenCode Desktop) :
+1. Quittez le bureau Daemon Protocol.
+2. Recherchez et supprimez ces fichiers (ils se trouvent dans le répertoire de données de l'application Daemon Protocol Desktop) :
 
 - `opencode.settings.dat` (serveur de bureau par défaut URL)
 - `opencode.global.dat` et `opencode.workspace.*.dat` (état de l'interface utilisateur comme les serveurs/projets récents)
@@ -171,7 +171,7 @@ Pour trouver rapidement le répertoire :
 
 ## Obtenir de l'aide
 
-Si vous rencontrez des problèmes avec OpenCode :
+Si vous rencontrez des problèmes avec Daemon Protocol :
 
 1. **Signaler les problèmes le GitHub**
 
@@ -195,7 +195,7 @@ Voici quelques problèmes courants et comment les résoudre.
 
 ---
 
-### OpenCode ne démarre pas
+### Daemon Protocol ne démarre pas
 
 1. Vérifiez les journaux pour les messages d'erreur
 2. Essayez d'exécuter avec `--print-logs` pour voir la sortie dans le terminal
