@@ -23,11 +23,11 @@ MCP サーバーはコンテキストに追加されるため、どのサーバ�
 
 ## 有効化
 
-MCP サーバーは、`mcp` の下の [Daemon Protocol 設定](https://opencode.ai/docs/config/) で定義できます。各 MCP を一意の名前で追加します。 LLM にプロンプ​​トを表示するときに、その MCP を名前で参照できます。
+MCP サーバーは、`mcp` の下の [Daemon Protocol 設定](https://daemonprotocol.com/docs/config/) で定義できます。各 MCP を一意の名前で追加します。 LLM にプロンプ​​トを表示するときに、その MCP を名前で参照できます。
 
 ```jsonc title="opencode.jsonc" {6}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "name-of-mcp-server": {
       // ...
@@ -52,7 +52,7 @@ MCP サーバーは、`mcp` の下の [Daemon Protocol 設定](https://opencode.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "jira": {
       "type": "remote",
@@ -73,7 +73,7 @@ MCP オブジェクト内の `type` から `"local"` を使用してローカル
 
 ```jsonc title="opencode.jsonc" {15}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-local-mcp-server": {
       "type": "local",
@@ -94,7 +94,7 @@ MCP オブジェクト内の `type` から `"local"` を使用してローカル
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "mcp_everything": {
       "type": "local",
@@ -132,7 +132,7 @@ use the mcp_everything tool to add the number 3 and 4
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-remote-mcp": {
       "type": "remote",
@@ -179,7 +179,7 @@ Daemon Protocol は、リモート MCP サーバーの OAuth 認証を自動的�
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -199,7 +199,7 @@ MCP サーバープロバイダーからクライアント認証情報を取得�
 
 ```json title="opencode.json" {7-11}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-oauth-server": {
       "type": "remote",
@@ -248,7 +248,7 @@ opencode mcp logout my-oauth-server
 
 ```json title="opencode.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-api-key-server": {
       "type": "remote",
@@ -301,7 +301,7 @@ MCP は、組み込みツールと並んで、Daemon Protocol のツールとし
 
 ```json title="opencode.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -322,7 +322,7 @@ MCP は、組み込みツールと並んで、Daemon Protocol のツールとし
 
 ```json title="opencode.json" {14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-mcp-foo": {
       "type": "local",
@@ -352,7 +352,7 @@ MCP は、組み込みツールと並んで、Daemon Protocol のツールとし
 
 ```json title="opencode.json" {11, 14-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "my-mcp": {
       "type": "local",
@@ -406,7 +406,7 @@ MCP サーバーツールはサーバー名をプレフィックスとして登�
 
 ```json title="opencode.json" {4-8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "sentry": {
       "type": "remote",
@@ -439,7 +439,7 @@ Show me the latest unresolved issues in my project. use sentry
 
 ```json title="opencode.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -453,7 +453,7 @@ Show me the latest unresolved issues in my project. use sentry
 
 ```json title="opencode.json" {7-9}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "context7": {
       "type": "remote",
@@ -488,7 +488,7 @@ GitHub 上のコードスニペットを検索するには、[Grep by Vercel](ht
 
 ```json title="opencode.json" {4-7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "mcp": {
     "gh_grep": {
       "type": "remote",

@@ -14,7 +14,7 @@
   node_modules ? callPackage ./node-modules.nix { },
 }:
 stdenvNoCC.mkDerivation (finalAttrs: {
-  pname = "opencode";
+  pname = "daemoncode";
   inherit (node_modules) version src;
   inherit node_modules;
 
@@ -55,10 +55,13 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
 
-    install -Dm755 dist/opencode-*/bin/opencode $out/bin/opencode
-    install -Dm644 schema.json $out/share/opencode/schema.json
+    install -Dm755 dist/daemoncode-*/bin/daemoncode $out/bin/daemoncode
+    ln -sf daemoncode $out/bin/opencode
+    install -Dm644 schema.json $out/share/daemoncode/schema.json
+    mkdir -p $out/share/opencode
+    ln -sf ../daemoncode/schema.json $out/share/opencode/schema.json
 
-    wrapProgram $out/bin/opencode \
+    wrapProgram $out/bin/daemoncode \
       --prefix PATH : ${
         lib.makeBinPath (
           [
@@ -74,9 +77,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
     # trick yargs into also generating zsh completions
-    installShellCompletion --cmd opencode \
-      --bash <($out/bin/opencode completion) \
-      --zsh <(SHELL=/bin/zsh $out/bin/opencode completion)
+    installShellCompletion --cmd daemoncode \
+      --bash <($out/bin/daemoncode completion) \
+      --zsh <(SHELL=/bin/zsh $out/bin/daemoncode completion)
   '';
 
   nativeInstallCheckInputs = [
@@ -88,15 +91,15 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   versionCheckProgramArg = "--version";
 
   passthru = {
-    jsonschema = "${placeholder "out"}/share/opencode/schema.json";
+    jsonschema = "${placeholder "out"}/share/daemoncode/schema.json";
     env = finalAttrs.env;
   };
 
   meta = {
-    description = "The open source coding agent";
-    homepage = "https://opencode.ai";
+    description = "Daemon Protocol coding agent CLI";
+    homepage = "https://daemonprotocol.com";
     license = lib.licenses.mit;
-    mainProgram = "opencode";
+    mainProgram = "daemoncode";
     inherit (node_modules.meta) platforms;
   };
 })

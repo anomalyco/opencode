@@ -32,7 +32,7 @@ Specifica i pacchetti npm nel tuo file di configurazione.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
 }
 ```
@@ -127,7 +127,7 @@ La funzione del plugin riceve:
 Per i plugin TypeScript, puoi importare i tipi dal pacchetto plugin:
 
 ```ts title="my-plugin.ts" {1}
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree }) => {
   return {
@@ -279,7 +279,7 @@ export const InjectEnvPlugin = async () => {
 I plugin possono anche aggiungere strumenti personalizzati a opencode:
 
 ```ts title=".opencode/plugins/custom-tools.ts"
-import { type Plugin, tool } from "@opencode-ai/plugin"
+import { type Plugin, tool } from "@daemon-protocol/plugin"
 
 export const CustomToolsPlugin: Plugin = async (ctx) => {
   return {
@@ -330,7 +330,7 @@ export const MyPlugin = async ({ client }) => {
 }
 ```
 
-Livelli: `debug`, `info`, `warn`, `error`. Vedi la [documentazione SDK](https://opencode.ai/docs/sdk) per i dettagli.
+Livelli: `debug`, `info`, `warn`, `error`. Vedi la [documentazione SDK](https://daemonprotocol.com/docs/sdk) per i dettagli.
 
 ---
 
@@ -339,7 +339,7 @@ Livelli: `debug`, `info`, `warn`, `error`. Vedi la [documentazione SDK](https://
 Personalizza il contesto incluso quando una sessione viene compattata:
 
 ```ts title=".opencode/plugins/compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const CompactionPlugin: Plugin = async (ctx) => {
   return {
@@ -363,7 +363,7 @@ L'hook `experimental.session.compacting` scatta prima che l'LLM generi un riassu
 Puoi anche sostituire completamente il prompt di compaction impostando `output.prompt`:
 
 ```ts title=".opencode/plugins/custom-compaction.ts"
-import type { Plugin } from "@opencode-ai/plugin"
+import type { Plugin } from "@daemon-protocol/plugin"
 
 export const CustomCompactionPlugin: Plugin = async (ctx) => {
   return {

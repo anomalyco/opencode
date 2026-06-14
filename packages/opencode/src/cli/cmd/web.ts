@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { withNetworkOptions, resolveNetworkOptions } from "../network"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@daemon-protocol/core/flag/flag"
 import open from "open"
 import { networkInterfaces } from "os"
 

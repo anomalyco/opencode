@@ -61,7 +61,7 @@ Vous pouvez personnaliser les formateurs via la section `formatter` de votre con
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {}
 }
 ```
@@ -85,7 +85,7 @@ Pour désactiver **tous** les formateurs globalement, définissez `formatter` su
 
 ```json title="opencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": false
 }
 ```
@@ -94,7 +94,7 @@ Pour désactiver un formateur **spécifique**, définissez `disabled` sur `true`
 
 ```json title="opencode.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -111,7 +111,7 @@ Vous pouvez remplacer les formateurs intégrés ou en ajouter de nouveaux en sp�
 
 ```json title="opencode.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "command": ["npx", "prettier", "--write", "$FILE"],

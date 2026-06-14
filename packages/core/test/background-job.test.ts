@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { BackgroundJob } from "@opencode-ai/core/background-job"
+import { BackgroundJob } from "@daemon-protocol/core/background-job"
 import { Deferred, Effect, Exit, Scope } from "effect"
 import { it } from "./lib/effect"
 

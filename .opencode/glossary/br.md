@@ -2,7 +2,7 @@
 
 ## Sources
 
-- PR #10086: https://github.com/anomalyco/opencode/pull/10086
+- PR #10086: https://github.com/daemon-blockint-tech/daemoncode/pull/10086
 
 ## Do Not Translate (Locale Additions)
 

@@ -3,8 +3,8 @@ import { Effect, Layer, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { Installation } from "../../src/installation"
-import { InstallationChannel } from "@opencode-ai/core/installation/version"
-import { AppProcess } from "@opencode-ai/core/process"
+import { InstallationChannel } from "@daemon-protocol/core/installation/version"
+import { AppProcess } from "@daemon-protocol/core/process"
 import { testEffect } from "../lib/effect"
 
 const encoder = new TextEncoder()
@@ -86,7 +86,7 @@ describe("installation", () => {
       Effect.gen(function* () {
         const result = yield* Installation.use.latest("npm")
         expect(result).toBe("1.5.0")
-        expect(npmCalls).toContain(`https://registry.npmjs.org/opencode-ai/${InstallationChannel}`)
+        expect(npmCalls).toContain(`https://registry.npmjs.org/daemoncode/${InstallationChannel}`)
       }),
     )
 
@@ -100,7 +100,7 @@ describe("installation", () => {
       Effect.gen(function* () {
         const result = yield* Installation.use.latest("bun")
         expect(result).toBe("1.6.0")
-        expect(bunCalls).toContain(`https://registry.npmjs.org/opencode-ai/${InstallationChannel}`)
+        expect(bunCalls).toContain(`https://registry.npmjs.org/daemoncode/${InstallationChannel}`)
       }),
     )
 
@@ -114,7 +114,7 @@ describe("installation", () => {
       Effect.gen(function* () {
         const result = yield* Installation.use.latest("pnpm")
         expect(result).toBe("1.7.0")
-        expect(pnpmCalls).toContain(`https://registry.npmjs.org/opencode-ai/${InstallationChannel}`)
+        expect(pnpmCalls).toContain(`https://registry.npmjs.org/daemoncode/${InstallationChannel}`)
       }),
     )
 
@@ -138,7 +138,8 @@ describe("installation", () => {
       testLayer(
         () => jsonResponse({ versions: { stable: "2.0.0" } }),
         (cmd, args) => {
-          // getBrewFormula: return core formula (no tap)
+          if (cmd === "brew" && args.includes("--formula") && args.includes("daemon-blockint-tech/tap/daemoncode")) return ""
+          if (cmd === "brew" && args.includes("--formula") && args.includes("daemoncode")) return "daemoncode"
           if (cmd === "brew" && args.includes("--formula") && args.includes("anomalyco/tap/opencode")) return ""
           if (cmd === "brew" && args.includes("--formula") && args.includes("opencode")) return "opencode"
           return ""
@@ -158,6 +159,7 @@ describe("installation", () => {
       testLayer(
         () => jsonResponse({}), // HTTP not used for tap formula
         (cmd, args) => {
+          if (cmd === "brew" && args.includes("daemon-blockint-tech/tap/daemoncode") && args.includes("--formula")) return "daemoncode"
           if (cmd === "brew" && args.includes("anomalyco/tap/opencode") && args.includes("--formula")) return "opencode"
           if (cmd === "brew" && args.includes("--json=v2")) return brewInfoJson
           return ""

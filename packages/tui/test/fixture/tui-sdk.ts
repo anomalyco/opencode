@@ -1,4 +1,4 @@
-import type { GlobalEvent } from "@opencode-ai/sdk/v2"
+import type { GlobalEvent } from "@daemon-protocol/sdk/v2"
 import type { EventSource } from "../../src/context/sdk"
 
 export const worktree = "/tmp/opencode"

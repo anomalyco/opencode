@@ -2,16 +2,16 @@ import { afterEach, describe, expect, mock } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { Effect, Layer, Stream } from "effect"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag } from "@daemon-protocol/core/flag/flag"
 import { registerAdapter } from "../../src/control-plane/adapters"
-import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { WorkspaceV2 } from "@daemon-protocol/core/workspace"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
 import { EventPaths } from "../../src/server/routes/instance/httpapi/groups/event"
 import { Session } from "@/session/session"
-import { Database } from "@opencode-ai/core/database/database"
-import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { Database } from "@daemon-protocol/core/database/database"
+import { Ripgrep } from "@daemon-protocol/core/ripgrep"
 import { Server } from "../../src/server/server"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, provideInstance, tmpdirScoped } from "../fixture/fixture"
@@ -406,7 +406,7 @@ describe("workspace HttpApi", () => {
             "content-type": "application/json",
             "x-opencode-workspace": "internal",
           },
-          body: JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+          body: JSON.stringify({ $schema: "https://daemonprotocol.com/config.json" }),
         })
 
         const responseBody = yield* response.text
@@ -423,7 +423,7 @@ describe("workspace HttpApi", () => {
               "content-type": "application/json",
               "x-target-auth": "secret",
             }),
-            body: JSON.stringify({ $schema: "https://opencode.ai/config.json" }),
+            body: JSON.stringify({ $schema: "https://daemonprotocol.com/config.json" }),
           },
         ])
         expect(forwarded[0]?.headers).not.toHaveProperty("x-opencode-directory")

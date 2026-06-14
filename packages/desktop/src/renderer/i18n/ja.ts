@@ -22,7 +22,7 @@ export const dict = {
 
   "desktop.cli.installed.title": "CLI をインストールしました",
   "desktop.cli.installed.message":
-    "CLI を {{path}} にインストールしました\n\nターミナルを再起動して 'opencode' コマンドを使用してください。",
+    "CLI を {{path}} にインストールしました\n\nターミナルを再起動して 'daemoncode' コマンドを使用してください。",
   "desktop.cli.failed.title": "インストールに失敗しました",
   "desktop.cli.failed.message": "CLI のインストールに失敗しました: {{error}}",
 }

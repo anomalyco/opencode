@@ -1,5 +1,5 @@
 {
-  "name": "@opencode-ai/ui",
+  "name": "@daemon-protocol/ui",
   "version": "1.17.6",
   "type": "module",
   "license": "MIT",
@@ -49,8 +49,8 @@
   },
   "dependencies": {
     "@kobalte/core": "catalog:",
-    "@opencode-ai/core": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*",
+    "@daemon-protocol/core": "workspace:*",
+    "@daemon-protocol/sdk": "workspace:*",
     "@pierre/diffs": "catalog:",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/bounds": "0.1.3",

@@ -58,6 +58,10 @@ let server: SidecarListener | null = null
 
 const pendingDeepLinks: string[] = []
 
+function isDeepLink(arg: string) {
+  return arg.startsWith("daemoncode://") || arg.startsWith("opencode://")
+}
+
 function useEnvProxy() {
   try {
     // Electron 41.2 runs Node 24.14.1; latest @types/node@24 is 24.12.2.
@@ -189,7 +193,7 @@ const main = Effect.gen(function* () {
   preferAppEnv(app.getPath("userData"))
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
-    const urls = argv.filter((arg: string) => arg.startsWith("opencode://"))
+    const urls = argv.filter(isDeepLink)
     if (urls.length) {
       logger.log("deep link received via second-instance", { urls })
       emitDeepLinks(urls)
@@ -237,6 +241,7 @@ const main = Effect.gen(function* () {
   yield* Effect.promise(() => app.whenReady())
 
   if (!TEST_ONBOARDING) migrate()
+  app.setAsDefaultProtocolClient("daemoncode")
   app.setAsDefaultProtocolClient("opencode")
   registerRendererProtocol()
   setDockIcon()

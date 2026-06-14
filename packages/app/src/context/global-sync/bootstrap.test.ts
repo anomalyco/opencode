@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import { QueryClient } from "@tanstack/solid-query"
-import type { Config, OpencodeClient, Project } from "@opencode-ai/sdk/v2/client"
-import type { NormalizedProviderListResponse } from "@opencode-ai/ui/context"
+import type { Config, DaemonCodeClient, Project } from "@daemon-protocol/sdk/v2/client"
+import type { NormalizedProviderListResponse } from "@daemon-protocol/ui/context"
 import { bootstrapDirectory, loadPathQuery, loadProvidersQuery } from "./bootstrap"
 import type { State, VcsCache } from "./types"
 import { ServerScope } from "@/utils/server-scope"
@@ -74,7 +74,7 @@ describe("bootstrapDirectory", () => {
           },
         },
         provider: { list: async () => ({ data: { all: [], connected: [], default: {} } }) },
-      } as unknown as OpencodeClient,
+      } as unknown as DaemonCodeClient,
       store,
       setStore,
       vcsCache: { setStore() {} } as unknown as VcsCache,
@@ -94,7 +94,7 @@ describe("bootstrapDirectory", () => {
 
 describe("query keys", () => {
   test("partitions identical directories by server scope", () => {
-    const client = {} as OpencodeClient
+    const client = {} as DaemonCodeClient
     const remote = "https://debian.example" as typeof ServerScope.local
 
     expect([...loadPathQuery(ServerScope.local, "/repo", client).queryKey]).toEqual(["local", "/repo", "path"])

@@ -38,7 +38,7 @@ export default function PrivacyPolicy() {
 
               <p>
                 Remember that your use of Daemon Protocol is at all times subject to our Terms of Use,{" "}
-                <a href={language.route("/legal/terms-of-service")}>https://opencode.ai/legal/terms-of-service</a>,
+                <a href={language.route("/legal/terms-of-service")}>https://daemonprotocol.com/legal/terms-of-service</a>,
                 which incorporates this Privacy Policy. Any terms we use in this Policy without defining them have the
                 definitions given to them in the Terms of Use.
               </p>

@@ -1,17 +1,17 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.17.6",
-  "name": "@opencode-ai/http-recorder",
+  "name": "@daemon-protocol/http-recorder",
   "description": "Record and replay Effect HTTP client traffic with deterministic cassettes",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/anomalyco/opencode.git",
+    "url": "git+https://github.com/daemon-blockint-tech/daemoncode.git",
     "directory": "packages/http-recorder"
   },
-  "homepage": "https://github.com/anomalyco/opencode/tree/dev/packages/http-recorder",
-  "bugs": "https://github.com/anomalyco/opencode/issues",
+  "homepage": "https://github.com/daemon-blockint-tech/daemoncode/tree/dev/packages/http-recorder",
+  "bugs": "https://github.com/daemon-blockint-tech/daemoncode/issues",
   "keywords": [
     "effect",
     "http",

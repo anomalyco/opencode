@@ -1,4 +1,4 @@
-import { CommandV2 } from "@opencode-ai/core/command"
+import { CommandV2 } from "@daemon-protocol/core/command"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"

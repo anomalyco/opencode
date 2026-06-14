@@ -1,4 +1,4 @@
-import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { PermissionV1 } from "@daemon-protocol/core/v1/permission"
 import type { Agent } from "./agent"
 
 /**

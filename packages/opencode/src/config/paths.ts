@@ -1,11 +1,16 @@
 export * as ConfigPaths from "./paths"
 
 import path from "path"
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { Global } from "@opencode-ai/core/global"
+import { Flag } from "@daemon-protocol/core/flag/flag"
+import { Global } from "@daemon-protocol/core/global"
 import { unique } from "remeda"
 import * as Effect from "effect/Effect"
-import { FSUtil } from "@opencode-ai/core/fs-util"
+import { FSUtil } from "@daemon-protocol/core/fs-util"
+
+const LEGACY_CONFIG_NAMES = ["opencode"] as const
+const CONFIG_DIR_NAMES = [".daemoncode", ".opencode"] as const
+
+const configNamesFor = (name: string) => (name === "daemoncode" ? [name, ...LEGACY_CONFIG_NAMES] : [name])
 
 export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
   name: string,
@@ -13,8 +18,10 @@ export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
   worktree?: string,
 ) {
   const afs = yield* FSUtil.Service
+  const names = configNamesFor(name)
+  const targets = names.flatMap((configName) => [`${configName}.jsonc`, `${configName}.json`])
   return (yield* afs.up({
-    targets: [`${name}.jsonc`, `${name}.json`],
+    targets,
     start: directory,
     stop: worktree,
   })).toReversed()
@@ -26,13 +33,13 @@ export const directories = Effect.fn("ConfigPaths.directories")(function* (direc
     Global.Path.config,
     ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
       ? yield* afs.up({
-          targets: [".opencode"],
+          targets: [...CONFIG_DIR_NAMES],
           start: directory,
           stop: worktree,
         })
       : []),
     ...(yield* afs.up({
-      targets: [".opencode"],
+      targets: [...CONFIG_DIR_NAMES],
       start: Global.Path.home,
       stop: Global.Path.home,
     })),
@@ -41,5 +48,8 @@ export const directories = Effect.fn("ConfigPaths.directories")(function* (direc
 })
 
 export function fileInDirectory(dir: string, name: string) {
-  return [path.join(dir, `${name}.json`), path.join(dir, `${name}.jsonc`)]
+  return configNamesFor(name).flatMap((configName) => [
+    path.join(dir, `${configName}.json`),
+    path.join(dir, `${configName}.jsonc`),
+  ])
 }

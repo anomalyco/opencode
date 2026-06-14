@@ -1,7 +1,10 @@
-export const deepLinkEvent = "opencode:deep-link"
+export const deepLinkEvent = "daemoncode:deep-link"
+export const legacyDeepLinkEvent = "opencode:deep-link"
+
+const DEEP_LINK_SCHEMES = ["daemoncode://", "opencode://"] as const
 
 const parseUrl = (input: string) => {
-  if (!input.startsWith("opencode://")) return
+  if (!DEEP_LINK_SCHEMES.some((scheme) => input.startsWith(scheme))) return
   if (typeof URL.canParse === "function" && !URL.canParse(input)) return
   try {
     return new URL(input)

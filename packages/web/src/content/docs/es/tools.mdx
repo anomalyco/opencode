@@ -15,7 +15,7 @@ Utilice el campo `permission` para controlar el comportamiento de la herramienta
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "edit": "deny",
     "bash": "ask",
@@ -28,7 +28,7 @@ También puedes utilizar comodines para controlar varias herramientas a la vez. 
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "mymcp_*": "ask"
   }
@@ -51,7 +51,7 @@ Ejecute comandos de shell en el entorno de su proyecto.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "bash": "allow"
   }
@@ -68,7 +68,7 @@ Modifique archivos existentes utilizando reemplazos de cadenas exactas.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -85,7 +85,7 @@ Cree nuevos archivos o sobrescriba los existentes.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -106,7 +106,7 @@ Lea el contenido del archivo desde su base de código.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "read": "allow"
   }
@@ -123,7 +123,7 @@ Busque contenidos de archivos utilizando expresiones regulares.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "grep": "allow"
   }
@@ -140,7 +140,7 @@ Encuentre archivos por coincidencia de patrones.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "glob": "allow"
   }
@@ -161,7 +161,7 @@ Esta herramienta solo está disponible cuando `OPENCODE_EXPERIMENTAL_LSP_TOOL=tr
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "lsp": "allow"
   }
@@ -180,7 +180,7 @@ Aplicar parches a los archivos.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "edit": "allow"
   }
@@ -201,7 +201,7 @@ Cargue una [habilidad](/docs/skills) (un archivo `SKILL.md`) y devuelva su conte
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "skill": "allow"
   }
@@ -216,7 +216,7 @@ Administre listas de tareas pendientes durante las sesiones de codificación.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "todowrite": "allow"
   }
@@ -237,7 +237,7 @@ Obtener contenido web.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "webfetch": "allow"
   }
@@ -265,7 +265,7 @@ OPENCODE_ENABLE_EXA=1 opencode
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "websearch": "allow"
   }
@@ -288,7 +288,7 @@ Haga preguntas al usuario durante la ejecución.
 
 ```json title="opencode.json" {4}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "question": "allow"
   }

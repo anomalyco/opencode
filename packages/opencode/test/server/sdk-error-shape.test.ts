@@ -8,7 +8,7 @@
  * extracted from the response body, plus `.status` and `.body` attached.
  */
 import { afterEach, describe, expect, test } from "bun:test"
-import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+import { createDaemonCodeClient } from "@daemon-protocol/sdk/v2"
 import { Server } from "../../src/server/server"
 import { disposeAllInstances, tmpdir } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
@@ -19,7 +19,7 @@ afterEach(async () => {
 })
 
 function client(directory: string) {
-  return createOpencodeClient({
+  return createDaemonCodeClient({
     baseUrl: "http://test",
     directory,
     fetch: ((req: Request) => Server.Default().app.fetch(req)) as unknown as typeof fetch,

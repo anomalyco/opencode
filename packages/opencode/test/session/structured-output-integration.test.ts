@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { SessionV1 } from "@daemon-protocol/core/v1/session"
+import { Ripgrep } from "@daemon-protocol/core/ripgrep"
 import { Effect, Layer } from "effect"
 import { Session } from "@/session/session"
 import { SessionPrompt } from "../../src/session/prompt"

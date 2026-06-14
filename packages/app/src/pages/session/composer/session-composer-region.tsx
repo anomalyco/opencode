@@ -1,7 +1,7 @@
 import { Show, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useNavigate, useSearchParams } from "@solidjs/router"
-import { useSpring } from "@opencode-ai/ui/motion-spring"
+import { useSpring } from "@daemon-protocol/ui/motion-spring"
 import { useLayout } from "@/context/layout"
 import { PromptInput } from "@/components/prompt-input"
 import { useLanguage } from "@/context/language"
@@ -28,7 +28,7 @@ import { useSettings } from "@/context/settings"
 import { useServer } from "@/context/server"
 import { useTabs } from "@/context/tabs"
 import { useDirectoryPicker } from "@/components/directory-picker"
-import { base64Encode } from "@opencode-ai/core/util/encode"
+import { base64Encode } from "@daemon-protocol/core/util/encode"
 
 export function SessionComposerRegion(props: {
   state: SessionComposerState

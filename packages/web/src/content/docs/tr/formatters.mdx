@@ -61,7 +61,7 @@ Biçimlendiricileri opencode yapılandırmanızdaki `formatter` bölümü aracı
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {}
 }
 ```
@@ -85,7 +85,7 @@ Bazı örneklere bakalım.
 
 ```json title="opencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": false
 }
 ```
@@ -94,7 +94,7 @@ Bazı örneklere bakalım.
 
 ```json title="opencode.json" {5}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "disabled": true
@@ -111,7 +111,7 @@ Komutu, ortam değişkenlerini ve dosya uzantılarını belirterek yerleşik bi�
 
 ```json title="opencode.json" {4-14}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "formatter": {
     "prettier": {
       "command": ["npx", "prettier", "--write", "$FILE"],

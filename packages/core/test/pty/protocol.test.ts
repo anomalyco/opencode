@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { PtyProtocol } from "@opencode-ai/core/pty/protocol"
+import { PtyProtocol } from "@daemon-protocol/core/pty/protocol"
 
 describe("pty protocol", () => {
   test("drops invalid binary input frames and decodes valid ones", () => {

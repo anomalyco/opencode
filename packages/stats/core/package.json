@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/stats-core",
+  "name": "@daemon-protocol/stats-core",
   "version": "1.17.6",
   "private": true,
   "type": "module",

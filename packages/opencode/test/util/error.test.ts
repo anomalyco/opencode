@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { NamedError } from "@opencode-ai/core/util/error"
+import { NamedError } from "@daemon-protocol/core/util/error"
 import { MessageError } from "../../src/session/message-error"
 
 describe("util.error", () => {

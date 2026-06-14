@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { $ } from "bun"
 import pkg from "../package.json"
-import { Script } from "@opencode-ai/script"
+import { Script } from "@daemon-protocol/script"
 import { fileURLToPath } from "url"
 
 const dir = fileURLToPath(new URL("..", import.meta.url))
@@ -35,7 +35,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
       bin: { lildax: "./bin/lildax" },
       version,
       license: pkg.license,
-      repository: { type: "git", url: "git+https://github.com/anomalyco/opencode.git" },
+      repository: { type: "git", url: "git+https://github.com/daemon-blockint-tech/daemoncode.git" },
       os: ["darwin", "linux", "win32"],
       cpu: ["arm64", "x64"],
       optionalDependencies: binaries,
@@ -47,7 +47,7 @@ await Bun.file(`./dist/${pkg.name}/package.json`).write(
 
 await Promise.all(
   Object.entries(binaries).map(([name, version]) =>
-    publish(`./dist/${name.replace("@opencode-ai/", "")}`, name, version),
+    publish(`./dist/${name.replace("@daemon-protocol/", "")}`, name, version),
   ),
 )
 await publish(`./dist/${pkg.name}`, pkg.name, version)

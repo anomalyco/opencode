@@ -147,7 +147,7 @@ _Mode_: `primary`
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "build": {
       "mode": "primary",
@@ -376,7 +376,7 @@ Daemon Protocol config의 model ID는 `provider/model-id` 형식을 사용합니
 
 ```json title="opencode.json" {3-6,9-12}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "tools": {
     "write": true,
     "bash": true
@@ -400,7 +400,7 @@ agent별 config는 전역 config를 override합니다.
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "readonly": {
       "tools": {
@@ -427,7 +427,7 @@ permission을 설정해 agent가 수행할 수 있는 action을 제어할 수 �
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "edit": "deny"
   }
@@ -438,7 +438,7 @@ permission을 설정해 agent가 수행할 수 있는 action을 제어할 수 �
 
 ```json title="opencode.json" {3-5,8-10}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "permission": {
     "edit": "deny"
   },
@@ -475,7 +475,7 @@ Only analyze code and suggest changes.
 
 ```json title="opencode.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -493,7 +493,7 @@ Only analyze code and suggest changes.
 
 ```json title="opencode.json" {7}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -511,7 +511,7 @@ Only analyze code and suggest changes.
 
 ```json title="opencode.json" {8}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "agent": {
     "build": {
       "permission": {
@@ -704,7 +704,7 @@ opencode agent create
 실제로 유용하게 쓸 수 있는 예시 agent를 소개합니다.
 
 :::tip
-공유하고 싶은 agent가 있나요? [PR 제출하기](https://github.com/anomalyco/opencode).
+공유하고 싶은 agent가 있나요? [PR 제출하기](https://github.com/daemon-blockint-tech/daemoncode).
 :::
 
 ---

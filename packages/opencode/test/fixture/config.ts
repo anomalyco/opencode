@@ -1,5 +1,5 @@
 import { Config } from "@/config/config"
-import { emptyConsoleState } from "@opencode-ai/core/v1/config/console-state"
+import { emptyConsoleState } from "@daemon-protocol/core/v1/config/console-state"
 import { Effect, Layer } from "effect"
 
 export function make(overrides: Partial<Config.Interface> = {}) {

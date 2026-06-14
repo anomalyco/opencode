@@ -1,8 +1,8 @@
-import { Binary } from "@opencode-ai/core/util/binary"
+import { Binary } from "@daemon-protocol/core/util/binary"
 import { createMemo } from "solid-js"
 import { useServerSync } from "./server-sync"
 import { useSDK } from "./sdk"
-import type { Message, Part } from "@opencode-ai/sdk/v2/client"
+import type { Message, Part } from "@daemon-protocol/sdk/v2/client"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 

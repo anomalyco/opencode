@@ -52,7 +52,7 @@ Para definir um desses como o modelo padrão, você pode definir a chave `model`
 
 ```json title="opencode.json" {3}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "model": "lmstudio/google/gemma-3n-e4b"
 }
 ```
@@ -69,7 +69,7 @@ Você pode configurar globalmente as opções de um modelo através da configura
 
 ```jsonc title="opencode.jsonc" {7-12,19-24}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -108,7 +108,7 @@ Você também pode definir variantes personalizadas que estendem as integradas. 
 
 ```jsonc title="opencode.jsonc" {6-21}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "opencode": {
       "models": {
@@ -173,7 +173,7 @@ Você pode substituir variantes existentes ou adicionar as suas:
 
 ```jsonc title="opencode.jsonc" {7-18}
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://daemonprotocol.com/config.json",
   "provider": {
     "openai": {
       "models": {
@@ -210,7 +210,7 @@ Quando o opencode é iniciado, ele verifica modelos na seguinte ordem de priorid
 
    ```json title="opencode.json"
    {
-     "$schema": "https://opencode.ai/config.json",
+     "$schema": "https://daemonprotocol.com/config.json",
      "model": "anthropic/claude-sonnet-4-20250514"
    }
    ```

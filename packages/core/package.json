@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "version": "1.17.6",
-  "name": "@opencode-ai/core",
+  "name": "@daemon-protocol/core",
   "type": "module",
   "license": "MIT",
   "private": true,
@@ -11,9 +11,6 @@
     "fix-node-pty": "bun run script/fix-node-pty.ts",
     "test": "bun test --only-failures",
     "typecheck": "tsgo --noEmit"
-  },
-  "bin": {
-    "opencode": "./bin/opencode"
   },
   "exports": {
     "./public": "./src/public/index.ts",
@@ -56,7 +53,7 @@
     "@parcel/watcher-linux-x64-musl": "2.5.1",
     "@parcel/watcher-win32-arm64": "2.5.1",
     "@parcel/watcher-win32-x64": "2.5.1",
-    "@opencode-ai/http-recorder": "workspace:*",
+    "@daemon-protocol/http-recorder": "workspace:*",
     "drizzle-kit": "catalog:"
   },
   "dependencies": {
@@ -88,9 +85,9 @@
     "@ff-labs/fff-bun": "0.9.4",
     "@npmcli/arborist": "9.4.0",
     "@npmcli/config": "10.8.1",
-    "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
-    "@opencode-ai/effect-sqlite-node": "workspace:*",
-    "@opencode-ai/llm": "workspace:*",
+    "@daemon-protocol/effect-drizzle-sqlite": "workspace:*",
+    "@daemon-protocol/effect-sqlite-node": "workspace:*",
+    "@daemon-protocol/llm": "workspace:*",
     "@opentelemetry/api": "1.9.0",
     "@opentelemetry/context-async-hooks": "2.6.1",
     "@opentelemetry/exporter-trace-otlp-http": "0.214.0",

@@ -61,7 +61,7 @@ Ili ga možete postaviti ručno.
               persist-credentials: false
 
           - name: Run Daemon Protocol
-           uses: anomalyco/opencode/github@latest
+           uses: daemon-blockint-tech/daemoncode/github@latest
            env:
              ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
            with:
@@ -134,7 +134,7 @@ jobs:
           persist-credentials: false
 
       - name: Run Daemon Protocol
-        uses: anomalyco/opencode/github@latest
+        uses: daemon-blockint-tech/daemoncode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         with:
@@ -171,7 +171,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: anomalyco/opencode/github@latest
+      - uses: daemon-blockint-tech/daemoncode/github@latest
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -227,7 +227,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: anomalyco/opencode/github@latest
+      - uses: daemon-blockint-tech/daemoncode/github@latest
         if: steps.check.outputs.result == 'true'
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -249,7 +249,7 @@ Za `issues` događaje, `prompt` unos je **potreban** jer nema komentara za izvla
 Zaobiđite zadani prompt da biste prilagodili ponašanje Daemon Protocol za vaš tok posla.
 
 ```yaml title=".github/workflows/opencode.yml"
-- uses: anomalyco/opencode/github@latest
+- uses: daemon-blockint-tech/daemoncode/github@latest
   with:
     model: anthropic/claude-sonnet-4-5
     prompt: |

@@ -13,11 +13,11 @@
       "outputs": [],
       "passThroughEnv": ["*"]
     },
-    "@opencode-ai/app#test": {
+    "@daemon-protocol/app#test": {
       "dependsOn": ["^build"],
       "outputs": []
     },
-    "@opencode-ai/ui#test": {
+    "@daemon-protocol/ui#test": {
       "dependsOn": ["^build"],
       "outputs": []
     }

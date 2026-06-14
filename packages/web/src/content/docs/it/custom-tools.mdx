@@ -27,7 +27,7 @@ Possono essere definiti:
 Il modo piu semplice per creare strumenti e usare l'helper `tool()` che fornisce type-safety e validazione.
 
 ```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -50,7 +50,7 @@ Il **nome del file** diventa il **nome dello strumento**. L'esempio sopra crea l
 Puoi anche esportare piu strumenti da un singolo file. Ogni export diventa **uno strumento separato** con nome **`<filename>_<exportname>`**:
 
 ```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 
 export const add = tool({
   description: "Add two numbers",
@@ -86,7 +86,7 @@ Gli strumenti personalizzati sono indicizzati per nome. Se uno strumento persona
 Per esempio, questo file sostituisce lo strumento `bash` integrato:
 
 ```ts title=".opencode/tools/bash.ts"
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 
 export default tool({
   description: "Restricted bash wrapper",
@@ -139,7 +139,7 @@ export default {
 Gli strumenti ricevono un contesto sulla sessione corrente:
 
 ```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 
 export default tool({
   description: "Get project information",
@@ -176,7 +176,7 @@ print(a + b)
 Poi crea la definizione dello strumento che lo invoca:
 
 ```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 import path from "path"
 
 export default tool({

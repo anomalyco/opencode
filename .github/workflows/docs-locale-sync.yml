@@ -50,7 +50,7 @@ jobs:
 
       - name: Install Daemon Protocol
         if: steps.changes.outputs.has_changes == 'true'
-        run: curl -fsSL https://opencode.ai/install | bash
+        run: curl -fsSL https://daemonprotocol.com/install | bash
 
       - name: Sync locale docs with Daemon Protocol
         if: steps.changes.outputs.has_changes == 'true'

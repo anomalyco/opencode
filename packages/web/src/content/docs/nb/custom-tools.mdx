@@ -27,7 +27,7 @@ De kan defineres:
 Den enkleste måten å lage verktøy på er å bruke `tool()`-hjelperen som gir typesikkerhet og validering.
 
 ```ts title=".opencode/tools/database.ts" {1}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 
 export default tool({
   description: "Query the project database",
@@ -50,7 +50,7 @@ export default tool({
 Du kan også eksportere flere verktøy fra en enkelt fil. Hver eksport blir **et separat verktøy** med navnet **`<filename>_<exportname>`**:
 
 ```ts title=".opencode/tools/math.ts"
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 
 export const add = tool({
   description: "Add two numbers",
@@ -86,7 +86,7 @@ Egendefinerte verktøy er nøklet etter verktøynavn. Hvis et egendefinert verkt
 For eksempel erstatter denne filen det innebygde `bash`-verktøyet:
 
 ```ts title=".opencode/tools/bash.ts"
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 
 export default tool({
   description: "Restricted bash wrapper",
@@ -139,7 +139,7 @@ export default {
 Verktøy mottar kontekst om gjeldende økt:
 
 ```ts title=".opencode/tools/project.ts" {8}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 
 export default tool({
   description: "Get project information",
@@ -176,7 +176,7 @@ print(a + b)
 Lag deretter verktøydefinisjonen som påkaller den:
 
 ```ts title=".opencode/tools/python-add.ts" {10}
-import { tool } from "@opencode-ai/plugin"
+import { tool } from "@daemon-protocol/plugin"
 import path from "path"
 
 export default tool({

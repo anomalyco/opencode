@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Patch } from "@opencode-ai/core/patch"
+import { Patch } from "@daemon-protocol/core/patch"
 
 describe("Patch", () => {
   test("parses add, update, and delete hunks", () => {
