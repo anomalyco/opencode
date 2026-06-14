@@ -19,7 +19,7 @@ import { useSDK } from "@/context/sdk"
 import { useSkills } from "@/context/skills"
 import { normalizeServerUrl, ServerConnection, useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
-import { isFilePath } from "@/utils/config-source"
+import { isFilePath, localPath } from "@/utils/config-source"
 import { useCheckServerHealth, type ServerHealth } from "@/utils/server-health"
 
 const pollMs = 10_000
@@ -328,6 +328,22 @@ export function StatusPopover() {
     )
   }
 
+  const canOpenContainingFolder = (value: string) => {
+    return platform.platform === "desktop" && !!platform.openInFinder && isFilePath(value)
+  }
+
+  const openContainingFolder = (value: string) => {
+    const openInFinder = platform.openInFinder
+    if (!openInFinder || !canOpenContainingFolder(value)) return
+    void openInFinder(localPath(value)).catch((err: unknown) => {
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: err instanceof Error ? err.message : String(err),
+      })
+    })
+  }
+
   return (
     <Popover
       open={shown()}
@@ -624,6 +640,21 @@ export function StatusPopover() {
                               copy(entry.value)
                             }}
                           />
+                          <Show when={canOpenContainingFolder(entry.value)}>
+                            <Tooltip value={language.t("ui.file.openFolder")} placement="bottom">
+                              <Button
+                                size="small"
+                                variant="ghost"
+                                icon="folder"
+                                class="shrink-0"
+                                aria-label={language.t("ui.file.openFolder")}
+                                onClick={(event: MouseEvent) => {
+                                  event.stopPropagation()
+                                  openContainingFolder(entry.value)
+                                }}
+                              />
+                            </Tooltip>
+                          </Show>
                         </div>
                       )}
                     </For>
