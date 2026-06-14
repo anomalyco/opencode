@@ -1,0 +1,81 @@
+---
+title: Cascade Control (ACE)
+description: Keep multi-agent runs bounded with the Agent Criticality circuit breaker.
+---
+
+When an agent delegates work with the `task` tool, each sub-agent can spawn more
+sub-agents. Left unchecked this can cascade — runaway fan-out, deep nesting, and
+escalating cost. **Cascade Control (ACE)** is a fission-inspired circuit breaker
+that measures how fast the agent population is growing and, optionally, blocks
+spawns that would push a run past safe limits.
+
+It is **off-by-default in any blocking sense**: the default mode only *observes*.
+
+## Quickstart
+
+Add a `criticality` block under `experimental` in your `opencode.json`:
+
+```jsonc
+{
+  "experimental": {
+    "criticality": {
+      "mode": "monitor"
+    }
+  }
+}
+```
+
+In `monitor` mode nothing is ever blocked — ACE just attaches metrics
+(`k_eff_agent`, `depth`, `d_max`, `n_active`) to each `task` call and logs them.
+Switch to `gate` to enforce limits.
+
+## Modes
+
+| Preset | Config | Behavior |
+|--------|--------|----------|
+| **Monitor** | `{ "mode": "monitor" }` | Measure only. Never blocks. Safe default for observing real workloads. |
+| **Bounded** | `{ "mode": "gate", "k_eff_threshold": 1.5, "max_active_agents": 64 }` | Reject spawns past the depth/growth limits, but with generous headroom. |
+| **Strict** | `{ "mode": "gate", "k_eff_threshold": 1.0, "max_active_agents": 32, "budget_usd": 50 }` | Tight limits plus a cost ceiling. For constrained or cost-sensitive runs. |
+
+## Configuration
+
+All keys live under `experimental.criticality`.
+
+| Key | Default | When to change |
+|-----|---------|----------------|
+| `mode` | `"monitor"` | Set to `"gate"` to actually block spawns. |
+| `k_eff_threshold` | `1.5` | Lower to clamp down on runaway growth sooner; raise to allow more aggressive fan-out. |
+| `max_active_agents` | `64` | The population ceiling used to derive the depth limit. Lower for tighter cascades. |
+| `sliding_window_ms` | `60000` | The window over which growth/absorption rates are estimated. |
+| `epsilon` | `0.1` | Numerical guard in `(0, 1)`; rarely needs changing. |
+| `budget_usd` | _(unset)_ | Set a number to reject spawns once the cascade's total cost would exceed it. |
+
+Each tunable also accepts a legacy short name: `k_upper` (→ `k_eff_threshold`),
+`n_max` (→ `max_active_agents`), `window_ms` (→ `sliding_window_ms`). The semantic
+name wins if both are present.
+
+## Glossary
+
+- **k_eff** — the effective multiplication factor, `(ν·f) / (α + ε)`. Think of it
+  as agents-spawned per agent-absorbed. `< 1` shrinking, `≈ 1` stable, `> 1` growing.
+- **D_max** — the maximum cascade depth before the active population would exceed
+  `max_active_agents`. Derived, not set directly.
+- **Criticality regimes** — *subcritical* (dies out), *critical* (bounded), and
+  *supercritical* (grows without bound), by analogy to a fission chain reaction.
+
+## When a spawn is blocked
+
+In `gate` mode the blocking sub-agent receives a plain-language explanation with
+the current depth, active count, and `k_eff`, plus suggested next steps (do the
+work inline, fold into an existing sub-agent, or reduce fan-out). The structured
+metrics are also attached to the tool call's `metadata.criticality` for tooling.
+
+## Troubleshooting
+
+**ACE is blocking too often.** You're likely in `gate` mode with tight limits.
+Raise `k_eff_threshold` and/or `max_active_agents`, or drop back to `monitor` to
+see what the real numbers look like before enforcing.
+
+**I don't see any ACE metrics.** Metrics are emitted on `task` spawns only. Make
+sure your run actually delegates via the `task` tool, and check structured logs for
+the `criticality` entries.

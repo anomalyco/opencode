@@ -19,12 +19,35 @@ export class Policy extends Schema.Class<Policy>("ConfigV2.Experimental.Policy")
 // mode it acts as a cascade circuit breaker, rejecting spawns that exceed the
 // depth limit D_max, the k_eff threshold, or the cost budget.
 export class Criticality extends Schema.Class<Criticality>("ConfigV2.Experimental.Criticality")({
-  mode: Schema.optional(Schema.Literal("monitor", "gate")),
-  k_upper: Schema.optional(Schema.Number),
-  n_max: Schema.optional(Schema.Number),
-  window_ms: Schema.optional(Schema.Number),
-  epsilon: Schema.optional(Schema.Number),
-  budget_usd: Schema.optional(Schema.Number),
+  mode: Schema.Union([Schema.Literal("monitor"), Schema.Literal("gate")])
+    .pipe(Schema.optional)
+    .annotate({
+      description:
+        "'monitor' (default): measure and emit criticality metrics, never block. 'gate': act as a circuit breaker and reject spawns that exceed the limits below.",
+    }),
+
+  // Semantic names (documented, preferred).
+  k_eff_threshold: Schema.Number.pipe(Schema.optional).annotate({
+    description:
+      "Reject a spawn when the agent multiplication factor k_eff exceeds this value. Higher = more permissive. Default 1.5.",
+  }),
+  max_active_agents: Schema.Number.pipe(Schema.optional).annotate({
+    description: "Population ceiling (N_max) used to derive the cascade depth limit D_max. Default 64.",
+  }),
+  sliding_window_ms: Schema.Number.pipe(Schema.optional).annotate({
+    description: "Time window over which spawn/absorption rates (nu, f, alpha) are estimated. Default 60000.",
+  }),
+  epsilon: Schema.Number.pipe(Schema.optional).annotate({
+    description: "Small guard in (0, 1) preventing division by zero in early/empty windows. Default 0.1.",
+  }),
+  budget_usd: Schema.Number.pipe(Schema.optional).annotate({
+    description: "Optional cost ceiling for the whole cascade (root session + descendants). Unset = no budget gate.",
+  }),
+
+  // Legacy math names (still accepted; superseded by the semantic names above).
+  k_upper: Schema.Number.pipe(Schema.optional).annotate({ description: "Legacy alias for k_eff_threshold." }),
+  n_max: Schema.Number.pipe(Schema.optional).annotate({ description: "Legacy alias for max_active_agents." }),
+  window_ms: Schema.Number.pipe(Schema.optional).annotate({ description: "Legacy alias for sliding_window_ms." }),
 }) {}
 
 export class Experimental extends Schema.Class<Experimental>("ConfigV2.Experimental")({

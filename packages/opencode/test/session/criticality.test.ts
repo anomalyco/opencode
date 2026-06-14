@@ -31,6 +31,36 @@ describe("config validation", () => {
   })
 })
 
+describe("config parameter aliases", () => {
+  test("semantic names resolve", () => {
+    const cfg = readSettings({
+      criticality: { k_eff_threshold: 2, max_active_agents: 128, sliding_window_ms: 30000 },
+    })
+    expect(cfg.kUpper).toBe(2)
+    expect(cfg.nMax).toBe(128)
+    expect(cfg.windowMs).toBe(30000)
+  })
+
+  test("legacy names still resolve", () => {
+    const cfg = readSettings({ criticality: { k_upper: 2, n_max: 128, window_ms: 30000 } })
+    expect(cfg.kUpper).toBe(2)
+    expect(cfg.nMax).toBe(128)
+    expect(cfg.windowMs).toBe(30000)
+  })
+
+  test("semantic name wins when both are present", () => {
+    const cfg = readSettings({ criticality: { k_eff_threshold: 2, k_upper: 9 } })
+    expect(cfg.kUpper).toBe(2)
+  })
+
+  test("invalid semantic value falls back to legacy then default", () => {
+    // semantic present but out of bounds -> use legacy
+    expect(readSettings({ criticality: { k_eff_threshold: -1, k_upper: 3 } }).kUpper).toBe(3)
+    // both invalid -> default
+    expect(readSettings({ criticality: { k_eff_threshold: Number.NaN, k_upper: 0 } }).kUpper).toBe(DEFAULTS.kUpper)
+  })
+})
+
 describe("ACE math", () => {
   test("k_eff regimes (paper eq. 2)", () => {
     const eps = 0.1

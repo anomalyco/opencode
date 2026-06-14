@@ -100,6 +100,38 @@ function renderOutput(input: {
   ].join("\n")
 }
 
+const CASCADE_DOCS_URL = "https://opencode.ai/docs/cascade-control"
+
+// Build an operator-friendly explanation for a blocked sub-agent spawn. Plain
+// language first, then contextualized metrics, then concrete next steps. The
+// machine-readable metrics still travel in `metadata.criticality`.
+function criticalityRejectionText(m: Criticality.Metrics): string {
+  const dMax = Number.isFinite(m.dMax) ? String(m.dMax) : "unbounded"
+  const headline: Record<string, string> = {
+    cascade_depth_limit: "Too many nested sub-agents: this delegation is deeper than the safe limit.",
+    supercritical_agent_state: "Sub-agents are spawning faster than they finish (runaway cascade risk).",
+    budget_absorption: "This cascade has reached its cost budget.",
+  }
+  const lines = [
+    headline[m.reason ?? ""] ?? "The orchestrator blocked this sub-agent spawn to keep the cascade bounded.",
+    "",
+    "Where things stand:",
+    `  • cascade depth: ${m.depth} (limit ${dMax})`,
+    `  • active sub-agents: ${m.nActive}`,
+    `  • growth factor k_eff: ${m.kEff.toFixed(2)} (1.0 = stable, >1 = growing)`,
+    "",
+    "What to do next:",
+    "  • Do this work directly in the current session instead of delegating.",
+    "  • Or fold it into a sub-agent that is already running.",
+    "  • Or reduce how many sub-agents you spawn at once, then try again.",
+    `  • If this depth/fan-out is expected, raise the limits in experimental.criticality. See ${CASCADE_DOCS_URL}.`,
+    "",
+    "Do not retry the same spawn unchanged — it will be blocked again.",
+  ]
+  return lines.join("\n")
+}
+
+export const TaskTool = Tool.define(
 type TaskModel = {
   modelID: string
   providerID: string
@@ -236,11 +268,7 @@ export const TaskTool = Tool.define<
               sessionID: ctx.sessionID,
               state: "error",
               summary: `Sub-agent spawn blocked by criticality circuit breaker (${criticalityMetrics.reason})`,
-              text: [
-                `The orchestrator rejected this sub-agent spawn to keep the agent cascade bounded (reason: ${criticalityMetrics.reason}).`,
-                `Current criticality: k_eff=${criticalityMetrics.kEff.toFixed(2)}, depth=${criticalityMetrics.depth}, D_max=${criticalityMetrics.dMax}, active=${criticalityMetrics.nActive}.`,
-                "Do not retry the same spawn. Instead, do the work directly in this session, merge it with an existing sub-task, or reduce fan-out before delegating again.",
-              ].join("\n"),
+              text: criticalityRejectionText(criticalityMetrics),
             }),
           }
         }

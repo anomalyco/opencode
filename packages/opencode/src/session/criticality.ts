@@ -123,16 +123,31 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Criticality") {}
 
+// Resolve a positive, finite number from a semantic alias first, then the legacy
+// name, then the default. Out-of-bounds or non-numeric values fall back.
+function pickPositive(semantic: unknown, legacy: unknown, fallback: number): number {
+  for (const candidate of [semantic, legacy]) {
+    if (typeof candidate === "number" && candidate > 0 && Number.isFinite(candidate)) return candidate
+  }
+  return fallback
+}
+
 export function readSettings(experimental: { criticality?: Partial<Record<keyof Settings | string, unknown>> } | undefined): Settings {
   const c = (experimental as any)?.criticality
   if (!c) return DEFAULTS
 
-  // Validate and coerce each setting with bounds checking.
+  // Validate and coerce each setting with bounds checking. Each tunable accepts a
+  // human-readable semantic alias (documented) or its legacy math name (still
+  // supported). Semantic name wins when both are present.
   const mode = c.mode === "gate" ? "gate" : "monitor"
-  const kUpper = typeof c.k_upper === "number" && c.k_upper > 0 && Number.isFinite(c.k_upper) ? c.k_upper : DEFAULTS.kUpper
-  const nMax = typeof c.n_max === "number" && c.n_max > 0 && Number.isFinite(c.n_max) ? c.n_max : DEFAULTS.nMax
-  const windowMs = typeof c.window_ms === "number" && c.window_ms > 0 && Number.isFinite(c.window_ms) ? c.window_ms : DEFAULTS.windowMs
-  const epsilon = typeof c.epsilon === "number" && c.epsilon >= 0 && c.epsilon < 1 && Number.isFinite(c.epsilon) ? c.epsilon : DEFAULTS.epsilon
+  const kUpper = pickPositive(c.k_eff_threshold, c.k_upper, DEFAULTS.kUpper)
+  const nMax = pickPositive(c.max_active_agents, c.n_max, DEFAULTS.nMax)
+  const windowMs = pickPositive(c.sliding_window_ms, c.window_ms, DEFAULTS.windowMs)
+
+  // epsilon must be in (0, 1); 0 would defeat the division-by-zero guard.
+  const epsilon = typeof c.epsilon === "number" && c.epsilon > 0 && c.epsilon < 1 && Number.isFinite(c.epsilon) ? c.epsilon : DEFAULTS.epsilon
+
+  // budget is optional; semantic and legacy names are identical here.
   const budgetUsd = typeof c.budget_usd === "number" && c.budget_usd > 0 && Number.isFinite(c.budget_usd) ? c.budget_usd : undefined
 
   return { mode, kUpper, nMax, windowMs, epsilon, budgetUsd }
