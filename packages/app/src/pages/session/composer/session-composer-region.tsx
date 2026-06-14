@@ -33,6 +33,7 @@ function SessionChildAgentMenu(props: {
   onOpen: (entry: SessionChildAgentEntry) => void
 }) {
   const language = useLanguage()
+  let contentRef: HTMLDivElement | undefined
   const title = (entry: SessionChildAgentEntry): string => {
     const cleaned = entry.title.replace(/\s+\(@[^)]*\s+subagent\)$/i, "").trim()
     return cleaned || entry.title
@@ -47,6 +48,18 @@ function SessionChildAgentMenu(props: {
     if (value === "not used") return "text-icon-warning-base"
     if (value === "running") return "text-text-weak"
     return "text-icon-critical-base"
+  }
+  const scrollHighlightedIntoView = (): void => {
+    const content = contentRef
+    if (!content) return
+    requestAnimationFrame(() => {
+      const highlighted = content.querySelector<HTMLElement>('[data-slot="dropdown-menu-item"][data-highlighted]')
+      highlighted?.scrollIntoView({ block: "nearest" })
+    })
+  }
+  const handleKeyDown = (event: KeyboardEvent): void => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End", "PageDown", "PageUp"].includes(event.key)) return
+    scrollHighlightedIntoView()
   }
 
   return (
@@ -65,7 +78,19 @@ function SessionChildAgentMenu(props: {
           <Icon name="chevron-down" size="small" class="text-icon-weak" />
         </DropdownMenu.Trigger>
         <DropdownMenu.Portal>
-          <DropdownMenu.Content class="w-[340px] max-w-[calc(100vw-32px)]">
+          <DropdownMenu.Content
+            ref={(el: HTMLDivElement) => {
+              contentRef = el
+            }}
+            class="w-[340px] max-w-[calc(100vw-32px)]"
+            style={{
+              "max-height": "min(520px, calc(100dvh - 160px))",
+              "overflow-y": "auto",
+              "overscroll-behavior": "contain",
+              "scrollbar-gutter": "stable",
+            }}
+            onKeyDown={handleKeyDown}
+          >
             <DropdownMenu.Group>
               <DropdownMenu.GroupLabel class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
                 {language.t("session.childAgents.menuLabel")}
