@@ -241,6 +241,31 @@ describe("collectSessionChildAgentEntries", () => {
     ])
   })
 
+  test("marks unreferenced direct child sessions as running while they are active", () => {
+    const entries = collectSessionChildAgentEntries({
+      sessionID: "ses_parent",
+      messages: [],
+      parts: {},
+      sessions: [
+        session({ id: "ses_child", parentID: "ses_parent", title: "Active child", agent: "general", created: 50 }),
+      ],
+      messagesBySession: {
+        ses_child: [assistant({ id: "msg_child", sessionID: "ses_child", created: 60, completed: false })],
+      },
+    })
+
+    expect(entries).toEqual([
+      {
+        id: "session:ses_child",
+        sessionID: "ses_child",
+        title: "Active child",
+        agent: "general",
+        created: 50,
+        status: "running",
+      },
+    ])
+  })
+
   test("uses child session activity over completed task tool status", () => {
     const message = assistant({ id: "msg_1", sessionID: "ses_parent", created: 10 })
     const entries = collectSessionChildAgentEntries({

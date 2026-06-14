@@ -66,6 +66,54 @@
     background-color: color-mix(in srgb, var(--text-base) 62%, transparent);
   }
 
+  .session-child-agent-scrollbar {
+    scrollbar-color: transparent transparent;
+    scrollbar-width: thin;
+  }
+
+  .session-child-agent-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+    background: transparent;
+  }
+
+  .session-child-agent-scrollbar::-webkit-scrollbar-track,
+  .session-child-agent-scrollbar::-webkit-scrollbar-track-piece,
+  .session-child-agent-scrollbar::-webkit-scrollbar-corner {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+
+  .session-child-agent-scrollbar::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  .session-child-agent-scrollbar::-webkit-scrollbar-thumb {
+    min-width: 32px;
+    min-height: 32px;
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-color: transparent;
+    background-clip: content-box;
+    box-shadow: none;
+    transition: background-color 160ms ease;
+  }
+
+  .session-child-agent-scrollbar[data-scrolling="true"] {
+    scrollbar-color: color-mix(in srgb, var(--text-weak) 52%, transparent) transparent;
+  }
+
+  .session-child-agent-scrollbar[data-scrolling="true"]::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--text-weak) 52%, transparent);
+  }
+
+  .session-child-agent-scrollbar[data-scrolling="true"]::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--text-base) 62%, transparent);
+  }
+
   .config-custom-model-summary
     [data-component="input"][data-variant="normal"]
     [data-slot="input-wrapper"]:not(:has([data-invalid])) {

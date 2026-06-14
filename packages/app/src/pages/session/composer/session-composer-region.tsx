@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, onCleanup } from "solid-js"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
@@ -34,6 +34,8 @@ function SessionChildAgentMenu(props: {
 }) {
   const language = useLanguage()
   let contentRef: HTMLDivElement | undefined
+  let scrollTimer: number | undefined
+  const [scrolling, setScrolling] = createSignal(false)
   const title = (entry: SessionChildAgentEntry): string => {
     const cleaned = entry.title.replace(/\s+\(@[^)]*\s+subagent\)$/i, "").trim()
     return cleaned || entry.title
@@ -46,12 +48,24 @@ function SessionChildAgentMenu(props: {
   const statusClass = (value: string): string => {
     if (value === "completed") return "text-icon-success-base"
     if (value === "not used") return "text-icon-warning-base"
-    if (value === "running") return "text-text-weak"
+    if (value === "running") return "text-icon-warning-base"
     return "text-icon-critical-base"
+  }
+  const revealScrollbar = (): void => {
+    if (scrollTimer !== undefined) {
+      window.clearTimeout(scrollTimer)
+      scrollTimer = undefined
+    }
+    setScrolling(true)
+    scrollTimer = window.setTimeout(() => {
+      setScrolling(false)
+      scrollTimer = undefined
+    }, 900)
   }
   const scrollHighlightedIntoView = (): void => {
     const content = contentRef
     if (!content) return
+    revealScrollbar()
     requestAnimationFrame(() => {
       const highlighted = content.querySelector<HTMLElement>('[data-slot="dropdown-menu-item"][data-highlighted]')
       highlighted?.scrollIntoView({ block: "nearest" })
@@ -61,6 +75,14 @@ function SessionChildAgentMenu(props: {
     if (!["ArrowDown", "ArrowUp", "Home", "End", "PageDown", "PageUp"].includes(event.key)) return
     scrollHighlightedIntoView()
   }
+  const handleScroll = (): void => {
+    revealScrollbar()
+  }
+
+  onCleanup(() => {
+    if (scrollTimer === undefined) return
+    window.clearTimeout(scrollTimer)
+  })
 
   return (
     <Show when={props.entries.length > 0}>
@@ -82,7 +104,8 @@ function SessionChildAgentMenu(props: {
             ref={(el: HTMLDivElement) => {
               contentRef = el
             }}
-            class="w-[340px] max-w-[calc(100vw-32px)]"
+            class="session-child-agent-scrollbar w-[340px] max-w-[calc(100vw-32px)]"
+            data-scrolling={scrolling() ? "true" : undefined}
             style={{
               "max-height": "min(520px, calc(100dvh - 160px))",
               "overflow-y": "auto",
@@ -90,6 +113,7 @@ function SessionChildAgentMenu(props: {
               "scrollbar-gutter": "stable",
             }}
             onKeyDown={handleKeyDown}
+            onScroll={handleScroll}
           >
             <DropdownMenu.Group>
               <DropdownMenu.GroupLabel class="text-11-medium uppercase tracking-[0.08em] text-text-weak">

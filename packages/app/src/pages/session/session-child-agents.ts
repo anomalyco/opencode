@@ -115,14 +115,15 @@ export function collectSessionChildAgentEntries(input: CollectChildAgentEntriesI
   const sessionIDs = new Set(entries.map((entry) => entry.sessionID))
   for (const session of childSessions) {
     if (sessionIDs.has(session.id)) continue
+    const status = statusFor(session.id)
     entries.push({
       id: `session:${session.id}`,
       sessionID: session.id,
       title: sessionTitle(session, undefined, text(session.agent)),
       agent: text(session.agent),
       created: session.time.created,
-      status: statusFor(session.id),
-      usage: "not used",
+      status,
+      usage: status === "running" ? undefined : "not used",
       order,
     })
     order += 1
