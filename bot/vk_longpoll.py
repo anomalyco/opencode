@@ -1261,7 +1261,17 @@ class VKLongPoll:
                 await self.opencode_process.restart(workdir=workdir)
 
         # Создаем новую сессию через API
-        new_session_id = await self.opencode_client.create_session()
+        logger.info("Creating new session via API...")
+        try:
+            # Пересоздаём aiohttp сессию после рестарта lildax
+            await self.opencode_client.__aexit__(None, None, None)
+            await self.opencode_client.__aenter__()
+            new_session_id = await self.opencode_client.create_session()
+            logger.info(f"New session created: {new_session_id}")
+        except Exception as e:
+            logger.exception(f"Failed to create session: {e}")
+            await self.vk.send_message(user_id, f"❌ Ошибка создания сессии: {e}")
+            return
 
         self.session_mgr.sessions[user_id] = new_session_id
         if new_session_id not in self.session_mgr.seen_messages:
