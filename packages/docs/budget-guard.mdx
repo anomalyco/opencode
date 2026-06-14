@@ -1,0 +1,70 @@
+---
+title: Budget & Runaway Guard
+description: Cap session spend, get early warnings, and stop gracefully before the bill runs away.
+---
+
+Agentic coding sessions can quietly run up cost — a tool-call loop, an over-eager
+sub-agent, a long autonomous run. The **Budget & Runaway Guard** gives every
+session a spend cap with **early warnings** and a **graceful stop** *before* the
+cap is exceeded, instead of reporting the overage after the money is gone.
+
+It applies to **every** session (not just multi-agent runs) and is **off until you
+set a cap**.
+
+## Quickstart
+
+```jsonc
+{
+  "experimental": {
+    "budget": {
+      "usd": 5
+    }
+  }
+}
+```
+
+With this, the session warns the model once at 50% and 80% of `$5`, then stops
+gracefully when spend reaches `$5`.
+
+## Configuration
+
+All keys live under `experimental.budget`.
+
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `usd` | _(unset)_ | Spend cap in USD for a single session. Unset = guard disabled. |
+| `warn_at` | `[0.5, 0.8]` | Fractions of the cap at which to warn the model once each. |
+| `on_exceed` | `"stop"` | `"stop"`: halt gracefully before exceeding the cap. `"warn"`: keep going but inject an over-budget warning. |
+
+### Examples
+
+```jsonc
+// Hard stop with a single 90% warning
+{ "experimental": { "budget": { "usd": 10, "warn_at": [0.9] } } }
+
+// Never stop, just keep warning (good for trusted long runs)
+{ "experimental": { "budget": { "usd": 20, "on_exceed": "warn" } } }
+```
+
+## How it works
+
+Before each model step, the guard reads the session's cumulative cost:
+
+- **Approaching the cap** — when spend first crosses a `warn_at` threshold, a
+  one-time `<budget-warning>` is injected so the model can prioritize finishing
+  and avoid new tangents. Each threshold fires at most once per session.
+- **At the cap** — in the default `stop` mode the run halts *before* spending more,
+  surfacing a clear message (`budget of $X reached`). In `warn` mode it keeps going
+  with a persistent over-budget reminder.
+
+Because the check happens before the step, the cap is a true ceiling on spend, not
+a post-hoc report.
+
+## Troubleshooting
+
+**My session stopped early.** It hit the cap. Raise `experimental.budget.usd`, or
+switch `on_exceed` to `"warn"` if you'd rather be reminded than stopped.
+
+**I never see warnings.** Warnings are injected for the model's benefit and also
+logged; make sure a cap is set and that the session actually spends enough to cross
+a `warn_at` threshold.
