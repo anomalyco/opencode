@@ -1339,6 +1339,40 @@ test("config parser preserves permission order while rejecting unknown top-level
   }
 })
 
+test("provider model limits can specify token fields independently", () => {
+  const config = ConfigParse.schema(
+    ConfigV1.Info,
+    {
+      provider: {
+        custom: {
+          models: {
+            "context-only": {
+              limit: {
+                context: 1_000_000,
+              },
+            },
+            "output-only": {
+              limit: {
+                output: 16_384,
+              },
+            },
+            "input-only": {
+              limit: {
+                input: 512_000,
+              },
+            },
+          },
+        },
+      },
+    },
+    "test",
+  )
+
+  expect(config.provider?.custom.models?.["context-only"]?.limit).toEqual({ context: 1_000_000 })
+  expect(config.provider?.custom.models?.["output-only"]?.limit).toEqual({ output: 16_384 })
+  expect(config.provider?.custom.models?.["input-only"]?.limit).toEqual({ input: 512_000 })
+})
+
 // MCP config merging tests
 
 it.instance("project config can override MCP server enabled status", () =>
