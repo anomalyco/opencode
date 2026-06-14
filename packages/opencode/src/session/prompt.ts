@@ -160,7 +160,17 @@ export const layer = Layer.effect(
 
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
       yield* Effect.logInfo("cancel", { "session.id": sessionID })
-      yield* state.cancel(sessionID)
+      // The session tree is the second cancel source (design-final §4.5 Ü1):
+      // the descendant IDs seed the background-job matching so mid-tree
+      // cancels reach jobs whose metadata chain is broken. Defensive defect
+      // catch — cancel must never fail on a session-lookup error.
+      const descendants = yield* sessions
+        .descendants(sessionID)
+        .pipe(Effect.catchDefect(() => Effect.succeed<Session.Info[]>([])))
+      yield* state.cancel(
+        sessionID,
+        descendants.map((info) => info.id),
+      )
     })
 
     const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
