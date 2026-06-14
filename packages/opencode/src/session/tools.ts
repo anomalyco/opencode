@@ -84,6 +84,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       sessionID: gateInput.ctx.sessionID,
       callID: gateInput.ctx.callID,
       tool: gateInput.tool,
+      agentName: input.agent.name,
       ask: (req) =>
         permission.ask({
           ...req,

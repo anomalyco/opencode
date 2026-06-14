@@ -1,6 +1,7 @@
 import type { SessionID } from "@/session/schema"
 import {
   actionFor,
+  mergeAgentOverride,
   reasonFor,
   resolve,
   type AceConfig,
@@ -45,9 +46,10 @@ export function createController() {
         sessionID: SessionID
         callID?: string
         tool: string
+        agentName?: string
       },
     ): AceDecision | undefined {
-      const current = resolve(config)
+      const current = resolve(mergeAgentOverride(config, input.agentName))
       if (!current.enabled) return undefined
       const state = getState(states, input.sessionID)
       state.toolCalls += 1
@@ -67,9 +69,10 @@ export function createController() {
         sessionID: SessionID
         subagent: string
         depth: number
+        agentName?: string
       },
     ): AceDecision | undefined {
-      const current = resolve(config)
+      const current = resolve(mergeAgentOverride(config, input.agentName ?? input.subagent))
       if (!current.enabled) return undefined
       const state = getState(states, input.sessionID)
       state.spawns += 1
@@ -138,6 +141,7 @@ export function gateToolCall(
     sessionID: SessionID
     callID?: string
     tool: string
+    agentName?: string
   },
 ): AceDecision | undefined {
   return controller.gateToolCall(config, input)
@@ -149,6 +153,7 @@ export function gateSpawn(
     sessionID: SessionID
     subagent: string
     depth: number
+    agentName?: string
   },
 ): AceDecision | undefined {
   return controller.gateSpawn(config, input)
