@@ -18,11 +18,23 @@ interface PkceCodes {
   challenge: string
 }
 
-async function generatePKCE(): Promise<PkceCodes> {
+function generateVerifier(length: number): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
-  const verifier = Array.from(crypto.getRandomValues(new Uint8Array(43)))
-    .map((b) => chars[b % chars.length])
-    .join("")
+  // Reject bytes in the biased tail so each character is uniformly distributed.
+  const limit = 256 - (256 % chars.length)
+  let result = ""
+  while (result.length < length) {
+    const bytes = crypto.getRandomValues(new Uint8Array(length - result.length))
+    for (let i = 0; i < bytes.length && result.length < length; i++) {
+      if (bytes[i] >= limit) continue
+      result += chars[bytes[i] % chars.length]
+    }
+  }
+  return result
+}
+
+async function generatePKCE(): Promise<PkceCodes> {
+  const verifier = generateVerifier(43)
   const challenge = base64UrlEncode(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)))
   return { verifier, challenge }
 }
@@ -178,6 +190,9 @@ const HTML_SUCCESS = `<!doctype html>
   </body>
 </html>`
 
+const escapeHtml = (value: string) =>
+  value.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!)
+
 const HTML_ERROR = (error: string) => `<!doctype html>
 <html>
   <head>
@@ -221,7 +236,7 @@ const HTML_ERROR = (error: string) => `<!doctype html>
     <div class="container">
       <h1>Authorization Failed</h1>
       <p>An error occurred during authorization.</p>
-      <div class="error">${error}</div>
+      <div class="error">${escapeHtml(error)}</div>
     </div>
   </body>
 </html>`

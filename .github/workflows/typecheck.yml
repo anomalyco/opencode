@@ -7,6 +7,9 @@ on:
     branches: [dev]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   typecheck:
     runs-on: blacksmith-4vcpu-ubuntu-2404

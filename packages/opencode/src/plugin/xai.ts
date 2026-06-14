@@ -60,9 +60,17 @@ async function generatePKCE(): Promise<PkceCodes> {
 
 function generateRandomString(length: number): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
-  return Array.from(crypto.getRandomValues(new Uint8Array(length)))
-    .map((b) => chars[b % chars.length])
-    .join("")
+  // Reject bytes in the biased tail so each character is uniformly distributed.
+  const limit = 256 - (256 % chars.length)
+  let result = ""
+  while (result.length < length) {
+    const bytes = crypto.getRandomValues(new Uint8Array(length - result.length))
+    for (let i = 0; i < bytes.length && result.length < length; i++) {
+      if (bytes[i] >= limit) continue
+      result += chars[bytes[i] % chars.length]
+    }
+  }
+  return result
 }
 
 function base64UrlEncode(buffer: ArrayBuffer): string {
