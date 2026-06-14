@@ -74,7 +74,7 @@ function startDevServer(data: any) {
   })
 }
 
-async function waitForRestartSignal(mtime: number, signal: AbortSignal) {
+async function waitForRestartSignal(mtime: number, signal: AbortSignal): Promise<boolean> {
   while (!signal.aborted) {
     await sleep(RESTART_POLL_INTERVAL)
     if (signal.aborted) return false
@@ -84,23 +84,37 @@ async function waitForRestartSignal(mtime: number, signal: AbortSignal) {
   return false
 }
 
-while (true) {
-  const { data, mtime } = await readSnapshot()
-  const proc = startDevServer(data)
-  const restartAbort = new AbortController()
+async function main() {
+  while (true) {
+    const { data, mtime } = await readSnapshot()
+    const proc = startDevServer(data)
+    const restartAbort = new AbortController()
 
-  const result = await Promise.race([
-    proc.exited.then((code) => ({ type: "exit" as const, code })),
-    waitForRestartSignal(mtime, restartAbort.signal).then((restart) => ({ type: "restart" as const, restart })),
-  ])
+    try {
+      const result = await Promise.race([
+        proc.exited.then((code) => ({ type: "exit", code })),
+        waitForRestartSignal(mtime, restartAbort.signal).then((shouldRestart) => ({ type: "restart", shouldRestart })),
+      ])
 
-  restartAbort.abort()
+      restartAbort.abort()
 
-  if (result.type === "restart" && result.restart) {
-    proc.kill()
-    await proc.exited
-    continue
+      if (result.type === "restart" && result.shouldRestart) {
+        proc.kill()
+        await proc.exited
+        continue
+      }
+
+      process.exit(result.code)
+    } catch (error) {
+      restartAbort.abort()
+      console.error("Unexpected error in server loop:", error)
+      proc.kill()
+      process.exit(1)
+    }
   }
-
-  process.exit(result.code)
 }
+
+main().catch((error) => {
+  console.error("Fatal error:", error)
+  process.exit(1)
+})
