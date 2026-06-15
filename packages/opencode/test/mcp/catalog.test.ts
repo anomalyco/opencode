@@ -1,6 +1,8 @@
-import { describe, expect, mock, test } from "bun:test"
-import type { Client } from "@modelcontextprotocol/sdk/client/index.js"
-import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
+import { afterEach, describe, expect, test } from "bun:test"
+import { Client } from "@modelcontextprotocol/sdk/client/index.js"
+import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js"
+import { Server } from "@modelcontextprotocol/sdk/server/index.js"
+import { CallToolRequestSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js"
 import { convertTool } from "../../src/mcp/catalog"
 
 const definition = {
@@ -9,11 +11,23 @@ const definition = {
   inputSchema: { type: "object" as const, properties: {} },
 }
 
-function tool(result: CallToolResult | { toolResult: unknown }) {
-  const callTool = mock(async () => result)
-  const converted = convertTool(definition, { callTool } as unknown as Client)
+const connections: Array<{ client: Client; server: Server }> = []
+
+afterEach(async () => {
+  await Promise.all(connections.splice(0).flatMap(({ client, server }) => [client.close(), server.close()]))
+})
+
+async function tool(result: CallToolResult) {
+  const client = new Client({ name: "test-client", version: "1" })
+  const server = new Server({ name: "test-server", version: "1" }, { capabilities: { tools: {} } })
+  server.setRequestHandler(CallToolRequestSchema, async () => result)
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+  await Promise.all([client.connect(clientTransport), server.connect(serverTransport)])
+  connections.push({ client, server })
+
+  const converted = convertTool(definition, client)
   if (!converted.execute) throw new Error("expected executable tool")
-  return { callTool, execute: converted.execute }
+  return converted.execute
 }
 
 describe("mcp catalog", () => {
@@ -22,34 +36,27 @@ describe("mcp catalog", () => {
       content: [{ type: "text" as const, text: "ordinary output" }],
       structuredContent: { value: 42 },
     }
-    const converted = tool(result)
+    const execute = await tool(result)
 
-    await expect(converted.execute({}, { toolCallId: "call-1", messages: [] })).resolves.toEqual({
+    await expect(execute({}, { toolCallId: "call-1", messages: [] })).resolves.toEqual({
       ...result,
       content: [{ type: "text", text: '{"value":42}' }],
     })
-    expect(converted.callTool).toHaveBeenCalledTimes(1)
   })
 
-  test("returns task tool results", async () => {
-    const result = { toolResult: { taskId: "task-1" } }
-    const converted = tool(result)
-
-    await expect(converted.execute({}, { toolCallId: "call-1", messages: [] })).resolves.toBe(result)
-  })
-
-  test("throws MCP tool errors with text and structured diagnostics", async () => {
-    const converted = tool({
+  test("throws MCP tool errors with text diagnostics", async () => {
+    const execute = await tool({
       isError: true,
       content: [
         { type: "text", text: "validation failed" },
-        { type: "resource", resource: { uri: "error://details", text: "labels must be an object" } },
+        { type: "text", text: "labels must be an object" },
+        { type: "resource", resource: { uri: "error://details", text: "resource details" } },
       ],
       structuredContent: { field: "labels", expected: "object" },
     })
 
-    await expect(converted.execute({}, { toolCallId: "call-1", messages: [] })).rejects.toThrow(
-      'validation failed\n\nlabels must be an object\n\n{"field":"labels","expected":"object"}',
+    await expect(execute({}, { toolCallId: "call-1", messages: [] })).rejects.toThrow(
+      "validation failed\n\nlabels must be an object",
     )
   })
 })

@@ -3,7 +3,6 @@ import {
   CallToolResultSchema,
   ListToolsResultSchema,
   ToolSchema,
-  type CallToolResult,
   type Tool as MCPToolDef,
 } from "@modelcontextprotocol/sdk/types.js"
 import { dynamicTool, jsonSchema, type JSONSchema7, type Tool } from "ai"
@@ -52,20 +51,27 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(inputSchema),
     execute: async (args: unknown, options) => {
-      const result = await client.callTool(
-        {
-          name: mcpTool.name,
-          arguments: (args || {}) as Record<string, unknown>,
-        },
-        CallToolResultSchema,
-        {
-          resetTimeoutOnProgress: true,
-          signal: options.abortSignal,
-          timeout,
-        },
+      const result = CallToolResultSchema.parse(
+        await client.callTool(
+          {
+            name: mcpTool.name,
+            arguments: (args || {}) as Record<string, unknown>,
+          },
+          CallToolResultSchema,
+          {
+            resetTimeoutOnProgress: true,
+            signal: options.abortSignal,
+            timeout,
+          },
+        ),
       )
-      if (!isCallToolResult(result)) return result
-      if (result.isError) throw new Error(errorText(result))
+      if (result.isError)
+        throw new Error(
+          result.content
+            .flatMap((item) => (item.type === "text" ? [item.text] : []))
+            .filter((text) => text.trim())
+            .join("\n\n") || "MCP tool returned an error",
+        )
       if (result.structuredContent === undefined || result.structuredContent === null) return result
       return {
         ...result,
@@ -73,23 +79,6 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
       }
     },
   })
-}
-
-function isCallToolResult(result: Awaited<ReturnType<Client["callTool"]>>): result is CallToolResult {
-  return "content" in result && Array.isArray(result.content)
-}
-
-function errorText(result: CallToolResult) {
-  const content = result.content.flatMap((item) => {
-    if (item.type === "text") return [item.text]
-    if (item.type === "resource" && "text" in item.resource) return [item.resource.text]
-    return []
-  })
-  if (result.structuredContent !== undefined && result.structuredContent !== null) {
-    const structured = JSON.stringify(result.structuredContent)
-    if (structured !== undefined) content.push(structured)
-  }
-  return [...new Set(content.filter((item) => item.trim().length > 0))].join("\n\n") || "MCP tool returned an error"
 }
 
 export function fetch<T extends { name: string }>(
