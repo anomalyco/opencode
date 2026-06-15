@@ -455,6 +455,60 @@ noLLMServer.instance(
   { config: cfg },
 )
 
+noLLMServer.instance(
+  "loop exits when client user id sorts after completed assistant id",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      const userID = MessageID.ascending("msg_ecb75b56f0019wLoesAlmhX0ux")
+      const assistantID = MessageID.ascending("msg_ecb75b4d0001DVQARZxNZz73D7")
+
+      yield* sessions.updateMessage({
+        id: userID,
+        role: "user",
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        time: { created: 1 },
+      })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: userID,
+        sessionID: chat.id,
+        type: "text",
+        text: "hello",
+      })
+      yield* sessions.updateMessage({
+        id: assistantID,
+        role: "assistant",
+        parentID: userID,
+        sessionID: chat.id,
+        mode: "build",
+        agent: "build",
+        cost: 0,
+        path: { cwd: "/tmp", root: "/tmp" },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        time: { created: 2, completed: 3 },
+        finish: "stop",
+      })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: assistantID,
+        sessionID: chat.id,
+        type: "text",
+        text: "done",
+      })
+
+      const result = yield* prompt.loop({ sessionID: chat.id })
+      expect(result.info.id).toBe(assistantID)
+    }),
+  { config: cfg },
+)
+
 it.instance("loop exits without an LLM request for interrupted orphan tool calls", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)

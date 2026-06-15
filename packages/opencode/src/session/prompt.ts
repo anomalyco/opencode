@@ -1165,7 +1165,7 @@ export const layer = Layer.effect(
             lastAssistant?.finish &&
             !["tool-calls"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
-            lastUser.id < lastAssistant.id
+            lastUser.time.created <= lastAssistant.time.created
           ) {
             const orphan = lastAssistantMsg?.parts.find(
               (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),
@@ -1220,7 +1220,7 @@ export const layer = Layer.effect(
                 msg.info.summary === true &&
                 msg.info.finish &&
                 !msg.info.error &&
-                msg.info.id > lastFinished.id,
+                MessageV2.after(msg.info, lastFinished),
             ) &&
             (yield* compaction.isOverflow({ tokens: lastFinished.tokens, model }))
           ) {
@@ -1314,7 +1314,7 @@ export const layer = Layer.effect(
 
             if (step > 1 && lastFinished) {
               for (const m of msgs) {
-                if (m.info.role !== "user" || m.info.id <= lastFinished.id) continue
+                if (m.info.role !== "user" || !MessageV2.after(m.info, lastFinished)) continue
                 for (const p of m.parts) {
                   if (p.type !== "text" || p.ignored || p.synthetic) continue
                   if (!p.text.trim()) continue
