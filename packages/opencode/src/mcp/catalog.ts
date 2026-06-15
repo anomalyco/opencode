@@ -50,8 +50,8 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
   return dynamicTool({
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(inputSchema),
-    execute: (args: unknown, options) =>
-      client.callTool(
+    execute: async (args: unknown, options) => {
+      const result = await client.callTool(
         {
           name: mcpTool.name,
           arguments: (args || {}) as Record<string, unknown>,
@@ -62,7 +62,14 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
           signal: options.abortSignal,
           timeout,
         },
-      ),
+      )
+      if (result.isError) throw new Error(formatToolErrorContent(result.content))
+      if (result.structuredContent === undefined || result.structuredContent === null) return result
+      return {
+        ...result,
+        content: [{ type: "text" as const, text: JSON.stringify(result.structuredContent) }],
+      }
+    },
   })
 }
 
@@ -93,6 +100,22 @@ export function fetch<T extends { name: string }>(
 }
 
 export const sanitize = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "_")
+
+function formatToolErrorContent(content: unknown) {
+  if (!Array.isArray(content)) return "MCP tool returned an error"
+  return (
+    content
+      .flatMap((item) => (isTextContent(item) ? [item.text] : []))
+      .filter((text) => text.trim())
+      .join("\n\n") || "MCP tool returned an error"
+  )
+}
+
+function isTextContent(value: unknown): value is { type: "text"; text: string } {
+  if (typeof value !== "object" || value === null) return false
+  const item = value as Record<string, unknown>
+  return item.type === "text" && typeof item.text === "string"
+}
 
 export function prompts(client: Client, timeout?: number) {
   if (!client.getServerCapabilities()?.prompts) return Promise.resolve([])

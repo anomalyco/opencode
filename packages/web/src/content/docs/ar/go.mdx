@@ -49,18 +49,17 @@ OpenCode Go هو اشتراك منخفض التكلفة — **$5 للشهر ال
 
 تشمل قائمة النماذج الحالية:
 
-- **GLM-5**
 - **GLM-5.1**
-- **Kimi K2.5**
+- **GLM-5**
+- **Kimi K2.7 Code**
 - **Kimi K2.6**
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
-- **MiniMax M2.5**
-- **MiniMax M2.7**
 - **MiniMax M3**
-- **Qwen3.6 Plus**
-- **Qwen3.7 Plus**
+- **MiniMax M2.7**
 - **Qwen3.7 Max**
+- **Qwen3.7 Plus**
+- **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 
@@ -84,13 +83,12 @@ OpenCode Go هو اشتراك منخفض التكلفة — **$5 للشهر ال
 | ----------------- | ------------------- | ------------------ | ---------------- |
 | GLM-5.1           | 880                 | 2,150              | 4,300            |
 | GLM-5             | 1,150               | 2,880              | 5,750            |
-| Kimi K2.5         | 1,850               | 4,630              | 9,250            |
 | Kimi K2.6         | 1,150               | 2,880              | 5,750            |
+| Kimi K2.7 Code    | 1,350               | 4,630              | 9,250            |
 | MiMo-V2.5         | 30,100              | 75,200             | 150,400          |
 | MiMo-V2.5-Pro     | 3,250               | 8,150              | 16,300           |
 | MiniMax M3        | 3,200               | 8,000              | 16,000           |
 | MiniMax M2.7      | 3,400               | 8,500              | 17,000           |
-| MiniMax M2.5      | 6,300               | 15,900             | 31,800           |
 | Qwen3.7 Max       | 950                 | 2,390              | 4,770            |
 | Qwen3.7 Plus      | 4,300               | 10,800             | 21,600           |
 | Qwen3.6 Plus      | 3,300               | 8,200              | 16,300           |
@@ -100,11 +98,11 @@ OpenCode Go هو اشتراك منخفض التكلفة — **$5 للشهر ال
 تستند التقديرات إلى متوسط أنماط الطلبات المرصودة:
 
 - GLM-5/5.1 — ‏700 input، و52,000 cached، و150 output tokens لكل طلب
-- Kimi K2.5/K2.6 — ‏870 input، و55,000 cached، و200 output tokens لكل طلب
+- Kimi K2.7/K2.6 — ‏870 input، و55,000 cached، و200 output tokens لكل طلب
 - DeepSeek V4 Pro — ‏750 input، و82,000 cached، و290 output tokens لكل طلب
 - DeepSeek V4 Flash — ‏790 input، و68,000 cached، و280 output tokens لكل طلب
 - MiniMax M3 — ‏510 input، و56,000 cached، و190 output tokens لكل طلب
-- MiniMax M2.7/M2.5 — ‏300 input، و55,000 cached، و125 output tokens لكل طلب
+- MiniMax M2.7 — ‏300 input، و55,000 cached، و125 output tokens لكل طلب
 - Qwen3.7 Max — ‏420 input، و66,000 cached، و200 output tokens لكل طلب
 - Qwen3.7 Plus — ‏500 input، و57,000 cached، و190 output tokens لكل طلب
 - Qwen3.6 Plus — ‏500 input، و57,000 cached، و190 output tokens لكل طلب
@@ -117,8 +115,8 @@ OpenCode Go هو اشتراك منخفض التكلفة — **$5 للشهر ال
 | ---------------------------- | ------- | ------- | --------------- | --------------- |
 | GLM-5.1                      | $1.40   | $4.40   | $0.26           | -               |
 | GLM-5                        | $1.00   | $3.20   | $0.20           | -               |
+| Kimi K2.7 Code               | $0.95   | $4.00   | $0.19           | -               |
 | Kimi K2.6                    | $0.95   | $4.00   | $0.16           | -               |
-| Kimi K2.5                    | $0.60   | $3.00   | $0.10           | -               |
 | MiMo V2.5                    | $0.14   | $0.28   | $0.0028         | -               |
 | MiMo V2.5 Pro                | $1.74   | $3.48   | $0.0145         | -               |
 | MiniMax M3                   | $0.30   | $1.20   | $0.06           | -               |
@@ -156,7 +154,7 @@ OpenCode Go هو اشتراك منخفض التكلفة — **$5 للشهر ال
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5             | glm-5             | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.5         | kimi-k2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.7         | kimi-k2.7         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.6         | kimi-k2.6         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -169,7 +167,7 @@ OpenCode Go هو اشتراك منخفض التكلفة — **$5 للشهر ال
 | Qwen3.7 Plus      | qwen3.7-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
-يستخدم [model id](/docs/config/#models) في إعدادات OpenCode لديك التنسيق `opencode-go/<model-id>`. على سبيل المثال، بالنسبة إلى Kimi K2.6، ستستخدم `opencode-go/kimi-k2.6` في إعداداتك.
+يستخدم [model id](/docs/config/#models) في إعدادات OpenCode لديك التنسيق `opencode-go/<model-id>`. على سبيل المثال، بالنسبة إلى Kimi K2.7 Code، ستستخدم `opencode-go/kimi-k2.7-code` في إعداداتك.
 
 ---
 
