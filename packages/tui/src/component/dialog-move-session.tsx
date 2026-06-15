@@ -72,7 +72,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
 
   const [directories, { refetch }] = createResource(
     () => (props.initialRemoving ? undefined : props.projectID),
-    async (projectID) => {
+    async (projectID, info) => {
       try {
         await sdk.client.v2.projectCopy.refresh(
           { projectID, location: { directory: sdk.directory } },
@@ -83,17 +83,22 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         return directories.data ?? []
       } catch (error) {
         setLoadError(error)
-        return []
+        // Keep any list we already showed so a failed refresh leaves the dialog
+        // usable; only an initial load with no data falls back to the error view.
+        return info.value
       }
     },
   )
   const directoryData = createMemo(() => directories() ?? props.initialDirectories)
+  // Show the locked error view only when we have nothing to display. A refresh
+  // that fails after the list rendered keeps the list and its actions.
+  const showError = createMemo(() => Boolean(loadError()) && !directoryData())
 
   const currentDirectory = createMemo(
     () => replacementCurrent() ?? (props.current?.type === "directory" ? props.current.directory : currentCheckout()),
   )
   const currentRoot = createMemo<ProjectDirectory | undefined>(() => {
-    if (loadError()) return
+    if (showError()) return
     const directory = currentDirectory()
     if (!directory) return
     return (
@@ -104,7 +109,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
   })
 
   const options = createMemo<DialogSelectOption<MoveSessionSelection | undefined>[]>(() => {
-    if (loadError()) return []
+    if (showError()) return []
     const data = directoryData()
     const current = currentRoot()?.directory
     if (directories.loading && !data && !current) return [{ title: "Loading project directories...", value: undefined }]
@@ -273,8 +278,10 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     if (await removedCurrent(deletingCurrent)) return
   }
 
+  const fullHeight = createMemo(() => Math.max(8, Math.min(16, dimensions().height - Math.floor(dimensions().height / 4) - 2)))
+
   return (
-    <box minHeight={loadError() ? 5 : Math.max(8, Math.min(16, dimensions().height - Math.floor(dimensions().height / 4) - 2))}>
+    <box minHeight={showError() ? 5 : fullHeight()}>
       <DialogSelect
         title="Move session"
         titleView={
@@ -287,10 +294,10 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
             </Show>
           </box>
         }
-        renderFilter={!loadError()}
+        renderFilter={!showError()}
         options={options()}
         emptyView={
-          loadError() ? (
+          showError() ? (
             <box paddingLeft={4} paddingRight={4}>
               <text fg={theme.error} attributes={TextAttributes.BOLD}>
                 Could not load project directories
@@ -299,14 +306,14 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
             </box>
           ) : undefined
         }
-        locked={Boolean(loadError()) || directories.loading || loadedProject.loading || Boolean(removing())}
+        locked={showError() || directories.loading || loadedProject.loading || Boolean(removing())}
         current={current()}
         onSelect={(option) => {
           if (option.value) props.onSelect(option.value)
         }}
         onMove={() => setToDelete(undefined)}
         actions={
-          loadError()
+          showError()
             ? []
             : [
                 {
