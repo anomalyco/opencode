@@ -46,9 +46,19 @@ interface ChildCounters {
   roundTrips: number
 }
 
+export interface InboxItem {
+  from: SessionID
+  fromSlug: string
+  body: string
+  time: number
+}
+
 interface State {
   pending: Map<SessionID, PendingReply>
   counters: Map<SessionID, ChildCounters>
+  registry: Map<string, SessionID>
+  allow: Map<SessionID, string[]>
+  inbox: Map<SessionID, InboxItem[]>
 }
 
 export interface Interface {
@@ -67,6 +77,11 @@ export interface Interface {
   }) => Effect.Effect<void, NotFoundError>
   readonly reject: (childSessionID: SessionID) => Effect.Effect<void, NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<PendingReply>>
+  readonly registerSlug: (slug: string, sessionID: SessionID) => Effect.Effect<void>
+  readonly resolveSlug: (slug: string) => Effect.Effect<Option.Option<SessionID>>
+  readonly setAllow: (sessionID: SessionID, slugs: string[]) => Effect.Effect<void>
+  readonly getAllow: (sessionID: SessionID) => Effect.Effect<string[]>
+  readonly slugFor: (sessionID: SessionID) => Effect.Effect<string>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Messaging") {}
@@ -80,6 +95,9 @@ export const layer = Layer.effect(
         const state: State = {
           pending: new Map<SessionID, PendingReply>(),
           counters: new Map<SessionID, ChildCounters>(),
+          registry: new Map<string, SessionID>(),
+          allow: new Map<SessionID, string[]>(),
+          inbox: new Map<SessionID, InboxItem[]>(),
         }
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
@@ -88,6 +106,9 @@ export const layer = Layer.effect(
             }
             state.pending.clear()
             state.counters.clear()
+            state.registry.clear()
+            state.allow.clear()
+            state.inbox.clear()
           }),
         )
         return state
@@ -193,7 +214,37 @@ export const layer = Layer.effect(
       return Array.from(value.pending.values())
     })
 
-    return Service.of({ send, reply, reject, list })
+    const registerSlug: Interface["registerSlug"] = Effect.fn("Messaging.registerSlug")(function* (slug, sessionID) {
+      const value = yield* InstanceState.get(state)
+      value.registry.set(slug, sessionID)
+      if (!value.inbox.has(sessionID)) value.inbox.set(sessionID, [])
+    })
+
+    const resolveSlug: Interface["resolveSlug"] = Effect.fn("Messaging.resolveSlug")(function* (slug) {
+      const value = yield* InstanceState.get(state)
+      const found = value.registry.get(slug)
+      return found === undefined ? Option.none<SessionID>() : Option.some(found)
+    })
+
+    const setAllow: Interface["setAllow"] = Effect.fn("Messaging.setAllow")(function* (sessionID, slugs) {
+      const value = yield* InstanceState.get(state)
+      value.allow.set(sessionID, slugs)
+    })
+
+    const getAllow: Interface["getAllow"] = Effect.fn("Messaging.getAllow")(function* (sessionID) {
+      const value = yield* InstanceState.get(state)
+      return value.allow.get(sessionID) ?? []
+    })
+
+    const slugFor: Interface["slugFor"] = Effect.fn("Messaging.slugFor")(function* (sessionID) {
+      const value = yield* InstanceState.get(state)
+      for (const [slug, id] of value.registry) {
+        if (id === sessionID) return slug
+      }
+      return String(sessionID)
+    })
+
+    return Service.of({ send, reply, reject, list, registerSlug, resolveSlug, setAllow, getAllow, slugFor })
   }),
 )
 

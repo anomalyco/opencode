@@ -11,6 +11,7 @@ import { Config } from "@/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Session } from "@/session/session"
+import { Interrupt } from '../../src/session/interrupt';
 import type { SessionPrompt } from "../../src/session/prompt"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionRunState } from "@/session/run-state"
@@ -25,6 +26,7 @@ import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Messaging } from "../../src/messaging"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -51,6 +53,8 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       ToolRegistry.node,
       Interrupt.node,
       Database.node,
+      Messaging.node,
+      Interrupt.node,
       RuntimeFlags.node,
       Ripgrep.node,
     ]),
