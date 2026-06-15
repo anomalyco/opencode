@@ -88,6 +88,7 @@ const getBase = (appId: string): Configuration => ({
   nsis: {
     oneClick: false,
     perMachine: false,
+    selectPerMachineByDefault: false,
     allowToChangeInstallationDirectory: true,
     installerIcon: `resources/icons/icon.ico`,
     installerHeaderIcon: `resources/icons/icon.ico`,
