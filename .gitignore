@@ -27,6 +27,7 @@ target
 # Local dev files
 opencode-dev
 UPCOMING_CHANGELOG.md
+/CEREBRAS_REASONING_HISTORY_REPLAY_README.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
