@@ -22,6 +22,17 @@ export const OUTPUT_TOKEN_MAX = 32_000
 // branch that requests it stays in lockstep.
 const INCLUDE_ENCRYPTED_REASONING = ["reasoning.encrypted_content"] as const
 
+function responsesItemIDOptionKeys(model: Provider.Model, sdkOptionKey: string | undefined) {
+  if (model.api.npm === "@ai-sdk/github-copilot") return ["openai", "copilot"]
+  if (
+    sdkOptionKey &&
+    ["@ai-sdk/openai", "@ai-sdk/azure", "@ai-sdk/amazon-bedrock/mantle"].includes(model.api.npm)
+  ) {
+    return [sdkOptionKey]
+  }
+  return []
+}
+
 export function sanitizeSurrogates(content: string) {
   return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
 }
@@ -460,16 +471,18 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
   }
 
   // Strip Responses item IDs before serialization, following Codex and keeping signed request bodies immutable.
-  if (
-    options.store !== true &&
-    key &&
-    ["@ai-sdk/openai", "@ai-sdk/azure", "@ai-sdk/amazon-bedrock/mantle"].includes(model.api.npm)
-  ) {
+  const itemIDKeys = options.store !== true ? responsesItemIDOptionKeys(model, key) : []
+  if (itemIDKeys.length > 0) {
     msgs = mapProviderOptions(msgs, (options) => {
-      if (!options?.[key] || !("itemId" in options[key])) return options
-      const metadata = { ...options[key] }
-      delete metadata.itemId
-      return { ...options, [key]: metadata }
+      if (!options) return options
+      let result = options
+      for (const itemIDKey of itemIDKeys) {
+        if (!result[itemIDKey] || !("itemId" in result[itemIDKey])) continue
+        const metadata = { ...result[itemIDKey] }
+        delete metadata.itemId
+        result = { ...result, [itemIDKey]: metadata }
+      }
+      return result
     })
   }
 

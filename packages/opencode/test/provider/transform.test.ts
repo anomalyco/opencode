@@ -1928,6 +1928,58 @@ describe("ProviderTransform.message - strip openai metadata when store=false", (
     expect(result[0].content[1].providerOptions?.openai?.itemId).toBeUndefined()
   })
 
+  test("strips Copilot Responses itemId while preserving encrypted reasoning", () => {
+    const copilotModel = {
+      ...openaiModel,
+      id: "github-copilot/gpt-5.5",
+      providerID: "github-copilot",
+      api: {
+        id: "gpt-5.5",
+        url: "https://api.githubcopilot.com",
+        npm: "@ai-sdk/github-copilot",
+      },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "thinking...",
+            providerOptions: {
+              openai: {
+                itemId: "rs_123",
+                reasoningEncryptedContent: "encrypted",
+              },
+              copilot: {
+                itemId: "rs_123",
+                reasoningEncryptedContent: "encrypted",
+              },
+            },
+          },
+          {
+            type: "text",
+            text: "Hello",
+            providerOptions: {
+              openai: {
+                itemId: "msg_456",
+              },
+            },
+          },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, copilotModel, { store: false }) as any[]
+
+    expect(result).toHaveLength(1)
+    expect(result[0].content[0].providerOptions?.openai?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.openai?.reasoningEncryptedContent).toBe("encrypted")
+    expect(result[0].content[0].providerOptions?.copilot?.itemId).toBeUndefined()
+    expect(result[0].content[0].providerOptions?.copilot?.reasoningEncryptedContent).toBe("encrypted")
+    expect(result[0].content[1].providerOptions?.openai?.itemId).toBeUndefined()
+  })
+
   test("uses the SDK package namespace rather than provider ID", () => {
     const zenModel = {
       ...openaiModel,
