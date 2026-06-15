@@ -810,10 +810,8 @@ function stackedTopModelsSegments(point: UsagePoint, order: Map<string, number>)
 }
 
 function getTopModelsSegmentOrder(data: UsagePoint[]) {
-  return getRankOrder(
-    data.flatMap((point) =>
-      point.segments.map((segment, index) => ({ key: segment.model, value: segment.value, index })),
-    ),
+  return new Map(
+    data.find((point) => point.segments.length > 0)?.segments.map((segment, index) => [segment.model, index]) ?? [],
   )
 }
 
