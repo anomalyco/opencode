@@ -63,8 +63,7 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
           timeout,
         },
       )
-      if (result.isError)
-        throw new Error(formatToolErrorContent(result.content))
+      if (result.isError) throw new Error(formatToolErrorContent(result.content))
       if (result.structuredContent === undefined || result.structuredContent === null) return result
       return {
         ...result,
