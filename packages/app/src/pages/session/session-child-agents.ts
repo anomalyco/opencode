@@ -73,9 +73,10 @@ export function collectSessionChildAgentEntries(input: CollectChildAgentEntriesI
   let order = 0
   const statusFor = (sessionID: string, options: StatusForOptions = {}): SessionChildAgentStatus | undefined => {
     const messages = input.messagesBySession?.[sessionID]
+    const last = messages?.at(-1)
+    if (last?.role === "assistant" && last.error !== undefined) return "error"
     if (working(input.statuses?.[sessionID], messages)) return "running"
-    if (messages !== undefined) {
-      const last = messages.at(-1)
+    if (last !== undefined) {
       if (last?.role === "assistant" && typeof last.time.completed === "number") return "completed"
     }
     if (options.toolStatus === "running" || options.toolStatus === "error") return options.toolStatus
@@ -123,7 +124,7 @@ export function collectSessionChildAgentEntries(input: CollectChildAgentEntriesI
       agent: text(session.agent),
       created: session.time.created,
       status,
-      usage: status === "running" ? undefined : "not used",
+      usage: status === "running" || status === "error" ? undefined : "not used",
       order,
     })
     order += 1

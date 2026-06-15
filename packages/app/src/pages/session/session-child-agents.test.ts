@@ -15,7 +15,13 @@ const session = (input: { id: string; parentID?: string; title?: string; agent?:
     time: { created: input.created, updated: input.created },
   }) as Session
 
-const assistant = (input: { id: string; sessionID: string; created: number; completed?: number | false }) => {
+const assistant = (input: {
+  id: string
+  sessionID: string
+  created: number
+  completed?: number | false
+  error?: { name: string; data?: { message?: string } }
+}) => {
   const time =
     input.completed === false
       ? { created: input.created }
@@ -29,6 +35,7 @@ const assistant = (input: { id: string; sessionID: string; created: number; comp
     time,
     agent: "build",
     model: { providerID: "test", modelID: "model" },
+    error: input.error,
   } as unknown as Message
 }
 
@@ -291,6 +298,74 @@ describe("collectSessionChildAgentEntries", () => {
     })
 
     expect(entries[0]?.status).toBe("running")
+  })
+
+  test("uses child assistant errors over completed task tool status", () => {
+    const message = assistant({ id: "msg_1", sessionID: "ses_parent", created: 10 })
+    const entries = collectSessionChildAgentEntries({
+      sessionID: "ses_parent",
+      messages: [message],
+      parts: {
+        msg_1: [
+          task({
+            id: "prt_1",
+            sessionID: "ses_parent",
+            messageID: "msg_1",
+            childID: "ses_child",
+            description: "run bad model",
+            agent: "general",
+            started: 25,
+          }),
+        ],
+      },
+      sessions: [session({ id: "ses_child", parentID: "ses_parent", title: "Run bad model", created: 25 })],
+      messagesBySession: {
+        ses_child: [
+          assistant({
+            id: "msg_child",
+            sessionID: "ses_child",
+            created: 30,
+            completed: 40,
+            error: { name: "APIError", data: { message: "model not found: gpt-5.4" } },
+          }),
+        ],
+      },
+    })
+
+    expect(entries[0]?.status).toBe("error")
+  })
+
+  test("shows unreferenced direct child session errors instead of not used", () => {
+    const entries = collectSessionChildAgentEntries({
+      sessionID: "ses_parent",
+      messages: [],
+      parts: {},
+      sessions: [
+        session({ id: "ses_child", parentID: "ses_parent", title: "Failed child", agent: "general", created: 50 }),
+      ],
+      messagesBySession: {
+        ses_child: [
+          assistant({
+            id: "msg_child",
+            sessionID: "ses_child",
+            created: 60,
+            completed: 70,
+            error: { name: "APIError", data: { message: "model not found: gpt-5.4" } },
+          }),
+        ],
+      },
+    })
+
+    expect(entries).toEqual([
+      {
+        id: "session:ses_child",
+        sessionID: "ses_child",
+        title: "Failed child",
+        agent: "general",
+        created: 50,
+        status: "error",
+      },
+    ])
   })
 
   test("marks completed only when the child assistant has completed", () => {
