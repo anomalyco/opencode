@@ -95,6 +95,22 @@ export async function createPage(input: DocMountInput) {
   let awareness: OpencodeAwarenessSource | undefined
   let aware = false
 
+  // Live, mutable copy of the local actor's display identity. The awareness "user" field is set once
+  // at construction; this lets us re-apply a corrected name/color later (e.g. after a re-register)
+  // WITHOUT a full remount — setLocalStateField triggers an awareness update that the awareness
+  // source re-broadcasts to peers, so an already-connected peer's stale label self-heals live.
+  let identityName = input.sync?.name
+  let identityColor = input.sync?.color
+
+  const applyIdentity = () => {
+    if (!input.sync || !awareness) return
+    collection.awarenessStore.awareness.setLocalStateField("user", {
+      actorID: input.sync.actorID,
+      name: label(input.sync.actorID, identityName),
+    })
+    if (identityColor) collection.awarenessStore.awareness.setLocalStateField("color", identityColor)
+  }
+
   if (input.sync) {
     direct = new OpencodeDocSource(input.sync)
     awareness = input.readonly ? undefined : new OpencodeAwarenessSource(input.sync)
@@ -105,13 +121,7 @@ export async function createPage(input: DocMountInput) {
       awarenessSources: awareness ? [awareness] : [],
     })
     collection.meta.initialize()
-    if (awareness) {
-      collection.awarenessStore.awareness.setLocalStateField("user", {
-        actorID: input.sync.actorID,
-        name: label(input.sync.actorID, input.sync.name),
-      })
-      collection.awarenessStore.awareness.setLocalStateField("color", input.sync.color)
-    }
+    if (awareness) applyIdentity()
     if (input.init !== false) {
       draft = await remote(direct, collection, input.sync.docID, page, input.readonly, query)
       draft =
@@ -516,7 +526,7 @@ export async function createPage(input: DocMountInput) {
   }
 
   const actors = () => {
-    const own = input.sync ? [{ actorID: input.sync.actorID, name: label(input.sync.actorID, input.sync.name) }] : []
+    const own = input.sync ? [{ actorID: input.sync.actorID, name: label(input.sync.actorID, identityName) }] : []
     const states = Array.from(collection.awarenessStore.awareness.getStates().values())
     return Array.from(
       [...own, ...states.map(actor).filter((item): item is DocActor => !!item)]
@@ -554,6 +564,12 @@ export async function createPage(input: DocMountInput) {
     canUndo: () => doc.canUndo,
     canRedo: () => doc.canRedo,
     actors,
+    setActorIdentity: (name: string | undefined, color?: string) => {
+      if (name === identityName && (color === undefined || color === identityColor)) return
+      identityName = name
+      if (color !== undefined) identityColor = color
+      applyIdentity()
+    },
     setTheme: (theme: "light" | "dark") => {
       editor.std.get(ThemeProvider).app$.value = scheme(theme)
     },

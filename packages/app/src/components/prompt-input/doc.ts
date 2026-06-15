@@ -134,6 +134,10 @@ export function createPromptDoc(input: PromptDocInput) {
   const ensure = async (sessionID: string, alive?: () => boolean) => {
     const actor = await register(input, sessionID, alive)
     setActor(actor)
+    // If an editor handle is already live for this session (re-ensure without a remount), push the
+    // freshly resolved identity into its awareness so a corrected name/color self-heals live for
+    // peers instead of waiting for a remount or a peer refresh.
+    handle?.setActorIdentity(label(actor.actorID, actor.name), actor.color)
     const doc = await promptDoc(input, sessionID, alive)
     setDocID(doc.docID)
     sync = {
