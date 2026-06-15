@@ -53,6 +53,24 @@ export async function openEditor(input: { value: string; renderer: CliRenderer; 
   }
 }
 
+function readEditorLock(file: string) {
+  const port = Number.parseInt(path.basename(file, ".lock"), 10)
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) return undefined
+  try {
+    const value = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>
+    if (value.transport !== undefined && value.transport !== "ws") return undefined
+    return {
+      port,
+      authToken: typeof value.authToken === "string" ? value.authToken : undefined,
+      workspaceFolders: Array.isArray(value.workspaceFolders)
+        ? value.workspaceFolders.filter((item): item is string => typeof item === "string")
+        : [],
+    }
+  } catch {
+    return undefined
+  }
+}
+
 export function discoverEditorConnection(directory: string) {
   const root = path.join(os.homedir(), ".claude", "ide")
   const contains = (parent: string) => {
@@ -65,28 +83,19 @@ export function discoverEditorConnection(directory: string) {
       .filter((entry) => entry.endsWith(".lock"))
       .flatMap((entry) => {
         const file = path.join(root, entry)
-        const port = Number.parseInt(path.basename(file, ".lock"), 10)
-        if (!Number.isInteger(port) || port <= 0 || port > 65535) return []
-        try {
-          const value = JSON.parse(readFileSync(file, "utf8")) as Record<string, unknown>
-          if (value.transport !== undefined && value.transport !== "ws") return []
-          const folders = Array.isArray(value.workspaceFolders)
-            ? value.workspaceFolders.filter((item): item is string => typeof item === "string")
-            : []
-          const score = Math.max(0, ...folders.map(contains))
-          if (!score) return []
-          return [
-            {
-              url: `ws://127.0.0.1:${port}`,
-              authToken: typeof value.authToken === "string" ? value.authToken : undefined,
-              source: `lock:${port}`,
-              score,
-              mtime: statSync(file).mtimeMs,
-            },
-          ]
-        } catch {
-          return []
-        }
+        const lock = readEditorLock(file)
+        if (!lock) return []
+        const score = Math.max(0, ...lock.workspaceFolders.map(contains))
+        if (!score) return []
+        return [
+          {
+            url: `ws://127.0.0.1:${lock.port}`,
+            authToken: lock.authToken,
+            source: `lock:${lock.port}`,
+            score,
+            mtime: statSync(file).mtimeMs,
+          },
+        ]
       })
       .sort((left, right) => right.score - left.score || right.mtime - left.mtime)
       .map(({ url, authToken, source }) => ({ url, authToken, source }))[0]
@@ -95,7 +104,18 @@ export function discoverEditorConnection(directory: string) {
   }
 }
 
+export function discoverEditorConnectionByPort(port: number) {
+  const lock = readEditorLock(path.join(os.homedir(), ".claude", "ide", `${port}.lock`))
+  if (!lock) return undefined
+  return {
+    url: `ws://127.0.0.1:${lock.port}`,
+    authToken: lock.authToken,
+    source: `env:${lock.port}`,
+  }
+}
+
 export const editorIntegration = {
   connection: discoverEditorConnection,
+  connectionByPort: discoverEditorConnectionByPort,
   selection: (directory: string) => resolveZedSelection(resolveZedDbPath() ?? "", directory),
 }
