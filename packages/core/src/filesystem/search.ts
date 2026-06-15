@@ -232,4 +232,6 @@ export const fffLayer = Layer.effect(
   }),
 )
 
-export const defaultLayer = Layer.unwrap(Effect.sync(() => (Flag.OPENCODE_DISABLE_FFF ? ripgrepLayer : fffLayer)))
+export const defaultLayer = Layer.unwrap(
+  Effect.sync(() => (Flag.OPENCODE_DISABLE_FFF || !Fff.available() ? ripgrepLayer : fffLayer)),
+)

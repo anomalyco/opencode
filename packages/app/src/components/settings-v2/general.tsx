@@ -1,16 +1,14 @@
 import { Component, Show, createMemo, createResource, onMount } from "solid-js"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
-import { Icon } from "@opencode-ai/ui/icon"
 import { SelectV2 } from "@opencode-ai/ui/v2/select-v2"
 import { Switch } from "@opencode-ai/ui/v2/switch-v2"
 import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme/context"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
-import { usePlatform, type DisplayBackend } from "@/context/platform"
+import { usePlatform } from "@/context/platform"
 import { useServerSync } from "@/context/server-sync"
 import { useServerSDK } from "@/context/server-sdk"
 import { useUpdaterAction } from "../updater-action"
@@ -94,7 +92,6 @@ export const SettingsGeneralV2: Component = () => {
 
   const updater = useUpdaterAction()
 
-  const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
   const dir = createMemo(() => decode64(params.dir))
   const accepting = createMemo(() => {
     const value = dir()
@@ -129,17 +126,11 @@ export const SettingsGeneralV2: Component = () => {
 
   const [shells] = createResource(
     () =>
-      serverSdk.client.pty
-        .shells()
+      serverSdk()
+        .client.pty.shells()
         .then((res) => res.data ?? [])
         .catch(() => [] as ShellOption[]),
     { initialValue: [] as ShellOption[] },
-  )
-
-  const [displayBackend, { refetch: refetchDisplayBackend }] = createResource(
-    () => (linux() && platform.getDisplayBackend ? true : false),
-    () => Promise.resolve(platform.getDisplayBackend?.() ?? null).catch(() => null as DisplayBackend | null),
-    { initialValue: null as DisplayBackend | null },
   )
 
   const [pinchZoom, { mutate: setPinchZoom }] = createResource(
@@ -153,11 +144,11 @@ export const SettingsGeneralV2: Component = () => {
   })
 
   const autoOption = { id: "auto", value: "", label: language.t("settings.general.row.shell.autoDefault") }
-  const currentShell = createMemo(() => serverSync.data.config.shell ?? "")
+  const currentShell = createMemo(() => serverSync().data.config.shell ?? "")
 
   const shellOptions = createMemo<ShellSelectOption[]>(() => {
     const list = shells.latest
-    const current = serverSync.data.config.shell
+    const current = serverSync().data.config.shell
 
     const nameCounts = new Map<string, number>()
     for (const s of list) {
@@ -185,14 +176,6 @@ export const SettingsGeneralV2: Component = () => {
 
     return options
   })
-
-  const onDisplayBackendChange = (checked: boolean) => {
-    const update = platform.setDisplayBackend?.(checked ? "wayland" : "auto")
-    if (!update) return
-    void update.finally(() => {
-      void refetchDisplayBackend()
-    })
-  }
 
   const onPinchZoomChange = (checked: boolean) => {
     setPinchZoom(checked)
@@ -292,7 +275,7 @@ export const SettingsGeneralV2: Component = () => {
             onSelect={(option) => {
               if (!option) return
               if (option.value === currentShell()) return
-              serverSync.updateConfig({ shell: option.value })
+              serverSync().updateConfig({ shell: option.value })
             }}
           />
         </SettingsRowV2>
@@ -384,18 +367,6 @@ export const SettingsGeneralV2: Component = () => {
         </SettingsRowV2>
 
         <SettingsRowV2
-          title={language.t("settings.general.row.showNavigation.title")}
-          description={language.t("settings.general.row.showNavigation.description")}
-        >
-          <div data-action="settings-show-navigation">
-            <Switch
-              checked={settings.general.showNavigation()}
-              onChange={(checked) => settings.general.setShowNavigation(checked)}
-            />
-          </div>
-        </SettingsRowV2>
-
-        <SettingsRowV2
           title={language.t("settings.general.row.showSearch.title")}
           description={language.t("settings.general.row.showSearch.description")}
         >
@@ -403,18 +374,6 @@ export const SettingsGeneralV2: Component = () => {
             <Switch
               checked={settings.general.showSearch()}
               onChange={(checked) => settings.general.setShowSearch(checked)}
-            />
-          </div>
-        </SettingsRowV2>
-
-        <SettingsRowV2
-          title={language.t("settings.general.row.showTerminal.title")}
-          description={language.t("settings.general.row.showTerminal.description")}
-        >
-          <div data-action="settings-show-terminal">
-            <Switch
-              checked={settings.general.showTerminal()}
-              onChange={(checked) => settings.general.setShowTerminal(checked)}
             />
           </div>
         </SettingsRowV2>
@@ -709,6 +668,7 @@ export const SettingsGeneralV2: Component = () => {
     </div>
   )
 
+  // We can probably remove this, right?
   const DisplaySection = () => (
     <Show when={desktop()}>
       <div class="settings-v2-section">
@@ -723,26 +683,6 @@ export const SettingsGeneralV2: Component = () => {
               <Switch checked={pinchZoom.latest} onChange={onPinchZoomChange} />
             </div>
           </SettingsRowV2>
-
-          <Show when={linux()}>
-            <SettingsRowV2
-              title={
-                <div class="flex items-center gap-2">
-                  <span>{language.t("settings.general.row.wayland.title")}</span>
-                  <Tooltip value={language.t("settings.general.row.wayland.tooltip")} placement="top">
-                    <span class="text-text-weak">
-                      <Icon name="help" size="small" />
-                    </span>
-                  </Tooltip>
-                </div>
-              }
-              description={language.t("settings.general.row.wayland.description")}
-            >
-              <div data-action="settings-wayland">
-                <Switch checked={displayBackend.latest === "wayland"} onChange={onDisplayBackendChange} />
-              </div>
-            </SettingsRowV2>
-          </Show>
         </SettingsListV2>
       </div>
     </Show>
@@ -763,13 +703,13 @@ export const SettingsGeneralV2: Component = () => {
 
         <SoundsSection />
 
-        <UpdatesSection />
+        <Show when={desktop()}>
+          <UpdatesSection />
+        </Show>
 
         <DisplaySection />
 
-        <Show when={desktop()}>
-          <AdvancedSection />
-        </Show>
+        <AdvancedSection />
       </div>
     </>
   )

@@ -153,6 +153,14 @@ const MAX_PROMPT_SESSIONS = 20
 
 type PromptSession = ReturnType<typeof createPromptSession>
 
+type PromptStore = {
+  prompt: Prompt
+  cursor?: number
+  context: {
+    items: (ContextItem & { key: string })[]
+  }
+}
+
 type Scope = { draftID: string } | { dir: string; id?: string }
 
 function scopeKey(scope: Scope) {
@@ -174,25 +182,26 @@ function promptTarget(serverScope: ServerScope, scope: Scope) {
 function createPromptSession(serverScope: ServerScope, scope: Scope) {
   const [store, setStore, _, ready] = persisted(
     promptTarget(serverScope, scope),
-    createStore<{
-      prompt: Prompt
-      cursor?: number
-      context: {
-        items: (ContextItem & { key: string })[]
-      }
-    }>({
-      prompt: clonePrompt(DEFAULT_PROMPT),
-      cursor: undefined,
-      context: {
-        items: [],
-      },
-    }),
+    createStore<PromptStore>(promptStore()),
   )
 
+  return { ready, ...createPromptStateValue(store, setStore) }
+}
+
+function promptStore(): PromptStore {
+  return {
+    prompt: clonePrompt(DEFAULT_PROMPT),
+    cursor: undefined,
+    context: {
+      items: [],
+    },
+  }
+}
+
+function createPromptStateValue(store: PromptStore, setStore: SetStoreFunction<PromptStore>) {
   const actions = createPromptActions(setStore)
 
   return {
-    ready,
     current: () => store.prompt,
     cursor: createMemo(() => store.cursor),
     dirty: () => !isPromptEqual(store.prompt, DEFAULT_PROMPT),
@@ -229,6 +238,15 @@ function createPromptSession(serverScope: ServerScope, scope: Scope) {
     },
     set: actions.set,
     reset: actions.reset,
+  }
+}
+
+export function createPromptState() {
+  const [store, setStore] = createStore<PromptStore>(promptStore())
+  const ready = Object.assign(() => true, { promise: Promise.resolve(true) })
+  return {
+    ready: () => ready,
+    ...createPromptStateValue(store, setStore),
   }
 }
 
@@ -272,7 +290,7 @@ export const { use: usePrompt, provider: PromptProvider } = createSimpleContext(
 
       const entry = createRoot(
         (dispose) => ({
-          value: createPromptSession(serverSDK.scope, scope),
+          value: createPromptSession(serverSDK().scope, scope),
           dispose,
         }),
         owner,

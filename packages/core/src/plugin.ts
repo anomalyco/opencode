@@ -25,14 +25,6 @@ type HookSpec = {
     input: Catalog.Editor
     output: {}
   }
-  "account.switched": {
-    input: {
-      serviceID: import("./auth").Auth.ServiceID
-      from?: import("./auth").Auth.ID
-      to?: import("./auth").Auth.ID
-    }
-    output: {}
-  }
   "aisdk.language": {
     input: {
       model: ModelV2.Info

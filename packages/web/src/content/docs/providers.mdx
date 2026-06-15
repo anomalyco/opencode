@@ -1948,15 +1948,30 @@ Don't have a Snowflake account? [Sign up for a free trial](https://signup.snowfl
 
 opencode's core workflow for coding, editing files, and running commands relies on tool calling. Only the Claude and OpenAI families within Snowflake Cortex support this. The provider is limited to those families to support the core workflow.
 
-1. Generate a [Programmatic Access Token (PAT)](https://docs.snowflake.com/en/user-guide/programmatic-access-tokens) in your Snowflake account.
+OpenCode supports two authentication methods:
 
-2. Run the `/connect` command and search for **Snowflake Cortex**.
+- **Browser OAuth (Recommended)** — sign in with your IdP/SSO; no secrets to manage, tokens refresh automatically.
+- **Manual bearer token** — paste a PAT or JWT from the Snowflake console.
+
+#### Browser OAuth (Recommended)
+
+1. Run the `/connect` command and search for **Snowflake Cortex**.
 
    ```txt
    /connect
    ```
 
-3. Enter your [account identifier](https://docs.snowflake.com/en/user-guide/admin-account-identifier) when prompted (e.g. `myorg-myaccount` or `xy12345.us-east-1`).
+2. Select **Login with Snowflake (External Browser)**.
+
+   ```txt
+   ┌ Select auth method
+   │
+   │ Login with Snowflake (External Browser)
+   │ Paste PAT or bearer token manually
+   └
+   ```
+
+3. Enter your [account identifier](https://docs.snowflake.com/en/user-guide/admin-account-identifier) when prompted, for example `myorg-myaccount` or `xy12345.us-east-1`.
 
    ```txt
    ┌ Snowflake Account Identifier
@@ -1965,14 +1980,37 @@ opencode's core workflow for coding, editing files, and running commands relies 
    └ enter
    ```
 
-4. Enter your **PAT**.
+4. Optionally enter a Snowflake role to scope the session (e.g. `SYSADMIN`). Leave blank to use your default role.
+
+5. Complete sign-in in the browser that opens. OpenCode captures the OAuth callback automatically and stores the token — no copy/paste needed.
+
+6. Run the `/models` command to select a model.
 
    ```txt
-   ┌ Programmatic Access Token (PAT)
-   │
-   │
-   └ enter
+   /models
    ```
+
+:::note
+Browser OAuth uses Snowflake's built-in `SNOWFLAKE$LOCAL_APPLICATION` security integration ([docs](https://docs.snowflake.com/en/user-guide/oauth-local-applications)), which is rolling out to all accounts. To check availability in your account:
+
+```sql
+SHOW SECURITY INTEGRATIONS LIKE 'SNOWFLAKE$LOCAL_APPLICATION';
+```
+
+If the result is empty, use the **Manual bearer token** method below while the integration rolls out to your account.
+:::
+
+#### Manual bearer token
+
+If you prefer to paste a token directly, or if `SNOWFLAKE$LOCAL_APPLICATION` is not yet available in your account:
+
+1. Generate a [Programmatic Access Token (PAT)](https://docs.snowflake.com/en/user-guide/programmatic-access-tokens) in your Snowflake account.
+
+2. Run the `/connect` command, search for **Snowflake Cortex**, and select **Paste PAT or bearer token manually**.
+
+3. Enter your [account identifier](https://docs.snowflake.com/en/user-guide/admin-account-identifier) when prompted.
+
+4. Paste your PAT.
 
 5. Run the `/models` command to select a model.
 
@@ -1980,12 +2018,18 @@ opencode's core workflow for coding, editing files, and running commands relies 
    /models
    ```
 
-Alternatively, set environment variables before starting opencode:
+#### Environment variable
+
+For CI or headless environments, set a PAT or JWT before starting opencode:
 
 ```bash
 export SNOWFLAKE_ACCOUNT=myorg-myaccount
-export SNOWFLAKE_CORTEX_PAT=your-pat
+export SNOWFLAKE_CORTEX_TOKEN=your-pat-or-jwt
 ```
+
+:::note
+`SNOWFLAKE_CORTEX_TOKEN` accepts a PAT or JWT only — the browser OAuth flow is available via `/connect` only and cannot be configured through an environment variable. `SNOWFLAKE_CORTEX_PAT` is still supported for backward compatibility.
+:::
 
 The model catalog is provided automatically. A minimal `opencode.json` is all that's needed:
 

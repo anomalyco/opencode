@@ -70,3 +70,19 @@ exports[`TUI inline tool wrapping separates a subagent group after an expanded r
    ✓ Explore Task — Inspect active task spacing
      ↳ 1 toolcall · 501ms"
 `;
+
+exports[`TUI inline tool wrapping separates a subagent from the previous assistant summary 1`] = `
+"   ▣ Build · Little Frank · 53.1s
+
+   ✓ Build Task — Review changes
+     ↳ 48 toolcalls · 1m 40s"
+`;
+
+exports[`TUI inline tool wrapping separates a subagent from the previous assistant error 1`] = `
+"│
+│  Managed inference requires an active Member plan
+│
+
+   ✓ Build Task — Review changes
+     ↳ 48 toolcalls · 1m 40s"
+`;
