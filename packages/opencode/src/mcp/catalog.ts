@@ -61,6 +61,7 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
           resetTimeoutOnProgress: true,
           signal: options.abortSignal,
           timeout,
+          onprogress: () => {},
         },
       )
       if (result.isError) throw new Error(formatToolErrorContent(result.content))

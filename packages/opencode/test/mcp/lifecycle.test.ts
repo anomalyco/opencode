@@ -19,6 +19,12 @@ interface MockClientState {
   listResourcesCalls: number
   getPromptTimeout?: number
   readResourceTimeout?: number
+  callToolOptions?: {
+    resetTimeoutOnProgress?: boolean
+    signal?: AbortSignal
+    timeout?: number
+    onprogress?: (progress: unknown) => void
+  }
   requestCalls: number
   listToolsShouldFail: boolean
   listToolsError: string
@@ -232,6 +238,11 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
     async readResource(params: { uri: string }, options?: { timeout?: number }) {
       if (this._state) this._state.readResourceTimeout = options?.timeout
       return { contents: [{ uri: params.uri, text: "test" }] }
+    }
+
+    async callTool(_params: unknown, _schema: unknown, options?: MockClientState["callToolOptions"]) {
+      if (this._state) this._state.callToolOptions = options
+      return { content: [{ type: "text", text: "ok" }] }
     }
 
     async close() {
@@ -918,6 +929,39 @@ it.instance(
         expect(yield* mcp.resources()).toEqual({})
         expect(serverState.listPromptsCalls).toBe(0)
         expect(serverState.listResourcesCalls).toBe(0)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "MCP tool calls include a progress handler so progress can reset timeouts",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "progress-server"
+        const serverState = getOrCreateClientState("progress-server")
+        serverState.capabilities = { tools: {} }
+
+        yield* mcp.add("progress-server", {
+          type: "local",
+          command: ["echo", "test"],
+          timeout: 2500,
+        })
+
+        const tools = yield* mcp.tools()
+        const tool = tools["progress-server_test_tool"]
+        expect(tool).toBeDefined()
+
+        const abort = new AbortController()
+        yield* Effect.promise(() =>
+          tool.execute?.({}, { toolCallId: "call_1", messages: [], abortSignal: abort.signal } as never),
+        )
+
+        expect(serverState.callToolOptions?.resetTimeoutOnProgress).toBe(true)
+        expect(serverState.callToolOptions?.signal).toBe(abort.signal)
+        expect(serverState.callToolOptions?.timeout).toBe(2500)
+        expect(typeof serverState.callToolOptions?.onprogress).toBe("function")
       }),
     ),
   { config: { mcp: {} } },
