@@ -838,8 +838,8 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
 
       // Add none and max variants to deepseek-v4 models. 
       if (model.api.id.toLowerCase().includes("deepseek-v4")) {
-        // Add the none effort level to only for the deepseek provider because others might not
-        // support it.
+        // Add the none effort level to only the official Deepseek API because other providers may
+        // not support it.
         const efforts = [...WIDELY_SUPPORTED_EFFORTS, "max"]
         if (model.providerID === "deepseek") efforts.unshift("none")
 
