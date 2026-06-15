@@ -19,6 +19,7 @@ import { Virtualizer, type VirtualizerHandle } from "virtua/solid"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { Button } from "@opencode-ai/ui/button"
 import { Card } from "@opencode-ai/ui/card"
+import { Collapsible } from "@opencode-ai/ui/collapsible"
 import {
   ContextToolGroup,
   Message,
@@ -1000,10 +1001,10 @@ export function MessageTimeline(props: {
 
   const getMsgPart = (messageID: string, partID: string) => getMsgParts(messageID).find((part) => part.id === partID)
 
-  const renderAssistantPartGroup = (row: Accessor<TimelineRowMap["AssistantPart"]>) => {
-    if (row().group.type === "context") {
+  const renderAssistantGroup = (input: { userMessageID: string; group: TimelineRowMap["AssistantPart"]["group"] }) => {
+    if (input.group.type === "context") {
       const parts = createMemo(() => {
-        const group = row().group
+        const group = input.group
         if (group.type !== "context") return emptyTools
         return group.refs
           .map((ref) => getMsgPart(ref.messageID, ref.partID))
@@ -1013,21 +1014,19 @@ export function MessageTimeline(props: {
       return (
         <ContextToolGroup
           parts={parts()}
-          busy={
-            workingTurn(row().userMessageID) && lastAssistantGroupKey().get(row().userMessageID) === row().group.key
-          }
+          busy={workingTurn(input.userMessageID) && lastAssistantGroupKey().get(input.userMessageID) === input.group.key}
           onSizeChange={measureTimeline}
         />
       )
     }
 
     const message = createMemo(() => {
-      const group = row().group
+      const group = input.group
       if (group.type !== "part") return
       return messageByID().get(group.ref.messageID)
     })
     const part = createMemo(() => {
-      const group = row().group
+      const group = input.group
       if (group.type !== "part") return
       return getMsgPart(group.ref.messageID, group.ref.partID)
     })
@@ -1045,8 +1044,8 @@ export function MessageTimeline(props: {
               <MessagePart
                 part={part()}
                 message={message()}
-                showAssistantCopyPartID={assistantCopyPartID(row().userMessageID)}
-                turnDurationMs={turnDurationMs(row().userMessageID)}
+                showAssistantCopyPartID={assistantCopyPartID(input.userMessageID)}
+                turnDurationMs={turnDurationMs(input.userMessageID)}
                 defaultOpen={defaultOpen()}
                 toolOpen={toolOpen[part().id] ?? defaultOpen()}
                 onToolOpenChange={(open) => setToolOpen(part().id, open)}
@@ -1057,6 +1056,37 @@ export function MessageTimeline(props: {
           </Show>
         )}
       </Show>
+    )
+  }
+
+  const renderAssistantPartGroup = (row: Accessor<TimelineRowMap["AssistantPart"]>) =>
+    renderAssistantGroup({ userMessageID: row().userMessageID, group: row().group })
+
+  function TimelineAssistantPreambleRow(props: { row: Accessor<TimelineRowByTag<"AssistantPreamble">> }) {
+    const [open, setOpen] = createSignal(false)
+
+    return (
+      <Collapsible data-component="assistant-preamble" open={open()} onOpenChange={setOpen}>
+        <Collapsible.Trigger data-slot="assistant-preamble-toggle">
+          <span data-slot="assistant-preamble-toggle-copy">
+            {open() ? language.t("ui.messagePart.reasoning.collapse") : language.t("ui.messagePart.reasoning.expand")}
+          </span>
+          <Collapsible.Arrow />
+        </Collapsible.Trigger>
+        <Collapsible.Content>
+          <div data-slot="assistant-preamble-content">
+            <For each={props.row().groups}>
+              {(group) => renderAssistantGroup({ userMessageID: props.row().userMessageID, group })}
+            </For>
+          </div>
+          <Collapsible.Trigger data-slot="assistant-preamble-toggle" data-position="end">
+            <span data-slot="assistant-preamble-toggle-copy">
+              {language.t("ui.messagePart.reasoning.collapse")}
+            </span>
+            <Collapsible.Arrow />
+          </Collapsible.Trigger>
+        </Collapsible.Content>
+      </Collapsible>
     )
   }
 
@@ -1184,6 +1214,21 @@ export function MessageTimeline(props: {
                 aria-hidden={workingTurn(assistantPartRow().userMessageID)}
               >
                 {renderAssistantPartGroup(assistantPartRow)}
+              </div>
+            </div>
+          </TimelineRowFrame>
+        )
+      }
+      case "AssistantPreamble": {
+        const assistantPreambleRow = row as Accessor<TimelineRowByTag<"AssistantPreamble">>
+        return (
+          <TimelineRowFrame row={assistantPreambleRow}>
+            <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
+              <div
+                data-slot="session-turn-assistant-content"
+                aria-hidden={workingTurn(assistantPreambleRow().userMessageID)}
+              >
+                <TimelineAssistantPreambleRow row={assistantPreambleRow} />
               </div>
             </div>
           </TimelineRowFrame>

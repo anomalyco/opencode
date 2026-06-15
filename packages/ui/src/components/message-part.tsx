@@ -663,19 +663,29 @@ export function AssistantParts(props: {
   )
 
   const last = createMemo(() => grouped().at(-1)?.key)
+  const partForEntry = (entry: PartGroup) => {
+    if (entry.type !== "part") return
+    return part().get(entry.ref.messageID)?.get(entry.ref.partID)
+  }
   const finalIndex = createMemo(() => {
     const entries = grouped()
     for (let i = entries.length - 1; i >= 0; i--) {
       const entry = entries[i]
       if (!entry || entry.type !== "part") continue
-      const item = part().get(entry.ref.messageID)?.get(entry.ref.partID)
+      const item = partForEntry(entry)
       if (item?.type === "text") return i
     }
     return -1
   })
+  const preambleText = createMemo(() =>
+    grouped()
+      .slice(0, Math.max(0, finalIndex()))
+      .some((entry) => partForEntry(entry)?.type === "text"),
+  )
   const preamble = createMemo(() => {
     const entries = grouped()
     const index = finalIndex()
+    if (preambleText()) return [] as PartGroup[]
     if (index === -1) return entries
     if (index === 0) return [] as PartGroup[]
     return entries.slice(0, index)
@@ -683,6 +693,7 @@ export function AssistantParts(props: {
   const response = createMemo(() => {
     const entries = grouped()
     const index = finalIndex()
+    if (preambleText()) return entries
     if (index === -1) return [] as PartGroup[]
     return entries.slice(index)
   })

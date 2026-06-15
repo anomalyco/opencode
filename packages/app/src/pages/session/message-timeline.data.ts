@@ -24,6 +24,11 @@ export type TimelineRowMap = {
     group: PartGroup
     previousAssistantPart: boolean
   }
+  AssistantPreamble: {
+    userMessageID: string
+    groups: PartGroup[]
+    previousAssistantPart: boolean
+  }
   Thinking: { userMessageID: string; reasoningHeading?: string }
   Retry: { userMessageID: string }
   DiffSummary: { userMessageID: string; diffs: SummaryDiff[] }
@@ -50,6 +55,11 @@ export namespace TimelineRow {
     group: PartGroup
     previousAssistantPart: boolean
   }> {}
+  export class AssistantPreamble extends Data.TaggedClass("AssistantPreamble")<{
+    userMessageID: string
+    groups: PartGroup[]
+    previousAssistantPart: boolean
+  }> {}
   export class Thinking extends Data.TaggedClass("Thinking")<{
     userMessageID: string
     reasoningHeading?: string
@@ -72,6 +82,7 @@ export namespace TimelineRow {
     | UserMessage
     | TurnDivider
     | AssistantPart
+    | AssistantPreamble
     | Thinking
     | DiffSummary
     | Error
@@ -88,6 +99,8 @@ export namespace TimelineRow {
         return `turn-divider:${row.userMessageID}:${row.label}`
       case "AssistantPart":
         return `assistant-part:${row.userMessageID}:${row.group.key}`
+      case "AssistantPreamble":
+        return `assistant-preamble:${row.userMessageID}:${row.groups.map((group) => group.key).join("|")}`
       case "Thinking":
         return `thinking:${row.userMessageID}`
       case "DiffSummary":
@@ -174,8 +187,27 @@ export namespace Timeline {
       )
     }
 
-    let assistantGroupIndex = 0
-    assistantItems.forEach((item) => {
+    const finalTextIndex = finalAssistantTextIndex(assistantItems, assistantPartRefs)
+    const preambleItems = finalTextIndex > 0 ? assistantItems.slice(0, finalTextIndex) : []
+    const preambleGroups = preambleItems.flatMap((item) => (item.type === "part" ? [item.group] : []))
+    const canCollapsePreamble =
+      preambleItems.length > 0 &&
+      preambleGroups.length === preambleItems.length &&
+      preambleGroups.every((group) => !assistantGroupTextPart(group, assistantPartRefs))
+    const responseItems = canCollapsePreamble ? assistantItems.slice(finalTextIndex) : assistantItems
+
+    if (canCollapsePreamble) {
+      rows.push(
+        new TimelineRow.AssistantPreamble({
+          userMessageID: userMessage.id,
+          groups: preambleGroups,
+          previousAssistantPart: false,
+        }),
+      )
+    }
+
+    let assistantGroupIndex = canCollapsePreamble ? 1 : 0
+    responseItems.forEach((item) => {
       if (item.type === "interrupted") {
         rows.push(
           new TimelineRow.TurnDivider({
@@ -246,6 +278,26 @@ export namespace Timeline {
 
   function isSummaryDiff(value: SnapshotFileDiff): value is SummaryDiff {
     return typeof value.file === "string"
+  }
+
+  function finalAssistantTextIndex(
+    items: Array<{ type: "part"; group: PartGroup } | { type: "interrupted" }>,
+    refs: Array<{ messageID: string; part: Part }>,
+  ) {
+    for (let index = items.length - 1; index >= 0; index--) {
+      const item = items[index]
+      if (!item || item.type !== "part") continue
+      const group = item.group
+      if (group.type !== "part") continue
+      const part = refs.find((ref) => ref.messageID === group.ref.messageID && ref.part.id === group.ref.partID)?.part
+      if (part?.type === "text") return index
+    }
+    return -1
+  }
+
+  function assistantGroupTextPart(group: PartGroup, refs: Array<{ messageID: string; part: Part }>) {
+    if (group.type !== "part") return false
+    return refs.find((ref) => ref.messageID === group.ref.messageID && ref.part.id === group.ref.partID)?.part?.type === "text"
   }
 
   function reasoningHeading(text: string) {
