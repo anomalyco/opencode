@@ -1,10 +1,15 @@
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { expect, mock, beforeEach } from "bun:test"
-import { ListRootsRequestSchema, ToolListChangedNotificationSchema } from "@modelcontextprotocol/sdk/types.js"
-import { Cause, Effect, Exit } from "effect"
+import {
+  ListRootsRequestSchema,
+  ResourceListChangedNotificationSchema,
+  ToolListChangedNotificationSchema,
+} from "@modelcontextprotocol/sdk/types.js"
+import { Cause, Deferred, Effect, Exit } from "effect"
+import { GlobalBus } from "@/bus/global"
 import type { MCP as MCPNS } from "../../src/mcp/index"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, testEffect } from "../lib/effect"
 import { TestInstance } from "../fixture/fixture"
 
 // --- Mock infrastructure ---
@@ -543,6 +548,41 @@ it.instance(
         expect(serverState.listToolsCalls).toBe(2)
       }),
     ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "resource list change notifications publish a resource change event",
+  () =>
+    Effect.gen(function* () {
+      const mcp = yield* MCP.Service
+      const seen = yield* Deferred.make<string>()
+      const listener = (event: { payload: { type?: string; properties?: { server?: string } } }) => {
+        if (event.payload.type === "mcp.resources.changed" && event.payload.properties?.server)
+          Deferred.doneUnsafe(seen, Effect.succeed(event.payload.properties.server))
+      }
+      yield* Effect.acquireRelease(
+        Effect.sync(() => GlobalBus.on("event", listener)),
+        () => Effect.sync(() => GlobalBus.off("event", listener)),
+      )
+
+      lastCreatedClientName = "resource-notify-server"
+      const serverState = getOrCreateClientState("resource-notify-server")
+      serverState.capabilities = { resources: {} }
+
+      yield* mcp.add("resource-notify-server", {
+        type: "local",
+        command: ["echo", "test"],
+      })
+
+      const handler = serverState.notificationHandlers.get(ResourceListChangedNotificationSchema)
+      expect(handler).toBeDefined()
+      yield* Effect.promise(() => handler?.())
+
+      expect(
+        yield* awaitWithTimeout(Deferred.await(seen), "mcp.resources.changed event was not published"),
+      ).toBe("resource-notify-server")
+    }),
   { config: { mcp: {} } },
 )
 
