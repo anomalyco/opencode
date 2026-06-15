@@ -1,5 +1,6 @@
 import { createConnection } from "net"
 import { createServer } from "http"
+import { escapeHtml } from "@/util/html"
 import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH, parseRedirectUri } from "./oauth-provider"
 
 // Current callback server configuration (may differ from defaults if custom redirectUri is used)
@@ -25,15 +26,6 @@ const HTML_SUCCESS = `<!DOCTYPE html>
   <script>setTimeout(() => window.close(), 2000);</script>
 </body>
 </html>`
-
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;")
-}
 
 const HTML_ERROR = (error: string) => `<!DOCTYPE html>
 <html>
