@@ -54,21 +54,34 @@ function cursorLabels(editor: HTMLElement) {
 }
 
 // Status Pill(디자인 시스템 07 ·해커톤 상태)의 "라운드 정도·세로 크기"만 이름표에 반영한다.
-// 색·폰트·좌우 패딩은 BlockSuite styleMap 값을 그대로 둔다. styleMap이 라벨을 다시 그려도
-// flip 루프가 매 refresh마다 재적용하므로 스타일이 유지된다.
-function dressCursorLabel(label: HTMLElement) {
-  label.style.borderRadius = "999px"
-  label.style.lineHeight = "1"
-  // BlockSuite 라벨엔 1px border가 있어(pill엔 없음) 세로 패딩 3px면 12+6+2=20px로
-  // Status Pill(11.5+8=20px) 높이와 정확히 맞는다. 4px면 2px 더 커진다.
-  label.style.paddingTop = "3px"
-  label.style.paddingBottom = "3px"
+// 색·폰트·좌우 패딩은 BlockSuite styleMap 값을 그대로 둔다.
+//
+// BlockSuite는 Lit styleMap으로 라벨의 inline style(border-radius:4px 등)을 매 렌더마다 다시
+// 쓴다. 타이핑·리사이즈가 곧 재렌더라 inline style을 JS로 덮어쓰면 한 프레임 늦게 적용돼
+// "둥글→각짐→둥글" 깜빡임이 생긴다. 그래서 shadowRoot에 stylesheet를 주입한다. Lit은 재렌더
+// 시 adoptedStyleSheets는 건드리지 않고, !important가 inline style을 이기므로 깜빡임이 없다.
+// border가 1px라(pill엔 없음) 세로 패딩 3px면 12+6+2=20px로 Status Pill(11.5+8=20px)과 맞는다.
+const CURSOR_LABEL_CSS = `
+div[style*="ellipsis"] {
+  border-radius: 999px !important;
+  line-height: 1 !important;
+  padding-top: 3px !important;
+  padding-bottom: 3px !important;
+}
+`
+let labelSheet: CSSStyleSheet | undefined
+function installCursorLabelStyle(root: ShadowRoot) {
+  if (!labelSheet) {
+    labelSheet = new CSSStyleSheet()
+    labelSheet.replaceSync(CURSOR_LABEL_CSS)
+  }
+  if (root.adoptedStyleSheets.includes(labelSheet)) return
+  root.adoptedStyleSheets = [...root.adoptedStyleSheets, labelSheet]
 }
 
 function flipCursorLabels(editor: HTMLElement) {
   const edge = editor.getBoundingClientRect().right - 8
   cursorLabels(editor).forEach((label) => {
-    dressCursorLabel(label)
     label.style.transform = ""
     label.style.transformOrigin = ""
     label.style.maxWidth = "160px"
@@ -135,6 +148,7 @@ export function watchCursorLabels(editor: HTMLElement, host: HTMLElement) {
   const bind = () => {
     widgets(editor).forEach((widget) => {
       if (!widget.shadowRoot) return
+      installCursorLabelStyle(widget.shadowRoot)
       if (seen.has(widget.shadowRoot)) return
       seen.add(widget.shadowRoot)
       obs.observe(widget.shadowRoot, {
