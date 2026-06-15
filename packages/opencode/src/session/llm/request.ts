@@ -68,7 +68,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   const header = system[0]
   yield* input.plugin.trigger(
     "experimental.chat.system.transform",
-    { sessionID: input.sessionID, model: input.model },
+    { sessionID: input.sessionID, model: input.model, agent: input.agent.name },
     { system },
   )
   if (system.length > 2 && system[0] === header) {

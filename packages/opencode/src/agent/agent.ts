@@ -378,7 +378,7 @@ export const layer = Layer.effect(
           : undefined
 
         const system = [PROMPT_GENERATE]
-        yield* plugin.trigger("experimental.chat.system.transform", { model: resolved }, { system })
+        yield* plugin.trigger("experimental.chat.system.transform", { model: resolved, agent: 'user' }, { system })
         const existing = yield* InstanceState.useEffect(state, (s) => s.list())
 
         // TODO: clean this up so provider specific logic doesnt bleed over
