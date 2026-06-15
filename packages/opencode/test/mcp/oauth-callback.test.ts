@@ -32,6 +32,18 @@ describe("McpOAuthCallback.ensureRunning", () => {
     expect(McpOAuthCallback.isRunning()).toBe(true)
   })
 
+  test("stops after the callback completes", async () => {
+    const redirectUri = "http://127.0.0.1:18003/custom/callback"
+    await McpOAuthCallback.ensureRunning(redirectUri)
+    const callback = McpOAuthCallback.waitForCallback("success")
+
+    const response = await fetch(`${redirectUri}?code=code&state=success`)
+
+    expect(response.status).toBe(200)
+    expect(await callback).toBe("code")
+    expect(McpOAuthCallback.isRunning()).toBe(false)
+  })
+
   test("escapes provider error markup in callback HTML", async () => {
     const redirectUri = "http://127.0.0.1:18001/custom/callback"
     await McpOAuthCallback.ensureRunning(redirectUri)
