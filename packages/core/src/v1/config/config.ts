@@ -171,6 +171,12 @@ export const Info = Schema.Struct({
       mode: Schema.optional(Schema.Literals(["observe", "assist", "autonomous"])).annotate({
         description: "Evolution mode: observe (read-only), assist (suggestions), autonomous (auto-execute)",
       }),
+      contextBudget: Schema.optional(NonNegativeInt).annotate({
+        description: "Maximum tokens for Evolution context injection before truncation or error (default: 4096)",
+      }),
+      contextBudgetStrategy: Schema.optional(Schema.Literals(["truncate", "strict"])).annotate({
+        description: "Context budget strategy when budget exceeded: truncate (trim to fit) or strict (raise error) (default: truncate)",
+      }),
     }),
   ).annotate({ description: "Evolution Layer configuration — AI project memory, planning, and review" }),
   experimental: Schema.optional(

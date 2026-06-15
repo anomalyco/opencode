@@ -78,6 +78,21 @@
 
 ---
 
+### ContextBudgetError
+
+| Field | Value |
+|---|---|
+| **Class** | `Schema.TaggedErrorClass("EvolutionContextBudgetError")` |
+| **Category** | Domain Error |
+| **Source** | `src/evolution/context/budget.ts` |
+| **Constructor** | `new ContextBudgetError({ message })` — direct |
+| **Fields** | `message: String` |
+| **Boundary** | ✅ Boleh keluar ke consumer |
+| **When triggered** | Context budget exceeded — total demand > available tokens |
+| **Consumer impact** | Consumer should reduce context / trim data, not retry or crash |
+
+---
+
 ## Error Boundary Audit
 
 | Item | Result |
@@ -91,13 +106,14 @@
 
 ---
 
-## Current Error Family (3 errors)
+## Current Error Family (4 errors)
 
 ```
 Evolution Layer Errors
 ├── Domain Error
 │   ├── EvolutionNotEnabledError    (memory/decisions)
-│   └── AdrNotFoundError            (decisions)
+│   ├── AdrNotFoundError            (decisions)
+│   └── ContextBudgetError          (context/budget) — Phase 2
 └── Storage Error
     └── EvolutionStorageError       (memory/decisions/project) — via toEvolutionStorageError()
 ```
@@ -111,7 +127,6 @@ Without AD-003 (Error Taxonomy Governance), Phase 3 modules will produce:
 - RetrieverError
 - ContextError
 - ComposerError
-- BudgetError
 - RoutingError
 - AgentError
 

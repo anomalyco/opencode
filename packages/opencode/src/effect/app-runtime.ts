@@ -52,7 +52,7 @@ import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Evolution } from "@/evolution/index"
-
+import { EvolutionContextLayer } from "@/evolution/context/register"
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
   FSUtil.defaultLayer,
@@ -93,6 +93,7 @@ export const AppLayer = Layer.mergeAll(
   Truncate.defaultLayer,
   ToolRegistry.defaultLayer,
   Evolution.defaultLayer,
+  EvolutionContextLayer.layer,
   Format.defaultLayer,
   Project.defaultLayer,
   Vcs.defaultLayer,

@@ -14,6 +14,12 @@ export const ConfigEvolution = Schema.Struct({
   mode: Schema.optional(Schema.Literals(["observe", "assist", "autonomous"])).annotate({
     description: "Evolution mode: observe (read-only), assist (suggestions), autonomous (auto-execute)",
   }),
+  contextBudget: Schema.optional(Schema.Int).annotate({
+    description: "Maximum tokens for Evolution context injection before truncation or error (default: 4096)",
+  }),
+  contextBudgetStrategy: Schema.optional(Schema.Literals(["truncate", "strict"])).annotate({
+    description: "Context budget strategy when budget exceeded: truncate (trim to fit) or strict (raise error) (default: truncate)",
+  }),
 })
 export type ConfigEvolution = Schema.Schema.Type<typeof ConfigEvolution>
 
@@ -26,11 +32,21 @@ export interface Status {
 }
 
 export interface Interface {
-  readonly status: () => Effect.Effect<Status, EvolutionStorageError>
-  readonly getConfig: () => Effect.Effect<ConfigEvolution>
-  readonly getProjectContext: () => Effect.Effect<EvolutionProject.ProjectProfile, EvolutionStorageError>
-  readonly getMemories: () => Effect.Effect<EvolutionMemory.MemoryEntry[], EvolutionStorageError>
-  readonly getDecisions: () => Effect.Effect<EvolutionDecisions.DecisionRecord[], EvolutionStorageError>
+  // Registry accessors (ADR-007)
+  memory(): EvolutionMemory.Interface
+  decisions(): EvolutionDecisions.Interface
+  project(): EvolutionProject.Interface
+
+  // Utility methods
+  status(): Effect.Effect<Status, EvolutionStorageError>
+  getConfig(): Effect.Effect<ConfigEvolution>
+
+  /** @deprecated Use memory() */
+  getMemories(): Effect.Effect<EvolutionMemory.MemoryEntry[], EvolutionStorageError>
+  /** @deprecated Use decisions() */
+  getDecisions(): Effect.Effect<EvolutionDecisions.DecisionRecord[], EvolutionStorageError>
+  /** @deprecated Use project() */
+  getProjectContext(): Effect.Effect<EvolutionProject.ProjectProfile, EvolutionStorageError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Evolution") {}
@@ -93,7 +109,16 @@ export const layer = Layer.effect(
       return yield* brain.decisions.list()
     })
 
-    return Service.of({ status, getConfig, getProjectContext, getMemories, getDecisions })
+    return Service.of({
+      memory: () => brain.memory,
+      decisions: () => brain.decisions,
+      project: () => brain.project,
+      status,
+      getConfig,
+      getMemories: () => brain.memory.all(),
+      getDecisions: () => brain.decisions.list(),
+      getProjectContext: () => brain.project.profile(),
+    })
   }),
 )
 

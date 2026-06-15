@@ -132,4 +132,5 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     ToolOutputStore.defaultCleanupLayer,
     ApplicationTools.layer,
   ],
-}) {}
+}) {
+}

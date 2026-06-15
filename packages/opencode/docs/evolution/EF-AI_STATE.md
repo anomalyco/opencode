@@ -4,7 +4,7 @@
 **Hierarchy**: Level 3 (see docs/evolution layering)
 **Owner**: Architecture Reviewer
 **Update Trigger**: Phase gate changes
-**Last updated**: 2026-06-13
+**Last updated**: 2026-06-15 (Sprint C-Patch ACCEPTED)
 
 ---
 
@@ -40,9 +40,17 @@ Phase 2 — Context Intelligence
 
 | Gate | Status |
 |---|---|
-| Implementation | 🔄 In progress |
-| Verification | ⏳ Pending |
-| Acceptance | ⏳ Pending |
+| Architecture Package | ✅ Verified (2026-06-14, Architecture Reviewer) |
+| Design Freeze | ✅ Approved (2026-06-14, DF-01 through DF-10 resolved) |
+| Sprint A Implementation | ✅ Complete (T-01/T-02/T-07a/T-07b) |
+| Sprint A Verification | ✅ Verified by Architecture Reviewer (2026-06-14) |
+| Sprint A Acceptance | ✅ Accepted by Architecture Reviewer (with ED-021 debt recorded) |
+| Sprint B Implementation | ✅ Complete (T-03/T-04/T-05 — 22/22 tests pass) |
+| Sprint B Verification | ✅ Verified by Architecture Reviewer (V-01 RESOLVED) |
+| Sprint B Acceptance | ✅ Accepted by Architecture Reviewer (2026-06-14) |
+| Sprint C (Integration) | ✅ Complete (Sprint C-Patch) |
+| Sprint C-Patch | ✅ Complete (CP-01/CP-02/CP-03 — T-08 wired) |
+| **Last updated** | 2026-06-15 (Sprint C-Patch ACCEPTED) |
 
 ---
 
@@ -56,6 +64,9 @@ Phase 2 — Context Intelligence
 | ADR-004 | EvolutionContext typed output contract | Accepted |
 | ADR-005 | Error Boundary Model — single translator path | Accepted |
 | ADR-006 | Status Endpoint Model B — aggregate runtime | Accepted |
+| ADR-007 | Context Intelligence Foundation — Phase 2 | Accepted |
+| ADR-008 | Sprint B Implementation Decisions + Sprint C Integration | Accepted |
+| ADR-009 | Sprint C-Patch — Root Cause Fix + T-08 Wiring | Accepted |
 
 See `DECISIONS.md` for full ADR details.
 
@@ -63,7 +74,7 @@ See `DECISIONS.md` for full ADR details.
 
 ## Active Debts
 
-See `ARCHITECTURE_DEBT_REGISTRY.md` (4 entries: AD-001, AD-003, TD-001, KL-001).
+See `ARCHITECTURE_DEBT_REGISTRY.md` (6 entries: AD-001, AD-003, AD-CP03-01, TD-001, KL-001, ED-021).
 
 Note: AD-002 (Memory Governance) reclassified to ARCHITECTURAL_RISK_WATCHLIST.md as AR-004 (evidence strength: LOW).
 
@@ -80,7 +91,7 @@ See `ARCHITECTURAL_RISK_WATCHLIST.md` (4 entries: AR-001, AR-002, AR-003, AR-004
 | Phase | Title | Status |
 |---|---|---|
 | 1 | Foundation Brain | ✅ Complete |
-| 2 | Context Intelligence | ✅ UNLOCKED — **IN PROGRESS** |
+| 2 | Context Intelligence | ✅ UNLOCKED — **Sprint A ACCEPTED — Sprint B ACCEPTED** |
 | 3 | Decision Engine | 🔒 Locked |
 | 4 | Agent Orchestration | 🔒 Locked |
 | 5 | Self Improvement | 🔒 Locked |

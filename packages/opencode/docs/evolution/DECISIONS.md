@@ -210,7 +210,58 @@ Impact:
 Status:
 Accepted
 
-## TD-001
+## ADR-007
+
+Date:
+2026-06-14
+
+Title:
+Context Intelligence Foundation — Phase 2
+
+Decision:
+
+Phase 2 — Context Intelligence is APPROVED AS DIRECTION with the following architectural decisions:
+
+**AR-01 — Context Ownership (Opsi A)**:
+EvolutionContext is the typed output object per ADR-004. SystemContextProvider delivers it to the AI Session. Evolution.Service does NOT own the composed context — it only provides the registry/sub-domain access.
+
+Chain: `EvolutionContext → SystemContextProvider → AI Session`
+
+**AR-02 — Budget Governance (Opsi 1 — flat)**:
+ConfigEvolution uses flat token budget:
+```
+contextBudget: 4096
+```
+Not per-domain breakdown. Allocation logic lives in ContextBudget.Service.
+
+**AR-03 — Provider Boundary (Facade only)**:
+SystemContextProvider must NOT call Retriever directly. It may only call Evolution.Service facade. This preserves AD-001 (Boundary Enforcement).
+
+**AR-04 — Error Contract**:
+ContextBudgetError is classified as Domain Error. Registered in ERROR_REGISTRY.md.
+
+Component stack (implementation order):
+1. ContextBudget.Service — budget calculation, no external deps
+2. ContextRetriever.Service — reads from Evolution.Service facade
+3. ContextComposer.Service — orchestrates Retriever + Budget → EvolutionContext
+4. SystemContextProvider — registers via SystemContextRegistry.register()
+
+All components are ADD. No existing code is modified (except Evolution.Service facade REPLACE at end).
+
+Reason:
+Phase 1 foundation complete. Automatic context loading into AI sessions is the next capability needed. These decisions resolve all open architecture questions.
+
+Impact:
++ ADR-004 contract fulfilled (EvolutionContext output)
++ AD-001 preserved (Facade-only boundary)
++ Error taxonomy extended (ContextBudgetError)
++ Implementation order clear
+
+Risk:
+Budget allocation logic may need refinement in Phase 3 (Decision Engine). Flat config may be insufficient for per-domain tuning. Mitigation: configurable via ConfigEvolution, no hardcoding.
+
+Status:
+Accepted
 
 Date:
 2026-06-12 (updated 2026-06-13)
@@ -423,3 +474,225 @@ Discovery today requires grep of the codebase.
 
 Status:
 Observation — no action yet, no explicit decision
+
+## DF-10 — EvolutionContext Injection Point
+
+Date:
+2026-06-14
+
+Title:
+EvolutionContext Injection via V2 SystemContextRegistry
+
+Decision:
+EvolutionContext tidak memerlukan modifikasi session runner. Cukup register entry ke `SystemContextRegistry` pada saat layer startup, mirip `SystemContextBuiltIns.layer` di `location-layer.ts:54`.
+
+Injection chain:
+```
+SystemContextRegistry.register(evolution/context)
+  → systemContext.load()
+  → SystemContext.combine() + skillGuidance + referenceGuidance
+  → SessionContextEpoch.initialize()
+  → system.baseline (string)
+  → LLM.request({ system: [agent.system, system.baseline] })
+```
+
+Reason:
+- `SystemContextRegistry.register()` sudah tersedia di `core/src/system-context/registry.ts`
+- Pattern sudah ada contoh dari `builtins.ts:39` dan `instruction-context.ts:73`
+- V2 runner (`runner/llm.ts:170-173`) otomatis load + combine semua registered entries
+- Tidak perlu modifikasi prompt.ts, system.ts, atau runner/llm.ts
+
+Implementation:
+1. Buat `packages/core/src/evolution/evolution-context.ts` yang `register()` entry ke `SystemContextRegistry`
+2. Layer ini ditambahkan ke `LocationServiceMap` di `location-layer.ts`
+
+Location in codebase:
+- `packages/core/src/session/runner/llm.ts:170-224` (injection point — sudah ada)
+- `packages/core/src/system-context/registry.ts:11-14` (register/load interface)
+- `packages/core/src/system-context/builtins.ts:39` (contoh registrasi)
+- `packages/core/src/location-layer.ts:95` (V2 runner ter-wire)
+
+Fallback (if V2 runner not active):
+V1 path: injection via `experimental.chat.system.transform` plugin hook di `request.ts:69-73`
+
+Status:
+Resolved — DF-10 blocker cleared
+
+## ADR-008
+
+Date:
+2026-06-14
+
+Title:
+Sprint B Implementation Decisions + Sprint C Integration Approach
+
+Decision:
+
+### AR-01 — Safety Margin: Option C (no implicit margin)
+
+No hidden 0.9 multiplier in code.
+`budget.configured` = exact value of `ConfigEvolution.contextBudget`.
+User owns the effective limit via config.
+`Math.ceil` is the conservative approximation layer only — not a hidden margin.
+
+Evidence: `budget.ts:22` (`budget: () => config.contextBudget ?? 4096`).
+Verified: grep clean — no 0.9 matches in `context/*.ts`.
+
+### AR-02 — Truncation Priority: HYPOTHESIS (DF-09)
+
+Current priority: Memory > Decisions > Project (project never truncated).
+Evidence: None — hypothesis pending Phase 2 Verification.
+Risk: Wrong priority = poor context quality.
+Mitigation: Integration tests will reveal behavior. Phase 2 Verification owns this finding.
+
+### AR-03 — Monotonic Shrink Formula
+
+`Math.max(1, Math.min(oldCount - 1, Math.floor(oldCount × ratio × 0.8)))`
+
+Guarantees `newCount < oldCount` each iteration (monotonic decrease).
+Precondition: skeleton (1 memory + 1 decision + project) must fit budget.
+If skeleton > budget → `ContextBudgetError` thrown (both `truncate` and `strict` strategies).
+
+Evidence: `composer.ts:37` — `truncateCount()` function.
+
+### AR-04 — Sprint C Integration Approach: Internal Wiring Only
+
+**Principle: Integration Before Contract Expansion.**
+Sprint C does NOT add `context()` to `Evolution.Interface`.
+Sprint C wires `ContextComposer` internally via `SystemContextProvider`.
+Registration via `SystemContextRegistry.register()` (pattern: `instruction-context.ts`).
+Public API expansion (`context()` accessor) deferred to post-Sprint C ADR.
+
+### AR-05 — Graceful Degradation Contract
+
+`SystemContextProvider.provide()` returns `Effect<string, never>` — errors never propagate.
+On `EvolutionStorageError` or `ContextBudgetError`: logs a warning, returns empty string.
+Evolution context is enrichment, not required for session.
+
+### AR-06 — L-01 Compliance (Effect Chain)
+
+`load()` callback in `SystemContextRegistry.register()` uses `Effect.tryPromise`.
+NOT fire-and-forget. Pattern per `instruction-context.ts:73`.
+
+Reason:
+- AR-01: Sprint B safety margin resolved as Option C across all reviewers. Must be formalized.
+- AR-02: DF-09 truncation priority accepted as hypothesis during Design Freeze.
+- AR-03: Monotonic shrink formula specified in Sprint B spec, implemented in `composer.ts`.
+- AR-04: Sprint C internal wiring approved Architecture Reviewer (conditional).
+- AR-05: Graceful degradation per Phase 1 Acceptance.
+- AR-06: L-01 hard requirement from Phase 1 Acceptance.
+
+Impact:
++ Sprint B decisions formalized (was pending ADR)
++ Sprint C scope clearly bounded (no public contract expansion)
++ DF-10 runtime path will be proven end-to-end
++ Graceful degradation prevents session crashes
++ Context enrichment available in V2 runner system baseline
+
+Risk:
+- AR-02 (truncation priority): Unverified hypothesis. Mitigation: Phase 2 Verification.
+- AR-04 (no context() accessor): Internal callers import provider.ts directly. Acceptable for Sprint C.
+- Sprint C wires evolution into production path for first time — graceful degradation masks errors.
+
+Status:
+Accepted — implemented per Sprint C-Patch
+
+### AR-07 — Error Boundary Ownership
+
+SystemContextProvider owns error boundary for Evolution domain errors.
+`composer.provide()` may throw `ContextBudgetError`; provider catches with `Effect.catch` → `console.warn` → `""`.
+Core/Registry never see Evolution domain errors.
+
+Implementation:
+- `provider.ts:16` — `Effect.catch(composer.provide(), ...)` wraps the composer call
+- No changes needed to `SystemContextRegistry` or core
+
+Status:
+Accepted — implemented per Sprint C Evidence Package
+
+### AR-08 — Duplicate Key Registration Policy
+
+Duplicate registration key = fatal programming error (`Effect.die`).
+Pattern: `registry.ts:27` (`current.some(item => item.key === entry.key)` → `Effect.die`).
+Acceptable because registration is startup-only — no concurrent hot-reload.
+Re-audit if dynamic/hot-reload registration introduced in future.
+
+Implementation:
+- `registry.ts:27-29` — die on duplicate key
+- Test: `duplicate-registration.test.ts` — Q4 passes
+
+Status:
+Accepted — implemented per Sprint C Evidence Package
+
+## ADR-009
+
+Date:
+2026-06-14
+
+Title:
+Sprint C-Patch — Root Cause Fix + T-08 Wiring
+
+Decision:
+
+### CP-01 — Config.Service Pattern Fix
+
+`register.ts:14` bug: `Effect.map(yield* Config.Service, ...)` passed a plain service object (not an Effect) to `Effect.map`, causing `"Not a valid effect: [object Object]"` across all layer compositions.
+
+Fix: Use the same pattern as `evolution/index.ts:56-58`:
+```
+const config = yield* Config.Service
+const data = yield* config.get()
+const cfg = data.evolution ?? {}
+```
+`config.get()` returns `Effect<Info>` — properly deferable.
+
+### CP-02 — D-02 Test Uses Real Layer
+
+D-02 was manually calling `registry.register()`, bypassing `EvolutionContextLayer.layer`. After CP-01 fix, D-02 now uses the real layer via `Layer.provideMerge`:
+```
+Effect.provide(EvolutionContextLayer.layer.pipe(
+  Layer.provideMerge(SystemContextRegistry.layer),
+  Layer.provideMerge(Layer.succeed(Config.Service, mockConfig)),
+  Layer.provideMerge(Layer.succeed(Evolution.Service, mockEvolution)),
+))
+```
+D-02 now proves the complete DF-10 pipeline: layer registration → `load()` → `initialize()` → non-empty baseline.
+
+### CP-03 — T-08 Wiring via Extension Point
+
+**Problem**: `EvolutionContextLayer.layer` requires location-scoped `SystemContextRegistry.Service`, but lives in `packages/opencode` while location composition lives in `packages/core`. Cannot import evolution from core.
+
+**Solution**: Extension point on `LocationServiceMap`:
+- Core (`location-layer.ts:137`): `static extraLayers: ReadonlyArray<Layer.Layer<any, any, any>> = []` merged into `lookup()` return
+- Core imports nothing from opencode — extension slot only
+- Opencode (`app-runtime.ts`): `LocationServiceMap.extraLayers = [EvolutionContextLayer.layer]`
+- Lifecycle ownership stays in core; opencode contributes extensions
+- Dependency direction: core ← opencode (no reverse import)
+
+### Type Safety
+
+The `extraLayers` slot uses `Layer.Layer<any, any, any>` as the constraint — intentionally generic. Type safety is enforced at the injection site (opencode), not at the slot definition (core). This prevents framework-specific taint in core while allowing any well-typed layer to be injected.
+
+### Duplicate Registration Safety
+
+`extraLayers` is set via replacement (`=` not `.push()`), so module re-imports in tests are idempotent. Each location creation gets a fresh merge — no accumulation risk.
+
+Reason:
+- CP-01: Root cause of all layer composition failures in Sprint C
+- CP-02: Evidence gap — D-02 was bypassing the real layer
+- CP-03: Architectural requirement — inject evolution context into per-location system context without breaking dependency direction or lifecycle ownership
+
+Impact:
+- D-02 now proves real `EvolutionContextLayer.layer` in 96ms
+- `register.ts` no longer produces "Not a valid effect" errors
+- Evolution context is registered per-location at app startup
+- Other opencode modules can use the `extraLayers` slot for future extensions
+
+Files changed:
+- `packages/opencode/src/evolution/context/register.ts:14` (CP-01)
+- `packages/core/src/location-layer.ts:113,137` (CP-03a)
+- `packages/opencode/src/effect/app-runtime.ts:5-6,9` (CP-03b)
+- `packages/opencode/test/evolution/context/duplicate-registration.test.ts` (CP-02)
+
+Status:
+Accepted — implemented per Sprint C-Patch
