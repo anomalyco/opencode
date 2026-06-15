@@ -76,7 +76,7 @@ export const SettingsProviders: Component = () => {
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
   const isConfigCustom = (providerID: string) => {
-    const provider = serverSync.data.config.provider?.[providerID]
+    const provider = serverSync().data.config.provider?.[providerID]
     if (!provider) return false
     if (provider.npm !== "@ai-sdk/openai-compatible") return false
     if (!provider.models || Object.keys(provider.models).length === 0) return false
@@ -84,11 +84,11 @@ export const SettingsProviders: Component = () => {
   }
 
   const disableProvider = async (providerID: string, name: string) => {
-    const before = serverSync.data.config.disabled_providers ?? []
+    const before = serverSync().data.config.disabled_providers ?? []
     const next = before.includes(providerID) ? before : [...before, providerID]
-    serverSync.set("config", "disabled_providers", next)
+    serverSync().set("config", "disabled_providers", next)
 
-    await serverSync
+    await serverSync()
       .updateConfig({ disabled_providers: next })
       .then(() => {
         showToast({
@@ -99,7 +99,7 @@ export const SettingsProviders: Component = () => {
         })
       })
       .catch((err: unknown) => {
-        serverSync.set("config", "disabled_providers", before)
+        serverSync().set("config", "disabled_providers", before)
         const message = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description: message })
       })
@@ -107,14 +107,16 @@ export const SettingsProviders: Component = () => {
 
   const disconnect = async (providerID: string, name: string) => {
     if (isConfigCustom(providerID)) {
-      await serverSDK.client.auth.remove({ providerID }).catch(() => undefined)
+      await serverSDK()
+        .client.auth.remove({ providerID })
+        .catch(() => undefined)
       await disableProvider(providerID, name)
       return
     }
-    await serverSDK.client.auth
-      .remove({ providerID })
+    await serverSDK()
+      .client.auth.remove({ providerID })
       .then(async () => {
-        await serverSDK.client.global.dispose()
+        await serverSDK().client.global.dispose()
         showToast({
           variant: "success",
           icon: "circle-check",
@@ -178,7 +180,7 @@ export const SettingsProviders: Component = () => {
                               dialog.show(() => (
                                 <DialogCustomProvider
                                   back="close"
-                                  initialConfig={customProviderFormState(item.id, serverSync.data.config.provider?.[item.id])}
+                                  initialConfig={customProviderFormState(item.id, serverSync().data.config.provider?.[item.id])}
                                   originalProviderID={item.id}
                                 />
                               ))

@@ -37,6 +37,8 @@ export namespace ZenData {
         priority: z.number().optional(),
         tpmLimit: z.number().optional(),
         tpsGoal: z.number().optional(),
+        budgetMode: z.enum(["always", "fill"]).optional(),
+        budgetContribution: z.number().optional(),
         weight: z.number().optional(),
         disabled: z.boolean().optional(),
         storeModel: z.string().optional(),
@@ -54,6 +56,7 @@ export namespace ZenData {
     payloadModifier: z.record(z.string(), z.any()).optional(),
     payloadMappings: z.record(z.string(), z.string()).optional(),
     adjustCacheUsage: z.boolean().optional(),
+    budget: z.number().optional(),
   })
 
   const ModelsSchema = z.object({
