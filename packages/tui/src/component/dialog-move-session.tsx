@@ -12,7 +12,7 @@ import { useTuiPaths } from "../context/runtime"
 import { Locale } from "../util/locale"
 import { errorMessage } from "../util/error"
 import { useToast } from "../ui/toast"
-import { useBindings, useCommandShortcut } from "../keymap"
+import { useCommandShortcut } from "../keymap"
 import { useProject } from "../context/project"
 import { Spinner } from "./spinner"
 import { DialogWorkspaceFileChanges } from "./dialog-workspace-file-changes"
@@ -59,7 +59,7 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
     ))
   }
 
-  const [loadedProject, loadedProjectActions] = createResource(
+  const [loadedProject] = createResource(
     () => (projectContext.project() === props.projectID ? undefined : props.projectID),
     async (projectID) => {
       try {
@@ -281,11 +281,6 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
     if (await removedCurrent(deletingCurrent)) return
   }
 
-  const retry = () => {
-    if (projectLoadError()) void loadedProjectActions.refetch()
-    if (directoryLoadError()) void refetch()
-  }
-
   createEffect(() => dialog.setSize(loadError() ? "medium" : "xlarge"))
 
   return (
@@ -338,59 +333,24 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
         </box>
       }
     >
-      {(error) => (
-        <DialogMoveSessionError
-          error={error()}
-          retry={retry}
-          retrying={
-            (Boolean(projectLoadError()) && loadedProject.loading) ||
-            (Boolean(directoryLoadError()) && directories.loading)
-          }
-        />
-      )}
+      {(error) => <DialogMoveSessionError error={error()} />}
     </Show>
   )
 }
 
-function DialogMoveSessionError(props: { error: unknown; retry: () => void; retrying: boolean }) {
+function DialogMoveSessionError(props: { error: unknown }) {
   const { theme } = useTheme()
-  useBindings(() => ({
-    bindings: [
-      {
-        key: "return",
-        desc: "Retry loading project directories",
-        group: "Dialog",
-        cmd: () => {
-          if (!props.retrying) props.retry()
-        },
-      },
-    ],
-  }))
   return (
-    <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
+    <box paddingLeft={2} paddingRight={2} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text attributes={TextAttributes.BOLD} fg={theme.text}>
           Move session
         </text>
         <text fg={theme.textMuted}>esc</text>
       </box>
-      <box paddingTop={1} paddingBottom={1} gap={1}>
-        <text fg={theme.error}>Failed to load project directories</text>
+      <box paddingTop={1}>
+        <text fg={theme.text}>Could not load project directories</text>
         <text fg={theme.textMuted}>{errorMessage(props.error)}</text>
-      </box>
-      <box flexDirection="row" justifyContent="flex-end" paddingTop={1}>
-        <box
-          paddingLeft={2}
-          paddingRight={2}
-          backgroundColor={props.retrying ? theme.backgroundElement : theme.primary}
-          onMouseUp={() => {
-            if (!props.retrying) props.retry()
-          }}
-        >
-          <text fg={props.retrying ? theme.textMuted : theme.selectedListItemText}>
-            {props.retrying ? "retrying..." : "enter  retry"}
-          </text>
-        </box>
       </box>
     </box>
   )
