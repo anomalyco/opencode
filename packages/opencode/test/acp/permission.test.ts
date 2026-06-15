@@ -8,7 +8,9 @@ import type {
 import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2"
 import { Effect, ManagedRuntime } from "effect"
 import { ACPEvent } from "@/acp/event"
+import { ACPPermission } from "@/acp/permission"
 import { ACPSession } from "@/acp/session"
+import { SessionResolver } from "@/acp/session-resolve"
 
 type PermissionEvent = Extract<Event, { type: "permission.asked" }>
 type PermissionReplyParams = Parameters<OpencodeClient["permission"]["reply"]>[0]
@@ -36,6 +38,7 @@ function makeSessionService() {
 function createHarness(
   requestPermission: (params: RequestPermissionRequest) => Promise<RequestPermissionResponse> = () =>
     Promise.resolve({ outcome: { outcome: "selected", optionId: "once" } }),
+  sdkSessionGet?: OpencodeClient["session"]["get"],
 ) {
   const replies: PermissionReplyParams[] = []
   const requests: RequestPermissionRequest[] = []
@@ -50,6 +53,8 @@ function createHarness(
     },
     session: {
       message: () => Promise.resolve({ data: undefined }),
+      get: (sdkSessionGet ??
+        (() => Promise.resolve({ data: undefined }))) as OpencodeClient["session"]["get"],
     },
   } as unknown as OpencodeClient
   const connection = {
@@ -197,6 +202,172 @@ describe("acp permissions", () => {
           patterns: ["/tmp/outside/*"],
         },
         locations: [{ path: "/tmp/outside" }],
+      },
+    })
+  })
+
+  it("routes child-session permission prompts through the root ACP session", async () => {
+    const harness = createHarness()
+    await createSession(harness.session, "ses_root")
+    await Effect.runPromise(
+      harness.session.registerChild({
+        sessionId: "ses_child",
+        parentSessionId: "ses_root",
+      }),
+    )
+
+    harness.subscription.handle(
+      permissionAsked("ses_child", "perm_child", {
+        metadata: { command: "ps aux" },
+        tool: { messageID: "msg_1", callID: "call_child" },
+      }),
+    )
+
+    await pollUntil(() => harness.replies.length === 1, "child permission was never replied")
+
+    expect(harness.requests[0]).toMatchObject({
+      sessionId: "ses_root",
+      toolCall: {
+        toolCallId: "call_child",
+        rawInput: { command: "ps aux", childSessionId: "ses_child" },
+      },
+    })
+    expect(harness.replies[0]).toEqual({ requestID: "perm_child", reply: "once", directory: "/workspace" })
+  })
+
+  it("auto-resolves child permissions through the SDK parent chain", async () => {
+    const harness = createHarness(undefined, ((input) =>
+      Promise.resolve({
+        data:
+          input.sessionID === "ses_child"
+            ? {
+                id: "ses_child",
+                parentID: "ses_root",
+                directory: "/workspace",
+              }
+            : undefined,
+      })) as OpencodeClient["session"]["get"])
+    await createSession(harness.session, "ses_root")
+
+    harness.subscription.handle(
+      permissionAsked("ses_child", "perm_resolved", {
+        metadata: { command: "ps aux" },
+        tool: { messageID: "msg_1", callID: "call_resolved" },
+      }),
+    )
+
+    await pollUntil(() => harness.replies.length === 1, "resolved child permission was never replied")
+
+    expect(harness.requests[0]).toMatchObject({
+      sessionId: "ses_root",
+      toolCall: {
+        toolCallId: "call_resolved",
+        rawInput: { command: "ps aux", childSessionId: "ses_child" },
+      },
+    })
+  })
+
+  it("routes concurrent child permission prompts from sibling subagents to the root session", async () => {
+    const harness = createHarness()
+    await createSession(harness.session, "ses_root")
+    await Effect.runPromise(
+      harness.session.registerChild({
+        sessionId: "ses_child_a",
+        parentSessionId: "ses_root",
+      }),
+    )
+    await Effect.runPromise(
+      harness.session.registerChild({
+        sessionId: "ses_child_b",
+        parentSessionId: "ses_root",
+      }),
+    )
+
+    harness.subscription.handle(
+      permissionAsked("ses_child_a", "perm_a", {
+        metadata: { command: "ps aux" },
+        tool: { messageID: "msg_a", callID: "call_a" },
+      }),
+    )
+    harness.subscription.handle(
+      permissionAsked("ses_child_b", "perm_b", {
+        metadata: { command: "ls" },
+        tool: { messageID: "msg_b", callID: "call_b" },
+      }),
+    )
+
+    await pollUntil(() => harness.requests.length === 2, "sibling child permissions were not both requested")
+    await pollUntil(() => harness.replies.length === 2, "sibling child permissions were not both replied")
+
+    expect(harness.requests.map((request) => request.sessionId)).toEqual(["ses_root", "ses_root"])
+    expect(harness.requests.map((request) => request.toolCall.rawInput)).toEqual([
+      { command: "ps aux", childSessionId: "ses_child_a" },
+      { command: "ls", childSessionId: "ses_child_b" },
+    ])
+  })
+
+  it("routes grandchild permission prompts through the root ACP session", async () => {
+    const session = makeSessionService()
+    await createSession(session, "ses_root")
+    const resolver = new SessionResolver(
+      session,
+      {
+        session: {
+          get: (input: { sessionID: string }) =>
+            Promise.resolve({
+              data:
+                input.sessionID === "ses_grandchild"
+                  ? {
+                      id: "ses_grandchild",
+                      parentID: "ses_child",
+                      directory: "/workspace",
+                    }
+                  : input.sessionID === "ses_child"
+                    ? {
+                        id: "ses_child",
+                        parentID: "ses_root",
+                        directory: "/workspace",
+                      }
+                    : undefined,
+            }),
+        },
+      } as unknown as OpencodeClient,
+    )
+    const replies: PermissionReplyParams[] = []
+    const requests: RequestPermissionRequest[] = []
+    const handler = new ACPPermission.Handler({
+      sdk: {
+        permission: {
+          reply: (params: PermissionReplyParams) => {
+            replies.push(params)
+            return Promise.resolve({ data: true })
+          },
+        },
+      } as unknown as OpencodeClient,
+      connection: {
+        requestPermission: (params: RequestPermissionRequest) => {
+          requests.push(params)
+          return Promise.resolve({ outcome: { outcome: "selected", optionId: "once" } })
+        },
+      },
+      session,
+      resolver,
+    })
+
+    handler.handle(
+      permissionAsked("ses_grandchild", "perm_grandchild", {
+        metadata: { command: "printf nested" },
+        tool: { messageID: "msg_gc", callID: "call_gc" },
+      }),
+    )
+
+    await pollUntil(() => replies.length === 1, "grandchild permission was never replied")
+
+    expect(requests[0]).toMatchObject({
+      sessionId: "ses_root",
+      toolCall: {
+        toolCallId: "call_gc",
+        rawInput: { command: "printf nested", childSessionId: "ses_grandchild" },
       },
     })
   })

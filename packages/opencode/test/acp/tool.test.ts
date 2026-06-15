@@ -5,6 +5,7 @@ import {
   completedToolRawOutput,
   extractImageAttachments,
   imageContents,
+  runningToolUpdate,
   shellOutputSnapshot,
   toLocations,
   toToolKind,
@@ -213,5 +214,22 @@ describe("acp tool conversion", () => {
     expect(shellOutputSnapshot({ metadata: { output: "line 1\nline 2" } })).toBe("line 1\nline 2")
     expect(shellOutputSnapshot({ metadata: { output: 42 } })).toBeUndefined()
     expect(shellOutputSnapshot({ metadata: undefined })).toBeUndefined()
+  })
+
+  test("includes running tool metadata in rawOutput", () => {
+    expect(
+      runningToolUpdate({
+        toolCallId: "call_task",
+        toolName: "task",
+        state: {
+          status: "running",
+          input: { description: "Run ps command" },
+          title: "Run ps command",
+          metadata: { sessionId: "ses_child", parentSessionId: "ses_root" },
+        },
+      }),
+    ).toMatchObject({
+      rawOutput: { metadata: { sessionId: "ses_child", parentSessionId: "ses_root" } },
+    })
   })
 })

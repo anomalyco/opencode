@@ -3,6 +3,7 @@ import type { Event, OpencodeClient } from "@opencode-ai/sdk/v2"
 import { applyPatch } from "diff"
 import { exists, readText } from "@/util/filesystem"
 import type { ACPSession } from "./session"
+import type { SessionResolver } from "./session-resolve"
 import { toLocations, toToolKind, type ToolInput } from "./tool"
 import { Effect } from "effect"
 
@@ -24,6 +25,7 @@ export class Handler {
       sdk: OpencodeClient
       connection: Connection
       session: ACPSession.Interface
+      resolver: SessionResolver
     },
   ) {}
 
@@ -43,8 +45,10 @@ export class Handler {
 
   private async process(event: PermissionEvent) {
     const permission = event.properties
-    const session = await Effect.runPromise(this.input.session.tryGet(permission.sessionID))
+    const session = await this.input.resolver.resolve(permission.sessionID)
     if (!session) return
+
+    const root = await Effect.runPromise(this.input.session.getRoot(permission.sessionID)).catch(() => session)
 
     if (!this.input.connection.requestPermission) {
       await this.reply(permission.id, "reject", session.cwd)
@@ -53,12 +57,18 @@ export class Handler {
 
     const result = await this.input.connection
       .requestPermission({
-        sessionId: permission.sessionID,
+        sessionId: root.id,
         toolCall: {
           toolCallId: permission.tool?.callID ?? permission.id,
           status: "pending",
           title: permission.permission,
-          rawInput: permission.metadata,
+          rawInput:
+            root.id === session.id
+              ? permission.metadata
+              : {
+                  ...(permission.metadata && typeof permission.metadata === "object" ? permission.metadata : {}),
+                  childSessionId: session.id,
+                },
           kind: toToolKind(permission.permission),
           locations: toLocations(permission.permission, permission.metadata),
         },

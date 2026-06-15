@@ -3,6 +3,8 @@ import type {
   Event,
   EventMessagePartDelta,
   EventMessagePartUpdated,
+  EventSessionCreated,
+  EventSessionDeleted,
   OpencodeClient,
   Part,
   SessionMessageResponse,
@@ -11,6 +13,7 @@ import type {
 import { Effect } from "effect"
 import { ACPSession } from "./session"
 import { ACPPermission } from "./permission"
+import { SessionResolver } from "./session-resolve"
 import { partsToContentChunks, type ReplayPart } from "./content"
 import {
   duplicateRunningToolUpdate,
@@ -40,6 +43,7 @@ export class Subscription {
   private readonly abort = new AbortController()
   private readonly shellSnapshots = new Map<string, string>()
   private readonly toolStarts = new Set<string>()
+  private readonly resolver: SessionResolver
   private readonly permission: ACPPermission.Handler
   private started = false
 
@@ -50,7 +54,8 @@ export class Subscription {
       session: ACPSession.Interface
     },
   ) {
-    this.permission = new ACPPermission.Handler(input)
+    this.resolver = new SessionResolver(input.session, input.sdk)
+    this.permission = new ACPPermission.Handler({ ...input, resolver: this.resolver })
   }
 
   start() {
@@ -70,6 +75,10 @@ export class Subscription {
       case "permission.asked":
         this.permission.handle(event)
         return
+      case "session.created":
+        return this.handleSessionCreated(event)
+      case "session.deleted":
+        return this.handleSessionDeleted(event)
       case "message.part.updated":
         return this.handlePartUpdated(event)
       case "message.part.delta":
@@ -84,6 +93,7 @@ export class Subscription {
     for (const part of message.parts) {
       await this.recordFetchedPart(message.info.sessionID, message, part)
       if (part.type === "tool") {
+        await this.trackTaskChildSession(message.info.sessionID, part, cwd ?? process.cwd())
         await this.handleToolPart(message.info.sessionID, part, cwd ?? process.cwd())
         continue
       }
@@ -128,10 +138,37 @@ export class Subscription {
     }
   }
 
+  private async handleSessionCreated(event: EventSessionCreated) {
+    const info = event.properties.info
+    if (!info.parentID) return
+
+    const parent = await Effect.runPromise(this.input.session.tryGet(info.parentID))
+    if (parent) {
+      await this.resolver.registerChild({
+        sessionId: info.id,
+        parentSessionId: info.parentID,
+        cwd: info.directory,
+      })
+      return
+    }
+
+    await this.resolver.resolve(info.id, info.directory)
+  }
+
+  private async handleSessionDeleted(event: EventSessionDeleted) {
+    const sessionId = event.properties.sessionID
+    this.resolver.invalidate(sessionId)
+    await Effect.runPromise(this.input.session.remove(sessionId)).catch(() => undefined)
+  }
+
+  private async resolveSession(sessionId: string, directory?: string) {
+    return await this.resolver.resolve(sessionId, directory)
+  }
+
   private async handlePartUpdated(event: EventMessagePartUpdated) {
     const part = event.properties.part
     const sessionId = part.sessionID || event.properties.sessionID
-    const session = await Effect.runPromise(this.input.session.tryGet(sessionId))
+    const session = await this.resolveSession(sessionId)
     if (!session) return
 
     await Effect.runPromise(
@@ -147,13 +184,14 @@ export class Subscription {
       }),
     )
     if (part.type === "tool") {
+      await this.trackTaskChildSession(session.id, part, session.cwd)
       await this.handleToolPart(session.id, part, session.cwd)
     }
   }
 
   private async handlePartDelta(event: EventMessagePartDelta) {
     const props = event.properties
-    const session = await Effect.runPromise(this.input.session.tryGet(props.sessionID))
+    const session = await this.resolveSession(props.sessionID)
     if (!session) return
 
     const known = await Effect.runPromise(
@@ -278,6 +316,16 @@ export class Subscription {
     }
   }
 
+  private async trackTaskChildSession(sessionId: string, part: ToolPart, cwd: string) {
+    const child = taskChildSession(part)
+    if (!child?.sessionId) return
+    await this.resolver.registerChild({
+      sessionId: child.sessionId,
+      parentSessionId: child.parentSessionId ?? sessionId,
+      cwd,
+    })
+  }
+
   private async runningTool(sessionId: string, part: ToolPart, cwd: string) {
     if (part.state.status !== "running") return
 
@@ -337,6 +385,17 @@ export class Subscription {
     this.toolStarts.delete(toolCallId)
     this.shellSnapshots.delete(toolCallId)
   }
+}
+
+function taskChildSession(part: ToolPart) {
+  if (part.tool !== "task") return
+  const metadata = "metadata" in part.state ? part.state.metadata : undefined
+  if (!metadata || typeof metadata !== "object") return
+  const values = metadata as Record<string, unknown>
+  const sessionId = typeof values.sessionId === "string" ? values.sessionId : undefined
+  const parentSessionId = typeof values.parentSessionId === "string" ? values.parentSessionId : undefined
+  if (!sessionId) return
+  return { sessionId, parentSessionId }
 }
 
 export * as ACPEvent from "./event"
