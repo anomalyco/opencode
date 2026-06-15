@@ -1,0 +1,20 @@
+{
+  "name": "@opencode/shodan",
+  "version": "0.1.0",
+  "description": "Native Shodan internet intelligence client for daemoncode — REST, Streaming, and Exploits API",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./index.ts",
+      "types": "./index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "keywords": ["shodan", "security", "internet-intelligence", "vulnerability", "network-reconnaissance"],
+  "license": "MIT"
+}
