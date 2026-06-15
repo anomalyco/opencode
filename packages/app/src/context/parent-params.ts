@@ -1,44 +1,60 @@
-import {useSearchParams} from '@solidjs/router'
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { createMemo } from 'solid-js'
 
-const toArray = (value: string | string[] | undefined) => {
-  if (typeof value === "string") return [value]
-  if (Array.isArray(value)) return value
-  return []
-}
+type IdName = { id: string; name: string }
+type ParentParams = { user: IdName[]; team: IdName[] }
 
-const getFirst = (value: string | string[] | undefined) => {
-  const array = toArray(value)
-  return array[0]
-}
-
-const parseIdName = (value: string) => {
+const parseIdName = (value: string): IdName | undefined => {
   const [id, name] = value.split("||")
   if (!id || !name) return undefined
   return { id, name }
 }
 
+const filterIdName = (values: string[]): IdName[] =>
+  values.map(parseIdName).filter((item): item is IdName => !!item)
+
+const STORAGE_KEY = "parent-params:v1"
+
+const parseSearch = (search: string): ParentParams => {
+  const params = new URLSearchParams(search)
+  return {
+    user: filterIdName(params.getAll("user")),
+    team: filterIdName(params.getAll("team")),
+  }
+}
+
+// The host passes the viewer identity via `?user=id||name` (and optionally `?team=`) on the ENTRY url
+// only. The app then redirects (`/` → `/session/...`) and that navigation drops the query string, so
+// by the time the prompt-doc actor registers the param is already gone — registration falls back to a
+// tab-scoped "Guest-xxxx" actor. This bites hardest in an iframe embed, where the redirect wins the
+// race against any in-render read.
+//
+// So capture once at MODULE LOAD — earlier than any router render or redirect, while
+// `window.location` still holds the entry url — and persist to sessionStorage so the identity also
+// survives a later full reload of the param-less `/session/...` url. Reading `searchParams`
+// reactively/at-init is NOT enough: the value legitimately disappears after the redirect.
+const capture = (): ParentParams => {
+  if (typeof window === "undefined") return { user: [], team: [] }
+  const fromUrl = parseSearch(window.location.search)
+  if (fromUrl.user.length || fromUrl.team.length) {
+    try {
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(fromUrl))
+    } catch {
+      // ignore storage access errors (e.g. partitioned third-party iframe)
+    }
+    return fromUrl
+  }
+  try {
+    const raw = sessionStorage.getItem(STORAGE_KEY)
+    if (raw) return JSON.parse(raw) as ParentParams
+  } catch {
+    // ignore
+  }
+  return { user: [], team: [] }
+}
+
+const captured = capture()
+
 export const { use: useParentParams, provider: ParentParamsProvider } = createSimpleContext({
   name: "ClientEnv",
-  init: () => {
-    const [searchParams] = useSearchParams()
-
-    // Read the query params reactively (not a one-shot untrack snapshot): on a cold load the router
-    // may not have parsed the URL yet when this provider initializes. A snapshot taken then would be
-    // permanently empty, so every actor registration would go out without a userID/name and the
-    // server would mint a "Guest-xxxx" identity. Memos re-read searchParams at access time, so by the
-    // time register() runs the user param is present.
-    const user = createMemo(() => toArray(searchParams.user).map(parseIdName).filter(Boolean))
-    const team = createMemo(() => toArray(searchParams.team).map(parseIdName).filter(Boolean))
-
-    return {
-      get user() {
-        return user()
-      },
-      get team() {
-        return team()
-      },
-    }
-  },
+  init: (): ParentParams => captured,
 })
