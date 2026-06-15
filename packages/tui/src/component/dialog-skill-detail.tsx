@@ -2,7 +2,7 @@ import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { useKeyboard } from "@opentui/solid"
-import { createMemo, Show } from "solid-js"
+import { Show } from "solid-js"
 
 export type DialogSkillDetailProps = {
   name: string
@@ -14,8 +14,6 @@ export type DialogSkillDetailProps = {
 export function DialogSkillDetail(props: DialogSkillDetailProps) {
   const dialog = useDialog()
   const { theme } = useTheme()
-
-  const hasTemplate = createMemo(() => !!props.template)
 
   useKeyboard((evt) => {
     if (evt.name === "return") {
@@ -43,7 +41,7 @@ export function DialogSkillDetail(props: DialogSkillDetailProps) {
           </box>
         </Show>
       </box>
-      <Show when={hasTemplate()}>
+      <Show when={!!props.template}>
         <box flexGrow={1} flexShrink={1} maxHeight={20}>
           <scrollbox
             paddingLeft={4}
@@ -56,7 +54,7 @@ export function DialogSkillDetail(props: DialogSkillDetailProps) {
           </scrollbox>
         </box>
       </Show>
-      <Show when={!hasTemplate()}>
+      <Show when={!!!props.template}>
         <box paddingLeft={4} paddingRight={4} paddingTop={1}>
           <text fg={theme.textMuted}>No template available</text>
         </box>

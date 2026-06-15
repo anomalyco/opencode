@@ -34,10 +34,8 @@ export function DialogSkill(props: DialogSkillProps) {
   const showError = createMemo(() => Boolean(loadError()))
   const [selectedIndex, setSelectedIndex] = createSignal(0)
 
-  const recentNames = createMemo(() => getTopRecentSkills(5))
-
   function pushDetail(skillName: string) {
-    const skill = allSkills().find((s) => s.name === skillName)
+    const skill = (skills() ?? []).find((s) => s.name === skillName)
     if (!skill) return
     dialog.push(() => (
       <DialogSkillDetail
@@ -54,7 +52,7 @@ export function DialogSkill(props: DialogSkillProps) {
     const list = skills() ?? []
     const maxWidth = Math.max(0, ...list.map((s) => s.name.length))
 
-    const recentOpts: DialogSelectOption<string>[] = recentNames().map((name) => ({
+    const recentOpts: DialogSelectOption<string>[] = getTopRecentSkills(5).map((name) => ({
       title: name.padEnd(maxWidth),
       description: undefined,
       value: name,
@@ -83,11 +81,6 @@ export function DialogSkill(props: DialogSkillProps) {
     }))
 
     return [...recentOpts, ...allOpts]
-  })
-
-  const allSkills = createMemo(() => {
-    const list = skills() ?? []
-    return list
   })
 
   useKeyboard((evt) => {
