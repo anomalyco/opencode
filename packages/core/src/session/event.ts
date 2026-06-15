@@ -398,6 +398,22 @@ export namespace Tool {
   export type Failed = typeof Failed.Type
 }
 
+export namespace Skill {
+  export const Proposed = EventV2.define({
+    type: "session.next.skill.proposed",
+    ...options,
+    schema: {
+      ...Base,
+      name: Schema.String,
+      description: Schema.String,
+      slug: Schema.String,
+      location: Schema.String,
+      reason: Schema.String,
+    },
+  })
+  export type Proposed = typeof Proposed.Type
+}
+
 export namespace ACE {
   export const Mode = Schema.Literals(["monitor", "fixed-cap", "reject-escalate"])
   export const Target = Schema.Literals(["tool", "spawn"])
@@ -547,6 +563,7 @@ const DurableDefinitions = [
   Tool.Progress,
   Tool.Success,
   Tool.Failed,
+  Skill.Proposed,
   ACE.Decision,
   ACE.PressureUpdated,
   Reasoning.Started,

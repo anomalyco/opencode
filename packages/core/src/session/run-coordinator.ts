@@ -65,6 +65,7 @@ const maxSeq = (left: number | undefined, right: number | undefined) => {
 export const make = <Key, A, E>(options: {
   readonly drain: (key: Key, mode: Mode) => Effect.Effect<A, E>
   readonly onFailure?: (key: Key, cause: Cause.Cause<E>) => Effect.Effect<void>
+  readonly onIdle?: (key: Key) => Effect.Effect<void>
 }): Effect.Effect<Coordinator<Key, A, E>, never, Scope.Scope> =>
   Effect.gen(function* () {
     const active = new Map<Key, Entry<A, E>>()
@@ -139,6 +140,7 @@ export const make = <Key, A, E>(options: {
         active.delete(key)
         Deferred.doneUnsafe(entry.done, exit)
         Deferred.doneUnsafe(entry.settled, Effect.succeed(exit))
+        if (options.onIdle !== undefined) report(Effect.suspend(() => options.onIdle!(key)))
         return
       }
 
