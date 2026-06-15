@@ -54,9 +54,6 @@ interface PendingAuth {
 }
 
 let server: ReturnType<typeof createServer> | undefined
-let starting: Promise<void> | undefined
-let stopping: Promise<void> | undefined
-let idleStopRequested = false
 const pendingAuths = new Map<string, PendingAuth>()
 // Reverse index: mcpName → oauthState, so cancelPending(mcpName) can
 // find the right entry in pendingAuths (which is keyed by oauthState).
@@ -74,20 +71,10 @@ function cleanupStateIndex(oauthState: string) {
 }
 
 function stopIfIdle() {
-  if (pendingAuths.size > 0) return
-  if (starting || stopping) {
-    idleStopRequested = true
-    return
-  }
-  if (!server) return
+  if (pendingAuths.size > 0 || !server) return
 
-  const current = server
+  server.close()
   server = undefined
-  idleStopRequested = false
-  stopping = new Promise<void>((resolve) => current.close(() => resolve())).finally(() => {
-    stopping = undefined
-    if (idleStopRequested) stopIfIdle()
-  })
 }
 
 function handleRequest(req: import("http").IncomingMessage, res: import("http").ServerResponse) {
@@ -157,12 +144,6 @@ export async function ensureRunning(redirectUri?: string): Promise<void> {
   // Parse the redirect URI to get port and path (uses defaults if not provided)
   const { port, path } = parseRedirectUri(redirectUri)
 
-  if (stopping) await stopping
-  if (starting) {
-    await starting
-    return ensureRunning(redirectUri)
-  }
-
   // If server is running on a different port/path, stop it first
   if (server && (currentPort !== port || currentPath !== path)) {
     await stop()
@@ -170,31 +151,24 @@ export async function ensureRunning(redirectUri?: string): Promise<void> {
 
   if (server) return
 
-  starting = (async () => {
-    if (await isPortInUse(port)) return
+  const running = await isPortInUse(port)
+  if (running) {
+    return
+  }
 
-    currentPort = port
-    currentPath = path
+  currentPort = port
+  currentPath = path
 
-    const next = createServer(handleRequest)
-    await new Promise<void>((resolve, reject) => {
-      next.listen(currentPort, () => resolve())
-      next.on("error", reject)
+  server = createServer(handleRequest)
+  await new Promise<void>((resolve, reject) => {
+    server!.listen(currentPort, () => {
+      resolve()
     })
-    server = next
-  })()
-  await starting.finally(() => {
-    starting = undefined
+    server!.on("error", reject)
   })
-  if (idleStopRequested) stopIfIdle()
 }
 
-export function waitForCallback(
-  oauthState: string,
-  mcpName?: string,
-  timeoutMs: number = CALLBACK_TIMEOUT_MS,
-): Promise<string> {
-  idleStopRequested = false
+export function waitForCallback(oauthState: string, mcpName?: string): Promise<string> {
   if (mcpName) mcpNameToState.set(mcpName, oauthState)
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
@@ -204,7 +178,7 @@ export function waitForCallback(
         reject(new Error("OAuth callback timeout - authorization took too long"))
         stopIfIdle()
       }
-    }, timeoutMs)
+    }, CALLBACK_TIMEOUT_MS)
 
     pendingAuths.set(oauthState, { resolve, reject, timeout })
   })
@@ -238,13 +212,9 @@ export async function isPortInUse(port: number = OAUTH_CALLBACK_PORT): Promise<b
 }
 
 export async function stop(): Promise<void> {
-  if (starting) await starting
-  if (stopping) await stopping
-
   if (server) {
-    const current = server
+    await new Promise<void>((resolve) => server!.close(() => resolve()))
     server = undefined
-    await new Promise<void>((resolve) => current.close(() => resolve()))
   }
 
   for (const [_name, pending] of pendingAuths) {
@@ -253,7 +223,6 @@ export async function stop(): Promise<void> {
   }
   pendingAuths.clear()
   mcpNameToState.clear()
-  idleStopRequested = false
 }
 
 export function isRunning(): boolean {

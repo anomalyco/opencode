@@ -745,7 +745,7 @@ export const layer = Layer.effect(
       return mcpConfig
     })
 
-    const startAuth = Effect.fn("MCP.startAuth")(function* (mcpName: string, pendingState?: string) {
+    const startAuth = Effect.fn("MCP.startAuth")(function* (mcpName: string) {
       const mcpConfig = yield* requireMcpConfig(mcpName)
       if (mcpConfig.type !== "remote") throw new Error(`MCP server ${mcpName} is not a remote server`)
       if (mcpConfig.oauth === false) throw new Error(`MCP server ${mcpName} has OAuth explicitly disabled`)
@@ -763,11 +763,9 @@ export const layer = Layer.effect(
       // Start the callback server with custom redirectUri if configured
       yield* Effect.promise(() => McpOAuthCallback.ensureRunning(effectiveRedirectUri))
 
-      const oauthState =
-        pendingState ??
-        Array.from(crypto.getRandomValues(new Uint8Array(32)))
-          .map((b) => b.toString(16).padStart(2, "0"))
-          .join("")
+      const oauthState = Array.from(crypto.getRandomValues(new Uint8Array(32)))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("")
       yield* auth.updateOAuthState(mcpName, oauthState)
       let capturedUrl: URL | undefined
       const authProvider = new McpOAuthProvider(
@@ -813,66 +811,60 @@ export const layer = Layer.effect(
     })
 
     const authenticate = Effect.fn("MCP.authenticate")(function* (mcpName: string) {
-      const oauthState = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("")
-      const callbackPromise = McpOAuthCallback.waitForCallback(oauthState, mcpName)
-      void callbackPromise.catch(() => {})
-
-      return yield* Effect.gen(function* () {
-        const result = yield* startAuth(mcpName, oauthState)
-        if (!result.authorizationUrl) {
-          const client = "client" in result ? result.client : undefined
-          const mcpConfig = yield* requireMcpConfig(mcpName).pipe(
-            Effect.tapError(() => Effect.tryPromise(() => client?.close() ?? Promise.resolve()).pipe(Effect.ignore)),
-          )
-
-          const listed = client
-            ? client.getServerCapabilities()?.tools
-              ? yield* McpCatalog.defs(client, mcpConfig.timeout)
-              : []
-            : undefined
-          if (!client || !listed) {
-            yield* Effect.tryPromise(() => client?.close() ?? Promise.resolve()).pipe(Effect.ignore)
-            return { status: "failed", error: "Failed to get tools" } satisfies Status
-          }
-
-          const s = yield* InstanceState.get(state)
-          yield* auth.clearOAuthState(mcpName)
-          return yield* storeClient(s, mcpName, client, listed, mcpConfig.timeout)
-        }
-
-        yield* Effect.tryPromise(() => open(result.authorizationUrl)).pipe(
-          Effect.flatMap((subprocess) =>
-            Effect.callback<void, Error>((resume) => {
-              const timer = setTimeout(() => resume(Effect.void), 500)
-              subprocess.on("error", (err) => {
-                clearTimeout(timer)
-                resume(Effect.fail(err))
-              })
-              subprocess.on("exit", (code) => {
-                if (code !== null && code !== 0) {
-                  clearTimeout(timer)
-                  resume(Effect.fail(new Error(`Browser open failed with exit code ${code}`)))
-                }
-              })
-            }),
-          ),
-          Effect.catch(() => {
-            return events.publish(BrowserOpenFailed, { mcpName, url: result.authorizationUrl }).pipe(Effect.ignore)
-          }),
+      const result = yield* startAuth(mcpName)
+      if (!result.authorizationUrl) {
+        const client = "client" in result ? result.client : undefined
+        const mcpConfig = yield* requireMcpConfig(mcpName).pipe(
+          Effect.tapError(() => Effect.tryPromise(() => client?.close() ?? Promise.resolve()).pipe(Effect.ignore)),
         )
 
-        const code = yield* Effect.promise(() => callbackPromise)
-
-        const storedState = yield* auth.getOAuthState(mcpName)
-        if (storedState !== result.oauthState) {
-          yield* auth.clearOAuthState(mcpName)
-          throw new Error("OAuth state mismatch - potential CSRF attack")
+        const listed = client
+          ? client.getServerCapabilities()?.tools
+            ? yield* McpCatalog.defs(client, mcpConfig.timeout)
+            : []
+          : undefined
+        if (!client || !listed) {
+          yield* Effect.tryPromise(() => client?.close() ?? Promise.resolve()).pipe(Effect.ignore)
+          return { status: "failed", error: "Failed to get tools" } satisfies Status
         }
+
+        const s = yield* InstanceState.get(state)
         yield* auth.clearOAuthState(mcpName)
-        return yield* finishAuth(mcpName, code)
-      }).pipe(Effect.ensuring(Effect.sync(() => McpOAuthCallback.cancelPending(mcpName))))
+        return yield* storeClient(s, mcpName, client, listed, mcpConfig.timeout)
+      }
+
+      const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)
+
+      yield* Effect.tryPromise(() => open(result.authorizationUrl)).pipe(
+        Effect.flatMap((subprocess) =>
+          Effect.callback<void, Error>((resume) => {
+            const timer = setTimeout(() => resume(Effect.void), 500)
+            subprocess.on("error", (err) => {
+              clearTimeout(timer)
+              resume(Effect.fail(err))
+            })
+            subprocess.on("exit", (code) => {
+              if (code !== null && code !== 0) {
+                clearTimeout(timer)
+                resume(Effect.fail(new Error(`Browser open failed with exit code ${code}`)))
+              }
+            })
+          }),
+        ),
+        Effect.catch(() => {
+          return events.publish(BrowserOpenFailed, { mcpName, url: result.authorizationUrl }).pipe(Effect.ignore)
+        }),
+      )
+
+      const code = yield* Effect.promise(() => callbackPromise)
+
+      const storedState = yield* auth.getOAuthState(mcpName)
+      if (storedState !== result.oauthState) {
+        yield* auth.clearOAuthState(mcpName)
+        throw new Error("OAuth state mismatch - potential CSRF attack")
+      }
+      yield* auth.clearOAuthState(mcpName)
+      return yield* finishAuth(mcpName, code)
     })
 
     const finishAuth = Effect.fn("MCP.finishAuth")(function* (mcpName: string, authorizationCode: string) {
