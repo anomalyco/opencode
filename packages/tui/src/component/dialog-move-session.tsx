@@ -113,24 +113,7 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
   })
 
   const options = createMemo<DialogSelectOption<MoveSessionSelection | undefined>[]>(() => {
-    const error = loadError()
-    if (error)
-      return [
-        {
-          title: "Could not load project directories",
-          titleView: <span style={{ fg: theme.error }}>Could not load project directories</span>,
-          description: "Close and reopen to try again",
-          details: [errorMessage(error)],
-          category: "Error",
-          categoryView: (
-            <text fg={theme.error} attributes={TextAttributes.BOLD}>
-              Error
-            </text>
-          ),
-          gutter: () => <text fg={theme.error}>!</text>,
-          value: undefined,
-        },
-      ]
+    if (loadError()) return []
     const data = directoryData()
     const current = currentRoot()?.directory
     if (directories.loading && !data && !current) return [{ title: "Loading project directories...", value: undefined }]
@@ -314,6 +297,16 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
           </box>
         }
         options={options()}
+        emptyView={
+          loadError() ? (
+            <box flexGrow={1} alignItems="center" justifyContent="center" paddingLeft={4} paddingRight={4}>
+              <text fg={theme.error} attributes={TextAttributes.BOLD}>
+                Could not load project directories
+              </text>
+              <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
+            </box>
+          ) : undefined
+        }
         locked={Boolean(loadError()) || directories.loading || loadedProject.loading || Boolean(removing())}
         current={current()}
         onSelect={(option) => {
