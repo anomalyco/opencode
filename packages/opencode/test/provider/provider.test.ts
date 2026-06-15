@@ -22,6 +22,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
 const originalEnv = new Map<string, string | undefined>()
+const originalFetch = globalThis.fetch
 
 const rememberEnv = (k: string) => {
   if (!originalEnv.has(k)) originalEnv.set(k, process.env[k])
@@ -48,6 +49,7 @@ const remove = (k: string) =>
   })
 
 afterEach(async () => {
+  globalThis.fetch = originalFetch
   for (const [key, value] of originalEnv) {
     if (value === undefined) delete process.env[key]
     else process.env[key] = value
@@ -55,6 +57,55 @@ afterEach(async () => {
   originalEnv.clear()
   await disposeAllInstances()
 })
+
+const setCopilotOAuth = () =>
+  setProcessEnv(
+    "OPENCODE_AUTH_CONTENT",
+    JSON.stringify({
+      "github-copilot": {
+        type: "oauth",
+        refresh: "test-refresh-token",
+        access: "test-access-token",
+        expires: Date.now() + 60_000,
+      },
+    }),
+  )
+
+function mockCopilotModels(limits: { context?: number; input: number; output: number }) {
+  const fetchModels = Object.assign(
+    async (input: RequestInfo | URL) => {
+      const url = input instanceof URL ? input.href : typeof input === "string" ? input : input.url
+      if (!url.endsWith("/models")) throw new Error(`unexpected fetch: ${url}`)
+      return new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: true,
+              id: "gpt-5.5",
+              name: "GPT-5.5",
+              version: "gpt-5.5-2026-06-01",
+              capabilities: {
+                family: "gpt",
+                limits: {
+                  max_context_window_tokens: limits.context,
+                  max_prompt_tokens: limits.input,
+                  max_output_tokens: limits.output,
+                },
+                supports: {
+                  streaming: true,
+                  tool_calls: true,
+                },
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      )
+    },
+    { preconnect: originalFetch.preconnect },
+  )
+  globalThis.fetch = fetchModels
+}
 
 const providerLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   Provider.layer.pipe(
@@ -815,6 +866,56 @@ it.instance(
       provider: {
         anthropic: {
           models: { "claude-sonnet-4-20250514": { cost: { input: 999, output: 888 } } },
+        },
+      },
+    },
+  },
+)
+
+it.instance("github copilot live model discovery overrides stale catalog limits", () =>
+  Effect.gen(function* () {
+    yield* setCopilotOAuth()
+    mockCopilotModels({ context: 1_050_000, input: 922_000, output: 128_000 })
+
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.githubCopilot].models["gpt-5.5"]
+
+    expect(model.limit).toEqual({
+      context: 1_050_000,
+      input: 922_000,
+      output: 128_000,
+    })
+  }),
+)
+
+it.instance(
+  "github copilot model config limit overrides live discovery limits",
+  Effect.gen(function* () {
+    yield* setCopilotOAuth()
+    mockCopilotModels({ context: 1_050_000, input: 922_000, output: 128_000 })
+
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.githubCopilot].models["gpt-5.5"]
+
+    expect(model.limit).toEqual({
+      context: 1_200_000,
+      input: 1_050_000,
+      output: 64_000,
+    })
+  }),
+  {
+    config: {
+      provider: {
+        "github-copilot": {
+          models: {
+            "gpt-5.5": {
+              limit: {
+                context: 1_200_000,
+                input: 1_050_000,
+                output: 64_000,
+              },
+            },
+          },
         },
       },
     },
