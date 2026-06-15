@@ -132,7 +132,12 @@ See [bot/README.md](./bot/README.md) for more details.
 
 ### Building
 
+Requires [Bun](https://bun.sh) — a fast JavaScript runtime and package manager (alternative to Node.js):
+
 ```bash
+# Install Bun
+curl -fsSL https://bun.sh/install | bash
+
 # Install dependencies
 bun install
 
