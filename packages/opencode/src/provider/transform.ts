@@ -836,8 +836,8 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         return Object.fromEntries(["none", "high"].map((effort) => [effort, { reasoningEffort: effort }]))
       }
 
-      // Add none and max variants to deepseek-v4 models. None effort level is only added to the
-      // official Deepseek provider because others may not support it. 
+      // Add none and max variants to deepseek-v4 models. None is only added to the official
+      // Deepseek provider because others may not support it. 
       if (model.api.id.toLowerCase().includes("deepseek-v4")) {
         const efforts = [...WIDELY_SUPPORTED_EFFORTS, "max"]
         if (model.providerID === "deepseek") efforts.unshift("none")
