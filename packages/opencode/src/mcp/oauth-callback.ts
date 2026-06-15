@@ -1,5 +1,6 @@
 import { createConnection } from "net"
 import { createServer } from "http"
+import { escapeHtml } from "@/util/html"
 import { OAUTH_CALLBACK_PORT, OAUTH_CALLBACK_PATH, parseRedirectUri } from "./oauth-provider"
 
 // Current callback server configuration (may differ from defaults if custom redirectUri is used)
@@ -42,7 +43,7 @@ const HTML_ERROR = (error: string) => `<!DOCTYPE html>
   <div class="container">
     <h1>Authorization Failed</h1>
     <p>An error occurred during authorization.</p>
-    <div class="error">${error}</div>
+    <div class="error">${escapeHtml(error)}</div>
   </div>
 </body>
 </html>`
@@ -70,6 +71,13 @@ function cleanupStateIndex(oauthState: string) {
   }
 }
 
+function stopIfIdle() {
+  if (pendingAuths.size > 0 || !server) return
+
+  server.close()
+  server = undefined
+}
+
 function handleRequest(req: import("http").IncomingMessage, res: import("http").ServerResponse) {
   const url = new URL(req.url || "/", `http://localhost:${currentPort}`)
 
@@ -87,7 +95,7 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
   // Enforce state parameter presence
   if (!state) {
     const errorMsg = "Missing required state parameter - potential CSRF attack"
-    res.writeHead(400, { "Content-Type": "text/html" })
+    res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" })
     res.end(HTML_ERROR(errorMsg))
     return
   }
@@ -101,13 +109,14 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
       cleanupStateIndex(state)
       pending.reject(new Error(errorMsg))
     }
-    res.writeHead(200, { "Content-Type": "text/html" })
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
     res.end(HTML_ERROR(errorMsg))
+    stopIfIdle()
     return
   }
 
   if (!code) {
-    res.writeHead(400, { "Content-Type": "text/html" })
+    res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" })
     res.end(HTML_ERROR("No authorization code provided"))
     return
   }
@@ -115,7 +124,7 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
   // Validate state parameter
   if (!pendingAuths.has(state)) {
     const errorMsg = "Invalid or expired state parameter - potential CSRF attack"
-    res.writeHead(400, { "Content-Type": "text/html" })
+    res.writeHead(400, { "Content-Type": "text/html; charset=utf-8" })
     res.end(HTML_ERROR(errorMsg))
     return
   }
@@ -127,8 +136,9 @@ function handleRequest(req: import("http").IncomingMessage, res: import("http").
   cleanupStateIndex(state)
   pending.resolve(code)
 
-  res.writeHead(200, { "Content-Type": "text/html" })
+  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" })
   res.end(HTML_SUCCESS)
+  stopIfIdle()
 }
 
 export async function ensureRunning(redirectUri?: string): Promise<void> {
@@ -167,6 +177,7 @@ export function waitForCallback(oauthState: string, mcpName?: string): Promise<s
         pendingAuths.delete(oauthState)
         if (mcpName) mcpNameToState.delete(mcpName)
         reject(new Error("OAuth callback timeout - authorization took too long"))
+        stopIfIdle()
       }
     }, CALLBACK_TIMEOUT_MS)
 
@@ -184,6 +195,7 @@ export function cancelPending(mcpName: string): void {
     pendingAuths.delete(key)
     mcpNameToState.delete(mcpName)
     pending.reject(new Error("Authorization cancelled"))
+    stopIfIdle()
   }
 }
 
