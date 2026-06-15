@@ -44,6 +44,6 @@ export function stream(text: string, live: boolean) {
   if (!head) return [{ raw: code.raw, src: code.raw, mode: "live" }] satisfies Block[]
   return [
     { raw: head, src: heal(head), mode: "live" },
-    { raw: code.raw, src: code.raw, mode: "live" },
+    { raw: code.raw, src: heal(code.raw), mode: "live" },
   ] satisfies Block[]
 }
