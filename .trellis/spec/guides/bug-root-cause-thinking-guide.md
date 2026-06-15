@@ -364,6 +364,45 @@ if (!toolDoneSettled) {
 
 ---
 
+### Pattern 7: Multi-Source Finalization Races
+
+**Symptom**: Multiple cleanup, recovery, or cancellation paths can write the same terminal state, making a normal operation look aborted or hiding the real abort source.
+
+**Example**:
+
+```typescript
+// Live processor cleanup owns in-memory work.
+processor.cleanupRunningTools()
+
+// Recovery finalizer owns stale durable state.
+session.finalizeOrphanedAssistant(sessionID)
+
+// User cancel coordinates interruption.
+prompt.cancel(sessionID)
+
+// BUG: all three directly write "Tool execution aborted" with the same metadata.
+```
+
+**Prevention Rule**:
+
+> Before changing an async terminal state, enumerate every writer of that state.
+> Distinguish live cleanup, durable recovery, user cancellation, and tool-specific
+> interruption. Centralize the terminal write or persist source/cause metadata so
+> later code and database inspections can tell which path acted.
+
+**Checklist**:
+
+- [ ] Which code paths can mark this operation completed, failed, cancelled, or interrupted?
+- [ ] Which path owns live in-memory lifecycle state?
+- [ ] Which path owns durable orphan recovery after process loss?
+- [ ] Which path represents explicit user/API cancellation?
+- [ ] Can two paths run concurrently or back-to-back on the same persisted record?
+- [ ] Does the terminal state include source metadata such as `abortSource`, `abortReason`, or owner/run id?
+- [ ] Does recovery prove there is no live owner before aborting active persisted work?
+- [ ] Do regression tests cover cleanup vs recovery, cancel vs cleanup, and background auto-resume races?
+
+---
+
 ## Post-Bug Analysis Template
 
 When you fix a bug, document it:
@@ -417,5 +456,6 @@ After analyzing a bug, add lessons to the appropriate guide:
 | React State Timing        | Yes          | Use refs for cross-render data, understand async updates |
 | Third-Party Hook Fallback | Yes          | Check fallback behavior when params are undefined        |
 | Async Cleanup Race        | Yes          | Explicit lifecycle settlement + normal-vs-abort timeouts |
+| Multi-Source Finalization | Yes          | Enumerate terminal writers + source metadata             |
 
 **Core Principle**: Most preventable bugs come from **implicit assumptions**. Make assumptions explicit.
