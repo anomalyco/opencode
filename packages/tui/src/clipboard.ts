@@ -1,10 +1,7 @@
-import { execFile, spawn } from "node:child_process"
-import { readFile, rm } from "node:fs/promises"
+import { execSync, spawn } from "node:child_process"
+import { readFile, rm, writeFile } from "node:fs/promises"
 import { platform, release, tmpdir } from "node:os"
 import path from "node:path"
-import { promisify } from "node:util"
-
-const exec = promisify(execFile)
 
 function command(command: string, args: string[] = [], input?: string) {
   return new Promise<Buffer>((resolve, reject) => {
@@ -30,18 +27,10 @@ export async function read() {
   if (platform() === "darwin") {
     const file = path.join(tmpdir(), "opencode-clipboard.png")
     try {
-      await exec("osascript", [
-        "-e",
-        'set imageData to the clipboard as "PNGf"',
-        "-e",
-        `set fileRef to open for access POSIX file "${file}" with write permission`,
-        "-e",
-        "set eof fileRef to 0",
-        "-e",
-        "write imageData to fileRef",
-        "-e",
-        "close access fileRef",
-      ])
+      execSync(
+        `osascript -e 'set imageData to the clipboard as "PNGf"' -e 'set fileRef to open for access POSIX file "${file}" with write permission' -e 'set eof fileRef to 0' -e 'write imageData to fileRef' -e 'close access fileRef'`,
+        { stdio: "ignore" },
+      )
       return { data: (await readFile(file)).toString("base64"), mime: "image/png" }
     } catch {
       // Fall through to text clipboard.
@@ -51,12 +40,49 @@ export async function read() {
   }
 
   if (platform() === "win32" || release().includes("WSL")) {
-    const script =
-      "Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img) { $ms = New-Object System.IO.MemoryStream; $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); [System.Convert]::ToBase64String($ms.ToArray()) }"
-    const image = await command("powershell.exe", ["-NonInteractive", "-NoProfile", "-command", script]).catch(() =>
-      Buffer.alloc(0),
-    )
-    if (image.length) return { data: image.toString().trim(), mime: "image/png" }
+    try {
+      const script = [
+        "Add-Type -AssemblyName System.Windows.Forms",
+        "Add-Type -AssemblyName System.Drawing",
+        "$d = [System.Windows.Forms.Clipboard]::GetDataObject()",
+        "if ($d) {",
+        "  if ($d.GetDataPresent([System.Windows.Forms.DataFormats]::FileDrop)) {",
+        "    $files = $d.GetData([System.Windows.Forms.DataFormats]::FileDrop)",
+        "    foreach ($f in $files) {",
+        "      if (Test-Path $f) {",
+        "        $bytes = [System.IO.File]::ReadAllBytes($f)",
+        "        $b64 = [System.Convert]::ToBase64String($bytes)",
+        "        $ext = [System.IO.Path]::GetExtension($f).ToLower()",
+        "        $mime = switch ($ext) { '.png' {'image/png'} '.jpg' {'image/jpeg'} '.jpeg' {'image/jpeg'} '.gif' {'image/gif'} '.webp' {'image/webp'} '.bmp' {'image/bmp'} default {'application/octet-stream'} }",
+        "        Write-Host \"FILEDATA:$mime`:$b64\"",
+        "        break",
+        "      }",
+        "    }",
+        "  } elseif ($d.GetDataPresent([System.Windows.Forms.DataFormats]::Bitmap)) {",
+        "    $img = $d.GetData([System.Windows.Forms.DataFormats]::Bitmap)",
+        "    $ms = New-Object System.IO.MemoryStream",
+        "    $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)",
+        "    Write-Host \"FILEDATA:image/png:$([System.Convert]::ToBase64String($ms.ToArray()))\"",
+        "  }",
+        "}",
+      ].join("; ")
+      const stdout = execSync(`powershell.exe -STA -NonInteractive -NoProfile -Command "${script.replace(/"/g, '\\"')}"`, {
+        encoding: "utf8",
+        timeout: 10000,
+        windowsHide: true,
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+      const match = stdout.match(/FILEDATA:([^:]+):(.+)/)
+      if (match) {
+        const mime = match[1]
+        const data = match[2].trim()
+        if (mime.startsWith("image/") && data.length > 0) {
+          return { data, mime }
+        }
+      }
+    } catch {
+      // Fall through to text clipboard.
+    }
   }
 
   if (platform() === "linux") {

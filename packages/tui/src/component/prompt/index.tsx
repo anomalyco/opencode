@@ -1393,23 +1393,28 @@ export function Prompt(props: PromptProps) {
                   return
                 }
 
-                // Normalize line endings at the boundary
-                // Windows ConPTY/Terminal often sends CR-only newlines in bracketed paste
-                // Replace CRLF first, then any remaining CR
                 const normalizedText = decodePasteBytes(event.bytes).replace(/\r\n/g, "\n").replace(/\r/g, "\n")
                 const pastedContent = normalizedText.trim()
 
-                // Windows Terminal <1.25 can surface image-only clipboard as an
-                // empty bracketed paste. Windows Terminal 1.25+ does not.
                 if (!pastedContent) {
-                  keymap.dispatchCommand("prompt.paste")
+                  try {
+                    const clipboardContent = await clipboard.read?.()
+                    if (clipboardContent?.mime.startsWith("image/")) {
+                      event.preventDefault()
+                      await pasteAttachment({
+                        filename: "clipboard",
+                        mime: clipboardContent.mime,
+                        content: clipboardContent.data,
+                      })
+                      return
+                    }
+                  } catch {
+                    // Ignore clipboard read errors
+                  }
                   return
                 }
 
-                // Once we cross an async boundary below, the terminal may perform its
-                // default paste unless we suppress it first and handle insertion ourselves.
                 event.preventDefault()
-
                 await pasteInputText(normalizedText)
               }}
               ref={(r: TextareaRenderable) => {
