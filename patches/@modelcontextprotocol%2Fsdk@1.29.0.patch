@@ -1,3 +1,29 @@
+diff --git a/dist/cjs/client/index.d.ts b/dist/cjs/client/index.d.ts
+index 1822bf749aec71d2bb295083d832114ee187bb67..58b859a7b32222fb5cb9f2011fdc5d010f3d05fb 100644
+--- a/dist/cjs/client/index.d.ts
++++ b/dist/cjs/client/index.d.ts
+@@ -428,6 +428,8 @@ export declare class Client<RequestT extends Request = Request, NotificationT ex
+      *
+      * For task-based execution with streaming behavior, use client.experimental.tasks.callToolStream() instead.
+      */
++    callTool(params: CallToolRequest['params'], resultSchema?: undefined, options?: RequestOptions): Promise<SchemaOutput<typeof CallToolResultSchema>>;
++    callTool<T extends typeof CallToolResultSchema | typeof CompatibilityCallToolResultSchema>(params: CallToolRequest['params'], resultSchema: T, options?: RequestOptions): Promise<SchemaOutput<T>>;
+     callTool(params: CallToolRequest['params'], resultSchema?: typeof CallToolResultSchema | typeof CompatibilityCallToolResultSchema, options?: RequestOptions): Promise<{
+         [x: string]: unknown;
+         content: ({
+diff --git a/dist/esm/client/index.d.ts b/dist/esm/client/index.d.ts
+index 1822bf749aec71d2bb295083d832114ee187bb67..58b859a7b32222fb5cb9f2011fdc5d010f3d05fb 100644
+--- a/dist/esm/client/index.d.ts
++++ b/dist/esm/client/index.d.ts
+@@ -428,6 +428,8 @@ export declare class Client<RequestT extends Request = Request, NotificationT ex
+      *
+      * For task-based execution with streaming behavior, use client.experimental.tasks.callToolStream() instead.
+      */
++    callTool(params: CallToolRequest['params'], resultSchema?: undefined, options?: RequestOptions): Promise<SchemaOutput<typeof CallToolResultSchema>>;
++    callTool<T extends typeof CallToolResultSchema | typeof CompatibilityCallToolResultSchema>(params: CallToolRequest['params'], resultSchema: T, options?: RequestOptions): Promise<SchemaOutput<T>>;
+     callTool(params: CallToolRequest['params'], resultSchema?: typeof CallToolResultSchema | typeof CompatibilityCallToolResultSchema, options?: RequestOptions): Promise<{
+         [x: string]: unknown;
+         content: ({
 diff --git a/dist/cjs/client/index.js b/dist/cjs/client/index.js
 index 6ac1da14dc7f6211ae70f7711c124b76098816d8..adb5b7bd45514a406a0f7e40b64631c101584c84 100644
 --- a/dist/cjs/client/index.js
