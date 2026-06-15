@@ -1,5 +1,4 @@
 import { test, expect, describe, afterEach } from "bun:test"
-import { createServer } from "http"
 import { McpOAuthCallback } from "../../src/mcp/oauth-callback"
 import { parseRedirectUri } from "../../src/mcp/oauth-provider"
 
@@ -34,11 +33,11 @@ describe("McpOAuthCallback.ensureRunning", () => {
   })
 
   test("stops after the callback completes", async () => {
-    const port = await availablePort()
-    await McpOAuthCallback.ensureRunning(`http://127.0.0.1:${port}/callback`)
+    const redirectUri = "http://127.0.0.1:18003/custom/callback"
+    await McpOAuthCallback.ensureRunning(redirectUri)
     const callback = McpOAuthCallback.waitForCallback("success")
 
-    const response = await fetch(`http://127.0.0.1:${port}/callback?code=code&state=success`)
+    const response = await fetch(`${redirectUri}?code=code&state=success`)
 
     expect(response.status).toBe(200)
     expect(await callback).toBe("code")
@@ -71,12 +70,3 @@ describe("McpOAuthCallback.ensureRunning", () => {
     expect(await response.text()).toContain('<div class="error">The user denied access</div>')
   })
 })
-
-async function availablePort() {
-  const probe = createServer()
-  await new Promise<void>((resolve) => probe.listen(0, "127.0.0.1", resolve))
-  const address = probe.address()
-  if (!address || typeof address === "string") throw new Error("Failed to allocate callback test port")
-  await new Promise<void>((resolve) => probe.close(() => resolve()))
-  return address.port
-}
