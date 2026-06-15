@@ -79,7 +79,7 @@ import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
 import { createTuiAttention } from "./attention"
 import * as TuiAudio from "./audio"
-import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
+import { win32DisableProcessedInput, win32FlushInputBuffer, win32InstallCtrlCGuard } from "./terminal-win32"
 import { destroyRenderer } from "./util/renderer"
 import { cliErrorMessage, errorFormat } from "./util/error"
 
@@ -180,6 +180,18 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const exit = { epilogue: undefined as string | undefined, reason: undefined as unknown }
   const result = yield* Effect.scoped(
     Effect.gen(function* () {
+      // Keep ENABLE_PROCESSED_INPUT disabled for the renderer's lifetime.
+      // Without the guard, runtimes/ConPTY can re-apply the flag, which turns
+      // Ctrl+C into a CTRL_C_EVENT and causes Windows Terminal to reset the
+      // tab title. Install before the renderer is created so the console mode
+      // is correct from the first frame (matches pre-refactor ordering).
+      const unguard = yield* Effect.acquireRelease(
+        Effect.sync(() => win32InstallCtrlCGuard()),
+        (release) =>
+          Effect.sync(() => {
+            if (typeof release === "function") release()
+          }),
+      )
       const renderer = yield* Effect.acquireRelease(
         Effect.tryPromise(() =>
           createCliRenderer({

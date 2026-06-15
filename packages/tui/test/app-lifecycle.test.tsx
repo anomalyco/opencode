@@ -125,3 +125,63 @@ test("app.exit prints the session epilogue after scoped cleanup", async () => {
     mock.restore()
   }
 })
+
+test("installs win32 Ctrl+C guard for renderer lifetime and releases it on shutdown", async () => {
+  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  const core = await import("@opentui/core")
+  mock.module("@opentui/core", () => ({ ...core, createCliRenderer: async () => setup.renderer }))
+
+  const win32 = await import("../src/terminal-win32")
+  let installCalls = 0
+  let unhookCalls = 0
+  mock.module("../src/terminal-win32", () => ({
+    ...win32,
+    win32InstallCtrlCGuard: () => {
+      installCalls++
+      return () => {
+        unhookCalls++
+      }
+    },
+  }))
+
+  const listeners = new Set(process.listeners("SIGHUP"))
+  const events = createEventSource()
+  const calls = createFetch()
+  let started!: () => void
+  const ready = new Promise<void>((resolve) => {
+    started = resolve
+  })
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        url: "http://test",
+        directory,
+        config: createTuiResolvedConfig({ plugin_enabled: {} }),
+        fetch: calls.fetch,
+        events: events.source,
+        args: {},
+        pluginHost: {
+          async start() {
+            started()
+          },
+          async dispose() {},
+        },
+      }).pipe(Effect.provide(Global.defaultLayer)),
+    )
+    await ready
+    expect(installCalls).toBe(1)
+    expect(unhookCalls).toBe(0)
+
+    process.emit("SIGHUP")
+    await task
+
+    expect(setup.renderer.isDestroyed).toBe(true)
+    expect(unhookCalls).toBe(1)
+    expect(process.listeners("SIGHUP").every((listener) => listeners.has(listener))).toBe(true)
+  } finally {
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    mock.restore()
+  }
+})
