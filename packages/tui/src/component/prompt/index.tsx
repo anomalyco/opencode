@@ -99,11 +99,10 @@ export type PromptRef = {
   readonly text: string
   /** Substring by display-width offsets (the extmark/cursor offset model). */
   getTextRange(startOffset: number, endOffset: number): string
-  /** Replace [startOffset, endOffset) (display-width offsets) with
-   *  `replacement`, preserving undo history AND the textarea's extmark
-   *  controller (uses setSelection+insertText+clearSelection for non-empty
-   *  ranges and cursor-set+insertText for empty ranges). Cursor lands at
-   *  the end of the replacement. */
+  /** Replace [startOffset, endOffset) (display-width offsets) with `replacement`.
+   *  If startOffset > endOffset the range is treated as a pure INSERTION at
+   *  min(startOffset, endOffset) — it never deletes. Cursor lands at the end of
+   *  the replacement. Preserves undo history and the extmark controller. */
   replaceRange(startOffset: number, endOffset: number, replacement: string): void
   /** The textarea's extmark controller — range decorations for plugins.
    *  Offsets are display-width. Use registerType to namespace; never touch

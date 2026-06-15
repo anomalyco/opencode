@@ -208,6 +208,10 @@ export type TuiPromptRef = {
   submit(): void
   readonly text: string
   getTextRange(startOffset: number, endOffset: number): string
+  /** Replace [startOffset, endOffset) (display-width offsets) with `replacement`.
+   *  If startOffset > endOffset the range is treated as a pure INSERTION at
+   *  min(startOffset, endOffset) — it never deletes. Cursor lands at the end of
+   *  the replacement. Preserves undo history and the extmark controller. */
   replaceRange(startOffset: number, endOffset: number, replacement: string): void
   readonly extmarks: Pick<NonNullable<TextareaRenderable["extmarks"]>,
     | "create" | "delete" | "get" | "getAll" | "getVirtual" | "getAtOffset"
@@ -404,10 +408,8 @@ export type TuiStyleDefinition = {
 }
 
 export type TuiSyntaxStyle = {
-  /** Register a named style. Re-registering the same name is idempotent
-   *  (returns the existing id and overwrites the previous definition) —
-   *  safe to call on plugin reload. Returns the style id (use with
-   *  extmark create({ styleId })). */
+  /** Register (or update) a named syntax style. Returns the same id for a given
+   *  name across calls and updates the style definition on repeat registration. */
   registerStyle(name: string, definition: TuiStyleDefinition): number
   /** Look up a style id by name, or null if not registered. */
   getStyleId(name: string): number | null
