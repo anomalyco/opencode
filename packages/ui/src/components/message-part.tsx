@@ -293,7 +293,26 @@ function getDirectory(path: string | undefined) {
 }
 
 import type { IconProps } from "./icon"
-import { normalize, resolveFileDiff } from "./session-diff"
+import type { DiffSource } from "./session-diff"
+import { createPreparedDiff } from "../diff/resource"
+
+function PreparedToolDiff(props: { source: DiffSource; virtualize?: boolean }) {
+  const fileComponent = useFileComponent()
+  const [prepared] = createPreparedDiff(() => props.source)
+  return (
+    <Show when={prepared()}>
+      {(value) => (
+        <Dynamic
+          component={fileComponent}
+          mode="diff"
+          virtualize={props.virtualize}
+          fileDiff={value().fileDiff}
+          hunkSeparators={value().fileDiff.isPartial ? "simple" : "line-info-basic"}
+        />
+      )}
+    </Show>
+  )
+}
 
 export type ToolInfo = {
   icon: IconProps["name"]
@@ -1936,7 +1955,6 @@ ToolRegistry.register({
   name: "edit",
   render(props) {
     const i18n = useI18n()
-    const fileComponent = useFileComponent()
     const diagnostics = createMemo(() => getDiagnostics(props.metadata.diagnostics, props.input.filePath))
     const path = createMemo(() => props.metadata?.filediff?.file || props.input.filePath || "")
     const filename = () => getFilename(props.input.filePath ?? "")
@@ -1944,7 +1962,13 @@ ToolRegistry.register({
     const diffSource = createMemo(
       () => {
         const filediff = props.metadata?.filediff
-        if (!filediff) return
+        if (!filediff) {
+          return {
+            file: props.input.filePath || "",
+            before: props.input.oldString || "",
+            after: props.input.newString || "",
+          }
+        }
         return {
           file: filediff.file || props.input.filePath || "",
           patch: typeof filediff.patch === "string" ? filediff.patch : undefined,
@@ -1958,27 +1982,6 @@ ToolRegistry.register({
           a?.file === b?.file && a?.patch === b?.patch && a?.before === b?.before && a?.after === b?.after,
       },
     )
-
-    const fileCompProps = createMemo(() => {
-      try {
-        const source = diffSource()
-        if (source) {
-          const fileDiff = resolveFileDiff(source)
-          if (fileDiff) return { fileDiff, hunkSeparators: fileDiff.isPartial ? "simple" : "line-info-basic" }
-        }
-      } catch {}
-
-      return {
-        before: {
-          name: props.metadata?.filediff?.file || props.input.filePath,
-          contents: props.metadata?.filediff?.before || props.input.oldString || "",
-        },
-        after: {
-          name: props.metadata?.filediff?.file || props.input.filePath,
-          contents: props.metadata?.filediff?.after || props.input.newString || "",
-        },
-      }
-    })
 
     return (
       <div data-component="edit-tool">
@@ -2021,7 +2024,7 @@ ToolRegistry.register({
               }
             >
               <div data-component="edit-content">
-                <Dynamic component={fileComponent} mode="diff" virtualize={props.virtualizeDiff} {...fileCompProps()} />
+                <PreparedToolDiff source={diffSource()} virtualize={props.virtualizeDiff} />
               </div>
             </ToolFileAccordion>
           </Show>
@@ -2095,7 +2098,6 @@ ToolRegistry.register({
   name: "apply_patch",
   render(props) {
     const i18n = useI18n()
-    const fileComponent = useFileComponent()
     const files = createMemo(() => patchFiles(props.metadata.files))
     const pending = createMemo(() => props.status === "pending" || props.status === "running")
     const single = createMemo(() => {
@@ -2145,19 +2147,6 @@ ToolRegistry.register({
                   <For each={files()}>
                     {(file) => {
                       const active = createMemo(() => expanded().includes(file.filePath))
-                      const [visible, setVisible] = createSignal(false)
-
-                      createEffect(() => {
-                        if (!active()) {
-                          setVisible(false)
-                          return
-                        }
-
-                        requestAnimationFrame(() => {
-                          if (!active()) return
-                          setVisible(true)
-                        })
-                      })
 
                       return (
                         <Accordion.Item value={file.filePath} data-type={file.type}>
@@ -2200,15 +2189,9 @@ ToolRegistry.register({
                             </Accordion.Trigger>
                           </StickyAccordionHeader>
                           <Accordion.Content>
-                            <Show when={props.deferContent === false || visible()}>
+                            <Show when={active()}>
                               <div data-component="apply-patch-file-diff">
-                                <Dynamic
-                                  component={fileComponent}
-                                  mode="diff"
-                                  virtualize={props.virtualizeDiff}
-                                  fileDiff={file.view.fileDiff}
-                                  hunkSeparators={file.view.fileDiff.isPartial ? "simple" : "line-info-basic"}
-                                />
+                                <PreparedToolDiff source={file.source} virtualize={props.virtualizeDiff} />
                               </div>
                             </Show>
                           </Accordion.Content>
@@ -2278,12 +2261,7 @@ ToolRegistry.register({
               }
             >
               <div data-component="apply-patch-file-diff">
-                <Dynamic
-                  component={fileComponent}
-                  mode="diff"
-                  virtualize={props.virtualizeDiff}
-                  fileDiff={single()!.view.fileDiff}
-                />
+                <PreparedToolDiff source={single()!.source} virtualize={props.virtualizeDiff} />
               </div>
             </ToolFileAccordion>
           </BasicTool>

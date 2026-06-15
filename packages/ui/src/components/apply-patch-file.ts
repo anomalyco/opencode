@@ -1,4 +1,4 @@
-import { normalize, type ViewDiff } from "./session-diff"
+import type { DiffSource } from "./session-diff"
 
 type Kind = "add" | "update" | "delete" | "move"
 
@@ -22,17 +22,11 @@ export type ApplyPatchFile = {
   additions: number
   deletions: number
   movePath?: string
-  view: ViewDiff
+  source: DiffSource
 }
 
 function kind(value: unknown) {
   if (value === "add" || value === "update" || value === "delete" || value === "move") return value
-}
-
-function status(type: Kind): "added" | "deleted" | "modified" {
-  if (type === "add") return "added"
-  if (type === "delete") return "deleted"
-  return "modified"
 }
 
 export function patchFile(raw: unknown): ApplyPatchFile | undefined {
@@ -60,15 +54,12 @@ export function patchFile(raw: unknown): ApplyPatchFile | undefined {
     additions,
     deletions,
     movePath,
-    view: normalize({
+    source: {
       file: relativePath,
       patch,
       before,
       after,
-      additions,
-      deletions,
-      status: status(type),
-    }),
+    },
   }
 }
 
