@@ -14,8 +14,15 @@ export interface Skill {
   name: string
   /** Source path on disk, if loaded from a file. */
   path: string
-  /** Parsed frontmatter key/values (shallow). */
+  /** Parsed frontmatter key/values (shallow; for reads like `name`). */
   frontmatter: Record<string, unknown>
+  /**
+   * The original frontmatter block text, preserved verbatim. The loop only ever
+   * edits the body, so round-tripping the raw block avoids mangling rich YAML
+   * (lists, maps, multi-line values) that the shallow parser can't represent.
+   * Undefined for skills constructed without a source block.
+   */
+  frontmatterRaw?: string
   /** Markdown body (everything after the frontmatter block). */
   body: string
 }
