@@ -36,14 +36,14 @@ export function DialogModel(props: { providerID?: string }) {
         return [
           {
             key: item,
-            value: { providerID: provider.id, modelID: model.id },
+            value: { providerID: provider.id, modelID: item.modelID },
             title: model.name ?? item.modelID,
             description: provider.name,
             category,
-            disabled: provider.id === "opencode" && model.id.includes("-nano"),
+            disabled: provider.id === "opencode" && item.modelID.includes("-nano"),
             footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
             onSelect: () => {
-              onSelect(provider.id, model.id)
+              onSelect(provider.id, item.modelID)
             },
           },
         ]
