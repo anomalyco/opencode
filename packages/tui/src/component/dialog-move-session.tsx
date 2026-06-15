@@ -283,7 +283,7 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
   }
 
   return (
-    <box minHeight={Math.max(8, Math.min(16, dimensions().height - Math.floor(dimensions().height / 4) - 2))}>
+    <box minHeight={loadError() ? 5 : Math.max(8, Math.min(16, dimensions().height - Math.floor(dimensions().height / 4) - 2))}>
       <DialogSelect
         title="Move session"
         titleView={
@@ -296,14 +296,20 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
             </Show>
           </box>
         }
+        renderFilter={!loadError()}
         options={options()}
         emptyView={
           loadError() ? (
-            <box flexGrow={1} alignItems="center" justifyContent="center" paddingLeft={4} paddingRight={4}>
-              <text fg={theme.error} attributes={TextAttributes.BOLD}>
-                Could not load project directories
-              </text>
-              <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
+            <box paddingLeft={4} paddingRight={4} paddingTop={1} gap={1}>
+              <box flexDirection="row" gap={1}>
+                <text fg={theme.error}>!</text>
+                <text fg={theme.text} attributes={TextAttributes.BOLD}>
+                  Could not load project directories
+                </text>
+              </box>
+              <box paddingLeft={2}>
+                <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
+              </box>
             </box>
           ) : undefined
         }
