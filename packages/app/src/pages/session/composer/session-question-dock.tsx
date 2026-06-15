@@ -574,17 +574,32 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   // ── Lifecycle ───────────────────────────────────────────────────────────────────────────────
+  let disposed = false
   const init = async () => {
     const user = parentParams.user[0]
     const stored = loadActor(sessionID, user?.id)
-    const res = await sdk.client.session.actor.upsert({
-      sessionID,
-      directory: sdk.directory,
-      ...(stored ? { actorID: stored } : {}),
-      ...(user ? { userID: user.id, name: user.name } : {}),
-    })
-    const a = res.data
-    if (!a) return
+    // The dock mounts before the server may be reachable; without retry the actor registration would
+    // fail once and the dock would stay dead until a manual reload. Back off until it succeeds or the
+    // dock is torn down.
+    let a: Awaited<ReturnType<typeof sdk.client.session.actor.upsert>>["data"] | undefined
+    let delay = 500
+    while (!disposed) {
+      try {
+        const res = await sdk.client.session.actor.upsert({
+          sessionID,
+          directory: sdk.directory,
+          ...(stored ? { actorID: stored } : {}),
+          ...(user ? { userID: user.id, name: user.name } : {}),
+        })
+        a = res.data
+        if (a) break
+      } catch {
+        // fall through to backoff
+      }
+      await new Promise<void>((r) => setTimeout(r, delay))
+      delay = Math.min(delay * 2, 8000)
+    }
+    if (disposed || !a) return
     saveActor(sessionID, a.actorID, user?.id)
     setActor({ actorID: a.actorID, name: label(a.actorID, a.name), color: a.color })
 
@@ -611,7 +626,10 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   onMount(() => void init().catch(fail))
-  onCleanup(() => channel?.close())
+  onCleanup(() => {
+    disposed = true
+    channel?.close()
+  })
 
   // Keep the dock from overflowing the prompt area (matches the previous local-state behavior).
   const measure = () => {

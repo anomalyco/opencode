@@ -19,28 +19,51 @@ type PromptDocInput = {
   user?: () => { id: string; name: string } | undefined
 }
 
-async function register(input: PromptDocInput, sessionID: string) {
+// Bootstrap requests (actor registration + prompt doc lookup) run before the sync layer exists, so a
+// server that is unavailable at page load would otherwise leave the editor permanently uninitialized
+// — the mounting effect only re-runs on session change, not when the server comes back. Retry with
+// exponential backoff until it succeeds or `alive()` reports the attempt has been superseded.
+async function withRetry<T>(alive: (() => boolean) | undefined, task: () => Promise<T>): Promise<T> {
+  let delay = 500
+  for (;;) {
+    try {
+      return await task()
+    } catch (err) {
+      if (alive && !alive()) throw err
+      await new Promise<void>((r) => setTimeout(r, delay))
+      if (alive && !alive()) throw err
+      delay = Math.min(delay * 2, 8000)
+    }
+  }
+}
+
+async function register(input: PromptDocInput, sessionID: string, alive?: () => boolean) {
   const user = input.user?.()
   // With a ?user= param the identity is keyed by that user id (stable per user, distinct across
   // users); without it, per tab. We never force a tab/browser-stored actorID onto a user-scoped
   // identity — that would merge two different users into one. The server also de-dupes by user id.
   const stored = loadActor(sessionID, user?.id)
-  const res = await input.client.session.actor.upsert({
-    sessionID,
-    directory: input.directory(),
-    ...(stored ? { actorID: stored } : {}),
-    ...(user ? { userID: user.id, name: user.name } : {}),
+  const actor = await withRetry(alive, async () => {
+    const res = await input.client.session.actor.upsert({
+      sessionID,
+      directory: input.directory(),
+      ...(stored ? { actorID: stored } : {}),
+      ...(user ? { userID: user.id, name: user.name } : {}),
+    })
+    const value = res.data as SessionActor | undefined
+    if (!value) throw new Error("actor registration failed")
+    return value
   })
-  const actor = res.data as SessionActor | undefined
-  if (!actor) throw new Error("actor registration failed")
   saveActor(sessionID, actor.actorID, user?.id)
   return actor
 }
 
-async function promptDoc(input: PromptDocInput, sessionID: string) {
-  const res = await input.client.session.promptDoc({ sessionID, directory: input.directory() })
-  if (!res.data?.docID) throw new Error("prompt doc lookup failed")
-  return res.data
+async function promptDoc(input: PromptDocInput, sessionID: string, alive?: () => boolean) {
+  return withRetry(alive, async () => {
+    const res = await input.client.session.promptDoc({ sessionID, directory: input.directory() })
+    if (!res.data?.docID) throw new Error("prompt doc lookup failed")
+    return res.data
+  })
 }
 
 export function createPromptDoc(input: PromptDocInput) {
@@ -108,10 +131,10 @@ export function createPromptDoc(input: PromptDocInput) {
     await current?.dispose()
   }
 
-  const ensure = async (sessionID: string) => {
-    const actor = await register(input, sessionID)
+  const ensure = async (sessionID: string, alive?: () => boolean) => {
+    const actor = await register(input, sessionID, alive)
     setActor(actor)
-    const doc = await promptDoc(input, sessionID)
+    const doc = await promptDoc(input, sessionID, alive)
     setDocID(doc.docID)
     sync = {
       docID: doc.docID,
@@ -185,7 +208,7 @@ export function createPromptDoc(input: PromptDocInput) {
       // Already on the target doc (a duplicate pivot that queued behind the real one) — no-op.
       if (!opts?.force && handle?.collection.id === next && session === sessionID && sync?.docID === next) return
 
-      if (session !== sessionID || !sync) await ensure(sessionID)
+      if (session !== sessionID || !sync) await ensure(sessionID, alive)
       if (!alive() || !sync) return
       await remount(alive, {
         sync: { ...sync, docID: next },
@@ -197,7 +220,8 @@ export function createPromptDoc(input: PromptDocInput) {
   }
 
   const refresh = async (sessionID: string, opts?: { init?: boolean }) => {
-    const doc = await promptDoc(input, sessionID)
+    // Stop retrying if the user navigates to a different session while the server is still down.
+    const doc = await promptDoc(input, sessionID, () => input.sessionID() === sessionID)
     setDocID(doc.docID)
     if (live !== doc.docID || handle?.collection.id !== doc.docID || sync?.docID !== doc.docID) {
       await pivot(sessionID, doc.docID, opts)
@@ -216,13 +240,13 @@ export function createPromptDoc(input: PromptDocInput) {
     if (!sessionID) return Promise.resolve()
 
     return serialize(async (alive) => {
-      const remote = await promptDoc(input, sessionID)
+      const remote = await promptDoc(input, sessionID, alive)
       if (!alive()) return
       setDocID(remote.docID)
       if (session !== sessionID || !sync || sync.docID !== remote.docID) {
         await drop()
         if (!alive()) return
-        await ensure(sessionID)
+        await ensure(sessionID, alive)
         if (!alive()) return
       }
 
