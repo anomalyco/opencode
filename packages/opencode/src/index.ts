@@ -26,6 +26,7 @@ import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
 import { DbCommand } from "./cli/cmd/db"
+import { LoopBenchCommand } from "./cli/cmd/loop-bench"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
@@ -101,6 +102,7 @@ const cli = yargs(args)
   .command(SessionCommand)
   .command(PluginCommand)
   .command(DbCommand)
+  .command(LoopBenchCommand)
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||
