@@ -133,3 +133,19 @@ export function planRangeReplace(
     ],
   }
 }
+
+/** Map a logical edit-buffer position to absolute screen coords, accounting
+ *  for both axes of viewport scroll. Returns null when the position is
+ *  scrolled outside the viewport on either axis. Pure — no native deps. */
+export function viewportScreenCoords(
+  pos: { row: number; col: number },
+  viewport: { offsetX: number; offsetY: number; width: number; height: number },
+  screenX: number,
+  screenY: number,
+): { x: number; y: number } | null {
+  const visualRow = pos.row - viewport.offsetY
+  const visualCol = pos.col - viewport.offsetX
+  if (visualRow < 0 || visualRow >= viewport.height) return null
+  if (visualCol < 0 || visualCol >= viewport.width) return null
+  return { x: screenX + visualCol, y: screenY + visualRow }
+}

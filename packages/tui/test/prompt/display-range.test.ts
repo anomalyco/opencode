@@ -223,3 +223,30 @@ describe("planRangeReplace — extmark-safe primitive", () => {
     expect(result.text).toBe("X你ab")
   })
 })
+
+import { viewportScreenCoords } from "../../src/prompt/display"
+
+describe("viewportScreenCoords", () => {
+  const vp = { offsetX: 0, offsetY: 0, width: 80, height: 10 }
+  test("no scroll: adds screen origin to logical position", () => {
+    expect(viewportScreenCoords({ row: 2, col: 5 }, vp, 3, 1)).toEqual({ x: 8, y: 3 })
+  })
+  test("horizontal scroll: subtracts viewport.offsetX from col", () => {
+    expect(viewportScreenCoords({ row: 0, col: 40 }, { ...vp, offsetX: 30 }, 3, 1)).toEqual({ x: 13, y: 1 })
+  })
+  test("vertical scroll: subtracts viewport.offsetY from row", () => {
+    expect(viewportScreenCoords({ row: 12, col: 0 }, { ...vp, offsetY: 5 }, 0, 0)).toEqual({ x: 0, y: 7 })
+  })
+  test("col scrolled left of viewport → null", () => {
+    expect(viewportScreenCoords({ row: 0, col: 10 }, { ...vp, offsetX: 30 }, 0, 0)).toBeNull()
+  })
+  test("col past right edge → null", () => {
+    expect(viewportScreenCoords({ row: 0, col: 85 }, vp, 0, 0)).toBeNull()
+  })
+  test("row above viewport → null", () => {
+    expect(viewportScreenCoords({ row: 1, col: 0 }, { ...vp, offsetY: 5 }, 0, 0)).toBeNull()
+  })
+  test("row below viewport → null", () => {
+    expect(viewportScreenCoords({ row: 10, col: 0 }, vp, 0, 0)).toBeNull()
+  })
+})

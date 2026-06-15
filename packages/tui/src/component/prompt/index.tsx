@@ -28,7 +28,7 @@ import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
 import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
-import { planRangeReplace, promptOffsetWidth } from "../../prompt/display"
+import { planRangeReplace, promptOffsetWidth, viewportScreenCoords } from "../../prompt/display"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
@@ -123,10 +123,10 @@ export type PromptRef = {
    *
    *  Implementation: maps offset → logical {row, col} via
    *  editBuffer.offsetToPosition, then adjusts for the viewport's
-   *  scrollY and adds the textarea's screenX/screenY. Prompts rarely
-   *  wrap (wrapMode="none" is the default), so logical col ≈ visual col
-   *  for v1. If wrap is ever enabled, visual col may differ from logical
-   *  col for long lines. */
+   *  scrollX/scrollY and adds the textarea's screenX/screenY. Prompts
+   *  rarely wrap (wrapMode="none" is the default), so logical col ≈
+   *  visual col for v1. If wrap is ever enabled, visual col may differ
+   *  from logical col for long lines. */
   offsetToScreen(offset: number): { x: number; y: number } | null
 }
 
@@ -647,23 +647,9 @@ export function Prompt(props: PromptProps) {
     },
     offsetToScreen(offset: number): { x: number; y: number } | null {
       if (!input || input.isDestroyed) return null
-      // offsetToPosition returns logical {row, col} in the edit buffer.
-      // For a non-wrapping textarea (the default), logical col equals
-      // visual col. If wrap mode is ever enabled, visual col may differ
-      // from logical col for long lines — a future improvement would use
-      // editorView.getVisualCursor() after a temporary cursor move, but
-      // that mutates state. For v1, logical ≈ visual is acceptable.
       const pos = input.editBuffer.offsetToPosition(offset)
       if (!pos) return null
-      const viewport = input.editorView.getViewport()
-      const visualRow = pos.row - viewport.offsetY
-      const visualCol = pos.col
-      // Guard: if the row is scrolled out of view, don't render the overlay.
-      if (visualRow < 0 || visualRow >= viewport.height) return null
-      return {
-        x: input.screenX + visualCol,
-        y: input.screenY + visualRow,
-      }
+      return viewportScreenCoords(pos, input.editorView.getViewport(), input.screenX, input.screenY)
     },
     focus() {
       input.focus()
