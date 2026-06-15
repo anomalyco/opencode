@@ -300,16 +300,11 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
         options={options()}
         emptyView={
           loadError() ? (
-            <box paddingLeft={4} paddingRight={4} paddingTop={1} gap={1}>
-              <box flexDirection="row" gap={1}>
-                <text fg={theme.error}>!</text>
-                <text fg={theme.text} attributes={TextAttributes.BOLD}>
-                  Could not load project directories
-                </text>
-              </box>
-              <box paddingLeft={2}>
-                <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
-              </box>
+            <box paddingLeft={4} paddingRight={4}>
+              <text fg={theme.error} attributes={TextAttributes.BOLD}>
+                Could not load project directories
+              </text>
+              <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
             </box>
           ) : undefined
         }
