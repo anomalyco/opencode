@@ -89,6 +89,21 @@ type ChangeMode = "git" | "branch" | "session" | "turn"
 type VcsMode = "git" | "branch"
 type ScrollMode = "live" | "anchored"
 
+function mergeKnownSessions(current: Session[], incoming: readonly Session[]): Session[] {
+  if (incoming.length === 0) return current
+
+  const byID = new Map(current.map((session) => [session.id, session] as const))
+  let changed = false
+  for (const session of incoming) {
+    const previous = byID.get(session.id)
+    if (previous === session) continue
+    byID.set(session.id, session)
+    changed = true
+  }
+  if (!changed) return current
+  return [...byID.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+}
+
 function list(value: unknown): FileDiff[] {
   // Older/local session records have previously persisted malformed `summary.diffs`
   // values. Treat anything non-array as "no diffs" so a bad record can't crash
@@ -273,7 +288,11 @@ export default function Page() {
         void sdk.client.session.children({ sessionID: id }).then(
           (result) => {
             if (cancelled) return
-            setApiChildSessions(result.data ?? [])
+            const children = result.data ?? []
+            setApiChildSessions(children)
+            if (children.length > 0) {
+              sync.set("session", (current) => mergeKnownSessions(current, children))
+            }
           },
           () => {
             if (cancelled) return

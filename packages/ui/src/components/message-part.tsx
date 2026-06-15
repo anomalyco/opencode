@@ -66,6 +66,7 @@ import {
   type PartGroup,
 } from "./message-part-order"
 import { activeStreamingAssistantMessageID } from "./message-part-stream"
+import { resolveTaskChildSessionId } from "./message-task-session"
 export type { PartGroup } from "./message-part-order"
 
 type ProviderSummary = {
@@ -1460,6 +1461,7 @@ export function Part(props: MessagePartProps) {
 export interface ToolProps {
   input: Record<string, any>
   metadata: Record<string, any>
+  part?: ToolPart
   tool: string
   output?: string
   status?: string
@@ -1560,12 +1562,16 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
     return emptyMetadata
   }
   const taskId = createMemo(() => {
-    if (part().tool !== "task") return
-    const value = partMetadata().sessionId
-    if (typeof value === "string" && value) return value
+    if (part().tool !== "task") return undefined
+    return resolveTaskChildSessionId({
+      metadata: partMetadata(),
+      tool: part(),
+      input: input(),
+      sessions: data.store.session,
+    })
   })
   const taskHref = createMemo(() => {
-    if (part().tool !== "task") return
+    if (part().tool !== "task") return undefined
     return sessionLink(taskId(), loc.pathname, data.sessionHref)
   })
   const taskSubtitle = createMemo(() => {
@@ -1622,6 +1628,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               component={render}
               input={input()}
               tool={part().tool}
+              part={part()}
               metadata={partMetadata()}
               // @ts-expect-error
               output={part().state.output}
@@ -2229,7 +2236,14 @@ ToolRegistry.register({
     const i18n = useI18n()
     const loc = useLocation()
 
-    const childSessionId = () => props.metadata.sessionId as string | undefined
+    const childSessionId = createMemo(() =>
+      resolveTaskChildSessionId({
+        metadata: props.metadata,
+        tool: props.part,
+        input: props.input,
+        sessions: data.store.session,
+      }),
+    )
     const pending = createMemo(() => props.status === "pending" || props.status === "running")
     const hasOutput = createMemo(() => typeof props.output === "string" && props.output.trim().length > 0)
     const outputPreview = createMemo(() => props.output?.trim().split("\n").find((line) => line.trim())?.trim())

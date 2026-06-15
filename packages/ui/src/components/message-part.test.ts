@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import type { AssistantMessage, Part, ReasoningPart, TextPart, ToolPart } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, Part, ReasoningPart, Session, TextPart, ToolPart } from "@opencode-ai/sdk/v2"
 import { groupParts, reasoningPartStreaming } from "./message-part-order"
+import { resolveTaskChildSessionId } from "./message-task-session"
 import { skillText } from "./message-skill"
 import { activeStreamingAssistantMessageID, hold, streamsplit } from "./message-part-stream"
 
@@ -45,6 +46,21 @@ function tool(part: Partial<ToolPart> = {}): ToolPart {
     },
     ...part,
   }
+}
+
+function session(input: { id: string; parentID?: string; title?: string; agent?: string; created?: number }): Session {
+  const created = input.created ?? 1
+  return {
+    id: input.id,
+    slug: input.id,
+    projectID: "proj",
+    directory: "/repo",
+    parentID: input.parentID,
+    title: input.title ?? input.id,
+    agent: input.agent,
+    version: "0.0.0",
+    time: { created, updated: created },
+  } satisfies Session
 }
 
 function assistant(completed?: number): AssistantMessage {
@@ -145,6 +161,40 @@ describe("message-part skillText", () => {
     ]
 
     expect(skillText(parts)).toBeUndefined()
+  })
+})
+
+describe("message-part resolveTaskChildSessionId", () => {
+  test("uses task metadata when present", () => {
+    expect(
+      resolveTaskChildSessionId({
+        metadata: { sessionId: "ses_child" },
+        sessions: [],
+      }),
+    ).toBe("ses_child")
+  })
+
+  test("falls back to child session title when task metadata is missing", () => {
+    const task = tool({
+      tool: "task",
+      sessionID: "ses_parent",
+      state: {
+        status: "running",
+        input: { description: "inspect bug", subagent_type: "scout" },
+        time: { start: 100 },
+      },
+    })
+
+    expect(
+      resolveTaskChildSessionId({
+        tool: task,
+        input: task.state.input,
+        sessions: [
+          session({ id: "ses_other", parentID: "ses_parent", title: "Other", created: 90 }),
+          session({ id: "ses_child", parentID: "ses_parent", title: "inspect bug (@scout subagent)", created: 101 }),
+        ],
+      }),
+    ).toBe("ses_child")
   })
 })
 
