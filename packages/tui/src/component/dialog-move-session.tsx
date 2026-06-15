@@ -72,7 +72,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
 
   const [directories, { refetch }] = createResource(
     () => (props.initialRemoving ? undefined : props.projectID),
-    async (projectID, info) => {
+    async (projectID, info): Promise<ProjectDirectory[] | undefined> => {
       try {
         await sdk.client.v2.projectCopy.refresh(
           { projectID, location: { directory: sdk.directory } },
