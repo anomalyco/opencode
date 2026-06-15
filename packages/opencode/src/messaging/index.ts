@@ -11,6 +11,10 @@ export const Rejected = MessagingEvent.Rejected
 
 const ROUND_TRIP_CAP = 8
 const DEFAULT_TIMEOUT = Duration.seconds(300)
+export const INBOX_OUTBOUND_BUDGET = 20
+export const INBOX_CAP = 50
+export const DEDUP_WINDOW = 100
+export const TREE_MESSAGE_CAP = 2000
 
 export class RejectedError extends Schema.TaggedErrorClass<RejectedError>()("Messaging.RejectedError", {}) {
   override get message() {
@@ -59,6 +63,10 @@ interface State {
   registry: Map<string, SessionID>
   allow: Map<SessionID, string[]>
   inbox: Map<SessionID, InboxItem[]>
+  dedup: Map<SessionID, string[]>
+  outbound: Map<SessionID, number>
+  waiters: Map<SessionID, Deferred.Deferred<void>>
+  treeTotal: { count: number }
 }
 
 export interface Interface {
@@ -82,6 +90,13 @@ export interface Interface {
   readonly setAllow: (sessionID: SessionID, slugs: string[]) => Effect.Effect<void>
   readonly getAllow: (sessionID: SessionID) => Effect.Effect<string[]>
   readonly slugFor: (sessionID: SessionID) => Effect.Effect<string>
+  readonly enqueue: (input: {
+    target: SessionID
+    from: SessionID
+    fromSlug: string
+    body: string
+  }) => Effect.Effect<void, AbuseError | NotFoundError>
+  readonly drain: (sessionID: SessionID) => Effect.Effect<ReadonlyArray<InboxItem>>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Messaging") {}
@@ -98,6 +113,10 @@ export const layer = Layer.effect(
           registry: new Map<string, SessionID>(),
           allow: new Map<SessionID, string[]>(),
           inbox: new Map<SessionID, InboxItem[]>(),
+          dedup: new Map<SessionID, string[]>(),
+          outbound: new Map<SessionID, number>(),
+          waiters: new Map<SessionID, Deferred.Deferred<void>>(),
+          treeTotal: { count: 0 },
         }
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
@@ -109,6 +128,10 @@ export const layer = Layer.effect(
             state.registry.clear()
             state.allow.clear()
             state.inbox.clear()
+            state.dedup.clear()
+            state.outbound.clear()
+            state.waiters.clear()
+            state.treeTotal.count = 0
           }),
         )
         return state
@@ -244,7 +267,51 @@ export const layer = Layer.effect(
       return String(sessionID)
     })
 
-    return Service.of({ send, reply, reject, list, registerSlug, resolveSlug, setAllow, getAllow, slugFor })
+    const enqueue: Interface["enqueue"] = Effect.fn("Messaging.enqueue")(function* (input) {
+      const v = yield* InstanceState.get(state)
+      if (v.treeTotal.count >= TREE_MESSAGE_CAP)
+        return yield* new AbuseError({ detail: "task-tree message cap reached; coordinators must synthesize and end" })
+      const used = v.outbound.get(input.from) ?? 0
+      if (used >= INBOX_OUTBOUND_BUDGET)
+        return yield* new AbuseError({ detail: `per-agent outbound budget (${INBOX_OUTBOUND_BUDGET}) reached` })
+      const queue = v.inbox.get(input.target)
+      if (queue === undefined) return yield* new NotFoundError({ childSessionID: input.target })
+      const hash = `${String(input.from)}\u0000${input.body}`
+      const seen = v.dedup.get(input.target) ?? []
+      if (seen.includes(hash)) return
+      if (queue.length >= INBOX_CAP)
+        return yield* new AbuseError({ detail: `recipient inbox cap (${INBOX_CAP}) reached` })
+      queue.push({ from: input.from, fromSlug: input.fromSlug, body: input.body, time: Date.now() })
+      v.outbound.set(input.from, used + 1)
+      v.treeTotal.count++
+      v.dedup.set(input.target, [...seen, hash].slice(-DEDUP_WINDOW))
+      const w = v.waiters.get(input.target)
+      if (w) {
+        v.waiters.delete(input.target)
+        yield* Deferred.succeed(w, undefined)
+      }
+    })
+
+    const drain: Interface["drain"] = Effect.fn("Messaging.drain")(function* (sessionID) {
+      const v = yield* InstanceState.get(state)
+      const q = v.inbox.get(sessionID) ?? []
+      v.inbox.set(sessionID, [])
+      return q
+    })
+
+    return Service.of({
+      send,
+      reply,
+      reject,
+      list,
+      registerSlug,
+      resolveSlug,
+      setAllow,
+      getAllow,
+      slugFor,
+      enqueue,
+      drain,
+    })
   }),
 )
 

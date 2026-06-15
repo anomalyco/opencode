@@ -45,3 +45,42 @@ it.instance("slugFor - reverse-lookup returns the slug, falls back to String(ses
     expect(yield* m.slugFor(unknown)).toBe(String(unknown))
   }),
 )
+
+it.instance("enqueue then drain returns FIFO, drains-and-clears, preserves fromSlug", () =>
+  Effect.gen(function* () {
+    const m = yield* Messaging.Service
+    const to = SessionID.make("ses_cccccccccccccccccccccccccc")
+    const from = SessionID.make("ses_dddddddddddddddddddddddddd")
+    yield* m.registerSlug("rev-b", to)
+    yield* m.enqueue({ target: to, from, fromSlug: "rev-a", body: "a" })
+    yield* m.enqueue({ target: to, from, fromSlug: "rev-a", body: "b" })
+    const drained = yield* m.drain(to)
+    expect(drained.map((x) => x.body)).toEqual(["a", "b"])
+    expect(drained.map((x) => x.fromSlug)).toEqual(["rev-a", "rev-a"])
+    expect(yield* m.drain(to)).toEqual([])
+  }),
+)
+
+it.instance("dedup drops identical (from,body) within the per-recipient window", () =>
+  Effect.gen(function* () {
+    const m = yield* Messaging.Service
+    const to = SessionID.make("ses_eeeeeeeeeeeeeeeeeeeeeeeeee")
+    const from = SessionID.make("ses_ffffffffffffffffffffffffff")
+    yield* m.registerSlug("rev-b2", to)
+    yield* m.enqueue({ target: to, from, fromSlug: "rev-a", body: "dup" })
+    yield* m.enqueue({ target: to, from, fromSlug: "rev-a", body: "dup" })
+    expect((yield* m.drain(to)).length).toBe(1)
+  }),
+)
+
+it.instance("over-budget send (M) fails with AbuseError", () =>
+  Effect.gen(function* () {
+    const m = yield* Messaging.Service
+    const to = SessionID.make("ses_gggggggggggggggggggggggggg")
+    const from = SessionID.make("ses_hhhhhhhhhhhhhhhhhhhhhhhhhh")
+    yield* m.registerSlug("rev-b3", to)
+    for (let i = 0; i < 20; i++) yield* m.enqueue({ target: to, from, fromSlug: "rev-a", body: `m${i}` })
+    const r = yield* m.enqueue({ target: to, from, fromSlug: "rev-a", body: "m20" }).pipe(Effect.flip)
+    expect(r._tag).toBe("Messaging.AbuseError")
+  }),
+)
