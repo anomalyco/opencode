@@ -22,6 +22,7 @@ export type KnownMessagePartMetadata = {
 
 export type Info = {
   id: string
+  rootSessionId: string
   cwd: string
   mcpServers: readonly McpServer[]
   createdAt: Date
@@ -33,6 +34,7 @@ export type Info = {
 
 export type StoreInput = {
   id: string
+  rootSessionId?: string
   cwd: string
   mcpServers?: readonly McpServer[]
   createdAt?: Date
@@ -58,12 +60,20 @@ export type PartMetadataLookupInput = {
   partId: string
 }
 
+export type RegisterChildInput = {
+  sessionId: string
+  parentSessionId: string
+  cwd?: string
+}
+
 export type Interface = {
   readonly create: (input: StoreInput) => Effect.Effect<Info>
   readonly load: (input: StoreInput) => Effect.Effect<Info>
   readonly list: (cwd?: string) => Effect.Effect<readonly Info[]>
   readonly get: (sessionId: string) => Effect.Effect<Info, ACPError.SessionNotFoundError>
   readonly tryGet: (sessionId: string) => Effect.Effect<Info | undefined>
+  readonly getRoot: (sessionId: string) => Effect.Effect<Info, ACPError.SessionNotFoundError>
+  readonly registerChild: (input: RegisterChildInput) => Effect.Effect<Info, ACPError.SessionNotFoundError>
   readonly remove: (sessionId: string) => Effect.Effect<Info | undefined>
   readonly setModel: (
     sessionId: string,
@@ -116,6 +126,12 @@ export const layer = Layer.effect(
       return yield* new ACPError.SessionNotFoundError({ sessionId })
     })
 
+    const getRoot: Interface["getRoot"] = Effect.fn("ACP.Session.getRoot")(function* (sessionId) {
+      const session = yield* get(sessionId)
+      if (session.rootSessionId === session.id) return session
+      return yield* get(session.rootSessionId)
+    })
+
     const update = Effect.fn("ACP.Session.update")(function* (sessionId: string, fn: (session: Info) => Info) {
       const result = yield* Ref.modify(sessions, (state) => {
         const session = state.get(sessionId)
@@ -133,9 +149,42 @@ export const layer = Layer.effect(
         if (!session) return [undefined, state] as const
         const next = new Map(state)
         next.delete(sessionId)
+        if (session.id === session.rootSessionId) {
+          for (const [id, item] of next.entries()) {
+            if (item.rootSessionId === sessionId && id !== sessionId) {
+              next.delete(id)
+            }
+          }
+        }
         return [snapshot(session), next] as const
       })
     })
+
+    const registerChild: Interface["registerChild"] = Effect.fn("ACP.Session.registerChild")((input) =>
+      Effect.gen(function* () {
+        const parent = yield* get(input.parentSessionId)
+        const existing = yield* tryGet(input.sessionId)
+        if (existing) {
+          if (existing.rootSessionId === parent.rootSessionId) return existing
+          return yield* update(input.sessionId, (session) => ({
+            ...session,
+            rootSessionId: parent.rootSessionId,
+            cwd: input.cwd ?? session.cwd,
+          }))
+        }
+
+        return yield* store({
+          id: input.sessionId,
+          cwd: input.cwd ?? parent.cwd,
+          createdAt: new Date(),
+          model: parent.model,
+          variant: parent.variant,
+          modeId: parent.modeId,
+          mcpServers: parent.mcpServers,
+          rootSessionId: parent.rootSessionId,
+        })
+      }),
+    )
 
     const setModel: Interface["setModel"] = Effect.fn("ACP.Session.setModel")((sessionId, model) =>
       update(sessionId, (session) => ({ ...session, model })),
@@ -170,12 +219,15 @@ export const layer = Layer.effect(
       load: store,
       list: Effect.fn("ACP.Session.list")(function* (cwd?: string) {
         return [...(yield* Ref.get(sessions)).values()]
+          .filter((session) => session.id === session.rootSessionId)
           .filter((session) => !cwd || session.cwd === cwd)
           .map(snapshot)
           .toSorted((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
       }),
       get,
       tryGet,
+      getRoot,
+      registerChild,
       remove,
       setModel,
       getModel: Effect.fn("ACP.Session.getModel")(function* (sessionId) {
@@ -205,6 +257,7 @@ export const defaultLayer = layer
 function makeSession(input: StoreInput): Info {
   return {
     id: input.id,
+    rootSessionId: input.rootSessionId ?? input.id,
     cwd: input.cwd,
     mcpServers: [...(input.mcpServers ?? [])],
     createdAt: input.createdAt ? new Date(input.createdAt) : new Date(),

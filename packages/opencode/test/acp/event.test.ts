@@ -538,6 +538,118 @@ describe("acp event routing", () => {
     expect(harness.updates[1]?.update).toMatchObject({ status: "in_progress", toolCallId: "call_1" })
   })
 
+  it("registers child task sessions and forwards their stream updates", async () => {
+    const harness = createHarness({
+      msg_child: assistantMessage("ses_child", "msg_child", "part_child", "text"),
+    })
+    await Effect.runPromise(harness.session.create({ id: "ses_root", cwd: "/workspace" }))
+
+    await harness.subscription.handle(
+      toolUpdated({
+        id: "part_call_task",
+        sessionID: "ses_root",
+        messageID: "msg_call_task",
+        type: "tool",
+        callID: "call_task",
+        tool: "task",
+        state: {
+          status: "running",
+          input: { description: "Run ps command" },
+          title: "Run ps command",
+          metadata: {
+            sessionId: "ses_child",
+            parentSessionId: "ses_root",
+          },
+          time: { start: Date.now() },
+        },
+      } satisfies ToolPart),
+    )
+
+    await harness.subscription.handle(partUpdated("ses_child", "msg_child", "part_child", "text"))
+    await harness.subscription.handle(textDelta("ses_child", "msg_child", "part_child", "hello child"))
+
+    const childUpdates = harness.updates.filter((item) => item.sessionId === "ses_child")
+    expect(harness.updates[1]?.update).toMatchObject({
+      sessionUpdate: "tool_call_update",
+      rawOutput: { metadata: { sessionId: "ses_child", parentSessionId: "ses_root" } },
+    })
+    expect(childUpdates.at(-1)?.update).toMatchObject({
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: "hello child" },
+    })
+  })
+
+  it("registers child sessions from session.created events", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_root", cwd: "/workspace" }))
+
+    await harness.subscription.handle({
+      id: "evt_created",
+      type: "session.created",
+      properties: {
+        sessionID: "ses_child",
+        info: {
+          id: "ses_child",
+          slug: "child",
+          projectID: "proj",
+          directory: "/workspace",
+          parentID: "ses_root",
+          title: "Child session",
+          version: "1",
+          time: { created: Date.now(), updated: Date.now() },
+        },
+      },
+    })
+
+    expect(await Effect.runPromise(harness.session.tryGet("ses_child"))).toMatchObject({
+      id: "ses_child",
+      rootSessionId: "ses_root",
+      cwd: "/workspace",
+    })
+  })
+
+  it("replays running task metadata and keeps child stream updates visible", async () => {
+    const harness = createHarness({
+      msg_child: assistantMessage("ses_child", "msg_child", "part_child", "text"),
+    })
+    await Effect.runPromise(harness.session.create({ id: "ses_root", cwd: "/workspace" }))
+
+    await harness.subscription.replayMessage(
+      assistantToolMessage({
+        id: "part_call_task",
+        sessionID: "ses_root",
+        messageID: "msg_call_task",
+        type: "tool",
+        callID: "call_task",
+        tool: "task",
+        state: {
+          status: "running",
+          input: { description: "Run ps command" },
+          title: "Run ps command",
+          metadata: {
+            sessionId: "ses_child",
+            parentSessionId: "ses_root",
+          },
+          time: { start: Date.now() },
+        },
+      } satisfies ToolPart),
+    )
+
+    await harness.subscription.handle(partUpdated("ses_child", "msg_child", "part_child", "text"))
+    await harness.subscription.handle(textDelta("ses_child", "msg_child", "part_child", "replayed child"))
+
+    expect(harness.updates.some((item) => item.sessionId === "ses_child")).toBe(true)
+    expect(
+      harness.updates
+        .filter((item) => item.sessionId === "ses_child")
+        .at(-1)
+        ?.update,
+    ).toMatchObject({
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: "replayed child" },
+    })
+  })
+
   it("includes available input in the synthetic pending tool call", async () => {
     const harness = createHarness()
     await Effect.runPromise(harness.session.create({ id: "ses_pending_input", cwd: "/workspace" }))

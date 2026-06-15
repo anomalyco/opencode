@@ -40,6 +40,7 @@ describe("acp session state", () => {
 
       expect(created).toMatchObject({
         id: "ses_1",
+        rootSessionId: "ses_1",
         cwd: "/workspace",
         mcpServers: [mcpServer],
         model: model("anthropic", "claude-sonnet"),
@@ -195,6 +196,59 @@ describe("acp session state", () => {
       expect(removed?.knownParts.size).toBe(1)
       expect(missing).toBeUndefined()
       expect(missingPart).toBeUndefined()
+    }),
+  )
+
+  sessionTest.effect("registers child sessions against the root ACP session", () =>
+    Effect.gen(function* () {
+      yield* ACPSession.Service.use((session) => session.create({ id: "ses_root", cwd: "/workspace" }))
+      const child = yield* ACPSession.Service.use((session) =>
+        session.registerChild({
+          sessionId: "ses_child",
+          parentSessionId: "ses_root",
+        }),
+      )
+      const root = yield* ACPSession.Service.use((session) => session.getRoot("ses_child"))
+
+      expect(child.rootSessionId).toBe("ses_root")
+      expect(child.cwd).toBe("/workspace")
+      expect(root.id).toBe("ses_root")
+    }),
+  )
+
+  sessionTest.effect("lists only root sessions and omits registered child aliases", () =>
+    Effect.gen(function* () {
+      yield* ACPSession.Service.use((session) => session.create({ id: "ses_root", cwd: "/workspace" }))
+      yield* ACPSession.Service.use((session) =>
+        session.registerChild({
+          sessionId: "ses_child",
+          parentSessionId: "ses_root",
+        }),
+      )
+
+      const listed = yield* ACPSession.Service.use((session) => session.list("/workspace"))
+
+      expect(listed.map((item) => item.id)).toEqual(["ses_root"])
+    }),
+  )
+
+  sessionTest.effect("removing a root session clears registered child aliases", () =>
+    Effect.gen(function* () {
+      yield* ACPSession.Service.use((session) => session.create({ id: "ses_root", cwd: "/workspace" }))
+      yield* ACPSession.Service.use((session) =>
+        session.registerChild({
+          sessionId: "ses_child",
+          parentSessionId: "ses_root",
+        }),
+      )
+
+      yield* ACPSession.Service.use((session) => session.remove("ses_root"))
+
+      const missingRoot = yield* ACPSession.Service.use((session) => session.tryGet("ses_root"))
+      const missingChild = yield* ACPSession.Service.use((session) => session.tryGet("ses_child"))
+
+      expect(missingRoot).toBeUndefined()
+      expect(missingChild).toBeUndefined()
     }),
   )
 })

@@ -13,9 +13,10 @@ import type {
 import type { OpencodeClient } from "@opencode-ai/sdk/v2"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { Effect } from "effect"
+import { Effect, ManagedRuntime } from "effect"
 import * as ACPService from "@/acp/service"
 import * as ACPError from "@/acp/error"
+import * as ACPSession from "@/acp/session"
 import { UsageService } from "@/acp/usage"
 import type { Provider } from "@/provider/provider"
 
@@ -375,6 +376,34 @@ describe("ACP service sessions", () => {
 
     expect(listed.sessions[0]?.sessionId).toBe(created.sessionId)
     expect(listed.sessions[0]?.cwd).toBe("/workspace")
+  })
+
+  it("does not list registered task child aliases in session/list", async () => {
+    const session = ManagedRuntime.make(ACPSession.defaultLayer).runSync(
+      ACPSession.Service.use((service) => Effect.succeed(service)),
+    )
+    await Effect.runPromise(session.create({ id: "ses_root", cwd: "/workspace" }))
+    await Effect.runPromise(
+      session.registerChild({
+        sessionId: "ses_child",
+        parentSessionId: "ses_root",
+      }),
+    )
+
+    const { service } = makeService()
+    const listed = await Effect.runPromise(
+      ACPService.make({
+        sdk: {
+          session: {
+            list: () => Promise.resolve({ data: [] }),
+          },
+        } as unknown as OpencodeClient,
+        connection: { sessionUpdate: () => Promise.resolve() },
+        session,
+      }).listSessions({ cwd: "/workspace" }),
+    )
+
+    expect(listed.sessions.map((item) => item.sessionId)).toEqual(["ses_root"])
   })
 
   it("lists all sessions with next cursor when the first page is full", async () => {

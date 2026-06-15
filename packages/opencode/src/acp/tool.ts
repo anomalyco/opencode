@@ -21,6 +21,7 @@ export type RunningToolState = {
   readonly status: "running"
   readonly input: ToolInput
   readonly title?: string
+  readonly metadata?: unknown
 }
 
 export type ErrorToolState = {
@@ -163,6 +164,7 @@ export function runningToolUpdate(input: {
     title: toolTitle(input.toolName, input.state.input, input.state.title),
     locations: toLocations(input.toolName, input.state.input, input.cwd),
     rawInput: rawInput(input.toolName, input.state.input, input.cwd),
+    ...(input.state.metadata !== undefined ? { rawOutput: { metadata: input.state.metadata } } : {}),
     ...(content ? { content } : {}),
   }
 }
@@ -180,6 +182,7 @@ export function duplicateRunningToolUpdate(input: {
     title: toolTitle(input.toolName, input.state.input, input.state.title),
     locations: toLocations(input.toolName, input.state.input, input.cwd),
     rawInput: rawInput(input.toolName, input.state.input, input.cwd),
+    ...(input.state.metadata !== undefined ? { rawOutput: { metadata: input.state.metadata } } : {}),
   }
 }
 
