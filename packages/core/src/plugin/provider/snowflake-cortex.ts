@@ -70,14 +70,17 @@ export const SnowflakeCortexPlugin = PluginV2.define({
     return {
       "aisdk.sdk": Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("snowflake-cortex")) return
-        const pat =
-          process.env.SNOWFLAKE_CORTEX_PAT ?? (typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined)
+        const token =
+          process.env.SNOWFLAKE_CORTEX_TOKEN ??
+          process.env.SNOWFLAKE_CORTEX_PAT ??
+          (typeof evt.options.token === "string" ? evt.options.token : undefined) ??
+          (typeof evt.options.apiKey === "string" ? evt.options.apiKey : undefined)
         const upstream = typeof evt.options.fetch === "function" ? (evt.options.fetch as FetchLike) : undefined
         if (evt.options.includeUsage !== false) evt.options.includeUsage = true
         const mod = yield* Effect.promise(() => import("@ai-sdk/openai-compatible"))
         evt.sdk = mod.createOpenAICompatible({
           ...evt.options,
-          ...(pat ? { apiKey: pat } : {}),
+          ...(token ? { apiKey: token } : {}),
           fetch: cortexFetch(upstream) as typeof fetch,
         } as any)
       }),
