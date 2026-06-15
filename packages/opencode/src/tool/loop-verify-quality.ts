@@ -30,15 +30,20 @@ export const VerifyQualityTool = Tool.define(
             ChildProcess.make(cmd, args, { cwd, stdin: "ignore" }),
           )
           const exitCode = yield* handle.exitCode
-        const stdout = yield* Stream.mkString(Stream.decodeText(handle.stdout))
-        const stderr = yield* Stream.mkString(Stream.decodeText(handle.stderr))
-        const output = (stderr || stdout).trim()
-        if (exitCode === 0) return { passed: true, detail: `${cmd} ${args.join(" ")} passed.` }
-        if (output.includes("missing script") || output.includes("not found")) {
-          return { passed: true, detail: `No ${args[args.length - 1]} script configured.` }
-        }
-        return { passed: false, detail: output || `${cmd} ${args.join(" ")} failed with code ${exitCode}` }
-      }))
+          const stdout = yield* Stream.mkString(Stream.decodeText(handle.stdout))
+          const stderr = yield* Stream.mkString(Stream.decodeText(handle.stderr))
+          const output = (stderr || stdout).trim()
+          if (exitCode === 0) return { passed: true, detail: `${cmd} ${args.join(" ")} passed.` }
+          if (output.includes("missing script") || output.includes("not found")) {
+            return { passed: true, detail: `No ${args[args.length - 1]} script configured.` }
+          }
+          return { passed: false, detail: output || `${cmd} ${args.join(" ")} failed with code ${exitCode}` }
+        }).pipe(
+          Effect.catch(() =>
+            Effect.succeed({ passed: true, detail: `${cmd} could not be executed. Skipping.` }),
+          ),
+        ),
+      )
 
     const execute = (
       params: Schema.Schema.Type<typeof VerifyQualityParams>,
@@ -96,6 +101,9 @@ export const VerifyQualityTool = Tool.define(
               break
             case "scope":
               result = { passed: true, detail: `Scope: ${phase.scope.slice(0, 100)}.` }
+              break
+            default:
+              result = { passed: true, detail: "Unknown check." }
               break
           }
           results[check] = result

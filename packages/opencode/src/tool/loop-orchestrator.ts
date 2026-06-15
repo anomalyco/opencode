@@ -123,6 +123,7 @@ export const layer = Layer.effect(
     })
 
     const startPhase = Effect.fn("LoopOrchestrator.startPhase")(function* (phaseId: string, sessionID?: string, phaseTitle?: string, totalPhases?: number) {
+      yield* Effect.sleep("100 millis")
       const refs = yield* InstanceState.get(state)
       const now = yield* Clock.currentTimeMillis
       yield* Ref.update(refs.phaseStartTimes, (m) => new Map(m).set(phaseId, now))
@@ -146,7 +147,11 @@ export const layer = Layer.effect(
       const refs = yield* InstanceState.get(state)
       const now = yield* Clock.currentTimeMillis
       const argsHash = args !== undefined ? JSON.stringify(args) : undefined
-      yield* Ref.update(refs.toolCallHistory, (h) => [...h, { phaseId, tool, error, argsHash, timestamp: now }])
+      yield* Ref.update(refs.toolCallHistory, (h) => {
+        const entry = { phaseId, tool, error, argsHash, timestamp: now }
+        const updated = [...h, entry]
+        return updated.length > 100 ? updated.slice(-50) : updated
+      })
     })
 
     const isStuck = Effect.fn("LoopOrchestrator.isStuck")(function* (phaseId: string, sessionID?: string) {
