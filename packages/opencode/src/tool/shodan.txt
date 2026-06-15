@@ -1,0 +1,60 @@
+Use the `shodan` tool to query Shodan — the world's search engine for Internet-connected devices — for security intelligence, host reconnaissance, DNS lookups, and vulnerability/exploit research.
+
+## MANDATORY RULE: always ask for explicit user approval before calling this tool.
+
+Before calling shodan with `approved: true`, you MUST present the exact query to the user and receive explicit confirmation. Never set `approved: true` autonomously.
+
+## Available operations
+
+### host_info
+Look up all services discovered on a specific IP address.
+- ip: the IP address to query
+- history (optional): include historical banners
+- minify (optional): return only ports and general info, no banners
+
+Example use: "What services are running on 203.0.113.42?"
+
+### host_search
+Search Shodan using its query syntax. Returns matching hosts with org, country, ports, and known vulns.
+- query: Shodan query string, e.g. `apache port:443 country:ID`, `product:elasticsearch -auth`, `port:22 org:"target-org"`
+- facets (optional): summary facets, e.g. `country:5,org:3`
+- page (optional): result page number
+
+Example use: "Find all MongoDB instances exposed without auth in Singapore."
+
+### host_count
+Count hosts matching a query WITHOUT consuming query credits. Use this first to estimate result size.
+- query: Shodan query string
+
+### dns_resolve
+Resolve one or more hostnames to IP addresses.
+- hostnames: array of hostnames
+
+### dns_reverse
+Reverse-lookup IPs to find associated hostnames.
+- ips: array of IP addresses
+
+### honeypot_score
+Calculate the probability that an IP is a honeypot. Returns a score from 0.0 (legitimate) to 1.0 (honeypot).
+- ip: IP address to check
+
+### exploits_search
+Search for exploits and CVEs across multiple vulnerability databases.
+- query (optional): text search, e.g. `"remote code execution python"`
+- port (optional): filter by affected port number
+- type (optional): `shellcode` | `remote` | `local` | `dos` | `webapps` | `papers`
+- cve (optional): filter by CVE ID
+- osvdb (optional): filter by OSVDB ID
+
+Example use: "Find exploits for services on port 5432." or "Search for CVE-2021-44228."
+
+### api_info
+Check current API plan, remaining query credits, and scan credits.
+
+### ports
+List all ports the Shodan crawlers are currently monitoring.
+
+## Security requirements
+- SHODAN_API_KEY must be set in the environment
+- Every call is audit-logged to ~/.daemoncode/audit/shodan.ndjson
+- High-risk operations (scan, stream) are intentionally not exposed via this tool — use the ShodanStreamClient and ShodanClient.scan() directly from code only after review
