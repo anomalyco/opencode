@@ -31,4 +31,30 @@ describe("McpOAuthCallback.ensureRunning", () => {
     await McpOAuthCallback.ensureRunning("http://127.0.0.1:18000/custom/callback")
     expect(McpOAuthCallback.isRunning()).toBe(true)
   })
+
+  test("escapes provider error markup in callback HTML", async () => {
+    const redirectUri = "http://127.0.0.1:18001/custom/callback"
+    await McpOAuthCallback.ensureRunning(redirectUri)
+
+    const error = `<script>alert("xss" & 'more')</script>`
+    const response = await fetch(
+      `${redirectUri}?state=test&error=access_denied&error_description=${encodeURIComponent(error)}`,
+    )
+    const body = await response.text()
+
+    expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8")
+    expect(body).toContain("&lt;script&gt;alert(&quot;xss&quot; &amp; &#39;more&#39;)&lt;/script&gt;")
+    expect(body).not.toContain(error)
+  })
+
+  test("keeps normal provider errors readable", async () => {
+    const redirectUri = "http://127.0.0.1:18002/custom/callback"
+    await McpOAuthCallback.ensureRunning(redirectUri)
+
+    const response = await fetch(
+      `${redirectUri}?state=test&error=access_denied&error_description=${encodeURIComponent("The user denied access")}`,
+    )
+
+    expect(await response.text()).toContain('<div class="error">The user denied access</div>')
+  })
 })
