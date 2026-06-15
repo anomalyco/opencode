@@ -29,15 +29,16 @@ export const When = Schema.Struct({
 }).annotate({ identifier: "Integration.When" })
 export type When = typeof When.Type
 
-export class TextPrompt extends Schema.Class<TextPrompt>("Integration.TextPrompt")({
+export const TextPrompt = Schema.Struct({
   type: Schema.Literal("text"),
   key: Schema.String,
   message: Schema.String,
   placeholder: Schema.optional(Schema.String),
   when: Schema.optional(When),
-}) {}
+}).annotate({ identifier: "Integration.TextPrompt" })
+export type TextPrompt = typeof TextPrompt.Type
 
-export class SelectPrompt extends Schema.Class<SelectPrompt>("Integration.SelectPrompt")({
+export const SelectPrompt = Schema.Struct({
   type: Schema.Literal("select"),
   key: Schema.String,
   message: Schema.String,
@@ -49,27 +50,31 @@ export class SelectPrompt extends Schema.Class<SelectPrompt>("Integration.Select
     }),
   ),
   when: Schema.optional(When),
-}) {}
+}).annotate({ identifier: "Integration.SelectPrompt" })
+export type SelectPrompt = typeof SelectPrompt.Type
 
 export const Prompt = Schema.Union([TextPrompt, SelectPrompt]).pipe(Schema.toTaggedUnion("type"))
 export type Prompt = typeof Prompt.Type
 
-export class OAuthMethod extends Schema.Class<OAuthMethod>("Integration.OAuthMethod")({
+export const OAuthMethod = Schema.Struct({
   id: MethodID,
   type: Schema.Literal("oauth"),
   label: Schema.String,
   prompts: Schema.optional(Schema.Array(Prompt)),
-}) {}
+}).annotate({ identifier: "Integration.OAuthMethod" })
+export type OAuthMethod = typeof OAuthMethod.Type
 
-export class KeyMethod extends Schema.Class<KeyMethod>("Integration.KeyMethod")({
+export const KeyMethod = Schema.Struct({
   type: Schema.Literal("key"),
   label: Schema.optional(Schema.String),
-}) {}
+}).annotate({ identifier: "Integration.KeyMethod" })
+export type KeyMethod = typeof KeyMethod.Type
 
-export class EnvMethod extends Schema.Class<EnvMethod>("Integration.EnvMethod")({
+export const EnvMethod = Schema.Struct({
   type: Schema.Literal("env"),
   names: Schema.Array(Schema.String),
-}) {}
+}).annotate({ identifier: "Integration.EnvMethod" })
+export type EnvMethod = typeof EnvMethod.Type
 
 export const Method = Schema.Union([OAuthMethod, KeyMethod, EnvMethod]).pipe(Schema.toTaggedUnion("type"))
 export type Method = typeof Method.Type
@@ -197,7 +202,11 @@ export interface Interface {
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
   /** Returns all integrations with their methods and current connections. */
   readonly list: () => Effect.Effect<Info[]>
-  readonly connect: {
+  readonly connection: {
+    /** Returns active connections for every registered or credential-backed integration. */
+    readonly list: () => Effect.Effect<Map<ID, IntegrationConnection.Info>>
+    /** Returns the active connection for one integration. */
+    readonly forIntegration: (id: ID) => Effect.Effect<IntegrationConnection.Info | undefined>
     /** Runs a key method and stores the resulting credential. */
     readonly key: (input: {
       /** Integration receiving the credential. */
@@ -218,6 +227,13 @@ export interface Interface {
       /** User-facing label for the credential created on completion. */
       readonly label?: string
     }) => Effect.Effect<Attempt, AuthorizationError>
+    /** Updates a stored credential exposed as a connection. */
+    readonly update: (
+      credentialID: Credential.ID,
+      updates: Partial<Pick<Credential.Stored, "label">>,
+    ) => Effect.Effect<void>
+    /** Removes a stored credential connection. */
+    readonly remove: (credentialID: Credential.ID) => Effect.Effect<void>
   }
   readonly attempt: {
     /** Returns the current state of an OAuth attempt. */
@@ -326,21 +342,30 @@ export const locationLayer = Layer.effect(
     })
 
     const connections = (entry: Entry, saved: readonly Credential.Stored[]): IntegrationConnection.Info[] => {
-      const connected = saved.map(
-        (credential) =>
-          new IntegrationConnection.CredentialInfo({ type: "credential", id: credential.id, label: credential.label }),
-      )
+      const connected = saved.map((credential) => ({
+        type: "credential" as const,
+        id: credential.id,
+        label: credential.label,
+      }))
       const detected = entry.methods
         .filter((method) => method.type === "env")
         .flatMap((method) => method.names.filter((name) => process.env[name]))
-        .map(
-          (name, index) =>
-            new IntegrationConnection.EnvInfo({
-              type: "env",
-              name,
-            }),
-        )
+        .map((name) => ({ type: "env" as const, name }))
       return [...connected, ...detected]
+    }
+
+    const activeConnection = (
+      entry: Entry | undefined,
+      saved: readonly Credential.Stored[],
+    ): IntegrationConnection.Info | undefined => {
+      const credential = saved.at(-1)
+      if (credential) return { type: "credential", id: credential.id, label: credential.label }
+      if (!entry) return
+      const name = entry.methods
+        .filter((method) => method.type === "env")
+        .flatMap((method) => method.names)
+        .find((name) => process.env[name])
+      if (name) return { type: "env", name }
     }
 
     const project = (entry: Entry, saved: readonly Credential.Stored[]) =>
@@ -382,6 +407,7 @@ export const locationLayer = Layer.effect(
               ? new Credential.OAuth({ ...exit.value, methodID: result.methodID })
               : exit.value,
         })
+        yield* events.publish(Event.Updated, {})
       }
       yield* close(result.scope)
     })
@@ -421,8 +447,21 @@ export const locationLayer = Layer.effect(
           }),
         )).toSorted((a, b) => a.name.localeCompare(b.name))
       }),
-      connect: {
-        key: Effect.fn("Integration.connect.key")(function* (input) {
+      connection: {
+        list: Effect.fn("Integration.connection.list")(function* () {
+          const saved = Map.groupBy(yield* credentials.all(), (credential) => credential.integrationID)
+          return new Map(
+            new Set([...state.get().integrations.keys(), ...saved.keys()]).values().flatMap((id) => {
+              const connection = activeConnection(state.get().integrations.get(id), saved.get(id) ?? [])
+              return connection ? [[id, connection] as const] : []
+            }),
+          )
+        }),
+        forIntegration: Effect.fn("Integration.connection.forIntegration")(function* (id) {
+          const entry = state.get().integrations.get(id)
+          return activeConnection(entry, yield* credentials.list(id))
+        }),
+        key: Effect.fn("Integration.connection.key")(function* (input) {
           const method = state
             .get()
             .integrations.get(input.integrationID)
@@ -433,8 +472,9 @@ export const locationLayer = Layer.effect(
             label: input.label,
             value: new Credential.Key({ type: "key", key: input.key }),
           })
+          yield* events.publish(Event.Updated, {})
         }),
-        oauth: Effect.fn("Integration.connect.oauth")(function* (input) {
+        oauth: Effect.fn("Integration.connection.oauth")(function* (input) {
           const method = state.get().integrations.get(input.integrationID)?.implementations.get(input.methodID)
           if (!method) {
             return yield* Effect.die(`OAuth method not found: ${input.integrationID}/${input.methodID}`)
@@ -473,6 +513,14 @@ export const locationLayer = Layer.effect(
             mode: authorization.mode,
             time,
           })
+        }),
+        update: Effect.fn("Integration.connection.update")(function* (credentialID, updates) {
+          yield* credentials.update(credentialID, updates)
+          yield* events.publish(Event.Updated, {})
+        }),
+        remove: Effect.fn("Integration.connection.remove")(function* (credentialID) {
+          yield* credentials.remove(credentialID)
+          yield* events.publish(Event.Updated, {})
         }),
       },
       attempt: {

@@ -262,8 +262,10 @@ function ModelHero(props: { data: StatsModelData | null; catalog: ModelCatalogEn
           >
             {(data) => (
               <p>
-                Ranked #{data().rank} across recent OpenCode token usage with {formatPercent(data().tokenShare)} of
-                observed volume.
+                {data().rank === null
+                  ? "Unranked across last week's OpenCode Go usage"
+                  : `Ranked #${data().rank} across last week's OpenCode Go usage`}{" "}
+                with {formatPercent(data().tokenShare)} of observed 2M volume.
               </p>
             )}
           </Show>
@@ -278,9 +280,9 @@ function ModelHero(props: { data: StatsModelData | null; catalog: ModelCatalogEn
         <Show when={props.data} fallback={<ModelCatalogCallout catalog={props.catalog} />}>
           {(data) => (
             <div data-component="model-rank-panel">
-              <span>Current Rank</span>
-              <strong>#{data().rank}</strong>
-              <p>{formatRankMoveLabel(data().previousRank, data().rank)}</p>
+              <span>7D Rank</span>
+              <strong>{data().rank === null ? "—" : `#${data().rank}`}</strong>
+              <p>{formatModelRankMoveLabel(data())}</p>
             </div>
           )}
         </Show>
@@ -810,8 +812,10 @@ function formatRankMove(previousRank: number, rank: number) {
   return "Even"
 }
 
-function formatRankMoveLabel(previousRank: number | null, rank: number) {
-  return previousRank === null ? "New in window" : `${formatRankMove(previousRank, rank)} vs previous window`
+function formatModelRankMoveLabel(data: StatsModelData) {
+  if (data.rank === null) return "No usage last week"
+  if (data.previousRank === null) return "New this week"
+  return `${formatRankMove(data.previousRank, data.rank)} vs previous week`
 }
 
 function formatTokens(value: number) {

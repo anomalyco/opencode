@@ -32,11 +32,11 @@ const headlessMethodID = Integration.MethodID.make("chatgpt-headless")
 
 export const browser = {
   integrationID: Integration.ID.make("openai"),
-  method: new Integration.OAuthMethod({
+  method: {
     id: browserMethodID,
     type: "oauth",
     label: "ChatGPT Pro/Plus (browser)",
-  }),
+  },
   authorize: () =>
     Effect.gen(function* () {
       const pkce = yield* Effect.promise(generatePKCE)
@@ -89,11 +89,11 @@ export const browser = {
 
 export const headless = {
   integrationID: Integration.ID.make("openai"),
-  method: new Integration.OAuthMethod({
+  method: {
     id: headlessMethodID,
     type: "oauth",
     label: "ChatGPT Pro/Plus (headless)",
-  }),
+  },
   authorize: () =>
     Effect.gen(function* () {
       const device = yield* request<{ device_auth_id: string; user_code: string; interval: string }>(
