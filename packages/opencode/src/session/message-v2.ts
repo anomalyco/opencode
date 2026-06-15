@@ -616,6 +616,17 @@ export function fromError(
   ctx: { providerID: ProviderV2.ID; aborted?: boolean },
 ): NonNullable<Assistant["error"]> {
   switch (true) {
+    case isProviderHeaderTimeoutAbort(e):
+      return new APIError(
+        {
+          message: e.message,
+          isRetryable: true,
+          metadata: {
+            code: "ProviderHeaderTimeoutError",
+          },
+        },
+        { cause: e },
+      ).toObject()
     case e instanceof DOMException && e.name === "AbortError":
       return new AbortedError(
         { message: e.message },
@@ -750,6 +761,10 @@ export function fromError(
       } catch {}
       return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
   }
+}
+
+function isProviderHeaderTimeoutAbort(e: unknown): e is Error {
+  return e instanceof Error && e.name === "AbortError" && e.message.startsWith("Provider response headers timed out after ")
 }
 
 function isTimeoutError(e: Error) {
