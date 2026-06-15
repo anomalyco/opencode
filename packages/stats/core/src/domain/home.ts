@@ -382,10 +382,9 @@ function buildUsagePoints(
 
 function buildLeaderboard(rows: StatMetricRow[], product: UsageProduct, rankWindow: DateWindow) {
   const previous = new Map(
-    aggregateByModelName(rowsForProduct(rows, product, rankWindow.previousStart, rankWindow.previousEnd)).map((item) => [
-      item.model,
-      item.totalTokens,
-    ]),
+    aggregateByModelName(rowsForProduct(rows, product, rankWindow.previousStart, rankWindow.previousEnd)).map(
+      (item) => [item.model, item.totalTokens],
+    ),
   )
 
   return aggregateByModelName(rowsForProduct(rows, product, rankWindow.start, rankWindow.end))
