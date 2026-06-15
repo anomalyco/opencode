@@ -48,11 +48,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 /** Test or embedding seam for supplying a model resolver directly. */
 export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Service, Service.of({ resolve }))
 
-const apiKey = (
-  model: ModelV2.Info,
-  connection?: IntegrationConnection.Info,
-  credential?: Credential.Stored,
-) => {
+const apiKey = (model: ModelV2.Info, connection?: IntegrationConnection.Info, credential?: Credential.Stored) => {
   if (credential?.value.type === "key") return Auth.value(credential.value.key)
   if (credential?.value.type === "oauth") return Auth.value(credential.value.access)
   const value = model.request.body.apiKey ?? model.api.settings?.apiKey

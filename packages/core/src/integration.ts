@@ -228,7 +228,10 @@ export interface Interface {
       readonly label?: string
     }) => Effect.Effect<Attempt, AuthorizationError>
     /** Updates a stored credential exposed as a connection. */
-    readonly update: (credentialID: Credential.ID, updates: Partial<Pick<Credential.Stored, "label">>) => Effect.Effect<void>
+    readonly update: (
+      credentialID: Credential.ID,
+      updates: Partial<Pick<Credential.Stored, "label">>,
+    ) => Effect.Effect<void>
     /** Removes a stored credential connection. */
     readonly remove: (credentialID: Credential.ID) => Effect.Effect<void>
   }
@@ -339,9 +342,11 @@ export const locationLayer = Layer.effect(
     })
 
     const connections = (entry: Entry, saved: readonly Credential.Stored[]): IntegrationConnection.Info[] => {
-      const connected = saved.map(
-        (credential) => ({ type: "credential" as const, id: credential.id, label: credential.label }),
-      )
+      const connected = saved.map((credential) => ({
+        type: "credential" as const,
+        id: credential.id,
+        label: credential.label,
+      }))
       const detected = entry.methods
         .filter((method) => method.type === "env")
         .flatMap((method) => method.names.filter((name) => process.env[name]))
@@ -446,12 +451,10 @@ export const locationLayer = Layer.effect(
         list: Effect.fn("Integration.connection.list")(function* () {
           const saved = Map.groupBy(yield* credentials.all(), (credential) => credential.integrationID)
           return new Map(
-            new Set([...state.get().integrations.keys(), ...saved.keys()])
-              .values()
-              .flatMap((id) => {
-                const connection = activeConnection(state.get().integrations.get(id), saved.get(id) ?? [])
-                return connection ? [[id, connection] as const] : []
-              }),
+            new Set([...state.get().integrations.keys(), ...saved.keys()]).values().flatMap((id) => {
+              const connection = activeConnection(state.get().integrations.get(id), saved.get(id) ?? [])
+              return connection ? [[id, connection] as const] : []
+            }),
           )
         }),
         forIntegration: Effect.fn("Integration.connection.forIntegration")(function* (id) {

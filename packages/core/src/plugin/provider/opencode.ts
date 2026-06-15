@@ -14,9 +14,7 @@ export const OpencodePlugin = PluginV2.define({
         if (!item) return
         const integration = yield* integrations.get(Integration.ID.make(item.provider.id))
         hasKey = Boolean(
-          process.env.OPENCODE_API_KEY ||
-            integration?.connections.length ||
-            item.provider.request.body.apiKey,
+          process.env.OPENCODE_API_KEY || integration?.connections.length || item.provider.request.body.apiKey,
         )
         evt.provider.update(item.provider.id, (provider) => {
           if (!hasKey) provider.request.body.apiKey = "public"
