@@ -1,4 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
+import { $ } from "bun"
 import path from "path"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -13,6 +14,15 @@ const it = testEffect(
   Layer.mergeAll(Worktree.defaultLayer, FSUtil.defaultLayer, CrossSpawnSpawner.defaultLayer, Git.defaultLayer),
 )
 const wintest = process.platform !== "win32" ? it.instance : it.instance.skip
+
+const initEmptyGitRepo = (directory: string) =>
+  Effect.promise(async () => {
+    await $`git init`.cwd(directory).quiet()
+    await $`git config core.fsmonitor false`.cwd(directory).quiet()
+    await $`git config commit.gpgsign false`.cwd(directory).quiet()
+    await $`git config user.email test@opencode.test`.cwd(directory).quiet()
+    await $`git config user.name Test`.cwd(directory).quiet()
+  })
 
 function normalize(input: string) {
   return input.replace(/\\/g, "/").toLowerCase()
@@ -41,6 +51,7 @@ const removeCreatedWorktree = (directory: string) =>
     const svc = yield* Worktree.Service
     const ok = yield* svc.remove({ directory })
     if (!ok) return yield* Effect.fail(new Error(`failed to remove worktree ${directory}`))
+    return undefined
   })
 
 const withCreatedWorktree = <A, E, R>(
@@ -174,6 +185,22 @@ describe("Worktree", () => {
   })
 
   describe("create + remove lifecycle", () => {
+    wintest(
+      "creates git worktree from empty repository",
+      () =>
+        withCreatedWorktree({ name: "empty-repo" }, ({ info, ready }) =>
+          Effect.gen(function* () {
+            const test = yield* TestInstance
+            const list = yield* git(test.directory, ["worktree", "list", "--porcelain"])
+
+            expect(normalize(list)).toContain(normalize(info.directory))
+            expect(info.branch).toBe("opencode/empty-repo")
+            expect(ready.branch).toBe(info.branch)
+          }),
+        ),
+      { init: initEmptyGitRepo },
+    )
+
     it.instance(
       "create returns worktree info and remove cleans up",
       () =>

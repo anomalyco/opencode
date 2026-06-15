@@ -128,6 +128,10 @@ function failedRemoves(...chunks: string[]) {
   )
 }
 
+function branchMissing(...chunks: string[]) {
+  return chunks.some((chunk) => /branch ['"].+['"] not found/i.test(chunk))
+}
+
 // ---------------------------------------------------------------------------
 // Effect service
 // ---------------------------------------------------------------------------
@@ -229,9 +233,11 @@ export const layer: Layer.Layer<
 
     const setup = Effect.fnUntraced(function* (info: Info) {
       const ctx = yield* InstanceState.context
+      const head = yield* git(["rev-parse", "--verify", "HEAD"], { cwd: ctx.worktree })
+      const hasHead = head.code === 0
       const created = yield* git(
         info.branch
-          ? ["worktree", "add", "--no-checkout", "-b", info.branch, info.directory]
+          ? ["worktree", "add", ...(hasHead ? ["--no-checkout"] : []), "-b", info.branch, info.directory]
           : ["worktree", "add", "--no-checkout", "--detach", info.directory, "HEAD"],
         { cwd: ctx.worktree },
       )
@@ -242,6 +248,7 @@ export const layer: Layer.Layer<
       }
 
       yield* project.addSandbox(ctx.project.id, info.directory).pipe(Effect.catch(() => Effect.void))
+      return undefined
     })
 
     const boot = Effect.fnUntraced(function* (info: Info, startCommand?: string) {
@@ -454,7 +461,7 @@ export const layer: Layer.Layer<
       const branch = entry.branch?.replace(/^refs\/heads\//, "")
       if (branch) {
         const deleted = yield* git(["branch", "-D", branch], { cwd: ctx.worktree })
-        if (deleted.code !== 0) {
+        if (deleted.code !== 0 && !branchMissing(deleted.stderr, deleted.text)) {
           return yield* new RemoveFailedError({
             message: deleted.stderr || deleted.text || "Failed to delete worktree branch",
           })
@@ -478,7 +485,7 @@ export const layer: Layer.Layer<
       function* (directory: string, cmd: string) {
         const [shell, args] = process.platform === "win32" ? ["cmd", ["/c", cmd]] : ["bash", ["-lc", cmd]]
         const result = yield* appProcess.run(
-          ChildProcess.make(shell, args as string[], { cwd: directory, extendEnv: true, stdin: "ignore" }),
+          ChildProcess.make(shell, args, { cwd: directory, extendEnv: true, stdin: "ignore" }),
         )
         return { code: result.exitCode, stderr: result.stderr.toString("utf8") }
       },
