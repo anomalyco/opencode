@@ -12,6 +12,11 @@ interface ImportMeta {
   readonly env: ImportMetaEnv
 }
 
+declare module "*.png" {
+  const src: string
+  export default src
+}
+
 export declare module "solid-js" {
   namespace JSX {
     interface Directives {
