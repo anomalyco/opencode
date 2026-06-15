@@ -1952,6 +1952,11 @@ export type Config = {
   small_model?: string
   default_agent?: string
   username?: string
+  display?: {
+    currency?: string
+    cost_currency?: string
+    currency_rate?: number
+  }
   mode?: {
     build?: AgentConfig
     plan?: AgentConfig

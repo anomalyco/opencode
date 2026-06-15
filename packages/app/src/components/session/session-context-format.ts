@@ -1,7 +1,11 @@
 import { DateTime } from "luxon"
+import { CostDisplay } from "@opencode-ai/core/cost-display"
 
-export function createSessionContextFormatter(locale: string) {
+export function createSessionContextFormatter(locale: string, config?: CostDisplay.Config) {
   return {
+    cost(value: number) {
+      return CostDisplay.format(locale, value, config)
+    },
     number(value: number | null | undefined) {
       if (value === undefined) return "—"
       if (value === null) return "—"

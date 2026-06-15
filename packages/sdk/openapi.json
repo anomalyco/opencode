@@ -20282,6 +20282,25 @@
         },
         "additionalProperties": false
       },
+      "DisplayConfig": {
+        "type": "object",
+        "properties": {
+          "currency": {
+            "type": "string",
+            "description": "ISO 4217 currency code used to display usage costs, for example USD or CNY."
+          },
+          "cost_currency": {
+            "type": "string",
+            "description": "ISO 4217 currency code of the stored usage costs. Defaults to USD. Set to CNY if configured model prices are already RMB."
+          },
+          "currency_rate": {
+            "type": "number",
+            "description": "Optional multiplier from cost_currency to currency. When omitted, built-in approximate rates are used for supported currencies.",
+            "exclusiveMinimum": 0
+          }
+        },
+        "additionalProperties": false
+      },
       "Config": {
         "type": "object",
         "properties": {
@@ -20455,6 +20474,9 @@
           },
           "username": {
             "type": "string"
+          },
+          "display": {
+            "$ref": "#/components/schemas/DisplayConfig"
           },
           "mode": {
             "type": "object",

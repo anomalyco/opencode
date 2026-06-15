@@ -124,20 +124,12 @@ export function SessionContextTab() {
     { equals: same },
   )
 
-  const usd = createMemo(
-    () =>
-      new Intl.NumberFormat(language.intl(), {
-        style: "currency",
-        currency: "USD",
-      }),
-  )
-
   const metrics = createMemo(() => getSessionContextMetrics(messages(), [...providers.all().values()]))
   const ctx = createMemo(() => metrics().context)
-  const formatter = createMemo(() => createSessionContextFormatter(language.intl()))
+  const formatter = createMemo(() => createSessionContextFormatter(language.intl(), sync().data.config.display))
 
   const cost = createMemo(() => {
-    return usd().format(metrics().totalCost)
+    return formatter().cost(metrics().totalCost)
   })
 
   const counts = createMemo(() => {

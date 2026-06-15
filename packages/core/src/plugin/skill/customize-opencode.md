@@ -68,6 +68,12 @@ Every field is optional.
   "snapshot": true,
   "instructions": ["AGENTS.md", "docs/style.md"],
 
+  "display": {
+    "currency": "CNY",
+    "cost_currency": "USD",
+    "currency_rate": 7.2
+  },
+
   "skills": {
     "paths": [".opencode/skills", "/abs/path/to/skills"],
     "urls": ["https://example.com/.well-known/skills/"]
@@ -154,6 +160,7 @@ Shape notes worth being explicit about:
 - `plugin` is an array of strings or `[name, options]` tuples, not an object.
 - `mcp[name].command` is an array of strings, never a single string. `type` is required.
 - `permission` is either a string action or an object keyed by tool name.
+- `display.cost_currency` is the currency used by configured model prices. If configured costs are already RMB, use `{ "currency": "CNY", "cost_currency": "CNY" }`.
 
 ## Skills
 

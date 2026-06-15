@@ -84,6 +84,22 @@ export const Info = Schema.Struct({
   username: Schema.optional(Schema.String).annotate({
     description: "Custom username to display in conversations instead of system username",
   }),
+  display: Schema.optional(
+    Schema.Struct({
+      currency: Schema.optional(Schema.String).annotate({
+        description:
+          "ISO 4217 currency code used to display usage costs, for example USD or CNY.",
+      }),
+      cost_currency: Schema.optional(Schema.String).annotate({
+        description:
+          "ISO 4217 currency code of the stored usage costs. Defaults to USD. Set to CNY if configured model prices are already RMB.",
+      }),
+      currency_rate: Schema.optional(Schema.Finite.check(Schema.isGreaterThan(0))).annotate({
+        description:
+          "Optional multiplier from cost_currency to currency. When omitted, built-in approximate rates are used for supported currencies.",
+      }),
+    }),
+  ).annotate({ description: "Display preferences" }),
   mode: Schema.optional(
     Schema.StructWithRest(
       Schema.Struct({ build: Schema.optional(ConfigAgentV1.Info), plan: Schema.optional(ConfigAgentV1.Info) }),

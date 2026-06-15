@@ -1172,6 +1172,21 @@ export type McpRemoteConfig = {
  */
 export type LayoutConfig = "auto" | "stretch"
 
+export type DisplayConfig = {
+  /**
+   * ISO 4217 currency code used to display usage costs, for example USD or CNY.
+   */
+  currency?: string
+  /**
+   * ISO 4217 currency code of the stored usage costs. Defaults to USD. Set to CNY if configured model prices are already RMB.
+   */
+  cost_currency?: string
+  /**
+   * Optional multiplier from cost_currency to currency. When omitted, built-in approximate rates are used for supported currencies.
+   */
+  currency_rate?: number
+}
+
 export type Config = {
   /**
    * JSON schema reference for configuration validation
@@ -1257,6 +1272,10 @@ export type Config = {
    * Custom username to display in conversations instead of system username
    */
   username?: string
+  /**
+   * Display preferences
+   */
+  display?: DisplayConfig
   /**
    * @deprecated Use `agent` field instead.
    */
