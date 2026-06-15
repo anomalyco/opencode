@@ -5,6 +5,12 @@ export default {
   id: "20260410174513_workspace-name",
   up(tx) {
     return Effect.gen(function* () {
+      const columns = yield* tx.all<{ name: string }>(`PRAGMA table_info(\`workspace\`)`)
+      const names = new Set(columns.map((column) => column.name))
+      const selectName = names.has("name") ? "`name`" : "''"
+      const selectDirectory = names.has("directory") ? "`directory`" : "NULL"
+      const selectExtra = names.has("extra") ? "`extra`" : "NULL"
+
       yield* tx.run(`PRAGMA foreign_keys=OFF;`)
       yield* tx.run(`
         CREATE TABLE \`__new_workspace\` (
@@ -19,7 +25,7 @@ export default {
         );
       `)
       yield* tx.run(
-        `INSERT INTO \`__new_workspace\`(\`id\`, \`type\`, \`branch\`, \`name\`, \`directory\`, \`extra\`, \`project_id\`) SELECT \`id\`, \`type\`, \`branch\`, \`name\`, \`directory\`, \`extra\`, \`project_id\` FROM \`workspace\`;`,
+        `INSERT INTO \`__new_workspace\`(\`id\`, \`type\`, \`branch\`, \`name\`, \`directory\`, \`extra\`, \`project_id\`) SELECT \`id\`, \`type\`, \`branch\`, ${selectName}, ${selectDirectory}, ${selectExtra}, \`project_id\` FROM \`workspace\`;`,
       )
       yield* tx.run(`DROP TABLE \`workspace\`;`)
       yield* tx.run(`ALTER TABLE \`__new_workspace\` RENAME TO \`workspace\`;`)

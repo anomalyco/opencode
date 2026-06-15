@@ -9,6 +9,7 @@ import { eq, inArray, sql } from "drizzle-orm"
 import { DatabaseMigration } from "@opencode-ai/core/database/migration"
 import { migrations } from "@opencode-ai/core/database/migration.gen"
 import sessionUsageMigration from "@opencode-ai/core/database/migration/20260510033149_session_usage"
+import workspaceNameMigration from "@opencode-ai/core/database/migration/20260410174513_workspace-name"
 import normalizeStoragePathsMigration from "@opencode-ai/core/database/migration/20260601010001_normalize_storage_paths"
 import sessionMessageProjectionOrderMigration from "@opencode-ai/core/database/migration/20260603040000_session_message_projection_order"
 import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migration/20260604172448_event_sourced_session_input"
@@ -222,6 +223,43 @@ describe("DatabaseMigration", () => {
           expect.objectContaining({ name: "session_input_session_promoted_seq_idx", unique: 1 }),
           expect.objectContaining({ name: "session_input_session_admitted_seq_idx", unique: 1 }),
         ])
+      }),
+    )
+  })
+
+  test("defaults missing workspace names during legacy workspace rebuild", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`
+          CREATE TABLE workspace (
+            id text PRIMARY KEY,
+            type text NOT NULL,
+            branch text,
+            directory text,
+            extra text,
+            project_id text NOT NULL
+          )
+        `)
+        yield* db.run(sql`
+          INSERT INTO workspace (id, type, branch, directory, extra, project_id)
+          VALUES ('wrk_legacy', 'remote', 'main', '/repo', '{}', 'proj_legacy')
+        `)
+
+        yield* DatabaseMigration.applyOnly(db, [workspaceNameMigration])
+
+        expect(yield* db.get(sql`SELECT id, type, branch, name, directory, extra, project_id FROM workspace`)).toEqual({
+          id: "wrk_legacy",
+          type: "remote",
+          branch: "main",
+          name: "",
+          directory: "/repo",
+          extra: "{}",
+          project_id: "proj_legacy",
+        })
+        expect(yield* db.get(sql`SELECT dflt_value FROM pragma_table_info('workspace') WHERE name = 'name'`)).toEqual(
+          { dflt_value: "''" },
+        )
       }),
     )
   })
