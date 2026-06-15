@@ -36,6 +36,7 @@ export const McpPaths = {
   authAuthenticate: "/mcp/:name/auth/authenticate",
   connect: "/mcp/:name/connect",
   disconnect: "/mcp/:name/disconnect",
+  remove: "/mcp/:name",
 } as const
 
 export const McpApi = HttpApi.make("mcp")
@@ -134,6 +135,17 @@ export const McpApi = HttpApi.make("mcp")
           OpenApi.annotations({
             identifier: "mcp.disconnect",
             description: "Disconnect an MCP server.",
+          }),
+        ),
+        HttpApiEndpoint.delete("remove", McpPaths.remove, {
+          params: { name: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(StatusMap, "MCP server removed successfully"),
+          error: McpServerNotFoundError,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "mcp.remove",
+            description: "Remove a dynamically added MCP server.",
           }),
         ),
       )

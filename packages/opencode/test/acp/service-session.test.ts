@@ -148,6 +148,13 @@ describe("ACP service sessions", () => {
   ) => {
     const updates: SessionNotification[] = []
     const mcpAdds: string[] = []
+    const mcpRemoves: string[] = []
+    const mcpOperations: Array<{
+      readonly action: "add" | "remove"
+      readonly directory: string
+      readonly name: string
+      readonly command?: readonly string[]
+    }> = []
     const aborts: string[] = []
     const forks: string[] = []
     const prompts: unknown[] = []
@@ -235,9 +242,20 @@ describe("ACP service sessions", () => {
         },
       },
       mcp: {
-        add: (input: { name?: string }) => {
+        add: (input: { directory?: string; name?: string; config?: { command?: readonly string[] } }) => {
           if (input.name) mcpAdds.push(input.name)
+          mcpOperations.push({
+            action: "add",
+            directory: input.directory ?? "",
+            name: input.name ?? "",
+            command: input.config?.command,
+          })
           return Promise.resolve({ data: {} })
+        },
+        remove: (input: { directory?: string; name?: string }) => {
+          if (input.name) mcpRemoves.push(`${input.directory ?? ""}:${input.name}`)
+          mcpOperations.push({ action: "remove", directory: input.directory ?? "", name: input.name ?? "" })
+          return Promise.resolve({ data: true })
         },
       },
     } as unknown as OpencodeClient
@@ -262,6 +280,8 @@ describe("ACP service sessions", () => {
       service: ACPService.make({ sdk, connection, usage }),
       updates,
       mcpAdds,
+      mcpRemoves,
+      mcpOperations,
       aborts,
       forks,
       prompts,
@@ -424,6 +444,109 @@ describe("ACP service sessions", () => {
     expect(missing.code).toBe(-32602)
     expect(aborts).toEqual([created.sessionId])
     expect(await Effect.runPromise(service.closeSession({ sessionId: "missing" }))).toEqual({})
+  })
+
+  it("removes ACP MCP servers when closing their owning session", async () => {
+    const { service, mcpRemoves } = makeService()
+    const created = await Effect.runPromise(
+      service.newSession({
+        cwd: "/workspace",
+        mcpServers: [
+          { name: "tools", command: "node", args: ["server.js"], env: [] },
+          { name: "tools", command: "node", args: ["server.js"], env: [] },
+        ],
+      }),
+    )
+
+    expect(await Effect.runPromise(service.closeSession({ sessionId: created.sessionId }))).toEqual({})
+
+    expect(mcpRemoves).toEqual(["/workspace:tools"])
+  })
+
+  it("keeps shared ACP MCP servers registered until the last owning session closes", async () => {
+    const { service, mcpRemoves } = makeService()
+    const server = { name: "tools", command: "node", args: ["server.js"], env: [] }
+
+    await Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_a", mcpServers: [server] }))
+    await Effect.runPromise(service.loadSession({ cwd: "/workspace", sessionId: "ses_b", mcpServers: [server] }))
+
+    expect(await Effect.runPromise(service.closeSession({ sessionId: "ses_a" }))).toEqual({})
+    expect(mcpRemoves).toEqual([])
+
+    expect(await Effect.runPromise(service.closeSession({ sessionId: "ses_b" }))).toEqual({})
+    expect(mcpRemoves).toEqual(["/workspace:tools"])
+  })
+
+  it("restores the remaining same-name ACP MCP config when closing the active owner", async () => {
+    const { service, mcpOperations } = makeService()
+
+    await Effect.runPromise(
+      service.loadSession({
+        cwd: "/workspace",
+        sessionId: "ses_a",
+        mcpServers: [{ name: "tools", command: "node", args: ["one.js"], env: [] }],
+      }),
+    )
+    await Effect.runPromise(
+      service.loadSession({
+        cwd: "/workspace",
+        sessionId: "ses_b",
+        mcpServers: [{ name: "tools", command: "node", args: ["two.js"], env: [] }],
+      }),
+    )
+
+    await Effect.runPromise(service.closeSession({ sessionId: "ses_b" }))
+    expect(mcpOperations).toEqual([
+      { action: "add", directory: "/workspace", name: "tools", command: ["node", "one.js"] },
+      { action: "add", directory: "/workspace", name: "tools", command: ["node", "two.js"] },
+      { action: "remove", directory: "/workspace", name: "tools" },
+      { action: "add", directory: "/workspace", name: "tools", command: ["node", "one.js"] },
+    ])
+
+    await Effect.runPromise(service.closeSession({ sessionId: "ses_a" }))
+    expect(mcpOperations).toEqual([
+      { action: "add", directory: "/workspace", name: "tools", command: ["node", "one.js"] },
+      { action: "add", directory: "/workspace", name: "tools", command: ["node", "two.js"] },
+      { action: "remove", directory: "/workspace", name: "tools" },
+      { action: "add", directory: "/workspace", name: "tools", command: ["node", "one.js"] },
+      { action: "remove", directory: "/workspace", name: "tools" },
+    ])
+  })
+
+  it("restores the previous active same-name ACP MCP config", async () => {
+    const { service, mcpOperations } = makeService()
+
+    await Effect.runPromise(
+      service.loadSession({
+        cwd: "/workspace",
+        sessionId: "ses_a",
+        mcpServers: [{ name: "tools", command: "node", args: ["one.js"], env: [] }],
+      }),
+    )
+    await Effect.runPromise(
+      service.loadSession({
+        cwd: "/workspace",
+        sessionId: "ses_b",
+        mcpServers: [{ name: "tools", command: "node", args: ["two.js"], env: [] }],
+      }),
+    )
+    await Effect.runPromise(
+      service.loadSession({
+        cwd: "/workspace",
+        sessionId: "ses_c",
+        mcpServers: [{ name: "tools", command: "node", args: ["three.js"], env: [] }],
+      }),
+    )
+
+    await Effect.runPromise(service.closeSession({ sessionId: "ses_c" }))
+
+    expect(mcpOperations).toEqual([
+      { action: "add", directory: "/workspace", name: "tools", command: ["node", "one.js"] },
+      { action: "add", directory: "/workspace", name: "tools", command: ["node", "two.js"] },
+      { action: "add", directory: "/workspace", name: "tools", command: ["node", "three.js"] },
+      { action: "remove", directory: "/workspace", name: "tools" },
+      { action: "add", directory: "/workspace", name: "tools", command: ["node", "two.js"] },
+    ])
   })
 
   it("cancel aborts the backing session and keeps the ACP session", async () => {

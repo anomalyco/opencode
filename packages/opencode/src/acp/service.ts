@@ -71,6 +71,14 @@ export type Interface = {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ACP/Service") {}
 
+type McpRegistration = {
+  readonly key: string
+  readonly nameKey: string
+  readonly directory: string
+  readonly name: string
+  readonly config: ReturnType<typeof mcpConfig>
+}
+
 export function make(input: {
   sdk: OpencodeClient
   connection?: ServiceConnection
@@ -81,7 +89,8 @@ export function make(input: {
 }): Interface {
   const session = input.session ?? makeSessionService()
   const directoryService = input.directory ?? makeDirectoryService(input.sdk)
-  const registeredMcp = new Map<string, Set<string>>()
+  const registeredMcp = new Map<string, Map<string, McpRegistration>>()
+  const activeMcp = new Map<string, string>()
   const sessionSnapshots = new Map<string, Directory.Snapshot>()
   const events = input.connection
     ? ACPEvent.start({ sdk: input.sdk, connection: input.connection, session })
@@ -190,7 +199,7 @@ export function make(input: {
     })
     sessionSnapshots.set(state.id, snapshot)
 
-    yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
+    yield* registerMcpServers(input.sdk, registeredMcp, activeMcp, params.cwd, state.id, params.mcpServers)
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
 
     const response = {
@@ -227,7 +236,7 @@ export function make(input: {
     })
     sessionSnapshots.set(state.id, snapshot)
 
-    yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers)
+    yield* registerMcpServers(input.sdk, registeredMcp, activeMcp, params.cwd, state.id, params.mcpServers)
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
     yield* replayMessages(events, messages)
 
@@ -312,7 +321,7 @@ export function make(input: {
     })
     sessionSnapshots.set(state.id, snapshot)
 
-    yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers ?? [])
+    yield* registerMcpServers(input.sdk, registeredMcp, activeMcp, params.cwd, state.id, params.mcpServers ?? [])
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
     yield* replayMessages(events, messages)
 
@@ -338,10 +347,13 @@ export function make(input: {
 
   const closeSession = Effect.fn("ACP.closeSession")(function* (params: CloseSessionRequest) {
     const removed = yield* session.remove(params.sessionId)
-    registeredMcp.delete(params.sessionId)
-    sessionSnapshots.delete(params.sessionId)
     if (!removed) return {}
 
+    const registeredServers = registeredMcp.get(params.sessionId) ?? new Map<string, McpRegistration>()
+    registeredMcp.delete(params.sessionId)
+    sessionSnapshots.delete(params.sessionId)
+
+    yield* removeMcpServers(input.sdk, registeredMcp, activeMcp, registeredServers)
     yield* abortBackingSession(removed)
     return {}
   })
@@ -381,7 +393,7 @@ export function make(input: {
     })
     sessionSnapshots.set(state.id, snapshot)
 
-    yield* registerMcpServers(input.sdk, registeredMcp, params.cwd, state.id, params.mcpServers ?? [])
+    yield* registerMcpServers(input.sdk, registeredMcp, activeMcp, params.cwd, state.id, params.mcpServers ?? [])
     yield* sendAvailableCommands(input.connection, state.id, snapshot)
     yield* replayMessages(events, messages)
 
@@ -900,39 +912,44 @@ function sendAvailableCommands(
 
 function registerMcpServers(
   sdk: OpencodeClient,
-  registered: Map<string, Set<string>>,
+  registered: Map<string, Map<string, McpRegistration>>,
+  active: Map<string, string>,
   directory: string,
   sessionId: string,
   servers: readonly McpServer[],
 ) {
   const started = performance.now()
-  const current = registered.get(sessionId) ?? new Set<string>()
+  const current = registered.get(sessionId) ?? new Map<string, McpRegistration>()
   registered.set(sessionId, current)
   const pending = new Set<string>()
 
   return Effect.all(
     servers
-      .map((server) => ({ server, config: mcpConfig(server) }))
-      .filter((entry) => {
-        const key = mcpRegistrationKey(entry.server.name, entry.config)
-        if (current.has(key) || pending.has(key)) return false
-        pending.add(key)
+      .map((server) => mcpRegistration(directory, server.name, mcpConfig(server)))
+      .filter((registration) => {
+        if (current.has(registration.key) || pending.has(registration.key)) return false
+        pending.add(registration.key)
         return true
       })
-      .map((entry) =>
+      .map((registration) =>
         request(
           () =>
             sdk.mcp.add(
               {
-                directory,
-                name: entry.server.name,
-                config: entry.config,
+                directory: registration.directory,
+                name: registration.name,
+                config: registration.config,
               },
               { throwOnError: true },
             ),
           "mcp",
         ).pipe(
-          Effect.tap(() => Effect.sync(() => current.add(mcpRegistrationKey(entry.server.name, entry.config)))),
+          Effect.tap(() =>
+            Effect.sync(() => {
+              current.set(registration.key, registration)
+              active.set(registration.nameKey, registration.key)
+            }),
+          ),
           Effect.ignore,
         ),
       ),
@@ -949,8 +966,98 @@ function registerMcpServers(
   )
 }
 
-function mcpRegistrationKey(name: string, config: ReturnType<typeof mcpConfig>) {
-  return `${name}:${stableStringify(config)}`
+function removeMcpServers(
+  sdk: OpencodeClient,
+  registered: Map<string, Map<string, McpRegistration>>,
+  active: Map<string, string>,
+  owned: ReadonlyMap<string, McpRegistration>,
+) {
+  const pending = new Set<string>()
+  return Effect.all(
+    [...owned.values()]
+      .filter((registration) => {
+        if (pending.has(registration.nameKey)) return false
+        if (active.get(registration.nameKey) !== registration.key) return false
+        if (hasMcpRegistration(registered, registration.key)) return false
+        pending.add(registration.nameKey)
+        return true
+      })
+      .map((registration) => {
+        const replacement = replacementMcpRegistration(registered, registration.nameKey)
+        return request(
+          () =>
+            sdk.mcp.remove(
+              {
+                directory: registration.directory,
+                name: registration.name,
+              },
+              { throwOnError: true },
+            ),
+          "mcp",
+        ).pipe(
+          Effect.catch((error) =>
+            Effect.logError("failed to remove ACP MCP server", {
+              error,
+              directory: registration.directory,
+              name: registration.name,
+            }).pipe(Effect.andThen(Effect.sync(() => active.delete(registration.nameKey)))),
+          ),
+          Effect.andThen(
+            replacement
+              ? restoreMcpServer(sdk, active, replacement)
+              : Effect.sync(() => active.delete(registration.nameKey)),
+          ),
+        )
+      }),
+    { concurrency: "unbounded" },
+  ).pipe(Effect.asVoid)
+}
+
+function restoreMcpServer(sdk: OpencodeClient, active: Map<string, string>, registration: McpRegistration) {
+  return request(
+    () =>
+      sdk.mcp.add(
+        {
+          directory: registration.directory,
+          name: registration.name,
+          config: registration.config,
+        },
+        { throwOnError: true },
+      ),
+    "mcp",
+  ).pipe(
+    Effect.tap(() => Effect.sync(() => active.set(registration.nameKey, registration.key))),
+    Effect.catch((error) =>
+      Effect.logError("failed to restore ACP MCP server", {
+        error,
+        directory: registration.directory,
+        name: registration.name,
+      }).pipe(Effect.andThen(Effect.sync(() => active.delete(registration.nameKey)))),
+    ),
+  )
+}
+
+function replacementMcpRegistration(registered: Map<string, Map<string, McpRegistration>>, nameKey: string) {
+  return [...registered.values()].flatMap((items) => [...items.values()]).findLast((item) => item.nameKey === nameKey)
+}
+
+function hasMcpRegistration(registered: Map<string, Map<string, McpRegistration>>, key: string) {
+  return [...registered.values()].some((items) => items.has(key))
+}
+
+function mcpNameKey(directory: string, name: string) {
+  return stableStringify([directory, name])
+}
+
+function mcpRegistration(directory: string, name: string, config: ReturnType<typeof mcpConfig>): McpRegistration {
+  const nameKey = mcpNameKey(directory, name)
+  return {
+    key: `${nameKey}:${stableStringify(config)}`,
+    nameKey,
+    directory,
+    name,
+    config,
+  }
 }
 
 function mcpConfig(server: McpServer) {

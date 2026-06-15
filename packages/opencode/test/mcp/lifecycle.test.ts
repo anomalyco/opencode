@@ -539,6 +539,91 @@ it.instance(
   },
 )
 
+it.instance(
+  "remove() deletes dynamic-only servers from status and tools",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "dynamic-server"
+        const dynamicState = getOrCreateClientState("dynamic-server")
+        dynamicState.tools = [
+          { name: "dynamic_tool", description: "dynamic", inputSchema: { type: "object", properties: {} } },
+        ]
+
+        yield* mcp.add("dynamic-server", {
+          type: "local",
+          command: ["echo", "dynamic"],
+        })
+
+        expect((yield* mcp.status())["dynamic-server"]?.status).toBe("connected")
+        expect(Object.keys(yield* mcp.tools()).some((key) => key.includes("dynamic_tool"))).toBe(true)
+
+        const removedStatus = yield* mcp.remove("dynamic-server")
+
+        expect(removedStatus["dynamic-server"]).toBeUndefined()
+        expect((yield* mcp.status())["dynamic-server"]).toBeUndefined()
+        expect(dynamicState.closed).toBe(true)
+        expect(Object.keys(yield* mcp.tools()).some((key) => key.includes("dynamic_tool"))).toBe(false)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "remove() restores same-name static config after dynamic override",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "shared-server"
+        const staticState = getOrCreateClientState("shared-server")
+        staticState.tools = [
+          { name: "static_tool", description: "static", inputSchema: { type: "object", properties: {} } },
+        ]
+
+        expect((yield* mcp.status())["shared-server"]?.status).toBe("connected")
+        expect(Object.keys(yield* mcp.tools()).some((key) => key.includes("static_tool"))).toBe(true)
+
+        clientStates.delete("shared-server")
+        const dynamicState = getOrCreateClientState("shared-server")
+        dynamicState.tools = [
+          { name: "dynamic_tool", description: "dynamic", inputSchema: { type: "object", properties: {} } },
+        ]
+
+        yield* mcp.add("shared-server", {
+          type: "local",
+          command: ["echo", "dynamic"],
+        })
+
+        expect(staticState.closed).toBe(true)
+        expect(Object.keys(yield* mcp.tools()).some((key) => key.includes("dynamic_tool"))).toBe(true)
+
+        clientStates.delete("shared-server")
+        const restoredState = getOrCreateClientState("shared-server")
+        restoredState.tools = [
+          { name: "static_tool", description: "restored", inputSchema: { type: "object", properties: {} } },
+        ]
+
+        const removedStatus = yield* mcp.remove("shared-server")
+
+        expect(dynamicState.closed).toBe(true)
+        expect(removedStatus["shared-server"]?.status).toBe("connected")
+        expect((yield* mcp.status())["shared-server"]?.status).toBe("connected")
+        expect(Object.keys(yield* mcp.tools()).some((key) => key.includes("static_tool"))).toBe(true)
+        expect(Object.keys(yield* mcp.tools()).some((key) => key.includes("dynamic_tool"))).toBe(false)
+      }),
+    ),
+  {
+    config: {
+      mcp: {
+        "shared-server": {
+          type: "local",
+          command: ["echo", "static"],
+        },
+      },
+    },
+  },
+)
+
 // ========================================================================
 // Test: add() closes existing client before replacing
 // ========================================================================
@@ -993,6 +1078,38 @@ it.instance(
       }),
     ),
   { config: { mcp: {} } },
+)
+
+it.instance(
+  "remove() on static-only server fails without closing it",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "static-only"
+        const staticState = getOrCreateClientState("static-only")
+
+        expect((yield* mcp.status())["static-only"]?.status).toBe("connected")
+
+        const exit = yield* mcp.remove("static-only").pipe(Effect.exit)
+
+        expect(Exit.isFailure(exit)).toBe(true)
+        if (Exit.isFailure(exit)) {
+          expect(Cause.squash(exit.cause)).toMatchObject({ _tag: "MCP.NotFoundError", name: "static-only" })
+        }
+        expect(staticState.closed).toBe(false)
+        expect((yield* mcp.status())["static-only"]?.status).toBe("connected")
+      }),
+    ),
+  {
+    config: {
+      mcp: {
+        "static-only": {
+          type: "local",
+          command: ["echo", "static"],
+        },
+      },
+    },
+  },
 )
 
 // ========================================================================

@@ -279,6 +279,7 @@ describe("PublicApi OpenAPI v2 errors", () => {
       ["delete", "/mcp/{name}/auth"],
       ["post", "/mcp/{name}/connect"],
       ["post", "/mcp/{name}/disconnect"],
+      ["delete", "/mcp/{name}"],
     ] as const) {
       expect(componentName(responseRef(spec.paths[route[1]]?.[route[0]]?.responses?.["404"]) ?? "")).toBe(
         "McpServerNotFoundError",

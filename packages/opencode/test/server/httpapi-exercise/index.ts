@@ -431,6 +431,11 @@ const scenarios: Scenario[] = [
     .mutating()
     .at((ctx) => ({ path: route("/mcp/{name}/disconnect", { name: "httpapi-missing" }), headers: ctx.headers() }))
     .json(404, object, "status"),
+  http.protected
+    .delete("/mcp/{name}", "mcp.remove")
+    .mutating()
+    .at((ctx) => ({ path: route("/mcp/{name}", { name: "httpapi-missing" }), headers: ctx.headers() }))
+    .json(404, object, "status"),
   http.protected.get("/pty/shells", "pty.shells").json(200, array),
   http.protected.get("/pty", "pty.list").json(200, array),
   http.protected

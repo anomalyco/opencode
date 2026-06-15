@@ -165,6 +165,7 @@ export interface Interface {
   readonly add: (name: string, mcp: ConfigMCPV1.Info) => Effect.Effect<{ status: Record<string, Status> | Status }>
   readonly connect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (name: string) => Effect.Effect<void, NotFoundError>
+  readonly remove: (name: string) => Effect.Effect<Record<string, Status>, NotFoundError>
   readonly getPrompt: (
     clientName: string,
     name: string,
@@ -593,7 +594,6 @@ export const layer = Layer.effect(
       s.status[name] = result.status
       if (!result.mcpClient) {
         yield* closeClient(s, name)
-        delete s.clients[name]
         return result.status
       }
 
@@ -616,8 +616,33 @@ export const layer = Layer.effect(
       yield* requireMcpConfig(name)
       const s = yield* InstanceState.get(state)
       yield* closeClient(s, name)
-      delete s.clients[name]
       s.status[name] = { status: "disabled" }
+    })
+
+    const remove = Effect.fn("MCP.remove")(function* (name: string) {
+      const s = yield* InstanceState.get(state)
+      const configured = s.config[name]
+      if (!configured) return yield* new NotFoundError({ name })
+
+      delete s.config[name]
+      pendingOAuthTransports.delete(name)
+
+      const cfg = yield* cfgSvc.get()
+      const staticConfig = cfg.mcp?.[name]
+      if (!staticConfig || !isMcpConfigured(staticConfig)) {
+        yield* closeClient(s, name)
+        delete s.status[name]
+        return yield* status()
+      }
+
+      if (staticConfig.enabled === false) {
+        yield* closeClient(s, name)
+        s.status[name] = { status: "disabled" }
+        return yield* status()
+      }
+
+      yield* createAndStore(name, staticConfig)
+      return yield* status()
     })
 
     function requestTimeout(s: State, name: string, configured: McpEntry | undefined, fallback?: number) {
@@ -923,6 +948,7 @@ export const layer = Layer.effect(
       add,
       connect,
       disconnect,
+      remove,
       getPrompt,
       readResource,
       startAuth,
