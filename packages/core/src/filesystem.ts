@@ -78,7 +78,14 @@ const baseLayer = Layer.effect(
       const absolute = path.resolve(location.directory, input ?? ".")
       if (!FSUtil.contains(location.directory, absolute))
         return yield* Effect.die(new Error("Path escapes the location"))
-      const real = yield* fs.realPath(absolute).pipe(Effect.orDie)
+      // realPath fails when the target no longer exists; a missing path cannot
+      // be a symlink escaping the location, so fall back to the lexical path
+      // (already constrained above) and let callers decide how to handle it
+      // instead of crashing here.
+      const real = yield* fs.realPath(absolute).pipe(
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(absolute)),
+        Effect.orDie,
+      )
       if (!FSUtil.contains(root, real)) return yield* Effect.die(new Error("Path escapes the location"))
       return { absolute, real, directory: location.directory, root }
     })
@@ -97,7 +104,14 @@ const baseLayer = Layer.effect(
       }),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
         const target = yield* resolve(input.path)
-        const info = yield* fs.stat(target.real).pipe(Effect.orDie)
+        const info = yield* fs.stat(target.real).pipe(
+          Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+          Effect.orDie,
+        )
+        // A path that no longer exists on disk — for example a subdirectory
+        // removed after the watcher indexed it — is skipped rather than
+        // crashing the whole listing, so treat it as empty.
+        if (!info) return []
         if (info.type !== "Directory") return yield* Effect.die(new Error("Path is not a directory"))
         return yield* fs.readDirectoryEntries(target.real).pipe(
           Effect.orDie,

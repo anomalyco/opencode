@@ -60,6 +60,18 @@ describe("FileSystem", () => {
     ),
   )
 
+  it.live("skips a subdirectory removed after indexing", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const sub = path.join(directory, "transient")
+        yield* Effect.promise(() => fs.mkdir(sub))
+        yield* Effect.promise(() => fs.rm(sub, { recursive: true }))
+        const entries = yield* (yield* FileSystem.Service).list({ path: RelativePath.make("transient") })
+        expect(entries).toEqual([])
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("rejects lexical escapes", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
