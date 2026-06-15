@@ -688,30 +688,30 @@ describe("session.message-v2.toModelMessage", () => {
     const userID = "m-user"
     const assistantID = "m-assistant"
 
-    const input: MessageV2.WithParts[] = [
-      {
-        info: userInfo(userID),
-        parts: [
-          {
-            ...basePart(userID, "u1"),
-            type: "text",
-            text: "think about this",
-          },
-        ] as MessageV2.Part[],
-      },
-      {
-        info: assistantInfo(assistantID, userID, undefined, { providerID: "other", modelID: "other" }),
-        parts: [
-          {
-            ...basePart(assistantID, "a1"),
-            type: "reasoning",
-            text: "reasoning trace",
-            time: { start: 0 },
-            metadata: { anthropic: { signature: "sig-abc" } },
-          },
-        ] as MessageV2.Part[],
-      } as MessageV2.WithParts,
-    ]
+   const input: SessionV1.WithParts[] = [
+       {
+         info: userInfo(userID),
+         parts: [
+           {
+             ...basePart(userID, "u1"),
+             type: "text",
+             text: "think about this",
+           },
+         ] as SessionV1.Part[],
+       },
+       {
+         info: assistantInfo(assistantID, userID, undefined, { providerID: "other", modelID: "other" }),
+         parts: [
+           {
+             ...basePart(assistantID, "a1"),
+             type: "reasoning",
+             text: "reasoning trace",
+             time: { start: 0 },
+             metadata: { anthropic: { signature: "sig-abc" } },
+           },
+         ] as SessionV1.Part[],
+       } as SessionV1.WithParts,
+     ]
 
     expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
       {
