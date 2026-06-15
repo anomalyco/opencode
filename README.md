@@ -130,6 +130,21 @@ A VK Messenger gateway that bridges VK chat with a local OpenCode/lildax AI serv
 
 See [bot/README.md](./bot/README.md) for more details.
 
+### Building
+
+```bash
+# Install dependencies
+bun install
+
+# Build lildax binary (current platform only)
+cd packages/cli && bun run build --single --skip-install
+
+# Build for all platforms
+cd packages/cli && bun run build
+```
+
+The binary will be at `packages/cli/dist/cli-<os>-<arch>/bin/lildax`.
+
 ---
 
 **Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
