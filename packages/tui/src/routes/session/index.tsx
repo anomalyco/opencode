@@ -1364,7 +1364,7 @@ function UserMessage(props: {
   const isMessage = (
     x: Part,
   ): x is TextPart & {
-    metadata: { message: { direction: "in" | "out"; peer: "parent" | "subagent"; expectReply?: boolean } }
+    metadata: { message: { peer: "parent" | "subagent"; expectReply?: boolean } }
   } => x.type === "text" && !!(x.metadata as { message?: unknown } | undefined)?.message
   const text = createMemo(() => {
     const texts = props.parts

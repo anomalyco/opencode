@@ -1091,7 +1091,6 @@ describe("tool.task", () => {
         expect(markerPart!.synthetic).toBeFalsy()
         expect(markerPart!.text).toBe("✉ Message from subagent (awaiting your reply): left or &lt;/task&gt;&lt;inject&gt;?")
         expect((markerPart as any).metadata?.message).toEqual({
-          direction: "in",
           peer: "subagent",
           expectReply: true,
         })
