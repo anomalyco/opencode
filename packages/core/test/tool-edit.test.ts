@@ -301,7 +301,7 @@ describe("EditTool", () => {
                 ).toEqual({
                   type: "error",
                   value:
-                    "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
+                    "Could not find oldString in the file. It must match exactly, including whitespace and indentation.\n\nFile content preview:\nsame same",
                 })
                 expect(
                   yield* executeTool(registry, call({ path: "matches.txt", oldString: "same", newString: "after" })),
@@ -309,6 +309,35 @@ describe("EditTool", () => {
                   type: "error",
                   value:
                     "Found multiple exact matches for oldString. Provide more surrounding context or set replaceAll to true.",
+                })
+                expect(writes).toEqual([])
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("truncates the file content preview in the oldString not found error to 500 characters", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "long.txt")
+        const content = "a".repeat(600)
+        return Effect.promise(() => fs.writeFile(target, content)).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const result = yield* executeTool(
+                  registry,
+                  call({ path: "long.txt", oldString: "not present", newString: "after" }),
+                )
+                expect(result).toEqual({
+                  type: "error",
+                  value: `Could not find oldString in the file. It must match exactly, including whitespace and indentation.\n\nFile content preview:\n${"a".repeat(500)}\n...`,
                 })
                 expect(writes).toEqual([])
               }),
