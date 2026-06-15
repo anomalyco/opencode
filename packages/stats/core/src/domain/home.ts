@@ -47,7 +47,7 @@ export type StatsModelData = {
   slug: string
   provider: string
   author: string
-  rank: number
+  rank: number | null
   previousRank: number | null
   totalModels: number
   tokenShare: number
@@ -96,6 +96,8 @@ const DAY_MS = 86_400_000
 const TOKEN_SCALE = 1_000_000
 const DOLLARS_PER_MICROCENT = 1 / 100_000_000
 const METRIC_MODEL_LIMIT = 10
+const TOP_MODEL_SEGMENT_LIMIT = 9
+const SITE_PRODUCT = "Go"
 const LEADERBOARD_CHANGE_MIN_MULTIPLE = 10
 const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const
 
@@ -227,20 +229,27 @@ function buildStatsModelData(
   const latest = Math.max(...normalized.map((row) => row.periodStart))
   const latestUpdate = Math.max(...modelScopedRows.map((row) => row.updatedAt))
   const window = getWindow("2M", earliest, latest)
-  const currentRows = rowsForProduct(modelScopedRows, "All Users", window.start, window.end)
-  const previousRows = rowsForProduct(modelScopedRows, "All Users", window.previousStart, window.previousEnd)
+  const rankWindow = getWindow("1W", earliest, latest)
+  const currentRows = rowsForProduct(modelScopedRows, SITE_PRODUCT, window.start, window.end)
+  const previousRows = rowsForProduct(modelScopedRows, SITE_PRODUCT, window.previousStart, window.previousEnd)
   const current = combineRowsForModel(model, currentRows)
   const previous = combineRowsForModel(model, previousRows)
-  const peers = aggregateByModelName(rowsForProduct(normalized, "All Users", window.start, window.end))
+  const rankPeers = aggregateByModelName(rowsForProduct(normalized, SITE_PRODUCT, rankWindow.start, rankWindow.end))
     .filter((item) => item.totalTokens > 0)
     .toSorted((a, b) => b.totalTokens - a.totalTokens || a.model.localeCompare(b.model))
-  const previousPeers = aggregateByModelName(
-    rowsForProduct(normalized, "All Users", window.previousStart, window.previousEnd),
+  const previousRankPeers = aggregateByModelName(
+    rowsForProduct(normalized, SITE_PRODUCT, rankWindow.previousStart, rankWindow.previousEnd),
   )
     .filter((item) => item.totalTokens > 0)
     .toSorted((a, b) => b.totalTokens - a.totalTokens || a.model.localeCompare(b.model))
-  const rank = Math.max(1, peers.findIndex((item) => item.model === model) + 1)
-  const previousRankIndex = previousPeers.findIndex((item) => item.model === model)
+  const peers = aggregateByModelName(rowsForProduct(normalized, SITE_PRODUCT, window.start, window.end))
+    .filter((item) => item.totalTokens > 0)
+    .toSorted((a, b) => b.totalTokens - a.totalTokens || a.model.localeCompare(b.model))
+  const rankIndex = rankPeers.findIndex((item) => item.model === model)
+  const rank = rankIndex >= 0 ? rankIndex + 1 : null
+  const previousRankIndex = previousRankPeers.findIndex((item) => item.model === model)
+  const peerRankIndex = peers.findIndex((item) => item.model === model)
+  const peerRank = peerRankIndex >= 0 ? peerRankIndex + 1 : 1
   const totalTokens = peers.reduce((sum, item) => sum + item.totalTokens, 0)
 
   return {
@@ -271,7 +280,7 @@ function buildStatsModelData(
     tokenMix: buildModelTokenMix(current),
     productMix: buildModelProductMix(modelScopedRows, window, current),
     country: createRangeRecord((range) => buildCountryStats(geo, getWindow(range, earliest, latest))),
-    peers: buildModelPeers(peers, rank, totalTokens),
+    peers: buildModelPeers(peers, peerRank, totalTokens),
   }
 }
 
@@ -289,11 +298,11 @@ function buildStatsLabData(providerParam: string, modelRows: ModelStatMetric[]):
   const latest = Math.max(...normalized.map((row) => row.periodStart))
   const latestUpdate = Math.max(...providerRows.map((row) => row.updatedAt))
   const window = getWindow("2M", earliest, latest)
-  const currentRows = rowsForProduct(providerRows, "All Users", window.start, window.end)
-  const previousRows = rowsForProduct(providerRows, "All Users", window.previousStart, window.previousEnd)
+  const currentRows = rowsForProduct(providerRows, SITE_PRODUCT, window.start, window.end)
+  const previousRows = rowsForProduct(providerRows, SITE_PRODUCT, window.previousStart, window.previousEnd)
   const current = combineRowsForModel("", currentRows)
   const previous = combineRowsForModel("", previousRows)
-  const allCurrent = aggregateByModel(rowsForProduct(normalized, "All Users", window.start, window.end))
+  const allCurrent = aggregateByModel(rowsForProduct(normalized, SITE_PRODUCT, window.start, window.end))
   const totalTokens = allCurrent.reduce((sum, item) => sum + item.totalTokens, 0)
   const models = aggregateByModel(currentRows)
     .filter((item) => item.totalTokens > 0)
@@ -337,9 +346,10 @@ function emptyStatsHomeData(): StatsHomeData {
 
 function buildUsagePoints(rows: StatMetricRow[], product: UsageProduct, range: UsageRange, window: DateWindow) {
   const windowRows = rowsForProduct(rows, product, window.start, window.end)
-  const modelOrder = aggregateByModel(windowRows)
+  const rankStart = Math.max(window.start, window.end - 7 * DAY_MS)
+  const modelOrder = aggregateByModel(rowsForProduct(rows, product, rankStart, window.end))
     .toSorted((a, b) => b.totalTokens - a.totalTokens)
-    .slice(0, 6)
+    .slice(0, TOP_MODEL_SEGMENT_LIMIT)
     .map((item) => ({ key: modelKey(item.provider, item.model), model: item.model }))
 
   return createBuckets(window, range).map((bucket) => {
@@ -408,7 +418,7 @@ function buildMarketShare(rows: ProviderMetricRow[], product: UsageProduct, rang
 }
 
 function buildCountryStats(rows: GeoMetricRow[], window: DateWindow) {
-  const countries = aggregateByCountry(rowsForProduct(rows, "All Users", window.start, window.end))
+  const countries = aggregateByCountry(rowsForProduct(rows, SITE_PRODUCT, window.start, window.end))
     .filter((item) => item.tokens > 0 && item.country !== "AQ")
     .toSorted((a, b) => b.tokens - a.tokens)
   const totalTokens = countries.reduce((sum, item) => sum + item.tokens, 0)

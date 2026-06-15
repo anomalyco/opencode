@@ -1,10 +1,13 @@
-import { Flag } from "@opencode-ai/core/flag/flag"
-import { lazy } from "@/util/lazy"
-import { Filesystem } from "@/util/filesystem"
-import { which } from "@opencode-ai/core/util/which"
+export * as Shell from "./shell"
+
 import path from "path"
 import { spawn, type ChildProcess } from "child_process"
+import { readFile } from "fs/promises"
+import { statSync } from "fs"
 import { setTimeout as sleep } from "node:timers/promises"
+import { Flag } from "./flag/flag"
+import { FSUtil } from "./fs-util"
+import { which } from "./util/which"
 
 const SIGKILL_TIMEOUT_MS = 200
 const META: Record<string, { deny?: boolean; login?: boolean; posix?: boolean; ps?: boolean }> = {
@@ -47,7 +50,7 @@ export async function killTree(proc: ChildProcess, opts?: { exited?: () => boole
     if (!opts?.exited?.()) {
       process.kill(-pid, "SIGKILL")
     }
-  } catch (_e) {
+  } catch {
     proc.kill("SIGTERM")
     await sleep(SIGKILL_TIMEOUT_MS)
     if (!opts?.exited?.()) {
@@ -56,9 +59,13 @@ export async function killTree(proc: ChildProcess, opts?: { exited?: () => boole
   }
 }
 
+function stat(file: string) {
+  return statSync(file, { throwIfNoEntry: false }) ?? undefined
+}
+
 function full(file: string) {
   if (process.platform !== "win32") return file
-  const shell = Filesystem.windowsPath(file)
+  const shell = FSUtil.windowsPath(file)
   if (path.win32.dirname(shell) !== ".") {
     if (shell.startsWith("/") && name(shell) === "bash") return gitbash() || shell
     return shell
@@ -76,13 +83,13 @@ function ok(file: string) {
 }
 
 function rooted(file: string) {
-  return path.isAbsolute(Filesystem.windowsPath(file))
+  return path.isAbsolute(FSUtil.windowsPath(file))
 }
 
 function resolve(file: string) {
   const shell = full(file)
   if (rooted(shell)) {
-    if (Filesystem.stat(shell)?.isFile()) return shell
+    if (stat(shell)?.isFile()) return shell
     return
   }
   return which(shell) ?? undefined
@@ -99,7 +106,7 @@ function win() {
 }
 
 async function unix() {
-  const text = await Filesystem.readText("/etc/shells").catch(() => "")
+  const text = await readFile("/etc/shells", "utf8").catch(() => "")
   if (text) return Array.from(new Set(text.split("\n").filter((line) => line.trim() && !line.startsWith("#"))))
   return ["/bin/bash", "/bin/zsh", "/bin/sh"]
 }
@@ -109,7 +116,7 @@ function select(file: string | undefined, opts?: { acceptable?: boolean }) {
     const shell = resolve(file)
     if (shell) return shell
   }
-  if (process.platform === "win32") return win()[0]!
+  if (process.platform === "win32") return win()[0]
   return fallback()
 }
 
@@ -119,7 +126,7 @@ export function gitbash() {
   const git = which("git")
   if (!git) return
   const file = path.join(git, "..", "..", "bin", "bash.exe")
-  if (Filesystem.stat(file)?.size) return file
+  if (stat(file)?.size) return file
 }
 
 function fallback() {
@@ -130,7 +137,7 @@ function fallback() {
 }
 
 export function name(file: string) {
-  if (process.platform === "win32") return path.win32.parse(Filesystem.windowsPath(file)).name.toLowerCase()
+  if (process.platform === "win32") return path.win32.parse(FSUtil.windowsPath(file)).name.toLowerCase()
   return path.basename(file).toLowerCase()
 }
 
@@ -192,24 +199,28 @@ export function args(file: string, command: string, cwd: string) {
   return ["-c", command]
 }
 
-const defaultPreferred = lazy(() => select(process.env.SHELL))
-const defaultAcceptable = lazy(() => select(process.env.SHELL, { acceptable: true }))
+let defaultPreferred: string | undefined
+let defaultAcceptable: string | undefined
 
 export function preferred(configShell?: string) {
   if (configShell) return select(configShell)
-  return defaultPreferred()
+  defaultPreferred ??= select(process.env.SHELL)
+  return defaultPreferred
 }
-preferred.reset = () => defaultPreferred.reset()
+preferred.reset = () => {
+  defaultPreferred = undefined
+}
 
 export function acceptable(configShell?: string) {
   if (configShell) return select(configShell, { acceptable: true })
-  return defaultAcceptable()
+  defaultAcceptable ??= select(process.env.SHELL, { acceptable: true })
+  return defaultAcceptable
 }
-acceptable.reset = () => defaultAcceptable.reset()
+acceptable.reset = () => {
+  defaultAcceptable = undefined
+}
 
 export async function list(): Promise<Item[]> {
   const shells = process.platform === "win32" ? win() : await unix()
   return shells.filter((s) => resolve(s)).map(info)
 }
-
-export * as Shell from "./shell"

@@ -46,6 +46,8 @@ export interface Interface {
   readonly all: () => Effect.Effect<Stored[]>
   /** Returns stored credentials belonging to one integration. */
   readonly list: (integrationID: IntegrationSchema.ID) => Effect.Effect<Stored[]>
+  /** Returns one stored credential by ID. */
+  readonly get: (id: ID) => Effect.Effect<Stored | undefined>
   /** Replaces any credential for an integration and returns the new record. */
   readonly create: (input: {
     readonly integrationID: IntegrationSchema.ID
@@ -98,6 +100,10 @@ export const layer = Layer.effect(
           const credential = stored(row)
           return credential ? [credential] : []
         })
+      }),
+      get: Effect.fn("Credential.get")(function* (id) {
+        const row = yield* db.select().from(CredentialTable).where(eq(CredentialTable.id, id)).get().pipe(Effect.orDie)
+        return row ? stored(row) : undefined
       }),
       create: Effect.fn("Credential.create")(function* (input) {
         const credential = new Stored({
