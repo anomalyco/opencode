@@ -57,6 +57,59 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("lowers enabled thinking to a budget", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.updateRequest(request, {
+          providerOptions: { anthropic: { thinking: { type: "enabled", budgetTokens: 16_000 } } },
+        }),
+      )
+      expect(prepared.body.thinking).toEqual({ type: "enabled", budget_tokens: 16_000 })
+      expect(prepared.body.output_config).toBeUndefined()
+    }),
+  )
+
+  it.effect("lowers adaptive thinking and effort to output_config", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
+        LLM.updateRequest(request, {
+          providerOptions: {
+            anthropic: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
+          },
+        }),
+      )
+      expect(prepared.body.thinking).toEqual({ type: "adaptive", display: "summarized" })
+      expect(prepared.body.output_config).toEqual({ effort: "high" })
+    }),
+  )
+
+  it.effect("adds the effort beta header only when effort is set", () =>
+    Effect.gen(function* () {
+      const seen: Record<string, string>[] = []
+      const body = () =>
+        sseEvents(
+          { type: "message_start", message: { usage: { input_tokens: 1 } } },
+          { type: "message_delta", delta: { stop_reason: "end_turn" }, usage: { output_tokens: 1 } },
+          { type: "message_stop" },
+        )
+      const layer = dynamicResponse((input) =>
+        Effect.sync(() => {
+          seen.push({ ...input.request.headers })
+          return input.respond(body(), { headers: { "content-type": "text/event-stream" } })
+        }),
+      )
+
+      yield* LLMClient.generate(
+        LLM.updateRequest(request, { providerOptions: { anthropic: { effort: "high" } } }),
+      ).pipe(Effect.provide(layer))
+      yield* LLMClient.generate(request).pipe(Effect.provide(layer))
+
+      expect(seen[0]["anthropic-version"]).toBe("2023-06-01")
+      expect(seen[0]["anthropic-beta"]).toBe("effort-2025-11-24")
+      expect(seen[1]["anthropic-beta"]).toBeUndefined()
+    }),
+  )
+
   it.effect("lowers chronological system updates natively for Claude Opus 4.8 with cache hints", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(

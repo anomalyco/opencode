@@ -970,9 +970,25 @@ const ProviderInterleaved = Schema.Union([
   }),
 ])
 
+const ProviderReasoningOption = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("toggle"),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("effort"),
+    values: Schema.Array(Schema.String),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("budget_tokens"),
+    min: optionalOmitUndefined(Schema.Finite),
+    max: optionalOmitUndefined(Schema.Finite),
+  }),
+])
+
 const ProviderCapabilities = Schema.Struct({
   temperature: Schema.Boolean,
   reasoning: Schema.Boolean,
+  reasoningOptions: optionalOmitUndefined(Schema.Array(ProviderReasoningOption)),
   attachment: Schema.Boolean,
   toolcall: Schema.Boolean,
   input: ProviderModalities,
@@ -1168,6 +1184,16 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
   return result
 }
 
+function reasoningOptions(options: ModelsDev.Model["reasoning_options"]): Model["capabilities"]["reasoningOptions"] {
+  return options
+    ?.filter((option) => option.type === "toggle" || option.type === "effort" || option.type === "budget_tokens")
+    .map((option) =>
+      option.type === "effort"
+        ? { ...option, values: option.values.filter((value): value is string => typeof value === "string") }
+        : { ...option },
+    )
+}
+
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
   const base: Model = {
     id: ModelV2.ID.make(model.id),
@@ -1191,6 +1217,7 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     capabilities: {
       temperature: model.temperature ?? false,
       reasoning: model.reasoning ?? false,
+      reasoningOptions: reasoningOptions(model.reasoning_options),
       attachment: model.attachment ?? false,
       toolcall: model.tool_call ?? true,
       input: {
@@ -1212,7 +1239,6 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     release_date: model.release_date ?? "",
     variants: {},
   }
-
   return {
     ...base,
     variants: mapValues(ProviderTransform.variants(base), (v) => v),
@@ -1413,6 +1439,8 @@ export const layer = Layer.effect(
               capabilities: {
                 temperature: model.temperature ?? existingModel?.capabilities.temperature ?? false,
                 reasoning: model.reasoning ?? existingModel?.capabilities.reasoning ?? false,
+                reasoningOptions:
+                  reasoningOptions(model.reasoning_options) ?? existingModel?.capabilities.reasoningOptions,
                 attachment: model.attachment ?? existingModel?.capabilities.attachment ?? false,
                 toolcall: model.tool_call ?? existingModel?.capabilities.toolcall ?? true,
                 input: {

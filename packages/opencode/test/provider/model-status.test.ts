@@ -14,18 +14,19 @@ describe("provider model status schemas", () => {
 
   test("accepts active status across public provider schemas", () => {
     expect(Schema.decodeUnknownSync(ConfigProviderV1.Model)({ status: "active" }).status).toBe("active")
-    expect(
-      Schema.decodeUnknownSync(ModelsDev.Model)({
-        id: "test-model",
-        name: "Test Model",
-        release_date: "2026-01-01",
-        attachment: false,
-        reasoning: false,
-        temperature: true,
-        tool_call: true,
-        limit: { context: 128000, output: 8192 },
-      }).status,
-    ).toBeUndefined()
+    const decoded = Schema.decodeUnknownSync(ModelsDev.Model)({
+      id: "test-model",
+      name: "Test Model",
+      release_date: "2026-01-01",
+      attachment: false,
+      reasoning: false,
+      reasoning_options: [{ type: "effort", values: ["high", "max"] }],
+      temperature: true,
+      tool_call: true,
+      limit: { context: 128000, output: 8192 },
+    })
+    expect(decoded.reasoning_options).toEqual([{ type: "effort", values: ["high", "max"] }])
+    expect(decoded.status).toBeUndefined()
     expect(
       Schema.decodeUnknownSync(Provider.Model)({
         id: "test-model",

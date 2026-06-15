@@ -610,7 +610,8 @@ describe("Config", () => {
                 model: {
                   request: {
                     body: {
-                      output_config: { effort: "high", task_budget: 4096 },
+                      effort: "high",
+                      output_config: { task_budget: 4096 },
                       metadata: { user_id: "user-1" },
                     },
                   },

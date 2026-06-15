@@ -43,6 +43,22 @@ const Cost = Schema.Struct({
   ),
 })
 
+export const ReasoningOption = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("effort"),
+    values: Schema.Array(Schema.NullOr(Schema.String)),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("toggle"),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("budget_tokens"),
+    min: Schema.optional(Schema.Finite),
+    max: Schema.optional(Schema.Finite),
+  }),
+])
+export type ReasoningOption = Schema.Schema.Type<typeof ReasoningOption>
+
 export const Model = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
@@ -60,6 +76,7 @@ export const Model = Schema.Struct({
       }),
     ]),
   ),
+  reasoning_options: Schema.optional(Schema.Array(ReasoningOption)),
   cost: Schema.optional(Cost),
   limit: Schema.Struct({
     context: Schema.Finite,

@@ -7,6 +7,7 @@ import { ModelRequest } from "../model-request"
 import { ModelsDev } from "../models-dev"
 import { PluginV2 } from "../plugin"
 import { ProviderV2 } from "../provider"
+import { ReasoningVariants } from "../reasoning-variants"
 
 function released(date: string) {
   const time = Date.parse(date)
@@ -40,8 +41,8 @@ function cost(input: ModelsDev.Model["cost"]) {
   ]
 }
 
-function variants(model: ModelsDev.Model, packageName?: string) {
-  return Object.entries(model.experimental?.modes ?? {}).map(([id, item]) => {
+export function variants(model: ModelsDev.Model, providerID: string, packageName?: string) {
+  const modes = Object.entries(model.experimental?.modes ?? {}).map(([id, item]) => {
     const request = ModelRequest.normalizeAiSdkOptions(packageName, item.provider?.body ?? {})
     return {
       id: ModelV2.VariantID.make(id),
@@ -49,6 +50,18 @@ function variants(model: ModelsDev.Model, packageName?: string) {
       ...request,
     }
   })
+  const efforts = ReasoningVariants.fromOptions(
+    { npm: packageName, apiID: model.id, modelID: model.id, providerID },
+    model.reasoning_options,
+  )
+  const fromEfforts = Object.entries(efforts ?? {})
+    .filter(([id]) => !modes.some((mode) => mode.id === id))
+    .map(([id, body]) => ({
+      id: ModelV2.VariantID.make(id),
+      headers: {},
+      ...ModelRequest.normalizeAiSdkOptions(packageName, body),
+    }))
+  return [...modes, ...fromEfforts]
 }
 
 export const ModelsDevPlugin = PluginV2.define({
@@ -119,7 +132,7 @@ export const ModelsDevPlugin = PluginV2.define({
                 input: [...(model.modalities?.input ?? [])],
                 output: [...(model.modalities?.output ?? [])],
               }
-              draft.variants = variants(model, model.provider?.npm ?? item.npm)
+              draft.variants = variants(model, item.id, model.provider?.npm ?? item.npm)
               draft.time.released = released(model.release_date)
               draft.cost = cost(model.cost)
               draft.status = model.status ?? "active"

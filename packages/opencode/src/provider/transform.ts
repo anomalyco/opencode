@@ -3,6 +3,7 @@ import { mergeDeep, unique } from "remeda"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import type * as Provider from "./provider"
 import type * as ModelsDev from "@opencode-ai/core/models-dev"
+import { ReasoningVariants } from "@opencode-ai/core/reasoning-variants"
 import { iife } from "@/util/iife"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
@@ -16,11 +17,6 @@ function mimeToModality(mime: string): Modality | undefined {
 }
 
 export const OUTPUT_TOKEN_MAX = 32_000
-
-// OpenAI Responses `include` value that returns the encrypted reasoning state
-// needed for stateless multi-turn reasoning (store: false). Hoisted so every
-// branch that requests it stays in lockstep.
-const INCLUDE_ENCRYPTED_REASONING = ["reasoning.encrypted_content"] as const
 
 export function sanitizeSurrogates(content: string) {
   return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
@@ -595,34 +591,6 @@ function openaiCompatibleReasoningEfforts(id: string) {
   return gpt5CodexReasoningEfforts(apiId) ?? versionedGpt5ReasoningEfforts(apiId) ?? OPENAI_EFFORTS
 }
 
-function anthropicOpus47OrLater(apiId: string) {
-  // Matches "opus-4.7" (Anthropic/Bedrock/Vertex) and "claude-4.7-opus" (SAP AI Core inverted).
-  // Greedy \d+ correctly extends to multi-digit majors (e.g. "claude-10.0-opus") for forward compatibility.
-  const version = /opus-(\d+)[.-](\d+)(?:[.@-]|$)|claude-(\d+)[.-](\d+)-opus(?:[.@-]|$)/i.exec(apiId)
-  if (!version) return false
-  const major = Number(version[1] ?? version[3])
-  const minor = Number(version[2] ?? version[4])
-  return major > 4 || (major === 4 && minor >= 7)
-}
-
-function anthropicAdaptiveEfforts(apiId: string): string[] | null {
-  if (anthropicOpus47OrLater(apiId) || apiId.includes("fable-5")) {
-    return ["low", "medium", "high", "xhigh", "max"]
-  }
-  if (
-    ["opus-4-6", "opus-4.6", "4-6-opus", "4.6-opus", "sonnet-4-6", "sonnet-4.6", "4-6-sonnet", "4.6-sonnet"].some((v) =>
-      apiId.includes(v),
-    )
-  ) {
-    return ["low", "medium", "high", "max"]
-  }
-  return null
-}
-
-function anthropicOmitsThinking(apiId: string) {
-  return anthropicOpus47OrLater(apiId) || apiId.includes("fable-5")
-}
-
 function googleThinkingLevelEfforts(apiId: string) {
   const id = apiId.toLowerCase()
   if (!id.includes("gemini-3")) return ["low", "high"]
@@ -636,12 +604,6 @@ function googleThinkingBudgetMax(apiId: string) {
   const id = apiId.toLowerCase()
   if (id.includes("2.5") && id.includes("pro") && !id.includes("flash")) return 32_768
   return 24_576
-}
-
-// SAP's Zod schema drops unknown top-level keys; reasoning controls survive
-// only via `modelParams` (catchall), forwarded verbatim by the SAP SDKs.
-function wrapInSapModelParams(variants: Record<string, Record<string, any>>): Record<string, Record<string, any>> {
-  return Object.fromEntries(Object.entries(variants).map(([k, v]) => [k, { modelParams: v }]))
 }
 
 function googleThinkingVariants(model: Provider.Model): Record<string, Record<string, any>> {
@@ -665,6 +627,12 @@ function googleThinkingVariants(model: Provider.Model): Record<string, Record<st
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
   if (!model.capabilities.reasoning) return {}
 
+  const fromData = ReasoningVariants.fromOptions(
+    { npm: model.api.npm, apiID: model.api.id, modelID: model.id, providerID: model.providerID },
+    model.capabilities.reasoningOptions,
+  )
+  if (fromData) return fromData
+
   const id = model.id.toLowerCase()
   if (
     model.api.id.toLowerCase().includes("minimax-m3") &&
@@ -675,8 +643,8 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
       thinking: { thinking: { type: "adaptive" } },
     }
   }
-  const adaptiveThinkingOmitted = anthropicOmitsThinking(model.api.id)
-  const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
+  const adaptiveThinkingOmitted = ReasoningVariants.anthropicOmitsThinking(model.api.id)
+  const adaptiveEfforts = ReasoningVariants.anthropicAdaptiveEfforts(model.api.id)
   if (
     id.includes("deepseek-chat") ||
     id.includes("deepseek-reasoner") ||
@@ -815,7 +783,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           {
             reasoningEffort: effort,
             reasoningSummary: "auto",
-            include: INCLUDE_ENCRYPTED_REASONING,
+            include: ReasoningVariants.INCLUDE_ENCRYPTED_REASONING,
           },
         ]),
       )
@@ -849,7 +817,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           {
             reasoningEffort: effort,
             reasoningSummary: "auto",
-            include: INCLUDE_ENCRYPTED_REASONING,
+            include: ReasoningVariants.INCLUDE_ENCRYPTED_REASONING,
           },
         ]),
       )
@@ -863,7 +831,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           {
             reasoningEffort: effort,
             reasoningSummary: "auto",
-            include: INCLUDE_ENCRYPTED_REASONING,
+            include: ReasoningVariants.INCLUDE_ENCRYPTED_REASONING,
           },
         ]),
       )
@@ -1010,7 +978,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         if (adaptiveEfforts) {
           // Bedrock adaptive splits `effort` out into `output_config` (vs Anthropic
           // native which inlines it). Opus 4.7+ flipped `display` default to "omitted".
-          return wrapInSapModelParams(
+          return ReasoningVariants.wrapInSapModelParams(
             Object.fromEntries(
               adaptiveEfforts.map((effort) => [
                 effort,
@@ -1022,19 +990,21 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
             ),
           )
         }
-        return wrapInSapModelParams({
+        return ReasoningVariants.wrapInSapModelParams({
           high: { thinking: { type: "enabled", budget_tokens: 16000 } },
           max: { thinking: { type: "enabled", budget_tokens: 31999 } },
         })
       }
       if (id.includes("gemini") && id.includes("2.5")) {
-        return wrapInSapModelParams(googleThinkingVariants(model))
+        return ReasoningVariants.wrapInSapModelParams(googleThinkingVariants(model))
       }
       if (id.includes("gpt") || /\bo[1-9]/.test(id)) {
         const efforts = openaiReasoningEfforts(id, model.release_date)
-        return wrapInSapModelParams(Object.fromEntries(efforts.map((effort) => [effort, { reasoning_effort: effort }])))
+        return ReasoningVariants.wrapInSapModelParams(
+          Object.fromEntries(efforts.map((effort) => [effort, { reasoning_effort: effort }])),
+        )
       }
-      return wrapInSapModelParams(
+      return ReasoningVariants.wrapInSapModelParams(
         Object.fromEntries(["low", "medium", "high"].map((effort) => [effort, { reasoning_effort: effort }])),
       )
     }
@@ -1161,7 +1131,7 @@ export function options(input: {
         result["reasoningSummary"] = "auto"
       }
       if (input.model.api.npm === "@ai-sdk/openai" || input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle") {
-        result["include"] = INCLUDE_ENCRYPTED_REASONING
+        result["include"] = ReasoningVariants.INCLUDE_ENCRYPTED_REASONING
       }
     }
 
@@ -1178,7 +1148,7 @@ export function options(input: {
 
     if (input.model.providerID.startsWith("opencode")) {
       result["promptCacheKey"] = input.sessionID
-      result["include"] = INCLUDE_ENCRYPTED_REASONING
+      result["include"] = ReasoningVariants.INCLUDE_ENCRYPTED_REASONING
       result["reasoningSummary"] = "auto"
     }
   }

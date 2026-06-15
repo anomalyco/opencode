@@ -1285,6 +1285,40 @@ test("mode cost preserves over-200k pricing from base model", () => {
   })
 })
 
+test("models.dev reasoning_options generate exact reasoning effort variants", () => {
+  const provider = {
+    id: "zhipuai-coding-plan",
+    name: "Zhipu AI Coding Plan",
+    env: [],
+    api: "https://open.bigmodel.cn/api/coding/paas/v4",
+    npm: "@ai-sdk/openai-compatible",
+    models: {
+      "glm-5.2": {
+        id: "glm-5.2",
+        name: "GLM-5.2",
+        family: "glm",
+        release_date: "2026-06-13",
+        attachment: false,
+        reasoning: true,
+        reasoning_options: [{ type: "effort", values: ["high", "max"] }],
+        temperature: true,
+        tool_call: true,
+        interleaved: { field: "reasoning_content" },
+        limit: {
+          context: 1_000_000,
+          output: 131_072,
+        },
+      },
+    },
+  } as unknown as ModelsDev.Provider
+
+  const model = Provider.fromModelsDevProvider(provider).models["glm-5.2"]
+  expect(model.variants).toEqual({
+    high: { reasoningEffort: "high" },
+    max: { reasoningEffort: "max" },
+  })
+})
+
 test("models.dev normalization fills required response fields", () => {
   const provider = {
     id: "gateway",
