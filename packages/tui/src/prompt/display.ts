@@ -1,3 +1,5 @@
+import type { TextareaRenderable } from "@opentui/core"
+
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
 export function promptOffsetWidth(value: string) {
@@ -149,3 +151,56 @@ export function viewportScreenCoords(
   if (visualCol < 0 || visualCol >= viewport.width) return null
   return { x: screenX + visualCol, y: screenY + visualRow }
 }
+
+// Use TextareaRenderable directly as the input type — it's importable from
+// @opentui/core (re-exported via renderables/index.d.ts:23 → Textarea.js) and
+// already used in index.tsx. Council R2 Should (rev-1): prefer this over a
+// hand-written `GuardInput` intermediate so the helpers' input type can't
+// drift from the real textarea. `makeGuardedAccessors` (Task 4) takes the same
+// `() => TextareaRenderable | undefined`.
+// (If a future opentui bump makes the direct import heavy, fall back to a
+//  minimal structural type covering: isDestroyed, extmarks, plainText,
+//  getTextRange, cursorOffset, setSelection, insertText, clearSelection, clear.)
+type GuardInput = TextareaRenderable
+
+/** Plugin-safe extmarks facade. ALWAYS returns a facade (never undefined) so
+ *  it can be built ONCE — the component creates the factory before the
+ *  textarea mounts (`input` is assigned later at index.tsx:1504), so a
+ *  build-time controller capture would be permanently undefined. Each method
+ *  re-reads the input via `live()` and no-ops when absent/destroyed (a plugin
+ *  that captured the facade before unmount can't deref a destroyed
+ *  controller — finding 6). Delegates as `input.extmarks.method(...)` so
+ *  `this` is the controller (finding 5 — no .bind needed). Omits
+ *  clear()/destroy() (wipe internal prompt-part marks / tear down).
+ *
+ *  Unmounted/destroyed sentinel (council R2 Should, rev-1+rev-3): when the
+ *  prompt is unmounted these no-op to `create`/`registerType` → -1,
+ *  `delete` → false, `get*` → null/[]. A plugin CANNOT distinguish "no
+ *  extmarks" from "prompt gone"; treat any -1 type/mark id as a no-op and do
+ *  not persist it. Document this on the plugin-facing JSDoc too. */
+export function safeExtmarks(getInput: () => GuardInput | undefined): SafeExtmarks {
+  const live = () => {
+    const input = getInput()
+    return !input || input.isDestroyed ? undefined : input.extmarks
+  }
+  return {
+    create: (opts) => live()?.create(opts) ?? -1,
+    delete: (id) => live()?.delete(id) ?? false,
+    get: (id) => live()?.get(id) ?? null,
+    getAll: () => live()?.getAll() ?? [],
+    getVirtual: () => live()?.getVirtual() ?? [],
+    getAtOffset: (offset) => live()?.getAtOffset(offset) ?? [],
+    getAllForTypeId: (typeId) => live()?.getAllForTypeId(typeId) ?? [],
+    registerType: (name) => live()?.registerType(name) ?? -1,
+    getTypeId: (name) => live()?.getTypeId(name) ?? null,
+    getTypeName: (typeId) => live()?.getTypeName(typeId) ?? null,
+    getMetadataFor: (id) => live()?.getMetadataFor(id) ?? null,
+  }
+}
+
+type RawExtmarks = NonNullable<TextareaRenderable["extmarks"]>
+export type SafeExtmarks = Pick<
+  RawExtmarks,
+  | "create" | "delete" | "get" | "getAll" | "getVirtual" | "getAtOffset"
+  | "getAllForTypeId" | "registerType" | "getTypeId" | "getTypeName" | "getMetadataFor"
+>

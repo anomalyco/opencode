@@ -28,7 +28,7 @@ import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
 import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
-import { planRangeReplace, promptOffsetWidth, viewportScreenCoords } from "../../prompt/display"
+import { planRangeReplace, promptOffsetWidth, viewportScreenCoords, type SafeExtmarks } from "../../prompt/display"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
@@ -108,7 +108,7 @@ export type PromptRef = {
   /** The textarea's extmark controller — range decorations for plugins.
    *  Offsets are display-width. Use registerType to namespace; never touch
    *  the "prompt-part" type. */
-  readonly extmarks: TextareaRenderable["extmarks"]
+  readonly extmarks: SafeExtmarks
   /** Current cursor offset in display-width cells (0-based, same model as
    *  getTextRange/replaceRange). 0 when the prompt has not mounted. */
   readonly cursorOffset: number

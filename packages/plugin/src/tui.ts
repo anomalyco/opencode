@@ -209,7 +209,10 @@ export type TuiPromptRef = {
   readonly text: string
   getTextRange(startOffset: number, endOffset: number): string
   replaceRange(startOffset: number, endOffset: number, replacement: string): void
-  readonly extmarks: TextareaRenderable["extmarks"]
+  readonly extmarks: Pick<NonNullable<TextareaRenderable["extmarks"]>,
+    | "create" | "delete" | "get" | "getAll" | "getVirtual" | "getAtOffset"
+    | "getAllForTypeId" | "registerType" | "getTypeId" | "getTypeName" | "getMetadataFor"
+  >
   readonly cursorOffset: number
   /** Move the cursor to a display-width offset (same model as cursorOffset). */
   setCursorOffset(offset: number): void
