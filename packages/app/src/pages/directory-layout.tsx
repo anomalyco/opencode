@@ -20,7 +20,7 @@ export function DirectoryDataProvider(props: ParentProps<{ directory: string; dr
   createEffect(() => {
     // A draft lives at /new-session?draftId=… and has no directory segment to normalize.
     if (props.draftID) return
-    const next = sync.data.path.directory
+    const next = sync().data.path.directory
     if (!next || next === props.directory) return
     const path = location.pathname.slice(slug().length + 1)
     navigate(`/${base64Encode(next)}${path}${location.search}${location.hash}`, { replace: true })
@@ -28,12 +28,15 @@ export function DirectoryDataProvider(props: ParentProps<{ directory: string; dr
 
   createResource(
     () => params.id,
-    (id) => sync.session.sync(id).catch(() => {}),
+    (id) =>
+      sync()
+        .session.sync(id)
+        .catch(() => {}),
   )
 
   return (
     <DataProvider
-      data={sync.data}
+      data={sync().data}
       directory={props.directory}
       onNavigateToSession={(sessionID: string) => navigate(`/${slug()}/session/${sessionID}`)}
       onSessionHref={(sessionID: string) => `/${slug()}/session/${sessionID}`}

@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { DateTime, Effect, Layer, Option } from "effect"
+import { DateTime, Effect, Fiber, Layer, Option, Stream } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Integration } from "@opencode-ai/core/integration"
 import { Credential } from "@opencode-ai/core/credential"
@@ -25,13 +25,29 @@ const it = testEffect(
     Layer.provideMerge(
       Layer.mock(Credential.Service)({
         all: () => Effect.succeed([]),
+        list: () => Effect.succeed([]),
       }),
     ),
   ),
 )
 
 describe("CatalogV2", () => {
-  it.effect("projects active credentials without rebuilding catalog state", () => {
+  it.effect("publishes an updated event after catalog changes", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const events = yield* EventV2.Service
+      const updated = yield* events
+        .subscribe(Catalog.Event.Updated)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
+
+      yield* (yield* catalog.transform())((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
+
+      expect((yield* Fiber.join(updated)).length).toBe(1)
+    }),
+  )
+
+  it.effect("derives availability from active credentials without changing provider state", () => {
     const integrationID = Integration.ID.make("test")
     const first = {
       id: Credential.ID.create(),
@@ -53,6 +69,7 @@ describe("CatalogV2", () => {
       Layer.provideMerge(
         Layer.mock(Credential.Service)({
           all: () => Effect.sync(() => [active]),
+          list: () => Effect.sync(() => [active]),
         }),
       ),
     )
@@ -62,17 +79,43 @@ describe("CatalogV2", () => {
       const transform = yield* catalog.transform()
       yield* transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
 
-      expect(yield* catalog.provider.get(ProviderV2.ID.make("test"))).toMatchObject({
-        enabled: { via: "credential", credentialID: first.id },
-        request: { body: { apiKey: "first", tenant: "one" } },
-      })
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([ProviderV2.ID.make("test")])
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("test"))).request.body).toEqual({})
       active = second
-      expect(yield* catalog.provider.get(ProviderV2.ID.make("test"))).toMatchObject({
-        enabled: { via: "credential", credentialID: second.id },
-        request: { body: { apiKey: "second", tenant: "two" } },
-      })
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([ProviderV2.ID.make("test")])
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("test"))).request.body).toEqual({})
     }).pipe(Effect.provide(layer))
   })
+
+  it.effect("projects environment connections without a catalog plugin", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const previous = process.env.CATALOG_TEST_API_KEY
+        process.env.CATALOG_TEST_API_KEY = "secret"
+        return previous
+      }),
+      () =>
+        Effect.gen(function* () {
+          const catalog = yield* Catalog.Service
+          const integrations = yield* Integration.Service
+          const providerID = ProviderV2.ID.make("test")
+          yield* integrations.update((editor) =>
+            editor.method.update({
+              integrationID: Integration.ID.make(providerID),
+              method: { type: "env", names: ["CATALOG_TEST_API_KEY"] },
+            }),
+          )
+          yield* (yield* catalog.transform())((editor) => editor.provider.update(providerID, () => {}))
+
+          expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(providerID)
+        }),
+      (previous) =>
+        Effect.sync(() => {
+          if (previous === undefined) delete process.env.CATALOG_TEST_API_KEY
+          else process.env.CATALOG_TEST_API_KEY = previous
+        }),
+    ),
+  )
 
   it.effect("normalizes provider baseURL into api url", () =>
     Effect.gen(function* () {
@@ -292,9 +335,7 @@ describe("CatalogV2", () => {
       const transform = yield* catalog.transform()
 
       yield* transform((catalog) => {
-        catalog.provider.update(providerID, (provider) => {
-          provider.enabled = { via: "custom", data: {} }
-        })
+        catalog.provider.update(providerID, () => {})
         catalog.model.update(providerID, ModelV2.ID.make("old"), (model) => {
           model.time.released = DateTime.makeUnsafe(1000)
         })
@@ -316,9 +357,7 @@ describe("CatalogV2", () => {
       const transform = yield* catalog.transform()
 
       const models = (catalog: Catalog.Editor) => {
-        catalog.provider.update(providerID, (provider) => {
-          provider.enabled = { via: "custom", data: {} }
-        })
+        catalog.provider.update(providerID, () => {})
         catalog.model.update(providerID, old, (model) => {
           model.time.released = DateTime.makeUnsafe(1000)
         })
@@ -349,12 +388,10 @@ describe("CatalogV2", () => {
 
       yield* transform((catalog) => {
         catalog.provider.update(disabledProvider, (provider) => {
-          provider.enabled = false
+          provider.disabled = true
         })
         catalog.model.update(disabledProvider, disabledModel, () => {})
-        catalog.provider.update(enabledProvider, (provider) => {
-          provider.enabled = { via: "custom", data: {} }
-        })
+        catalog.provider.update(enabledProvider, () => {})
         catalog.model.update(enabledProvider, fallbackModel, () => {})
         catalog.model.default.set(disabledProvider, disabledModel)
       })

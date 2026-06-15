@@ -73,6 +73,13 @@ export function DialogMoveSession(props: {
         )
         const directories = await sdk.client.project.directories({ projectID }, { throwOnError: true })
         return directories.data ?? []
+      } catch (error) {
+        toast.show({
+          variant: "error",
+          title: "Failed to load project directories",
+          message: errorMessage(error),
+        })
+        return []
       } finally {
         setWorking(false)
       }
