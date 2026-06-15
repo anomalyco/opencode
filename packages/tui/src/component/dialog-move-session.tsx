@@ -49,12 +49,13 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
   const [toDelete, setToDelete] = createSignal<string>()
   const [removing, setRemoving] = createSignal(props.initialRemoving)
   const [replacementCurrent, setReplacementCurrent] = createSignal<string>()
-  const [loadError, setLoadError] = createSignal<unknown>()
+  const [projectLoadError, setProjectLoadError] = createSignal<unknown>()
+  const [directoryLoadError, setDirectoryLoadError] = createSignal<unknown>()
   const deleteHint = useCommandShortcut("dialog.move_session.delete")
 
   function reopen(initialRemoving?: string) {
     dialog.replace(() => (
-      <DialogMoveSession {...props} initialDirectories={directories()} initialRemoving={initialRemoving} />
+      <DialogMoveSession {...props} initialDirectories={directoryData()} initialRemoving={initialRemoving} />
     ))
   }
 
@@ -63,53 +64,56 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
     async (projectID) => {
       try {
         const result = await sdk.client.project.current({}, { throwOnError: true })
+        setProjectLoadError(undefined)
         return result.data?.id === projectID ? result.data.worktree : undefined
       } catch (error) {
-        setLoadError(error)
+        setProjectLoadError(error)
         return undefined
       }
     },
   )
-  const currentCheckout = createMemo(() =>
-    projectContext.project() === props.projectID ? projectContext.instance.path().worktree : loadedProject(),
-  )
+  const currentCheckout = createMemo(() => {
+    if (projectContext.project() === props.projectID) return projectContext.instance.path().worktree
+    return loadedProject()
+  })
 
   const [directories, { refetch }] = createResource(
     () => (props.initialRemoving ? undefined : props.projectID),
     async (projectID) => {
-      setWorking(true)
       try {
         await sdk.client.v2.projectCopy.refresh(
           { projectID, location: { directory: sdk.directory } },
           { throwOnError: true },
         )
         const directories = await sdk.client.project.directories({ projectID }, { throwOnError: true })
+        setDirectoryLoadError(undefined)
         return directories.data ?? []
       } catch (error) {
-        setLoadError(error)
+        setDirectoryLoadError(error)
         return []
-      } finally {
-        setWorking(false)
       }
     },
-    { initialValue: props.initialDirectories },
   )
+  const directoryData = createMemo(() => directories() ?? props.initialDirectories)
+  const loadError = createMemo(() => projectLoadError() ?? directoryLoadError())
 
   const currentDirectory = createMemo(
     () => replacementCurrent() ?? (props.current?.type === "directory" ? props.current.directory : currentCheckout()),
   )
   const currentRoot = createMemo<ProjectDirectory | undefined>(() => {
+    if (loadError()) return
     const directory = currentDirectory()
     if (!directory) return
     return (
-      directories()
+      directoryData()
         ?.filter((root) => contains(root.directory, directory))
         .toSorted((a, b) => b.directory.length - a.directory.length)[0] ?? { directory }
     )
   })
 
   const options = createMemo<DialogSelectOption<MoveSessionSelection | undefined>[]>(() => {
-    const data = directories()
+    if (loadError()) return []
+    const data = directoryData()
     const current = currentRoot()?.directory
     if (directories.loading && !data && !current) return [{ title: "Loading project directories...", value: undefined }]
     const roots = [...(data ?? [])]
@@ -207,7 +211,7 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
 
   async function remove(option: DialogSelectOption<MoveSessionSelection | undefined>) {
     if (!option.value || option.value.type !== "directory" || option.value.subdirectory || removing()) return
-    const data = directories()
+    const data = directoryData()
     const selected = option.value
     const root = data?.find((item) => item.directory === selected.directory)
     if (!root?.strategy) return
@@ -278,9 +282,8 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
   }
 
   const retry = () => {
-    setLoadError(undefined)
-    void loadedProjectActions.refetch()
-    void refetch()
+    if (projectLoadError()) void loadedProjectActions.refetch()
+    if (directoryLoadError()) void refetch()
   }
 
   createEffect(() => dialog.setSize(loadError() ? "medium" : "xlarge"))
@@ -297,7 +300,7 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
                 <text fg={theme.text} attributes={TextAttributes.BOLD}>
                   Move session
                 </text>
-                <Show when={working()}>
+                <Show when={working() || directories.loading || loadedProject.loading}>
                   <Spinner />
                 </Show>
               </box>
@@ -321,7 +324,7 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
                 disabled: (option) => {
                   const value = option?.value
                   if (!value || value.type !== "directory" || value.subdirectory) return true
-                  return !directories()?.find((item) => item.directory === value.directory)?.strategy
+                  return !directoryData()?.find((item) => item.directory === value.directory)?.strategy
                 },
                 onTrigger: remove,
               },
@@ -335,12 +338,21 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
         </box>
       }
     >
-      {(error) => <DialogMoveSessionError error={error()} retry={retry} />}
+      {(error) => (
+        <DialogMoveSessionError
+          error={error()}
+          retry={retry}
+          retrying={
+            (Boolean(projectLoadError()) && loadedProject.loading) ||
+            (Boolean(directoryLoadError()) && directories.loading)
+          }
+        />
+      )}
     </Show>
   )
 }
 
-function DialogMoveSessionError(props: { error: unknown; retry: () => void }) {
+function DialogMoveSessionError(props: { error: unknown; retry: () => void; retrying: boolean }) {
   const { theme } = useTheme()
   useBindings(() => ({
     bindings: [
@@ -348,7 +360,9 @@ function DialogMoveSessionError(props: { error: unknown; retry: () => void }) {
         key: "return",
         desc: "Retry loading project directories",
         group: "Dialog",
-        cmd: props.retry,
+        cmd: () => {
+          if (!props.retrying) props.retry()
+        },
       },
     ],
   }))
@@ -365,8 +379,17 @@ function DialogMoveSessionError(props: { error: unknown; retry: () => void }) {
         <text fg={theme.textMuted}>{errorMessage(props.error)}</text>
       </box>
       <box flexDirection="row" justifyContent="flex-end" paddingTop={1}>
-        <box paddingLeft={2} paddingRight={2} backgroundColor={theme.primary} onMouseUp={props.retry}>
-          <text fg={theme.selectedListItemText}>retry</text>
+        <box
+          paddingLeft={2}
+          paddingRight={2}
+          backgroundColor={props.retrying ? theme.backgroundElement : theme.primary}
+          onMouseUp={() => {
+            if (!props.retrying) props.retry()
+          }}
+        >
+          <text fg={props.retrying ? theme.textMuted : theme.selectedListItemText}>
+            {props.retrying ? "retrying..." : "enter  retry"}
+          </text>
         </box>
       </box>
     </box>
