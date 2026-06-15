@@ -6,6 +6,7 @@ import os from "os"
 import { SessionID, MessageID, PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
 import { Interrupt } from "./interrupt"
+import { Marker } from "./marker"
 import { SessionRevert } from "./revert"
 import { Session } from "./session"
 import { Agent } from "../agent/agent"
@@ -1127,7 +1128,7 @@ const layer = Layer.effect(
             } satisfies SessionV1.TextPart)
             // The non-synthetic line is the visible transcript marker the user sees.
             // Origin ("user" / "parent") attributes the marker to who issued it.
-            // metadata.interrupt tags the part so the TUI renders it as a distinct
+            // metadata.marker tags the part so the TUI renders it as a distinct
             // system-event line rather than as normal user prose.
             const visibleLine = Interrupt.renderMarker({
               intent: pendingInterrupt.value.intent,
@@ -1141,12 +1142,11 @@ const layer = Layer.effect(
               type: "text",
               text: visibleLine,
               synthetic: false,
-              metadata: {
-                interrupt: {
-                  intent: pendingInterrupt.value.intent,
-                  origin: pendingInterrupt.value.origin,
-                },
-              },
+              metadata: Marker.metadataFor({
+                kind: "interrupt",
+                intent: pendingInterrupt.value.intent,
+                origin: pendingInterrupt.value.origin,
+              }),
             } satisfies SessionV1.TextPart)
             // Reload so the new user turn is the latest and the break-check below runs a turn on it.
             msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(Effect.provideService(Database.Service, database))

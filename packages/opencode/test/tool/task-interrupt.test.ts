@@ -359,7 +359,7 @@ describe("tool.task-interrupt", () => {
             ),
         )
         expect(visibleAbort).toBe(true)
-        // UX4: the marker is tagged via metadata.interrupt so the TUI can render
+        // UX4: the marker is tagged via metadata.marker so the TUI can render
         // it as a distinct system-event line instead of joining it into normal
         // user prose.
         const markerPart = childMessages
@@ -367,7 +367,9 @@ describe("tool.task-interrupt", () => {
           .find((part) => part.type === "text" && part.synthetic === false && part.text.startsWith("⊘ "))
         expect(markerPart).toBeDefined()
         if (markerPart && markerPart.type === "text") {
-          expect(markerPart.metadata).toMatchObject({ interrupt: { intent: "abort", origin: "parent" } })
+          expect(markerPart.metadata).toMatchObject({
+            marker: { kind: "interrupt", intent: "abort", origin: "parent" },
+          })
         }
       }),
   )
