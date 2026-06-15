@@ -1,6 +1,6 @@
 import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
-import { createMemo, createResource, createSignal, ErrorBoundary, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, Show } from "solid-js"
 import path from "path"
 import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
@@ -32,13 +32,7 @@ type DialogMoveSessionProps = {
 }
 
 export function DialogMoveSession(props: DialogMoveSessionProps) {
-  const dialog = useDialog()
-  onMount(() => dialog.setSize("xlarge"))
-  return (
-    <ErrorBoundary fallback={(error, reset) => <DialogMoveSessionError error={error} retry={reset} />}>
-      <DialogMoveSessionContent {...props} />
-    </ErrorBoundary>
-  )
+  return <DialogMoveSessionContent {...props} />
 }
 
 function DialogMoveSessionContent(props: DialogMoveSessionProps) {
@@ -55,6 +49,7 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
   const [toDelete, setToDelete] = createSignal<string>()
   const [removing, setRemoving] = createSignal(props.initialRemoving)
   const [replacementCurrent, setReplacementCurrent] = createSignal<string>()
+  const [loadError, setLoadError] = createSignal<unknown>()
   const deleteHint = useCommandShortcut("dialog.move_session.delete")
 
   function reopen(initialRemoving?: string) {
@@ -63,11 +58,16 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
     ))
   }
 
-  const [loadedProject] = createResource(
+  const [loadedProject, loadedProjectActions] = createResource(
     () => (projectContext.project() === props.projectID ? undefined : props.projectID),
     async (projectID) => {
-      const result = await sdk.client.project.current({}, { throwOnError: true })
-      return result.data?.id === projectID ? result.data.worktree : undefined
+      try {
+        const result = await sdk.client.project.current({}, { throwOnError: true })
+        return result.data?.id === projectID ? result.data.worktree : undefined
+      } catch (error) {
+        setLoadError(error)
+        return undefined
+      }
     },
   )
   const currentCheckout = createMemo(() =>
@@ -85,6 +85,9 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
         )
         const directories = await sdk.client.project.directories({ projectID }, { throwOnError: true })
         return directories.data ?? []
+      } catch (error) {
+        setLoadError(error)
+        return []
       } finally {
         setWorking(false)
       }
@@ -109,8 +112,6 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
     const data = directories()
     const current = currentRoot()?.directory
     if (directories.loading && !data && !current) return [{ title: "Loading project directories...", value: undefined }]
-    if (directories.error && !data && !current)
-      return [{ title: "Failed to load project directories", value: undefined }]
     const roots = [...(data ?? [])]
     if (current && !roots.some((item) => item.directory === current)) roots.unshift({ directory: current })
     roots.sort((a, b) => {
@@ -276,51 +277,66 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
     if (await removedCurrent(deletingCurrent)) return
   }
 
+  const retry = () => {
+    setLoadError(undefined)
+    void loadedProjectActions.refetch()
+    void refetch()
+  }
+
+  createEffect(() => dialog.setSize(loadError() ? "medium" : "xlarge"))
+
   return (
-    <box minHeight={Math.max(8, Math.min(16, dimensions().height - Math.floor(dimensions().height / 4) - 2))}>
-      <DialogSelect
-        title="Move session"
-        titleView={
-          <box flexDirection="row" gap={1}>
-            <text fg={theme.text} attributes={TextAttributes.BOLD}>
-              Move session
-            </text>
-            <Show when={working()}>
-              <Spinner />
-            </Show>
-          </box>
-        }
-        options={options()}
-        locked={directories.loading || loadedProject.loading || Boolean(removing())}
-        current={current()}
-        onSelect={(option) => {
-          if (option.value) props.onSelect(option.value)
-        }}
-        onMove={() => setToDelete(undefined)}
-        actions={[
-          {
-            command: "dialog.move_session.new",
-            title: "new",
-            onTrigger: () => props.onSelect({ type: "new" }),
-          },
-          {
-            command: "dialog.move_session.delete",
-            title: "delete",
-            disabled: (option) => {
-              const value = option?.value
-              if (!value || value.type !== "directory" || value.subdirectory) return true
-              return !directories()?.find((item) => item.directory === value.directory)?.strategy
-            },
-            onTrigger: remove,
-          },
-          {
-            command: "dialog.move_session.refresh",
-            title: "refresh",
-            onTrigger: () => void refetch(),
-          },
-        ]}
-      />
-    </box>
+    <Show
+      when={loadError()}
+      fallback={
+        <box minHeight={Math.max(8, Math.min(16, dimensions().height - Math.floor(dimensions().height / 4) - 2))}>
+          <DialogSelect
+            title="Move session"
+            titleView={
+              <box flexDirection="row" gap={1}>
+                <text fg={theme.text} attributes={TextAttributes.BOLD}>
+                  Move session
+                </text>
+                <Show when={working()}>
+                  <Spinner />
+                </Show>
+              </box>
+            }
+            options={options()}
+            locked={directories.loading || loadedProject.loading || Boolean(removing())}
+            current={current()}
+            onSelect={(option) => {
+              if (option.value) props.onSelect(option.value)
+            }}
+            onMove={() => setToDelete(undefined)}
+            actions={[
+              {
+                command: "dialog.move_session.new",
+                title: "new",
+                onTrigger: () => props.onSelect({ type: "new" }),
+              },
+              {
+                command: "dialog.move_session.delete",
+                title: "delete",
+                disabled: (option) => {
+                  const value = option?.value
+                  if (!value || value.type !== "directory" || value.subdirectory) return true
+                  return !directories()?.find((item) => item.directory === value.directory)?.strategy
+                },
+                onTrigger: remove,
+              },
+              {
+                command: "dialog.move_session.refresh",
+                title: "refresh",
+                onTrigger: () => void refetch(),
+              },
+            ]}
+          />
+        </box>
+      }
+    >
+      {(error) => <DialogMoveSessionError error={error()} retry={retry} />}
+    </Show>
   )
 }
 
@@ -338,12 +354,18 @@ function DialogMoveSessionError(props: { error: unknown; retry: () => void }) {
   }))
   return (
     <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
-      <text attributes={TextAttributes.BOLD} fg={theme.text}>
-        Failed to load project directories
-      </text>
-      <text fg={theme.error}>{errorMessage(props.error)}</text>
-      <box flexDirection="row" justifyContent="flex-end">
-        <box paddingLeft={3} paddingRight={3} backgroundColor={theme.primary} onMouseUp={props.retry}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text attributes={TextAttributes.BOLD} fg={theme.text}>
+          Move session
+        </text>
+        <text fg={theme.textMuted}>esc</text>
+      </box>
+      <box paddingTop={1} paddingBottom={1} gap={1}>
+        <text fg={theme.error}>Failed to load project directories</text>
+        <text fg={theme.textMuted}>{errorMessage(props.error)}</text>
+      </box>
+      <box flexDirection="row" justifyContent="flex-end" paddingTop={1}>
+        <box paddingLeft={2} paddingRight={2} backgroundColor={theme.primary} onMouseUp={props.retry}>
           <text fg={theme.selectedListItemText}>retry</text>
         </box>
       </box>
