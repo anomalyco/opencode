@@ -73,7 +73,7 @@ nix run nixpkgs#opencode           # او github:anomalyco/opencode لاحدث �
 | macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
 | macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
 | Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb` او `.rpm` او AppImage       |
+| Linux                 | `.deb` او `.rpm` او `.AppImage`       |
 
 ```bash
 # macOS (Homebrew)

@@ -73,7 +73,7 @@ OpenCode มีให้ใช้งานเป็นแอปพลิเค�
 | macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
 | macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
 | Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm`, หรือ AppImage      |
+| Linux                 | `.deb`, `.rpm`, หรือ `.AppImage`      |
 
 ```bash
 # macOS (Homebrew)

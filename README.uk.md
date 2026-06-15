@@ -73,7 +73,7 @@ OpenCode також доступний як десктопний застосу�
 | macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
 | macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
 | Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm` або AppImage        |
+| Linux                 | `.deb`, `.rpm` або `.AppImage`        |
 
 ```bash
 # macOS (Homebrew)

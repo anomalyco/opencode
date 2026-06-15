@@ -73,7 +73,7 @@ OpenCode jest także dostępny jako aplikacja desktopowa. Pobierz ją bezpośred
 | macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
 | macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
 | Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm` lub AppImage        |
+| Linux                 | `.deb`, `.rpm` lub `.AppImage`        |
 
 ```bash
 # macOS (Homebrew)

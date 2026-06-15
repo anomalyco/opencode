@@ -73,7 +73,7 @@ OpenCode 也提供桌面版應用程式。您可以直接從 [發佈頁面 (rele
 | macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
 | macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
 | Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm`, 或 AppImage        |
+| Linux                 | `.deb`, `.rpm`, 或 `.AppImage`        |
 
 ```bash
 # macOS (Homebrew Cask)

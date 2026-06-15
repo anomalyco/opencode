@@ -64,7 +64,7 @@ nix run nixpkgs#opencode           # ou github:anomalyco/opencode pour la branch
 > [!TIP]
 > Supprimez les versions antérieures à 0.1.x avant d'installer.
 
-### Application de bureau (BETA)
+### Application de bureau (BÊTA)
 
 OpenCode est aussi disponible en application de bureau. Téléchargez-la directement depuis la [page des releases](https://github.com/anomalyco/opencode/releases) ou [opencode.ai/download](https://opencode.ai/download).
 
@@ -73,7 +73,7 @@ OpenCode est aussi disponible en application de bureau. Téléchargez-la directe
 | macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
 | macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
 | Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm`, ou AppImage        |
+| Linux                 | `.deb`, `.rpm`, ou `.AppImage`        |
 
 ```bash
 # macOS (Homebrew)
@@ -99,9 +99,9 @@ XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
 
 ### Agents
 
-OpenCode inclut deux agents intégrés que vous pouvez basculer avec la touche `Tab`.
+OpenCode inclut deux agents intégrés entre lesquels vous pouvez basculer avec la touche `Tab`.
 
-- **build** - Par défaut, agent avec accès complet pour le travail de développement
+- **build** - Agent par défaut avec accès complet pour le travail de développement
 - **plan** - Agent en lecture seule pour l'analyse et l'exploration du code
   - Refuse les modifications de fichiers par défaut
   - Demande l'autorisation avant d'exécuter des commandes bash
@@ -122,7 +122,7 @@ Si vous souhaitez contribuer à OpenCode, lisez nos [docs de contribution](./CON
 
 ### Construire avec OpenCode
 
-Si vous travaillez sur un projet lié à OpenCode et que vous utilisez "opencode" dans le nom du projet (par exemple, "opencode-dashboard" ou "opencode-mobile"), ajoutez une note dans votre README pour préciser qu'il n'est pas construit par l'équipe OpenCode et qu'il n'est pas affilié à nous.
+Si vous travaillez sur un projet lié à OpenCode et que vous utilisez "opencode" dans le nom du projet (par exemple, "opencode-dashboard" ou "opencode-mobile"), ajoutez une note dans votre README pour préciser qu'il n'est pas construit par l'équipe OpenCode et qu'il ne nous est pas affilié.
 
 ---
 

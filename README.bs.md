@@ -73,7 +73,7 @@ OpenCode je dostupan i kao desktop aplikacija. Preuzmi je direktno sa [stranice 
 | macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
 | macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
 | Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm`, ili AppImage       |
+| Linux                 | `.deb`, `.rpm`, ili `.AppImage`       |
 
 ```bash
 # macOS (Homebrew)
