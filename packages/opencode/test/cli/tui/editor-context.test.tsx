@@ -7,7 +7,7 @@ import { EditorContextProvider, useEditorContext, type EditorIntegration } from 
 import { tmpdir } from "../../fixture/fixture"
 import { FakeWebSocket } from "../../lib/websocket"
 import { TestTuiContexts } from "../../fixture/tui-environment"
-import { discoverEditorConnection } from "@opencode-ai/tui/editor"
+import { discoverEditorConnection, discoverEditorConnectionByPort } from "@opencode-ai/tui/editor"
 
 const originalClaudePort = process.env.CLAUDE_CODE_SSE_PORT
 const originalOpencodePort = process.env.OPENCODE_EDITOR_SSE_PORT
@@ -51,6 +51,7 @@ function mountEditorContext(WebSocketImpl?: typeof WebSocket) {
 
 const editorService: EditorIntegration = {
   connection: discoverEditorConnection,
+  connectionByPort: discoverEditorConnectionByPort,
 }
 
 function createWebSocketImpl(...sockets: FakeWebSocket[]) {
@@ -159,6 +160,14 @@ test("useEditorContext favors configured port over lock files", async () => {
   await mkdir(ideDirectory, { recursive: true })
   await writeFile(
     path.join(ideDirectory, "3001.lock"),
+    JSON.stringify({
+      transport: "ws",
+      workspaceFolders: [startupDirectory],
+    }),
+  )
+
+  await writeFile(
+    path.join(ideDirectory, "4010.lock"),
     JSON.stringify({
       transport: "ws",
       workspaceFolders: [startupDirectory],
@@ -287,6 +296,68 @@ test("useEditorContext connects with OPENCODE_EDITOR_SSE_PORT", async () => {
   process.env.OPENCODE_EDITOR_SSE_PORT = "4020"
   spyOn(process, "cwd").mockImplementation(() => tmp.path)
   const socket = new FakeWebSocket("ws://127.0.0.1:4020")
+
+  const mounted = mountEditorContext(createWebSocketImpl(socket))
+  await nextTick()
+
+  expect(socket.closed).toBeFalse()
+
+  mounted.dispose()
+})
+
+test("useEditorContext authorizes a configured SSE port using the lock file token", async () => {
+  await using tmp = await tmpdir()
+  const startupDirectory = path.join(tmp.path, "startup")
+  const ideDirectory = path.join(tmp.path, ".claude", "ide")
+  await mkdir(startupDirectory, { recursive: true })
+  await mkdir(ideDirectory, { recursive: true })
+  await writeFile(
+    path.join(ideDirectory, "4030.lock"),
+    JSON.stringify({
+      transport: "ws",
+      workspaceFolders: [startupDirectory],
+      authToken: "secret-token",
+    }),
+  )
+
+  process.env.CLAUDE_CODE_SSE_PORT = "4030"
+  process.env.OPENCODE_EDITOR_SSE_PORT = undefined
+  spyOn(process, "cwd").mockImplementation(() => startupDirectory)
+  spyOn(os, "homedir").mockImplementation(() => tmp.path)
+  const socket = new FakeWebSocket("ws://127.0.0.1:4030", {
+    headers: { "x-claude-code-ide-authorization": "secret-token" },
+  })
+
+  const mounted = mountEditorContext(createWebSocketImpl(socket))
+  await nextTick()
+
+  expect(socket.closed).toBeFalse()
+
+  mounted.dispose()
+})
+
+test("useEditorContext falls back to lock discovery when the configured port is stale", async () => {
+  await using tmp = await tmpdir()
+  const startupDirectory = path.join(tmp.path, "startup")
+  const ideDirectory = path.join(tmp.path, ".claude", "ide")
+  await mkdir(startupDirectory, { recursive: true })
+  await mkdir(ideDirectory, { recursive: true })
+  await writeFile(
+    path.join(ideDirectory, "4041.lock"),
+    JSON.stringify({
+      transport: "ws",
+      workspaceFolders: [startupDirectory],
+      authToken: "disc-token",
+    }),
+  )
+
+  process.env.CLAUDE_CODE_SSE_PORT = "4040"
+  process.env.OPENCODE_EDITOR_SSE_PORT = undefined
+  spyOn(process, "cwd").mockImplementation(() => startupDirectory)
+  spyOn(os, "homedir").mockImplementation(() => tmp.path)
+  const socket = new FakeWebSocket("ws://127.0.0.1:4041", {
+    headers: { "x-claude-code-ide-authorization": "disc-token" },
+  })
 
   const mounted = mountEditorContext(createWebSocketImpl(socket))
   await nextTick()

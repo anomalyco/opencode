@@ -106,6 +106,7 @@ type EditorConnection = {
 
 export type EditorIntegration = Readonly<{
   connection?(directory: string): EditorConnection | undefined
+  connectionByPort?(port: number): EditorConnection | undefined
   selection?(directory: string): Promise<unknown>
 }>
 
@@ -173,7 +174,7 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
     const connect = () => {
       if (closed) return
 
-      const connection = resolveEditorConnection(directory, port, editor.connection)
+      const connection = resolveEditorConnection(directory, port, editor.connection, editor.connectionByPort)
       if (!connection) {
         if (!zedTerminal) {
           setStore("status", "disabled")
@@ -320,7 +321,10 @@ export const { use: useEditorContext, provider: EditorContextProvider } = create
 
     return {
       enabled() {
-        return Boolean(resolveEditorConnection(directory, port, editor.connection) || (zedTerminal && editor.selection))
+        return Boolean(
+          resolveEditorConnection(directory, port, editor.connection, editor.connectionByPort) ||
+            (zedTerminal && editor.selection),
+        )
       },
       connected() {
         return store.status === "connected"
@@ -362,12 +366,14 @@ function resolveEditorConnection(
   directory: string,
   port: number | undefined,
   discover: ((directory: string) => EditorConnection | undefined) | undefined,
+  connectionByPort: ((port: number) => EditorConnection | undefined) | undefined,
 ): EditorConnection | undefined {
   if (port) {
-    return {
-      url: `ws://127.0.0.1:${port}`,
-      source: `env:${port}`,
-    }
+    const connection = connectionByPort?.(port)
+    if (connection) return connection
+    const discovered = discover?.(directory)
+    if (discovered) return discovered
+    return { url: `ws://127.0.0.1:${port}`, source: `env:${port}` }
   }
 
   return discover?.(directory)
