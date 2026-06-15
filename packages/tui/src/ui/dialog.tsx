@@ -102,6 +102,28 @@ function init() {
     }, 1)
   }
 
+  function clearAll() {
+    for (const item of store.stack) {
+      if (item.onClose) item.onClose()
+    }
+    batch(() => {
+      setStore("size", "medium")
+      setStore("stack", [])
+    })
+    refocus()
+  }
+
+  function popDialog() {
+    if (store.stack.length <= 1) {
+      clearAll()
+      return
+    }
+    const top = store.stack[store.stack.length - 1]
+    if (top?.onClose) top.onClose()
+    setStore("stack", (prev) => prev.slice(0, -1))
+    refocus()
+  }
+
   useBindings(() => ({
     enabled: store.stack.length > 0 && !renderer.getSelection()?.getSelectedText(),
     bindings: [
@@ -113,10 +135,7 @@ function init() {
           if (renderer.getSelection()) {
             renderer.clearSelection()
           }
-          const current = store.stack.at(-1)
-          current?.onClose?.()
-          setStore("stack", store.stack.slice(0, -1))
-          refocus()
+          popDialog()
         },
       },
       {
@@ -127,10 +146,7 @@ function init() {
           if (renderer.getSelection()) {
             renderer.clearSelection()
           }
-          const current = store.stack.at(-1)
-          current?.onClose?.()
-          setStore("stack", store.stack.slice(0, -1))
-          refocus()
+          popDialog()
         },
       },
     ],
@@ -138,14 +154,7 @@ function init() {
 
   return {
     clear() {
-      for (const item of store.stack) {
-        if (item.onClose) item.onClose()
-      }
-      batch(() => {
-        setStore("size", "medium")
-        setStore("stack", [])
-      })
-      refocus()
+      clearAll()
     },
     replace(input: any, onClose?: () => void) {
       if (store.stack.length === 0) {
@@ -162,6 +171,22 @@ function init() {
           onClose,
         },
       ])
+    },
+    push(input: any, onClose?: () => void) {
+      if (store.stack.length === 0) {
+        focus = renderer.currentFocusedRenderable
+        focus?.blur()
+      }
+      setStore("stack", (prev) => [
+        ...prev,
+        {
+          element: input,
+          onClose,
+        },
+      ])
+    },
+    pop() {
+      popDialog()
     },
     get stack() {
       return store.stack

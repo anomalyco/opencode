@@ -51,6 +51,8 @@ export interface DialogSelectProps<T> {
   }[]
   bindings?: readonly Binding<Renderable, KeyEvent>[]
   current?: T
+  selectedIndex?: number
+  onIndexChange?: (index: number, option: DialogSelectOption<T>) => void
 }
 
 export interface DialogSelectOption<T = any> {
@@ -60,6 +62,8 @@ export interface DialogSelectOption<T = any> {
   description?: string
   details?: string[]
   footer?: JSX.Element | string
+  trailing?: string
+  onTrailingClick?: () => void
   titleWidth?: number
   truncateTitle?: boolean | "left"
   category?: string
@@ -303,8 +307,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     if (option) {
       selection = option
       resetSelection = !preserve
+      props.onMove?.(option)
+      props.onIndexChange?.(next, option)
     }
-    if (option) props.onMove?.(option)
     scrollToSelection(center)
   }
 
@@ -685,6 +690,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                               title={option.title}
                               titleView={option.titleView}
                               footer={flatten() ? (option.category ?? option.footer) : option.footer}
+                              trailing={option.trailing}
+                              onTrailingClick={option.onTrailingClick}
                               titleWidth={option.titleWidth}
                               truncateTitle={option.truncateTitle}
                               description={option.description !== category ? option.description : undefined}
@@ -736,6 +743,8 @@ function Option(props: {
   current?: boolean
   muted?: boolean
   footer?: JSX.Element | string
+  trailing?: string
+  onTrailingClick?: () => void
   titleWidth?: number
   truncateTitle?: boolean | "left"
   gutter?: () => JSX.Element
@@ -783,6 +792,22 @@ function Option(props: {
       <Show when={props.footer}>
         <box flexShrink={0}>
           <text fg={props.active && !props.muted ? fg : theme.textMuted}>{props.footer}</text>
+        </box>
+      </Show>
+      <Show when={props.trailing}>
+        <box flexShrink={0}>
+          <text
+            fg={props.active && !props.muted ? fg : theme.textMuted}
+            onMouseUp={(e: { preventDefault(): void; stopPropagation(): void }) => {
+              if (props.onTrailingClick) {
+                e.preventDefault()
+                e.stopPropagation()
+                props.onTrailingClick()
+              }
+            }}
+          >
+            {props.trailing}
+          </text>
         </box>
       </Show>
     </>
