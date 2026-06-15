@@ -38,6 +38,7 @@ bot/config_8082.json
 bot/sessions.json
 bot/debug.log
 bot/bot.log
+*.pid
 bot/opencode.json
 bot/tmp_startup_configs/
 bot/venv/
