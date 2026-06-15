@@ -8,6 +8,7 @@ import type { UpdaterPlatform } from "../updater"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
+type OpenFilePickerOptions = { title?: string; extensions?: string[]; defaultPath?: string }
 type OpenAttachmentPickerOptions = {
   title?: string
   multiple?: boolean
@@ -57,6 +58,12 @@ type PlatformBase = {
 
   /** Resolve the native source path for a desktop File. */
   getPathForFile?(file: File): string
+
+  /** Open a native file picker and return selected local paths (desktop only) */
+  openFilePickerDialog?(opts?: OpenFilePickerOptions): Promise<PickerPaths>
+
+  /** Convert a local file path into a URL the current platform can render */
+  localFileUrl?(path: string): string
 
   /** Open a native save file picker dialog (desktop only) */
   saveFilePickerDialog?(opts?: SaveFilePickerOptions): Promise<string | null>

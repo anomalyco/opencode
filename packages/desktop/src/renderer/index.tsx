@@ -167,6 +167,27 @@ const createPlatform = (): Platform => {
       return attachmentPaths.get(file) ?? window.api.getPathForFile(file)
     },
 
+    async openFilePickerDialog(opts) {
+      const result = await window.api.openFilePicker({
+        multiple: false,
+        title: opts?.title ?? t("desktop.dialog.chooseFile"),
+        defaultPath: opts?.defaultPath,
+        extensions: opts?.extensions ?? ACCEPTED_FILE_EXTENSIONS,
+      })
+      if (!result) return null
+      try {
+        return result.files[0]?.path ?? null
+      } finally {
+        await window.api.releasePickedFiles(result.token)
+      }
+    },
+
+    localFileUrl(path) {
+      const url = new URL("oc-local-file://background")
+      url.searchParams.set("path", path)
+      return url.toString()
+    },
+
     async saveFilePickerDialog(opts) {
       return window.api.saveFilePicker({
         title: opts?.title ?? t("desktop.dialog.saveFile"),

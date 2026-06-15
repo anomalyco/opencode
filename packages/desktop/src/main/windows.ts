@@ -3,7 +3,7 @@ import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
 import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
 import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
 import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol } from "electron"
-import { dirname, isAbsolute, join, relative, resolve } from "node:path"
+import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
 import type { TitlebarTheme } from "../preload/types"
 import { exportDebugLogs, write as writeLog } from "./logging"
@@ -15,6 +15,8 @@ const root = dirname(fileURLToPath(import.meta.url))
 const rendererRoot = join(root, "../renderer")
 const rendererProtocol = "oc"
 const rendererHost = "renderer"
+const localFileProtocol = "oc-local-file"
+const localFileHost = "background"
 const clipboardWritePermission = "clipboard-sanitized-write"
 const notificationPermission = "notifications"
 const rendererPermissions = new Set([clipboardWritePermission, notificationPermission])
@@ -29,6 +31,14 @@ const jsCallStacksDocumentPolicy = "include-js-call-stacks-in-crash-reports"
 protocol.registerSchemesAsPrivileged([
   {
     scheme: rendererProtocol,
+    privileges: {
+      secure: true,
+      standard: true,
+      supportFetchAPI: true,
+    },
+  },
+  {
+    scheme: localFileProtocol,
     privileges: {
       secure: true,
       standard: true,
@@ -182,6 +192,7 @@ export function createMainWindow() {
 }
 
 export function registerRendererProtocol() {
+  registerLocalFileProtocol()
   if (protocol.isProtocolHandled(rendererProtocol)) return
 
   protocol.handle(rendererProtocol, async (request) => {
@@ -219,6 +230,31 @@ export function registerRendererProtocol() {
       return new Response("Not found", { status: 404 })
     }
   })
+}
+
+function registerLocalFileProtocol() {
+  if (protocol.isProtocolHandled(localFileProtocol)) return
+
+  protocol.handle(localFileProtocol, async (request) => {
+    const url = new URL(request.url)
+    const file = url.searchParams.get("path")
+    if (url.host !== localFileHost || !file || !isLocalImage(file)) {
+      writeLog("protocol", "rejected local file", { url: request.url }, "warn")
+      return new Response("Not found", { status: 404 })
+    }
+
+    try {
+      return net.fetch(pathToFileURL(file).toString())
+    } catch (error) {
+      writeLog("protocol", "local file fetch error", { url: request.url, file, error }, "error")
+      return new Response("Not found", { status: 404 })
+    }
+  })
+}
+
+function isLocalImage(file: string) {
+  if (!isAbsolute(file)) return false
+  return new Set([".png", ".jpg", ".jpeg", ".webp", ".gif"]).has(extname(file).toLowerCase())
 }
 
 function loadWindow(win: BrowserWindow, html: string) {

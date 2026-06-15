@@ -30,6 +30,7 @@ import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { Link } from "./link"
 import { SettingsList } from "./settings-list"
+import type { BackgroundFit } from "@/context/background"
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
@@ -51,6 +52,11 @@ type ShellOption = {
 type ShellSelectOption = {
   id: string
   value: string
+  label: string
+}
+
+type BackgroundFitOption = {
+  value: BackgroundFit
   label: string
 }
 
@@ -217,6 +223,21 @@ export const SettingsGeneral: Component = () => {
   const mono = () => monoInput(settings.appearance.font())
   const sans = () => sansInput(settings.appearance.uiFont())
   const terminal = () => terminalInput(settings.appearance.terminalFont())
+
+  const backgroundFitOptions = createMemo<BackgroundFitOption[]>(() => [
+    { value: "cover", label: language.t("settings.general.background.fit.cover") },
+    { value: "contain", label: language.t("settings.general.background.fit.contain") },
+    { value: "repeat", label: language.t("settings.general.background.fit.repeat") },
+  ])
+
+  const chooseBackgroundImage = async () => {
+    const path = await platform.openFilePickerDialog?.({
+      title: language.t("settings.general.background.choose.title"),
+      extensions: ["png", "jpg", "jpeg", "webp", "gif"],
+    })
+    if (!path || Array.isArray(path)) return
+    settings.appearance.setBackgroundImage(path)
+  }
 
   const soundSelectProps = (
     enabled: () => boolean,
@@ -562,6 +583,91 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
+
+        <Show when={desktop()}>
+          <SettingsRow
+            title={language.t("settings.general.background.image.title")}
+            description={
+              settings.appearance.backgroundImage() || language.t("settings.general.background.image.description")
+            }
+          >
+            <div class="flex items-center gap-2" data-action="settings-background-image">
+              <Button size="small" variant="secondary" onClick={chooseBackgroundImage}>
+                {language.t("settings.general.background.choose")}
+              </Button>
+              <Button
+                size="small"
+                variant="ghost"
+                disabled={!settings.appearance.backgroundImage()}
+                onClick={() => settings.appearance.clearBackground()}
+              >
+                {language.t("settings.general.background.clear")}
+              </Button>
+            </div>
+          </SettingsRow>
+
+          <SettingsRow
+            title={language.t("settings.general.background.enabled.title")}
+            description={language.t("settings.general.background.enabled.description")}
+          >
+            <div data-action="settings-background-enabled">
+              <Switch
+                checked={settings.appearance.backgroundEnabled()}
+                disabled={!settings.appearance.backgroundImage()}
+                onChange={(checked) => settings.appearance.setBackgroundEnabled(checked)}
+              />
+            </div>
+          </SettingsRow>
+
+          <SettingsRow
+            title={language.t("settings.general.background.fit.title")}
+            description={language.t("settings.general.background.fit.description")}
+          >
+            <Select
+              data-action="settings-background-fit"
+              options={backgroundFitOptions()}
+              current={backgroundFitOptions().find((o) => o.value === settings.appearance.backgroundFit())}
+              value={(o) => o.value}
+              label={(o) => o.label}
+              onSelect={(option) => option && settings.appearance.setBackgroundFit(option.value)}
+              variant="secondary"
+              size="small"
+              triggerVariant="settings"
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            title={language.t("settings.general.background.opacity.title")}
+            description={`${Math.round(settings.appearance.backgroundOpacity() * 100)}%`}
+          >
+            <input
+              data-action="settings-background-opacity"
+              type="range"
+              min="0"
+              max="1"
+              step="0.05"
+              value={settings.appearance.backgroundOpacity()}
+              onInput={(event) => settings.appearance.setBackgroundOpacity(event.currentTarget.valueAsNumber)}
+              class="w-full sm:w-[180px] accent-primary"
+            />
+          </SettingsRow>
+
+          <SettingsRow
+            title={language.t("settings.general.background.blur.title")}
+            description={`${settings.appearance.backgroundBlur()}px`}
+          >
+            <input
+              data-action="settings-background-blur"
+              type="range"
+              min="0"
+              max="24"
+              step="1"
+              value={settings.appearance.backgroundBlur()}
+              onInput={(event) => settings.appearance.setBackgroundBlur(event.currentTarget.valueAsNumber)}
+              class="w-full sm:w-[180px] accent-primary"
+            />
+          </SettingsRow>
+        </Show>
       </SettingsList>
     </div>
   )

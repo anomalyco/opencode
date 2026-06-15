@@ -2,6 +2,7 @@ import { createStore, reconcile } from "solid-js/store"
 import { createEffect, createMemo } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { persisted } from "@/utils/persist"
+import type { BackgroundFit } from "./background"
 
 export interface NotificationSettings {
   agent: boolean
@@ -40,6 +41,11 @@ export interface Settings {
     mono: string
     sans: string
     terminal: string
+    backgroundEnabled: boolean
+    backgroundImage: string
+    backgroundOpacity: number
+    backgroundBlur: number
+    backgroundFit: BackgroundFit
   }
   keybinds: Record<string, string>
   permissions: {
@@ -124,6 +130,11 @@ const defaultSettings: Settings = {
     mono: "",
     sans: "",
     terminal: "",
+    backgroundEnabled: false,
+    backgroundImage: "",
+    backgroundOpacity: 0.25,
+    backgroundBlur: 0,
+    backgroundFit: "cover",
   },
   keybinds: {},
   permissions: {
@@ -275,6 +286,37 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         terminalFont: withFallback(() => store.appearance?.terminal, defaultSettings.appearance.terminal),
         setTerminalFont(value: string) {
           setStore("appearance", "terminal", value.trim() ? value : "")
+        },
+        backgroundEnabled: withFallback(
+          () => store.appearance?.backgroundEnabled,
+          defaultSettings.appearance.backgroundEnabled,
+        ),
+        setBackgroundEnabled(value: boolean) {
+          setStore("appearance", "backgroundEnabled", value)
+        },
+        backgroundImage: withFallback(() => store.appearance?.backgroundImage, defaultSettings.appearance.backgroundImage),
+        setBackgroundImage(value: string) {
+          setStore("appearance", "backgroundImage", value.trim() ? value : "")
+          setStore("appearance", "backgroundEnabled", Boolean(value.trim()))
+        },
+        backgroundOpacity: withFallback(
+          () => store.appearance?.backgroundOpacity,
+          defaultSettings.appearance.backgroundOpacity,
+        ),
+        setBackgroundOpacity(value: number) {
+          setStore("appearance", "backgroundOpacity", Math.min(1, Math.max(0, value)))
+        },
+        backgroundBlur: withFallback(() => store.appearance?.backgroundBlur, defaultSettings.appearance.backgroundBlur),
+        setBackgroundBlur(value: number) {
+          setStore("appearance", "backgroundBlur", Math.min(24, Math.max(0, value)))
+        },
+        backgroundFit: withFallback(() => store.appearance?.backgroundFit, defaultSettings.appearance.backgroundFit),
+        setBackgroundFit(value: BackgroundFit) {
+          setStore("appearance", "backgroundFit", value)
+        },
+        clearBackground() {
+          setStore("appearance", "backgroundImage", "")
+          setStore("appearance", "backgroundEnabled", false)
         },
       },
       keybinds: {
