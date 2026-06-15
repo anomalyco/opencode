@@ -28,7 +28,7 @@ import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
 import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
-import { planRangeReplace, promptOffsetWidth, viewportScreenCoords, type SafeExtmarks } from "../../prompt/display"
+import { makeGuardedAccessors, planRangeReplace, promptOffsetWidth, viewportScreenCoords, type SafeExtmarks } from "../../prompt/display"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
@@ -614,6 +614,8 @@ export function Prompt(props: PromptProps) {
     ]),
   }))
 
+  const guarded = makeGuardedAccessors(() => input)
+
   const ref: PromptRef = {
     get focused() {
       return input.focused
@@ -622,22 +624,16 @@ export function Prompt(props: PromptProps) {
       return store.prompt
     },
     get text() {
-      return input.plainText
+      return guarded.text()
     },
     getTextRange(startOffset, endOffset) {
-      return input.getTextRange(startOffset, endOffset)
+      return guarded.getTextRange(startOffset, endOffset)
     },
     replaceRange(startOffset, endOffset, replacement) {
-      const plan = planRangeReplace(input.plainText, startOffset, endOffset, replacement)
-      for (const action of plan.actions) {
-        if (action.type === "setCursor") input.cursorOffset = action.offset
-        else if (action.type === "setSelection") input.setSelection(action.start, action.end)
-        else if (action.type === "insertText") input.insertText(action.value)
-        else if (action.type === "clearSelection") input.clearSelection()
-      }
+      guarded.replaceRange(startOffset, endOffset, replacement)
     },
     get extmarks() {
-      return input.extmarks
+      return guarded.extmarks
     },
     get cursorOffset() {
       return input?.cursorOffset ?? 0
@@ -664,12 +660,8 @@ export function Prompt(props: PromptProps) {
       input.gotoBufferEnd()
     },
     reset() {
-      input.clear()
-      input.extmarks.clear()
-      setStore("prompt", {
-        input: "",
-        parts: [],
-      })
+      guarded.reset() // guarded handles input.clear() + input.extmarks.clear() (no-op if destroyed)
+      setStore("prompt", { input: "", parts: [] })
       setStore("extmarkToPartIndex", new Map())
     },
     submit() {

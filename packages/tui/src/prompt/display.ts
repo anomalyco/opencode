@@ -204,3 +204,47 @@ export type SafeExtmarks = Pick<
   | "create" | "delete" | "get" | "getAll" | "getVirtual" | "getAtOffset"
   | "getAllForTypeId" | "registerType" | "getTypeId" | "getTypeName" | "getMetadataFor"
 >
+
+/** Guarded PromptRef accessors. Each derefs the live input via getInput and
+ *  no-ops when the input is absent or destroyed — so a plugin holding a
+ *  retained ref after the prompt unmounts can't crash the TUI. Pure factory
+ *  (only a type dep on TextareaRenderable) → unit-testable without a native
+ *  textarea. */
+export function makeGuardedAccessors(getInput: () => TextareaRenderable | undefined) {
+  return {
+    text(): string {
+      const input = getInput()
+      if (!input || input.isDestroyed) return ""
+      return input.plainText
+    },
+    getTextRange(startOffset: number, endOffset: number): string {
+      const input = getInput()
+      if (!input || input.isDestroyed) return ""
+      return input.getTextRange(startOffset, endOffset)
+    },
+    replaceRange(startOffset: number, endOffset: number, replacement: string): void {
+      const input = getInput()
+      if (!input || input.isDestroyed) return
+      const plan = planRangeReplace(input.plainText, startOffset, endOffset, replacement)
+      for (const action of plan.actions) {
+        if (action.type === "setCursor") input.cursorOffset = action.offset
+        else if (action.type === "setSelection") input.setSelection(action.start, action.end)
+        else if (action.type === "insertText") input.insertText(action.value)
+        else if (action.type === "clearSelection") input.clearSelection()
+      }
+    },
+    /** Guarded INPUT side of reset (the crash-prone part): clears the textarea
+     *  and its extmark controller. The component's reset() calls this, then
+     *  does its own SolidJS setStore(...) (which can't live here). Council
+     *  consensus finding #1: reset must be in the factory so ALL guarded input
+     *  ops share one source of truth. */
+    reset(): void {
+      const input = getInput()
+      if (!input || input.isDestroyed) return
+      input.clear()
+      input.extmarks.clear()
+    },
+    // The plugin-safe extmarks facade (Task 3), built once and self-guarding.
+    extmarks: safeExtmarks(getInput),
+  }
+}
