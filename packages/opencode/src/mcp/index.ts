@@ -13,6 +13,7 @@ import {
   ListRootsRequestSchema,
   type LoggingMessageNotification,
   LoggingMessageNotificationSchema,
+  ResourceListChangedNotificationSchema,
   type Tool as MCPToolDef,
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js"
@@ -60,7 +61,7 @@ export const Resource = Schema.Struct({
 export type Resource = Schema.Schema.Type<typeof Resource>
 
 export const ToolsChanged = McpEvent.ToolsChanged
-
+export const ResourcesChanged = McpEvent.ResourcesChanged
 export const BrowserOpenFailed = McpEvent.BrowserOpenFailed
 
 export const Failed = NamedError.create("MCPFailed", {
@@ -450,17 +451,25 @@ export const layer = Layer.effect(
         bridge.promise(serverLog(name, notification.params)),
       )
 
-      if (!client.getServerCapabilities()?.tools) return
-      client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
-        if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+      const capabilities = client.getServerCapabilities()
+      if (capabilities?.resources) {
+        client.setNotificationHandler(ResourceListChangedNotificationSchema, async () => {
+          if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+          await bridge.promise(events.publish(ResourcesChanged, { server: name }).pipe(Effect.ignore))
+        })
+      }
+      if (capabilities?.tools) {
+        client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
+          if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
-        const listed = await bridge.promise(McpCatalog.defs(client, timeout))
-        if (!listed) return
-        if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+          const listed = await bridge.promise(McpCatalog.defs(client, timeout))
+          if (!listed) return
+          if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
-        s.defs[name] = listed
-        await bridge.promise(events.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
-      })
+          s.defs[name] = listed
+          await bridge.promise(events.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
+        })
+      }
     }
 
     function serverLog(name: string, params: LoggingMessageNotification["params"]) {
