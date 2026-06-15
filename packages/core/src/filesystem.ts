@@ -78,7 +78,9 @@ const baseLayer = Layer.effect(
       const absolute = path.resolve(location.directory, input ?? ".")
       if (!FSUtil.contains(location.directory, absolute))
         return yield* Effect.die(new Error("Path escapes the location"))
-      const real = yield* fs.realPath(absolute).pipe(Effect.orDie)
+      const real = yield* fs
+        .realPath(absolute)
+        .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(absolute)), Effect.orDie)
       if (!FSUtil.contains(root, real)) return yield* Effect.die(new Error("Path escapes the location"))
       return { absolute, real, directory: location.directory, root }
     })
@@ -97,7 +99,10 @@ const baseLayer = Layer.effect(
       }),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
         const target = yield* resolve(input.path)
-        const info = yield* fs.stat(target.real).pipe(Effect.orDie)
+        const info = yield* fs
+          .stat(target.real)
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)), Effect.orDie)
+        if (info === undefined) return []
         if (info.type !== "Directory") return yield* Effect.die(new Error("Path is not a directory"))
         return yield* fs.readDirectoryEntries(target.real).pipe(
           Effect.orDie,

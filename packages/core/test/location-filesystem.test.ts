@@ -60,6 +60,15 @@ describe("FileSystem", () => {
     ),
   )
 
+  it.live("returns empty list for a missing path", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const entries = yield* (yield* FileSystem.Service).list({ path: RelativePath.make("missing") })
+        expect(entries).toEqual([])
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("rejects lexical escapes", () =>
     withTmp((directory) =>
       Effect.gen(function* () {
