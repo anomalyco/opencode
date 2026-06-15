@@ -41,6 +41,7 @@ import type {
   FooterState,
   FooterSubagentState,
   FooterView,
+  LoopStatusData,
   PermissionReply,
   QuestionReject,
   QuestionReply,
@@ -53,6 +54,7 @@ import type {
   RunResource,
   RunTuiConfig,
 } from "./types"
+import { renderLoopIndicator } from "./types"
 import type { RunTheme } from "./theme"
 import { modelInfo } from "./variant.shared"
 
@@ -84,6 +86,7 @@ type RunFooterViewProps = {
   view?: () => FooterView
   subagent?: () => FooterSubagentState
   queuedPrompts?: () => FooterQueuedPrompt[]
+  loopStatus?: () => LoopStatusData | undefined
   theme: () => RunTheme
   diffStyle?: RunDiffStyle
   tuiConfig: RunTuiConfig
@@ -381,9 +384,18 @@ export function RunFooterView(props: RunFooterViewProps) {
   const shell = createMemo(() => prompt() && composer.shell())
   const menu = createMemo(() => prompt() && composer.visible())
   const stateStatus = createMemo(() => props.state().status.trim())
+  const loopActive = createMemo(() => {
+    const s = props.loopStatus?.()
+    return s?.active ?? false
+  })
+
   const modeLabel = createMemo(() => {
     if (exiting()) {
       return "EXIT"
+    }
+
+    if (loopActive()) {
+      return "LOOP"
     }
 
     return shell() ? "SHELL" : "BUILD"
@@ -458,6 +470,14 @@ export function RunFooterView(props: RunFooterViewProps) {
     }
 
     const items: Array<{ kind: string; key: string; label: string }> = []
+    if (loopActive()) {
+      const s = props.loopStatus?.()
+      if (s) {
+        const phase = `${s.currentPhase}/${s.totalPhases}`
+        const pct = `${s.percentage}%`
+        items.push({ kind: "loop", key: phase, label: pct })
+      }
+    }
     if (foregroundSubagents() && backgroundShortcut()) {
       items.push({ kind: "background", key: backgroundShortcut(), label: "background" })
     }

@@ -29,7 +29,7 @@ import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
-import { type RunError, Service, StepLimitExceededError } from "./index"
+import { type RunError, Service, StepLimitExceededError, LoopTimeoutError, LoopPhaseLimitError } from "./index"
 import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
@@ -373,6 +373,7 @@ export const layer = Layer.effect(
     const run = Effect.fn("SessionRunner.run")(function* (input: {
       readonly sessionID: SessionSchema.ID
       readonly force?: boolean
+      readonly loopConfig?: import("./index").LoopConfig
     }) {
       const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
       const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
@@ -380,7 +381,31 @@ export const layer = Layer.effect(
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let openActivity = input.force === true || hasSteer || hasQueue
+
+      // Loop mode state
+      const loopConfig = input.loopConfig
+      const loopStartTime = loopConfig ? Date.now() : 0
+      let phasesExecuted = 0
+
       while (openActivity) {
+        if (loopConfig) {
+          const elapsed = Date.now() - loopStartTime
+          if (elapsed > loopConfig.globalTimeoutMs) {
+            return yield* new LoopTimeoutError({
+              sessionID: input.sessionID,
+              elapsedMs: elapsed,
+              limitMs: loopConfig.globalTimeoutMs,
+            })
+          }
+          if (phasesExecuted >= loopConfig.maxPhases) {
+            return yield* new LoopPhaseLimitError({
+              sessionID: input.sessionID,
+              phasesExecuted,
+              maxPhases: loopConfig.maxPhases,
+            })
+          }
+        }
+
         let needsContinuation = true
         for (let step = 0; step < MAX_STEPS; step++) {
           needsContinuation = yield* runTurn(input.sessionID, promotion)
@@ -392,6 +417,7 @@ export const layer = Layer.effect(
           return yield* new StepLimitExceededError({ sessionID: input.sessionID, limit: MAX_STEPS })
         openActivity = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = openActivity ? "queue" : undefined
+        if (loopConfig) phasesExecuted++
       }
     })
 

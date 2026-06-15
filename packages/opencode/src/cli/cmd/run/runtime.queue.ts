@@ -10,7 +10,7 @@
 // Resolves when the footer closes and all in-flight work finishes.
 import * as Locale from "@/util/locale"
 import { MessageID, PartID } from "@/session/schema"
-import { isExitCommand, isNewCommand } from "./prompt.shared"
+import { isExitCommand, isNewCommand, isLoopCommand } from "./prompt.shared"
 import type { FooterApi, FooterEvent, FooterQueuedPrompt, RunPrompt } from "./types"
 
 type Trace = {
@@ -29,6 +29,7 @@ export type QueueInput = {
   trace?: Trace
   onSend?: (prompt: RunPrompt) => void
   onNewSession?: () => void | Promise<void>
+  onLoopChange?: (active: boolean, scope?: string) => void | Promise<void>
   run: (prompt: RunPrompt, signal: AbortSignal) => Promise<void>
 }
 
@@ -162,6 +163,83 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
             continue
           }
 
+          // Handle /loop commands
+          if (prompt.mode !== "shell" && isLoopCommand(prompt.text)) {
+            const match = prompt.text.trim().match(/^\/loop\s+(.+)$/)
+            if (!match) {
+              input.footer.append({
+                kind: "system",
+                text: "Usage: /loop on <scope> | /loop off | /loop status | /loop phases | /loop summary",
+                phase: "final",
+                source: "system",
+              })
+              continue
+            }
+
+            const [command, ...commandArgs] = match[1].split(/\s+/)
+
+            switch (command) {
+              case "on": {
+                const scope = commandArgs.join(" ")
+                await input.onLoopChange?.(true, scope)
+                input.footer.append({
+                  kind: "system",
+                  text: `Loop mode activated${scope ? `: ${scope}` : ""}. Use /loop off to deactivate.`,
+                  phase: "final",
+                  source: "system",
+                })
+                continue
+              }
+              case "off":
+              case "exit": {
+                await input.onLoopChange?.(false)
+                input.footer.append({
+                  kind: "system",
+                  text: "Loop mode deactivated. Returning to standard agent.",
+                  phase: "final",
+                  source: "system",
+                })
+                continue
+              }
+              case "status": {
+                input.footer.append({
+                  kind: "system",
+                  text: "Loop active. Use /loop phases to list phases or run /loop summary for details.",
+                  phase: "final",
+                  source: "system",
+                })
+                continue
+              }
+              case "phases": {
+                input.footer.append({
+                  kind: "system",
+                  text: "Phase list: run plan_create first via the loop agent, then use loop_summary to view progress.",
+                  phase: "final",
+                  source: "system",
+                })
+                continue
+              }
+              case "summary": {
+                input.footer.append({
+                  kind: "system",
+                  text: "Summary: run loop_summary tool inside the loop session. This CLI command will be wired in a future update.",
+                  phase: "final",
+                  source: "system",
+                })
+                continue
+              }
+              default: {
+                input.footer.append({
+                  kind: "system",
+                  text: `Unknown /loop command: ${command}. Available: on, off, status, phases, summary`,
+                  phase: "final",
+                  source: "system",
+                })
+                continue
+              }
+            }
+          }
+
           const sent =
             prompt.mode === "shell"
               ? prompt
@@ -282,7 +360,8 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
       !active.command &&
       prompt.mode !== "shell" &&
       !prompt.command &&
-      !isNewCommand(prompt.text)
+      !isNewCommand(prompt.text) &&
+      !isLoopCommand(prompt.text)
     ) {
       const queued: FooterQueuedPrompt = {
         messageID: MessageID.ascending(),

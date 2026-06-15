@@ -468,6 +468,20 @@ export namespace Compaction {
   export type Ended = typeof Ended.Type
 }
 
+export namespace Loop {
+  export const PhaseCompleted = EventV2.define({
+    type: "session.loop.phase.completed",
+    ...options,
+    schema: {
+      ...Base,
+      phaseId: Schema.String,
+      status: Schema.Literals(["completed", "failed"]),
+      summary: Schema.String,
+    },
+  })
+  export type PhaseCompleted = typeof PhaseCompleted.Type
+}
+
 const DurableDefinitions = [
   AgentSwitched,
   ModelSwitched,
@@ -496,6 +510,7 @@ const DurableDefinitions = [
   Retried,
   Compaction.Started,
   Compaction.Ended,
+  Loop.PhaseCompleted,
 ] as const
 const EphemeralDefinitions = [Text.Delta, Tool.Input.Delta, Reasoning.Delta, Compaction.Delta] as const
 

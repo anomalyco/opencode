@@ -14,6 +14,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_LOOP from "./prompt/loop.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@opencode-ai/core/global"
@@ -117,6 +118,7 @@ export const layer = Layer.effect(
         const defaults = Permission.fromConfig({
           "*": "allow",
           doom_loop: "ask",
+          loop: "ask",
           external_directory: {
             "*": "ask",
             ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
@@ -213,6 +215,27 @@ export const layer = Layer.effect(
             options: {},
             mode: "subagent",
             native: true,
+          },
+          loop: {
+            name: "loop",
+            description:
+              "Loop mode. Breaks large tasks into phases, delegates to " +
+              "sub-agents with minimal context, verifies quality at each step, " +
+              "and reconciles the final result.",
+            options: {},
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                question: "allow",
+                doom_loop: "allow",
+                loop: "allow",
+              }),
+              user,
+            ),
+            mode: "primary",
+            native: true,
+            steps: 50,
+            prompt: PROMPT_LOOP,
           },
           compaction: {
             name: "compaction",

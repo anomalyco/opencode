@@ -70,6 +70,9 @@ export type RunInput = {
   thinking: boolean
   backgroundSubagents: boolean
   demo?: boolean
+  loop?: boolean
+  loopTimeout?: string
+  loopPhases?: number
 }
 
 // The semantic role of a scrollback entry. Maps 1:1 to theme colors.
@@ -217,6 +220,19 @@ export type FooterOutput = {
   subagent?: FooterSubagentState
 }
 
+export interface LoopStatusData {
+  active: boolean
+  currentPhase: number
+  totalPhases: number
+  phaseName: string
+  phaseStatus: "pending" | "running" | "completed" | "failed"
+  elapsedMs: number
+  timeoutMs: number
+  percentage: number
+  stuck: boolean
+  lastSummary?: string
+}
+
 // Typed messages sent to RunFooter.event(). The prompt queue and stream
 // transport both emit these to update footer state without reaching into
 // internal signals directly.
@@ -278,6 +294,10 @@ export type FooterEvent =
   | {
       type: "stream.subagent"
       state: FooterSubagentState
+    }
+  | {
+      type: "loop.status"
+      loop: LoopStatusData
     }
 
 export type PermissionReply = Parameters<OpencodeClient["permission"]["reply"]>[0]
@@ -347,4 +367,29 @@ export type FooterApi = {
   idle(): Promise<void>
   close(): void
   destroy(): void
+}
+
+// ─── Loop Indicator Helpers ─────────────────────────────────────────────────
+
+export function renderProgressBar(percentage: number, width: number): string {
+  const filled = Math.round((percentage / 100) * width)
+  const empty = width - filled
+  return "█".repeat(filled) + "░".repeat(empty)
+}
+
+export function formatDuration(ms: number): string {
+  const total = Math.floor(ms / 1000)
+  const min = Math.floor(total / 60)
+  const sec = total % 60
+  return `${min}:${sec.toString().padStart(2, "0")}`
+}
+
+export function renderLoopIndicator(metrics: LoopStatusData): string {
+  const phase = `${metrics.currentPhase}/${metrics.totalPhases}`
+  const time = `${formatDuration(metrics.elapsedMs)}/${formatDuration(metrics.timeoutMs)}`
+  const bar = renderProgressBar(metrics.percentage, 8)
+  const name = metrics.phaseName ? ` | ${metrics.phaseName}` : ""
+  const stuck = metrics.stuck ? " | ⚠ STUCK" : ""
+
+  return `[Loop ${phase} | ⏱ ${time} | ${bar} ${metrics.percentage}%${name}${stuck}]`
 }

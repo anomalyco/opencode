@@ -83,6 +83,19 @@ function formatRunError(error: unknown) {
   return FormatError(error) ?? FormatUnknownError(error)
 }
 
+function parseLoopTimeout(value: string): number {
+  const match = value.match(/^(\d+)(m|h|s)$/)
+  if (!match) throw new Error(`Invalid timeout format: "${value}". Use e.g., "5m", "30m", "2h"`)
+  const amount = parseInt(match[1])
+  const unit = match[2]
+  switch (unit) {
+    case "s": return amount * 1000
+    case "m": return amount * 60 * 1000
+    case "h": return amount * 3600 * 1000
+    default: throw new Error(`Unknown time unit: "${unit}"`)
+  }
+}
+
 async function tool(part: ToolPart) {
   try {
     const { toolInlineInfo } = await import("./run/tool")
@@ -220,7 +233,23 @@ export const RunCommand = effectCmd({
       })
       .option("replay-limit", {
         type: "number",
-        describe: "cap visible interactive replay to the newest N messages",
+        describe: "limit the number of replay messages (requires --interactive)",
+      })
+      .option("loop", {
+        alias: ["L"],
+        type: "boolean",
+        describe: "Enable continuous loop mode for autonomous task execution",
+        default: false,
+      })
+      .option("loop-timeout", {
+        type: "string",
+        describe: "Maximum time for loop mode (e.g., '5m', '30m', '2h')",
+        default: "30m",
+      })
+      .option("loop-phases", {
+        type: "number",
+        describe: "Maximum number of phases in loop mode",
+        default: 10,
       })
       .option("interactive", {
         alias: ["i"],
@@ -791,6 +820,40 @@ export const RunCommand = effectCmd({
           }
 
           const model = pick(args.model)
+
+          // Handle --loop mode (non-interactive)
+          if (args.loop) {
+            if (!flags.experimentalLoopMode) {
+              die("Loop mode is experimental. Set OPENCODE_EXPERIMENTAL_LOOP_MODE=true to enable it.")
+            }
+            if (!args.interactive) {
+              // Loop mode uses the loop agent and passes loop config
+              // NOTE: loopConfig passthrough requires the SDK `session.prompt` method
+              // to accept and forward this parameter to the session runner. Currently
+              // the runner (llm.ts) supports it, but the SDK transport layer may drop it.
+              const loopAgent = "loop"
+              const loopTimeout = parseLoopTimeout(args["loop-timeout"])
+              const result = await client.session.prompt({
+                sessionID,
+                agent: loopAgent,
+                model,
+                variant: args.variant,
+                parts: [...files, { type: "text", text: message }],
+                loopConfig: {
+                  globalTimeoutMs: loopTimeout,
+                  maxPhases: args["loop-phases"],
+                },
+              })
+              if (result.error) {
+                if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
+                process.exitCode = 1
+                return
+              }
+              await finish()
+              return
+            }
+          }
+
           const result = await client.session.prompt({
             sessionID,
             agent,

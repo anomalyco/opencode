@@ -46,6 +46,7 @@ import type {
   FooterState,
   FooterSubagentState,
   FooterView,
+  LoopStatusData,
   PermissionReply,
   QuestionReject,
   QuestionReply,
@@ -200,6 +201,8 @@ export class RunFooter implements FooterApi {
   private setView: Setter<FooterView>
   private subagent: Accessor<FooterSubagentState>
   private setSubagent: (next: FooterSubagentState) => void
+  private loopStatus: Accessor<LoopStatusData | undefined>
+  private setLoopStatus: Setter<LoopStatusData | undefined>
   private queuedPrompts: Accessor<FooterQueuedPrompt[]>
   private setQueuedPrompts: Setter<FooterQueuedPrompt[]>
   private promptRoute: FooterPromptRoute = { type: "composer" }
@@ -288,6 +291,9 @@ export class RunFooter implements FooterApi {
     const [queuedPrompts, setQueuedPrompts] = createSignal<FooterQueuedPrompt[]>([])
     this.queuedPrompts = queuedPrompts
     this.setQueuedPrompts = setQueuedPrompts
+    const [loopStatus, setLoopStatus] = createSignal<LoopStatusData | undefined>()
+    this.loopStatus = loopStatus
+    this.setLoopStatus = setLoopStatus
     this.base = Math.max(1, renderer.footerHeight - TEXTAREA_MIN_ROWS)
     this.scrollback = this.createScrollback(options.wrote ?? false)
 
@@ -309,6 +315,7 @@ export class RunFooter implements FooterApi {
               view: footer.view,
               subagent: footer.subagent,
               queuedPrompts: footer.queuedPrompts,
+              loopStatus: footer.loopStatus,
               findFiles: options.findFiles,
               agents: footer.agents,
               resources: footer.resources,
@@ -466,6 +473,11 @@ export class RunFooter implements FooterApi {
 
       this.setSubagent(next.state)
       this.applyHeight()
+      return
+    }
+
+    if (next.type === "loop.status") {
+      this.setLoopStatus(next.loop)
       return
     }
 

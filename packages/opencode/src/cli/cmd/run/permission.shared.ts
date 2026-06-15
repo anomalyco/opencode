@@ -116,6 +116,17 @@ export function permissionInfo(request: PermissionRequest): PermissionInfo {
     }
   }
 
+  if (request.permission === "loop") {
+    return {
+      icon: "🔄",
+      title: "Enter autonomous loop mode",
+      lines: [
+        "This allows the agent to enter a continuous loop mode where it autonomously",
+        "breaks tasks into phases, delegates to subagents, and iterates until completion.",
+      ],
+    }
+  }
+
   return {
     icon: "⚙",
     title: `Call tool ${request.permission}`,

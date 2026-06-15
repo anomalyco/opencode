@@ -163,6 +163,19 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  loop: Schema.optional(
+    Schema.Struct({
+      global_timeout_ms: Schema.optional(PositiveInt).annotate({
+        description: "Global timeout for the loop agent in milliseconds (default: 1800000 = 30 min)",
+      }),
+      phase_timeout_ms: Schema.optional(PositiveInt).annotate({
+        description: "Per-phase timeout in milliseconds (default: 600000 = 10 min)",
+      }),
+      stuck_threshold: Schema.optional(NonNegativeInt).annotate({
+        description: "Number of identical tool calls before stuck detection (default: 3)",
+      }),
+    }),
+  ),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),

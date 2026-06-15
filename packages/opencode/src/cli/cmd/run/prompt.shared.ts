@@ -52,6 +52,10 @@ export function isNewCommand(input: string): boolean {
   return input.trim().toLowerCase() === "/new"
 }
 
+export function isLoopCommand(input: string): boolean {
+  return input.trim().toLowerCase().startsWith("/loop")
+}
+
 export function createPromptHistory(items?: RunPrompt[]): PromptHistoryState {
   const list = (items ?? []).filter((item) => item.text.trim().length > 0).map(promptCopy)
   const next: RunPrompt[] = []

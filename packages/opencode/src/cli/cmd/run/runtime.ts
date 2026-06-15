@@ -21,6 +21,7 @@ import { createRuntimeLifecycle } from "./runtime.lifecycle"
 import { trace } from "./trace"
 import { cycleVariant, formatModelLabel, resolveSavedVariant, resolveVariant, saveVariant } from "./variant.shared"
 import type { LocalReplayAnchor, LocalReplayRow, RunInput, RunPrompt, RunProvider, StreamCommit } from "./types"
+import { getLoopMetrics } from "@/tool/loop-shared"
 
 /** @internal Exported for testing */
 export { pickVariant, resolveVariant } from "./variant.shared"
@@ -134,6 +135,17 @@ type RuntimeState = {
   selectSubagent?: (sessionID: string | undefined) => void
   session?: Promise<void>
   stream?: Promise<StreamState>
+  loop?: {
+    active: boolean
+    currentPhase: number
+    totalPhases: number
+    phaseName: string
+    phaseStatus: "pending" | "running" | "completed" | "failed"
+    startedAt: number
+    timeoutMs: number
+    percentage: number
+    stuck: boolean
+  }
 }
 
 function hasSession(input: RunRuntimeInput, state: RuntimeState) {
@@ -540,12 +552,66 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       await state.demo.start()
     }
 
+    let loopPollTimer: ReturnType<typeof setInterval> | undefined
+
+    const updateFooterLoop = () => {
+      const loop = state.loop
+      if (!loop) {
+        footer.event({
+          type: "loop.status",
+          loop: { active: false, currentPhase: 0, totalPhases: 0, phaseName: "", phaseStatus: "pending", elapsedMs: 0, timeoutMs: 1_800_000, percentage: 0, stuck: false },
+        })
+        return
+      }
+      const shared = getLoopMetrics()
+      const m = shared.metrics
+      footer.event({
+        type: "loop.status",
+        loop: {
+          active: true,
+          currentPhase: m?.completedPhases ?? loop.currentPhase,
+          totalPhases: m?.totalPhases ?? loop.totalPhases,
+          phaseName: shared.phaseName || loop.phaseName,
+          phaseStatus: shared.phaseStatus === "in_progress" ? "running" : (shared.phaseStatus || loop.phaseStatus),
+          elapsedMs: m?.elapsedMs ?? (typeof loop.startedAt === "number" ? performance.now() - loop.startedAt : 0),
+          timeoutMs: m?.globalTimeoutMs ?? loop.timeoutMs,
+          percentage: m?.percentage ?? loop.percentage,
+          stuck: m?.stuck ?? loop.stuck,
+        },
+      })
+    }
+
     const mod = await import("./runtime.queue")
     const createSession = input.createSession
+    const originalAgent = state.agent
     await mod.runPromptQueue({
       footer,
       initialInput: input.initialInput,
       trace: log,
+      onLoopChange: (active, scope) => {
+        if (active) {
+          const shared = getLoopMetrics()
+          state.loop = {
+            active: true,
+            currentPhase: shared.metrics?.completedPhases ?? 0,
+            totalPhases: shared.metrics?.totalPhases ?? 0,
+            phaseName: scope ?? shared.phaseName,
+            phaseStatus: shared.phaseStatus === "in_progress" ? "running" : shared.phaseStatus,
+            startedAt: performance.now(),
+            timeoutMs: shared.metrics?.globalTimeoutMs ?? 1_800_000,
+            percentage: shared.metrics?.percentage ?? 0,
+            stuck: shared.metrics?.stuck ?? false,
+          }
+          state.agent = "loop"
+          loopPollTimer = setInterval(updateFooterLoop, 2_000)
+        } else {
+          state.loop = undefined
+          state.agent = originalAgent
+          if (loopPollTimer) clearInterval(loopPollTimer)
+          loopPollTimer = undefined
+        }
+        updateFooterLoop()
+      },
       onSend: (prompt) => {
         state.shown = true
         state.history.push(prompt)

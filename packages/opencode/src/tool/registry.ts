@@ -16,6 +16,11 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import { PlanCreateTool } from "./loop-plan-create"
+import { PhaseDefineTool } from "./loop-phase-define"
+import { VerifyQualityTool } from "./loop-verify-quality"
+import { LoopSummaryTool } from "./loop-summary"
+import { LoopCompleteTool } from "./loop-complete"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -28,6 +33,8 @@ import { Provider } from "@/provider/provider"
 import { WebSearchTool } from "./websearch"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
+import * as LoopState from "./loop-state"
+import * as LoopOrchestrator from "./loop-orchestrator"
 import { ApplyPatchTool } from "./apply_patch"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
@@ -105,6 +112,11 @@ export const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const planCreate = yield* PlanCreateTool
+    const phaseDefine = yield* PhaseDefineTool
+    const verifyQuality = yield* VerifyQualityTool
+    const loopSummary = yield* LoopSummaryTool
+    const loopComplete = yield* LoopCompleteTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -212,6 +224,11 @@ export const layer = Layer.effect(
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          planCreate: Tool.init(planCreate),
+          phaseDefine: Tool.init(phaseDefine),
+          verifyQuality: Tool.init(verifyQuality),
+          loopSummary: Tool.init(loopSummary),
+          loopComplete: Tool.init(loopComplete),
         })
 
         return {
@@ -233,6 +250,11 @@ export const layer = Layer.effect(
             tool.patch,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
+            tool.planCreate,
+            tool.phaseDefine,
+            tool.verifyQuality,
+            tool.loopSummary,
+            tool.loopComplete,
           ],
           task: tool.task,
           read: tool.read,
@@ -274,6 +296,10 @@ export const layer = Layer.effect(
           input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4")
         if (tool.id === ApplyPatchTool.id) return usePatch
         if (tool.id === EditTool.id || tool.id === WriteTool.id) return !usePatch
+
+        // Loop tools are only available to the loop agent
+        const loopToolIDs = new Set(["loop_plan_create", "loop_phase_define", "loop_verify_quality", "loop_summary", "loop_complete"])
+        if (loopToolIDs.has(tool.id)) return input.agent.name === "loop"
 
         return true
       })
@@ -335,6 +361,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(Format.defaultLayer),
       Layer.provide(CrossSpawnSpawner.defaultLayer),
       Layer.provide(Truncate.defaultLayer),
+      Layer.provide(LoopState.defaultLayer),
     )
     .pipe(Layer.provide(Database.defaultLayer), Layer.provide(RuntimeFlags.defaultLayer)),
 )
@@ -415,7 +442,7 @@ function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-export const node = LayerNode.make(layer.pipe(Layer.provide(Ripgrep.defaultLayer)), [
+export const node =   LayerNode.make(layer.pipe(Layer.provide(Ripgrep.defaultLayer)), [
   Config.node,
   Plugin.node,
   Question.node,
@@ -433,6 +460,8 @@ export const node = LayerNode.make(layer.pipe(Layer.provide(Ripgrep.defaultLayer
   CrossSpawnSpawner.node,
   Format.node,
   Truncate.node,
+  LoopState.node,
+  LoopOrchestrator.node,
   RuntimeFlags.node,
   Database.node,
 ])

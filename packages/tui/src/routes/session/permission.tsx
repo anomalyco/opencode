@@ -371,6 +371,21 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               }
             }
 
+            if (permission === "loop") {
+              return {
+                icon: "🔄",
+                title: "Enter autonomous loop mode",
+                body: (
+                  <box paddingLeft={1}>
+                    <text fg={theme.textMuted}>
+                      This allows the agent to enter a continuous loop mode where it autonomously{" "}
+                      breaks tasks into phases, delegates to subagents, and iterates until completion.
+                    </text>
+                  </box>
+                ),
+              }
+            }
+
             return {
               icon: "⚙",
               title: `Call tool ${permission}`,
