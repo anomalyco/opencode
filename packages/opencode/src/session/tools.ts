@@ -3,6 +3,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { MCP } from "@/mcp"
+import type { ProgressCallback } from "@/mcp/catalog"
 import { Permission } from "@/permission"
 import { Tool } from "@/tool/tool"
 import { ToolJsonSchema } from "@/tool/json-schema"
@@ -12,7 +13,7 @@ import { Truncate } from "@/tool/truncate"
 import { Plugin } from "@/plugin"
 import type { TaskPromptOps } from "@/tool/task"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
-import { Effect } from "effect"
+import { DateTime, Effect } from "effect"
 import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import { SessionProcessor } from "./processor"
@@ -21,6 +22,9 @@ import { EffectBridge } from "@/effect/bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { isRecord } from "@/util/record"
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { SessionEvent } from "@opencode-ai/core/session/event"
+import { SessionMessage } from "@opencode-ai/core/session/message"
 
 const MCP_RESOURCE_TOOLS = {
   list: "list_mcp_resources",
@@ -35,6 +39,19 @@ const SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES = new Set([
   "image/png",
   "image/webp",
 ])
+
+export function mcpProgressToToolProgress(progress: Parameters<ProgressCallback>[0]) {
+  const structured: Record<string, unknown> = {
+    source: "mcp",
+    progress: progress.progress,
+    ...(progress.total !== undefined ? { total: progress.total } : {}),
+    ...(progress.message !== undefined ? { message: progress.message } : {}),
+  }
+  return {
+    structured,
+    content: progress.message ? [{ type: "text" as const, text: progress.message }] : [],
+  }
+}
 
 export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
@@ -52,6 +69,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const registry = yield* ToolRegistry.Service
   const mcp = yield* MCP.Service
   const truncate = yield* Truncate.Service
+  const events = yield* EventV2Bridge.Service
 
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
     sessionID: input.session.id,
@@ -399,7 +417,21 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           )
           const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
             yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
-            return yield* Effect.promise(() => execute(args, opts))
+            const onprogress: ProgressCallback = (progress) => {
+              const state = mcpProgressToToolProgress(progress)
+              void run.promise(
+                events
+                  .publish(SessionEvent.Tool.Progress, {
+                    sessionID: ctx.sessionID,
+                    assistantMessageID: SessionMessage.ID.make(input.processor.message.id),
+                    callID: opts.toolCallId,
+                    timestamp: DateTime.makeUnsafe(Date.now()),
+                    ...state,
+                  })
+                  .pipe(Effect.ignore),
+              )
+            }
+            return yield* Effect.promise(() => execute(args, { ...opts, onprogress } as never))
           }).pipe(
             Effect.withSpan("Tool.execute", {
               attributes: {

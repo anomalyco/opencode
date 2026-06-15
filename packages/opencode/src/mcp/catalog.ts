@@ -2,6 +2,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import {
   CallToolResultSchema,
   ListToolsResultSchema,
+  type Progress,
   ToolSchema,
   type Tool as MCPToolDef,
 } from "@modelcontextprotocol/sdk/types.js"
@@ -10,6 +11,9 @@ import { Effect } from "effect"
 
 const DEFAULT_TIMEOUT = 30_000
 const MAX_LIST_PAGES = 1_000
+
+export type ProgressCallback = (progress: Progress) => void
+type ToolExecutionOptionsWithProgress = { onprogress?: ProgressCallback }
 
 const TolerantListToolsResultSchema = ListToolsResultSchema.extend({
   tools: ToolSchema.omit({ outputSchema: true }).array(),
@@ -62,7 +66,7 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
           signal: options.abortSignal,
           timeout,
           // The MCP SDK only sends a progress token when this hook is present, enabling timeout resets.
-          onprogress: () => {},
+          onprogress: (progress) => (options as ToolExecutionOptionsWithProgress).onprogress?.(progress),
         },
       )
       if (result.isError)
