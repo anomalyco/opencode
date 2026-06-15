@@ -1796,6 +1796,72 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### Poolside
+
+[Poolside](https://platform.poolside.ai) provides an OpenAI-compatible Chat API for its `laguna` family of models. Thinking is enabled by default.
+
+1. Head over to [platform.poolside.ai](https://platform.poolside.ai), sign in with Google or GitHub, then open the **API Keys** tab and click **New key** to generate an API key.
+
+2. Run the `/connect` command and scroll down to **Other**.
+
+   ```txt
+   /connect
+   ```
+
+3. Enter `poolside` as the provider id.
+
+   ```txt
+   ┌ Enter provider id
+   │ poolside
+   └
+   ```
+
+4. Enter your Poolside API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+5. Add the provider to your `opencode.json` file:
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "poolside": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "Poolside",
+         "options": {
+           "baseURL": "https://inference.poolside.ai/v1"
+         },
+         "models": {
+           "poolside/laguna-m.1": {
+             "name": "Laguna M.1"
+           },
+           "poolside/laguna-xs.2": {
+             "name": "Laguna XS.2"
+           }
+         }
+       }
+     }
+   }
+   ```
+
+6. Run the `/models` command to select a model like _Laguna M.1_.
+
+   ```txt
+   /models
+   ```
+
+:::tip
+You can also install the [`pool` CLI](https://downloads.poolside.ai/pool/install.sh) from the Poolside platform's **Quick Start** tab to use Poolside agents directly from your terminal or editor.
+:::
+
+---
+
 ### SAP AI Core
 
 SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon, Meta, Mistral, and AI21 through a unified platform.
