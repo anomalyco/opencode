@@ -1,12 +1,13 @@
 import { describe, expect, test } from "bun:test"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Exit, Schema } from "effect"
 import { MessageV2 } from "../../src/session/message-v2"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionID, MessageID } from "../../src/session/schema"
 
-const decodeFormat = Schema.decodeUnknownExit(MessageV2.Format)
-const decodeUser = Schema.decodeUnknownExit(MessageV2.User)
-const decodeAssistant = Schema.decodeUnknownExit(MessageV2.Assistant)
+const decodeFormat = Schema.decodeUnknownExit(SessionV1.Format)
+const decodeUser = Schema.decodeUnknownExit(SessionV1.User)
+const decodeAssistant = Schema.decodeUnknownExit(SessionV1.Assistant)
 
 describe("structured-output.OutputFormat", () => {
   test("parses text format", () => {
@@ -65,7 +66,7 @@ describe("structured-output.OutputFormat", () => {
 
 describe("structured-output.StructuredOutputError", () => {
   test("creates error with message and retries", () => {
-    const error = new MessageV2.StructuredOutputError({
+    const error = new SessionV1.StructuredOutputError({
       message: "Failed to validate",
       retries: 3,
     })
@@ -76,7 +77,7 @@ describe("structured-output.StructuredOutputError", () => {
   })
 
   test("converts to object correctly", () => {
-    const error = new MessageV2.StructuredOutputError({
+    const error = new SessionV1.StructuredOutputError({
       message: "Test error",
       retries: 2,
     })
@@ -88,13 +89,13 @@ describe("structured-output.StructuredOutputError", () => {
   })
 
   test("isInstance correctly identifies error", () => {
-    const error = new MessageV2.StructuredOutputError({
+    const error = new SessionV1.StructuredOutputError({
       message: "Test",
       retries: 1,
     })
 
-    expect(MessageV2.StructuredOutputError.isInstance(error)).toBe(true)
-    expect(MessageV2.StructuredOutputError.isInstance({ name: "other" })).toBe(false)
+    expect(SessionV1.StructuredOutputError.isInstance(error)).toBe(true)
+    expect(SessionV1.StructuredOutputError.isInstance({ name: "other" })).toBe(false)
   })
 })
 

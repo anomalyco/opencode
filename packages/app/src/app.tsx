@@ -9,11 +9,12 @@ import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
-import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
+import { type BaseRouterProps, Navigate, Route, Router, useParams, useSearchParams } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Effect } from "effect"
 import {
   type Component,
+  createEffect,
   createMemo,
   createResource,
   createSignal,
@@ -24,14 +25,14 @@ import {
   onCleanup,
   type ParentProps,
   Show,
-  Suspense,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/context/command"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
-import { GlobalSDKProvider } from "@/context/global-sdk"
-import { GlobalSyncProvider } from "@/context/global-sync"
+import { ServerSDKProvider } from "@/context/server-sdk"
+import { ServerSyncProvider } from "@/context/server-sync"
+import { GlobalProvider } from "@/context/global"
 import { HighlightsProvider } from "@/context/highlights"
 import { LanguageProvider, type Locale, useLanguage } from "@/context/language"
 import { LayoutProvider } from "@/context/layout"
@@ -40,29 +41,124 @@ import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
-import { SettingsProvider } from "@/context/settings"
+import { SettingsProvider, useSettings } from "@/context/settings"
 import { TerminalProvider } from "@/context/terminal"
-import DirectoryLayout from "@/pages/directory-layout"
+import { TabsProvider, useTabs, type DraftTab } from "@/context/tabs"
+import { SDKProvider, useSDK } from "@/context/sdk"
+import { WslServersProvider } from "@/wsl/context"
+import DirectoryLayout, { DirectoryDataProvider } from "@/pages/directory-layout"
 import Layout from "@/pages/layout"
 import { ErrorPage } from "./pages/error"
 import { useCheckServerHealth } from "./utils/server-health"
 
 const HomeRoute = lazy(() => import("@/pages/home"))
-const loadSession = () => import("@/pages/session")
-const Session = lazy(loadSession)
-const Loading = () => <div class="size-full" />
+const Session = lazy(() => import("@/pages/session"))
+const NewSession = lazy(() => import("@/pages/new-session"))
 
-if (typeof location === "object" && /\/session(?:\/|$)/.test(location.pathname)) {
-  void loadSession()
-}
+const SessionRoute = Object.assign(
+  () => {
+    const settings = useSettings()
+    const params = useParams()
+    const [search] = useSearchParams<{ draftId?: string; prompt?: string }>()
+    const sdk = useSDK()
+    const server = useServer()
+    const tabs = useTabs()
 
-const SessionRoute = () => (
-  <SessionProviders>
-    <Session />
-  </SessionProviders>
+    // When the new layout is enabled, the legacy new-session route (/:dir/session with no id)
+    // is replaced by a draft at /new-session?draftId=…
+    createEffect(() => {
+      if (!settings.general.newLayoutDesigns()) return
+      if (params.id || search.draftId) return
+      if (!tabs.ready() || !sdk().directory) return
+      tabs.newDraft({ server: server.key, directory: sdk().directory }, search.prompt)
+    })
+
+    return (
+      <SessionProviders>
+        <Session />
+      </SessionProviders>
+    )
+  },
+  { preload: Session.preload },
 )
 
-const SessionIndexRoute = () => <Navigate href="session" />
+// Wraps the non-draft routes. They are gated on (and keyed to) the globally selected
+// server via ServerKey, then provide the server-scoped shell (Permission/Layout/
+// Notification/Models + the visual Layout) for that server.
+function SelectedServerLayout(props: ParentProps) {
+  return (
+    <ServerKey>
+      <ServerSDKProvider>
+        <ServerSyncProvider>
+          <ServerScopedShell>{props.children}</ServerScopedShell>
+        </ServerSyncProvider>
+      </ServerSDKProvider>
+    </ServerKey>
+  )
+}
+
+// Wraps /new-session. It resolves the draft's target server and provides the
+// server-scoped shell for that server — without ServerKey, so the page never depends
+// on the globally "selected" server.
+function DraftServerLayout(props: ParentProps) {
+  const server = useServer()
+  const tabs = useTabs()
+  const [search] = useSearchParams<{ draftId?: string }>()
+  const conn = createMemo(() => {
+    const id = search.draftId
+    if (!id) return undefined
+    const draft = tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === id)
+    if (!draft) return undefined
+    return server.list.find((c) => ServerConnection.key(c) === draft.server)
+  })
+
+  return (
+    <ServerSDKProvider server={conn}>
+      <ServerSyncProvider server={conn}>
+        <ServerScopedShell>{props.children}</ServerScopedShell>
+      </ServerSyncProvider>
+    </ServerSDKProvider>
+  )
+}
+
+function DraftRoute() {
+  const [search] = useSearchParams<{ draftId?: string }>()
+  const tabs = useTabs()
+  return (
+    <Show when={tabs.ready()}>
+      <Show when={search.draftId} keyed fallback={<Navigate href="/" />}>
+        {(draftID) => <ResolvedDraftRoute draftID={draftID} />}
+      </Show>
+    </Show>
+  )
+}
+
+function ResolvedDraftRoute(props: { draftID: string }) {
+  const tabs = useTabs()
+  const draft = createMemo(() =>
+    tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === props.draftID),
+  )
+
+  // Key on the directory so retargeting the draft's project re-instantiates the
+  // directory-scoped providers while keeping the same draft id. The draft's target
+  // server is provided by DraftServerLayout, so changing only the server updates the
+  // SDK/sync hooks without remounting the composer.
+  const directory = () => draft()?.directory
+
+  return (
+    <Show when={directory()} keyed>
+      {(dir) => (
+        <SDKProvider directory={dir}>
+          <DirectoryDataProvider directory={dir} draftID={props.draftID}>
+            <DraftProviders>
+              <NewSession />
+            </DraftProviders>
+          </DirectoryDataProvider>
+        </SDKProvider>
+      )}
+    </Show>
+  )
+}
 
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
@@ -72,12 +168,11 @@ function UiI18nBridge(props: ParentProps) {
 declare global {
   interface Window {
     __OPENCODE__?: {
-      updaterEnabled?: boolean
       deepLinks?: string[]
-      wsl?: boolean
     }
     api?: {
       setTitlebar?: (theme: { mode: "light" | "dark" }) => Promise<void>
+      exportDebugLogs?: () => Promise<string>
     }
   }
 }
@@ -95,23 +190,49 @@ function QueryProvider(props: ParentProps) {
   return <QueryClientProvider client={client}>{props.children}</QueryClientProvider>
 }
 
-function AppShellProviders(props: ParentProps) {
+function BodyDesignClass() {
+  const settings = useSettings()
+
+  createEffect(() => {
+    if (typeof document === "undefined") return
+
+    const enabled = settings.general.newLayoutDesigns()
+    document.body.classList.toggle("text-12-regular", !enabled)
+    document.body.classList.toggle("font-(family-name:--font-family-text)", enabled)
+    document.body.classList.toggle("text-[13px]", enabled)
+    document.body.classList.toggle("font-[440]", enabled)
+  })
+
+  return null
+}
+
+// Server-agnostic providers shared across every route. These live in the shared
+// shell (router root) so they stay mounted regardless of the active server/route.
+function SharedProviders(props: ParentProps) {
   return (
     <SettingsProvider>
-      <PermissionProvider>
-        <LayoutProvider>
-          <NotificationProvider>
-            <ModelsProvider>
-              <CommandProvider>
-                <HighlightsProvider>
-                  <Layout>{props.children}</Layout>
-                </HighlightsProvider>
-              </CommandProvider>
-            </ModelsProvider>
-          </NotificationProvider>
-        </LayoutProvider>
-      </PermissionProvider>
+      <BodyDesignClass />
+      <CommandProvider>
+        <HighlightsProvider>{props.children}</HighlightsProvider>
+      </CommandProvider>
     </SettingsProvider>
+  )
+}
+
+// Server-scoped providers plus the visual Layout (tabs/sidebar). These live inside
+// each per-route server layout so they resolve to that route's server (selected vs
+// draft). The Layout remounts when crossing between those groups.
+function ServerScopedShell(props: ParentProps) {
+  return (
+    <PermissionProvider>
+      <LayoutProvider>
+        <NotificationProvider>
+          <ModelsProvider>
+            <Layout>{props.children}</Layout>
+          </ModelsProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    </PermissionProvider>
   )
 }
 
@@ -127,14 +248,15 @@ function SessionProviders(props: ParentProps) {
   )
 }
 
-function RouterRoot(props: ParentProps<{ appChildren?: JSX.Element }>) {
+// The draft page only renders the prompt composer, so it drops TerminalProvider.
+// FileProvider and CommentsProvider stay because PromptInput uses file search and comment context.
+function DraftProviders(props: ParentProps) {
   return (
-    <AppShellProviders>
-      {/*<Suspense fallback={<Loading />}>*/}
-      {props.appChildren}
-      {props.children}
-      {/*</Suspense>*/}
-    </AppShellProviders>
+    <FileProvider>
+      <PromptProvider>
+        <CommentsProvider>{props.children}</CommentsProvider>
+      </PromptProvider>
+    </FileProvider>
   )
 }
 
@@ -156,11 +278,13 @@ export function AppBaseProviders(props: ParentProps<{ locale?: Locale }>) {
               }}
             >
               <QueryProvider>
-                <DialogProvider>
-                  <MarkedProvider>
-                    <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                  </MarkedProvider>
-                </DialogProvider>
+                <WslServersProvider>
+                  <DialogProvider>
+                    <MarkedProvider>
+                      <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
+                    </MarkedProvider>
+                  </DialogProvider>
+                </WslServersProvider>
               </QueryProvider>
             </ErrorBoundary>
           </UiI18nBridge>
@@ -196,26 +320,21 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
           Effect.runPromise,
         ),
   )
+  const checking = createMemo(
+    () => checkMode() === "blocking" && ["unresolved", "pending"].includes(startupHealthCheck.state),
+  )
 
   return (
-    <Suspense
+    <Show
+      when={!checking()}
       fallback={
         <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
           <Splash class="w-16 h-20 opacity-50 animate-pulse" />
         </div>
       }
     >
-      {/*<Show
-        when={checkMode() === "blocking" ? !startupHealthCheck.loading : startupHealthCheck.state !== "pending"}
-        fallback={
-          <div class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base">
-            <Splash class="w-16 h-20 opacity-50 animate-pulse" />
-          </div>
-        }
-      >*/}
-      {checkMode() === "blocking" ? startupHealthCheck() : startupHealthCheck.latest}
       <Show
-        when={startupHealthCheck()}
+        when={startupHealthCheck.latest}
         fallback={
           <ConnectionError
             onRetry={() => {
@@ -231,8 +350,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean }>) {
       >
         {props.children}
       </Show>
-      {/*</Show>*/}
-    </Suspense>
+    </Show>
   )
 }
 
@@ -295,36 +413,54 @@ function ServerKey(props: ParentProps) {
 export function AppInterface(props: {
   children?: JSX.Element
   defaultServer: ServerConnection.Key
+  canonicalLocalServer?: ServerConnection.Key
   servers?: Array<ServerConnection.Any>
   router?: Component<BaseRouterProps>
   disableHealthCheck?: boolean
 }) {
+  // The shared shell holds only server-agnostic providers (QueryClient + Settings/
+  // Command/Highlights) and stays mounted across every route. The server-scoped
+  // providers and the visual Layout live in the per-route layouts below, so they
+  // resolve to that route's server (selected for most routes, the draft's server for
+  // /new-session). appChildren is server-agnostic, so it renders here once.
+  const ServerShell = (shellProps: ParentProps) => (
+    <QueryProvider>
+      <SharedProviders>
+        {props.children}
+        {shellProps.children}
+      </SharedProviders>
+    </QueryProvider>
+  )
+
   return (
     <ServerProvider
       defaultServer={props.defaultServer}
-      disableHealthCheck={props.disableHealthCheck}
+      canonicalLocalServer={props.canonicalLocalServer}
       servers={props.servers}
     >
-      <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
-        <ServerKey>
-          <QueryProvider>
-            <GlobalSDKProvider>
-              <GlobalSyncProvider>
-                <Dynamic
-                  component={props.router ?? Router}
-                  root={(routerProps) => <RouterRoot appChildren={props.children}>{routerProps.children}</RouterRoot>}
-                >
-                  <Route path="/" component={HomeRoute} />
-                  <Route path="/:dir" component={DirectoryLayout}>
-                    <Route path="/" component={SessionIndexRoute} />
-                    <Route path="/session/:id?" component={SessionRoute} />
-                  </Route>
-                </Dynamic>
-              </GlobalSyncProvider>
-            </GlobalSDKProvider>
-          </QueryProvider>
-        </ServerKey>
-      </ConnectionGate>
+      <GlobalProvider>
+        <ConnectionGate disableHealthCheck={props.disableHealthCheck}>
+          <Dynamic
+            component={props.router ?? Router}
+            root={(routerProps) => (
+              <TabsProvider>
+                <ServerShell>{routerProps.children}</ServerShell>
+              </TabsProvider>
+            )}
+          >
+            <Route component={SelectedServerLayout}>
+              <Route path="/" component={HomeRoute} />
+              <Route path="/:dir" component={DirectoryLayout}>
+                <Route path="/" component={() => <Navigate href="session" />} />
+                <Route path="/session/:id?" component={SessionRoute} />
+              </Route>
+            </Route>
+            <Route component={DraftServerLayout}>
+              <Route path="/new-session" component={DraftRoute} />
+            </Route>
+          </Dynamic>
+        </ConnectionGate>
+      </GlobalProvider>
     </ServerProvider>
   )
 }

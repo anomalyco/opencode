@@ -2,7 +2,7 @@ import { withAlpha } from "@opencode-ai/ui/theme/color"
 import { useTheme } from "@opencode-ai/ui/theme/context"
 import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
 import type { HexColor } from "@opencode-ai/ui/theme/types"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@/utils/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
 import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
 import { SerializeAddon } from "@/addons/serialize"
@@ -161,9 +161,9 @@ export const Terminal = (props: TerminalProps) => {
   const theme = useTheme()
   const language = useLanguage()
   const server = useServer()
-  const directory = sdk.directory
-  const client = sdk.client
-  const url = sdk.url
+  const directory = sdk().directory
+  const client = sdk().client
+  const url = sdk().url
   const auth = server.current?.http
   const username = auth?.username ?? "opencode"
   const password = auth?.password ?? ""

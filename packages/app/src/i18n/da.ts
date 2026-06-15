@@ -459,7 +459,7 @@ export const dict = {
   "error.dev.rootNotFound":
     "Rodelement ikke fundet. Har du glemt at tilføje det til din index.html? Eller måske er id-attributten stavet forkert?",
 
-  "error.globalSync.connectFailed": "Kunne ikke forbinde til server. Kører der en server på `{{url}}`?",
+  "error.serverSync.connectFailed": "Kunne ikke forbinde til server. Kører der en server på `{{url}}`?",
   "directory.error.invalidUrl": "Ugyldig mappe i URL.",
 
   "error.chain.unknown": "Ukendt fejl",
@@ -920,8 +920,8 @@ export const dict = {
   "common.key.insert": "Insert",
   "common.unknown": "ukendt",
   "error.page.circular": "[Cirkulær]",
-  "error.globalSDK.noServerAvailable": "Ingen server tilgængelig",
-  "error.globalSDK.serverNotAvailable": "Server ikke tilgængelig",
+  "error.serverSDK.noServerAvailable": "Ingen server tilgængelig",
+  "error.serverSDK.serverNotAvailable": "Server ikke tilgængelig",
   "error.childStore.persistedCacheCreateFailed": "Kunne ikke oprette vedvarende cache",
   "error.childStore.persistedProjectMetadataCreateFailed": "Kunne ikke oprette vedvarende projektmetadata",
   "error.childStore.persistedProjectIconCreateFailed": "Kunne ikke oprette vedvarende projektikon",

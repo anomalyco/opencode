@@ -1,7 +1,8 @@
 import { Schema } from "effect"
 import { ContentBlockID, FinishReason, ProtocolID, ProviderMetadata, RouteID, ToolCallID } from "./ids"
-import { ModelRef } from "./options"
-import { ToolResultValue } from "./messages"
+import { ModelSchema } from "./options"
+import { ToolOutput, ToolResultValue } from "./messages"
+import { ProviderFailureClassification } from "./errors"
 
 /**
  * Token usage reported by an LLM provider.
@@ -91,6 +92,7 @@ export const TextDelta = Schema.Struct({
   type: Schema.tag("text-delta"),
   id: ContentBlockID,
   text: Schema.String,
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.TextDelta" })
 export type TextDelta = Schema.Schema.Type<typeof TextDelta>
 
@@ -112,6 +114,7 @@ export const ReasoningDelta = Schema.Struct({
   type: Schema.tag("reasoning-delta"),
   id: ContentBlockID,
   text: Schema.String,
+  providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ReasoningDelta" })
 export type ReasoningDelta = Schema.Schema.Type<typeof ReasoningDelta>
 
@@ -161,6 +164,7 @@ export const ToolResult = Schema.Struct({
   id: ToolCallID,
   name: Schema.String,
   result: ToolResultValue,
+  output: Schema.optional(ToolOutput),
   providerExecuted: Schema.optional(Schema.Boolean),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ToolResult" })
@@ -196,6 +200,7 @@ export type Finish = Schema.Schema.Type<typeof Finish>
 export const ProviderErrorEvent = Schema.Struct({
   type: Schema.tag("provider-error"),
   message: Schema.String,
+  classification: Schema.optional(ProviderFailureClassification),
   retryable: Schema.optional(Schema.Boolean),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ProviderError" })
@@ -250,7 +255,12 @@ export const LLMEvent = Object.assign(llmEventTagged, {
     ToolInputDelta.make({ ...input, id: toolCallID(input.id) }),
   toolInputEnd: (input: WithID<ToolInputEnd, ToolCallID>) => ToolInputEnd.make({ ...input, id: toolCallID(input.id) }),
   toolCall: (input: WithID<ToolCall, ToolCallID>) => ToolCall.make({ ...input, id: toolCallID(input.id) }),
-  toolResult: (input: WithID<ToolResult, ToolCallID>) => ToolResult.make({ ...input, id: toolCallID(input.id) }),
+  toolResult: (input: WithID<ToolResult, ToolCallID>) =>
+    ToolResult.make({
+      ...input,
+      id: toolCallID(input.id),
+      output: input.output === undefined ? undefined : ToolOutput.make(input.output.structured, input.output.content),
+    }),
   toolError: (input: WithID<ToolError, ToolCallID>) => ToolError.make({ ...input, id: toolCallID(input.id) }),
   stepFinish: (input: WithUsage<StepFinish>) =>
     StepFinish.make({
@@ -288,7 +298,7 @@ export class PreparedRequest extends Schema.Class<PreparedRequest>("LLM.Prepared
   id: Schema.String,
   route: RouteID,
   protocol: ProtocolID,
-  model: ModelRef,
+  model: ModelSchema,
   body: Schema.Unknown,
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
