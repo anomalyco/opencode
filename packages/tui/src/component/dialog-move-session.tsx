@@ -32,10 +32,6 @@ type DialogMoveSessionProps = {
 }
 
 export function DialogMoveSession(props: DialogMoveSessionProps) {
-  return <DialogMoveSessionContent {...props} />
-}
-
-function DialogMoveSessionContent(props: DialogMoveSessionProps) {
   const dialog = useDialog()
   const sdk = useSDK()
   const dimensions = useTerminalDimensions()
@@ -49,8 +45,7 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
   const [toDelete, setToDelete] = createSignal<string>()
   const [removing, setRemoving] = createSignal(props.initialRemoving)
   const [replacementCurrent, setReplacementCurrent] = createSignal<string>()
-  const [projectLoadError, setProjectLoadError] = createSignal<unknown>()
-  const [directoryLoadError, setDirectoryLoadError] = createSignal<unknown>()
+  const [loadError, setLoadError] = createSignal<unknown>()
   const deleteHint = useCommandShortcut("dialog.move_session.delete")
   onMount(() => dialog.setSize("xlarge"))
 
@@ -60,18 +55,15 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
     ))
   }
 
+  // A failed current-checkout lookup only affects which row is highlighted, so
+  // swallow it and let the directory list render without a current marker.
   const [loadedProject] = createResource(
     () => (projectContext.project() === props.projectID ? undefined : props.projectID),
-    async (projectID) => {
-      try {
-        const result = await sdk.client.project.current({}, { throwOnError: true })
-        setProjectLoadError(undefined)
-        return result.data?.id === projectID ? result.data.worktree : undefined
-      } catch (error) {
-        setProjectLoadError(error)
-        return undefined
-      }
-    },
+    (projectID) =>
+      sdk.client.project
+        .current({}, { throwOnError: true })
+        .then((result) => (result.data?.id === projectID ? result.data.worktree : undefined))
+        .catch(() => undefined),
   )
   const currentCheckout = createMemo(() => {
     if (projectContext.project() === props.projectID) return projectContext.instance.path().worktree
@@ -87,16 +79,15 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
           { throwOnError: true },
         )
         const directories = await sdk.client.project.directories({ projectID }, { throwOnError: true })
-        setDirectoryLoadError(undefined)
+        setLoadError(undefined)
         return directories.data ?? []
       } catch (error) {
-        setDirectoryLoadError(error)
+        setLoadError(error)
         return []
       }
     },
   )
   const directoryData = createMemo(() => directories() ?? props.initialDirectories)
-  const loadError = createMemo(() => projectLoadError() ?? directoryLoadError())
 
   const currentDirectory = createMemo(
     () => replacementCurrent() ?? (props.current?.type === "directory" ? props.current.directory : currentCheckout()),
