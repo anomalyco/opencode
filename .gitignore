@@ -32,3 +32,11 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+bot/config.json
+bot/config_8081.json
+bot/config_8082.json
+bot/sessions.json
+bot/debug.log
+bot/bot.log
+bot/opencode.json
+bot/tmp_startup_configs/
