@@ -228,6 +228,28 @@ const fragmentFailureEnv = LayerNode.buildLayer(root, {
 })
 const itFragmentFailure = testEffect(fragmentFailureEnv)
 
+const emptyFinalAnswerLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.make(
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "empty-final", providerMetadata: { openai: { phase: "final_answer" } } }),
+        LLMEvent.textEnd({ id: "empty-final", providerMetadata: { openai: { phase: "final_answer" } } }),
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "real-final", providerMetadata: { openai: { phase: "final_answer" } } }),
+        LLMEvent.textDelta({ id: "real-final", text: "Final answer." }),
+        LLMEvent.textEnd({ id: "real-final", providerMetadata: { openai: { phase: "final_answer" } } }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ),
+  }),
+)
+const emptyFinalAnswerEnv = LayerNode.buildLayer(root, {
+  replacements: [...replacements, LayerNode.replace(LLM.node, emptyFinalAnswerLLM)],
+})
+const itEmptyFinalAnswer = testEffect(emptyFinalAnswerEnv)
+
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
   const session = yield* Session.Service
@@ -1015,6 +1037,46 @@ itProviderError.live("session.processor effect tests fail provider-executed erro
           result: { type: "error", value: "provider boom" },
           provider: { executed: true },
         })
+      }),
+    { config: cfg },
+  ),
+)
+
+itEmptyFinalAnswer.live("session.processor effect tests drop empty OpenAI final answer text blocks", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "empty final answer")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+        expect(
+          yield* handle.process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies SessionV1.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "empty final answer" }],
+            tools: {},
+          }),
+        ).toBe("continue")
+
+        const parts = yield* MessageV2.parts(msg.id)
+        expect(parts.filter((part): part is SessionV1.TextPart => part.type === "text").map((part) => part.text)).toEqual([
+          "Final answer.",
+        ])
       }),
     { config: cfg },
   ),

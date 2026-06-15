@@ -189,18 +189,14 @@ export namespace Timeline {
 
     const finalTextIndex = finalAssistantTextIndex(assistantItems, assistantPartRefs)
     const preambleItems = finalTextIndex > 0 ? assistantItems.slice(0, finalTextIndex) : []
-    const preambleGroups = preambleItems.flatMap((item) => (item.type === "part" ? [item.group] : []))
-    const canCollapsePreamble =
-      preambleItems.length > 0 &&
-      preambleGroups.length === preambleItems.length &&
-      preambleGroups.every((group) => !assistantGroupTextPart(group, assistantPartRefs))
+    const canCollapsePreamble = preambleItems.length > 0 && preambleItems.every((item) => item.type === "part")
     const responseItems = canCollapsePreamble ? assistantItems.slice(finalTextIndex) : assistantItems
 
     if (canCollapsePreamble) {
       rows.push(
         new TimelineRow.AssistantPreamble({
           userMessageID: userMessage.id,
-          groups: preambleGroups,
+          groups: preambleItems.map((item) => item.group),
           previousAssistantPart: false,
         }),
       )
@@ -293,11 +289,6 @@ export namespace Timeline {
       if (part?.type === "text") return index
     }
     return -1
-  }
-
-  function assistantGroupTextPart(group: PartGroup, refs: Array<{ messageID: string; part: Part }>) {
-    if (group.type !== "part") return false
-    return refs.find((ref) => ref.messageID === group.ref.messageID && ref.part.id === group.ref.partID)?.part?.type === "text"
   }
 
   function reasoningHeading(text: string) {

@@ -81,11 +81,18 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   currentTextID: string | undefined
+  currentTextPersisted: boolean
+  currentTextV2Started: boolean
   reasoningMap: Record<string, SessionV1.ReasoningPart>
   v2AssistantMessageID: SessionMessage.ID | undefined
 }
 
 type StreamEvent = LLMEvent
+
+function isOpenAIFinalAnswer(metadata: SessionV1.TextPart["metadata"] | undefined) {
+  const openai = metadata?.openai
+  return isRecord(openai) && openai.phase === "final_answer"
+}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") {}
 
@@ -123,6 +130,8 @@ export const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         currentTextID: undefined,
+        currentTextPersisted: false,
+        currentTextV2Started: false,
         reasoningMap: {},
         v2AssistantMessageID: undefined,
       }
@@ -168,6 +177,24 @@ export const layer = Layer.effect(
         ctx.v2AssistantMessageID === undefined
           ? Effect.die("V2 step settlement has no owning assistant message")
           : Effect.succeed(ctx.v2AssistantMessageID)
+
+      const ensureCurrentTextVisible = Effect.fn("SessionProcessor.ensureCurrentTextVisible")(function* () {
+        if (!ctx.currentText || !ctx.currentTextID) return false
+        if (!ctx.assistantMessage.summary && mirrorAssistant && !ctx.currentTextV2Started) {
+          yield* events.publish(SessionEvent.Text.Started, {
+            sessionID: ctx.sessionID,
+            assistantMessageID: yield* ensureV2AssistantMessage(),
+            timestamp: DateTime.makeUnsafe(Date.now()),
+            textID: ctx.currentTextID,
+          })
+          ctx.currentTextV2Started = true
+        }
+        if (!ctx.currentTextPersisted) {
+          yield* session.updatePart(ctx.currentText)
+          ctx.currentTextPersisted = true
+        }
+        return true
+      })
 
       const readToolCall = Effect.fn("SessionProcessor.readToolCall")(function* (toolCallID: string) {
         const call = ctx.toolcalls[toolCallID]
@@ -267,7 +294,7 @@ export const layer = Layer.effect(
 
       const flushV2Fragments = Effect.fn("SessionProcessor.flushV2Fragments")(function* () {
         if (!mirrorAssistant) return
-        if (!ctx.assistantMessage.summary && ctx.currentText && ctx.currentTextID) {
+        if (!ctx.assistantMessage.summary && ctx.currentText && ctx.currentTextID && ctx.currentTextV2Started) {
           yield* events.publish(SessionEvent.Text.Ended, {
             sessionID: ctx.sessionID,
             assistantMessageID: yield* currentV2AssistantMessage(),
@@ -757,17 +784,6 @@ export const layer = Layer.effect(
           }
 
           case "text-start":
-            if (!ctx.assistantMessage.summary) {
-              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (mirrorAssistant) {
-                yield* events.publish(SessionEvent.Text.Started, {
-                  sessionID: ctx.sessionID,
-                  assistantMessageID: yield* ensureV2AssistantMessage(),
-                  timestamp: DateTime.makeUnsafe(Date.now()),
-                  textID: value.id,
-                })
-              }
-            }
             ctx.currentText = {
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -778,13 +794,16 @@ export const layer = Layer.effect(
               metadata: value.providerMetadata,
             }
             ctx.currentTextID = value.id
-            yield* session.updatePart(ctx.currentText)
+            ctx.currentTextPersisted = false
+            ctx.currentTextV2Started = false
             return
 
           case "text-delta":
             if (!ctx.currentText) return
-            ctx.currentText.text += value.text
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
+            if (value.text.length === 0) return
+            yield* ensureCurrentTextVisible()
+            ctx.currentText.text += value.text
             if (mirrorAssistant) {
               yield* events.publish(SessionEvent.Text.Delta, {
                 sessionID: ctx.sessionID,
@@ -807,6 +826,7 @@ export const layer = Layer.effect(
             if (!ctx.currentText) return
             // oxlint-disable-next-line no-self-assign -- reactivity trigger
             ctx.currentText.text = ctx.currentText.text
+            if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
             ctx.currentText.text = (yield* plugin.trigger(
               "experimental.text.complete",
               {
@@ -816,9 +836,17 @@ export const layer = Layer.effect(
               },
               { text: ctx.currentText.text },
             )).text
+            if (ctx.currentText.text.length === 0 && isOpenAIFinalAnswer(ctx.currentText.metadata)) {
+              ctx.currentText = undefined
+              ctx.currentTextID = undefined
+              ctx.currentTextPersisted = false
+              ctx.currentTextV2Started = false
+              return
+            }
+            yield* ensureCurrentTextVisible()
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (mirrorAssistant) {
+              if (mirrorAssistant && ctx.currentTextV2Started) {
                 yield* events.publish(SessionEvent.Text.Ended, {
                   sessionID: ctx.sessionID,
                   assistantMessageID: yield* currentV2AssistantMessage(),
@@ -832,10 +860,11 @@ export const layer = Layer.effect(
               const end = Date.now()
               ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
             }
-            if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
             yield* session.updatePart(ctx.currentText)
             ctx.currentText = undefined
             ctx.currentTextID = undefined
+            ctx.currentTextPersisted = false
+            ctx.currentTextV2Started = false
             return
 
           case "finish":
@@ -862,9 +891,13 @@ export const layer = Layer.effect(
         if (ctx.currentText) {
           const end = Date.now()
           ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
-          yield* session.updatePart(ctx.currentText)
+          if (ctx.currentTextPersisted || ctx.currentText.text.length > 0 || !isOpenAIFinalAnswer(ctx.currentText.metadata)) {
+            yield* session.updatePart(ctx.currentText)
+          }
           ctx.currentText = undefined
           ctx.currentTextID = undefined
+          ctx.currentTextPersisted = false
+          ctx.currentTextV2Started = false
         }
 
         for (const part of Object.values(ctx.reasoningMap)) {
@@ -969,6 +1002,8 @@ export const layer = Layer.effect(
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.currentTextID = undefined
+            ctx.currentTextPersisted = false
+            ctx.currentTextV2Started = false
             ctx.reasoningMap = {}
             yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
