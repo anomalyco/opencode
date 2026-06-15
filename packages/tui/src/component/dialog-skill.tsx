@@ -121,7 +121,7 @@ export function DialogSkill(props: DialogSkillProps) {
       selectedIndex={selectedIndex()}
       onIndexChange={(index) => setSelectedIndex(index)}
       footerHints={[
-        { title: "ctrl+o", label: "ctrl+o: expand", side: "right" },
+        { title: "ctrl+o", label: "expand", side: "right" },
       ]}
     />
   )

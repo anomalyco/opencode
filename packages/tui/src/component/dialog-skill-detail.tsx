@@ -48,7 +48,7 @@ export function DialogSkillDetail(props: DialogSkillDetailProps) {
           <scrollbox
             paddingLeft={4}
             paddingRight={4}
-            scrollbarOptions={{ visible: false }}
+            horizontalScrollbarOptions={{ visible: false }}
           >
             <text fg={theme.text} wrapMode="word">
               {props.template}
