@@ -37,7 +37,6 @@ import { McpAuth } from "@/mcp/auth"
 import { Command } from "@/command"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
-import { LoopOrchestrator } from "@/tool/loop-orchestrator"
 import { Format } from "@/format"
 import { InstanceLayer } from "@/project/instance-layer"
 import { Project } from "@/project/project"
@@ -104,7 +103,6 @@ export const AppLayer = Layer.mergeAll(
   Layer.provideMerge(Ripgrep.defaultLayer),
   Layer.provideMerge(InstanceLayer.layer),
   Layer.provideMerge(Observability.layer),
-  Layer.provideMerge(LoopOrchestrator.defaultLayer),
 )
 
 const rt = ManagedRuntime.make(AppLayer, { memoMap })

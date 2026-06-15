@@ -19,7 +19,7 @@ export const VerifyQualityTool = Tool.define(
   "loop_verify_quality",
   Effect.gen(function* () {
     const loop = yield* LoopState.Service
-    const orchestrator = yield* LoopOrchestrator.Service
+    const maybeOrchestrator = yield* Effect.serviceOption(LoopOrchestrator.Service)
     const spawner = yield* ChildProcessSpawner
     const maybeEvents = yield* Effect.serviceOption(EventV2Bridge.Service)
 
@@ -63,6 +63,7 @@ export const VerifyQualityTool = Tool.define(
         const phase = current.plan.phases[phaseIndex]
         const { directory } = yield* InstanceState.context
         const cwd = params.directory ?? directory
+        const orchestrator = Option.getOrThrow(maybeOrchestrator)
         const results: Record<string, CheckResult> = {}
         let allPassed = true
 

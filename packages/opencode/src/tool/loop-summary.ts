@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Schema, Option } from "effect"
 import * as Tool from "./tool"
 import { LoopState, LoopSummaryParams } from "./loop-state"
 import { LoopOrchestrator } from "./loop-orchestrator"
@@ -12,11 +12,11 @@ type Metadata = {
   status?: string
 }
 
-export const LoopSummaryTool = Tool.define<typeof LoopSummaryParams, Metadata, LoopState.Service | LoopOrchestrator.Service>(
+export const LoopSummaryTool = Tool.define<typeof LoopSummaryParams, Metadata, LoopState.Service>(
   "loop_summary",
   Effect.gen(function* () {
     const loop = yield* LoopState.Service
-    const orchestrator = yield* LoopOrchestrator.Service
+    const maybeOrchestrator = yield* Effect.serviceOption(LoopOrchestrator.Service)
     return {
       description:
         "Generate a summary of the current loop progress. Shows completed phases, current phase, elapsed time, and estimated remaining work.",
@@ -35,6 +35,7 @@ export const LoopSummaryTool = Tool.define<typeof LoopSummaryParams, Metadata, L
             }
           }
 
+          const orchestrator = Option.getOrThrow(maybeOrchestrator)
           const metrics = yield* orchestrator.metrics()
           const completed = metrics.completedPhases
           const totalPhases = metrics.totalPhases

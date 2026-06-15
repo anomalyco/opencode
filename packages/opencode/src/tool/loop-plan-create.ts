@@ -1,4 +1,4 @@
-import { Effect, Schema, Clock } from "effect"
+import { Effect, Schema, Clock, Option } from "effect"
 import * as Tool from "./tool"
 import { LoopState, PlanCreateParams, type Phase, type Plan } from "./loop-state"
 import { LoopOrchestrator } from "./loop-orchestrator"
@@ -7,11 +7,11 @@ type Metadata = {
   phases?: string[]
 }
 
-export const PlanCreateTool = Tool.define<typeof PlanCreateParams, Metadata, LoopState.Service | LoopOrchestrator.Service>(
+export const PlanCreateTool = Tool.define<typeof PlanCreateParams, Metadata, LoopState.Service>(
   "loop_plan_create",
   Effect.gen(function* () {
     const loop = yield* LoopState.Service
-    const orchestrator = yield* LoopOrchestrator.Service
+    const maybeOrchestrator = yield* Effect.serviceOption(LoopOrchestrator.Service)
     return {
       description:
         "Create a development plan with phases. Each phase defines a scope, acceptance criteria, and interface contract. Use this at the start of loop mode to decompose a large task into executable phases.",
@@ -81,6 +81,7 @@ export const PlanCreateTool = Tool.define<typeof PlanCreateParams, Metadata, Loo
             status: "running",
           })
 
+          const orchestrator = Option.getOrThrow(maybeOrchestrator)
           yield* orchestrator.start()
           if (phases.length > 0) yield* orchestrator.startPhase(phases[0].id, ctx.sessionID, phases[0].title, phases.length)
 

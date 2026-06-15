@@ -14,11 +14,11 @@ type Metadata = {
   total?: number
 }
 
-export const LoopCompleteTool = Tool.define<typeof LoopCompleteParams, Metadata, LoopState.Service | LoopOrchestrator.Service>(
+export const LoopCompleteTool = Tool.define<typeof LoopCompleteParams, Metadata, LoopState.Service>(
   "loop_complete",
   Effect.gen(function* () {
     const loop = yield* LoopState.Service
-    const orchestrator = yield* LoopOrchestrator.Service
+    const maybeOrchestrator = yield* Effect.serviceOption(LoopOrchestrator.Service)
     const maybeEvents = yield* Effect.serviceOption(EventV2Bridge.Service)
     return {
       description:
@@ -38,6 +38,7 @@ export const LoopCompleteTool = Tool.define<typeof LoopCompleteParams, Metadata,
             }
           }
 
+          const orchestrator = Option.getOrThrow(maybeOrchestrator)
           const metrics = yield* orchestrator.metrics()
           const totalPhases = metrics.totalPhases
           const completed = metrics.completedPhases
