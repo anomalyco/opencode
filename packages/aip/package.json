@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@daemon-protocol/aip",
+  "version": "0.0.0",
+  "description": "AIP-style architecture for daemoncode: semantic ontology, graph traversal, governed (kinetic) actions, and a dynamic learn-from-outcome layer.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "aip": "./src/cli.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test",
+    "build": "tsc"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@opencode-ai/evolve": "workspace:*"
+  },
+  "devDependencies": {
+    "@tsconfig/node22": "catalog:",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}
