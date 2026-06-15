@@ -5,6 +5,7 @@ import {
   createMemo,
   createSignal,
   For,
+  Index,
   Match,
   on,
   onCleanup,
@@ -1547,6 +1548,36 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     while (tIdx < text.length && /[\s\p{P}]/u.test(text[tIdx])) tIdx++
     return tIdx
   }
+  // Strip ALL occurrences of `reasoning` from `text`, allowing any amount of
+  // whitespace/Unicode punctuation between adjacent characters of the
+  // reasoning. Handles the common case where the model writes a partial
+  // response, then echoes the reasoning, then continues — the echoed
+  // reasoning sits in the middle of the text part, not at the start. The
+  // `g` flag ensures multiple occurrences are removed in one pass.
+  const stripReasoningFromText = (reasoning: string, text: string): string => {
+    if (!reasoning || !text) return text
+    // Build a regex pattern: each char of reasoning becomes a literal (with
+    // regex specials escaped), separated by `[\s\p{P}]*` to allow any
+    // amount of whitespace/punctuation between adjacent characters. Chars
+    // that ARE whitespace or punctuation in the reasoning itself also
+    // expand to `[\s\p{P}]*` so a single space in the reasoning can match
+    // a different whitespace/punct sequence in the text.
+    const pattern = reasoning
+      .split("")
+      .map((c) => {
+        if (/[\s\p{P}]/u.test(c)) return "[\\s\\p{P}]*"
+        return c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+      })
+      .join("[\\s\\p{P}]*")
+    try {
+      return text.replace(new RegExp(pattern, "giu"), "")
+    } catch {
+      // Defensive: if the pattern somehow fails to compile, return the
+      // original text untouched (better to leak reasoning than to crash
+      // the TUI).
+      return text
+    }
+  }
   const displayParts = createMemo(() => {
     const stripThink = (s: string) => s.replace(/<\/?think>/g, "").trim()
     // For dedup comparison only — strips whitespace, punctuation, and case
@@ -1658,24 +1689,26 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
           )
           return null
         }
-        if (partFp.startsWith(reasoningFp)) {
-          // Text begins with the reasoning content. Walk the original
-          // (non-normalized) text and find the position right after the
-          // reasoning ends, then keep only the tail.
-          const endPos = findReasoningEndInText(merged.text, part.text)
-          if (endPos > 0 && endPos < part.text.length) {
-            const remaining = part.text.slice(endPos).trim()
-            if (remaining.length > 0) {
+        if (partFp.includes(reasoningFp)) {
+          // Reasoning is embedded in the text part (start, middle, end, or
+          // multiple times). Strip every occurrence. The model often starts
+          // the response with a few words, then echoes the reasoning, then
+          // continues the response — so a startsWith-only check would miss
+          // the case where reasoning appears in the middle.
+          const stripped = stripReasoningFromText(merged.text, part.text)
+          if (stripped !== part.text) {
+            const cleaned = stripped.replace(/\s+/g, ' ').trim()
+            if (cleaned.length > 0) {
               dedupLog(
-                `     text-strip: stripped reasoning echo at pos=${endPos}, kept ${remaining.length} chars: ${truncate(JSON.stringify(remaining), 80)}`,
+                `     text-strip: stripped reasoning from text, kept ${cleaned.length} chars: ${truncate(JSON.stringify(cleaned), 80)}`,
               )
-              return { ...part, text: remaining }
+              return { ...part, text: cleaned }
             }
+            dedupLog(
+              `     text-dedup: DROP (text was entirely reasoning echo)  partFp=${truncate(partFp, 50)}`,
+            )
+            return null
           }
-          dedupLog(
-            `     text-dedup: DROP (text started with reasoning echo, nothing left after strip)  partFp=${truncate(partFp, 50)}`,
-          )
-          return null
         }
         return part
       })
@@ -1688,21 +1721,21 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
 
   return (
     <>
-      <For each={displayParts()}>
+      <Index each={displayParts()}>
         {(part, index) => {
-          const component = createMemo(() => PART_MAPPING[part.type as keyof typeof PART_MAPPING])
+          const component = createMemo(() => PART_MAPPING[part().type as keyof typeof PART_MAPPING])
           return (
             <Show when={component()}>
               <Dynamic
-                last={index() === displayParts().length - 1}
+                last={index === displayParts().length - 1}
                 component={component()}
-                part={part as any}
+                part={part() as any}
                 message={props.message}
               />
             </Show>
           )
         }}
-      </For>
+      </Index>
       <Show when={props.parts.some((x) => x.type === "tool" && x.tool === "task")}>
         <box paddingTop={1} paddingLeft={3}>
           <text fg={theme.text}>
