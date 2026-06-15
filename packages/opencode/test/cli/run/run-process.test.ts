@@ -58,6 +58,23 @@ describe("opencode run (non-interactive subprocess)", () => {
     60_000,
   )
 
+  // Regression for #32335: after a successful prompt the process used to stay
+  // alive with an idle event loop (server db connections, sockets and timers
+  // keep handles open), so scheduled `opencode run` jobs leaked and piled up.
+  // A successful run must terminate promptly on its own; a hang would expire
+  // the harness timeout and surface as a signal-killed failure instead.
+  cliIt.concurrent(
+    "exits promptly after a successful prompt instead of hanging (regression for #32335)",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.text("done")
+        const result = yield* opencode.run("say hi", { timeoutMs: 20_000 })
+        opencode.expectExit(result, 0)
+        expect(result.durationMs).toBeLessThan(20_000)
+      }),
+    30_000,
+  )
+
   // --format json puts one JSON object per line on stdout for each emitted
   // event. Consumers (CI scripts, tooling) parse this stream. Asserts the
   // shape so a future event-emit change has to update this expectation.

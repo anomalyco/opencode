@@ -784,26 +784,27 @@ export const RunCommand = effectCmd({
             if (result.error) {
               if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
               process.exitCode = 1
-              return
-            }
-            await finish()
-            return
+            } else await finish()
+          } else {
+            const model = pick(args.model)
+            const result = await client.session.prompt({
+              sessionID,
+              agent,
+              model,
+              variant: args.variant,
+              parts: [...files, { type: "text", text: message }],
+            })
+            if (result.error) {
+              if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
+              process.exitCode = 1
+            } else await finish()
           }
-
-          const model = pick(args.model)
-          const result = await client.session.prompt({
-            sessionID,
-            agent,
-            model,
-            variant: args.variant,
-            parts: [...files, { type: "text", text: message }],
-          })
-          if (result.error) {
-            if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
-            process.exitCode = 1
-            return
-          }
-          await finish()
+          // The server keeps handles alive (db connections, sockets, timers),
+          // so a non-interactive run would otherwise hang with an idle event
+          // loop instead of terminating. Exit explicitly once it finishes,
+          // matching the error paths above. Attach mode drives a separate
+          // server, so leave it untouched.
+          if (!args.attach) process.exit(process.exitCode ?? 0)
           return
         }
 
