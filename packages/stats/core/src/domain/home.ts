@@ -47,7 +47,7 @@ export type StatsModelData = {
   slug: string
   provider: string
   author: string
-  rank: number
+  rank: number | null
   previousRank: number | null
   totalModels: number
   tokenShare: number
@@ -229,20 +229,27 @@ function buildStatsModelData(
   const latest = Math.max(...normalized.map((row) => row.periodStart))
   const latestUpdate = Math.max(...modelScopedRows.map((row) => row.updatedAt))
   const window = getWindow("2M", earliest, latest)
+  const rankWindow = getWindow("1W", earliest, latest)
   const currentRows = rowsForProduct(modelScopedRows, SITE_PRODUCT, window.start, window.end)
   const previousRows = rowsForProduct(modelScopedRows, SITE_PRODUCT, window.previousStart, window.previousEnd)
   const current = combineRowsForModel(model, currentRows)
   const previous = combineRowsForModel(model, previousRows)
-  const peers = aggregateByModelName(rowsForProduct(normalized, SITE_PRODUCT, window.start, window.end))
+  const rankPeers = aggregateByModelName(rowsForProduct(normalized, SITE_PRODUCT, rankWindow.start, rankWindow.end))
     .filter((item) => item.totalTokens > 0)
     .toSorted((a, b) => b.totalTokens - a.totalTokens || a.model.localeCompare(b.model))
-  const previousPeers = aggregateByModelName(
-    rowsForProduct(normalized, SITE_PRODUCT, window.previousStart, window.previousEnd),
+  const previousRankPeers = aggregateByModelName(
+    rowsForProduct(normalized, SITE_PRODUCT, rankWindow.previousStart, rankWindow.previousEnd),
   )
     .filter((item) => item.totalTokens > 0)
     .toSorted((a, b) => b.totalTokens - a.totalTokens || a.model.localeCompare(b.model))
-  const rank = Math.max(1, peers.findIndex((item) => item.model === model) + 1)
-  const previousRankIndex = previousPeers.findIndex((item) => item.model === model)
+  const peers = aggregateByModelName(rowsForProduct(normalized, SITE_PRODUCT, window.start, window.end))
+    .filter((item) => item.totalTokens > 0)
+    .toSorted((a, b) => b.totalTokens - a.totalTokens || a.model.localeCompare(b.model))
+  const rankIndex = rankPeers.findIndex((item) => item.model === model)
+  const rank = rankIndex >= 0 ? rankIndex + 1 : null
+  const previousRankIndex = previousRankPeers.findIndex((item) => item.model === model)
+  const peerRankIndex = peers.findIndex((item) => item.model === model)
+  const peerRank = peerRankIndex >= 0 ? peerRankIndex + 1 : 1
   const totalTokens = peers.reduce((sum, item) => sum + item.totalTokens, 0)
 
   return {
@@ -273,7 +280,7 @@ function buildStatsModelData(
     tokenMix: buildModelTokenMix(current),
     productMix: buildModelProductMix(modelScopedRows, window, current),
     country: createRangeRecord((range) => buildCountryStats(geo, getWindow(range, earliest, latest))),
-    peers: buildModelPeers(peers, rank, totalTokens),
+    peers: buildModelPeers(peers, peerRank, totalTokens),
   }
 }
 
