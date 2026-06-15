@@ -1,3 +1,30 @@
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+const ellipsis = "…"
+
+function truncateEnd(str: string, width: number) {
+  let out = ""
+  let current = 0
+  for (const part of graphemes.segment(str)) {
+    const next = current + Bun.stringWidth(part.segment)
+    if (next > width) return out
+    out += part.segment
+    current = next
+  }
+  return out
+}
+
+function truncateStart(str: string, width: number) {
+  let out = ""
+  let current = 0
+  for (const part of Array.from(graphemes.segment(str)).reverse()) {
+    const next = current + Bun.stringWidth(part.segment)
+    if (next > width) return out
+    out = part.segment + out
+    current = next
+  }
+  return out
+}
+
 export function titlecase(str: string) {
   return str.replace(/\b\w/g, (c) => c.toUpperCase())
 }
@@ -59,23 +86,26 @@ export function duration(input: number) {
 }
 
 export function truncate(str: string, len: number): string {
-  if (str.length <= len) return str
-  return str.slice(0, len - 1) + "…"
+  if (Bun.stringWidth(str) <= len) return str
+  if (len <= 0) return ""
+  return truncateEnd(str, len - Bun.stringWidth(ellipsis)) + ellipsis
 }
 
 export function truncateLeft(str: string, len: number): string {
-  if (str.length <= len) return str
-  return "…" + str.slice(-(len - 1))
+  if (Bun.stringWidth(str) <= len) return str
+  if (len <= 0) return ""
+  return ellipsis + truncateStart(str, len - Bun.stringWidth(ellipsis))
 }
 
 export function truncateMiddle(str: string, maxLength: number = 35): string {
-  if (str.length <= maxLength) return str
+  if (Bun.stringWidth(str) <= maxLength) return str
+  if (maxLength <= 0) return ""
 
-  const ellipsis = "…"
-  const keepStart = Math.ceil((maxLength - ellipsis.length) / 2)
-  const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
+  const budget = maxLength - Bun.stringWidth(ellipsis)
+  const keepStart = Math.ceil(budget / 2)
+  const keepEnd = Math.floor(budget / 2)
 
-  return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
+  return truncateEnd(str, keepStart) + ellipsis + truncateStart(str, keepEnd)
 }
 
 export function pluralize(count: number, singular: string, plural: string): string {
