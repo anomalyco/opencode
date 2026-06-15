@@ -127,12 +127,43 @@ type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][numbe
 type ResourceInfo = Awaited<ReturnType<MCPClient["listResources"]>>["resources"][number]
 type McpEntry = NonNullable<ConfigV1.Info["mcp"]>[string]
 
+const LOCAL_MCP_INHERITED_ENV = [
+  "PATH",
+  "Path",
+  "PATHEXT",
+  "PathExt",
+  "HOME",
+  "USERPROFILE",
+  "TMPDIR",
+  "TMP",
+  "TEMP",
+  "SystemRoot",
+  "WINDIR",
+  "ComSpec",
+  "SHELL",
+  "LANG",
+  "LC_ALL",
+] as const
+
 function isMcpConfigured(entry: McpEntry): entry is ConfigMCPV1.Info {
   return typeof entry === "object" && entry !== null && "type" in entry
 }
 
 function remoteURL(value: string) {
   if (URL.canParse(value)) return new URL(value)
+}
+
+function localMcpEnv(mcp: ConfigMCPV1.Info & { type: "local" }, command: string) {
+  const env: Record<string, string> = {}
+  for (const key of LOCAL_MCP_INHERITED_ENV) {
+    const value = process.env[key]
+    if (value !== undefined) env[key] = value
+  }
+  if (command === "opencode") env.BUN_BE_BUN = "1"
+  return {
+    ...env,
+    ...mcp.environment,
+  }
 }
 
 interface CreateResult {
@@ -336,11 +367,7 @@ export const layer = Layer.effect(
         command: cmd,
         args,
         cwd,
-        env: {
-          ...process.env,
-          ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
-          ...mcp.environment,
-        },
+        env: localMcpEnv(mcp, cmd),
       })
 
       const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT

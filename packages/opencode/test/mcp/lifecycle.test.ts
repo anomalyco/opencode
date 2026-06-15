@@ -248,6 +248,7 @@ beforeEach(() => {
   connectError = "Mock transport cannot connect"
   clientCreateCount = 0
   transportCloseCount = 0
+  stdioOptsByName.clear()
 })
 
 // Import after mocks
@@ -292,6 +293,73 @@ it.instance(
         lastCreatedClientName = "rel-cwd"
         yield* mcp.add("rel-cwd", { type: "local", command: ["echo", "test"], cwd: "plugins/sub" })
         expect(stdioOptsByName.get("rel-cwd")?.cwd).toBe(path.resolve(directory, "plugins/sub"))
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "local mcp subprocess env excludes parent secrets and keeps explicit server env",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        const previous = {
+          OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+          MCP_PARENT_SECRET: process.env.MCP_PARENT_SECRET,
+          PATH: process.env.PATH,
+        }
+        process.env.OPENAI_API_KEY = "parent-openai-secret"
+        process.env.MCP_PARENT_SECRET = "parent-mcp-secret"
+        process.env.PATH = "/usr/bin"
+
+        try {
+          lastCreatedClientName = "env-safe"
+          yield* mcp.add("env-safe", {
+            type: "local",
+            command: ["node", "server.js"],
+            environment: {
+              EXPLICIT_TOKEN: "configured-token",
+              OPENAI_API_KEY: "explicit-openai-token",
+            },
+          })
+
+          const env = stdioOptsByName.get("env-safe")?.env
+          expect(env.PATH).toBe("/usr/bin")
+          expect(env.MCP_PARENT_SECRET).toBeUndefined()
+          expect(env.EXPLICIT_TOKEN).toBe("configured-token")
+          expect(env.OPENAI_API_KEY).toBe("explicit-openai-token")
+        } finally {
+          if (previous.OPENAI_API_KEY === undefined) delete process.env.OPENAI_API_KEY
+          else process.env.OPENAI_API_KEY = previous.OPENAI_API_KEY
+          if (previous.MCP_PARENT_SECRET === undefined) delete process.env.MCP_PARENT_SECRET
+          else process.env.MCP_PARENT_SECRET = previous.MCP_PARENT_SECRET
+          if (previous.PATH === undefined) delete process.env.PATH
+          else process.env.PATH = previous.PATH
+        }
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "local opencode mcp command keeps bun compatibility env without inheriting secrets",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        const previous = process.env.ANTHROPIC_API_KEY
+        process.env.ANTHROPIC_API_KEY = "parent-anthropic-secret"
+
+        try {
+          lastCreatedClientName = "opencode-child"
+          yield* mcp.add("opencode-child", { type: "local", command: ["opencode", "mcp"] })
+
+          const env = stdioOptsByName.get("opencode-child")?.env
+          expect(env.BUN_BE_BUN).toBe("1")
+          expect(env.ANTHROPIC_API_KEY).toBeUndefined()
+        } finally {
+          if (previous === undefined) delete process.env.ANTHROPIC_API_KEY
+          else process.env.ANTHROPIC_API_KEY = previous
+        }
       }),
     ),
   { config: { mcp: {} } },
