@@ -32,8 +32,6 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
-import { EventV2Bridge } from "@/event-v2-bridge"
-import { EventV2 } from "@opencode-ai/core/event"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 
@@ -1318,9 +1316,6 @@ export const layer = Layer.effect(
     const plugin = yield* Plugin.Service
     const modelsDevSvc = yield* ModelsDev.Service
     const runtimeFlags = yield* RuntimeFlags.Service
-    const eventBridge = yield* EventV2Bridge.Service
-    const context = yield* Effect.context()
-    const runFork = Effect.runForkWith(context)
 
     const state = yield* InstanceState.make<State>(() =>
       Effect.gen(function* () {
@@ -1347,8 +1342,6 @@ export const layer = Layer.effect(
           config: () => config.get(),
           env: () => env.all(),
           get: (key: string) => env.get(key),
-          bridge: eventBridge,
-          runFork,
         }
 
         function mergeProvider(providerID: ProviderV2.ID, provider: Partial<Info>) {
