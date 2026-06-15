@@ -226,12 +226,20 @@ export type TuiPromptApi = {
    *  changes. */
   ref(): TuiPromptRef | undefined
   /** Subscribe to prompt content changes (per keystroke / programmatic
-   *  edit). Survives prompt remounts. Returns a disposer. */
+   *  edit). Survives prompt remounts. Returns a disposer. Note:
+   *  per-channel reentrancy is guarded (a nested same-channel emit is
+   *  dropped), but a subscriber that mutates the OTHER channel which in
+   *  turn mutates this one can form a synchronous A→B→A loop. Plugins
+   *  MUST NOT create circular cross-channel mutations. */
   onChange(callback: () => void): () => void
   /** Subscribe to prompt cursor moves (arrows, click positioning, drag,
    *  word-moves, paste, delete, undo/redo). Deduplicated per offset — one
    *  callback per logical move. Survives prompt remounts. Returns a
-   *  disposer. */
+   *  disposer. Note: per-channel reentrancy is guarded (a nested
+   *  same-channel emit is dropped), but a subscriber that mutates the
+   *  OTHER channel which in turn mutates this one can form a synchronous
+   *  A→B→A loop. Plugins MUST NOT create circular cross-channel
+   *  mutations. */
   onCursorChange(callback: () => void): () => void
 }
 

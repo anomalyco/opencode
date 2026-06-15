@@ -93,3 +93,26 @@ describe("prompt ref context", () => {
     dispose()
   })
 })
+
+test("onChange handler that emits a cursor change is NOT dropped (cross-channel)", () => {
+  const ctx = createPromptRefContextValue()
+  let cursorFired = 0
+  ctx.onCursorChange(() => cursorFired++)
+  ctx.onChange(() => {
+    // a plugin reacting to content by moving the cursor → triggers emitCursorChange
+    ctx.emitCursorChange()
+  })
+  ctx.emitChange()
+  expect(cursorFired).toBe(1) // was 0 with the shared `emitting` flag
+})
+
+test("same-channel reentrancy is still guarded (no infinite loop)", () => {
+  const ctx = createPromptRefContextValue()
+  let n = 0
+  ctx.onChange(() => {
+    n++
+    if (n < 5) ctx.emitChange() // re-entrant same-channel emit must be dropped
+  })
+  ctx.emitChange()
+  expect(n).toBe(1)
+})
