@@ -1356,10 +1356,20 @@ function UserMessage(props: {
 }) {
   const ctx = use()
   const local = useLocal()
+  // Agent-message markers (✉ lines injected on a user message by the message
+  // tool / task tool's awaiting-reply path) are non-synthetic so they remain
+  // visible, but they aren't user prose — tag them via metadata.message at
+  // write-time and split them off here so they render as a distinct system-
+  // event line below the user text rather than masquerading as user input.
+  const isMessage = (
+    x: Part,
+  ): x is TextPart & {
+    metadata: { message: { direction: "in" | "out"; peer: "parent" | "subagent"; expectReply?: boolean } }
+  } => x.type === "text" && !!(x.metadata as { message?: unknown } | undefined)?.message
   const text = createMemo(() => {
     const texts = props.parts
       .map((x) => {
-        if (x.type === "text" && !x.synthetic) {
+        if (x.type === "text" && !x.synthetic && !isMessage(x)) {
           return x.text
         }
         return null
@@ -1367,6 +1377,7 @@ function UserMessage(props: {
       .filter(Boolean)
     return texts.join("\n\n")
   })
+  const messages = createMemo(() => props.parts.filter(isMessage))
   const files = createMemo(() => props.parts.flatMap((x) => (x.type === "file" ? [x] : [])))
   const { theme } = useTheme()
   const [hover, setHover] = createSignal(false)
@@ -1439,6 +1450,16 @@ function UserMessage(props: {
           </box>
         </box>
       </Show>
+      <For each={messages()}>
+        {(part) => (
+          <box marginTop={1} paddingLeft={3}>
+            <text fg={theme.textMuted}>
+              <span style={{ fg: theme.textMuted, bold: true }}>Message</span>
+              <span style={{ fg: theme.textMuted }}> · {part.text}</span>
+            </text>
+          </box>
+        )}
+      </For>
       <Show when={compaction()}>
         <box
           marginTop={1}

@@ -1,9 +1,11 @@
-import { Effect, Schema, Scope, Option } from "effect"
+import { Effect, Option, Schema, Scope } from "effect"
 import * as Tool from "./tool"
 import { Messaging } from "../messaging"
 import { Session } from "@/session/session"
 import { BackgroundJob } from "@/background/job"
-import { SessionID } from "../session/schema"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { MessageID, PartID, SessionID } from "../session/schema"
+import { MessageV2 } from "../session/message-v2"
 import type { TaskPromptOps } from "./task"
 import DESCRIPTION from "./message.txt"
 
@@ -26,6 +28,9 @@ type Metadata = {
   target: string
   expect_reply: boolean
 }
+
+export type MessageMarkerDirection = "in" | "out"
+export type MessageMarkerPeer = "parent" | "subagent"
 
 export const MessageTool = Tool.define<
   typeof Parameters,
@@ -53,9 +58,10 @@ export const MessageTool = Tool.define<
       if (params.target === "subagent") {
         if (!params.task_id)
           return yield* Effect.fail(new Error('message(target:"subagent") requires task_id'))
+        const childID = SessionID.make(params.task_id)
         yield* messaging
           .reply({
-            childSessionID: SessionID.make(params.task_id),
+            childSessionID: childID,
             body: params.body,
             callerSessionID: ctx.sessionID,
           })
@@ -64,6 +70,21 @@ export const MessageTool = Tool.define<
               Effect.fail(new Error(`No subagent is awaiting a reply for task_id ${params.task_id}`)),
             ),
           )
+        // Visible "✉ Reply from parent" marker in the SUBAGENT transcript and
+        // "✉ Replied to subagent" echo in the PARENT (sender) transcript.
+        // Best-effort: a marker write failure must not undo the delivered reply.
+        yield* writeMarker(sessions, {
+          sessionID: childID,
+          direction: "in",
+          peer: "parent",
+          body: params.body,
+        }).pipe(Effect.ignore)
+        yield* writeMarker(sessions, {
+          sessionID: ctx.sessionID,
+          direction: "out",
+          peer: "subagent",
+          body: params.body,
+        }).pipe(Effect.ignore)
         return {
           title: "Replied to subagent",
           metadata: { target: params.target, expect_reply: false },
@@ -104,6 +125,12 @@ export const MessageTool = Tool.define<
       // inject() returns Effect<void>. The only async failure is the forked ops.prompt call,
       // which is intentionally ignored (fire-and-forget injection). The ops-presence check is
       // hoisted above so inject() itself cannot fail for that reason.
+      //
+      // We push TWO parts to the parent's new user message:
+      //   1. synthetic <agent_message> frame — the model reads this and is told how to reply.
+      //   2. non-synthetic ✉ Message marker — the human reading the TUI sees a distinct line.
+      // The TUI's UserMessage filters synthetic parts out of the prose memo and routes the
+      // metadata.message-tagged part into a separate muted marker row (mirrors interrupt UX).
       const inject = Effect.fn("MessageTool.inject")(function* () {
         const parent = yield* sessions.get(parentID)
         yield* ops!
@@ -115,6 +142,11 @@ export const MessageTool = Tool.define<
                 type: "text",
                 synthetic: true,
                 text: renderInbound(ctx.sessionID, params.body, expectReply),
+              },
+              {
+                type: "text",
+                text: renderMarker({ direction: "in", peer: "subagent", body: params.body, expectReply }),
+                metadata: { message: { direction: "in", peer: "subagent", expectReply } },
               },
             ],
           })
@@ -128,7 +160,7 @@ export const MessageTool = Tool.define<
         ? background.message(ctx.sessionID, payload).pipe(Effect.asVoid)
         : inject().pipe(Effect.orDie)
 
-      return yield* messaging
+      const result = yield* messaging
         .send({
           childSessionID: ctx.sessionID,
           parentSessionID: parentID,
@@ -144,6 +176,7 @@ export const MessageTool = Tool.define<
               onNone: () => "Message delivered to the parent agent.",
               onSome: (text) => `Parent replied: ${text}`,
             }),
+            reply,
           })),
           // Timeout and parent-gone are non-fatal: the subagent continues.
           Effect.catchTags({
@@ -152,15 +185,43 @@ export const MessageTool = Tool.define<
                 title: "Parent did not reply",
                 metadata: { target: params.target, expect_reply: expectReply },
                 output: "Parent did not reply within the timeout; proceeding without an answer.",
+                reply: Option.none<string>(),
               }),
             "Messaging.RejectedError": () =>
               Effect.succeed({
                 title: "Parent unavailable",
                 metadata: { target: params.target, expect_reply: expectReply },
                 output: "Parent agent is no longer available; proceeding without an answer.",
+                reply: Option.none<string>(),
               }),
           }),
         )
+
+      // Sender-echo "✉ Sent to parent" in the SUBAGENT transcript. Best-effort.
+      yield* writeMarker(sessions, {
+        sessionID: ctx.sessionID,
+        direction: "out",
+        peer: "parent",
+        body: params.body,
+        expectReply,
+      }).pipe(Effect.ignore)
+      // Incoming "✉ Reply from parent" in the SUBAGENT transcript when the reply arrived
+      // here (Channel A path). Channel B replies arrive via the parent's message tool,
+      // which writes the subagent-side incoming marker on its own.
+      if (Option.isSome(result.reply)) {
+        yield* writeMarker(sessions, {
+          sessionID: ctx.sessionID,
+          direction: "in",
+          peer: "parent",
+          body: result.reply.value,
+        }).pipe(Effect.ignore)
+      }
+
+      return {
+        title: result.title,
+        metadata: result.metadata,
+        output: result.output,
+      }
     })
 
     return {
@@ -187,3 +248,73 @@ function renderInbound(childSessionID: SessionID, body: string, expectReply: boo
       : `</agent_message>`,
   ].join("\n")
 }
+
+// Build the user-visible transcript marker for a message-tool event.
+// Bodies travel into the model too (the marker is non-synthetic and non-ignored
+// so the TUI can render it without changing the visibility predicate), so the
+// untrusted body is XML-escaped with the same scheme as the synthetic frame.
+export function renderMarker(input: {
+  direction: MessageMarkerDirection
+  peer: MessageMarkerPeer
+  body: string
+  expectReply?: boolean
+}) {
+  const verb = renderVerb(input)
+  return `✉ ${verb}: ${escapeBody(input.body)}`
+}
+
+function renderVerb(input: { direction: MessageMarkerDirection; peer: MessageMarkerPeer; expectReply?: boolean }) {
+  if (input.direction === "in" && input.peer === "subagent")
+    return input.expectReply ? "Message from subagent (awaiting your reply)" : "Message from subagent"
+  if (input.direction === "in" && input.peer === "parent") return "Reply from parent"
+  if (input.direction === "out" && input.peer === "parent") return "Sent to parent"
+  return "Replied to subagent"
+}
+
+// Write a visible ✉ marker into a session's transcript as a new user-role message
+// carrying a single non-synthetic text part tagged with metadata.message. Mirrors
+// the abortChild pattern in interrupt.ts: derive agent/model from the most recent
+// user message of the target session (real subagent sessions have no session.model
+// — the model lives on user messages), and skip cleanly when the session has no
+// prior user message (a session must have at least one user message to render
+// anything; this guards purely defensively).
+export const writeMarker = (
+  sessions: Session.Interface,
+  input: {
+    sessionID: SessionID
+    direction: MessageMarkerDirection
+    peer: MessageMarkerPeer
+    body: string
+    expectReply?: boolean
+  },
+) =>
+  Effect.gen(function* () {
+    const messages = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.option)
+    if (Option.isNone(messages)) return
+    const { user: lastUser } = MessageV2.latest(messages.value)
+    if (!lastUser) return
+    const msg: SessionV1.User = {
+      id: MessageID.ascending(),
+      sessionID: input.sessionID,
+      role: "user",
+      time: { created: Date.now() },
+      agent: lastUser.agent,
+      model: lastUser.model,
+    }
+    yield* sessions.updateMessage(msg)
+    yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: msg.id,
+      sessionID: input.sessionID,
+      type: "text",
+      text: renderMarker(input),
+      synthetic: false,
+      metadata: {
+        message: {
+          direction: input.direction,
+          peer: input.peer,
+          ...(input.expectReply !== undefined ? { expectReply: input.expectReply } : {}),
+        },
+      },
+    } satisfies SessionV1.TextPart)
+  })
