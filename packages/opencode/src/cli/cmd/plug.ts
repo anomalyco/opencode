@@ -1,3 +1,5 @@
+import { EOL } from "os"
+
 import { intro, log, outro, spinner } from "@clack/prompts"
 import { Effect } from "effect"
 
@@ -44,8 +46,21 @@ export type PlugCtx = {
   directory: string
 }
 
+// The clack spinner relies on carriage returns and ANSI escape sequences to
+// animate in place. In a non-TTY (CI, subprocess, PowerShell pipe) those are
+// not interpreted, so every frame lands on its own line. Fall back to plain
+// static text when stdout is not a terminal.
+function staticSpinner(): Spin {
+  return {
+    start: (msg) => process.stdout.write(msg + EOL),
+    stop: (msg) => {
+      if (msg) process.stdout.write(msg + EOL)
+    },
+  }
+}
+
 const defaultPlugDeps: PlugDeps = {
-  spinner: () => spinner(),
+  spinner: () => (process.stdout.isTTY ? spinner() : staticSpinner()),
   log: {
     error: (msg) => log.error(msg),
     info: (msg) => log.info(msg),
