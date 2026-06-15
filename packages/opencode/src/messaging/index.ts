@@ -97,6 +97,10 @@ export interface Interface {
     body: string
   }) => Effect.Effect<void, AbuseError | NotFoundError>
   readonly drain: (sessionID: SessionID) => Effect.Effect<ReadonlyArray<InboxItem>>
+  readonly awaitInbox: (
+    sessionID: SessionID,
+    opts: { timeoutMs: number },
+  ) => Effect.Effect<boolean>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Messaging") {}
@@ -299,6 +303,19 @@ export const layer = Layer.effect(
       return q
     })
 
+    const awaitInbox: Interface["awaitInbox"] = Effect.fn("Messaging.awaitInbox")(function* (
+      sessionID,
+      opts,
+    ) {
+      const v = yield* InstanceState.get(state)
+      if ((v.inbox.get(sessionID)?.length ?? 0) > 0) return true
+      const d = yield* Deferred.make<void>()
+      v.waiters.set(sessionID, d)
+      const woke = yield* Deferred.await(d).pipe(Effect.timeoutOption(Duration.millis(opts.timeoutMs)))
+      v.waiters.delete(sessionID)
+      return Option.isSome(woke)
+    })
+
     return Service.of({
       send,
       reply,
@@ -311,6 +328,7 @@ export const layer = Layer.effect(
       slugFor,
       enqueue,
       drain,
+      awaitInbox,
     })
   }),
 )

@@ -84,3 +84,22 @@ it.instance("over-budget send (M) fails with AbuseError", () =>
     expect(r._tag).toBe("Messaging.AbuseError")
   }),
 )
+
+it.instance("awaitInbox returns true when inbox already has items", () =>
+  Effect.gen(function* () {
+    const m = yield* Messaging.Service
+    const s = SessionID.make("ses_iiiiiiiiiiiiiiiiiiiiiiiiii")
+    yield* m.registerSlug("x", s)
+    yield* m.enqueue({ target: s, from: s, fromSlug: "x", body: "q" })
+    expect(yield* m.awaitInbox(s, { timeoutMs: 50 })).toBe(true)
+  }),
+)
+
+it.instance("awaitInbox resolves false on timeout when inbox stays empty", () =>
+  Effect.gen(function* () {
+    const m = yield* Messaging.Service
+    const s = SessionID.make("ses_jjjjjjjjjjjjjjjjjjjjjjjjjj")
+    yield* m.registerSlug("y", s)
+    expect(yield* m.awaitInbox(s, { timeoutMs: 30 })).toBe(false)
+  }),
+)
