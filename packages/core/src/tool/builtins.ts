@@ -1,6 +1,8 @@
 export * as BuiltInTools from "./builtins"
 
 import { Layer } from "effect"
+import { BackgroundJob } from "../background-job"
+import { ShellJob } from "../shell-job"
 import { BashTool } from "./bash"
 import { ApplyPatchTool } from "./apply-patch"
 import { EditTool } from "./edit"
@@ -41,4 +43,4 @@ export const locationLayer = Layer.mergeAll(
   WebFetchTool.layer,
   WebSearchTool.layer.pipe(Layer.provide(WebSearchTool.defaultConfigLayer)),
   WriteTool.layer,
-)
+).pipe(Layer.provide(ShellJob.defaultLayer), Layer.provide(BackgroundJob.defaultLayer))

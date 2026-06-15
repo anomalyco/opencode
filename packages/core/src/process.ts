@@ -27,6 +27,11 @@ export interface RunStreamOptions {
   readonly maxErrorBytes?: number
 }
 
+export interface RunObservedOptions extends RunOptions {
+  readonly onStdout?: (chunk: string) => Effect.Effect<void>
+  readonly onStderr?: (chunk: string) => Effect.Effect<void>
+}
+
 export interface RunResult {
   readonly command: string
   readonly exitCode: number
@@ -38,6 +43,10 @@ export interface RunResult {
 
 export type Interface = ChildProcessSpawner["Service"] & {
   readonly run: (command: ChildProcess.Command, options?: RunOptions) => Effect.Effect<RunResult, AppProcessError>
+  readonly runObserved: (
+    command: ChildProcess.Command,
+    options?: RunObservedOptions,
+  ) => Effect.Effect<RunResult & { readonly timedOut?: boolean }, AppProcessError>
   readonly runStream: (
     command: ChildProcess.Command,
     options?: RunStreamOptions,
@@ -126,6 +135,29 @@ export const collectStream = (stream: Stream.Stream<Uint8Array, PlatformError>, 
     },
   ).pipe(Effect.map((x) => ({ buffer: Buffer.concat(x.chunks), truncated: x.truncated })))
 
+const makeCollector = (maxOutputBytes: number | undefined, onChunk?: (chunk: string) => Effect.Effect<void>) => {
+  const chunks: Uint8Array[] = []
+  let bytes = 0
+  let truncated = false
+  const collect = (chunk: Uint8Array) =>
+    Effect.gen(function* () {
+      if (maxOutputBytes === undefined) {
+        chunks.push(chunk)
+        bytes += chunk.length
+      } else {
+        const remaining = maxOutputBytes - bytes
+        if (remaining > 0) chunks.push(remaining >= chunk.length ? chunk : chunk.slice(0, remaining))
+        bytes += chunk.length
+        truncated = truncated || bytes > maxOutputBytes
+      }
+      if (onChunk) yield* onChunk(new TextDecoder().decode(chunk))
+    })
+  return {
+    collect,
+    snapshot: () => ({ buffer: Buffer.concat(chunks), truncated }),
+  }
+}
+
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -185,6 +217,67 @@ export const layer = Layer.effect(
       return yield* runCommand(next, options)
     })
 
+    const runObserved = Effect.fn("AppProcess.runObserved")(function* (
+      command: ChildProcess.Command,
+      options?: RunObservedOptions,
+    ) {
+      if (options?.stdin !== undefined && command._tag !== "StandardCommand") {
+        return yield* new AppProcessError({
+          command: describeCommand(command),
+          cause: new Error("stdin option only supports StandardCommand; received PipedCommand"),
+        })
+      }
+      const description = describeCommand(command)
+      const next =
+        options?.stdin === undefined || command._tag !== "StandardCommand"
+          ? command
+          : ChildProcess.make(command.command, command.args, {
+              ...command.options,
+              stdin: normalizeStdin(options.stdin),
+            })
+      return yield* Effect.scoped(
+        Effect.gen(function* () {
+          const handle = yield* spawner.spawn(next)
+          const stdout = makeCollector(options?.maxOutputBytes, options?.onStdout)
+          const stderr = makeCollector(options?.maxErrorBytes, options?.onStderr)
+          const stdoutFiber = yield* Stream.runForEach(handle.stdout, stdout.collect).pipe(Effect.forkScoped)
+          const stderrFiber = yield* Stream.runForEach(handle.stderr, stderr.collect).pipe(Effect.forkScoped)
+          const exit = handle.exitCode.pipe(Effect.map((exitCode) => ({ status: "exit" as const, exitCode })))
+          const timed = options?.timeout
+            ? Effect.raceFirst(
+                exit,
+                Effect.sleep(options.timeout).pipe(Effect.map(() => ({ status: "timeout" as const }))),
+              )
+            : exit
+          const raced = options?.signal
+            ? Effect.raceFirst(
+                timed,
+                waitForAbort(options.signal).pipe(Effect.map(() => ({ status: "abort" as const }))),
+              )
+            : timed
+          const result = yield* raced
+          if (result.status !== "exit") {
+            yield* handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.ignore)
+          } else {
+            yield* Effect.sleep(25).pipe(Effect.ignore)
+          }
+          yield* Fiber.interrupt(stdoutFiber).pipe(Effect.ignore)
+          yield* Fiber.interrupt(stderrFiber).pipe(Effect.ignore)
+          const out = stdout.snapshot()
+          const err = stderr.snapshot()
+          return {
+            command: description,
+            exitCode: result.status === "exit" ? result.exitCode : -1,
+            stdout: out.buffer,
+            stderr: err.buffer,
+            stdoutTruncated: out.truncated,
+            stderrTruncated: err.truncated,
+            ...(result.status === "timeout" ? { timedOut: true } : {}),
+          }
+        }),
+      ).pipe(Effect.catch((cause) => Effect.fail(wrapError(description, cause))))
+    })
+
     const runStream = (
       command: ChildProcess.Command,
       options?: RunStreamOptions,
@@ -226,7 +319,7 @@ export const layer = Layer.effect(
       )
     }
 
-    return Service.of({ ...spawner, run, runStream })
+    return Service.of({ ...spawner, run, runObserved, runStream })
   }),
 )
 

@@ -12,6 +12,8 @@ import { PermissionV2 } from "@opencode-ai/core/permission"
 import { AppProcess } from "@opencode-ai/core/process"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { BackgroundJob } from "@opencode-ai/core/background-job"
+import { ShellJob } from "@opencode-ai/core/shell-job"
 import { BashTool } from "@opencode-ai/core/tool/bash"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { location } from "./fixture/location"
@@ -107,6 +109,8 @@ const withTool = <A, E, R>(
     Layer.provide(permission),
     Layer.provide(mutation),
     Layer.provide(filesystem),
+    Layer.provide(ShellJob.defaultLayer),
+    Layer.provide(BackgroundJob.defaultLayer),
     Layer.provide(processLayer),
     Layer.provide(config),
   )
@@ -121,6 +125,12 @@ const call = (input: typeof BashTool.Input.Type, id = "call-bash") => ({
   call: { type: "tool-call" as const, id, name: "bash", input },
 })
 
+const toolCall = (name: string, input: unknown, id = `call-${name}`) => ({
+  sessionID,
+  ...toolIdentity,
+  call: { type: "tool-call" as const, id, name, input },
+})
+
 const it = testEffect(Layer.empty)
 
 describe("BashTool", () => {
@@ -132,8 +142,14 @@ describe("BashTool", () => {
         return withTool(tmp.path, (registry) =>
           Effect.gen(function* () {
             const definitions = yield* toolDefinitions(registry)
-            expect(definitions.map((tool) => tool.name)).toEqual(["bash"])
-            expect(definitions[0]?.inputSchema).not.toHaveProperty("properties.background")
+            expect(definitions.map((tool) => tool.name)).toEqual([
+              "bash",
+              "shell_status",
+              "shell_wait",
+              "shell_cancel",
+              "shell_logs",
+            ])
+            expect(definitions[0]?.inputSchema).toHaveProperty("properties.background")
             expect(yield* toolDefinitions(registry, [{ action: "bash", resource: "*", effect: "deny" }])).toEqual([])
             expect(
               yield* settleTool(registry, call({ command: "pwd", description: "Print working directory" })),
@@ -391,6 +407,81 @@ describe("BashTool", () => {
               })
             }),
           ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("runs managed background shell jobs with status, logs, wait, and cancel", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const command = `${JSON.stringify(process.execPath)} -e ${JSON.stringify(
+          "console.log('ready'); setInterval(() => console.log('tick'), 100)",
+        )}`
+        return withTool(
+          tmp.path,
+          (registry) =>
+            Effect.gen(function* () {
+              const started = Date.now()
+              const launched = yield* settleTool(
+                registry,
+                call({ command, background: true, description: "Start background node loop" }),
+              )
+              expect(Date.now() - started).toBeLessThan(900)
+              const jobId = (launched.output?.structured as { jobId?: string }).jobId
+              expect(jobId).toMatch(/^shell_/)
+              expect(launched.output?.structured).toMatchObject({ status: "running" })
+
+              const logs = yield* settleTool(registry, toolCall("shell_logs", { jobId, lines: 5 }))
+              expect(logs.result).toMatchObject({ type: "text", value: expect.stringContaining("ready") })
+
+              const waited = yield* settleTool(registry, toolCall("shell_wait", { jobId, timeout: 10 }))
+              expect(waited.output?.structured).toMatchObject({ status: "running" })
+
+              const cancelled = yield* settleTool(registry, toolCall("shell_cancel", { jobId }))
+              expect(cancelled.output?.structured).toMatchObject({ status: "cancelled" })
+
+              const status = yield* settleTool(registry, toolCall("shell_status", { jobId }))
+              expect(status.output?.structured).toMatchObject({ status: "cancelled" })
+            }),
+          AppProcess.defaultLayer,
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("returns final fields when a background command exits during initial preview", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withTool(
+          tmp.path,
+          (registry) =>
+            Effect.gen(function* () {
+              const settled = yield* settleTool(
+                registry,
+                call({
+                  command: `${JSON.stringify(process.execPath)} -e ${JSON.stringify("console.log('done')")}`,
+                  background: true,
+                  description: "Run quick background command",
+                }),
+              )
+              expect(settled.output?.structured).toMatchObject({
+                status: "exited",
+                exitCode: 0,
+                output: expect.stringContaining("done"),
+              })
+              expect(settled.result).toMatchObject({
+                type: "text",
+                value: expect.stringContaining("Background shell job"),
+              })
+            }),
+          AppProcess.defaultLayer,
         )
       },
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
