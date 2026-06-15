@@ -1163,15 +1163,32 @@
   width: 96px;
 }
 
-/* C-3 첨부(+) 버튼 — 원형 토글. 열리면 회전해 X 모양 강조 */
+/* C-3 액션 바 — 본문(흰색)보다 살짝 따뜻한 회백색(paper) 톤으로 분리 (디자인 --c-paper) */
+[data-component="prompt-doc-actions"] {
+  background: color-mix(in srgb, var(--app-canvas) 46%, var(--app-paper)) !important;
+}
+
+/* C-3 첨부(+) 버튼 — 원형 토글. 테두리 링 + 열리면 잉크색으로 채워지고 회전 */
 .oc-attach-btn {
   border-radius: 999px !important;
+  border: 1px solid var(--border-strong-base) !important;
+  background: transparent !important;
   transition: background var(--duration-150) var(--ease-standard),
+              border-color var(--duration-150) var(--ease-standard),
               transform var(--duration-base) var(--ease-standard);
 }
+.oc-attach-btn:hover:not(:disabled) {
+  background: var(--surface-base-hover) !important;
+  border-color: var(--border-strong-hover) !important;
+}
 .oc-attach-btn.is-open {
-  background: var(--surface-base-active) !important;
+  background: var(--icon-strong-base) !important;
+  border-color: var(--icon-strong-base) !important;
   transform: rotate(45deg);
+}
+.oc-attach-btn.is-open [data-component="icon"],
+.oc-attach-btn.is-open [data-slot="icon-svg"] {
+  color: var(--icon-invert-base) !important;
 }
 
 /* 첨부 메뉴 — 버튼 위로 확장되는 팝오버 (이미지·파일) */
@@ -1298,6 +1315,9 @@
 
 :root[data-theme="jitda"] [data-component="codle-session-frame"] {
   border-width: 0 1px 0 0;
+  /* 디자인(.oc-split-handle::before)의 hairline 과 동일한 색으로 정적 구분선을 맞춘다.
+     핸들이 렌더되지 않는 상태(컴포저 확장·모바일)에서도 이 테두리가 구분선으로 남는다. */
+  border-right-color: var(--border-base);
   border-radius: 0;
   box-shadow: none;
   /* 디자인(oc-canvas-grid)처럼 채팅 타임라인이 격자 배경을 갖도록 — 흰 프레임 배경을 투명으로 만들어
@@ -1311,6 +1331,12 @@
   box-shadow: none;
 }
 
+/* 사이드패널 안쪽 래퍼의 좌측 보더 제거 — 디자인엔 구분선이 하나뿐인데, 이 보더(border-weaker)가
+   좌 프레임 우측 테두리/핸들 ::before 와 1px 어긋나 겹쳐 두 줄로 보이게 만든다. 구분선은 핸들 쪽 하나로 통일. */
+:root[data-theme="jitda"] [data-component="codle-side-panel"] > div {
+  border-left-width: 0;
+}
+
 /* 좌·우(채팅↔미리보기) 섹션 리사이즈 핸들에만 적용 — 파일트리 등 다른 가로 핸들엔 영향 없음.
    gap 을 없앴으므로 손잡이를 디바이더(좌 프레임 우측 경계) 위에 오도록 offset 0(부모 인라인 7px 덮음).
    디바이더로 옮기면 좌 프레임·우 사이드패널이 핸들을 덮으므로 z-index 로 띄운다(컬럼이 스태킹 컨텍스트를
@@ -1318,4 +1344,51 @@
 :root[data-theme="jitda"] [data-component="resize-handle"][data-direction="horizontal"].session-panel-resize {
   --resize-gap-offset: 0px;
   z-index: 30;
+}
+
+/* 좌·우 분할 그립 — 디자인(viewer ?id=c4, .oc-split-grip)을 그대로 옮김. 평소엔 가운데 1px 디바이더
+   (좌 프레임 우측 테두리)만 보이고, 핸들 중앙엔 투명한 알약형 그립이 숨어 있다. hover 시 그립이
+   진해지고(text-base), 드래그 시 더 진해지며(text-strong) 길이가 40→52px 로 늘어 잡힌 느낌을 준다.
+   디자인 토큰 매핑: c-ink-3→text-base, c-ink→text-strong. */
+:root[data-theme="jitda"] [data-component="resize-handle"][data-direction="horizontal"].session-panel-resize > div {
+  width: 4px;
+  height: 40px;
+  border-radius: 999px;
+  background: transparent;
+  transition:
+    background-color 150ms cubic-bezier(0.2, 0, 0, 1),
+    height 150ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+:root[data-theme="jitda"] [data-component="resize-handle"][data-direction="horizontal"].session-panel-resize:hover > div {
+  background: var(--text-base);
+}
+
+:root[data-theme="jitda"] [data-component="resize-handle"][data-direction="horizontal"].session-panel-resize:active > div {
+  background: var(--text-strong);
+  height: 52px;
+}
+
+/* 디자인엔 hover 시 전체 높이 바가 없다 — 기본 ::after 풀하이트 바를 숨겨 알약형 그립만 노출. */
+:root[data-theme="jitda"] [data-component="resize-handle"][data-direction="horizontal"].session-panel-resize::after {
+  display: none;
+}
+
+/* 가운데 1px 구분선 — 디자인(.oc-split-handle::before)을 그대로 옮김. 프레임 우측 테두리 위에 정확히
+   겹치도록 핸들 중앙(50%)에 두고, z-index 30(핸들)으로 위에 올린다. hover/드래그 시 색이 진해진다
+   (border-base → border-strong-base). 토큰 매핑: c-hairline→border-base, c-hairline-strong→border-strong-base. */
+:root[data-theme="jitda"] [data-component="resize-handle"][data-direction="horizontal"].session-panel-resize::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  left: 50%;
+  width: 1px;
+  transform: translateX(-0.5px);
+  background: var(--border-base);
+  transition: background-color 150ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+:root[data-theme="jitda"] [data-component="resize-handle"][data-direction="horizontal"].session-panel-resize:hover::before,
+:root[data-theme="jitda"] [data-component="resize-handle"][data-direction="horizontal"].session-panel-resize:active::before {
+  background: var(--border-strong-base);
 }

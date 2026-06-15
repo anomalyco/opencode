@@ -53,9 +53,22 @@ function cursorLabels(editor: HTMLElement) {
   })
 }
 
+// Status Pill(디자인 시스템 07 ·해커톤 상태)의 "라운드 정도·세로 크기"만 이름표에 반영한다.
+// 색·폰트·좌우 패딩은 BlockSuite styleMap 값을 그대로 둔다. styleMap이 라벨을 다시 그려도
+// flip 루프가 매 refresh마다 재적용하므로 스타일이 유지된다.
+function dressCursorLabel(label: HTMLElement) {
+  label.style.borderRadius = "999px"
+  label.style.lineHeight = "1"
+  // BlockSuite 라벨엔 1px border가 있어(pill엔 없음) 세로 패딩 3px면 12+6+2=20px로
+  // Status Pill(11.5+8=20px) 높이와 정확히 맞는다. 4px면 2px 더 커진다.
+  label.style.paddingTop = "3px"
+  label.style.paddingBottom = "3px"
+}
+
 function flipCursorLabels(editor: HTMLElement) {
   const edge = editor.getBoundingClientRect().right - 8
   cursorLabels(editor).forEach((label) => {
+    dressCursorLabel(label)
     label.style.transform = ""
     label.style.transformOrigin = ""
     label.style.maxWidth = "160px"
