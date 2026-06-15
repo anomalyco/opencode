@@ -450,12 +450,6 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
           ),
     tokens,
   }
-  yield* Effect.logInfo("usage", {
-    input: tokens.input,
-    output: tokens.output,
-    cache_write: tokens.cache.write,
-    cache_read: tokens.cache.read,
-  })
   return result
 }
 
