@@ -382,7 +382,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
         local.session.promote(sessionDirectory, session.id)
         layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
-        navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+        // Preserve the query string (notably the host-passed ?user=id||name identity) on the new
+        // session url so the identity is not dropped when a session is created from the prompt.
+        navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}${window.location.search}${window.location.hash}`)
       }
     }
     if (!session) {

@@ -42,15 +42,19 @@ function DirectoryDataProvider(props: ParentProps<{ directory: string }>) {
     const recent = sync.data.session.find((s) => !s.parentID)
     if (!recent) return
     autoResumed = true
-    navigate(`/${slug()}/session/${recent.id}`, { replace: true })
+    // Carry the query string (notably the host-passed ?user=id||name identity) across the
+    // directory→session redirect; without it the param is dropped and the actor registers as a guest.
+    navigate(`/${slug()}/session/${recent.id}${location.search}${location.hash}`, { replace: true })
   })
 
   return (
     <DataProvider
       data={sync.data}
       directory={props.directory}
-      onNavigateToSession={(sessionID: string) => navigate(`/${slug()}/session/${sessionID}`)}
-      onSessionHref={(sessionID: string) => `/${slug()}/session/${sessionID}`}
+      onNavigateToSession={(sessionID: string) =>
+        navigate(`/${slug()}/session/${sessionID}${location.search}${location.hash}`)
+      }
+      onSessionHref={(sessionID: string) => `/${slug()}/session/${sessionID}${location.search}`}
       doc={(props) => <DocMessage id={props.id} fallback={props.fallback} />}
     >
       <LocalProvider>{props.children}</LocalProvider>

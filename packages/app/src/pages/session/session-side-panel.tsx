@@ -26,7 +26,7 @@ import { DiffTabContent } from "@/pages/session/diff-tab"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
-import { SessionPreviewPanel } from "@/pages/session/session-preview-panel"
+import { SessionPreviewPanel, SessionBrowserChrome, createSessionPreview } from "@/pages/session/session-preview-panel"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
 export function SessionSidePanel(props: {
@@ -168,6 +168,27 @@ export function SessionSidePanel(props: {
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
 
+  // 미리보기 우선: 콘텐츠가 미리보기뿐일 때는 탭 스트립을 숨긴다.
+  // 파일·컨텍스트 탭이 열리거나 리뷰 변경이 있을 때만 상단 탭 스트립을 노출(시안 OcBrowser showStrip 확장).
+  const showTabStrip = createMemo(() => openedTabs().length > 0 || contextOpen() || (reviewTab() && hasReview()))
+
+  // 미리보기 브라우저 chrome 바(시안 SafariChrome) — URL·새로고침 공유.
+  const preview = createSessionPreview()
+  const browserAddress = createMemo(() => {
+    const active = activeFileTab()
+    if (active) {
+      const path = pathFromContentTab(active)
+      if (path) return path
+    }
+    const url = preview.previewUrl()
+    if (!url) return undefined
+    try {
+      return new URL(url).host
+    } catch {
+      return url
+    }
+  })
+
   const fileTreeTab = () => (env.disableChangeFiles() ? "all" : layout.fileTree.tab())
 
   const setFileTreeTabValue = (value: string) => {
@@ -255,7 +276,14 @@ export function SessionSidePanel(props: {
               "pointer-events-none": !reviewOpen(),
             }}
           >
-            <div class="size-full min-w-0 h-full bg-background-base">
+            <div class="size-full min-w-0 h-full bg-background-base flex flex-col">
+              <SessionBrowserChrome
+                address={browserAddress()}
+                url={preview.previewUrl()}
+                onReload={preview.reload}
+                onHome={() => tabs().setActive("preview")}
+              />
+              <div class="flex-1 min-h-0">
               <DragDropProvider
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
@@ -265,6 +293,7 @@ export function SessionSidePanel(props: {
                 <DragDropSensors />
                 <ConstrainDragYAxis />
                 <Tabs value={activeTab()} onChange={openTab}>
+                  <Show when={showTabStrip()}>
                   <div class="sticky top-0 shrink-0 flex">
                     <Tabs.List
                       ref={(el: HTMLDivElement) => {
@@ -342,6 +371,7 @@ export function SessionSidePanel(props: {
                       </div>
                     </Tabs.List>
                   </div>
+                  </Show>
 
                   <Show when={reviewTab()}>
                     <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
@@ -352,7 +382,7 @@ export function SessionSidePanel(props: {
                   <Show when={previewTab()}>
                     <Tabs.Content value="preview" class="flex flex-col h-full overflow-hidden contain-strict">
                       <Show when={activeTab() === "preview"}>
-                        <SessionPreviewPanel />
+                        <SessionPreviewPanel src={preview.previewSrc()} />
                       </Show>
                     </Tabs.Content>
                   </Show>
@@ -406,6 +436,7 @@ export function SessionSidePanel(props: {
                   </Show>
                 </DragOverlay>
               </DragDropProvider>
+              </div>
             </div>
           </div>
 
@@ -512,7 +543,10 @@ export function SessionSidePanel(props: {
             </Show>
           </div>
           <Show when={reviewOpen() || fileOpen()}>
-            <TooltipKeybind title={language.t("command.fileTree.toggle")} keybind={command.keybind("fileTree.toggle")}>
+            <TooltipKeybind
+              title={language.t("session.header.open.fileExplorer")}
+              keybind={command.keybind("fileTree.toggle")}
+            >
               <IconButton
                 icon={fileOpen() ? "chevron-right" : "chevron-left"}
                 variant="secondary"
@@ -527,7 +561,7 @@ export function SessionSidePanel(props: {
                   event.stopPropagation()
                   layout.fileTree.toggle()
                 }}
-                aria-label={language.t("command.fileTree.toggle")}
+                aria-label={language.t("session.header.open.fileExplorer")}
                 aria-expanded={layout.fileTree.opened()}
                 aria-controls="file-tree-panel"
               />

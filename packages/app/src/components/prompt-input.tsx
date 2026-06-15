@@ -437,7 +437,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         if (accepting()) permission.enableAutoAccept(info.id, sdk.directory)
         local.session.promote(sdk.directory, info.id)
         layout.handoff.setTabs(base64Encode(sdk.directory), info.id)
-        navigate(`/${base64Encode(sdk.directory)}/session/${info.id}`)
+        // Preserve the query string (notably the host-passed ?user=id||name identity) on the new
+        // session url so the identity is not dropped when a session is created from the prompt.
+        navigate(`/${base64Encode(sdk.directory)}/session/${info.id}${window.location.search}${window.location.hash}`)
         return info.id
       })
       .catch(() => {

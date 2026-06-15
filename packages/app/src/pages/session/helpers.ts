@@ -52,6 +52,7 @@ export const createSessionTabs = (input: TabsInput) => {
     const first = openedTabs()[0]
     if (first) return first
     if (contextOpen()) return "context"
+    if (preview()) return "preview"
     if (review() && hasReview()) return "review"
     return "empty"
   })
