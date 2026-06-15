@@ -16,6 +16,7 @@ import { SessionMessageTable, SessionTable } from "./session/sql"
 import { SessionSchema } from "./session/schema"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema"
 import { AgentV2 } from "./agent"
+import { ProviderV2 } from "./provider"
 import { SessionV1 } from "./v1/session"
 import { InstallationVersion } from "./installation/version"
 import { Slug } from "./util/slug"
@@ -157,6 +158,7 @@ export interface Interface {
   readonly wait: (id: SessionSchema.ID) => Effect.Effect<void, NotFoundError | OperationUnavailableError>
   readonly resume: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | SessionRunner.RunError>
   readonly interrupt: (sessionID: SessionSchema.ID) => Effect.Effect<void>
+  readonly delete: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Session") {}
@@ -419,6 +421,48 @@ export const layer = Layer.effect(
           }),
         ),
       ),
+      delete: Effect.fn("V2Session.delete")(function* (sessionID) {
+        const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
+        if (!row) return yield* new NotFoundError({ sessionID })
+        const info = SessionV1.SessionInfo.make({
+          id: SessionSchema.ID.make(row.id),
+          slug: row.slug,
+          projectID: ProjectV2.ID.make(row.project_id),
+          workspaceID: row.workspace_id ? WorkspaceV2.ID.make(row.workspace_id) : undefined,
+          directory: row.directory,
+          path: row.path ?? undefined,
+          parentID: row.parent_id ? SessionSchema.ID.make(row.parent_id) : undefined,
+          title: row.title,
+          agent: row.agent ?? undefined,
+          model: row.model
+            ? {
+                id: ModelV2.ID.make(row.model.id),
+                providerID: ProviderV2.ID.make(row.model.providerID),
+                variant: row.model.variant,
+              }
+            : undefined,
+          version: row.version,
+          cost: row.cost,
+          tokens: {
+            input: row.tokens_input,
+            output: row.tokens_output,
+            reasoning: row.tokens_reasoning,
+            cache: {
+              read: row.tokens_cache_read,
+              write: row.tokens_cache_write,
+            },
+          },
+          time: {
+            created: row.time_created,
+            updated: row.time_updated,
+            archived: row.time_archived ?? undefined,
+          },
+        })
+        yield* events.publish(SessionV1.Event.Deleted, {
+          sessionID,
+          info,
+        })
+      }),
     })
 
     return result

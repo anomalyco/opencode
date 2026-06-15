@@ -206,6 +206,21 @@ export const SessionGroup = HttpApiGroup.make("server.session")
         }),
       ),
   )
+  .add(
+    HttpApiEndpoint.delete("session.delete", "/api/session/:sessionID", {
+      params: { sessionID: SessionV2.ID },
+      success: HttpApiSchema.NoContent,
+      error: SessionNotFoundError,
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.delete",
+          summary: "Delete session",
+          description: "Delete a session and all its messages.",
+        }),
+      ),
+  )
   .annotateMerge(
     OpenApi.annotations({
       title: "sessions",

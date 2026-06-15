@@ -160,3 +160,16 @@ class OpenCodeClient:
         """Получает список дочерних сессий (subagent/subtask)."""
         all_sessions = await self.get_all_sessions()
         return [s for s in all_sessions if s.get("parentID") == parent_id]
+
+    async def delete_session(self, session_id: str) -> bool:
+        """Удаляет сессию по ID."""
+        try:
+            async with self.session.delete(f"{self.base_url}/api/session/{session_id}") as resp:
+                if resp.status in (200, 204):
+                    logger.debug(f"Deleted session {session_id}")
+                    return True
+                logger.error(f"Failed to delete session: {resp.status}")
+                return False
+        except Exception as e:
+            logger.warning(f"Failed to delete session {session_id}: {e}")
+            return False

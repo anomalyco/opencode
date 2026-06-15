@@ -101,6 +101,12 @@ class SessionManager:
                 del self.seen_messages[session_id]
             if session_id in self.grant_mode:
                 del self.grant_mode[session_id]
+            if session_id in self.session_workdir:
+                del self.session_workdir[session_id]
+            # Удаляем записи о дочерних сессиях
+            for child_id in list(self.child_sessions.keys()):
+                if self.child_sessions[child_id] == session_id:
+                    del self.child_sessions[child_id]
             self._save()
             logger.info(f"Removed session for user {user_id}")
 

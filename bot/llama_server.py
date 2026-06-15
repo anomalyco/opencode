@@ -305,8 +305,16 @@ async def do_restart(
     import config
     importlib.reload(config)
 
-    # Шаг 6: Очищаем сессии текущего пользователя
+    # Шаг 6: Удаляем старую сессию из OpenCode сервера и очищаем локальный кэш
     if session_mgr:
+        session_id = session_mgr.sessions.get(user_id)
+        if session_id:
+            # Удаляем сессию из OpenCode сервера через API
+            from opencode_client import OpenCodeClient
+            async with OpenCodeClient() as client:
+                await client.delete_session(session_id)
+                logger.info(f"Deleted session {session_id} from OpenCode server")
+        # Удаляем из локального кэша
         session_mgr.remove(user_id)
         logger.info(
             f"Cleared session for user {user_id} after model switch to {alias}"
