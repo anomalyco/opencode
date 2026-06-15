@@ -29,7 +29,6 @@ type Metadata = {
   expect_reply: boolean
 }
 
-export type MessageMarkerDirection = "in" | "out"
 export type MessageMarkerPeer = "parent" | "subagent"
 
 export const MessageTool = Tool.define<
@@ -70,19 +69,12 @@ export const MessageTool = Tool.define<
               Effect.fail(new Error(`No subagent is awaiting a reply for task_id ${params.task_id}`)),
             ),
           )
-        // Visible "✉ Reply from parent" marker in the SUBAGENT transcript and
-        // "✉ Replied to subagent" echo in the PARENT (sender) transcript.
+        // Visible "✉ Reply from parent" marker in the SUBAGENT transcript.
+        // No parent-side echo: the message tool call already shows what was sent.
         // Best-effort: a marker write failure must not undo the delivered reply.
         yield* writeMarker(sessions, {
           sessionID: childID,
-          direction: "in",
           peer: "parent",
-          body: params.body,
-        }).pipe(Effect.ignore)
-        yield* writeMarker(sessions, {
-          sessionID: ctx.sessionID,
-          direction: "out",
-          peer: "subagent",
           body: params.body,
         }).pipe(Effect.ignore)
         return {
@@ -145,8 +137,8 @@ export const MessageTool = Tool.define<
               },
               {
                 type: "text",
-                text: renderMarker({ direction: "in", peer: "subagent", body: params.body, expectReply }),
-                metadata: { message: { direction: "in", peer: "subagent", expectReply } },
+                text: renderMarker({ peer: "subagent", body: params.body, expectReply }),
+                metadata: { message: { peer: "subagent", expectReply } },
               },
             ],
           })
@@ -176,7 +168,6 @@ export const MessageTool = Tool.define<
               onNone: () => "Message delivered to the parent agent.",
               onSome: (text) => `Parent replied: ${text}`,
             }),
-            reply,
           })),
           // Timeout and parent-gone are non-fatal: the subagent continues.
           Effect.catchTags({
@@ -185,37 +176,15 @@ export const MessageTool = Tool.define<
                 title: "Parent did not reply",
                 metadata: { target: params.target, expect_reply: expectReply },
                 output: "Parent did not reply within the timeout; proceeding without an answer.",
-                reply: Option.none<string>(),
               }),
             "Messaging.RejectedError": () =>
               Effect.succeed({
                 title: "Parent unavailable",
                 metadata: { target: params.target, expect_reply: expectReply },
                 output: "Parent agent is no longer available; proceeding without an answer.",
-                reply: Option.none<string>(),
               }),
           }),
         )
-
-      // Sender-echo "✉ Sent to parent" in the SUBAGENT transcript. Best-effort.
-      yield* writeMarker(sessions, {
-        sessionID: ctx.sessionID,
-        direction: "out",
-        peer: "parent",
-        body: params.body,
-        expectReply,
-      }).pipe(Effect.ignore)
-      // Incoming "✉ Reply from parent" in the SUBAGENT transcript when the reply arrived
-      // here (Channel A path). Channel B replies arrive via the parent's message tool,
-      // which writes the subagent-side incoming marker on its own.
-      if (Option.isSome(result.reply)) {
-        yield* writeMarker(sessions, {
-          sessionID: ctx.sessionID,
-          direction: "in",
-          peer: "parent",
-          body: result.reply.value,
-        }).pipe(Effect.ignore)
-      }
 
       return {
         title: result.title,
@@ -253,22 +222,15 @@ function renderInbound(childSessionID: SessionID, body: string, expectReply: boo
 // Bodies travel into the model too (the marker is non-synthetic and non-ignored
 // so the TUI can render it without changing the visibility predicate), so the
 // untrusted body is XML-escaped with the same scheme as the synthetic frame.
-export function renderMarker(input: {
-  direction: MessageMarkerDirection
-  peer: MessageMarkerPeer
-  body: string
-  expectReply?: boolean
-}) {
+export function renderMarker(input: { peer: MessageMarkerPeer; body: string; expectReply?: boolean }) {
   const verb = renderVerb(input)
   return `✉ ${verb}: ${escapeBody(input.body)}`
 }
 
-function renderVerb(input: { direction: MessageMarkerDirection; peer: MessageMarkerPeer; expectReply?: boolean }) {
-  if (input.direction === "in" && input.peer === "subagent")
+function renderVerb(input: { peer: MessageMarkerPeer; expectReply?: boolean }) {
+  if (input.peer === "subagent")
     return input.expectReply ? "Message from subagent (awaiting your reply)" : "Message from subagent"
-  if (input.direction === "in" && input.peer === "parent") return "Reply from parent"
-  if (input.direction === "out" && input.peer === "parent") return "Sent to parent"
-  return "Replied to subagent"
+  return "Reply from parent"
 }
 
 // Write a visible ✉ marker into a session's transcript as a new user-role message
@@ -282,7 +244,6 @@ export const writeMarker = (
   sessions: Session.Interface,
   input: {
     sessionID: SessionID
-    direction: MessageMarkerDirection
     peer: MessageMarkerPeer
     body: string
     expectReply?: boolean
@@ -311,7 +272,6 @@ export const writeMarker = (
       synthetic: false,
       metadata: {
         message: {
-          direction: input.direction,
           peer: input.peer,
           ...(input.expectReply !== undefined ? { expectReply: input.expectReply } : {}),
         },

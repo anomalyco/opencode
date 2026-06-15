@@ -355,7 +355,6 @@ export const TaskTool = Tool.define(
               // Best-effort: a marker write failure must not break the tool's return.
               yield* writeMessageMarker(sessions, {
                 sessionID: ctx.sessionID,
-                direction: "in",
                 peer: "subagent",
                 body: outcome.payload.body,
                 expectReply: true,
