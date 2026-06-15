@@ -1,18 +1,16 @@
 import { afterEach, describe, expect } from "bun:test"
 import path from "path"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { GlobalBus, type GlobalEvent } from "../../src/bus/global"
 import { Git } from "../../src/git"
-import { Instance } from "../../src/project/instance"
-import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { Worktree } from "../../src/worktree"
 import { disposeAllInstances, provideInstance, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
-  Layer.mergeAll(Worktree.defaultLayer, AppFileSystem.defaultLayer, CrossSpawnSpawner.defaultLayer, Git.defaultLayer),
+  Layer.mergeAll(Worktree.defaultLayer, FSUtil.defaultLayer, CrossSpawnSpawner.defaultLayer, Git.defaultLayer),
 )
 const wintest = process.platform !== "win32" ? it.instance : it.instance.skip
 
@@ -41,8 +39,6 @@ const waitReady = Effect.fn("WorktreeTest.waitReady")(function* () {
 const removeCreatedWorktree = (directory: string) =>
   Effect.gen(function* () {
     const svc = yield* Worktree.Service
-    const ctx = yield* Effect.sync(() => Instance.current).pipe(provideInstance(directory))
-    yield* Effect.promise(() => InstanceRuntime.disposeInstance(ctx))
     const ok = yield* svc.remove({ directory })
     if (!ok) return yield* Effect.fail(new Error(`failed to remove worktree ${directory}`))
   })
@@ -135,13 +131,17 @@ describe("Worktree", () => {
       { git: true },
     )
 
-    it.instance("throws NotGitError for non-git directories", () =>
+    it.instance("fails with NotGitError for non-git directories", () =>
       Effect.gen(function* () {
         const svc = yield* Worktree.Service
         const exit = yield* Effect.exit(svc.makeWorktreeInfo())
 
         expect(Exit.isFailure(exit)).toBe(true)
-        if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Worktree.NotGitError)
+        if (Exit.isFailure(exit)) {
+          const error = Cause.squash(exit.cause)
+          expect(error).toBeInstanceOf(Worktree.NotGitError)
+          if (error instanceof Worktree.NotGitError) expect(error._tag).toBe("WorktreeNotGitError")
+        }
       }),
     )
 
@@ -208,6 +208,22 @@ describe("Worktree", () => {
     )
 
     it.instance(
+      "lists the active linked worktree but not the project checkout",
+      () =>
+        withCreatedWorktree(undefined, ({ info }) =>
+          Effect.gen(function* () {
+            const test = yield* TestInstance
+            const svc = yield* Worktree.Service
+            const list = yield* svc.list().pipe(provideInstance(info.directory))
+
+            expect(list.map((item) => item.name)).toContain(info.name)
+            expect(list.map((item) => item.name)).not.toContain(path.basename(test.directory).toLowerCase())
+          }),
+        ),
+      { git: true },
+    )
+
+    it.instance(
       "create with custom name",
       () =>
         withCreatedWorktree({ name: "test-workspace" }, ({ info }) =>
@@ -249,7 +265,7 @@ describe("Worktree", () => {
       () =>
         Effect.gen(function* () {
           const test = yield* TestInstance
-          const fs = yield* AppFileSystem.Service
+          const fs = yield* FSUtil.Service
           const svc = yield* Worktree.Service
           const parent = path.join(path.dirname(test.directory), `${path.basename(test.directory)}-parent`)
           const target = path.join(parent, path.basename(test.directory))
@@ -286,14 +302,18 @@ describe("Worktree", () => {
       { git: true },
     )
 
-    it.instance("throws NotGitError for non-git directories", () =>
+    it.instance("fails with NotGitError for non-git directories", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
         const svc = yield* Worktree.Service
         const exit = yield* Effect.exit(svc.remove({ directory: path.join(test.directory, "fake") }))
 
         expect(Exit.isFailure(exit)).toBe(true)
-        if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(Worktree.NotGitError)
+        if (Exit.isFailure(exit)) {
+          const error = Cause.squash(exit.cause)
+          expect(error).toBeInstanceOf(Worktree.NotGitError)
+          if (error instanceof Worktree.NotGitError) expect(error._tag).toBe("WorktreeNotGitError")
+        }
       }),
     )
   })

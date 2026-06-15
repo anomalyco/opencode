@@ -82,6 +82,13 @@ describe("tool parameters", () => {
         properties: { value: { minimum: Number.MIN_SAFE_INTEGER, maximum: Number.MAX_SAFE_INTEGER } },
       })
     })
+
+    test("does not expose defaulted optional keys as nullable", () => {
+      expect(toJsonSchema(WebFetch)).toMatchObject({
+        properties: { format: { type: "string", enum: ["text", "markdown", "html"], default: "markdown" } },
+      })
+      expect(toJsonSchema(WebFetch).properties?.format).not.toHaveProperty("anyOf")
+    })
   })
 
   describe("apply_patch", () => {
@@ -235,6 +242,10 @@ describe("tool parameters", () => {
       const parsed = parse(Task, { description: "d", prompt: "p", subagent_type: "general" })
       expect(parsed.subagent_type).toBe("general")
     })
+    test("accepts optional background flag", () => {
+      const parsed = parse(Task, { description: "d", prompt: "p", subagent_type: "general", background: true })
+      expect(parsed.background).toBe(true)
+    })
     test("rejects missing prompt", () => {
       expect(accepts(Task, { description: "d", subagent_type: "general" })).toBe(false)
     })
@@ -253,8 +264,15 @@ describe("tool parameters", () => {
   })
 
   describe("webfetch", () => {
-    test("accepts url-only", () => {
-      expect(parse(WebFetch, { url: "https://example.com" }).url).toBe("https://example.com")
+    test("defaults omitted format to markdown", () => {
+      expect(parse(WebFetch, { url: "https://example.com" })).toEqual({
+        url: "https://example.com",
+        format: "markdown",
+      })
+      expect(parse(WebFetch, { url: "https://example.com", format: undefined })).toEqual({
+        url: "https://example.com",
+        format: "markdown",
+      })
     })
   })
 

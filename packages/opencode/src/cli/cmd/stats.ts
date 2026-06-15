@@ -1,8 +1,9 @@
 import { Effect } from "effect"
 import { effectCmd } from "../effect-cmd"
 import { Session } from "@/session/session"
-import { Database } from "@/storage/db"
-import { SessionTable } from "../../session/session.sql"
+import { NotFoundError } from "@/storage/storage"
+import { Database } from "@opencode-ai/core/database/database"
+import { SessionTable } from "@opencode-ai/core/session/sql"
 import { Project } from "@/project/project"
 import { InstanceRef } from "@/effect/instance-ref"
 
@@ -79,9 +80,10 @@ export const StatsCommand = effectCmd({
   }),
 })
 
-const getAllSessions = Effect.sync(() =>
-  Database.use((db) => db.select().from(SessionTable).all()).map((row) => Session.fromRow(row)),
-)
+const getAllSessions = Effect.fnUntraced(function* () {
+  const { db } = yield* Database.Service
+  return (yield* db.select().from(SessionTable).all().pipe(Effect.orDie)).map((row) => Session.fromRow(row))
+})
 
 const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
   days?: number,
@@ -89,7 +91,7 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
   currentProject?: Project.Info,
 ) {
   const svc = yield* Session.Service
-  const sessions = yield* getAllSessions
+  const sessions = yield* getAllSessions()
   const MS_IN_DAY = 24 * 60 * 60 * 1000
 
   const cutoffTime = (() => {
@@ -162,7 +164,9 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
     filteredSessions,
     (session) =>
       Effect.gen(function* () {
-        const messages = yield* svc.messages({ sessionID: session.id })
+        const messages = yield* svc
+          .messages({ sessionID: session.id })
+          .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed([])))
 
         const sessionCost = session.cost ?? 0
         const sessionTokens = session.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }

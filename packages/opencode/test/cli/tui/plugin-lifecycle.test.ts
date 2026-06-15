@@ -6,7 +6,7 @@ import { tmpdir } from "../../fixture/fixture"
 import { createTuiPluginApi } from "../../fixture/tui-plugin"
 import { mockTuiRuntime } from "../../fixture/tui-runtime"
 
-const { TuiPluginRuntime } = await import("../../../src/cli/cmd/tui/plugin/runtime")
+const { TuiPluginRuntime } = await import("../../../src/plugin/tui/runtime")
 
 test("runs onDispose callbacks with aborted signal and is idempotent", async () => {
   await using tmp = await tmpdir({
@@ -205,10 +205,10 @@ test(
     const { config, restore } = mockTuiRuntime(tmp.path, [tmp.extra.spec])
 
     try {
-      await TuiPluginRuntime.init({ api: createTuiPluginApi(), config })
+      await TuiPluginRuntime.init({ api: createTuiPluginApi(), config, disposeTimeoutMs: 25 })
 
       const done = await new Promise<string>((resolve) => {
-        const timer = setTimeout(() => resolve("timeout"), 7000)
+        const timer = setTimeout(() => resolve("timeout"), 500)
         void TuiPluginRuntime.dispose().then(() => {
           clearTimeout(timer)
           resolve("done")

@@ -46,6 +46,15 @@ export const dict = {
   "ui.sessionTurn.error.freeUsageExceeded": "تم تجاوز حد الاستخدام المجاني",
   "ui.sessionTurn.error.addCredits": "إضافة رصيد",
 
+  "dialog.usageExceeded.freeTier.title": "تم الوصول إلى الحد المجاني",
+  "dialog.usageExceeded.freeTier.description":
+    "اشترك في OpenCode Go للحصول على وصول موثوق إلى أفضل النماذج مفتوحة المصدر، ابتداءً من $5/شهر.",
+  "dialog.usageExceeded.freeTier.actionLabel": "اشترك",
+  "dialog.usageExceeded.accountRateLimit.title": "تم الوصول إلى حد Go",
+  "dialog.usageExceeded.accountRateLimit.description":
+    "تم الوصول إلى حد الاستخدام. لمتابعة استخدام هذا النموذج الآن، قم بتفعيل الاستخدام من رصيدك المتاح",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "فتح الإعدادات",
+
   "ui.sessionTurn.status.delegating": "تفويض العمل",
   "ui.sessionTurn.status.planning": "تخطيط الخطوات التالية",
   "ui.sessionTurn.status.gatheringContext": "استكشاف",

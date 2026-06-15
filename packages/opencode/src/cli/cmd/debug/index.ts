@@ -3,8 +3,6 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import os from "os"
 import { Duration, Effect } from "effect"
-import { Config } from "@/config/config"
-import { ConfigPlugin } from "@/config/plugin"
 import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
 import { ConfigCommand } from "./config"
@@ -16,6 +14,7 @@ import { SkillCommand } from "./skill"
 import { SnapshotCommand } from "./snapshot"
 import { AgentCommand } from "./agent"
 import { StartupCommand } from "./startup"
+import { V2Command } from "./v2"
 
 export const DebugCommand = cmd({
   command: "debug",
@@ -31,6 +30,7 @@ export const DebugCommand = cmd({
       .command(SnapshotCommand)
       .command(StartupCommand)
       .command(AgentCommand)
+      .command(V2Command)
       .command(InfoCommand)
       .command(PathsCommand)
       .command(WaitCommand)
@@ -50,6 +50,8 @@ const InfoCommand = effectCmd({
   command: "info",
   describe: "show debug information",
   handler: Effect.fn("Cli.debug.info")(function* () {
+    const { Config } = yield* Effect.promise(() => import("@/config/config"))
+    const { ConfigPlugin } = yield* Effect.promise(() => import("@/config/plugin"))
     const config = yield* Config.Service.use((cfg) => cfg.get())
     const termProgram = process.env.TERM_PROGRAM
       ? `${process.env.TERM_PROGRAM}${process.env.TERM_PROGRAM_VERSION ? ` ${process.env.TERM_PROGRAM_VERSION}` : ""}`

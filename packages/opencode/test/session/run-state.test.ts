@@ -1,7 +1,8 @@
 import { describe, expect } from "bun:test"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Context, Deferred, Effect, Fiber, Layer, Ref } from "effect"
-import { ModelID, ProviderID } from "@/provider/schema"
-import { MessageV2 } from "@/session/message-v2"
 import { SessionRunState } from "@/session/run-state"
 import { MessageID, SessionID } from "@/session/schema"
 import { testEffect } from "../lib/effect"
@@ -33,12 +34,12 @@ describe("SessionRunState", () => {
             cost: 0,
             path: { cwd: "/tmp", root: "/tmp" },
             tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-            modelID: ModelID.make("test-model"),
-            providerID: ProviderID.make("test"),
+            modelID: ModelV2.ID.make("test-model"),
+            providerID: ProviderV2.ID.make("test"),
             time: { created: 0 },
           },
           parts: [],
-        } satisfies MessageV2.WithParts
+        } satisfies SessionV1.WithParts
       })
 
       const first = yield* left.ensureRunning(sessionID, Effect.die("unexpected interrupt"), work).pipe(Effect.forkChild)

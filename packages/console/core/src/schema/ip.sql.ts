@@ -51,3 +51,13 @@ export const ModelTpsRateLimitTable = mysqlTable(
   },
   (table) => [primaryKey({ columns: [table.id, table.interval] })],
 )
+
+export const ModelStickyProviderTable = mysqlTable(
+  "model_sticky_provider",
+  {
+    id: varchar("id", { length: 255 }).notNull(),
+    ...timestamps,
+    providerId: varchar("provider_id", { length: 255 }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.id] })],
+)

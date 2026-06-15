@@ -1,13 +1,21 @@
-import type { Message, Session, Part, SnapshotFileDiff, SessionStatus, ProviderListResponse } from "@opencode-ai/sdk/v2"
+import type { Message, Session, Part, SnapshotFileDiff, SessionStatus, Provider } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "./helper"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
+
+export type NormalizedProviderListResponse = {
+  all: Map<string, Provider>
+  default: {
+    [key: string]: string
+  }
+  connected: Array<string>
+}
 
 type Data = {
   agent?: {
     name: string
     color?: string
   }[]
-  provider?: ProviderListResponse
+  provider?: NormalizedProviderListResponse
   session: Session[]
   session_status: {
     [sessionID: string]: SessionStatus
