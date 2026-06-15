@@ -22,6 +22,7 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { withTimeout } from "@/util/timeout"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { isTransientNetworkError } from "@opencode-ai/core/util/retry"
 import { McpOAuthProvider, OAUTH_CALLBACK_PATH } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
@@ -29,7 +30,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import { TuiEvent } from "@/server/tui-event"
 import open from "open"
-import { Cause, Effect, Exit, Layer, Option, Context, Schema, Stream } from "effect"
+import { Cause, Effect, Exit, Layer, Option, Context, Schema, Schedule, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -37,6 +38,7 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { McpCatalog } from "./catalog"
 
 const DEFAULT_TIMEOUT = 30_000
+const STARTUP_RETRY_SCHEDULE = Schedule.exponential(500).pipe(Schedule.jittered, Schedule.both(Schedule.recurs(3)))
 const CLIENT_OPTIONS = {
   capabilities: {
     // https://github.com/anomalyco/opencode/issues/11948
@@ -133,6 +135,10 @@ function isMcpConfigured(entry: McpEntry): entry is ConfigMCPV1.Info {
 
 function remoteURL(value: string) {
   if (URL.canParse(value)) return new URL(value)
+}
+
+function retryableStatus(status: Status): status is Extract<Status, { status: "failed" }> {
+  return status.status === "failed" && isTransientNetworkError(status.error)
 }
 
 interface CreateResult {
@@ -368,6 +374,7 @@ export const layer = Layer.effect(
             : yield* connectLocal(key, mcp as ConfigMCPV1.Info & { type: "local" })
 
         if (!mcpClient) {
+          if (retryableStatus(status)) return yield* Effect.fail(new Error(status.error))
           if (status.status !== "connected" && status.status !== "disabled") {
             yield* Effect.logWarning("server unavailable", { key, type: mcp.type, status: status.status })
           }
@@ -375,10 +382,9 @@ export const layer = Layer.effect(
         }
 
         return yield* Effect.gen(function* () {
-          const listed = mcpClient.getServerCapabilities()?.tools ? yield* McpCatalog.defs(mcpClient, mcp.timeout) : []
-          if (!listed) {
-            return yield* Effect.fail(new Error("Failed to get tools"))
-          }
+          const listed = mcpClient.getServerCapabilities()?.tools
+            ? yield* McpCatalog.listToolDefs(mcpClient, mcp.timeout)
+            : []
           return { mcpClient, status, defs: listed } satisfies CreateResult
         }).pipe(
           Effect.catchCause((cause) =>
@@ -386,6 +392,10 @@ export const layer = Layer.effect(
           ),
         )
       },
+      Effect.retry({
+        while: isTransientNetworkError,
+        schedule: STARTUP_RETRY_SCHEDULE,
+      }),
       Effect.map((result): CreateResult => result),
       Effect.catchCause((cause) => {
         if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt

@@ -6,26 +6,28 @@ export interface RetryOptions {
   retryIf?: (error: unknown) => boolean
 }
 
-const TRANSIENT_MESSAGES = [
+const TRANSIENT_NETWORK_MESSAGES = [
   "load failed",
   "network connection was lost",
   "network request failed",
   "failed to fetch",
+  "net::err_network_changed",
+  "net::err_network_io_suspended",
   "econnreset",
   "econnrefused",
   "etimedout",
   "socket hang up",
 ]
 
-function isTransientError(error: unknown): boolean {
+export function isTransientNetworkError(error: unknown): boolean {
   if (!error) return false
   // oxlint-disable-next-line no-base-to-string -- error is unknown, intentional coercion for message matching
   const message = String(error instanceof Error ? error.message : error).toLowerCase()
-  return TRANSIENT_MESSAGES.some((m) => message.includes(m))
+  return TRANSIENT_NETWORK_MESSAGES.some((m) => message.includes(m))
 }
 
 export async function retry<T>(fn: () => Promise<T>, options: RetryOptions = {}): Promise<T> {
-  const { attempts = 3, delay = 500, factor = 2, maxDelay = 10000, retryIf = isTransientError } = options
+  const { attempts = 3, delay = 500, factor = 2, maxDelay = 10000, retryIf = isTransientNetworkError } = options
 
   let lastError: unknown
   for (let attempt = 0; attempt < attempts; attempt++) {

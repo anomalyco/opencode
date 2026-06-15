@@ -1,6 +1,10 @@
 import { describe, expect, test } from "bun:test"
+import { QueryClient } from "@tanstack/solid-query"
+import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./global-sync/eviction"
 import { estimateRootSessionTotal, loadRootSessionsWithFallback } from "./global-sync/session-load"
+import { ServerScope } from "@/utils/server-scope"
+import { loadMcpQuery } from "./server-sync"
 
 describe("pickDirectoriesToEvict", () => {
   test("keeps pinned stores and evicts idle stores", () => {
@@ -60,6 +64,47 @@ describe("loadRootSessionsWithFallback", () => {
       { directory: "dir", roots: true, limit: 25 },
       { directory: "dir", roots: true },
     ])
+  })
+})
+
+describe("loadMcpQuery", () => {
+  test("retries transient fetch failures", async () => {
+    let calls = 0
+    const result = await new QueryClient().fetchQuery(
+      loadMcpQuery(ServerScope.local, "/repo", {
+        mcp: {
+          status: async () => {
+            calls++
+            if (calls === 1) throw new TypeError("Failed to fetch")
+            return { data: { context7: { status: "connected" } } }
+          },
+        },
+      } as unknown as OpencodeClient),
+    )
+
+    expect(result).toEqual({ context7: { status: "connected" } })
+    expect(calls).toBe(2)
+  })
+
+  test("does not multiply retries through the query client", async () => {
+    let calls = 0
+
+    await expect(
+      new QueryClient({
+        defaultOptions: { queries: { retryDelay: 1 } },
+      }).fetchQuery(
+        loadMcpQuery(ServerScope.local, "/repo", {
+          mcp: {
+            status: async () => {
+              calls++
+              throw new TypeError("Failed to fetch")
+            },
+          },
+        } as unknown as OpencodeClient),
+      ),
+    ).rejects.toThrow("Failed to fetch")
+
+    expect(calls).toBe(3)
   })
 })
 

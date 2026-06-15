@@ -8,6 +8,7 @@ import { useLanguage } from "@/context/language"
 import { useServer } from "@/context/server"
 import { useSync } from "@/context/sync"
 import { useGlobal } from "@/context/global"
+import { mcpStatusIssue } from "./status-popover-policy"
 
 const Body = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverBody })))
 const ServerBody = lazy(() => import("./status-popover-body").then((x) => ({ default: x.StatusPopoverServerBody })))
@@ -19,15 +20,10 @@ export function StatusPopover() {
   const sync = useSync()
   const [shown, setShown] = createSignal(false)
   const ready = createMemo(() => global.servers.health[server.key]?.healthy === false || sync().data.mcp_ready)
-  const mcpIssue = createMemo(() => {
-    const mcp = Object.values(sync().data.mcp ?? {})
-    const failed = mcp.some((item) => item.status === "failed" || item.status === "needs_client_registration")
-    const warn = mcp.some((item) => item.status === "needs_auth")
-    if (failed) return "critical" as const
-    if (warn) return "warning" as const
-  })
-  const serverHealthy = () => global.servers.health[server.key]?.healthy === true
-  const healthy = createMemo(() => global.servers.health[server.key]?.healthy === true && !mcpIssue())
+  const mcpIssue = createMemo(() => mcpStatusIssue(sync().data.mcp))
+  const serverHealth = () => global.servers.health[server.key]?.healthy
+  const serverHealthy = () => serverHealth() === true
+  const healthy = createMemo(() => serverHealthy() && !mcpIssue())
 
   return (
     <Popover
@@ -50,8 +46,9 @@ export function StatusPopover() {
               "absolute -top-px -right-px size-1.5 rounded-full": true,
               "bg-icon-success-base": ready() && healthy(),
               "bg-icon-warning-base": ready() && serverHealthy() && mcpIssue() === "warning",
-              "bg-icon-critical-base": serverHealthy() || (ready() && serverHealthy() && mcpIssue() === "critical"),
-              "bg-border-weak-base": serverHealthy() || !ready(),
+              "bg-icon-critical-base":
+                serverHealth() === false || (ready() && serverHealthy() && mcpIssue() === "critical"),
+              "bg-border-weak-base": serverHealth() === undefined || !ready(),
             }}
           />
         </div>
@@ -87,13 +84,7 @@ function DirectoryStatusPopover() {
   const [shown, setShown] = createSignal(false)
   const serverHealth = () => global.servers.health[server.key]?.healthy
   const ready = createMemo(() => serverHealth() === false || sync().data.mcp_ready)
-  const mcpIssue = createMemo(() => {
-    const mcp = Object.values(sync().data.mcp ?? {})
-    const failed = mcp.some((item) => item.status === "failed" || item.status === "needs_client_registration")
-    const warn = mcp.some((item) => item.status === "needs_auth")
-    if (failed) return "critical" as const
-    if (warn) return "warning" as const
-  })
+  const mcpIssue = createMemo(() => mcpStatusIssue(sync().data.mcp))
   const healthy = createMemo(() => serverHealth() === true && !mcpIssue())
   const state = createMemo<StatusPopoverState>(() => ({
     shown: shown(),

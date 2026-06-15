@@ -16,6 +16,7 @@ import { type ServerHealth } from "@/utils/server-health"
 import { useGlobal } from "@/context/global"
 import { useSettings } from "@/context/settings"
 import { useMcpToggle } from "@/context/mcp"
+import { mcpStatusDetail } from "./status-popover-policy"
 
 const pluginEmptyMessage = (value: string, file: string): JSXElement => {
   const parts = value.split(file)
@@ -400,6 +401,9 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                 <For each={mcpNames()}>
                   {(name) => {
                     const status = () => mcpStatus(name)
+                    const detail = () => {
+                      return mcpStatusDetail(sync().data.mcp?.[name], language.t("mcp.auth.clickToAuthenticate"))
+                    }
                     const enabled = () => status() === "connected"
                     return (
                       <button
@@ -425,10 +429,8 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                           <span class="flex items-center gap-2 min-w-0">
                             <span class="text-14-regular text-text-base truncate">{name}</span>
                           </span>
-                          <Show when={status() === "needs_auth"}>
-                            <span class="text-11-regular text-text-weaker truncate">
-                              {language.t("mcp.auth.clickToAuthenticate")}
-                            </span>
+                          <Show when={detail()}>
+                            <span class="text-11-regular text-text-weaker truncate">{detail()}</span>
                           </Show>
                         </span>
                         <div onClick={(event) => event.stopPropagation()}>

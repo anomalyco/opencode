@@ -49,6 +49,9 @@ let lastCreatedClientName: string | undefined
 let connectShouldFail = false
 let connectShouldHang = false
 let connectError = "Mock transport cannot connect"
+let connectFailuresRemaining = 0
+let listToolsFailuresRemaining = 0
+let transportStartCount = 0
 // Tracks how many Client instances were created (detects leaks)
 let clientCreateCount = 0
 // Tracks how many times transport.close() is called across all mock transports
@@ -94,7 +97,12 @@ class MockStdioTransport {
     if (lastCreatedClientName) stdioOptsByName.set(lastCreatedClientName, opts)
   }
   async start() {
+    transportStartCount++
     if (connectShouldHang) return new Promise<void>(() => {}) // never resolves
+    if (connectFailuresRemaining > 0) {
+      connectFailuresRemaining--
+      throw new Error(connectError)
+    }
     if (connectShouldFail) throw new Error(connectError)
   }
   async close() {
@@ -106,7 +114,12 @@ class MockStreamableHTTP {
   // oxlint-disable-next-line no-useless-constructor
   constructor(_url: URL, _opts?: any) {}
   async start() {
+    transportStartCount++
     if (connectShouldHang) return new Promise<void>(() => {}) // never resolves
+    if (connectFailuresRemaining > 0) {
+      connectFailuresRemaining--
+      throw new Error(connectError)
+    }
     if (connectShouldFail) throw new Error(connectError)
   }
   async close() {
@@ -119,7 +132,12 @@ class MockSSE {
   // oxlint-disable-next-line no-useless-constructor
   constructor(_url: URL, _opts?: any) {}
   async start() {
+    transportStartCount++
     if (connectShouldHang) return new Promise<void>(() => {}) // never resolves
+    if (connectFailuresRemaining > 0) {
+      connectFailuresRemaining--
+      throw new Error(connectError)
+    }
     if (connectShouldFail) throw new Error(connectError)
   }
   async close() {
@@ -181,6 +199,10 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 
     async listTools(params?: { cursor?: string }) {
       if (this._state) this._state.listToolsCalls++
+      if (listToolsFailuresRemaining > 0) {
+        listToolsFailuresRemaining--
+        throw new Error(this._state?.listToolsError ?? "listTools failed")
+      }
       if (this._state?.listToolsShouldFail) {
         throw new Error(this._state.listToolsError)
       }
@@ -246,6 +268,9 @@ beforeEach(() => {
   connectShouldFail = false
   connectShouldHang = false
   connectError = "Mock transport cannot connect"
+  connectFailuresRemaining = 0
+  listToolsFailuresRemaining = 0
+  transportStartCount = 0
   clientCreateCount = 0
   transportCloseCount = 0
 })
@@ -1016,7 +1041,145 @@ it.instance(
 // ========================================================================
 
 it.instance(
-  "server that fails to connect is marked as failed",
+  "retries transient network failures while connecting configured servers",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "flaky-server"
+        const serverState = getOrCreateClientState("flaky-server")
+        connectError = "net::ERR_NETWORK_CHANGED"
+        connectFailuresRemaining = 1
+        serverState.tools = [
+          {
+            name: "available_tool",
+            description: "works after reconnect",
+            inputSchema: { type: "object", properties: {} },
+          },
+        ]
+
+        const status = yield* mcp.status()
+        expect(status["flaky-server"]?.status).toBe("connected")
+
+        expect(transportStartCount).toBe(2)
+        expect(Object.keys(yield* mcp.tools())).toEqual(["flaky-server_available_tool"])
+      }),
+    ),
+  {
+    config: {
+      mcp: {
+        "flaky-server": {
+          type: "local",
+          command: ["echo", "test"],
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "stops retrying transient connect failures after the startup retry budget",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "exhausted-server"
+        getOrCreateClientState("exhausted-server")
+        connectError = "net::ERR_NETWORK_CHANGED"
+        connectFailuresRemaining = 4
+
+        const status = yield* mcp.status()
+        expect(status["exhausted-server"]?.status).toBe("failed")
+        if (status["exhausted-server"]?.status === "failed") {
+          expect(status["exhausted-server"].error).toContain("net::ERR_NETWORK_CHANGED")
+        }
+
+        expect(transportStartCount).toBe(4)
+        expect(Object.keys(yield* mcp.tools()).length).toBe(0)
+      }),
+    ),
+  {
+    config: {
+      mcp: {
+        "exhausted-server": {
+          type: "local",
+          command: ["echo", "test"],
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "retries transient network failures while listing configured server tools",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "flaky-list-server"
+        const serverState = getOrCreateClientState("flaky-list-server")
+        serverState.listToolsError = "net::ERR_NETWORK_IO_SUSPENDED"
+        listToolsFailuresRemaining = 1
+        serverState.tools = [
+          {
+            name: "available_tool",
+            description: "works after list retry",
+            inputSchema: { type: "object", properties: {} },
+          },
+        ]
+
+        const status = yield* mcp.status()
+        expect(status["flaky-list-server"]?.status).toBe("connected")
+
+        expect(serverState.listToolsCalls).toBe(2)
+        expect(Object.keys(yield* mcp.tools())).toEqual(["flaky-list-server_available_tool"])
+      }),
+    ),
+  {
+    config: {
+      mcp: {
+        "flaky-list-server": {
+          type: "local",
+          command: ["echo", "test"],
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "stops retrying transient tool listing failures after the startup retry budget",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "exhausted-list-server"
+        const serverState = getOrCreateClientState("exhausted-list-server")
+        serverState.listToolsError = "net::ERR_NETWORK_IO_SUSPENDED"
+        listToolsFailuresRemaining = 4
+
+        const status = yield* mcp.status()
+        expect(status["exhausted-list-server"]?.status).toBe("failed")
+        if (status["exhausted-list-server"]?.status === "failed") {
+          expect(status["exhausted-list-server"].error).toContain("net::ERR_NETWORK_IO_SUSPENDED")
+        }
+
+        expect(serverState.listToolsCalls).toBe(4)
+        expect(transportStartCount).toBe(4)
+        expect(serverState.closed).toBe(true)
+        expect(Object.keys(yield* mcp.tools()).length).toBe(0)
+      }),
+    ),
+  {
+    config: {
+      mcp: {
+        "exhausted-list-server": {
+          type: "local",
+          command: ["echo", "test"],
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "does not retry non-transient connect failures",
   () =>
     MCP.Service.use((mcp: MCPNS.Interface) =>
       Effect.gen(function* () {
@@ -1025,18 +1188,13 @@ it.instance(
         connectShouldFail = true
         connectError = "Connection refused"
 
-        yield* mcp.add("fail-connect", {
-          type: "local",
-          command: ["echo", "test"],
-        })
-
         const status = yield* mcp.status()
         expect(status["fail-connect"]?.status).toBe("failed")
         if (status["fail-connect"]?.status === "failed") {
           expect(status["fail-connect"].error).toContain("Connection refused")
         }
+        expect(transportStartCount).toBe(1)
 
-        // No tools should be available
         const tools = yield* mcp.tools()
         expect(Object.keys(tools).length).toBe(0)
       }),

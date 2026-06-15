@@ -35,6 +35,10 @@ export async function paginate<T, R extends { nextCursor?: string }>(
   throw new Error(`MCP list exceeded ${MAX_LIST_PAGES} pages`)
 }
 
+export function listToolDefs(client: Client, timeout?: number) {
+  return listTools(client, timeout ?? DEFAULT_TIMEOUT)
+}
+
 export function defs(client: Client, timeout?: number) {
   return listTools(client, timeout ?? DEFAULT_TIMEOUT).pipe(Effect.catch(() => Effect.void))
 }
