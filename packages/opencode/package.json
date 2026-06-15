@@ -90,6 +90,7 @@
     "@daemon-protocol/sdk": "workspace:*",
     "@daemon-protocol/server": "workspace:*",
     "@daemon-protocol/tui": "workspace:*",
+    "@opencode/shodan": "workspace:*",
     "@openrouter/ai-sdk-provider": "2.9.0",
     "@opentelemetry/api": "1.9.0",
     "@opentelemetry/context-async-hooks": "2.6.1",
