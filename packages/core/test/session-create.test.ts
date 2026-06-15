@@ -182,6 +182,33 @@ describe("SessionV2.create", () => {
     }),
   )
 
+  it.effect("clears archived projection when a legacy update omits archived time", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const input = { id, location }
+      const created = yield* session.create(input)
+      yield* db.update(SessionTable).set({ time_archived: 123 }).where(eq(SessionTable.id, id)).run().pipe(Effect.orDie)
+
+      yield* events.publish(SessionV1.Event.Updated, {
+        sessionID: id,
+        info: SessionV1.SessionInfo.make({
+          id,
+          slug: "updated",
+          version: "test",
+          projectID: created.projectID,
+          directory: created.location.directory,
+          title: "updated",
+          time: { created: 0, updated: 1 },
+        }),
+      })
+
+      const row = yield* db.select().from(SessionTable).where(eq(SessionTable.id, id)).get().pipe(Effect.orDie)
+      expect(row?.time_archived).toBeNull()
+    }),
+  )
+
   it.effect("persists creation through the existing legacy created event", () =>
     Effect.gen(function* () {
       const session = yield* SessionV2.Service

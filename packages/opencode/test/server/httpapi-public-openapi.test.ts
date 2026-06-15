@@ -23,7 +23,10 @@ type OpenApiOperation = {
     readonly schema?: { readonly type?: string }
   }>
   readonly responses?: Record<string, OpenApiResponse>
-  readonly requestBody?: { readonly required?: boolean }
+  readonly requestBody?: {
+    readonly required?: boolean
+    readonly content?: Record<string, { readonly schema?: OpenApiSchema }>
+  }
   readonly security?: unknown
 }
 type OpenApiPathItem = Partial<Record<Method, OpenApiOperation>>
@@ -53,6 +56,15 @@ function responseRef(response: OpenApiResponse | undefined) {
 
 function componentName(ref: string) {
   return ref.replace("#/components/schemas/", "")
+}
+
+function schemaRef(spec: OpenApiSpec, schema: OpenApiSchema | undefined) {
+  if (!schema?.$ref) return schema
+  return spec.components.schemas[componentName(schema.$ref)]
+}
+
+function jsonRequestSchema(spec: OpenApiSpec, path: string, method: Method) {
+  return schemaRef(spec, spec.paths[path]?.[method]?.requestBody?.content?.["application/json"]?.schema)
 }
 
 function componentNames(response: OpenApiResponse | undefined) {
@@ -113,6 +125,15 @@ describe("PublicApi OpenAPI v2 errors", () => {
     ]) {
       expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
     }
+  })
+
+  test("documents nullable archived session update payload", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+    const body = jsonRequestSchema(spec, "/session/{sessionID}", "patch")
+    const time = schemaRef(spec, body?.properties?.time)
+    const archived = schemaRef(spec, time?.properties?.archived)
+
+    expect(archived?.anyOf?.some((item) => item.type === "null")).toBe(true)
   })
 
   test("documents integration discovery and connection routes", () => {
