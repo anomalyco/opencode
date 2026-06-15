@@ -1,6 +1,6 @@
 import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
-import { createEffect, createMemo, createResource, createSignal, Show } from "solid-js"
+import { createMemo, createResource, createSignal, onMount, Show } from "solid-js"
 import path from "path"
 import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
@@ -52,6 +52,7 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
   const [projectLoadError, setProjectLoadError] = createSignal<unknown>()
   const [directoryLoadError, setDirectoryLoadError] = createSignal<unknown>()
   const deleteHint = useCommandShortcut("dialog.move_session.delete")
+  onMount(() => dialog.setSize("xlarge"))
 
   function reopen(initialRemoving?: string) {
     dialog.replace(() => (
@@ -112,7 +113,24 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
   })
 
   const options = createMemo<DialogSelectOption<MoveSessionSelection | undefined>[]>(() => {
-    if (loadError()) return []
+    const error = loadError()
+    if (error)
+      return [
+        {
+          title: "Could not load project directories",
+          titleView: <span style={{ fg: theme.error }}>Could not load project directories</span>,
+          description: "Close and reopen to try again",
+          details: [errorMessage(error)],
+          category: "Error",
+          categoryView: (
+            <text fg={theme.error} attributes={TextAttributes.BOLD}>
+              Error
+            </text>
+          ),
+          gutter: () => <text fg={theme.error}>!</text>,
+          value: undefined,
+        },
+      ]
     const data = directoryData()
     const current = currentRoot()?.directory
     if (directories.loading && !data && !current) return [{ title: "Loading project directories...", value: undefined }]
@@ -281,77 +299,54 @@ function DialogMoveSessionContent(props: DialogMoveSessionProps) {
     if (await removedCurrent(deletingCurrent)) return
   }
 
-  createEffect(() => dialog.setSize(loadError() ? "medium" : "xlarge"))
-
   return (
-    <Show
-      when={loadError()}
-      fallback={
-        <box minHeight={Math.max(8, Math.min(16, dimensions().height - Math.floor(dimensions().height / 4) - 2))}>
-          <DialogSelect
-            title="Move session"
-            titleView={
-              <box flexDirection="row" gap={1}>
-                <text fg={theme.text} attributes={TextAttributes.BOLD}>
-                  Move session
-                </text>
-                <Show when={working() || directories.loading || loadedProject.loading}>
-                  <Spinner />
-                </Show>
-              </box>
-            }
-            options={options()}
-            locked={directories.loading || loadedProject.loading || Boolean(removing())}
-            current={current()}
-            onSelect={(option) => {
-              if (option.value) props.onSelect(option.value)
-            }}
-            onMove={() => setToDelete(undefined)}
-            actions={[
-              {
-                command: "dialog.move_session.new",
-                title: "new",
-                onTrigger: () => props.onSelect({ type: "new" }),
-              },
-              {
-                command: "dialog.move_session.delete",
-                title: "delete",
-                disabled: (option) => {
-                  const value = option?.value
-                  if (!value || value.type !== "directory" || value.subdirectory) return true
-                  return !directoryData()?.find((item) => item.directory === value.directory)?.strategy
+    <box minHeight={Math.max(8, Math.min(16, dimensions().height - Math.floor(dimensions().height / 4) - 2))}>
+      <DialogSelect
+        title="Move session"
+        titleView={
+          <box flexDirection="row" gap={1}>
+            <text fg={theme.text} attributes={TextAttributes.BOLD}>
+              Move session
+            </text>
+            <Show when={working() || directories.loading || loadedProject.loading}>
+              <Spinner />
+            </Show>
+          </box>
+        }
+        options={options()}
+        locked={Boolean(loadError()) || directories.loading || loadedProject.loading || Boolean(removing())}
+        current={current()}
+        onSelect={(option) => {
+          if (option.value) props.onSelect(option.value)
+        }}
+        onMove={() => setToDelete(undefined)}
+        actions={
+          loadError()
+            ? []
+            : [
+                {
+                  command: "dialog.move_session.new",
+                  title: "new",
+                  onTrigger: () => props.onSelect({ type: "new" }),
                 },
-                onTrigger: remove,
-              },
-              {
-                command: "dialog.move_session.refresh",
-                title: "refresh",
-                onTrigger: () => void refetch(),
-              },
-            ]}
-          />
-        </box>
-      }
-    >
-      {(error) => <DialogMoveSessionError error={error()} />}
-    </Show>
-  )
-}
-
-function DialogMoveSessionError(props: { error: unknown }) {
-  const { theme } = useTheme()
-  return (
-    <box paddingLeft={2} paddingRight={2} paddingBottom={1}>
-      <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text}>
-          Move session
-        </text>
-        <text fg={theme.textMuted}>esc</text>
-      </box>
-      <box paddingTop={1}>
-        <text fg={theme.text}>Could not load project directories</text>
-        <text fg={theme.textMuted}>{errorMessage(props.error)}</text>
-      </box>
+                {
+                  command: "dialog.move_session.delete",
+                  title: "delete",
+                  disabled: (option) => {
+                    const value = option?.value
+                    if (!value || value.type !== "directory" || value.subdirectory) return true
+                    return !directoryData()?.find((item) => item.directory === value.directory)?.strategy
+                  },
+                  onTrigger: remove,
+                },
+                {
+                  command: "dialog.move_session.refresh",
+                  title: "refresh",
+                  onTrigger: () => void refetch(),
+                },
+              ]
+        }
+      />
     </box>
   )
 }
