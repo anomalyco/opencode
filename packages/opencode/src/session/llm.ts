@@ -239,6 +239,7 @@ const live: Layer.Layer<
           providerOptions: prepared.params.options,
           headers: prepared.headers,
           abort: input.abort,
+          logMessages: cfg.experimental?.log_messages,
         })
         if (native.type === "supported") {
           yield* Effect.logInfo("llm runtime selected", {
