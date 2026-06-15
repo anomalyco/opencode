@@ -337,6 +337,27 @@ export const shfmt: Info = {
   },
 }
 
+export const sqlfluff: Info = {
+  name: "sqlfluff",
+  extensions: [".sql"],
+  async enabled(context) {
+    const match = which("sqlfluff")
+    if (!match) return false
+
+    const configs = [".sqlfluff", "pyproject.toml", "setup.cfg", "tox.ini", "pep8.ini"]
+    for (const config of configs) {
+      const found = await Filesystem.findUp(config, context.directory, context.worktree)
+      if (found.length === 0) continue
+
+      const content = await Filesystem.readText(found[0])
+      const header = config === "pyproject.toml" ? "[tool.sqlfluff]" : "[sqlfluff]"
+      if (content.includes(header) && /dialect\s*=/.test(content)) return [match, "format", "$FILE"]
+    }
+
+    return false
+  },
+}
+
 export const nixfmt: Info = {
   name: "nixfmt",
   extensions: [".nix"],
