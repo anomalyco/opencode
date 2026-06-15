@@ -42,7 +42,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
     pathFromTab: file.pathFromTab,
     normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
   })
-  const messages = createMemo(() => (params.id ? (sync.data.message[params.id] ?? []) : []))
+  const messages = createMemo(() => (params.id ? (sync().data.message[params.id] ?? []) : []))
 
   const usd = createMemo(
     () =>
