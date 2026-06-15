@@ -34,7 +34,7 @@ import { useEvent } from "./context/event"
 import { SDKProvider, useSDK } from "./context/sdk"
 import { StartupLoading } from "./component/startup-loading"
 import { SyncProvider, useSync } from "./context/sync"
-import { SyncProviderV2 } from "./context/sync-v2"
+import { DataProvider } from "./context/data"
 import { LocalProvider, useLocal } from "./context/local"
 import { DialogModel } from "./component/dialog-model"
 import { useConnected } from "./component/use-connected"
@@ -178,7 +178,7 @@ function isVersionGreater(left: string, right: string) {
 export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const global = yield* Global.Service
   const exit = { epilogue: undefined as string | undefined, reason: undefined as unknown }
-  yield* Effect.scoped(
+  const result = yield* Effect.scoped(
     Effect.gen(function* () {
       const renderer = yield* Effect.acquireRelease(
         Effect.tryPromise(() =>
@@ -294,7 +294,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                         >
                                           <ProjectProvider>
                                             <SyncProvider>
-                                              <SyncProviderV2>
+                                              <DataProvider>
                                                 <ThemeProvider mode={mode}>
                                                   <LocalProvider>
                                                     <PromptStashProvider>
@@ -315,7 +315,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                     </PromptStashProvider>
                                                   </LocalProvider>
                                                 </ThemeProvider>
-                                              </SyncProviderV2>
+                                              </DataProvider>
                                             </SyncProvider>
                                           </ProjectProvider>
                                         </SDKProvider>
@@ -337,13 +337,14 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         }, renderer)
       })
       yield* Deferred.await(shutdown)
+      return { epilogue: exit.epilogue, reason: exit.reason }
     }),
   )
   yield* Effect.sync(() => {
     win32FlushInputBuffer()
-    if (exit.reason !== undefined)
-      process.stderr.write((cliErrorMessage(exit.reason) ?? errorFormat(exit.reason)) + "\n")
-    if (exit.epilogue) process.stdout.write(exit.epilogue + "\n")
+    if (result.reason !== undefined)
+      process.stderr.write((cliErrorMessage(result.reason) ?? errorFormat(result.reason)) + "\n")
+    if (result.epilogue) process.stdout.write(result.epilogue + "\n")
   })
 })
 

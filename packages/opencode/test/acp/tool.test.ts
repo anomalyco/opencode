@@ -1,3 +1,4 @@
+import { resolve } from "path"
 import { describe, expect, test } from "bun:test"
 import {
   completedToolContent,
@@ -37,7 +38,13 @@ describe("acp tool conversion", () => {
     expect(toLocations("external_directory", { directories: ["/tmp/outside"], patterns: ["/tmp/outside/*"] })).toEqual([
       { path: "/tmp/outside" },
     ])
-    expect(toLocations("bash", { filePath: "/tmp/nope.ts", path: "/tmp" })).toEqual([])
+    expect(toLocations("bash", { cmd: "pwd" }, "/workspace")).toEqual([{ path: "/workspace" }])
+    // Relative workdir resolves against cwd via the platform path resolver (backslashes on Windows).
+    expect(toLocations("bash", { command: "pwd", workdir: "subdir" }, "/workspace")).toEqual([
+      { path: resolve("/workspace", "subdir") },
+    ])
+    expect(toLocations("bash", { command: "pwd", workdir: "/abs/dir" }, "/workspace")).toEqual([{ path: "/abs/dir" }])
+    expect(toLocations("bash", { command: "printf hello" })).toEqual([])
     expect(toLocations("read", { path: "/tmp/missing-file-path.ts" })).toEqual([])
   })
 

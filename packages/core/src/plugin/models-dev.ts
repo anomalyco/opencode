@@ -1,5 +1,6 @@
 import { DateTime, Effect, Scope, Stream } from "effect"
 import { Catalog } from "../catalog"
+import { Integration } from "../integration"
 import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
 import { ModelRequest } from "../model-request"
@@ -54,18 +55,34 @@ export const ModelsDevPlugin = PluginV2.define({
   id: PluginV2.ID.make("models-dev"),
   effect: Effect.gen(function* () {
     const catalog = yield* Catalog.Service
+    const integrations = yield* Integration.Service
     const modelsDev = yield* ModelsDev.Service
     const events = yield* EventV2.Service
     const scope = yield* Scope.Scope
     const transform = yield* catalog.transform()
+    const integrationTransform = yield* integrations.transform()
     const refresh = Effect.fn("ModelsDevPlugin.refresh")(function* () {
       const data = yield* modelsDev.get()
+      yield* integrationTransform((integrations) => {
+        for (const item of Object.values(data)) {
+          if (item.env.length === 0) continue
+          const integrationID = Integration.ID.make(item.id)
+          integrations.update(integrationID, (integration) => (integration.name = item.name))
+          integrations.method.update({
+            integrationID,
+            method: { type: "key" },
+          })
+          integrations.method.update({
+            integrationID,
+            method: { type: "env", names: [...item.env] },
+          })
+        }
+      })
       yield* transform((catalog) => {
         for (const item of Object.values(data)) {
           const providerID = ProviderV2.ID.make(item.id)
           catalog.provider.update(providerID, (provider) => {
             provider.name = item.name
-            provider.env = [...item.env]
             provider.api = item.npm
               ? {
                   type: "aisdk",
