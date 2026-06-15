@@ -51,19 +51,17 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(inputSchema),
     execute: async (args: unknown, options) => {
-      const result = CallToolResultSchema.parse(
-        await client.callTool(
-          {
-            name: mcpTool.name,
-            arguments: (args || {}) as Record<string, unknown>,
-          },
-          CallToolResultSchema,
-          {
-            resetTimeoutOnProgress: true,
-            signal: options.abortSignal,
-            timeout,
-          },
-        ),
+      const result = await client.callTool(
+        {
+          name: mcpTool.name,
+          arguments: (args || {}) as Record<string, unknown>,
+        },
+        CallToolResultSchema,
+        {
+          resetTimeoutOnProgress: true,
+          signal: options.abortSignal,
+          timeout,
+        },
       )
       if (result.isError)
         throw new Error(
