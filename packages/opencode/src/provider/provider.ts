@@ -1110,6 +1110,7 @@ export type DefaultModelError = ModelNotFoundError | NoProvidersError | NoModels
 export type Error = ModelNotFoundError | InitError | NoProvidersError | NoModelsError
 
 export interface Interface {
+  readonly init: () => Effect.Effect<void>
   readonly list: () => Effect.Effect<Record<ProviderV2.ID, Info>>
   readonly getProvider: (providerID: ProviderV2.ID) => Effect.Effect<Info>
   readonly getModel: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => Effect.Effect<Model, ModelNotFoundError>
@@ -1129,6 +1130,7 @@ interface State {
   sdk: Map<string, BundledSDK>
   modelLoaders: Record<string, CustomModelLoader>
   varsLoaders: Record<string, CustomVarsLoader>
+  discoveryLoaders: Record<string, CustomDiscoverModels>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
@@ -1543,76 +1545,6 @@ export const layer = Layer.effect(
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderV2.ID.make("gitlab")
-        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
-          yield* Effect.promise(async () => {
-            try {
-              const discovered = await discoveryLoaders[gitlab]()
-              for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[gitlab].models[modelID]) {
-                  providers[gitlab].models[modelID] = model
-                }
-              }
-            } catch (e) {}
-          })
-        }
-
-        // Discover models for custom openai-compatible providers with a baseURL
-        for (const [id, provider] of Object.entries(providers)) {
-          const providerID = ProviderV2.ID.make(id)
-          if (provider.source !== "config") continue
-          const baseURL = typeof provider.options?.baseURL === "string" && provider.options.baseURL !== "" ? provider.options.baseURL : undefined
-          if (!baseURL) continue
-          const configProvider = cfg.provider?.[providerID]
-          const npm = configProvider?.npm ?? "@ai-sdk/openai-compatible"
-          if (npm !== "@ai-sdk/openai-compatible") continue
-
-          yield* Effect.promise(async () => {
-            try {
-              const response = await fetch(`${baseURL}/models`, {
-                signal: AbortSignal.timeout(5_000),
-              })
-              if (!response.ok) return
-              const data = await response.json()
-              if (!data?.data?.length) return
-
-              for (const model of data.data) {
-                if (typeof model.id !== "string") continue
-                if (provider.models[model.id]) continue
-                provider.models[model.id] = {
-                   id: ModelV2.ID.make(model.id),
-                   providerID,
-                   name: model.id,
-                   family: "",
-                   api: {
-                     id: model.id,
-                     url: baseURL,
-                     npm,
-                   },
-                   status: "active",
-                   headers: {},
-                   options: {},
-                   cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-                   limit: { context: 128000, output: 4096 },
-                  capabilities: {
-                    temperature: false,
-                    reasoning: false,
-                    attachment: false,
-                    toolcall: true,
-                    input: { text: true, audio: false, image: false, video: false, pdf: false },
-                    output: { text: true, audio: false, image: false, video: false, pdf: false },
-                    interleaved: false,
-                  },
-                  release_date: "",
-                  variants: {},
-                }
-              }
-            } catch {
-              // Discovery failed silently — existing models are preserved
-            }
-          })
-        }
-
         for (const [id, provider] of Object.entries(providers)) {
           const providerID = ProviderV2.ID.make(id)
           if (!isProviderAllowed(providerID)) {
@@ -1657,7 +1589,12 @@ export const layer = Layer.effect(
           }
 
           if (Object.keys(provider.models).length === 0) {
-            delete providers[providerID]
+            // Don't delete providers that will have models discovered in init()
+            const hasDiscoveryLoader = discoveryLoaders[providerID] !== undefined
+            const hasConfigBaseURL = cfg.provider?.[providerID]?.options?.baseURL
+            if (!hasDiscoveryLoader && !hasConfigBaseURL) {
+              delete providers[providerID]
+            }
             continue
           }
         }
@@ -1669,11 +1606,158 @@ export const layer = Layer.effect(
           sdk,
           modelLoaders,
           varsLoaders,
+          discoveryLoaders,
+          discoveryDone: false,
         }
       }),
     )
 
     const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
+
+   const init = Effect.fn("Provider.init")(function* () {
+      const s = yield* InstanceState.get(state)
+      const cfg = yield* config.get()
+
+      const providersToDiscover: Array<{
+        providerID: string
+        discover?: () => Promise<Record<string, any>>
+        inlineFetch: boolean
+      }> = []
+
+      for (const [providerID, discover] of Object.entries(s.discoveryLoaders)) {
+        providersToDiscover.push({ providerID, discover, inlineFetch: false })
+      }
+
+      for (const [providerID, configProvider] of Object.entries(cfg.provider ?? {})) {
+        if (s.discoveryLoaders[providerID]) continue
+        const npm = configProvider?.npm ?? "@ai-sdk/openai-compatible"
+        if (npm !== "@ai-sdk/openai-compatible") continue
+        const baseURL = configProvider?.options?.baseURL
+        if (typeof baseURL !== "string" || baseURL === "") continue
+        providersToDiscover.push({ providerID, inlineFetch: true })
+      }
+
+      yield* Effect.forEach(
+        providersToDiscover,
+        ({ providerID, discover, inlineFetch }) =>
+          Effect.gen(function* () {
+            const provider = s.providers[ProviderV2.ID.make(providerID)]
+            if (!provider || provider.source !== "config") return
+
+            const api = provider.options?.baseURL ?? ""
+            if (!api) return
+
+            const authExit = yield* auth.get(ProviderV2.ID.make(providerID)).pipe(Effect.exit)
+            const authResult = authExit._tag === "Success" ? authExit.value : undefined
+
+            const headers: Record<string, string> = {}
+            if (authResult?.type === "api" && authResult.key) {
+              headers["Authorization"] = `Bearer ${authResult.key}`
+            }
+            if (!headers["Authorization"] && provider.key) {
+              headers["Authorization"] = `Bearer ${provider.key}`
+            }
+            if (!headers["Authorization"] && provider.options?.apiKey) {
+              headers["Authorization"] = `Bearer ${provider.options.apiKey}`
+            }
+
+            let discovered: Set<string>
+            if (inlineFetch) {
+              const url = api.endsWith("/v1") ? `${api}/models` : `${api}/v1/models`
+              const fetchExit = yield* Effect.promise(() =>
+                fetch(url, { headers, signal: AbortSignal.timeout(3000) }),
+              ).pipe(Effect.exit)
+              if (fetchExit._tag === "Failure") {
+                if (Object.keys(provider.models).length === 0) delete s.providers[ProviderV2.ID.make(providerID)]
+                return
+              }
+              const res = fetchExit.value
+              if (!res.ok) {
+                if (Object.keys(provider.models).length === 0) delete s.providers[ProviderV2.ID.make(providerID)]
+                return
+              }
+
+              const jsonExit = yield* Effect.promise(() => res.json()).pipe(Effect.exit)
+              if (jsonExit._tag === "Failure") {
+                if (Object.keys(provider.models).length === 0) delete s.providers[ProviderV2.ID.make(providerID)]
+                return
+              }
+              const json: any = jsonExit.value
+              discovered = new Set<string>(
+                (json.data ?? [])
+                  .filter((m: any) => m.id && typeof m.id === "string")
+                  .map((m: any) => m.id as string),
+              )
+            } else if (discover) {
+              const discoverExit = yield* Effect.promise(() => discover()).pipe(Effect.exit)
+              if (discoverExit._tag === "Failure") {
+                if (Object.keys(provider.models).length === 0) delete s.providers[ProviderV2.ID.make(providerID)]
+                return
+              }
+              const result = discoverExit.value
+              discovered = new Set<string>(
+                Object.entries(result)
+                  .filter(([_, m]) => m && typeof m.id === "string")
+                  .map(([id]) => id),
+              )
+            } else {
+              return
+            }
+
+            // Filter out Models.dev models not returned by discovery (only for inlineFetch)
+            // Preserve config-defined models (they were explicitly configured by the user)
+            if (inlineFetch) {
+              const configProvider = cfg.provider?.[providerID]
+              if (configProvider) {
+                const configModelIDs = configProvider.models ? Object.keys(configProvider.models) : []
+                const modelIDs: string[] = []
+                for (const k in provider.models) modelIDs.push(k)
+                for (const modelID of modelIDs) {
+                  // Keep config-defined models, remove only Models.dev models not in discovery
+                  if (configModelIDs.includes(modelID)) continue
+                  if (!discovered.has(modelID)) {
+                    delete provider.models[modelID]
+                  }
+                }
+              }
+            }
+
+            // Merge discovered models
+            const npm = cfg.provider?.[providerID]?.npm ?? "@ai-sdk/openai-compatible"
+            for (const modelID of discovered) {
+              if (provider.models[modelID]) continue
+              provider.models[modelID] = {
+                id: ModelV2.ID.make(modelID),
+                providerID: ProviderV2.ID.make(providerID),
+                name: modelID,
+                api: { id: modelID, url: api, npm },
+                status: "active",
+                headers: {},
+                options: {},
+                cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                limit: { context: 128000, output: 128000 },
+                capabilities: {
+                  temperature: false,
+                  reasoning: false,
+                  attachment: false,
+                  toolcall: true,
+                  input: { text: true, audio: false, image: false, video: false, pdf: false },
+                  output: { text: true, audio: false, image: false, video: false, pdf: false },
+                  interleaved: false,
+                },
+                release_date: "",
+                variants: {},
+              }
+            }
+
+            // Remove provider if no models remain after successful discovery
+            if (inlineFetch && Object.keys(provider.models).length === 0) {
+              delete s.providers[ProviderV2.ID.make(providerID)]
+            }
+          }).pipe(Effect.ignore),
+        { concurrency: "unbounded" },
+      )
+    })
 
     async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
       try {
@@ -1984,7 +2068,16 @@ export const layer = Layer.effect(
       }
     })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+     return Service.of({
+        init: () => init(),
+        list,
+        getProvider,
+        getModel,
+        getLanguage,
+        closest,
+        getSmallModel,
+        defaultModel,
+      })
   }),
 )
 

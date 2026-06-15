@@ -17,7 +17,7 @@ import { Provider } from "@/provider/provider"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Filesystem } from "@/util/filesystem"
 import { InstanceLayer } from "@/project/instance-layer"
-import { testEffect } from "../lib/effect"
+import { pollWithTimeout, testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
@@ -1815,11 +1815,21 @@ it.instance(
         return Promise.resolve(originalFetch(url))
       }) as unknown as typeof fetch
 
+      const provider = yield* Provider.Service
+      yield* provider.init()
       const providers = yield* list
-      const provider = providers[ProviderV2.ID.make("llamacpp-router")]
-      expect(provider).toBeDefined()
-      expect(Object.keys(provider.models)).toContain("llama-3.1-8b")
-      expect(Object.keys(provider.models)).toContain("mistral-7b")
+      const p = providers[ProviderV2.ID.make("llamacpp-router")]
+      expect(p).toBeDefined()
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("llamacpp-router")]
+          return p?.models["llama-3.1-8b"] && p?.models["mistral-7b"] ? (true as const) : undefined
+        }),
+        "discovered models not found",
+      )
+      const discoveredProvider = (yield* list)[ProviderV2.ID.make("llamacpp-router")]
+      expect(Object.keys(discoveredProvider.models)).toContain("llama-3.1-8b")
+      expect(Object.keys(discoveredProvider.models)).toContain("mistral-7b")
     }),
   {
     config: {
@@ -1848,6 +1858,15 @@ it.instance(
         return Promise.resolve(originalFetch(url))
       }) as unknown as typeof fetch
 
+      const provider = yield* Provider.Service
+      yield* provider.init()
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("failing-provider")]
+          return p === undefined ? (true as const) : undefined
+        }),
+        "provider not removed after failed discovery",
+      )
       const providers = yield* list
       expect(providers[ProviderV2.ID.make("failing-provider")]).toBeUndefined()
     }),
@@ -1877,6 +1896,15 @@ it.instance(
         return Promise.resolve(originalFetch(url))
       }) as unknown as typeof fetch
 
+      const provider = yield* Provider.Service
+      yield* provider.init()
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("non-json-provider")]
+          return p === undefined ? (true as const) : undefined
+        }),
+        "provider not removed after non-JSON response",
+      )
       const providers = yield* list
       expect(providers[ProviderV2.ID.make("non-json-provider")]).toBeUndefined()
     }),
@@ -1911,6 +1939,15 @@ it.instance(
         return Promise.resolve(originalFetch(url))
       }) as unknown as typeof fetch
 
+      const provider = yield* Provider.Service
+      yield* provider.init()
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("empty-provider")]
+          return p === undefined ? (true as const) : undefined
+        }),
+        "provider not removed after empty discovery",
+      )
       const providers = yield* list
       expect(providers[ProviderV2.ID.make("empty-provider")]).toBeUndefined()
     }),
@@ -1951,18 +1988,31 @@ it.instance(
         return Promise.resolve(originalFetch(url))
       }) as unknown as typeof fetch
 
+      const provider = yield* Provider.Service
+      yield* provider.init()
       const providers = yield* list
-      const provider = providers[ProviderV2.ID.make("llamacpp-router")]
-      expect(provider).toBeDefined()
+      const p = providers[ProviderV2.ID.make("llamacpp-router")]
+      expect(p).toBeDefined()
+
+      // Wait for discovery to complete
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("llamacpp-router")]
+          return p?.models["mistral-7b"] && p?.models["gemma-2-9b"] ? (true as const) : undefined
+        }),
+        "discovered models not found",
+      )
+
+      const discoveredProvider = (yield* list)[ProviderV2.ID.make("llamacpp-router")]
 
       // Config-defined model should preserve custom settings
-      expect(provider.models["llama-3.1-8b"]).toBeDefined()
-      expect(provider.models["llama-3.1-8b"].name).toBe("My Llama")
-      expect(provider.models["llama-3.1-8b"].capabilities.reasoning).toBe(true)
+      expect(discoveredProvider.models["llama-3.1-8b"]).toBeDefined()
+      expect(discoveredProvider.models["llama-3.1-8b"].name).toBe("My Llama")
+      expect(discoveredProvider.models["llama-3.1-8b"].capabilities.reasoning).toBe(true)
 
       // Discovered models should be added
-      expect(provider.models["mistral-7b"]).toBeDefined()
-      expect(provider.models["gemma-2-9b"]).toBeDefined()
+      expect(discoveredProvider.models["mistral-7b"]).toBeDefined()
+      expect(discoveredProvider.models["gemma-2-9b"]).toBeDefined()
     }),
   {
     config: {
