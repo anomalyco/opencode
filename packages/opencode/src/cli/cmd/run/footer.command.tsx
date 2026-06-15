@@ -38,6 +38,7 @@ type VariantEntry = PanelEntry & {
 
 type SkillEntry = PanelEntry & {
   name: string
+  template?: string
 }
 
 type SubagentEntry = PanelEntry & {
@@ -132,7 +133,6 @@ function handleKey(input: {
   setQuery: (value: string) => void
   select: () => void
   close: () => void
-  onDrillDown?: () => void
 }) {
   const name = input.event.name.toLowerCase()
   const ctrl = input.event.ctrl && !input.event.meta && !input.event.shift && !input.event.super
@@ -185,12 +185,6 @@ function handleKey(input: {
     return
   }
 
-  if (name === "right" && input.onDrillDown) {
-    input.event.preventDefault()
-    input.onDrillDown()
-    return
-  }
-
   if (ctrl && name === "u") {
     input.event.preventDefault()
     input.setQuery("")
@@ -219,6 +213,7 @@ function PanelShell(props: {
   theme: Accessor<RunFooterTheme>
   inputRef: (input: InputRenderable) => void
   onQuery: (query: string) => void
+  onKeyDown?: (event: KeyEvent) => void
   children: JSX.Element
   dark?: boolean
   chrome?: "default" | "minimal"
@@ -268,6 +263,7 @@ function PanelShell(props: {
           placeholderColor={props.theme().muted}
           cursorColor={props.theme().highlight}
           onInput={props.onQuery}
+          onKeyDown={props.onKeyDown}
           ref={(input) => {
             props.inputRef(input)
             input.traits = { status: "FILTER" }
@@ -782,7 +778,6 @@ export function RunSkillSelectBody(props: {
 }) {
   let field: InputRenderable | undefined
   const [query, setQuery] = createSignal("")
-  const [drilledDown, setDrilledDown] = createSignal(false)
   const entries = createMemo<SkillEntry[]>(() =>
     (props.commands() ?? [])
       .filter((item) => item.source === "skill")
@@ -792,18 +787,23 @@ export function RunSkillSelectBody(props: {
         description: item.description?.replace(/\s+/g, " ").trim() || undefined,
         keywords: `skill ${item.name} ${item.description ?? ""}`,
         name: item.name,
+        template: item.template,
       }))
       .sort((a, b) => a.display.localeCompare(b.display)),
   )
   const recentEntries = createMemo<SkillEntry[]>(() => {
     if (query()) return []
-    return getTopRecentSkills(5).map((recent) => ({
-      category: "",
-      display: recent,
-      description: undefined,
-      keywords: `skill ${recent}`,
-      name: recent,
-    }))
+    return getTopRecentSkills(5).map((recent) => {
+      const full = entries().find((e) => e.name === recent)
+      return {
+        category: "",
+        display: recent,
+        description: full?.description,
+        keywords: `skill ${recent}`,
+        name: recent,
+        template: full?.template,
+      }
+    })
   })
   const allEntries = createMemo<SkillEntry[]>(() => [...recentEntries(), ...entries()])
   const filteredEntries = createMemo<SkillEntry[]>(() => match(query(), allEntries()))
@@ -819,15 +819,9 @@ export function RunSkillSelectBody(props: {
     props.onSelect(item.name)
   }
 
-  const drilledItem = createMemo(() => {
-    if (!drilledDown()) return undefined
-    return items()[menu.selected()]
-  })
-
   createEffect(() => {
     query()
     menu.reset()
-    setDrilledDown(false)
   })
 
   useKeyboard((event) => {
@@ -835,21 +829,7 @@ export function RunSkillSelectBody(props: {
       return
     }
 
-    if (event.name === "left" && drilledDown()) {
-      event.preventDefault()
-      setDrilledDown(false)
-      return
-    }
-
-    handleKey({
-      event,
-      menu,
-      field: () => field,
-      setQuery,
-      select,
-      close: props.onClose,
-      onDrillDown: () => setDrilledDown(true),
-    })
+    handleKey({ event, menu, field: () => field, setQuery, select, close: props.onClose })
   })
 
   return (
@@ -867,39 +847,20 @@ export function RunSkillSelectBody(props: {
       dark
       chrome="minimal"
     >
-      {drilledItem() ? (
-        <box
-          flexDirection="column"
-          height={PANEL_LIST_ROWS}
-          paddingLeft={PANEL_PAD}
-          paddingRight={PANEL_PAD}
-        >
-          <text fg={props.theme().highlight} attributes={TextAttributes.BOLD} wrapMode="none">
-            {drilledItem()!.name}
-          </text>
-          <text marginTop={1} fg={props.theme().text} wrapMode="none">
-            {drilledItem()!.description || "No description available"}
-          </text>
-          <text marginTop={1} fg={props.theme().muted} wrapMode="none">
-            Press ← to go back
-          </text>
-        </box>
-      ) : (
-        <RunFooterMenu
-          theme={props.theme}
-          items={items}
-          selected={menu.selected}
-          offset={menu.offset}
-          rows={() => PANEL_LIST_ROWS}
-          limit={PANEL_LIST_ROWS}
-          empty={props.commands() ? "No skills found" : "Skills loading"}
-          border={false}
-          paddingLeft={PANEL_PAD}
-          paddingRight={PANEL_PAD}
-          grouped={false}
-          background
-        />
-      )}
+      <RunFooterMenu
+        theme={props.theme}
+        items={items}
+        selected={menu.selected}
+        offset={menu.offset}
+        rows={() => PANEL_LIST_ROWS}
+        limit={PANEL_LIST_ROWS}
+        empty={props.commands() ? "No skills found" : "Skills loading"}
+        border={false}
+        paddingLeft={PANEL_PAD}
+        paddingRight={PANEL_PAD}
+        grouped={false}
+        background
+      />
     </PanelShell>
   )
 }
