@@ -21,7 +21,7 @@ jobs:
         {
           "aws": {
             "imageName": "enk-ecr-opencode-all-prd",
-            "valueFilePath": ["aws-apne2-prd-hackathon.yaml"]
+            "valueFilePath": ["aws-apne2-prd-hackathon.yaml", "aws-apne2-prd-jupyter.yaml"]
           }
         }
     secrets:
