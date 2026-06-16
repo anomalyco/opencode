@@ -60,6 +60,27 @@ describe("FileSystem", () => {
     ),
   )
 
+  it.live("follows workspace symlinks that resolve outside the workspace", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const outside = yield* Effect.promise(() => tmpdir())
+        yield* Effect.addFinalizer(() => Effect.promise(() => outside[Symbol.asyncDispose]()))
+        yield* Effect.promise(() => fs.mkdir(path.join(outside.path, "docs")))
+        yield* Effect.promise(() => fs.writeFile(path.join(outside.path, "docs", "outline.md"), "# Outline"))
+        yield* Effect.promise(() => fs.symlink(outside.path, path.join(directory, "linked")))
+
+        const service = yield* FileSystem.Service
+        const entries = yield* service.list({ path: RelativePath.make("linked") })
+        const content = yield* service.read({ path: RelativePath.make("linked/docs/outline.md") })
+
+        expect(entries.map((entry) => ({ path: entry.path, type: entry.type }))).toEqual([
+          { path: RelativePath.make("linked/docs" + path.sep), type: "directory" },
+        ])
+        expect(new TextDecoder().decode(content.content)).toBe("# Outline")
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("rejects lexical escapes", () =>
     withTmp((directory) =>
       Effect.gen(function* () {

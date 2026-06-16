@@ -73,10 +73,19 @@ export namespace FSUtil {
         return yield* Effect.tryPromise({
           try: async () => {
             const entries = await NFS.readdir(dirPath, { withFileTypes: true })
-            return entries.map(
-              (e): DirEntry => ({
-                name: e.name,
-                type: e.isDirectory() ? "directory" : e.isSymbolicLink() ? "symlink" : e.isFile() ? "file" : "other",
+            return Promise.all(
+              entries.map(async (e): Promise<DirEntry> => {
+                if (!e.isSymbolicLink()) {
+                  return {
+                    name: e.name,
+                    type: e.isDirectory() ? "directory" : e.isFile() ? "file" : "other",
+                  }
+                }
+                const stat = await NFS.stat(join(dirPath, e.name)).catch(() => undefined)
+                return {
+                  name: e.name,
+                  type: stat?.isDirectory() ? "directory" : stat?.isFile() ? "file" : "symlink",
+                }
               }),
             )
           },

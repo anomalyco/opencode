@@ -4,6 +4,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { testEffect } from "../lib/effect"
 import path from "path"
+import fs from "fs/promises"
 
 const live = FSUtil.layer.pipe(Layer.provideMerge(NodeFileSystem.layer))
 const { effect: it } = testEffect(live)
@@ -89,6 +90,24 @@ describe("FSUtil", () => {
 
         const result = yield* fs.readFileStringSafe(path.join(tmp, "does-not-exist.txt"))
         expect(result).toBeUndefined()
+      }),
+    )
+  })
+
+  describe("readDirectoryEntries", () => {
+    it(
+      "reports symlinks to directories as directories",
+      Effect.gen(function* () {
+        const service = yield* FSUtil.Service
+        const filesys = yield* FileSystem.FileSystem
+        const tmp = yield* filesys.makeTempDirectoryScoped()
+        const target = path.join(tmp, "target")
+        yield* filesys.makeDirectory(target)
+        yield* Effect.promise(() => fs.symlink(target, path.join(tmp, "link")))
+
+        const entries = yield* service.readDirectoryEntries(tmp)
+
+        expect(entries).toContainEqual({ name: "link", type: "directory" })
       }),
     )
   })
