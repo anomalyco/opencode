@@ -17,7 +17,10 @@ test("skips the blocking initial theme probe inside multiplexers", async () => {
 
   expect(shouldSkipInitialThemeModeProbe({ TMUX: "/tmp/tmux-501/default,123,0", TERM: "xterm-256color" })).toBe(true)
   expect(shouldSkipInitialThemeModeProbe({ STY: "123.screen", TERM: "screen-256color" })).toBe(true)
+  expect(shouldSkipInitialThemeModeProbe({ TERM: "tmux" })).toBe(true)
   expect(shouldSkipInitialThemeModeProbe({ TERM: "tmux-256color" })).toBe(true)
+  expect(shouldSkipInitialThemeModeProbe({ TERM: "screen" })).toBe(true)
+  expect(shouldSkipInitialThemeModeProbe({ TERM: "screen-256color" })).toBe(true)
   expect(await resolveInitialThemeMode(setup.renderer, { TMUX: "/tmp/tmux-501/default,123,0" })).toBe("dark")
   expect(setup.timeouts).toEqual([])
 })
@@ -26,6 +29,8 @@ test("waits for the initial theme mode on direct terminal sessions", async () =>
   const setup = createRenderer("light")
 
   expect(shouldSkipInitialThemeModeProbe({ TERM: "xterm-256color" })).toBe(false)
+  expect(shouldSkipInitialThemeModeProbe({ TMUX: "", STY: "", TERM: "xterm-256color" })).toBe(false)
+  expect(shouldSkipInitialThemeModeProbe({})).toBe(false)
   expect(await resolveInitialThemeMode(setup.renderer, { TERM: "xterm-256color" })).toBe("light")
   expect(setup.timeouts).toEqual([1000])
 })
