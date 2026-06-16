@@ -83,8 +83,9 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
         return directories.data ?? []
       } catch (error) {
         setLoadError(error)
-        // Keep any list we already showed so a failed refresh leaves the dialog
-        // usable; only an initial load with no data falls back to the error view.
+        // An initial load with no data surfaces the inline error view below. A
+        // failed refresh intentionally stays quiet and keeps the already-shown
+        // list interactive; reopening the dialog retries the load.
         return info.value
       }
     },
