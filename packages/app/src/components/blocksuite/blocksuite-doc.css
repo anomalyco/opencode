@@ -93,12 +93,11 @@
   width: 100%;
   max-width: 100%;
   height: auto;
-  min-height: 40px;
   overflow: visible;
   white-space: normal;
   --affine-editor-width: 100%;
   --affine-editor-side-padding: 12px;
-  --affine-editor-bottom-padding: 16px;
+  --affine-editor-bottom-padding: 0px;
   --affine-background-primary-color: transparent;
 }
 
@@ -138,7 +137,7 @@
 }
 
 [data-component="prompt-doc-viewer"] affine-preview-root {
-  padding: 6px 0 16px;
+  padding: 6px 0;
   background: transparent;
 }
 
