@@ -295,9 +295,20 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     })
   }
 
+  let submitting = false
   const handleSubmit = async (event: Event) => {
     event.preventDefault()
 
+    if (submitting) return
+    submitting = true
+    try {
+      return await submit()
+    } finally {
+      submitting = false
+    }
+  }
+
+  const submit = async () => {
     const currentPrompt = prompt.current()
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
     const images = input.imageAttachments().slice()
