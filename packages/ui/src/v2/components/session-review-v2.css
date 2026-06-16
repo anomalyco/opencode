@@ -250,6 +250,11 @@
   display: inline-flex;
 }
 
+[data-component="tabs-v2"].session-review-v2-tabs .session-review-v2-tab-close {
+  margin-left: -5px;
+  flex-shrink: 0;
+}
+
 .session-review-v2-tabs-bar {
   display: flex;
   flex-direction: row;
@@ -293,6 +298,7 @@
 
 [data-component="tabs-v2"].session-review-v2-tabs .session-review-v2-tabs-actions {
   position: relative;
+  margin-left: -2px;
   flex-shrink: 0;
   background-color: var(--background-stronger, var(--v2-background-bg-base));
 }
@@ -322,7 +328,6 @@
 }
 
 [data-component="tabs-v2"].session-review-v2-tabs .session-review-v2-file-tab--temporary [data-slot="tabs-v2-trigger"] {
-  color: var(--v2-text-text-faint);
   font-style: italic;
 }
 

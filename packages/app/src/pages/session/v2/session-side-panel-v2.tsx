@@ -228,7 +228,20 @@ export function SessionSidePanelV2(props: {
                             <SessionContextUsage variant="indicator" />
                             <div>{language.t("session.tab.context")}</div>
                           </div>
-                          <TabsV2.CloseButton onClick={() => tabs().close("context")} />
+                          <div class="-mr-1.5">
+                            <IconButtonV2
+                              size="small"
+                              variant="ghost-muted"
+                              class="session-review-v2-tab-close"
+                              onMouseDown={(event) => {
+                                event.preventDefault()
+                                event.stopPropagation()
+                              }}
+                              onClick={() => tabs().close("context")}
+                              icon={<IconV2 name="xmark-small" />}
+                              aria-label="Close tab"
+                            />
+                          </div>
                         </TabsV2.Trigger>
                       </Show>
                       <For each={tabsV2.visibleStripTabs()}>
@@ -274,7 +287,20 @@ export function SessionSidePanelV2(props: {
                                     <div>{language.t("command.file.open")}</div>
                                   </div>
                                 </Show>
-                                <TabsV2.CloseButton onClick={() => tabsV2.closeTab(tab)} />
+                                <div class="-mr-1.5">
+                                  <IconButtonV2
+                                    size="small"
+                                    variant="ghost-muted"
+                                    class="session-review-v2-tab-close"
+                                    onMouseDown={(event) => {
+                                      event.preventDefault()
+                                      event.stopPropagation()
+                                    }}
+                                    onClick={() => tabsV2.closeTab(tab)}
+                                    icon={<IconV2 name="xmark-small" />}
+                                    aria-label="Close tab"
+                                  />
+                                </div>
                               </TabsV2.Trigger>
                             </div>
                           )
