@@ -13,8 +13,9 @@ import DESCRIPTION from "./message.txt"
 const MAX_BODY_LENGTH = 16000
 
 export const Parameters = Schema.Struct({
-  target: Schema.Literals(["parent", "subagent"]).annotate({
-    description: "Who to message: 'parent' (the agent that spawned you) or 'subagent' (reply to one you spawned)",
+  target: Schema.String.annotate({
+    description:
+      "Who to message: 'parent' (the agent that spawned you), 'subagent' (reply to one you spawned), or a peer slug you were allow-listed to reach",
   }),
   body: Schema.String.annotate({ description: "The message or question text" }),
   expect_reply: Schema.optional(Schema.Boolean).annotate({
@@ -86,6 +87,46 @@ export const MessageTool = Tool.define<
       }
 
       // target === "parent"
+      if (params.target !== "parent") {
+        // peer-slug send (sibling/coordinator) — fire-and-forget only
+        if (params.expect_reply === true)
+          return yield* Effect.fail(
+            new Error(
+              `expect_reply is not allowed for peer messaging (target "${params.target}"); it is fire-and-forget`,
+            ),
+          )
+        const allow = yield* messaging.getAllow(ctx.sessionID)
+        if (!allow.includes(params.target))
+          return yield* Effect.fail(
+            new Error(`target "${params.target}" is not in your message_allow list`),
+          )
+        const targetID = Option.getOrUndefined(yield* messaging.resolveSlug(params.target))
+        if (!targetID)
+          return yield* Effect.fail(
+            new Error(`target "${params.target}" has not spawned yet`),
+          )
+        const me = yield* sessions.get(ctx.sessionID)
+        const peer = yield* sessions.get(targetID)
+        if (!peer.parentID || peer.parentID !== me.parentID)
+          return yield* Effect.fail(
+            new Error(`target "${params.target}" is not a sibling (parent mismatch)`),
+          )
+        const fromSlug = yield* messaging.slugFor(ctx.sessionID)
+        yield* messaging
+          .enqueue({ target: targetID, from: ctx.sessionID, fromSlug, body: params.body })
+          .pipe(
+            Effect.catchTag("Messaging.AbuseError", (e) => Effect.fail(new Error(e.detail))),
+            Effect.catchTag("Messaging.NotFoundError", () =>
+              Effect.fail(new Error(`target "${params.target}" is no longer live`)),
+            ),
+          )
+        return {
+          title: `Sent to ${params.target}`,
+          metadata: { target: params.target, expect_reply: false },
+          output: "Queued to recipient inbox.",
+        }
+      }
+
       const self = yield* sessions.get(ctx.sessionID)
       const parentID = self.parentID
       if (!parentID)
