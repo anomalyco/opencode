@@ -960,7 +960,7 @@ describe("ProviderTransform.schema - openai supported schema subset", () => {
     })
   })
 
-  test("keeps transitively referenced definitions and prunes unused definitions", () => {
+  test("keeps local references and sanitizes definitions", () => {
     const result = ProviderTransform.schema(openaiModel, {
       type: "object",
       properties: {
@@ -972,17 +972,9 @@ describe("ProviderTransform.schema - openai supported schema subset", () => {
       },
       $defs: {
         Value: {
-          type: "object",
+          type: "string",
+          pattern: "^value$",
           description: "Definition description",
-          properties: {
-            detail: { $ref: "#/$defs/Detail" },
-          },
-        },
-        Detail: {
-          type: "object",
-          properties: {
-            owner: { $ref: "#/$defs/Value" },
-          },
         },
         Unused: {
           type: "number",
@@ -997,43 +989,12 @@ describe("ProviderTransform.schema - openai supported schema subset", () => {
     })
     expect(result.$defs).toEqual({
       Value: {
-        type: "object",
+        type: "string",
         description: "Definition description",
-        properties: {
-          detail: { $ref: "#/$defs/Detail" },
-        },
       },
-      Detail: {
-        type: "object",
-        properties: {
-          owner: { $ref: "#/$defs/Value" },
-        },
+      Unused: {
+        type: "number",
       },
-    })
-  })
-
-  test("recognizes legacy, nested, and encoded local references", () => {
-    const result = ProviderTransform.schema(openaiModel, {
-      type: "object",
-      properties: {
-        name: { $ref: "#/definitions/User/properties/name" },
-        profile: { $ref: "#/%24defs/Profile%7E0Name" },
-      },
-      definitions: {
-        User: { type: "object", properties: { name: { type: "string" } } },
-        Unused: { type: "string" },
-      },
-      $defs: {
-        "Profile~Name": { type: "string" },
-        Unused: { type: "string" },
-      },
-    } as any) as any
-
-    expect(result.definitions).toEqual({
-      User: { type: "object", properties: { name: { type: "string" } } },
-    })
-    expect(result.$defs).toEqual({
-      "Profile~Name": { type: "string" },
     })
   })
 

@@ -1370,75 +1370,6 @@ function sanitizeOpenAISchema(value: unknown): unknown {
   return result
 }
 
-function pruneOpenAISchemaDefinitions(value: unknown) {
-  type Definition = { table: "$defs" | "definitions"; name: string }
-  const parseRef = (value: unknown): Definition | undefined => {
-    if (typeof value !== "string" || !value.startsWith("#")) return
-    const tokens = (() => {
-      try {
-        const pointer = decodeURIComponent(value.slice(1))
-        return pointer.startsWith("/") ? pointer.slice(1).split("/") : []
-      } catch {
-        return []
-      }
-    })()
-    if (tokens.length < 2) return
-    const decode = (token: string) => {
-      if (/~(?:[^01]|$)/.test(token)) return
-      return token.replaceAll("~1", "/").replaceAll("~0", "~")
-    }
-    const table = decode(tokens[0])
-    const name = decode(tokens[1])
-    if ((table !== "$defs" && table !== "definitions") || name === undefined) return
-    return { table, name }
-  }
-  const collectRef = (node: JsonRecord, pending: Definition[]) => {
-    const ref = parseRef(node.$ref)
-    if (ref) pending.push(ref)
-  }
-  const collectAll = (node: unknown, pending: Definition[]) => {
-    if (Array.isArray(node)) return node.forEach((item) => collectAll(item, pending))
-    if (!isPlainObject(node)) return
-    collectRef(node, pending)
-    Object.values(node).forEach((item) => collectAll(item, pending))
-  }
-  const collectOutsideDefinitions = (node: unknown, pending: Definition[]) => {
-    if (Array.isArray(node)) return node.forEach((item) => collectOutsideDefinitions(item, pending))
-    if (!isPlainObject(node)) return
-    collectRef(node, pending)
-    if (isPlainObject(node.properties)) {
-      Object.values(node.properties).forEach((item) => collectOutsideDefinitions(item, pending))
-    }
-    for (const key of ["items", "anyOf", "oneOf", "allOf"] as const) {
-      if (key in node) collectOutsideDefinitions(node[key], pending)
-    }
-    if ("additionalProperties" in node && typeof node.additionalProperties !== "boolean") {
-      collectOutsideDefinitions(node.additionalProperties, pending)
-    }
-  }
-
-  if (!isPlainObject(value)) return
-  const pending: Definition[] = []
-  const reachable = new Set<string>()
-  collectOutsideDefinitions(value, pending)
-  while (pending.length > 0) {
-    const definition = pending.pop()!
-    const key = JSON.stringify([definition.table, definition.name])
-    if (reachable.has(key)) continue
-    reachable.add(key)
-    const table = value[definition.table]
-    if (isPlainObject(table)) collectAll(table[definition.name], pending)
-  }
-  for (const tableName of ["$defs", "definitions"] as const) {
-    const table = value[tableName]
-    if (!isPlainObject(table)) continue
-    for (const name of Object.keys(table)) {
-      if (!reachable.has(JSON.stringify([tableName, name]))) delete table[name]
-    }
-    if (Object.keys(table).length === 0) delete value[tableName]
-  }
-}
-
 export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 {
   /*
   if (["openai", "azure"].includes(providerID)) {
@@ -1460,7 +1391,6 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
 
   if (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/azure") {
     schema = sanitizeOpenAISchema(schema) as JSONSchema7
-    pruneOpenAISchemaDefinitions(schema)
     // Codex also applies lossy compaction above 4 KB; defer that until OpenCode needs the same schema budget.
   }
 
