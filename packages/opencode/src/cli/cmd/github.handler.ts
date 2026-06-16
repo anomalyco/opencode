@@ -33,7 +33,13 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
 import { parseGitHubRemote } from "@/util/repository"
 import { Effect } from "effect"
-import { extractResponseText, formatPromptTooLargeError } from "./github.shared"
+import {
+  extractResponseText,
+  findResumableSession,
+  formatPromptTooLargeError,
+  GITHUB_RUN_METADATA_KEY,
+  shouldSendContinuation,
+} from "./github.shared"
 
 type GitHubAuthor = {
   login: string
@@ -494,19 +500,34 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         await addReaction(commentType)
       }
 
-      // Setup opencode session
+      // Setup opencode session. Reuse the prior session for this GitHub run when
+      // one already exists in the local DB (a wrapper/in-runner retry after a
+      // transient failure), so the agent continues its earlier work instead of
+      // re-fetching context and re-prompting the model from scratch. GITHUB_RUN_ID
+      // is stable across re-runs (only GITHUB_RUN_ATTEMPT increments), so it is a
+      // safe idempotency key. A cross-runner re-run starts on a fresh disk with an
+      // empty DB and still creates a new session; covering that needs the data dir
+      // persisted across runners, out of scope here.
       const repoData = await fetchRepo()
-      session = await runLocalEffect(
-        sessionSvc.create({
-          permission: [
-            {
-              permission: "question",
-              action: "deny",
-              pattern: "*",
-            },
-          ],
-        }),
-      )
+      const prior = findResumableSession(await runLocalEffect(sessionSvc.list()), runId)
+      const priorMessageCount = prior
+        ? (await runLocalEffect(sessionSvc.messages({ sessionID: prior.id, limit: 1 }))).length
+        : 0
+      const continuation = shouldSendContinuation({ foundPrior: prior !== undefined, priorMessageCount })
+      session = prior
+        ? { id: prior.id, title: prior.title, version: prior.version }
+        : await runLocalEffect(
+            sessionSvc.create({
+              metadata: { [GITHUB_RUN_METADATA_KEY]: runId },
+              permission: [
+                {
+                  permission: "question",
+                  action: "deny",
+                  pattern: "*",
+                },
+              ],
+            }),
+          )
       await subscribeSessionEvents()
       shareId = await (async () => {
         if (share === false) return
@@ -514,7 +535,15 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         await runLocalEffect(sessionShare.share(session.id))
         return session.id.slice(-8)
       })()
-      console.log("opencode session", session.id)
+      console.log(prior ? "resuming opencode session" : "opencode session", session.id)
+
+      // When continuing, the full task prompt and PR/issue context already live in
+      // the session history; send a short nudge instead of re-injecting everything
+      // (the point of resuming is to not re-spend those tokens).
+      const RESUME_PROMPT =
+        "The previous attempt in this session was interrupted before finishing. Continue the task to completion."
+      const runTask = (message: string) =>
+        chat(continuation ? RESUME_PROMPT : message, continuation ? [] : promptFiles)
 
       // Handle event types:
       // REPO_EVENTS (schedule, workflow_dispatch): no issue/PR context, output to logs/PR only
@@ -528,7 +557,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         const branchPrefix = isWorkflowDispatchEvent ? "dispatch" : "schedule"
         const branch = await checkoutNewBranch(branchPrefix)
         const head = await gitText(["rev-parse", "HEAD"])
-        const response = await chat(userPrompt, promptFiles)
+        const response = await runTask(userPrompt)
         const { dirty, uncommittedChanges, switched } = await branchIsDirty(head, branch)
         if (switched) {
           // Agent switched branches (likely created its own branch/PR)
@@ -563,7 +592,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
           await checkoutLocalBranch(prData)
           const head = await gitText(["rev-parse", "HEAD"])
           const dataPrompt = buildPromptDataForPR(prData)
-          const response = await chat(`${userPrompt}\n\n${dataPrompt}`, promptFiles)
+          const response = await runTask(`${userPrompt}\n\n${dataPrompt}`)
           const { dirty, uncommittedChanges, switched } = await branchIsDirty(head, prData.headRefName)
           if (switched) {
             console.log("Agent managed its own branch, skipping infrastructure push")
@@ -581,7 +610,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
           const forkBranch = await checkoutForkBranch(prData)
           const head = await gitText(["rev-parse", "HEAD"])
           const dataPrompt = buildPromptDataForPR(prData)
-          const response = await chat(`${userPrompt}\n\n${dataPrompt}`, promptFiles)
+          const response = await runTask(`${userPrompt}\n\n${dataPrompt}`)
           const { dirty, uncommittedChanges, switched } = await branchIsDirty(head, forkBranch)
           if (switched) {
             console.log("Agent managed its own branch, skipping infrastructure push")
@@ -601,7 +630,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         const head = await gitText(["rev-parse", "HEAD"])
         const issueData = await fetchIssue()
         const dataPrompt = buildPromptDataForIssue(issueData)
-        const response = await chat(`${userPrompt}\n\n${dataPrompt}`, promptFiles)
+        const response = await runTask(`${userPrompt}\n\n${dataPrompt}`)
         const { dirty, uncommittedChanges, switched } = await branchIsDirty(head, branch)
         if (switched) {
           // Agent switched branches (likely created its own branch/PR).
