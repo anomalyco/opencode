@@ -9,6 +9,8 @@ import { ProviderV2 } from "./provider"
 
 type SDK = any
 
+const PERPLEXITY_AGENT_UNSUPPORTED_RESPONSE_FIELDS = ["store", "temperature", "include", "tool_choice"] as const
+
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
   if (!res.body) return res
@@ -69,7 +71,7 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
   const chunkTimeout = options.chunkTimeout
   delete options.chunkTimeout
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-    const opts = { ...(init ?? {}) }
+    const opts = { ...init }
     const signals = [
       opts.signal,
       typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined,
@@ -87,10 +89,23 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
       opts.body &&
       opts.method === "POST"
     ) {
-      const body = JSON.parse(opts.body as string)
-      if (body.store !== true && Array.isArray(body.input)) {
-        for (const item of body.input) {
-          if ("id" in item) delete item.id
+      if (typeof opts.body === "string") {
+        const body = JSON.parse(opts.body)
+        if (body.store !== true && Array.isArray(body.input)) {
+          for (const item of body.input) {
+            if ("id" in item) delete item.id
+          }
+          opts.body = JSON.stringify(body)
+        }
+      }
+    }
+
+    if (model.providerID === "perplexity-agent" && typeof opts.body === "string" && opts.method === "POST") {
+      const url = typeof input === "string" || input instanceof URL ? input.toString() : input.url
+      if (url.endsWith("/responses")) {
+        const body = JSON.parse(opts.body)
+        for (const field of PERPLEXITY_AGENT_UNSUPPORTED_RESPONSE_FIELDS) {
+          delete body[field]
         }
         opts.body = JSON.stringify(body)
       }
