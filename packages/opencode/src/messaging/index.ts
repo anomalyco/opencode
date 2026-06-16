@@ -307,6 +307,22 @@ export const layer = Layer.effect(
       sessionID,
       opts,
     ) {
+      // Bounded behaviors (Phase 1):
+      //   (i) Lost-wakeup window: the empty-check at line 1 and the waiter
+      //       registration at line 2 are not atomic. A concurrent `enqueue` that
+      //       resolves its waiter between those two steps can leave the new
+      //       item in the inbox with no waiter to wake. Self-correcting: the
+      //       coordinator's NEXT `drain` (one turn later at worst) sees the
+      //       item. Worst case is one timeout of latency, never message loss.
+      //  (ii) Single-waiter-per-session: `v.waiters` is a `Map<SessionID,
+      //       Deferred>`, so a second concurrent `awaitInbox` for the same
+      //       session overwrites the first's Deferred without resolving it.
+      //       Phase 1 assumes one coordinator per session. A multi-coordinator
+      //       fan-in would need a per-session waiter set.
+      // (iii) On interrupt mid-await: the `Effect.timeoutOption` causes the
+      //       function to return `false`, and the `v.waiters.delete` cleanup
+      //       runs in the same scope. The instance finalizer (added in
+      //       `InstanceState.make`) sweeps any leftover waiter on shutdown.
       const v = yield* InstanceState.get(state)
       if ((v.inbox.get(sessionID)?.length ?? 0) > 0) return true
       const d = yield* Deferred.make<void>()

@@ -86,7 +86,8 @@ export const MessageTool = Tool.define<
         }
       }
 
-      // target === "parent"
+      // not "subagent" (handled above) and not "parent" (handled below) —
+      // the only remaining case is a peer-slug send (sibling / coordinator).
       if (params.target !== "parent") {
         // peer-slug send (sibling/coordinator) — fire-and-forget only
         if (params.expect_reply === true)
