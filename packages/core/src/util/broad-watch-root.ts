@@ -16,10 +16,20 @@ export function normalizeWatchRootPath(directory: string): string {
   return "/" + stack.join("/")
 }
 
-function looksLikeUnixUserHome(normalized: string): boolean {
+function looksLikeUserHome(normalized: string): boolean {
   const parts = normalized.split("/").filter(Boolean)
-  if (parts.length !== 2) return false
-  return parts[0] === "home" || parts[0] === "Users"
+  if (parts.length === 2) {
+    return parts[0] === "home" || parts[0] === "Users"
+  }
+  if (parts.length === 3 && /^[a-zA-Z]:$/.test(parts[0])) {
+    return parts[1] === "Users"
+  }
+  return false
+}
+
+function isDriveRoot(normalized: string): boolean {
+  const parts = normalized.split("/").filter(Boolean)
+  return parts.length === 1 && /^[a-zA-Z]:$/.test(parts[0])
 }
 
 /** Browser-safe check for directories that must not be file-watched or opened as projects. */
@@ -28,8 +38,8 @@ export function isBroadWatchRoot(directory: string, homeDir?: string): boolean {
   if (!trimmed) return true
   if (trimmed === "~") return true
   const normalized = normalizeWatchRootPath(directory)
-  if (normalized === "/") return true
+  if (normalized === "/" || isDriveRoot(normalized)) return true
   if (homeDir && normalized === normalizeWatchRootPath(homeDir)) return true
-  if (!homeDir && looksLikeUnixUserHome(normalized)) return true
+  if (!homeDir && looksLikeUserHome(normalized)) return true
   return false
 }

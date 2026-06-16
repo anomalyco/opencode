@@ -19,6 +19,14 @@ describe("isBroadWatchRoot (browser-safe)", () => {
     expect(isBroadWatchRoot("/Users/justin")).toBe(true)
   })
 
+  test("treats typical windows user home paths and drive roots as broad", () => {
+    expect(isBroadWatchRoot("C:/")).toBe(true)
+    expect(isBroadWatchRoot("C:\\")).toBe(true)
+    expect(isBroadWatchRoot("C:/Users/justin")).toBe(true)
+    expect(isBroadWatchRoot("C:\\Users\\justin")).toBe(true)
+    expect(isBroadWatchRoot("C:/Users/justin/Projects/demo")).toBe(false)
+  })
+
   test("matches an explicit home directory", () => {
     expect(isBroadWatchRoot("/home/justin", "/home/justin")).toBe(true)
     expect(isBroadWatchRoot("/home/justin/Projects/demo", "/home/justin")).toBe(false)
