@@ -58,11 +58,21 @@ export function FormatError(input: unknown): string | undefined {
   // ProviderModelNotFoundError: { providerID: string, modelID: string, suggestions?: string[] }
   const providerModelNotFound = configData(input, "ProviderModelNotFoundError")
   if (providerModelNotFound) {
+    const providerID = stringField(providerModelNotFound, "providerID")
+    const modelID = stringField(providerModelNotFound, "modelID")
     const suggestions = Array.isArray(providerModelNotFound.suggestions)
       ? providerModelNotFound.suggestions.filter((x) => typeof x === "string")
       : []
+    if (process.env.OPENCODE_FLAVOR === "anr") {
+      return [
+        `Model not found: ${providerID}/${modelID}`,
+        `This ID is not registered in the ANR model catalog for your environment.`,
+        ...(suggestions.length ? ["Did you mean: " + suggestions.join(", ")] : []),
+        `Run \`opencode models --provider ${providerID}\` to list available IDs.`,
+      ].join("\n")
+    }
     return [
-      `Model not found: ${stringField(providerModelNotFound, "providerID")}/${stringField(providerModelNotFound, "modelID")}`,
+      `Model not found: ${providerID}/${modelID}`,
       ...(suggestions.length ? ["Did you mean: " + suggestions.join(", ")] : []),
       `Try: \`opencode models\` to list available models`,
       `Or check your config (opencode.json) provider/model names`,
