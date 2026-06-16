@@ -105,13 +105,21 @@ export const MyPlugin = async (ctx) => {
 
 ```js title=".opencode/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
-  console.log("Plugin initialized!")
+  await client.app.log({
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+    },
+  })
 
   return {
     // Hook implementations go here
   }
 }
 ```
+
+For TUI plugins, avoid `console.log()` and `console.error()`. They write to the same terminal session as the client UI and can disrupt the input area. Prefer `client.app.log()` instead.
 
 The plugin function receives:
 

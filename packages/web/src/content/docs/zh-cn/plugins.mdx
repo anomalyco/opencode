@@ -104,13 +104,21 @@ export const MyPlugin = async (ctx) => {
 
 ```js title=".opencode/plugins/example.js"
 export const MyPlugin = async ({ project, client, $, directory, worktree }) => {
-  console.log("Plugin initialized!")
+  await client.app.log({
+    body: {
+      service: "my-plugin",
+      level: "info",
+      message: "Plugin initialized",
+    },
+  })
 
   return {
     // Hook implementations go here
   }
 }
 ```
+
+对于 TUI 插件，避免使用 `console.log()` 和 `console.error()`。它们会写到和客户端 UI 共用的终端会话里，可能干扰输入区；应优先使用 `client.app.log()`。
 
 插件函数接收以下参数：
 
