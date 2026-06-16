@@ -120,6 +120,15 @@ async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks:
   }
 }
 
+function pluginClientReentryResponse(directory: string) {
+  return new Response(`Plugin client request cannot enter instance ${directory} while its plugins are still loading`, {
+    status: 409,
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+    },
+  })
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -139,11 +148,17 @@ const layer = Layer.effect(
         const { Server } = yield* Effect.promise(() => import("../server/server"))
 
         const serverUrl = Server.url
+        let bootstrapping = true
         const client = createOpencodeClient({
           baseUrl: serverUrl?.toString() ?? "http://localhost:4096",
           directory: ctx.directory,
           headers: ServerAuth.headers(),
-          ...(serverUrl ? {} : { fetch: async (...args) => Server.Default().app.fetch(...args) }),
+          fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+            const request = new Request(input, init)
+            if (bootstrapping) return pluginClientReentryResponse(ctx.directory)
+            if (serverUrl) return globalThis.fetch(request)
+            return Server.Default().app.fetch(request)
+          },
         })
         const cfg = yield* config.get()
         const input: PluginInput = {
@@ -247,6 +262,8 @@ const layer = Layer.effect(
             Effect.ignore,
           )
         }
+
+        bootstrapping = false
 
         const unsubscribe = yield* events.listen((event) => {
           if (event.location?.directory !== ctx.directory) return Effect.void
