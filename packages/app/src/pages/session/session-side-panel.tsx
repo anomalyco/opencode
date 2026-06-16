@@ -268,7 +268,10 @@ export function SessionSidePanel(props: {
             address={browserAddress()}
             url={preview.previewUrl()}
             onReload={preview.reload}
-            onHome={() => tabs().setActive("preview")}
+            onHome={() => {
+              tabs().setActive("preview")
+              preview.reload()
+            }}
           />
           <div class="flex-1 min-h-0 flex">
           <div

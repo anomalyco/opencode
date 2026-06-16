@@ -558,6 +558,8 @@ export const dict = {
   "session.tab.context": "Context",
   "session.tab.preview": "Preview",
   "session.preview.notReady": "Preview is not ready yet",
+  "session.preview.generating.title": "AI is building your screen",
+  "session.preview.generating.hint": "Digging away to build it · Just a moment",
   "session.panel.reviewAndFiles": "Review and files",
   "session.review.filesChanged": "{{count}} Files Changed",
   "session.review.change.one": "Change",

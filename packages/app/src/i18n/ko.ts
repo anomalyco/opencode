@@ -484,6 +484,8 @@ export const dict = {
   "session.tab.context": "컨텍스트",
   "session.tab.preview": "미리보기",
   "session.preview.notReady": "아직 미리보기가 준비되지 않았습니다",
+  "session.preview.generating.title": "AI가 화면을 만들고 있어요",
+  "session.preview.generating.hint": "곡괭이질하듯 짓는 중이에요 · 잠시만 기다려 주세요",
   "session.panel.reviewAndFiles": "검토 및 파일",
   "session.review.filesChanged": "{{count}}개 파일 변경됨",
   "session.review.change.one": "변경",
