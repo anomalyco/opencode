@@ -20,6 +20,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionSchema } from "@opencode-ai/core/session/schema"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import sessionMetadataMigration from "@opencode-ai/core/database/migration/20260511173437_session-metadata"
+import workspaceNameMigration from "@opencode-ai/core/database/migration/20260410174513_workspace-name"
 import type { SqlClient as SqlClientService } from "effect/unstable/sql/SqlClient"
 import { Database } from "@opencode-ai/core/database/database"
 import { tmpdir } from "./fixture/tmpdir"
@@ -120,6 +121,34 @@ describe("DatabaseMigration", () => {
 
         expect(yield* db.get(sql`SELECT agent FROM session_context_epoch WHERE session_id = 'ses_existing'`)).toEqual({
           agent: "build",
+        })
+      }),
+    )
+  })
+
+  test("repairs legacy workspace rows when name column is missing", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE project (id text PRIMARY KEY)`)
+        yield* db.run(
+          sql`CREATE TABLE workspace (id text PRIMARY KEY, branch text, project_id text NOT NULL, type text NOT NULL, directory text, extra text)`,
+        )
+        yield* db.run(sql`INSERT INTO project (id) VALUES ('project_1')`)
+        yield* db.run(
+          sql`INSERT INTO workspace (id, branch, project_id, type, directory, extra) VALUES ('wrk_1', 'main', 'project_1', 'branch', '/repo', '{"foo":true}')`,
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [workspaceNameMigration])
+
+        expect(yield* db.get(sql`SELECT id, type, branch, name, directory, extra, project_id FROM workspace WHERE id = 'wrk_1'`)).toEqual({
+          id: 'wrk_1',
+          type: 'branch',
+          branch: 'main',
+          name: '',
+          directory: '/repo',
+          extra: '{"foo":true}',
+          project_id: 'project_1',
         })
       }),
     )
