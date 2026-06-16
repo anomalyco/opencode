@@ -10,6 +10,8 @@ import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { dynamicTool, jsonSchema } from "ai"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { Command } from "../../src/command"
@@ -168,7 +170,11 @@ const blockingProcessor = Layer.succeed(
   }),
 )
 
-function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makePrompt(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  processor?: "blocking"
+  mcp?: Layer.Layer<MCP.Service>
+}) {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
     Snapshot.defaultLayer,
@@ -181,7 +187,7 @@ function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; proces
     Config.defaultLayer,
     ProviderSvc.defaultLayer,
     lsp,
-    makeMcp(input?.mcpInstructions),
+    input?.mcp ?? makeMcp(input?.mcpInstructions),
     FSUtil.defaultLayer,
     BackgroundJob.defaultLayer,
     status,
@@ -2405,4 +2411,95 @@ noLLMServer.instance(
       }
     }),
   30_000,
+)
+
+// MCP wrapper permission payload — see packages/opencode/src/session/tools.ts.
+// The wrapper must forward the tool name as the permission key/pattern and the
+// raw tool arguments as metadata so SDK consumers can reason about the call.
+const mcpWithEchoTool = Layer.succeed(
+  MCP.Service,
+  MCP.Service.of({
+    status: () => Effect.succeed({}),
+    clients: () => Effect.succeed({}),
+    instructions: () => Effect.succeed([]),
+    tools: () =>
+      Effect.succeed({
+        echo_say: dynamicTool({
+          description: "echo back the greeting",
+          inputSchema: jsonSchema({
+            type: "object",
+            properties: { greeting: { type: "string" } },
+            required: ["greeting"],
+            additionalProperties: false,
+          }),
+          execute: async () => ({ content: [{ type: "text" as const, text: "ok" }] }),
+        }),
+      }),
+    prompts: () => Effect.succeed({}),
+    resources: () => Effect.succeed({}),
+    resourceTemplates: () => Effect.succeed({}),
+    add: () => Effect.succeed({ status: { status: "disabled" as const } }),
+    connect: () => Effect.void,
+    disconnect: () => Effect.void,
+    getPrompt: () => Effect.succeed(undefined),
+    readResource: () => Effect.succeed(undefined),
+    startAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
+    authenticate: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
+    finishAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
+    removeAuth: () => Effect.void,
+    supportsOAuth: () => Effect.succeed(false),
+    hasStoredTokens: () => Effect.succeed(false),
+    getAuthStatus: () => Effect.succeed("not_authenticated" as const),
+  }),
+)
+
+const mcpIt = testEffect(Layer.mergeAll(TestLLMServer.layer, makePrompt({ mcp: mcpWithEchoTool })))
+
+mcpIt.instance("mcp tool ask publishes tool name and args (regression: #19549)", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const events = yield* EventV2Bridge.Service
+    const seen = yield* Deferred.make<PermissionV1.Request>()
+    const unsub = yield* events.listen((event) => {
+      if (event.type === Permission.Event.Asked.type)
+        Deferred.doneUnsafe(seen, Effect.succeed(event.data as PermissionV1.Request))
+      return Effect.void
+    })
+    yield* Effect.addFinalizer(() => unsub)
+
+    const prompt = yield* SessionPrompt.Service
+    const permission = yield* Permission.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({
+      title: "MCP wrapper ask",
+      permission: [{ permission: "*", pattern: "*", action: "ask" }],
+    })
+
+    yield* prompt.prompt({
+      sessionID: session.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "say hi" }],
+    })
+    yield* llm.tool("echo_say", { greeting: "hi" })
+    yield* llm.text("done")
+
+    const fiber = yield* prompt.loop({ sessionID: session.id }).pipe(Effect.forkChild)
+
+    const request = yield* Deferred.await(seen).pipe(
+      Effect.timeoutOrElse({
+        duration: Duration.seconds(5),
+        orElse: () => Effect.fail(new Error("timed out waiting for permission.asked")),
+      }),
+    )
+    expect(request.permission).toBe("echo_say")
+    expect(request.patterns).toEqual(["echo_say"])
+    expect(request.always).toEqual(["echo_say"])
+    expect(request.metadata).toEqual({ greeting: "hi" })
+
+    yield* permission.reply({ requestID: request.id, reply: "once" })
+
+    const exit = yield* Fiber.await(fiber)
+    expect(Exit.isSuccess(exit)).toBe(true)
+  }),
 )
