@@ -32,6 +32,15 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   shell: Schema.String.pipe(Schema.optional).annotate({
     description: "Default shell to use for terminal and shell tool execution",
   }),
+  shell_background: Schema.Struct({
+    auto: Schema.Boolean.pipe(Schema.optional).annotate({
+      description: "Automatically run obvious long-lived shell commands as managed background jobs by default",
+    }),
+  })
+    .pipe(Schema.optional)
+    .annotate({
+      description: "Managed shell background-job defaults",
+    }),
   model: Schema.String.pipe(Schema.optional).annotate({
     description: "Default model to use when no session or agent model is selected",
   }),

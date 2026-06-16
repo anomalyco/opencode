@@ -13,6 +13,7 @@ import { fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Shell } from "@opencode-ai/core/shell"
+import { ShellBackground } from "@opencode-ai/core/shell-background"
 import { ShellJob } from "@opencode-ai/core/shell-job"
 import { ShellID } from "./shell/id"
 
@@ -629,7 +630,12 @@ export const ShellTool = Tool.define(
               if (params.timeout !== undefined && params.timeout < 0) {
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
               }
-              const timeout = params.timeout ?? (params.background ? DEFAULT_BACKGROUND_TIMEOUT_MS : defaultTimeoutMs)
+              const background = ShellBackground.resolve({
+                command: params.command,
+                requested: params.background,
+                configAuto: cfg.shell_background?.auto,
+              })
+              const timeout = params.timeout ?? (background.background ? DEFAULT_BACKGROUND_TIMEOUT_MS : defaultTimeoutMs)
               const ps = Shell.ps(shell)
               yield* Effect.scoped(
                 Effect.gen(function* () {
@@ -642,21 +648,26 @@ export const ShellTool = Tool.define(
                 }),
               )
 
-              if (params.background) {
+              if (background.background) {
                 const env = yield* shellEnv(ctx, cwd)
                 const job = yield* shellJob.start({
                   sessionID: ctx.sessionID,
                   command: params.command,
                   cwd,
-                  process: cmd(shell, params.command, cwd, env),
+                  process: ShellBackground.managedProcess({
+                    shell,
+                    command: params.command,
+                    cwd,
+                    env,
+                  }),
                   timeout,
                 })
                 const output = [
-                  `Background shell job ${job.jobId}: ${job.status}.`,
+                  `Background shell job ${job.jobId}: ${job.status}${background.mode === "manual" ? "." : " (started automatically)."}`,
                   `Command: ${params.command}`,
                   `cwd: ${cwd}`,
                   "",
-                  job.outputPreview,
+                  background.mode === "manual" ? job.outputPreview : `[started automatically in background]\n${job.outputPreview}`,
                   "",
                   "Use shell_status, shell_logs, shell_wait, or shell_cancel with this jobId. Do not use '&' as the primary background mechanism.",
                 ].join("\n")
@@ -668,6 +679,7 @@ export const ShellTool = Tool.define(
                     jobId: job.jobId,
                     status: job.status,
                     background: true,
+                    backgroundMode: background.mode,
                   },
                 })
                 return {
@@ -679,6 +691,7 @@ export const ShellTool = Tool.define(
                     jobId: job.jobId,
                     status: job.status,
                     background: true,
+                    backgroundMode: background.mode,
                     truncated: false,
                   },
                   output,

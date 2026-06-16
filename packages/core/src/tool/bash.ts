@@ -10,6 +10,7 @@ import { LocationMutation } from "../location-mutation"
 import { AppProcess } from "../process"
 import { PermissionV2 } from "../permission"
 import { PositiveInt } from "../schema"
+import { ShellBackground } from "../shell-background"
 import { ShellJob } from "../shell-job"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -33,10 +34,12 @@ export const Input = Schema.Struct({
   description: Schema.String.pipe(Schema.optional).annotate({
     description: "Concise description of the command's purpose",
   }),
-  background: Schema.Boolean.pipe(Schema.optional).annotate({
-    description:
-      "Run the command as a managed background shell job. Use for dev servers, watchers, and long-running commands; use shell_status or shell_wait before declaring success.",
-  }),
+  background: Schema.Union([Schema.Boolean, Schema.Literal("auto")])
+    .pipe(Schema.optional)
+    .annotate({
+      description:
+        "Run the command as a managed background shell job. Use true to force background, false to force foreground, or 'auto' to allow opencode to choose for obvious long-running commands.",
+    }),
 })
 
 const Output = Schema.Struct({
@@ -194,7 +197,7 @@ export const layer = Layer.effectDiscard(
     yield* tools
       .register({
         [name]: Tool.make({
-          description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. Timeout values are milliseconds (foreground default: ${DEFAULT_TIMEOUT_MS}; background default: ${DEFAULT_BACKGROUND_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows. Use background=true for dev servers, watchers, continuous commands, and long-running independent work; do not use '&' as the primary background mechanism. Call shell_status or shell_wait before declaring background command success.`,
+          description: `Execute one shell command string with the host user's filesystem, process, and network authority. The active Location is the default working directory. Relative workdir values resolve from that Location. External workdir values require external_directory approval; best-effort command-argument path warnings are advisory only. Timeout values are milliseconds (foreground default: ${DEFAULT_TIMEOUT_MS}; background default: ${DEFAULT_BACKGROUND_TIMEOUT_MS}; maximum: ${MAX_TIMEOUT_MS}). Uses the configured shell when set; otherwise uses /bin/sh on POSIX and COMSPEC or cmd.exe on Windows. Use background=true to force managed background execution, background=false to force foreground execution, or background="auto" to let opencode decide for obvious long-running commands. Do not use '&' as the primary background mechanism. Call shell_status or shell_wait before declaring background command success.`,
           input: Input,
           output: Output,
           toModelOutput: ({ output }) => [{ type: "text", text: modelOutput(output) }],
@@ -241,13 +244,23 @@ export const layer = Layer.effectDiscard(
                 detached: process.platform !== "win32",
                 forceKillAfter: Duration.seconds(3),
               })
-              const timeout = input.timeout ?? (input.background ? DEFAULT_BACKGROUND_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
-              if (input.background) {
+              const background = ShellBackground.resolve({
+                command: input.command,
+                requested: input.background,
+                configAuto: Config.latest(entries, "shell_background")?.auto,
+              })
+              const timeout = input.timeout ?? (background.background ? DEFAULT_BACKGROUND_TIMEOUT_MS : DEFAULT_TIMEOUT_MS)
+              if (background.background) {
                 const job = yield* shellJob.start({
                   sessionID: context.sessionID,
                   command: input.command,
                   cwd: target.canonical,
-                  process: command,
+                  process: ShellBackground.managedProcess({
+                    shell,
+                    command: input.command,
+                    cwd: target.canonical,
+                    env: process.env,
+                  }),
                   timeout,
                 })
                 return {
@@ -260,7 +273,10 @@ export const layer = Layer.effectDiscard(
                   durationMs: job.durationMs,
                   ...(job.exitCode !== undefined ? { exitCode: job.exitCode } : {}),
                   ...(job.timedOut ? { timedOut: true } : {}),
-                  output: job.outputPreview,
+                  output:
+                    background.mode === "manual"
+                      ? job.outputPreview
+                      : `[started automatically in background]\n${job.outputPreview}`,
                   truncated: job.stdoutTruncated === true || job.stderrTruncated === true,
                   ...(warnings.length ? { warnings } : {}),
                   ...(job.stdoutTruncated ? { stdoutTruncated: true } : {}),

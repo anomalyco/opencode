@@ -10,6 +10,7 @@ import { ModelRequest } from "../../model-request"
 
 const keys = new Set([
   "logLevel",
+  "shell_background",
   "server",
   "command",
   "reference",
@@ -37,6 +38,7 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
   return {
     $schema: info.$schema,
     shell: info.shell,
+    shell_background: info.shell_background,
     model: info.model,
     default_agent: info.default_agent,
     autoupdate: info.autoupdate,

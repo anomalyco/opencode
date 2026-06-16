@@ -26,9 +26,9 @@ export function parameterSchema(description: string) {
     workdir: Schema.optional(Schema.String).annotate({
       description: `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.`,
     }),
-    background: Schema.optional(Schema.Boolean).annotate({
+    background: Schema.optional(Schema.Union([Schema.Boolean, Schema.Literal("auto")])).annotate({
       description:
-        "Run the command as a managed background shell job. Use for dev servers, watchers, continuous commands, and long-running independent work. Use shell_status, shell_logs, shell_wait, or shell_cancel with the returned jobId.",
+        "Run the command as a managed background shell job. Use true to force background, false to force foreground, or 'auto' to allow opencode to choose for obvious long-running commands.",
     }),
     description: Schema.String.annotate({ description }),
   })
@@ -107,7 +107,7 @@ function bashCommandSection(chain: string, limits: Limits, defaultTimeoutMs: num
 Usage notes:
   - The command argument is required.
   - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms.
-  - Use \`background: true\` for dev servers, watchers, continuous commands, and long-running independent work. Do not use \`&\` as the primary background mechanism. After starting a background job, call \`shell_status\`, \`shell_logs\`, \`shell_wait\`, or \`shell_cancel\` with the returned jobId before declaring success.
+  - Use \`background: true\` to force managed background execution for dev servers, watchers, continuous commands, and long-running independent work. Use \`background: "auto"\` when you want opencode to decide for obvious long-running commands, and note that config may enable the same behavior by default when \`background\` is omitted. Do not use \`&\` as the primary background mechanism. After starting a background job, call \`shell_status\`, \`shell_logs\`, \`shell_wait\`, or \`shell_cancel\` with the returned jobId before declaring success.
   - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
   - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`head\`, \`tail\`, or other truncation commands to limit output; the full output will already be captured to a file for more precise searching.
 
@@ -160,7 +160,7 @@ Before executing the command, please follow these steps:
 Usage notes:
   - The command argument is required.
   - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms.
-  - Use \`background: true\` for dev servers, watchers, continuous commands, and long-running independent work. Do not use \`&\` as the primary background mechanism. After starting a background job, call \`shell_status\`, \`shell_logs\`, \`shell_wait\`, or \`shell_cancel\` with the returned jobId before declaring success.
+  - Use \`background: true\` to force managed background execution for dev servers, watchers, continuous commands, and long-running independent work. Use \`background: "auto"\` when you want opencode to decide for obvious long-running commands, and note that config may enable the same behavior by default when \`background\` is omitted. Do not use \`&\` as the primary background mechanism. After starting a background job, call \`shell_status\`, \`shell_logs\`, \`shell_wait\`, or \`shell_cancel\` with the returned jobId before declaring success.
   - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
   - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`Select-Object -First\`, \`Select-Object -Last\`, or other truncation commands to limit output; the full output will already be captured to a file for more precise searching.
 
@@ -211,7 +211,7 @@ Before executing the command, please follow these steps:
 Usage notes:
   - The command argument is required.
   - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms.
-  - Use \`background: true\` for dev servers, watchers, continuous commands, and long-running independent work. Do not use \`&\` as the primary background mechanism. After starting a background job, call \`shell_status\`, \`shell_logs\`, \`shell_wait\`, or \`shell_cancel\` with the returned jobId before declaring success.
+  - Use \`background: true\` to force managed background execution for dev servers, watchers, continuous commands, and long-running independent work. Use \`background: "auto"\` when you want opencode to decide for obvious long-running commands, and note that config may enable the same behavior by default when \`background\` is omitted. Do not use \`&\` as the primary background mechanism. After starting a background job, call \`shell_status\`, \`shell_logs\`, \`shell_wait\`, or \`shell_cancel\` with the returned jobId before declaring success.
   - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
   - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`more\` or other pagination commands to limit output; the full output will already be captured to a file for more precise searching.
 

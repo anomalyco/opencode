@@ -96,6 +96,7 @@ describe("tool.registry", () => {
       expect(bash).toBeDefined()
       const schema = bash ? ToolJsonSchema.fromTool(bash) : undefined
       expect((schema?.properties as Record<string, unknown> | undefined)?.background).toBeDefined()
+      expect(JSON.stringify((schema?.properties as Record<string, unknown> | undefined)?.background)).toContain("auto")
     }),
   )
 

@@ -23,6 +23,7 @@ import { AttachCommand } from "./cli/cmd/attach"
 import { TuiThreadCommand } from "./cli/cmd/tui"
 import { AcpCommand } from "./cli/cmd/acp"
 import { EOL } from "os"
+import { AppRuntime } from "./effect/app-runtime"
 import { WebCommand } from "./cli/cmd/web"
 import { PrCommand } from "./cli/cmd/pr"
 import { SessionCommand } from "./cli/cmd/session"
@@ -141,5 +142,9 @@ try {
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.
   // Explicitly exit to avoid any hanging subprocesses.
+  await Promise.race([
+    AppRuntime.dispose().catch(() => {}),
+    new Promise<void>((resolve) => setTimeout(resolve, 1500)),
+  ])
   process.exit()
 }

@@ -96,6 +96,7 @@ const withTool = <A, E, R>(
   directory: string,
   body: (registry: ToolRegistry.Interface) => Effect.Effect<A, E, R>,
   processLayer: Layer.Layer<AppProcess.Service> = appProcess,
+  configLayer: Layer.Layer<Config.Service> = config,
 ) => {
   const filesystem = FSUtil.defaultLayer
   const activeLocation = Layer.succeed(
@@ -113,7 +114,7 @@ const withTool = <A, E, R>(
     Layer.provide(ShellJob.defaultLayer),
     Layer.provide(background),
     Layer.provide(processLayer),
-    Layer.provide(config),
+    Layer.provide(configLayer),
   )
   return Effect.gen(function* () {
     return yield* body(yield* ToolRegistry.Service)
@@ -420,10 +421,13 @@ describe("BashTool", () => {
       (tmp) => {
         reset()
         const command = `${JSON.stringify(process.execPath)} -e ${JSON.stringify(
-          "console.log('ready'); setInterval(() => console.log('tick'), 100)",
+          [
+            "console.log('ready')",
+            "setInterval(() => console.log('tick'), 100)",
+          ].join(";"),
         )}`
         return withTool(
-          tmp.path,
+          realpathSync(process.cwd()),
           (registry) =>
             Effect.gen(function* () {
               const started = Date.now()
@@ -502,6 +506,7 @@ describe("BashTool", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
+
 })
 
 test("keeps locked deferred parity TODOs visible", async () => {
