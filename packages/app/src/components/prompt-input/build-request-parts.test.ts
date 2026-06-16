@@ -75,6 +75,31 @@ describe("buildRequestParts", () => {
     expect(files.map((part) => (part.type === "file" ? part.filename : ""))).toEqual(["a.png", "b.pdf"])
   })
 
+  test("preserves an external attachment source path for the model", () => {
+    const result = buildRequestParts({
+      prompt: [],
+      context: [],
+      images: [
+        {
+          type: "image",
+          id: "img_external",
+          filename: "opencode.global.dat",
+          sourcePath: "C:\\Users\\Luke\\AppData\\Roaming\\ai.opencode.desktop.beta\\opencode.global.dat",
+          mime: "text/plain",
+          dataUrl: "data:text/plain;base64,AAA",
+        },
+      ],
+      text: "inspect this",
+      messageID: "msg_external",
+      sessionID: "ses_external",
+      sessionDirectory: "C:\\Repos\\sst\\opencode",
+    })
+
+    expect(result.requestParts.find((part) => part.type === "file")?.filename).toBe(
+      "C:\\Users\\Luke\\AppData\\Roaming\\ai.opencode.desktop.beta\\opencode.global.dat",
+    )
+  })
+
   test("deduplicates context files when prompt already includes same path", () => {
     const prompt: Prompt = [{ type: "file", path: "src/foo.ts", content: "@src/foo.ts", start: 0, end: 11 }]
 
