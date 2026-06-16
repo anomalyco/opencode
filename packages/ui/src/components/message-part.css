@@ -237,6 +237,33 @@
     }
   }
 
+  [data-slot="user-message-expand-wrapper"] {
+    margin-top: 8px;
+    display: flex;
+    justify-content: center;
+    width: 100%;
+  }
+
+  [data-slot="user-message-expand-button"] {
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--text-weak);
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+
+    &:hover {
+      color: var(--text-base);
+      background: var(--surface-weaker);
+    }
+
+    &:active {
+      transform: scale(0.98);
+    }
+  }
+
   [data-slot="user-message-meta-bar"] {
     margin-top: 4px;
     display: flex;

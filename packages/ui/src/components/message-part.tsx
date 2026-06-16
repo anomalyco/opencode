@@ -1160,6 +1160,7 @@ export function UserMessageDisplay(props: {
     copied: false,
     busy: undefined as "fork" | "revert" | undefined,
   })
+  const [expanded, setExpanded] = createSignal(false)
   const copied = () => state.copied
   const busy = () => state.busy
 
@@ -1168,6 +1169,22 @@ export function UserMessageDisplay(props: {
   )
 
   const text = createMemo(() => textPart()?.text || "")
+
+  const MAX_PREVIEW_LENGTH = 1000
+  const isLongMessage = createMemo(() => text().length > MAX_PREVIEW_LENGTH)
+
+  // Escape potential HTML tags that could break rendering, but preserve valid markdown syntax
+  const escapeHtmlTags = (str: string) => {
+    // Only escape tags that look like real HTML tags (alphanumeric tag names with optional attributes)
+    // This preserves comparison operators like < and > in normal text
+    return str.replace(/<(\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)??)>/g, '&lt;$1&gt;')
+  }
+
+  const displayText = createMemo(() => {
+    const fullText = text()
+    const textToDisplay = (!isLongMessage() || expanded()) ? fullText : fullText.slice(0, MAX_PREVIEW_LENGTH)
+    return escapeHtmlTags(textToDisplay)
+  })
 
   const skillTemplatePart = createMemo(() => skillText(props.parts))
 
@@ -1285,8 +1302,8 @@ export function UserMessageDisplay(props: {
           <div data-slot="user-message-body">
             <div data-slot="user-message-text">
               <Markdown
-                text={text()}
-                cacheKey={textPart()?.id}
+                text={displayText()}
+                cacheKey={expanded() ? textPart()?.id : `${textPart()?.id}:preview`}
                 instant
                 stage={props.markdownStage}
                 onStage={props.onMarkdownStage}
@@ -1295,6 +1312,18 @@ export function UserMessageDisplay(props: {
                 highlight={props.markdownHighlight}
                 math={props.markdownMath}
               />
+              <Show when={isLongMessage()}>
+                <div data-slot="user-message-expand-wrapper">
+                  <button
+                    data-slot="user-message-expand-button"
+                    class="text-13-regular"
+                    onClick={() => setExpanded(!expanded())}
+                    onMouseDown={(e) => e.preventDefault()}
+                  >
+                    {expanded() ? i18n.t("ui.message.showLess") : i18n.t("ui.message.showMore")}
+                  </button>
+                </div>
+              </Show>
             </div>
           </div>
           <div data-slot="user-message-meta-bar">

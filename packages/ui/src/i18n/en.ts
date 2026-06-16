@@ -171,6 +171,8 @@ export const dict: Record<string, string> = {
   "ui.message.interrupted": "Interrupted",
   "ui.message.queued": "Queued",
   "ui.message.attachment.alt": "attachment",
+  "ui.message.showMore": "Show more",
+  "ui.message.showLess": "Show less",
 
   "ui.patch.action.deleted": "Deleted",
   "ui.patch.action.created": "Created",
