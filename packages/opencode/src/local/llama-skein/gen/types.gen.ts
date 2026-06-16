@@ -111,6 +111,22 @@ export type Model = {
     context_length?: number;
     max_output_tokens?: number;
     /**
+     * Current --n-cpu-moe value parsed from the model command, when set (llama.cpp MoE expert CPU offload).
+     */
+    n_cpu_moe?: number;
+    /**
+     * True when --cpu-moe is present in the model command (all MoE experts offloaded to CPU).
+     */
+    cpu_moe?: boolean;
+    /**
+     * Current --cpu-offload-gb value parsed from the model command, when set (vLLM weight offload).
+     */
+    cpu_offload_gb?: number;
+    /**
+     * Current --override-tensor value parsed from the model command, when set (llama.cpp tensor placement).
+     */
+    override_tensor?: string;
+    /**
      * Inference backend type.
      */
     backend?: 'llamacpp' | 'mlx' | 'vllm';
@@ -148,6 +164,22 @@ export type ConfigModelRequest = {
     description?: string;
     aliases?: Array<string>;
     ttl?: number;
+    /**
+     * Number of leading layers whose MoE expert tensors are offloaded to CPU/RAM (llama.cpp --n-cpu-moe). llamacpp only.
+     */
+    n_cpu_moe?: number;
+    /**
+     * Offload ALL MoE expert tensors to CPU/RAM (llama.cpp --cpu-moe). llamacpp only.
+     */
+    cpu_moe?: boolean;
+    /**
+     * GiB of weights to offload to CPU per GPU (vLLM --cpu-offload-gb). vllm only.
+     */
+    cpu_offload_gb?: number;
+    /**
+     * Advanced tensor placement override regex (llama.cpp --override-tensor). llamacpp only.
+     */
+    override_tensor?: string;
 };
 
 export type ConfigModelPatchRequest = {
@@ -170,6 +202,25 @@ export type ConfigModelPatchRequest = {
     'cache-type-k'?: string;
     cache_type_v?: string;
     'cache-type-v'?: string;
+    /**
+     * Number of leading layers whose MoE expert tensors are offloaded to CPU/RAM (llama.cpp --n-cpu-moe). 0 removes the flag. llamacpp only.
+     */
+    n_cpu_moe?: number;
+    'n-cpu-moe'?: number;
+    /**
+     * Offload ALL MoE expert tensors to CPU/RAM (llama.cpp --cpu-moe). false removes the flag. llamacpp only.
+     */
+    cpu_moe?: boolean;
+    /**
+     * GiB of weights to offload to CPU per GPU (vLLM --cpu-offload-gb). 0 removes the flag. vllm only.
+     */
+    cpu_offload_gb?: number;
+    'cpu-offload-gb'?: number;
+    /**
+     * Advanced tensor placement override regex (llama.cpp --override-tensor). Empty removes the flag. llamacpp only.
+     */
+    override_tensor?: string;
+    'override-tensor'?: string;
     flags?: {
         [key: string]: unknown;
     };
@@ -198,6 +249,41 @@ export type ConfigDefaultModelResponse = {
      * Configured default model ID, or null when no default is set.
      */
     model: string | null;
+};
+
+export type OffloadRecommendation = {
+    /**
+     * False for non-MoE models and backends where offload does not apply (e.g. mlx); see reason.
+     */
+    applicable: boolean;
+    /**
+     * Inference backend the recommendation targets.
+     */
+    backend: 'llamacpp' | 'mlx' | 'vllm';
+    /**
+     * Recommended --n-cpu-moe value (number of leading layers whose MoE experts to offload to CPU). 0 means the model fits fully on GPU.
+     */
+    n_cpu_moe?: number;
+    /**
+     * Human-readable explanation of the recommendation or why it is not applicable.
+     */
+    reason?: string;
+    /**
+     * Estimated total bytes of MoE expert tensors in the model.
+     */
+    expert_bytes_total?: number;
+    /**
+     * Free VRAM (MB) used for the calculation; falls back to system RAM when no GPU is present.
+     */
+    vram_free_mb?: number;
+    /**
+     * True when the model fits in free VRAM without any offload.
+     */
+    fits_fully_on_gpu?: boolean;
+    /**
+     * Context length assumed for the KV-cache portion of the estimate.
+     */
+    ctx_size?: number;
 };
 
 export type GetSystemVersionData = {
@@ -247,6 +333,34 @@ export type GetHardwareResponses = {
 };
 
 export type GetHardwareResponse = GetHardwareResponses[keyof GetHardwareResponses];
+
+export type GetOffloadRecommendationData = {
+    body?: never;
+    path: {
+        /**
+         * Model ID or alias.
+         */
+        model: string;
+    };
+    query?: never;
+    url: '/api/models/offload/{model}';
+};
+
+export type GetOffloadRecommendationErrors = {
+    /**
+     * Model not found.
+     */
+    404: unknown;
+};
+
+export type GetOffloadRecommendationResponses = {
+    /**
+     * Recommended offload settings.
+     */
+    200: OffloadRecommendation;
+};
+
+export type GetOffloadRecommendationResponse = GetOffloadRecommendationResponses[keyof GetOffloadRecommendationResponses];
 
 export type ListModelsData = {
     body?: never;

@@ -28,6 +28,27 @@ export const LocalCtxSizePayload = Schema.Struct({
   ctx_size: Schema.Int.check(Schema.isGreaterThan(0)),
 }).annotate({ identifier: "LocalCtxSizePayload" })
 
+// Backend-neutral CPU/MoE offload knobs. All optional; a zero/empty value
+// disables the corresponding flag on the backend. n_cpu_moe / cpu_moe target
+// llama.cpp; cpu_offload_gb targets vLLM.
+export const LocalOffloadPayload = Schema.Struct({
+  n_cpu_moe: Schema.optional(Schema.Int),
+  cpu_moe: Schema.optional(Schema.Boolean),
+  cpu_offload_gb: Schema.optional(Schema.Int),
+  override_tensor: Schema.optional(Schema.String),
+}).annotate({ identifier: "LocalOffloadPayload" })
+
+export const LocalOffloadRecommendation = Schema.Struct({
+  applicable: Schema.Boolean,
+  backend: Schema.String,
+  n_cpu_moe: Schema.optional(Schema.Int),
+  reason: Schema.optional(Schema.String),
+  expert_bytes_total: Schema.optional(Schema.Int),
+  vram_free_mb: Schema.optional(Schema.Int),
+  fits_fully_on_gpu: Schema.optional(Schema.Boolean),
+  ctx_size: Schema.optional(Schema.Int),
+}).annotate({ identifier: "LocalOffloadRecommendation" })
+
 export const LocalApi = HttpApi.make("local").add(
   HttpApiGroup.make("local")
     .add(
@@ -74,6 +95,35 @@ export const LocalApi = HttpApi.make("local").add(
           identifier: "local.model.setCtxSize",
           summary: "Set model context window size",
           description: "Patch the ctx_size for a model on a llama-swap backend.",
+        }),
+      ),
+      HttpApiEndpoint.patch("setModelOffload", `${root}/model/:providerID/:modelID/offload`, {
+        params: { providerID: Schema.String, modelID: Schema.String },
+        query: WorkspaceRoutingQuery,
+        payload: LocalOffloadPayload,
+        success: described(Schema.Boolean, "Offload settings updated"),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "local.model.setOffload",
+          summary: "Set model CPU/MoE offload",
+          description:
+            "Patch CPU/MoE offload settings (n_cpu_moe, cpu_moe, cpu_offload_gb, override_tensor) for a model on a llama-skein backend.",
+        }),
+      ),
+      HttpApiEndpoint.get(
+        "getModelOffloadRecommendation",
+        `${root}/model/:providerID/:modelID/offload-recommendation`,
+        {
+          params: { providerID: Schema.String, modelID: Schema.String },
+          query: WorkspaceRoutingQuery,
+          success: described(LocalOffloadRecommendation, "Recommended offload settings"),
+        },
+      ).annotateMerge(
+        OpenApi.annotations({
+          identifier: "local.model.offloadRecommendation",
+          summary: "Recommend model CPU/MoE offload",
+          description:
+            "Fetch llama-skein's recommended n_cpu_moe for a model given current free VRAM. MoE-scoped.",
         }),
       ),
     )

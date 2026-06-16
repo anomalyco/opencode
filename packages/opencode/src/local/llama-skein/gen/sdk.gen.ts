@@ -2,7 +2,7 @@
 
 import { buildClientParams, type Client, type Options as Options2, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddConfigModelErrors, AddConfigModelResponses, ClearDefaultModelErrors, ClearDefaultModelResponses, ConfigDefaultModelRequest, ConfigGroupPatchRequest, ConfigModelPatchRequest, ConfigModelRequest, GetConfigInfoResponses, GetConfigModelErrors, GetConfigModelResponses, GetDefaultModelResponses, GetHardwareResponses, GetSystemCapabilitiesResponses, GetSystemVersionResponses, ListModelsResponses, PatchConfigGroupErrors, PatchConfigGroupResponses, PatchConfigModelErrors, PatchConfigModelResponses, ReloadConfigErrors, ReloadConfigResponses, RemoveConfigModelErrors, RemoveConfigModelResponses, SetDefaultModelErrors, SetDefaultModelResponses } from './types.gen';
+import type { AddConfigModelErrors, AddConfigModelResponses, ClearDefaultModelErrors, ClearDefaultModelResponses, ConfigDefaultModelRequest, ConfigGroupPatchRequest, ConfigModelPatchRequest, ConfigModelRequest, GetConfigInfoResponses, GetConfigModelErrors, GetConfigModelResponses, GetDefaultModelResponses, GetHardwareResponses, GetOffloadRecommendationErrors, GetOffloadRecommendationResponses, GetSystemCapabilitiesResponses, GetSystemVersionResponses, ListModelsResponses, PatchConfigGroupErrors, PatchConfigGroupResponses, PatchConfigModelErrors, PatchConfigModelResponses, ReloadConfigErrors, ReloadConfigResponses, RemoveConfigModelErrors, RemoveConfigModelResponses, SetDefaultModelErrors, SetDefaultModelResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -67,6 +67,20 @@ export class LlamaSkeinClient extends HeyApiClient {
     
     public getHardware<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
         return (options?.client ?? this.client).get<GetHardwareResponses, unknown, ThrowOnError>({ url: '/api/hardware', ...options });
+    }
+    
+    /**
+     * Recommends CPU/MoE offload settings for a model given current free VRAM. MoE-scoped; non-MoE models and the mlx backend return applicable=false.
+     */
+    public getOffloadRecommendation<ThrowOnError extends boolean = false>(parameters: {
+        model: string;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'model' }] }]);
+        return (options?.client ?? this.client).get<GetOffloadRecommendationResponses, GetOffloadRecommendationErrors, ThrowOnError>({
+            url: '/api/models/offload/{model}',
+            ...options,
+            ...params
+        });
     }
     
     public listModels<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {

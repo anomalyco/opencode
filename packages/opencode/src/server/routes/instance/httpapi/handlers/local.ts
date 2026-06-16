@@ -10,6 +10,13 @@ function normalizeBaseURL(url: string) {
   return url.replace(/\/+$/, "").toLowerCase()
 }
 
+type ProviderEntry = {
+  npm?: string
+  name?: string
+  discoverModels?: boolean
+  options?: { baseURL?: string; apiKey?: string }
+}
+
 function isPrivateBaseURL(baseURL: string): boolean {
   try {
     const host = new URL(baseURL).hostname
@@ -214,22 +221,23 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       const { id, name, baseURL } = ctx.payload
       const global = yield* configSvc.getGlobal()
       const providers = { ...(global.provider ?? {}) }
-      // Reuse existing key if same baseURL already configured (e.g. written by sync-opencode)
       const normalised = normalizeBaseURL(baseURL)
       const existingKey = Object.entries(providers).find(
         ([, p]) =>
           normalizeBaseURL(String((p as { options?: { baseURL?: string } }).options?.baseURL ?? "")) === normalised,
       )?.[0]
-      const key = existingKey ?? id
+      const existing = (providers[id] ?? (existingKey ? providers[existingKey] : undefined) ?? {}) as ProviderEntry
+      if (existingKey && existingKey !== id) delete providers[existingKey]
 
-      providers[key] = {
+      providers[id] = {
+        ...existing,
         npm: "@ai-sdk/openai-compatible",
         name,
-        options: { baseURL, apiKey: "skein" },
+        options: { ...(existing.options ?? {}), baseURL, apiKey: existing.options?.apiKey ?? "skein" },
         discoverModels: true,
       }
       yield* configSvc.updateGlobal({ ...global, provider: providers }, { replace: ["provider"] })
-      return key
+      return id
     })
 
     const disconnect = Effect.fn("LocalHttpApi.disconnect")(function* (ctx) {
@@ -255,10 +263,36 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       return res !== null && !res.error
     })
 
+    const setModelOffload = Effect.fn("LocalHttpApi.setModelOffload")(function* (ctx) {
+      const { providerID, modelID } = ctx.params
+      const config = yield* configSvc.get()
+      const baseURL = (config.provider?.[providerID] as { options?: { baseURL?: string } } | undefined)?.options?.baseURL
+      if (!baseURL) return false
+      const res = yield* Effect.tryPromise(() =>
+        llamaClient(baseURL).patchConfigModel({ id: modelID, configModelPatchRequest: ctx.payload }),
+      ).pipe(Effect.orElseSucceed(() => null))
+      return res !== null && !res.error
+    })
+
+    const getModelOffloadRecommendation = Effect.fn("LocalHttpApi.getModelOffloadRecommendation")(function* (ctx) {
+      const { providerID, modelID } = ctx.params
+      const config = yield* configSvc.get()
+      const baseURL = (config.provider?.[providerID] as { options?: { baseURL?: string } } | undefined)?.options?.baseURL
+      const unavailable = { applicable: false, backend: "llamacpp", reason: "recommendation unavailable" }
+      if (!baseURL) return { applicable: false, backend: "llamacpp", reason: "provider not configured" }
+      const res = yield* Effect.tryPromise(() =>
+        llamaClient(baseURL).getOffloadRecommendation({ model: modelID }),
+      ).pipe(Effect.orElseSucceed(() => null))
+      if (res === null || res.error || !res.data) return unavailable
+      return res.data
+    })
+
     return handlers
       .handle("scan", scan)
       .handle("connect", connect)
       .handle("disconnect", disconnect)
       .handle("setModelCtxSize", setModelCtxSize)
+      .handle("setModelOffload", setModelOffload)
+      .handle("getModelOffloadRecommendation", getModelOffloadRecommendation)
   }),
 )
