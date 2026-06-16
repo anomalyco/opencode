@@ -379,6 +379,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID; messageID: MessageID }
     }) {
       yield* requireSession(ctx.params.sessionID)
+      yield* SessionError.mapStorageNotFound(
+        MessageV2.get({ sessionID: ctx.params.sessionID, messageID: ctx.params.messageID }),
+      )
       const busy = yield* runState.assertNotBusy(ctx.params.sessionID).pipe(Effect.exit)
       if (Exit.isFailure(busy)) {
         if (Cause.squash(busy.cause) instanceof Session.BusyError) {

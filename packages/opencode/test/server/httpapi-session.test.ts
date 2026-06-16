@@ -435,38 +435,88 @@ describe("session HttpApi", () => {
     }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
   )
 
-  it.live("deleteMessage cancels a busy session before deleting the message", () =>
-    Effect.gen(function* () {
-      const llm = yield* TestLLMServer
-      yield* llm.hang
+  it.live(
+    "deleteMessage cancels a busy session before deleting the message",
+    () =>
+      Effect.gen(function* () {
+        const llm = yield* TestLLMServer
+        yield* llm.hang
 
-      const config = testProviderConfig(llm.url)
-      const directory = yield* tmpdirScoped({ git: true, config })
-      const headers = { "x-opencode-directory": directory, "content-type": "application/json" }
-      const session = yield* createSession({ title: "delete busy" }).pipe(provideInstanceEffect(directory))
-      const message = yield* createTextMessage(session.id, "stuck").pipe(provideInstanceEffect(directory))
+        const config = testProviderConfig(llm.url)
+        const directory = yield* tmpdirScoped({ git: true, config })
+        const headers = { "x-opencode-directory": directory, "content-type": "application/json" }
+        const session = yield* createSession({ title: "delete busy" }).pipe(provideInstanceEffect(directory))
+        const message = yield* createTextMessage(session.id, "stuck").pipe(provideInstanceEffect(directory))
 
-      const prompt = yield* request(pathFor(SessionPaths.prompt, { sessionID: session.id }), {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          agent: "build",
-          model: { providerID: "test", modelID: "test-model" },
-          parts: [{ type: "text", text: "hang" }],
-        }),
-      }).pipe(Effect.forkScoped)
-      yield* llm.wait(1)
+        const prompt = yield* request(pathFor(SessionPaths.prompt, { sessionID: session.id }), {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            agent: "build",
+            model: { providerID: "test", modelID: "test-model" },
+            parts: [{ type: "text", text: "hang" }],
+          }),
+        }).pipe(Effect.forkScoped)
+        yield* llm.wait(1)
 
-      expect(
-        yield* requestJson<boolean>(
-          pathFor(SessionPaths.deleteMessage, { sessionID: session.id, messageID: message.info.id }),
+        expect(
+          yield* requestJson<boolean>(
+            pathFor(SessionPaths.deleteMessage, { sessionID: session.id, messageID: message.info.id }),
+            { method: "DELETE", headers },
+          ),
+        ).toBe(true)
+
+        const exit = yield* Fiber.await(prompt).pipe(Effect.timeout("5 seconds"))
+        expect(Exit.isSuccess(exit)).toBe(true)
+      }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+    10_000,
+  )
+
+  it.live(
+    "deleteMessage does not cancel a busy session when the message is missing",
+    () =>
+      Effect.gen(function* () {
+        const llm = yield* TestLLMServer
+        yield* llm.hang
+
+        const config = testProviderConfig(llm.url)
+        const directory = yield* tmpdirScoped({ git: true, config })
+        const headers = { "x-opencode-directory": directory, "content-type": "application/json" }
+        const session = yield* createSession({ title: "missing busy delete" }).pipe(provideInstanceEffect(directory))
+        const missingMessageID = MessageID.ascending("msg_missing_busy_delete")
+
+        const prompt = yield* request(pathFor(SessionPaths.prompt, { sessionID: session.id }), {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            agent: "build",
+            model: { providerID: "test", modelID: "test-model" },
+            parts: [{ type: "text", text: "hang" }],
+          }),
+        }).pipe(Effect.forkScoped)
+        yield* llm.wait(1)
+
+        const response = yield* request(
+          pathFor(SessionPaths.deleteMessage, { sessionID: session.id, messageID: missingMessageID }),
           { method: "DELETE", headers },
-        ),
-      ).toBe(true)
+        )
+        expect(response.status).toBe(404)
 
-      const exit = yield* Fiber.await(prompt).pipe(Effect.timeout("5 seconds"))
-      expect(Exit.isSuccess(exit)).toBe(true)
-    }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+        const completedBeforeAbort = yield* Fiber.await(prompt).pipe(
+          Effect.as(true),
+          Effect.timeoutOrElse({ duration: "250 millis", orElse: () => Effect.succeed(false) }),
+        )
+        expect(completedBeforeAbort).toBe(false)
+
+        expect(
+          yield* requestJson<boolean>(pathFor(SessionPaths.abort, { sessionID: session.id }), {
+            method: "POST",
+            headers,
+          }),
+        ).toBe(true)
+        const exit = yield* Fiber.await(prompt).pipe(Effect.timeout("5 seconds"))
+        expect(Exit.isSuccess(exit)).toBe(true)
+      }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
     10_000,
   )
 
@@ -968,6 +1018,15 @@ describe("session HttpApi", () => {
             { method: "DELETE", headers },
           ),
         ).toBe(true)
+
+        const missingDelete = yield* request(
+          pathFor(SessionPaths.deleteMessage, {
+            sessionID: session.id,
+            messageID: MessageID.ascending("msg_missing_delete"),
+          }),
+          { method: "DELETE", headers },
+        )
+        expect(missingDelete.status).toBe(404)
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
