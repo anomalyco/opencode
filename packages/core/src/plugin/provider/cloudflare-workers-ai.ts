@@ -24,9 +24,15 @@ export const CloudflareWorkersAIPlugin = PluginV2.define({
         if (evt.model.providerID !== providerID) return
         if (evt.package !== "@ai-sdk/openai-compatible") return
 
-        if (!hasWorkersEndpoint(evt.model.api)) return
+        const accountId = resolveAccountId(evt.options)
+        if (!hasWorkersEndpoint(evt.model.api) && !accountId) return
         const mod = yield* Effect.promise(() => import("@ai-sdk/openai-compatible"))
-        evt.sdk = mod.createOpenAICompatible(sdkOptions(evt.options) as any)
+        evt.sdk = mod.createOpenAICompatible(
+          sdkOptions({
+            ...evt.options,
+            baseURL: evt.options.baseURL ?? (accountId ? workersEndpoint(accountId) : undefined),
+          }) as any,
+        )
       }),
       "aisdk.language": Effect.fn(function* (evt) {
         if (evt.model.providerID !== providerID) return

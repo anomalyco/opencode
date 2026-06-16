@@ -44,11 +44,18 @@ type CheckReplacementErrors<SourceError, ReplacementError> = [Exclude<Replacemen
   ? unknown
   : { readonly "New replacement errors": Exclude<ReplacementError, SourceError> }
 
-export function replace<A, E, E2>(
+export function replaceWithNode<A, E, E2>(
   source: Node<A, E>,
   replacement: Node<NoInfer<A>, E2> & CheckReplacementErrors<E, NoInfer<E2>>,
 ): Replacement<A> {
   return { source, replacement }
+}
+
+export function replace<A, E, E2>(
+  source: Node<A, E>,
+  replacement: Layer.Layer<NoInfer<A>, E2, never> & CheckReplacementErrors<E, NoInfer<E2>>,
+): Replacement<A> {
+  return { source, replacement: make(replacement as Layer.Layer<A, E2>, []) }
 }
 
 export function buildLayer<A, E>(node: Node<A, E>, options?: { readonly replacements?: readonly Replacement[] }) {

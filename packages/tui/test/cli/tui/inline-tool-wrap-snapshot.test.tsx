@@ -134,6 +134,32 @@ function LoadedReadBeforeSubagentFixture() {
   )
 }
 
+function AssistantSummaryBeforeSubagentFixture() {
+  return (
+    <box flexDirection="column" width={72}>
+      <box id="assistant-summary-message-one" paddingLeft={3}>
+        <text>▣ Build · Little Frank · 53.1s</text>
+      </box>
+      <InlineToolRow id="tool-inline-subagent-one" icon="✓" complete={true} pending="" subagent={true}>
+        {"Build Task — Review changes\n↳ 48 toolcalls · 1m 40s"}
+      </InlineToolRow>
+    </box>
+  )
+}
+
+function AssistantErrorBeforeSubagentFixture() {
+  return (
+    <box flexDirection="column" width={72}>
+      <box id="assistant-error-message-one" border={["left"]} paddingTop={1} paddingBottom={1} paddingLeft={2}>
+        <text>Managed inference requires an active Member plan</text>
+      </box>
+      <InlineToolRow id="tool-inline-subagent-one" icon="✓" complete={true} pending="" subagent={true}>
+        {"Build Task — Review changes\n↳ 48 toolcalls · 1m 40s"}
+      </InlineToolRow>
+    </box>
+  )
+}
+
 function StickyScrollFixture(props: { separated: boolean; scroll: (scroll: ScrollBoxRenderable) => void }) {
   return (
     <scrollbox ref={props.scroll} stickyScroll={true} stickyStart="bottom" height={3} width={72}>
@@ -155,6 +181,22 @@ function StickyScrollFixture(props: { separated: boolean; scroll: (scroll: Scrol
   )
 }
 
+function FailedPendingToolFixture() {
+  return (
+    <InlineToolRow icon="%" complete={false} pending="Preparing patch..." failed={true} failure="Patch failed">
+      Patch
+    </InlineToolRow>
+  )
+}
+
+function FailedCompleteToolFixture() {
+  return (
+    <InlineToolRow icon="→" complete={true} pending="Reading file..." failed={true} failure="Read failed">
+      Read src/index.ts
+    </InlineToolRow>
+  )
+}
+
 async function renderFrame(component: () => JSX.Element, options: { width: number; height: number }) {
   testSetup = await testRender(component, options)
   await testSetup.renderOnce()
@@ -171,6 +213,18 @@ describe("TUI inline tool wrapping", () => {
   test("falls back for unknown tool names", () => {
     expect(toolDisplay("bash")).toBe("bash")
     expect(toolDisplay("plugin_tool")).toBe("generic")
+  })
+
+  test("replaces pending copy when a tool fails before completion", async () => {
+    const frame = await renderFrame(() => <FailedPendingToolFixture />, { width: 72, height: 3 })
+    expect(frame).toContain("Patch failed")
+    expect(frame).not.toContain("Preparing patch")
+  })
+
+  test("preserves useful completed copy when a tool fails", async () => {
+    const frame = await renderFrame(() => <FailedCompleteToolFixture />, { width: 72, height: 3 })
+    expect(frame).toContain("Read src/index.ts")
+    expect(frame).not.toContain("Read failed")
   })
 
   test("filters malformed nested tool wire data", () => {
@@ -246,6 +300,16 @@ describe("TUI inline tool wrapping", () => {
 
   test("separates a subagent group after an expanded read", async () => {
     expect(await renderFrame(() => <LoadedReadBeforeSubagentFixture />, { width: 72, height: 8 })).toMatchSnapshot()
+  })
+
+  test("separates a subagent from the previous assistant summary", async () => {
+    expect(
+      await renderFrame(() => <AssistantSummaryBeforeSubagentFixture />, { width: 72, height: 5 }),
+    ).toMatchSnapshot()
+  })
+
+  test("separates a subagent from the previous assistant error", async () => {
+    expect(await renderFrame(() => <AssistantErrorBeforeSubagentFixture />, { width: 72, height: 7 })).toMatchSnapshot()
   })
 
   test("updates sticky-bottom geometry when a text separator mounts and unmounts", async () => {

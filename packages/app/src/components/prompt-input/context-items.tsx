@@ -50,7 +50,7 @@ export const PromptContextItems: Component<ContextItemsProps> = (props) => {
                 >
                   <div class="flex items-center gap-1.5">
                     <FileIcon node={{ path: item.path, type: "file" }} class="shrink-0 size-3.5" />
-                    <div class="flex items-center text-11-regular min-w-0 font-medium">
+                    <div class="flex items-center text-[12px] min-w-0 font-medium leading-5">
                       <span class="text-text-strong whitespace-nowrap">{label}</span>
                       <Show when={item.selection}>
                         {(sel) => (
