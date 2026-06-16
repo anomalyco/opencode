@@ -65,7 +65,13 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
           onprogress: () => {},
         },
       )
-      if (result.isError) throw new Error(formatToolErrorContent(result.content))
+      if (result.isError)
+        throw new Error(
+          result.content
+            .flatMap((item) => (item.type === "text" ? [item.text] : []))
+            .filter((text) => text.trim())
+            .join("\n\n") || "MCP tool returned an error",
+        )
       if (result.structuredContent === undefined || result.structuredContent === null) return result
       return {
         ...result,
@@ -102,22 +108,6 @@ export function fetch<T extends { name: string }>(
 }
 
 export const sanitize = (value: string) => value.replace(/[^a-zA-Z0-9_-]/g, "_")
-
-function formatToolErrorContent(content: unknown) {
-  if (!Array.isArray(content)) return "MCP tool returned an error"
-  return (
-    content
-      .flatMap((item) => (isTextContent(item) ? [item.text] : []))
-      .filter((text) => text.trim())
-      .join("\n\n") || "MCP tool returned an error"
-  )
-}
-
-function isTextContent(value: unknown): value is { type: "text"; text: string } {
-  if (typeof value !== "object" || value === null) return false
-  const item = value as Record<string, unknown>
-  return item.type === "text" && typeof item.text === "string"
-}
 
 export function prompts(client: Client, timeout?: number) {
   if (!client.getServerCapabilities()?.prompts) return Promise.resolve([])
