@@ -1072,6 +1072,22 @@ export function defaultModelIDs<T extends { models: Record<string, { id: string 
   return mapValues(providers, (item) => sort(Object.values(item.models))[0].id)
 }
 
+export function unknownProviderFilters(input: {
+  known: Iterable<string>
+  disabled?: readonly string[]
+  enabled?: readonly string[]
+}): string[] {
+  const known = new Set(input.known)
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const key of [...(input.disabled ?? []), ...(input.enabled ?? [])]) {
+    if (known.has(key) || seen.has(key)) continue
+    seen.add(key)
+    result.push(key)
+  }
+  return result
+}
+
 export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundError>()("ProviderModelNotFoundError", {
   providerID: ProviderV2.ID,
   modelID: ModelV2.ID,
@@ -1467,6 +1483,20 @@ export const layer = Layer.effect(
           }
           database[providerID] = parsed
         }
+
+        // warn about disabled_providers/enabled_providers keys that match no
+        // known provider — these are silently ignored otherwise, the root cause
+        // of users disabling a provider and seeing no effect (typo'd key, or a
+        // model served through a gateway whose providerID isn't the brand name).
+        const unknownFilters = unknownProviderFilters({
+          known: Object.keys(database),
+          disabled: cfg.disabled_providers,
+          enabled: cfg.enabled_providers,
+        })
+        if (unknownFilters.length > 0)
+          yield* Effect.logWarning("ignoring unknown provider keys in disabled_providers/enabled_providers", {
+            keys: unknownFilters,
+          })
 
         // load env
         const envs = yield* env.all()

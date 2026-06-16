@@ -145,6 +145,39 @@ it.instance(
   { config: { enabled_providers: ["anthropic"] } },
 )
 
+test("unknownProviderFilters reports a disabled_providers key with no matching provider", () => {
+  const unknown = Provider.unknownProviderFilters({
+    known: ["anthropic", "openai"],
+    disabled: ["deepseek"],
+  })
+  expect(unknown).toEqual(["deepseek"])
+})
+
+test("unknownProviderFilters ignores keys that match a known provider", () => {
+  const unknown = Provider.unknownProviderFilters({
+    known: ["anthropic", "openai"],
+    disabled: ["anthropic"],
+  })
+  expect(unknown).toEqual([])
+})
+
+test("unknownProviderFilters reports an enabled_providers key with no matching provider", () => {
+  const unknown = Provider.unknownProviderFilters({
+    known: ["anthropic", "github-copilot"],
+    enabled: ["anthropic", "copilot"],
+  })
+  expect(unknown).toEqual(["copilot"])
+})
+
+test("unknownProviderFilters returns only unknown keys, deduped across both lists", () => {
+  const unknown = Provider.unknownProviderFilters({
+    known: ["anthropic", "openai"],
+    disabled: ["openai", "zen"],
+    enabled: ["anthropic", "zen", "deepseek"],
+  })
+  expect(unknown).toEqual(["zen", "deepseek"])
+})
+
 it.instance(
   "model whitelist filters models for provider",
   Effect.gen(function* () {
