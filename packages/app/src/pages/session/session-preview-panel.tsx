@@ -148,7 +148,7 @@ export function SessionBrowserChrome(props: {
           keybind={command.keybind("fileTree.toggle")}
         >
           <IconButton
-            icon={layout.fileTree.opened() ? "file-tree-active" : "file-tree"}
+            icon={layout.fileTree.opened() ? "sidebar-active" : "sidebar"}
             variant="ghost"
             size="small"
             onClick={() => layout.fileTree.toggle()}
@@ -177,9 +177,7 @@ export function SessionBrowserChrome(props: {
             aria-label={language.t("session.tab.preview")}
             onClick={() => props.onHome?.()}
           >
-            <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2">
-              <path d="M2.6 7.4 8 3l5.4 4.4M4.1 6.5V13h7.8V6.5" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
+            <Icon name="home" size="small" />
           </button>
           <span class="flex-1 min-w-0 text-center truncate text-12-regular font-mono text-text-base">
             {props.address ?? ""}
@@ -190,9 +188,7 @@ export function SessionBrowserChrome(props: {
             aria-label={language.t("common.refresh")}
             onClick={() => props.onReload()}
           >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3">
-              <path d="M13.3 8a5.3 5.3 0 1 1-1.6-3.8M13.3 2.6v3h-3" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
+            <Icon name="refresh" size="small" />
           </button>
         </div>
       </div>
@@ -200,7 +196,7 @@ export function SessionBrowserChrome(props: {
       {/* 우 그룹 — 새 탭에서 열기 + 주소 복사 */}
       <div class="flex flex-1 min-w-0 items-center justify-end gap-1">
         <button type="button" class={ghostBtn} aria-label={language.t("common.openInNewTab")} onClick={openInNewTab}>
-          <Icon name="square-arrow-top-right" size="small" />
+          <Icon name="external-link" size="small" />
         </button>
         <button
           type="button"

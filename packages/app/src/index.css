@@ -1345,6 +1345,10 @@
    진해지고(text-base), 드래그 시 더 진해지며(text-strong) 길이가 40→52px 로 늘어 잡힌 느낌을 준다.
    디자인 토큰 매핑: c-ink-3→text-base, c-ink→text-strong. */
 :root[data-theme="jitda"] [data-component="resize-handle"][data-direction="horizontal"].session-panel-resize > div {
+  /* 그립(알약)을 1px 디바이더(::before, positioned) 위에 올린다. 비-positioned flex 자식은
+     positioned ::before 보다 먼저 페인트돼 선이 그립을 덮으므로, relative+z-index 로 끌어올림. */
+  position: relative;
+  z-index: 1;
   width: 4px;
   height: 40px;
   border-radius: 999px;
