@@ -372,11 +372,13 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         }
         if (part.type === "reasoning") {
           if (differentModel) {
-            if (part.text.trim().length > 0)
-              assistantMessage.parts.push({
-                type: "text",
-                text: part.text,
-              })
+            // Strip providerMetadata on model switch to avoid provider-specific
+            // leakage (e.g., Bedrock thinking signatures), but preserve the
+            // reasoning part type for prefix cache compatibility
+            assistantMessage.parts.push({
+              type: "reasoning",
+              text: part.text,
+            })
             continue
           }
           assistantMessage.parts.push({
