@@ -25,6 +25,9 @@ import type {
   DocAssetGetResponses,
   DocConnectErrors,
   DocConnectResponses,
+  DocCycleGetErrors,
+  DocCycleGetResponses,
+  DocCycleListResponses,
   DocSyncPullErrors,
   DocSyncPullResponses,
   DocSyncPushErrors,
@@ -97,6 +100,7 @@ import type {
   ProjectSummaryGenerateResponses,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
+  PromptCycleStatus,
   ProviderAuthResponses,
   ProviderListResponses,
   ProviderOauthAuthorizeErrors,
@@ -155,6 +159,8 @@ import type {
   SessionPromptDocReadyErrors,
   SessionPromptDocReadyResponses,
   SessionPromptDocResponses,
+  SessionPromptDocStopErrors,
+  SessionPromptDocStopResponses,
   SessionPromptDocSubmitConnectErrors,
   SessionPromptDocSubmitConnectResponses,
   SessionPromptDocSubmitErrors,
@@ -163,6 +169,14 @@ import type {
   SessionPromptDocSubmitResponses,
   SessionPromptErrors,
   SessionPromptResponses,
+  SessionQuestionDraftConnectErrors,
+  SessionQuestionDraftConnectResponses,
+  SessionQuestionSubmitConnectErrors,
+  SessionQuestionSubmitConnectResponses,
+  SessionQuestionSubmitErrors,
+  SessionQuestionSubmitRespondErrors,
+  SessionQuestionSubmitRespondResponses,
+  SessionQuestionSubmitResponses,
   SessionRevertErrors,
   SessionRevertResponses,
   SessionShareErrors,
@@ -1698,6 +1712,9 @@ export class PromptDoc extends HeyApiClient {
       docID?: string
       actorID?: string
       actorIDs?: Array<string>
+      names?: {
+        [key: string]: string
+      }
       prompt?: {
         messageID?: string
         model?: {
@@ -1732,6 +1749,7 @@ export class PromptDoc extends HeyApiClient {
             { in: "body", key: "docID" },
             { in: "body", key: "actorID" },
             { in: "body", key: "actorIDs" },
+            { in: "body", key: "names" },
             { in: "body", key: "prompt" },
             { in: "body", key: "timeoutMs" },
           ],
@@ -1754,9 +1772,265 @@ export class PromptDoc extends HeyApiClient {
     })
   }
 
+  /**
+   * Create AI-response stop approval
+   *
+   * Create a collaborative consent vote to stop the session's in-flight AI response.
+   */
+  public stop<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      docID?: string
+      actorID?: string
+      actorIDs?: Array<string>
+      names?: {
+        [key: string]: string
+      }
+      timeoutMs?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "docID" },
+            { in: "body", key: "actorID" },
+            { in: "body", key: "actorIDs" },
+            { in: "body", key: "names" },
+            { in: "body", key: "timeoutMs" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionPromptDocStopResponses,
+      SessionPromptDocStopErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/prompt-doc/stop",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
   private _submit?: Submit
   get submit2(): Submit {
     return (this._submit ??= new Submit({ client: this.client }))
+  }
+}
+
+export class Submit2 extends HeyApiClient {
+  /**
+   * Respond to question reply submit approval
+   *
+   * Approve or cancel a collaborative question reply consent vote.
+   */
+  public respond<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      submitID: string
+      directory?: string
+      workspace?: string
+      actorID?: string
+      action?: "approve" | "cancel"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "submitID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "actorID" },
+            { in: "body", key: "action" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionQuestionSubmitRespondResponses,
+      SessionQuestionSubmitRespondErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/question/submit/{submitID}/respond",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Connect to question reply submit approvals
+   *
+   * WebSocket connection for question reply consent vote lifecycle events.
+   */
+  public connect<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      requestID: string
+      actorID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "requestID" },
+            { in: "query", key: "actorID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SessionQuestionSubmitConnectResponses,
+      SessionQuestionSubmitConnectErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/question/submit/connect",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Draft extends HeyApiClient {
+  /**
+   * Connect to question answer draft
+   *
+   * Bidirectional WebSocket for co-editing a shared question answer draft and presence.
+   */
+  public connect<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      requestID: string
+      actorID: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "requestID" },
+            { in: "query", key: "actorID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      SessionQuestionDraftConnectResponses,
+      SessionQuestionDraftConnectErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/question/draft/connect",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Question extends HeyApiClient {
+  /**
+   * Create question reply submit approval
+   *
+   * Create a collaborative consent vote to send an AI question reply (or dismiss).
+   */
+  public submit<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      requestID?: string
+      actorID?: string
+      actorIDs?: Array<string>
+      names?: {
+        [key: string]: string
+      }
+      payload?: {
+        requestID: string
+        answers?: Array<Array<string>>
+        reject?: boolean
+        step?: number
+      }
+      timeoutMs?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "requestID" },
+            { in: "body", key: "actorID" },
+            { in: "body", key: "actorIDs" },
+            { in: "body", key: "names" },
+            { in: "body", key: "payload" },
+            { in: "body", key: "timeoutMs" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionQuestionSubmitResponses,
+      SessionQuestionSubmitErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/question/submit",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  private _submit?: Submit2
+  get submit2(): Submit2 {
+    return (this._submit ??= new Submit2({ client: this.client }))
+  }
+
+  private _draft?: Draft
+  get draft(): Draft {
+    return (this._draft ??= new Draft({ client: this.client }))
   }
 }
 
@@ -1806,6 +2080,7 @@ export class Actor extends HeyApiClient {
       actorID?: string
       userID?: string
       name?: string
+      color?: string
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -1820,6 +2095,7 @@ export class Actor extends HeyApiClient {
             { in: "body", key: "actorID" },
             { in: "body", key: "userID" },
             { in: "body", key: "name" },
+            { in: "body", key: "color" },
           ],
         },
       ],
@@ -2817,6 +3093,11 @@ export class Session2 extends HeyApiClient {
     return (this._promptDoc ??= new PromptDoc({ client: this.client }))
   }
 
+  private _question?: Question
+  get question(): Question {
+    return (this._question ??= new Question({ client: this.client }))
+  }
+
   private _actor?: Actor
   get actor(): Actor {
     return (this._actor ??= new Actor({ client: this.client }))
@@ -3016,6 +3297,80 @@ export class Permission extends HeyApiClient {
   }
 }
 
+export class Cycle extends HeyApiClient {
+  /**
+   * List prompt cycles
+   *
+   * Return whole prompt→response cycles, newest first. Prompt/response text is not truncated.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      sessionID?: string
+      docID?: string
+      status?: PromptCycleStatus
+      limit?: number
+      offset?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "sessionID" },
+            { in: "query", key: "docID" },
+            { in: "query", key: "status" },
+            { in: "query", key: "limit" },
+            { in: "query", key: "offset" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<DocCycleListResponses, unknown, ThrowOnError>({
+      url: "/doc/cycle",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get a prompt cycle
+   *
+   * Return a single prompt→response cycle with its inputs. Prompt/response text is not truncated.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      cycleID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "cycleID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<DocCycleGetResponses, DocCycleGetErrors, ThrowOnError>({
+      url: "/doc/cycle/{cycleID}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Sync extends HeyApiClient {
   /**
    * Pull doc sync state
@@ -3207,6 +3562,11 @@ export class Doc extends HeyApiClient {
     })
   }
 
+  private _cycle?: Cycle
+  get cycle(): Cycle {
+    return (this._cycle ??= new Cycle({ client: this.client }))
+  }
+
   private _sync?: Sync
   get sync(): Sync {
     return (this._sync ??= new Sync({ client: this.client }))
@@ -3218,7 +3578,7 @@ export class Doc extends HeyApiClient {
   }
 }
 
-export class Question extends HeyApiClient {
+export class Question2 extends HeyApiClient {
   /**
    * List pending questions
    *
@@ -4711,9 +5071,9 @@ export class OpencodeClient extends HeyApiClient {
     return (this._doc ??= new Doc({ client: this.client }))
   }
 
-  private _question?: Question
-  get question(): Question {
-    return (this._question ??= new Question({ client: this.client }))
+  private _question?: Question2
+  get question(): Question2 {
+    return (this._question ??= new Question2({ client: this.client }))
   }
 
   private _provider?: Provider

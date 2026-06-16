@@ -1,6 +1,6 @@
 import type { SubmitIntent } from "./composer-state"
 
-export type PromptMode = "normal" | "shell" | "draw" | "doc"
+export type PromptMode = "normal" | "shell" | "doc"
 
 export type QueuedClearInput = {
   mode: PromptMode

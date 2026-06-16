@@ -440,6 +440,16 @@ export type EventSessionError = {
   }
 }
 
+export type EventDocPromptRotated = {
+  type: "doc.prompt.rotated"
+  properties: {
+    sessionID: string
+    docID: string
+    clientID?: string
+    init?: boolean
+  }
+}
+
 export type EventVcsBranchUpdated = {
   type: "vcs.branch.updated"
   properties: {
@@ -512,16 +522,6 @@ export type EventWorktreeFailed = {
   type: "worktree.failed"
   properties: {
     message: string
-  }
-}
-
-export type EventDocPromptRotated = {
-  type: "doc.prompt.rotated"
-  properties: {
-    sessionID: string
-    docID: string
-    clientID?: string
-    init?: boolean
   }
 }
 
@@ -1003,6 +1003,7 @@ export type Event =
   | EventCommandExecuted
   | EventSessionDiff
   | EventSessionError
+  | EventDocPromptRotated
   | EventVcsBranchUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
@@ -1012,7 +1013,6 @@ export type Event =
   | EventPtyDeleted
   | EventWorktreeReady
   | EventWorktreeFailed
-  | EventDocPromptRotated
   | EventMessageUpdated
   | EventMessageRemoved
   | EventMessagePartUpdated
@@ -1905,18 +1905,23 @@ export type SessionPromptDoc = {
   sessionID: string
 }
 
-export type DocSubmitStatus = "pending" | "sent" | "cancelled" | "expired"
+export type DocSubmitTargetKind = "doc" | "question" | "stop"
+
+export type DocSubmitStatus = "pending" | "sent" | "cancelled" | "expired" | "left"
 
 export type DocSubmitActor = {
   actorID: string
   name: string
+  color: string
   status: "pending" | "approved"
 }
 
 export type DocSubmit = {
   submitID: string
   sessionID: string
-  docID: string
+  targetKind: DocSubmitTargetKind
+  targetID: string
+  questionAction?: "send" | "dismiss" | "back"
   actorID: string
   status: DocSubmitStatus
   actors: Array<DocSubmitActor>
@@ -1931,6 +1936,52 @@ export type SessionActor = {
   userID?: string
   name: string
   color: string
+}
+
+export type PromptCycleInput = {
+  id: string
+  docID: string | null
+  submitID: string | null
+  actorIDs: Array<string> | null
+  initiatorActorID: string | null
+  seq: number
+  prompt: string
+  assets: Array<{
+    assetID?: string
+    mime: string
+    filename?: string
+    url?: string
+  }> | null
+  actorCount: number
+  userMessageID: string | null
+  timeCreated: number
+  timeConsented: number | null
+  consentMs: number | null
+}
+
+export type PromptCycleStatus = "running" | "completed" | "aborted" | "error"
+
+export type PromptCycle = {
+  id: string
+  sessionID: string
+  timeCreated: number
+  inputs: Array<PromptCycleInput>
+  assistantMessageID: string | null
+  response: string | null
+  modelID: string | null
+  providerID: string | null
+  timeOutputStart: number | null
+  timeCompleted: number | null
+  ttftMs: number | null
+  tokensInput: number | null
+  tokensOutput: number | null
+  tokensReasoning: number | null
+  tokensCacheRead: number | null
+  tokensCacheWrite: number | null
+  costTotal: number | null
+  status: PromptCycleStatus
+  aborted: boolean
+  error: string | null
 }
 
 export type DocAsset = {
@@ -4180,6 +4231,9 @@ export type SessionPromptDocSubmitData = {
     docID: string
     actorID: string
     actorIDs: Array<string>
+    names?: {
+      [key: string]: string
+    }
     prompt: {
       messageID?: string
       model?: {
@@ -4232,6 +4286,48 @@ export type SessionPromptDocSubmitResponses = {
 }
 
 export type SessionPromptDocSubmitResponse = SessionPromptDocSubmitResponses[keyof SessionPromptDocSubmitResponses]
+
+export type SessionPromptDocStopData = {
+  body?: {
+    docID: string
+    actorID: string
+    actorIDs: Array<string>
+    names?: {
+      [key: string]: string
+    }
+    timeoutMs?: number
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/prompt-doc/stop"
+}
+
+export type SessionPromptDocStopErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionPromptDocStopError = SessionPromptDocStopErrors[keyof SessionPromptDocStopErrors]
+
+export type SessionPromptDocStopResponses = {
+  /**
+   * Submit approval state
+   */
+  200: DocSubmit
+}
+
+export type SessionPromptDocStopResponse = SessionPromptDocStopResponses[keyof SessionPromptDocStopResponses]
 
 export type SessionPromptDocSubmitRespondData = {
   body?: {
@@ -4311,6 +4407,170 @@ export type SessionPromptDocSubmitConnectResponses = {
 export type SessionPromptDocSubmitConnectResponse =
   SessionPromptDocSubmitConnectResponses[keyof SessionPromptDocSubmitConnectResponses]
 
+export type SessionQuestionSubmitData = {
+  body?: {
+    requestID: string
+    actorID: string
+    actorIDs: Array<string>
+    names?: {
+      [key: string]: string
+    }
+    payload: {
+      requestID: string
+      answers?: Array<Array<string>>
+      reject?: boolean
+      step?: number
+    }
+    timeoutMs?: number
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/question/submit"
+}
+
+export type SessionQuestionSubmitErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionQuestionSubmitError = SessionQuestionSubmitErrors[keyof SessionQuestionSubmitErrors]
+
+export type SessionQuestionSubmitResponses = {
+  /**
+   * Submit approval state
+   */
+  200: DocSubmit
+}
+
+export type SessionQuestionSubmitResponse = SessionQuestionSubmitResponses[keyof SessionQuestionSubmitResponses]
+
+export type SessionQuestionSubmitRespondData = {
+  body?: {
+    actorID: string
+    action: "approve" | "cancel"
+  }
+  path: {
+    sessionID: string
+    submitID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/question/submit/{submitID}/respond"
+}
+
+export type SessionQuestionSubmitRespondErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionQuestionSubmitRespondError =
+  SessionQuestionSubmitRespondErrors[keyof SessionQuestionSubmitRespondErrors]
+
+export type SessionQuestionSubmitRespondResponses = {
+  /**
+   * Submit approval state
+   */
+  200: DocSubmit
+}
+
+export type SessionQuestionSubmitRespondResponse =
+  SessionQuestionSubmitRespondResponses[keyof SessionQuestionSubmitRespondResponses]
+
+export type SessionQuestionSubmitConnectData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    requestID: string
+    actorID: string
+  }
+  url: "/session/{sessionID}/question/submit/connect"
+}
+
+export type SessionQuestionSubmitConnectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionQuestionSubmitConnectError =
+  SessionQuestionSubmitConnectErrors[keyof SessionQuestionSubmitConnectErrors]
+
+export type SessionQuestionSubmitConnectResponses = {
+  /**
+   * Connected
+   */
+  200: boolean
+}
+
+export type SessionQuestionSubmitConnectResponse =
+  SessionQuestionSubmitConnectResponses[keyof SessionQuestionSubmitConnectResponses]
+
+export type SessionQuestionDraftConnectData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query: {
+    directory?: string
+    workspace?: string
+    requestID: string
+    actorID: string
+  }
+  url: "/session/{sessionID}/question/draft/connect"
+}
+
+export type SessionQuestionDraftConnectErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionQuestionDraftConnectError =
+  SessionQuestionDraftConnectErrors[keyof SessionQuestionDraftConnectErrors]
+
+export type SessionQuestionDraftConnectResponses = {
+  /**
+   * Connected
+   */
+  200: boolean
+}
+
+export type SessionQuestionDraftConnectResponse =
+  SessionQuestionDraftConnectResponses[keyof SessionQuestionDraftConnectResponses]
+
 export type SessionActorListData = {
   body?: never
   path: {
@@ -4346,6 +4606,7 @@ export type SessionActorUpsertData = {
     actorID?: string
     userID?: string
     name?: string
+    color?: string
   }
   path: {
     sessionID: string
@@ -4374,6 +4635,60 @@ export type SessionActorUpsertResponses = {
 }
 
 export type SessionActorUpsertResponse = SessionActorUpsertResponses[keyof SessionActorUpsertResponses]
+
+export type DocCycleListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+    sessionID?: string
+    docID?: string
+    status?: PromptCycleStatus
+    limit?: number
+    offset?: number
+  }
+  url: "/doc/cycle"
+}
+
+export type DocCycleListResponses = {
+  /**
+   * Prompt cycles
+   */
+  200: Array<PromptCycle>
+}
+
+export type DocCycleListResponse = DocCycleListResponses[keyof DocCycleListResponses]
+
+export type DocCycleGetData = {
+  body?: never
+  path: {
+    cycleID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/doc/cycle/{cycleID}"
+}
+
+export type DocCycleGetErrors = {
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type DocCycleGetError = DocCycleGetErrors[keyof DocCycleGetErrors]
+
+export type DocCycleGetResponses = {
+  /**
+   * Prompt cycle
+   */
+  200: PromptCycle
+}
+
+export type DocCycleGetResponse = DocCycleGetResponses[keyof DocCycleGetResponses]
 
 export type DocSyncPullData = {
   body?: never

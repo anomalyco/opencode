@@ -18,6 +18,7 @@
     },
     "overrides": {
       "c-paper": "#F4F2EC",
+      "c-helmet-wash": "#FBF6DF",
       "background-base": "var(--c-paper)",
       "background-weak": "#E9E6DD",
       "background-strong": "#FFFFFF",

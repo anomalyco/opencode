@@ -19,18 +19,20 @@ import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { usePromptDocBridge } from "@/context/prompt-doc-bridge"
 import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
+import { DiffTabContent } from "@/pages/session/diff-tab"
 import { FileTabContent } from "@/pages/session/file-tabs"
 import { createOpenSessionFileTab, createSessionTabs, getTabReorderIndex, type Sizing } from "@/pages/session/helpers"
 import { setSessionHandoff } from "@/pages/session/handoff"
-import { SessionPreviewPanel } from "@/pages/session/session-preview-panel"
+import { SessionPreviewPanel, SessionBrowserChrome, createSessionPreview } from "@/pages/session/session-preview-panel"
 import { useSessionLayout } from "@/pages/session/session-layout"
 
 export function SessionSidePanel(props: {
   reviewPanel: JSX.Element
   activeDiff?: string
-  focusReviewDiff: (path: string) => void
+  onChangeFileClick: (path: string) => void
   reviewSnap: boolean
   size: Sizing
 }) {
@@ -41,7 +43,15 @@ export function SessionSidePanel(props: {
   const language = useLanguage()
   const command = useCommand()
   const dialog = useDialog()
+  const bridge = usePromptDocBridge()
   const { params, sessionKey, tabs, view } = useSessionLayout()
+
+  const onContextAdd = createMemo(() => {
+    if (bridge.mode() !== "doc") return
+    return (path: string, type: "file" | "directory") => {
+      bridge.addReference(path, type)
+    }
+  })
 
   const isDesktop = createMediaQuery("(min-width: 768px)")
 
@@ -56,11 +66,6 @@ export function SessionSidePanel(props: {
     return `${layout.fileTree.width()}px`
   })
   const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
-  const offset = createMemo(() => {
-    if (!fileOpen()) return "-4px"
-    if (reviewOpen()) return `calc(${treeWidth()} - 10px)`
-    return `calc(${treeWidth()} - 24px)`
-  })
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
@@ -121,9 +126,15 @@ export function SessionSidePanel(props: {
     return file.tree.children("").length === 0
   })
 
+  const pathFromContentTab = (tab: string) => file.pathFromTab(tab) ?? file.pathFromDiffTab(tab)
+
   const normalizeTab = (tab: string) => {
-    if (!tab.startsWith("file://")) return tab
-    return file.tab(tab)
+    if (tab.startsWith("file://")) return file.tab(tab)
+    if (tab.startsWith("diff://")) {
+      const path = file.pathFromDiffTab(tab)
+      if (path) return file.diffTab(path)
+    }
+    return tab
   }
 
   const openReviewPanel = () => {
@@ -133,7 +144,7 @@ export function SessionSidePanel(props: {
   const openTab = createOpenSessionFileTab({
     normalizeTab,
     openTab: tabs().open,
-    pathFromTab: file.pathFromTab,
+    pathFromTab: pathFromContentTab,
     loadFile: file.load,
     openReviewPanel,
     setActive: tabs().setActive,
@@ -141,7 +152,7 @@ export function SessionSidePanel(props: {
 
   const tabState = createSessionTabs({
     tabs,
-    pathFromTab: file.pathFromTab,
+    pathFromTab: pathFromContentTab,
     normalizeTab,
     review: reviewTab,
     preview: previewTab,
@@ -152,12 +163,38 @@ export function SessionSidePanel(props: {
   const activeTab = tabState.activeTab
   const activeFileTab = tabState.activeFileTab
 
-  const fileTreeTab = () => layout.fileTree.tab()
+  // 미리보기 우선: 콘텐츠가 미리보기뿐일 때는 탭 스트립을 숨긴다.
+  // 파일·컨텍스트 탭이 열리거나 리뷰 변경이 있을 때만 상단 탭 스트립을 노출(시안 OcBrowser showStrip 확장).
+  const showTabStrip = createMemo(() => openedTabs().length > 0 || contextOpen() || (reviewTab() && hasReview()))
+
+  // 미리보기 브라우저 chrome 바(시안 SafariChrome) — URL·새로고침 공유.
+  const preview = createSessionPreview()
+  const browserAddress = createMemo(() => {
+    const active = activeFileTab()
+    if (active) {
+      const path = pathFromContentTab(active)
+      if (path) return path
+    }
+    const url = preview.previewUrl()
+    if (!url) return undefined
+    try {
+      return new URL(url).host
+    } catch {
+      return url
+    }
+  })
+
+  const fileTreeTab = () => (env.disableChangeFiles() ? "all" : layout.fileTree.tab())
 
   const setFileTreeTabValue = (value: string) => {
     if (value !== "changes" && value !== "all") return
+    if (value === "changes" && env.disableChangeFiles()) return
     layout.fileTree.setTab(value)
   }
+
+  createEffect(() => {
+    if (env.disableChangeFiles() && layout.fileTree.tab() === "changes") layout.fileTree.setTab("all")
+  })
 
   const showAllFiles = () => {
     if (fileTreeTab() !== "changes") return
@@ -195,7 +232,7 @@ export function SessionSidePanel(props: {
       files: tabs()
         .all()
         .reduce<Record<string, SelectedLineRange | null>>((acc, tab) => {
-          const path = file.pathFromTab(tab)
+          const path = pathFromContentTab(tab)
           if (!path) return acc
 
           const selected = file.selectedLines(path)
@@ -225,7 +262,15 @@ export function SessionSidePanel(props: {
         }}
         style={{ width: panelWidth() }}
       >
-        <div class="size-full flex border-l border-border-weaker-base">
+        <div class="size-full flex flex-col border-l border-border-weaker-base">
+          {/* 브라우저 chrome 바 — 시안처럼 상단 전체 폭을 차지(탐색기·미리보기 위). */}
+          <SessionBrowserChrome
+            address={browserAddress()}
+            url={preview.previewUrl()}
+            onReload={preview.reload}
+            onHome={() => tabs().setActive("preview")}
+          />
+          <div class="flex-1 min-h-0 flex">
           <div
             aria-hidden={!reviewOpen()}
             inert={!reviewOpen()}
@@ -244,6 +289,7 @@ export function SessionSidePanel(props: {
                 <DragDropSensors />
                 <ConstrainDragYAxis />
                 <Tabs value={activeTab()} onChange={openTab}>
+                  <Show when={showTabStrip()}>
                   <div class="sticky top-0 shrink-0 flex">
                     <Tabs.List
                       ref={(el: HTMLDivElement) => {
@@ -321,6 +367,7 @@ export function SessionSidePanel(props: {
                       </div>
                     </Tabs.List>
                   </div>
+                  </Show>
 
                   <Show when={reviewTab()}>
                     <Tabs.Content value="review" class="flex flex-col h-full overflow-hidden contain-strict">
@@ -331,7 +378,7 @@ export function SessionSidePanel(props: {
                   <Show when={previewTab()}>
                     <Tabs.Content value="preview" class="flex flex-col h-full overflow-hidden contain-strict">
                       <Show when={activeTab() === "preview"}>
-                        <SessionPreviewPanel />
+                        <SessionPreviewPanel src={preview.previewSrc()} />
                       </Show>
                     </Tabs.Content>
                   </Show>
@@ -360,13 +407,22 @@ export function SessionSidePanel(props: {
                   </Show>
 
                   <Show when={activeFileTab()} keyed>
-                    {(tab) => <FileTabContent tab={tab} />}
+                    {(tab) => (
+                      <Switch>
+                        <Match when={file.pathFromDiffTab(tab)}>
+                          <DiffTabContent tab={tab} />
+                        </Match>
+                        <Match when={true}>
+                          <FileTabContent tab={tab} />
+                        </Match>
+                      </Switch>
+                    )}
                   </Show>
                 </Tabs>
                 <DragOverlay>
                   <Show when={store.activeDraggable} keyed>
                     {(tab) => {
-                      const path = file.pathFromTab(tab)
+                      const path = pathFromContentTab(tab)
                       return (
                         <div data-component="tabs-drag-preview">
                           <Show when={path}>{(p) => <FileVisual active path={p()} />}</Show>
@@ -383,7 +439,7 @@ export function SessionSidePanel(props: {
             id="file-tree-panel"
             aria-hidden={!fileOpen()}
             inert={!fileOpen()}
-            class="relative min-w-0 h-full shrink-0 overflow-hidden"
+            class="order-first relative min-w-0 h-full shrink-0 overflow-hidden"
             classList={{
               "pointer-events-none": !fileOpen(),
               "transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
@@ -393,7 +449,7 @@ export function SessionSidePanel(props: {
           >
             <div
               class="h-full flex flex-col overflow-hidden group/filetree"
-              classList={{ "border-l border-border-weaker-base": reviewOpen() }}
+              classList={{ "border-r border-border-weaker-base": reviewOpen() }}
             >
               <Tabs
                 variant="pill"
@@ -402,15 +458,19 @@ export function SessionSidePanel(props: {
                 class="h-full"
                 data-scope="filetree"
               >
-                <Tabs.List>
-                  <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
-                    <span data-slot="tabs-trigger-badge">{reviewCount()}</span>
-                    {language.t(reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
-                  </Tabs.Trigger>
-                  <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
-                    {language.t("session.files.all")}
-                  </Tabs.Trigger>
-                </Tabs.List>
+                {/* Changes/All 탭이 둘 다 의미 있을 때만 pill 헤더 노출. 변경 파일 탭이 꺼져
+                    "모든 파일" 하나뿐이면(시안처럼) 헤더를 숨기고 트리만 보인다. */}
+                <Show when={!env.disableChangeFiles()}>
+                  <Tabs.List>
+                    <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
+                      <span data-slot="tabs-trigger-badge">{reviewCount()}</span>
+                      {language.t(reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
+                    </Tabs.Trigger>
+                    <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
+                      {language.t("session.files.all")}
+                    </Tabs.Trigger>
+                  </Tabs.List>
+                </Show>
                 <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
                   <Switch>
                     <Match when={hasReview()}>
@@ -430,7 +490,10 @@ export function SessionSidePanel(props: {
                           kinds={kinds()}
                           draggable={false}
                           active={props.activeDiff}
-                          onFileClick={(node) => props.focusReviewDiff(node.path)}
+                          onFileClick={(node) => props.onChangeFileClick(node.path)}
+                          onContextAdd={onContextAdd()}
+                          contextLabel={language.t("session.files.addToContext")}
+                          contextFolderLabel={language.t("session.files.addFolderToContext")}
                         />
                       </Show>
                     </Match>
@@ -451,6 +514,9 @@ export function SessionSidePanel(props: {
                         modified={diffFiles()}
                         kinds={kinds()}
                         onFileClick={(node) => openTab(file.tab(node.path))}
+                        onContextAdd={onContextAdd()}
+                        contextLabel={language.t("session.files.addToContext")}
+                        contextFolderLabel={language.t("session.files.addFolderToContext")}
                       />
                     </Match>
                   </Switch>
@@ -461,7 +527,7 @@ export function SessionSidePanel(props: {
               <div onPointerDown={() => props.size.start()}>
                 <ResizeHandle
                   direction="horizontal"
-                  edge="start"
+                  edge="end"
                   size={layout.fileTree.width()}
                   min={200}
                   max={360}
@@ -473,28 +539,7 @@ export function SessionSidePanel(props: {
               </div>
             </Show>
           </div>
-          <Show when={reviewOpen() || fileOpen()}>
-            <TooltipKeybind title={language.t("command.fileTree.toggle")} keybind={command.keybind("fileTree.toggle")}>
-              <IconButton
-                icon={fileOpen() ? "chevron-right" : "chevron-left"}
-                variant="secondary"
-                size="small"
-                class="absolute top-1/2 z-20 !h-8 !w-5 -translate-y-1/2 cursor-pointer bg-background-stronger"
-                classList={{
-                  "rounded-r-none border-r-0": !fileOpen(),
-                }}
-                style={{ right: offset() }}
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  layout.fileTree.toggle()
-                }}
-                aria-label={language.t("command.fileTree.toggle")}
-                aria-expanded={layout.fileTree.opened()}
-                aria-controls="file-tree-panel"
-              />
-            </TooltipKeybind>
-          </Show>
+          </div>
         </div>
       </aside>
     </Show>

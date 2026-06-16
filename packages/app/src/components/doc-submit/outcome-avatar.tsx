@@ -1,11 +1,12 @@
 import { Show } from "solid-js"
 import { avatarLabel } from "./avatar-label"
-import { actorColor } from "./actor-color"
 
-type Role = "requester" | "agreed" | "rejected" | "timeout"
+type Role = "requester" | "agreed" | "rejected" | "timeout" | "left"
 
 type Props = {
   name: string
+  // Server-assigned hex color, same source as the doc cursor label / pending avatar.
+  color: string
   role: Role
   compact?: boolean
 }
@@ -46,11 +47,18 @@ const map: Record<
     muted: true,
     glow: false,
   },
+  left: {
+    ring: "var(--ds-safety)",
+    chip: "나감",
+    chipBg: "#ffffff",
+    chipFg: "#c44a00",
+    muted: false,
+    glow: true,
+  },
 }
 
 export function OutcomeAvatar(props: Props) {
   const style = () => map[props.role]
-  const color = () => actorColor(props.name)
   const size = () => (props.compact ? 32 : 40)
   const fs = () => (props.compact ? 11 : 13)
 
@@ -63,8 +71,8 @@ export function OutcomeAvatar(props: Props) {
           width: `${size()}px`,
           height: `${size()}px`,
           "font-size": `${fs()}px`,
-          background: color().background,
-          color: color().foreground,
+          background: props.color,
+          color: "#fff",
           "border-color": style().ring,
         }}
       >

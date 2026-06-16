@@ -9,6 +9,7 @@ import {
   Match,
   Switch,
   createMemo,
+  createSignal,
   createEffect,
   createComputed,
   on,
@@ -37,6 +38,8 @@ import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePrompt } from "@/context/prompt"
+import { usePromptDocBridge } from "@/context/prompt-doc-bridge"
+import { addLineContext } from "@/utils/doc-line-reference"
 import { useSDK } from "@/context/sdk"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
@@ -45,10 +48,12 @@ import { sessionBusy } from "@/components/prompt-input/composer-state"
 import { type FollowupDraft, sendFollowupDraft } from "@/components/prompt-input/submit"
 import { createSessionComposerState, SessionComposerRegion } from "@/pages/session/composer"
 import {
+  createOpenDiffTab,
   createOpenReviewFile,
   createSessionTabs,
   createSizing,
   focusTerminalById,
+  isDiffTab,
   shouldFocusTerminalOnKeyDown,
 } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/message-timeline"
@@ -327,6 +332,7 @@ export default function Page() {
   const sdk = useSDK()
   const settings = useSettings()
   const prompt = usePrompt()
+  const bridge = usePromptDocBridge()
   const comments = useComments()
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
@@ -407,9 +413,15 @@ export default function Page() {
   })
   const centered = createMemo(() => isDesktop() && !desktopReviewOpen())
 
+  const pathFromContentTab = (tab: string) => file.pathFromTab(tab) ?? file.pathFromDiffTab(tab)
+
   function normalizeTab(tab: string) {
-    if (!tab.startsWith("file://")) return tab
-    return file.tab(tab)
+    if (tab.startsWith("file://")) return file.tab(tab)
+    if (tab.startsWith("diff://")) {
+      const path = file.pathFromDiffTab(tab)
+      if (path) return file.diffTab(path)
+    }
+    return tab
   }
 
   function normalizeTabs(list: string[]) {
@@ -436,7 +448,7 @@ export default function Page() {
   const previewTab = createMemo(() => isDesktop())
   const tabState = createSessionTabs({
     tabs,
-    pathFromTab: file.pathFromTab,
+    pathFromTab: pathFromContentTab,
     normalizeTab,
     review: reviewTab,
     preview: previewTab,
@@ -485,6 +497,7 @@ export default function Page() {
   createEffect(() => {
     const tab = activeFileTab()
     if (!tab) return
+    if (isDiffTab(tab)) return
 
     const path = file.pathFromTab(tab)
     if (path) file.load(path)
@@ -828,20 +841,26 @@ export default function Page() {
   }) => {
     const selection = selectionFromLines(input.selection)
     const preview = input.preview ?? selectionPreview(input.file, selection)
-    const saved = comments.add({
-      file: input.file,
-      selection: input.selection,
-      comment: input.comment,
-    })
-    prompt.context.add({
-      type: "file",
-      path: input.file,
-      selection,
-      comment: input.comment,
-      commentID: saved.id,
-      commentOrigin: input.origin,
-      preview,
-    })
+    addLineContext(
+      bridge,
+      { file: input.file, selection: input.selection, comment: input.comment, preview },
+      () => {
+        const saved = comments.add({
+          file: input.file,
+          selection: input.selection,
+          comment: input.comment,
+        })
+        prompt.context.add({
+          type: "file",
+          path: input.file,
+          selection,
+          comment: input.comment,
+          commentID: saved.id,
+          commentOrigin: input.origin,
+          preview,
+        })
+      },
+    )
   }
 
   const updateCommentInContext = (input: {
@@ -923,7 +942,7 @@ export default function Page() {
     }
   }
 
-  const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes")
+  const mobileChanges = createMemo(() => !isDesktop() && store.mobileTab === "changes" && !env.disableChangeFiles())
 
   const fileTreeTab = () => layout.fileTree.tab()
   const setFileTreeTab = (value: "changes" | "all") => layout.fileTree.setTab(value)
@@ -1079,6 +1098,7 @@ export default function Page() {
       activeFileTab,
       (active) => {
         if (!active) return
+        if (isDiffTab(active)) return
         if (fileTreeTab() !== "changes") return
         showAllFiles()
       },
@@ -1122,9 +1142,34 @@ export default function Page() {
 
   const focusReviewDiff = (path: string) => {
     openReviewPanel()
+    if (reviewTab()) tabs().setActive("review")
     view().review.openPath(path)
     setTree({ activeDiff: path, pendingDiff: path })
   }
+
+  const openDiffTab = createOpenDiffTab({
+    tabForPath: file.diffTab,
+    openTab: tabs().open,
+    setActive: tabs().setActive,
+    openReviewPanel,
+  })
+
+  const openChangeFile = (path: string) => {
+    if (env.productionLayout()) {
+      openDiffTab(path)
+      return
+    }
+    focusReviewDiff(path)
+  }
+
+  const activeDiffPath = createMemo(() => {
+    const tab = activeFileTab()
+    if (tab) {
+      const fromDiff = file.pathFromDiffTab(tab)
+      if (fromDiff) return fromDiff
+    }
+    return tree.activeDiff
+  })
 
   createEffect(() => {
     const pending = tree.pendingDiff
@@ -1701,6 +1746,8 @@ export default function Page() {
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
 
+  const [composerLift, setComposerLift] = createSignal(false)
+
   const SessionPanelBody = () => (
     <>
       <div class="flex-1 min-h-0 overflow-hidden">
@@ -1804,18 +1851,22 @@ export default function Page() {
         setPromptDockRef={(el) => {
           promptDock = el
         }}
+        onExpandedChange={setComposerLift}
       />
     </>
   )
 
   const SessionPanelResize = () => (
-    <Show when={isDesktop()}>
+    // 확장 입력창이 펼쳐지면(composerLift) 핸들을 렌더하지 않는다 — 어차피 드래그 불가이고,
+    // 전체 너비 입력창 위로 바가 올라오는 문제를 z-index 없이 막는다. (1px 경계선 디바이더는 유지)
+    <Show when={isDesktop() && !composerLift()}>
       <div
-        class="absolute inset-y-0 right-0 z-30 w-0 overflow-visible"
+        class="absolute inset-y-0 right-0 w-0 overflow-visible"
         style={{ "--resize-gap-offset": "7px" }}
         onPointerDown={() => size.start()}
       >
         <ResizeHandle
+          class="session-panel-resize"
           showHandle={true}
           direction="horizontal"
           size={layout.session.width()}
@@ -1839,18 +1890,20 @@ export default function Page() {
       data-component="codle-session-column"
       classList={{
         "relative flex min-h-0 min-w-0 flex-1 flex-col": true,
+        // expanded composer: sole z-index so column stacks above side panel (flex row DOM order)
+        "z-10": composerLift(),
         ...(props.classList ?? {}),
         [props.class ?? ""]: !!props.class,
       }}
       style={props.style}
     >
+      <SessionPanelResize />
       <div
         data-component="codle-session-frame"
         class="@container relative flex min-h-0 flex-1 flex-col overflow-hidden"
       >
         <SessionPanelBody />
       </div>
-      <SessionPanelResize />
     </div>
   )
 
@@ -1861,8 +1914,8 @@ export default function Page() {
           <SessionPanelColumn class="@container relative flex flex-col min-h-0 h-full flex-1 min-w-0" />
           <SessionSidePanel
             reviewPanel={reviewPanel()}
-            activeDiff={tree.activeDiff}
-            focusReviewDiff={focusReviewDiff}
+            activeDiff={activeDiffPath()}
+            onChangeFileClick={openChangeFile}
             reviewSnap={ui.reviewSnap}
             size={size}
           />
@@ -1875,7 +1928,7 @@ export default function Page() {
     <div data-component="codle-session" class="relative size-full overflow-hidden flex flex-col p-2 md:p-3">
       <SessionHeader />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row gap-2 md:gap-3">
-        <Show when={!isDesktop() && !!params.id}>
+        <Show when={!isDesktop() && !!params.id && !env.disableChangeFiles()}>
           <Tabs value={store.mobileTab} class="h-auto">
             <Tabs.List>
               <Tabs.Trigger
@@ -1914,8 +1967,8 @@ export default function Page() {
 
         <SessionSidePanel
           reviewPanel={reviewPanel()}
-          activeDiff={tree.activeDiff}
-          focusReviewDiff={focusReviewDiff}
+          activeDiff={activeDiffPath()}
+          onChangeFileClick={openChangeFile}
           reviewSnap={ui.reviewSnap}
           size={size}
         />

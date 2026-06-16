@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { hasDrawContent } from "./drawing"
 import {
   followupShouldQueue,
   parseFollowupMode,
@@ -89,15 +88,5 @@ describe("promptHasDraft", () => {
         },
       ]),
     ).toBe(true)
-  })
-})
-
-describe("hasDrawContent", () => {
-  test("visible stroke counts as content", () => {
-    expect(hasDrawContent([{ isDeleted: false }, { isDeleted: true }])).toBe(true)
-  })
-
-  test("all deleted is empty", () => {
-    expect(hasDrawContent([{ isDeleted: true }])).toBe(false)
   })
 })

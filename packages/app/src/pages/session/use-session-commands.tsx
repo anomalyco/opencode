@@ -8,6 +8,8 @@ import { useLayout } from "@/context/layout"
 import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
 import { usePrompt } from "@/context/prompt"
+import { usePromptDocBridge } from "@/context/prompt-doc-bridge"
+import { addLineContext } from "@/utils/doc-line-reference"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
@@ -40,6 +42,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const local = useLocal()
   const permission = usePermission()
   const prompt = usePrompt()
+  const bridge = usePromptDocBridge()
   const sdk = useSDK()
   const sync = useSync()
   const terminal = useTerminal()
@@ -57,14 +60,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (!id) return false
     return Math.max(info()?.summary?.files ?? 0, (sync.data.session_diff[id] ?? []).length) > 0
   }
-  const normalizeTab = (tab: string) => {
-    if (!tab.startsWith("file://")) return tab
-    return file.tab(tab)
-  }
   const tabState = createSessionTabs({
     tabs,
-    pathFromTab: file.pathFromTab,
-    normalizeTab,
+    pathFromTab: (tab) => file.pathFromTab(tab) ?? file.pathFromDiffTab(tab),
+    normalizeTab: (tab) => {
+      if (tab.startsWith("file://")) return file.tab(tab)
+      if (tab.startsWith("diff://")) {
+        const path = file.pathFromDiffTab(tab)
+        if (path) return file.diffTab(path)
+      }
+      return tab
+    },
     review: actions.review,
     hasReview,
   })
@@ -98,7 +104,19 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const addSelectionToContext = (path: string, selection: FileSelection) => {
     const preview = selectionPreview(path, selection)
-    prompt.context.add({ type: "file", path, selection, preview })
+    const tab = activeFileTab()
+    const filePath = tab ? file.pathFromTab(tab) : path
+    const lines =
+      filePath === path ? (file.selectedLines(path) as SelectedLineRange | null | undefined) : undefined
+    const range: SelectedLineRange = {
+      start: selection.startLine,
+      end: selection.endLine,
+      ...(lines?.side ? { side: lines.side } : {}),
+      ...(lines?.endSide ? { endSide: lines.endSide } : {}),
+    }
+    addLineContext(bridge, { file: path, selection: range, preview }, () => {
+      prompt.context.add({ type: "file", path, selection, preview })
+    })
   }
 
   const canAddSelectionContext = () => {

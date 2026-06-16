@@ -8,7 +8,7 @@ import { Font } from "@opencode-ai/ui/font"
 import { Splash } from "@opencode-ai/ui/logo"
 import { ThemeProvider } from "@opencode-ai/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
-import { type BaseRouterProps, Navigate, Route, Router } from "@solidjs/router"
+import { type BaseRouterProps, Navigate, Route, Router, useLocation } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { type Duration, Effect } from "effect"
 import {
@@ -38,6 +38,7 @@ import { LayoutProvider } from "@/context/layout"
 import { ModelsProvider } from "@/context/models"
 import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
+import { PromptDocBridgeProvider } from "@/context/prompt-doc-bridge"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SettingsProvider } from "@/context/settings"
@@ -64,7 +65,12 @@ const SessionRoute = () => (
   </SessionProviders>
 )
 
-const SessionIndexRoute = () => <Navigate href="session" />
+const SessionIndexRoute = () => {
+  // Preserve the query string (notably the host-passed ?user=id||name identity) when redirecting the
+  // directory index to its session, so it is not lost before the actor registers.
+  const location = useLocation()
+  return <Navigate href={`session${location.search}${location.hash}`} />
+}
 
 function UiI18nBridge(props: ParentProps) {
   const language = useLanguage()
@@ -118,7 +124,9 @@ function SessionProviders(props: ParentProps) {
     <TerminalProvider>
       <FileProvider>
         <PromptProvider>
-          <CommentsProvider>{props.children}</CommentsProvider>
+          <PromptDocBridgeProvider>
+            <CommentsProvider>{props.children}</CommentsProvider>
+          </PromptDocBridgeProvider>
         </PromptProvider>
       </FileProvider>
     </TerminalProvider>

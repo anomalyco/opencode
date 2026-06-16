@@ -82,7 +82,13 @@ export function ResizeHandle(props: ResizeHandleProps) {
       onMouseDown={handleMouseDown}
     >
       <Show when={local.showHandle}>
-        <div class="h-18 w-0.5 rounded-none bg-border-base transition-colors group-hover:bg-border-strong-base" />
+        <div
+          classList={{
+            "rounded-none bg-border-base transition-colors group-hover:bg-border-strong-base": true,
+            "h-18 w-0.5": local.direction === "horizontal",
+            "w-18 h-0.5": local.direction === "vertical",
+          }}
+        />
       </Show>
     </div>
   )

@@ -4,7 +4,7 @@ import { PendingAvatar } from "./pending-avatar"
 
 const max = 5
 
-type Item = { name: string }
+type Item = { name: string; color: string }
 
 type Props = {
   items: Item[]
@@ -19,7 +19,7 @@ export function PendingRow(props: Props) {
 
   return (
     <div class="ds-pending-row" classList={{ "ds-pending-row--large": large() }}>
-      <For each={slots()}>{(item) => <PendingAvatar name={item.name} compact={large()} />}</For>
+      <For each={slots()}>{(item) => <PendingAvatar name={item.name} color={item.color} compact={large()} />}</For>
       <Show when={more()}>
         <MoreIndicator size={size()} hidden={hidden()} />
       </Show>

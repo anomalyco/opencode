@@ -100,7 +100,7 @@
     z-index: 20;
     height: 40px;
     padding-bottom: 8px;
-    background-color: var(--background-stronger);
+    background-color: transparent;
   }
 
   [data-component="session-turn-diffs-trigger"] {
@@ -155,6 +155,10 @@
     padding-top: 0px;
     display: flex;
     flex-direction: column;
+
+    [data-component="sticky-accordion-header"] {
+      background-color: transparent;
+    }
   }
 
   [data-slot="session-turn-diff-trigger"] {

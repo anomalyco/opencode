@@ -242,7 +242,13 @@ export namespace HubAuth {
         // 가서 hub 가 unknown path 로 처리해 404 가 난다. JUPYTERHUB_SERVICE_PREFIX 를 다시
         // prefix 해 hub 가 user-server 로 라우팅할 수 있는 절대 경로로 저장한다.
         const servicePrefix = Flag.JUPYTERHUB_SERVICE_PREFIX?.replace(/\/+$/, "") ?? ""
-        oauthStates.set(stateId, { csrf, next: `${servicePrefix}${c.req.path}` })
+        // AIDEV-NOTE: c.req.path 는 경로만이라 그대로 next 로 쓰면 OAuth 콜백 후 원본 쿼리가
+        // 사라진다. 호스트가 iframe 에 붙이는 ?user=id||name 식별자가 여기서 유실되면 SPA 가
+        // 게스트로 등록돼 협업 커서에 Guest-xxxx 로 보인다. 원본 쿼리를 보존하되, basic-auth 용
+        // ?token= 은 로그인 후 URL/히스토리에 남기지 않도록 제거한다.
+        const reqUrl = new URL(c.req.url)
+        reqUrl.searchParams.delete("token")
+        oauthStates.set(stateId, { csrf, next: `${servicePrefix}${c.req.path}${reqUrl.search}` })
         setCookie(c, STATE_COOKIE, csrf, {
           path: "/",
           httpOnly: true,

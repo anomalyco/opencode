@@ -122,4 +122,28 @@ describe("watchCursorLabels", () => {
     expect(calls).toBe(done)
     host.remove()
   })
+
+  test("applies Status Pill round + vertical size to remote cursor labels", async () => {
+    const host = document.createElement("div")
+    const editor = document.createElement("div")
+    const widget = document.createElement("affine-doc-remote-selection-widget") as Widget
+    const root = widget.attachShadow({ mode: "open" })
+    const label = document.createElement("div")
+    label.style.whiteSpace = "nowrap"
+    label.style.textOverflow = "ellipsis"
+    root.append(label)
+    editor.append(widget)
+    host.append(editor)
+    document.body.append(host)
+
+    const stop = watchCursorLabels(editor, host)
+    await wait()
+
+    expect(label.style.borderRadius).toBe("999px")
+    expect(label.style.lineHeight).toBe("1")
+    expect(label.style.paddingTop).toBe("3px")
+    expect(label.style.paddingBottom).toBe("3px")
+    stop()
+    host.remove()
+  })
 })

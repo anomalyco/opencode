@@ -1,5 +1,8 @@
 import type { BlockModel, Doc } from "@blocksuite/store"
 import type { OpencodeClient } from "@opencode-ai/sdk/v2/client"
+import { formatCommentNote, formatFolderReferenceNote, formatReferenceNote } from "@/utils/comment-note"
+import type { FileSelection } from "@/context/file/types"
+import { lineRangeLabel, lineRefSegments, lineRefSegmentsLabel } from "./line-reference-url"
 
 export type DocExportAsset = {
   id: string
@@ -100,6 +103,15 @@ function str(model: BlockModel, key: string) {
 function num(model: BlockModel, key: string) {
   const value = prop(model, key)
   return typeof value === "number" ? value : undefined
+}
+
+function lineSelection(start: number, end: number): FileSelection {
+  return {
+    startLine: Math.min(start, end),
+    endLine: Math.max(start, end),
+    startChar: 0,
+    endChar: 0,
+  }
 }
 
 function source(model: BlockModel) {
@@ -212,6 +224,30 @@ function plain(model: BlockModel): string[] {
   if (model.flavour === "opencode:file-reference") {
     return [str(model, "name") ?? str(model, "path") ?? str(model, "url") ?? "File", ...children()]
   }
+  if (model.flavour === "opencode:line-reference") {
+    const path = str(model, "path") ?? ""
+    const start = num(model, "start")
+    const end = num(model, "end")
+    const range =
+      start !== undefined && end !== undefined
+        ? lineRefSegmentsLabel(
+            lineRefSegments({
+              start,
+              end,
+              side: str(model, "side"),
+              endSide: str(model, "endSide"),
+              additionStart: num(model, "additionStart"),
+              additionEnd: num(model, "additionEnd"),
+              deletionStart: num(model, "deletionStart"),
+              deletionEnd: num(model, "deletionEnd"),
+            }),
+          )
+        : str(model, "label")
+    const comment = str(model, "comment")
+    const preview = str(model, "preview")
+    const head = [str(model, "name") ?? path, range, preview, comment].filter((line): line is string => !!line)
+    return [...head, ...children()]
+  }
   if (model.flavour === "affine:image") return [caption(model) || source(model) || "Image", ...children()]
   if (model.flavour === "affine:attachment") return [str(model, "name") ?? source(model) ?? "Attachment", ...children()]
   if (model.flavour === "affine:divider") return ["---", ...children()]
@@ -273,11 +309,46 @@ async function block(model: BlockModel, opts: ExportOpts, assets: DocExportAsset
   }
 
   if (model.flavour === "opencode:file-reference") {
-    const name = str(model, "name") ?? str(model, "path") ?? str(model, "url") ?? "File"
+    const path = str(model, "path") ?? str(model, "url") ?? ""
+    const name = str(model, "name") ?? path ?? "File"
     const url = str(model, "url")
     const nested = await children()
-    if (!url) return [label(name), ...nested]
-    return [`[${label(name)}](${url})`, ...nested]
+    const dir = str(model, "nodeType") === "directory"
+    const note = dir ? formatFolderReferenceNote(path) : formatReferenceNote({ path })
+    const link = url ? `[${label(name)}](${url})` : label(name)
+    return [note, link, ...nested].filter(Boolean)
+  }
+
+  if (model.flavour === "opencode:line-reference") {
+    const path = str(model, "path") ?? ""
+    const name = str(model, "name") ?? path
+    const url = str(model, "url") ?? path
+    const start = num(model, "start")
+    const end = num(model, "end")
+    const comment = str(model, "comment")
+    const nested = await children()
+    const selection =
+      start !== undefined && end !== undefined ? lineSelection(start, end) : undefined
+    const note = comment
+      ? formatCommentNote({ path, selection, comment })
+      : formatReferenceNote({ path, selection })
+    const rangeLabel =
+      start !== undefined && end !== undefined
+        ? lineRefSegmentsLabel(
+            lineRefSegments({
+              start,
+              end,
+              side: str(model, "side"),
+              endSide: str(model, "endSide"),
+              additionStart: num(model, "additionStart"),
+              additionEnd: num(model, "additionEnd"),
+              deletionStart: num(model, "deletionStart"),
+              deletionEnd: num(model, "deletionEnd"),
+            }),
+          )
+        : str(model, "label")
+    const link = rangeLabel ? `[${label(name)} ${rangeLabel}](${url})` : `[${label(name)}](${url})`
+    return [note, link, ...nested].filter(Boolean)
   }
 
   if (model.flavour === "affine:latex") {

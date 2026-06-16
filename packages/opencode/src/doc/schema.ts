@@ -44,6 +44,26 @@ export const SubmitID = Schema.String.pipe(
 )
 export type SubmitID = Schema.Schema.Type<typeof SubmitID>
 
+export const CycleID = Schema.String.pipe(
+  Schema.brand("CycleID"),
+  withStatics((s) => ({
+    make: (id: string) => s.makeUnsafe(id),
+    ascending: (id?: string) => s.makeUnsafe(Identifier.ascending("cycle", id)),
+    zod: Identifier.schema("cycle").pipe(z.custom<Schema.Schema.Type<typeof s>>()),
+  })),
+)
+export type CycleID = Schema.Schema.Type<typeof CycleID>
+
+export const CycleInputID = Schema.String.pipe(
+  Schema.brand("CycleInputID"),
+  withStatics((s) => ({
+    make: (id: string) => s.makeUnsafe(id),
+    ascending: (id?: string) => s.makeUnsafe(Identifier.ascending("cycleInput", id)),
+    zod: Identifier.schema("cycleInput").pipe(z.custom<Schema.Schema.Type<typeof s>>()),
+  })),
+)
+export type CycleInputID = Schema.Schema.Type<typeof CycleInputID>
+
 export const SessionIDParam = z.object({
   sessionID: SessionID.zod,
 })

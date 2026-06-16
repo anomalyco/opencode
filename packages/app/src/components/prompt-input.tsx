@@ -1,6 +1,6 @@
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { useSpring } from "@opencode-ai/ui/motion-spring"
-import { createEffect, on, Component, Show, onCleanup, createMemo, createSignal } from "solid-js"
+import { createEffect, on, Component, Show, onCleanup, onMount, createMemo, createSignal } from "solid-js"
 import { useNavigate } from "@solidjs/router"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { Binary } from "@opencode-ai/util/binary"
@@ -39,13 +39,18 @@ import { useProviders } from "@/hooks/use-providers"
 import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
 import { usePermission } from "@/context/permission"
+import { usePromptDocBridge } from "@/context/prompt-doc-bridge"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
+import { useClientEnv } from "@/context/client-env"
+import { useParentParams } from "@/context/parent-params"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { createSessionTabs } from "@/pages/session/helpers"
+import { createOpenDiffTab, createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
+import { captureDisplayImage } from "./prompt-input/capture"
+import { CaptureEditDialog } from "./prompt-input/capture-edit-dialog"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
 import {
   canNavigateHistoryAtCursor,
@@ -72,17 +77,27 @@ import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { promptFromDocMarkdown } from "@/components/prompt-input/prompt-plain"
-import { PromptDrawingShell } from "./prompt-input/drawing-shell"
-import { createPromptDrawing } from "./prompt-input/drawing"
+import { PromptDocShell } from "./prompt-input/doc-shell"
 import { createPromptDoc } from "./prompt-input/doc"
+import { createOpenSessionFile } from "./prompt-input/open-session-file"
+import { lineRefToSelection } from "@/components/blocksuite/line-reference-url"
 import { createPromptContextSync } from "./prompt-input/context-sync"
-import { connectSubmit, respondSubmit, startSubmit, type DocSubmitState } from "./prompt-input/doc-submit"
+import { connectSubmit, respondSubmit, startSubmit, startStopSubmit, type DocSubmitState } from "./prompt-input/doc-submit"
 import { DialogDocSubmit } from "./doc-submit/dialog-doc-submit"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 
 interface PromptInputProps {
   class?: string
   ref?: (el: HTMLDivElement) => void
+  expanded?: boolean
+  onComposerExpand?: (opts?: { initialScale?: number }) => void
+  onComposerCollapse?: () => void
+  composerShell?: {
+    size: number
+    min: number
+    max: number
+    onResize: (height: number) => void
+  }
   newSessionWorktree?: string
   onNewSessionWorktreeReset?: () => void
   edit?: { id: string; prompt: Prompt; context: FollowupDraft["context"] }
@@ -126,12 +141,14 @@ const permissionsOff = import.meta.env.VITE_DISABLE_PROMPT_PERMISSIONS === "true
 const footerOff = import.meta.env.VITE_DISABLE_PROMPT_FOOTER === "true"
 const wysiwygOnly = import.meta.env.VITE_DISABLE_WYSIWYG_ONLY === "true"
 
-type PromptMode = "normal" | "shell" | "draw" | "doc"
+type PromptMode = "normal" | "shell" | "doc"
 
-const canvasMode = (mode: PromptMode) => mode === "draw" || mode === "doc"
+const canvasMode = (mode: PromptMode) => mode === "doc"
 const DOC_MIN = 150
 const DOC_HEIGHT = 300
 const DOC_RATIO = 0.8
+// 자동 확대: 입력창 포커스 시 기존 '확대(전체 너비 expanded)'로 자동 진입할지 여부. localStorage 영속.
+const AUTO_EXPAND_KEY = "prompt.doc.autoExpand"
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
@@ -143,6 +160,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const files = useFile()
   const prompt = usePrompt()
   const layout = useLayout()
+  const env = useClientEnv()
   const comments = useComments()
   const dialog = useDialog()
   const providers = useProviders()
@@ -155,11 +173,21 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
   let slashPopoverRef!: HTMLDivElement
+  let rootRef: HTMLDivElement | undefined
   let pending: Promise<string | undefined> | undefined
 
   const mirror = { input: false }
   const inset = 56
   const space = `${inset}px`
+
+  const composerExpand = () => {
+    if (!props.onComposerExpand || !props.onComposerCollapse) return
+    return {
+      expanded: !!props.expanded,
+      onExpand: props.onComposerExpand,
+      onCollapse: props.onComposerCollapse,
+    }
+  }
 
   const scrollCursorIntoView = () => {
     const container = scrollRef
@@ -203,9 +231,25 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const activeFileTab = createSessionTabs({
     tabs,
-    pathFromTab: files.pathFromTab,
-    normalizeTab: (tab) => (tab.startsWith("file://") ? files.tab(tab) : tab),
+    pathFromTab: (tab) => files.pathFromTab(tab) ?? files.pathFromDiffTab(tab),
+    normalizeTab: (tab) => {
+      if (tab.startsWith("file://")) return files.tab(tab)
+      if (tab.startsWith("diff://")) {
+        const path = files.pathFromDiffTab(tab)
+        if (path) return files.diffTab(path)
+      }
+      return tab
+    },
   }).activeFileTab
+
+  const openDiffTab = createOpenDiffTab({
+    tabForPath: files.diffTab,
+    openTab: tabs().open,
+    setActive: tabs().setActive,
+    openReviewPanel: () => {
+      if (!view().reviewPanel.opened()) view().reviewPanel.open()
+    },
+  })
 
   const commentInReview = (path: string) => {
     const sessionID = params.id
@@ -216,44 +260,30 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return diffs.some((diff) => diff.file === path)
   }
 
+  const openSessionFile = createOpenSessionFile({
+    commentInReview,
+    productionLayout: env.productionLayout,
+    reviewPanel: view().reviewPanel,
+    fileTree: layout.fileTree,
+    tabs: tabs(),
+    tabForPath: files.tab,
+    openDiffTab,
+    normalizePath: files.normalize,
+    expandTree: files.tree.expand,
+    loadFile: files.load,
+    setSelectedLines: files.setSelectedLines,
+    setCommentActive: comments.setActive,
+    setCommentFocus: comments.setFocus,
+    commentFocus: comments.focus,
+  })
+
   const openComment = (item: { path: string; commentID?: string; commentOrigin?: "review" | "file" }) => {
     if (!item.commentID) return
-
-    const focus = { file: item.path, id: item.commentID }
-    comments.setActive(focus)
-
-    const queueCommentFocus = (attempts = 6) => {
-      const schedule = (left: number) => {
-        requestAnimationFrame(() => {
-          comments.setFocus({ ...focus })
-          if (left <= 0) return
-          requestAnimationFrame(() => {
-            const current = comments.focus()
-            if (!current) return
-            if (current.file !== focus.file || current.id !== focus.id) return
-            schedule(left - 1)
-          })
-        })
-      }
-
-      schedule(attempts)
-    }
-
-    const wantsReview = item.commentOrigin === "review" || (item.commentOrigin !== "file" && commentInReview(item.path))
-    if (wantsReview) {
-      if (!view().reviewPanel.opened()) view().reviewPanel.open()
-      layout.fileTree.setTab("changes")
-      tabs().setActive("review")
-      queueCommentFocus()
-      return
-    }
-
-    if (!view().reviewPanel.opened()) view().reviewPanel.open()
-    layout.fileTree.setTab("all")
-    const tab = files.tab(item.path)
-    tabs().open(tab)
-    tabs().setActive(tab)
-    Promise.resolve(files.load(item.path)).finally(() => queueCommentFocus())
+    openSessionFile({
+      path: item.path,
+      origin: item.commentOrigin,
+      commentFocus: { file: item.path, id: item.commentID },
+    })
   }
 
   const recent = createMemo(() => {
@@ -306,6 +336,80 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     applyingHistory: false,
   })
   const [height, setHeight] = createSignal(DOC_HEIGHT)
+  // 자동 확대: 입력창 포커스 시 전체 너비 expanded 로 자동 진입(기본 ON, localStorage 영속).
+  const [autoExpand, setAutoExpand] = createSignal(
+    (() => {
+      try {
+        return localStorage.getItem(AUTO_EXPAND_KEY) !== "0"
+      } catch {
+        return true
+      }
+    })(),
+  )
+  const [focusWithin, setFocusWithin] = createSignal(false)
+  // 탭 캡처 진행 중 여부. 아래 자동 확대 이펙트가 이 값을 보고 캡처 동안 입력창을 강제 축소한다.
+  const [capturing, setCapturing] = createSignal(false)
+  // 컴포저 내부에서 시작된 클릭(포커스 못 받는 버튼/컨트롤 포함)으로 포커스가 body 로 빠지는 걸
+  // '이탈'로 오인해 축소→재확장 깜빡이는 걸 막기 위한 플래그.
+  let pointerDownInside = false
+  // 마운트 시 에디터가 자동 포커스되어도 곧바로 확대되지 않도록, 실제 사용자 상호작용 이후에만 자동 확대.
+  const [interacted, setInteracted] = createSignal(false)
+  const toggleAutoExpand = () => {
+    const next = !autoExpand()
+    setAutoExpand(next)
+    try {
+      localStorage.setItem(AUTO_EXPAND_KEY, next ? "1" : "0")
+    } catch {}
+    // 토글만으로는 현재 확대/축소 상태를 바꾸지 않는다 — 끄면 그 상태 그대로 둔 채 자동 동작만 멈춘다.
+  }
+  // 자동 확대 ON 이면 포커스 상태를 expanded 에 반영. OFF면 무조건 축소(collapse) 모드로 강제한다.
+  createEffect(() => {
+    if (!props.onComposerExpand || !props.onComposerCollapse) return
+    // 탭 캡처 중엔 확대된 입력창이 캡처 화면을 가리므로 강제로 축소하고, 캡처가 완전히 끝날
+    // 때까지 재확대를 막는다. 끝나면(capturing=false) 아래 포커스 기준 로직이 원래 상태로 되돌린다.
+    if (capturing()) {
+      if (props.expanded) props.onComposerCollapse()
+      return
+    }
+    if (!autoExpand()) {
+      if (props.expanded) props.onComposerCollapse()
+      return
+    }
+    if (focusWithin() && interacted() && !props.expanded) props.onComposerExpand({ initialScale: 2 })
+    else if (!focusWithin() && props.expanded) props.onComposerCollapse()
+  })
+  onMount(() => {
+    const el = rootRef
+    if (!el) return
+    // 에디터 본문(prompt-doc) 클릭/타이핑만 '상호작용'으로 친다 — 리사이즈 핸들·액션바 버튼은
+    // 제외해, 마운트 자동 포커스 상태에서 작은 입력창 높이 조절(핸들 드래그)이 확대를 유발하지 않게.
+    const mark = (e: Event) => {
+      const t = e.target
+      if (t instanceof Element && t.closest('[data-component="prompt-doc"]')) setInteracted(true)
+    }
+    // 컴포저 내부에서 시작된 클릭인지 기록. 포커스 못 받는 컨트롤을 눌러 포커스가 body 로 빠져도
+    // 이 플래그가 있으면 focusout 에서 '이탈'로 보지 않는다. 키 입력(Tab 이동 등)이 시작되면 해제해
+    // 실제 포커스 위치 기준으로 판단하게 한다.
+    const trackPointer = (e: PointerEvent) => {
+      const t = e.target
+      pointerDownInside = t instanceof Node && el.contains(t)
+    }
+    const clearPointer = () => {
+      pointerDownInside = false
+    }
+    // doc 패널이 pointerdown 전파를 막으므로 캡처 단계로 듣는다.
+    el.addEventListener("pointerdown", mark, true)
+    el.addEventListener("keydown", mark, true)
+    // 컴포저 밖 클릭도 잡아야 하므로 window 캡처로 듣는다.
+    window.addEventListener("pointerdown", trackPointer, true)
+    el.addEventListener("keydown", clearPointer, true)
+    onCleanup(() => {
+      el.removeEventListener("pointerdown", mark, true)
+      el.removeEventListener("keydown", mark, true)
+      window.removeEventListener("pointerdown", trackPointer, true)
+      el.removeEventListener("keydown", clearPointer, true)
+    })
+  })
 
   const seed = (info: Session) => {
     const [, setStore] = globalSync.child(sdk.directory)
@@ -333,7 +437,9 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         if (accepting()) permission.enableAutoAccept(info.id, sdk.directory)
         local.session.promote(sdk.directory, info.id)
         layout.handoff.setTabs(base64Encode(sdk.directory), info.id)
-        navigate(`/${base64Encode(sdk.directory)}/session/${info.id}`)
+        // Preserve the query string (notably the host-passed ?user=id||name identity) on the new
+        // session url so the identity is not dropped when a session is created from the prompt.
+        navigate(`/${base64Encode(sdk.directory)}/session/${info.id}${window.location.search}${window.location.hash}`)
         return info.id
       })
       .catch(() => {
@@ -355,6 +461,38 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (store.mode !== "doc") return
     setHeight((value) => clamp(value))
   }
+  const shellResize = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
+    const bounds = props.composerShell
+    if (!bounds || event.button !== 0) return
+    event.preventDefault()
+    event.stopPropagation()
+
+    const start = bounds.size
+    const y = event.clientY
+    const html = document.documentElement
+    const body = document.body
+    const cursor = html.style.cursor
+    const select = body.style.userSelect
+    html.style.cursor = "ns-resize"
+    body.style.userSelect = "none"
+
+    const clamp = (value: number) => Math.min(bounds.max, Math.max(bounds.min, value))
+    const move = (event: PointerEvent) => {
+      bounds.onResize(clamp(start + y - event.clientY))
+    }
+    const up = () => {
+      html.style.cursor = cursor
+      body.style.userSelect = select
+      window.removeEventListener("pointermove", move)
+      window.removeEventListener("pointerup", up)
+      window.removeEventListener("pointercancel", up)
+    }
+
+    window.addEventListener("pointermove", move)
+    window.addEventListener("pointerup", up)
+    window.addEventListener("pointercancel", up)
+  }
+
   const resize = (event: PointerEvent & { currentTarget: HTMLDivElement }) => {
     if (event.button !== 0) return
     event.preventDefault()
@@ -406,20 +544,75 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return prompt.context.items().filter((item) => !!item.comment?.trim()).length
   })
 
-  const drawing = createPromptDrawing({
-    t: (key) => language.t(key as Parameters<typeof language.t>[0]),
-  })
+  const parentParams = useParentParams()
   const doc = createPromptDoc({
     sessionID: () => params.id,
     url: () => sdk.url,
     directory: () => sdk.directory,
     client: sdk.client,
     submit: () => void submit(),
+    user: () => parentParams.user[0],
+  })
+  // detach() keeps the doc handle (sync + undo history) alive across panel unmounts, so the
+  // component itself owns the final teardown.
+  onCleanup(() => doc.dispose())
+
+  const bridge = usePromptDocBridge()
+  createEffect(() => {
+    bridge.setMode(store.mode)
+  })
+  const relPath = (path: string) => {
+    const dir = sdk.directory.replace(/\/+$/, "")
+    if (path.startsWith(dir) && (path === dir || path[dir.length] === "/")) {
+      return path.slice(dir.length).replace(/^\/+/, "")
+    }
+    return path
+  }
+
+  createEffect(() => {
+    bridge.setAddReference((path, nodeType) => {
+      if (store.mode !== "doc") return false
+      return doc.addReference(relPath(path), nodeType ?? "file")
+    })
+    bridge.setAddLineReference((input) => {
+      if (store.mode !== "doc") return false
+      const range = input.selection
+      return doc.addLineReference({
+        path: relPath(input.path),
+        start: range.start,
+        end: range.end,
+        side: range.side,
+        endSide: range.endSide,
+        additionStart: range.additionStart,
+        additionEnd: range.additionEnd,
+        deletionStart: range.deletionStart,
+        deletionEnd: range.deletionEnd,
+        label: input.label,
+        comment: input.comment,
+        preview: input.preview,
+      })
+    })
+    bridge.setOpenLineReference((input) => {
+      if (store.mode !== "doc") return false
+      openSessionFile({ path: input.path, selection: lineRefToSelection(input) })
+      return true
+    })
+    bridge.setOpenFileReference((path, nodeType) => {
+      if (store.mode !== "doc") return false
+      openSessionFile({ path: relPath(path), nodeType: nodeType === "directory" ? "directory" : "file" })
+      return true
+    })
+    onCleanup(() => {
+      bridge.setAddReference(undefined)
+      bridge.setAddLineReference(undefined)
+      bridge.setOpenLineReference(undefined)
+      bridge.setOpenFileReference(undefined)
+      bridge.setMode("normal")
+    })
   })
 
   const hasDraft = createMemo(() => {
     if (store.mode === "doc") return doc.filled()
-    if (store.mode === "draw") return drawing.filled()
     if (imageAttachments().length > 0 || commentCount() > 0) return true
     if (!prompt.dirty()) return false
     return promptHasDraft(prompt.current())
@@ -482,6 +675,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
   const [approval, setApproval] = createSignal<DocSubmitState | undefined>()
   let approvalID: string | undefined
+  let finalizedID: string | undefined
   let approvalSession: string | undefined
 
   const approvalActor = () => doc.actorID()
@@ -499,6 +693,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const actorID = approvalActor()
     if (!actorID) return
     if (!state.actors.some((item) => item.actorID === actorID)) return
+    // Terminal states are handled exactly once per submit: a server replay on reconnect (or a
+    // duplicate cast) for an already-resolved submit must not re-clear context or re-open a dialog.
+    if (state.status !== "pending") {
+      if (finalizedID === state.submitID) return
+      finalizedID = state.submitID
+      // A 'stop' vote shows no terminal screen — any resolution just closes. Stopping the response
+      // and the response finishing on its own are the same end state, so there's nothing to show:
+      // on approval the server already cancelled the run; a reject/expire simply does nothing.
+      if (state.targetKind === "stop") {
+        if (approvalID === state.submitID) closeApproval()
+        return
+      }
+    }
     if (state.status === "sent") {
       clearContext()
       if (approvalID === state.submitID) closeApproval()
@@ -512,6 +719,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         <DialogDocSubmit
           state={approval}
           actorID={actorID}
+          kind={approval()?.targetKind === "stop" ? "stop" : "doc"}
           approve={() => {
             const current = approval()
             if (!current) return
@@ -752,10 +960,48 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const pick = () => fileInputRef?.click()
 
+  // 캡처 동안엔 확대된 입력창이 화면을 가리므로 축소 상태를 강제한다. 실제 축소/복귀는 위쪽
+  // 자동 확대 이펙트가 capturing() 을 보고 처리한다 — 캡처가 완전히 끝나기 전엔 재확대하지 않고,
+  // 끝나면 원래(포커스 기준) 상태로 되돌린다. 이미 축소 상태였다면 그대로 축소를 유지한다.
+  const captureTab = async () => {
+    if (capturing()) return
+    setCapturing(true)
+    let file: File | null = null
+    try {
+      file = await captureDisplayImage()
+    } catch {
+      showToast({ title: language.t("common.requestFailed") })
+      setCapturing(false)
+      return
+    }
+    if (!file) {
+      // 피커 취소 → 모달 없이 컴포저 복귀.
+      setCapturing(false)
+      return
+    }
+    // 찍은 이미지를 편집 모달에서 크롭/드로잉한 뒤 "추가" 시에만 입력창에 넣는다.
+    // capturing 은 모달이 닫힐 때(onClose)만 해제 → 그동안 컴포저는 축소 유지.
+    dialog.show(
+      () => (
+        <CaptureEditDialog
+          file={file!}
+          onAdd={async (edited) => {
+            try {
+              if (store.mode === "doc") await doc.addFiles([edited])
+              else await addAttachments([edited])
+            } catch {
+              showToast({ title: language.t("common.requestFailed") })
+            }
+          }}
+        />
+      ),
+      () => setCapturing(false),
+    )
+  }
+
   const setMode = (mode: PromptMode) => {
     if (store.mode === mode) return
     if (store.mode === "doc" && mode !== "doc") doc.detach()
-    if (canvasMode(store.mode) && !canvasMode(mode)) drawing.dispose()
     setStore("mode", mode)
     setStore("popover", null)
     if (mode === "normal") requestAnimationFrame(() => editorRef?.focus())
@@ -765,7 +1011,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const normalModeKey = "mod+shift+e"
   const modes = [
     { mode: "doc", icon: "code-lines", label: "prompt.mode.doc", action: "prompt-doc" },
-    { mode: "draw", icon: "pencil-line", label: "prompt.mode.draw", action: "prompt-draw" },
     { mode: "normal", icon: "prompt", label: "prompt.mode.normal", action: "prompt-normal" },
   ] as const
 
@@ -824,13 +1069,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       keybind: normalModeKey,
       disabled: store.mode === "normal",
       onSelect: () => setMode("normal"),
-    },
-    {
-      id: "prompt.mode.draw",
-      title: language.t("command.prompt.mode.draw"),
-      category: language.t("command.category.session"),
-      disabled: store.mode === "draw",
-      onSelect: () => setMode("draw"),
     },
     {
       id: "prompt.mode.doc",
@@ -1438,7 +1676,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const { addAttachments, removeAttachment, handlePaste } = createPromptAttachments({
-    enabled: () => store.mode !== "draw",
+    enabled: () => true,
     editor: () => editorRef,
     isDialogActive: () => !!dialog.active,
     setDraggingType: (type) => setStore("draggingType", type),
@@ -1539,8 +1777,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const docID = doc.docID()
       const actorID = doc.actorID()
       if (!docID || !actorID) return false
-      const ids = Array.from(new Set([actorID, ...doc.actors().map((item) => item.actorID)]))
+      const list = doc.actors()
+      const ids = Array.from(new Set([actorID, ...list.map((item) => item.actorID)]))
       if (ids.length <= 1) return false
+      const names: Record<string, string> = {}
+      for (const item of list) {
+        const name = item.name?.trim()
+        if (name && name !== item.actorID) names[item.actorID] = name
+      }
       try {
         const state = await startSubmit({
           baseUrl: sdk.url,
@@ -1549,6 +1793,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           docID,
           actorID,
           actorIDs: ids,
+          names,
           prompt: {
             messageID: input.messageID,
             agent: input.agent,
@@ -1578,27 +1823,49 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     requestAnimationFrame(() => editorRef?.focus())
   }
 
-  async function submit() {
-    if (submitAction() === "stop") {
+  // Stopping the AI mid-response is a shared action in a collaborative doc: gate it behind the same
+  // consent vote as sending. Solo (or non-doc) falls straight through to a direct abort. The dialog
+  // is driven by the vote, so it stays up even if the response finishes first; on resolution it just
+  // closes (server already cancelled on approval, or nothing on reject — same end state either way).
+  const requestStop = async () => {
+    const sessionID = params.id
+    const docID = doc.docID()
+    const actorID = doc.actorID()
+    if (store.mode !== "doc" || !sessionID || !docID || !actorID) {
       await abort()
       return
     }
+    const list = doc.actors()
+    const ids = Array.from(new Set([actorID, ...list.map((item) => item.actorID)]))
+    if (ids.length <= 1) {
+      await abort()
+      return
+    }
+    const names: Record<string, string> = {}
+    for (const item of list) {
+      const name = item.name?.trim()
+      if (name && name !== item.actorID) names[item.actorID] = name
+    }
+    try {
+      const state = await startStopSubmit({
+        baseUrl: sdk.url,
+        directory: sdk.directory,
+        sessionID,
+        docID,
+        actorID,
+        actorIDs: ids,
+        names,
+      })
+      approvalSession = sessionID
+      showApproval(state)
+    } catch {
+      await abort()
+    }
+  }
 
-    if (store.mode === "draw") {
-      const part = await drawing.commit()
-      if (!part) {
-        if (working()) {
-          await abort()
-          return
-        }
-        showToast({
-          title: language.t("prompt.toast.drawEmpty.title"),
-          description: language.t("prompt.toast.drawEmpty.description"),
-        })
-        return
-      }
-      drawing.dispose()
-      await handleSubmit(undefined, [part])
+  async function submit() {
+    if (submitAction() === "stop") {
+      await requestStop()
       return
     }
 
@@ -1617,7 +1884,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return
       }
       const base = [
-        ...promptFromDocMarkdown(text, prompt.current(), doc.docID()),
+        ...promptFromDocMarkdown(text, prompt.current(), doc.docID(), doc.actorID()),
         ...(next?.assets.map((asset) => ({
           type: "image" as const,
           id: asset.id,
@@ -1630,7 +1897,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const sessionID = await handleSubmit(undefined, {
         prompt: base,
         prepare: async (id) => [
-          ...promptFromDocMarkdown(text, prompt.current(), await doc.refresh(id)),
+          ...promptFromDocMarkdown(text, prompt.current(), await doc.refresh(id), doc.actorID()),
           ...base.filter((part) => part.type === "image"),
         ],
       })
@@ -1713,15 +1980,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return
       }
 
-      if (store.mode === "draw") {
-        setMode("normal")
-        event.preventDefault()
-        event.stopPropagation()
-        return
-      }
-
       if (working()) {
-        abort()
+        void requestStop()
         event.preventDefault()
         event.stopPropagation()
         return
@@ -1787,7 +2047,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         return
       }
       if (working()) {
-        abort()
+        void requestStop()
         event.preventDefault()
       }
       return
@@ -1817,10 +2077,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (event.repeat) return
       const action = submitAction()
       if (action === "stop") {
-        void abort()
+        void requestStop()
         return
       }
-      if (store.mode === "draw" || store.mode === "doc") {
+      if (store.mode === "doc") {
         void submit()
         return
       }
@@ -1830,13 +2090,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   return (
     <div
+      ref={(el) => (rootRef = el)}
       classList={{
         "relative flex w-full flex-col gap-0": true,
-        "h-[300px] max-h-[512px]": store.mode === "draw",
-        "size-full max-h-[512px] min-h-0": store.mode !== "doc" && store.mode !== "draw",
+        "size-full max-h-[512px] min-h-0": store.mode !== "doc" && !props.expanded,
+        "flex-1 min-h-0": props.expanded,
+        relative: props.expanded,
       }}
       style={
-        store.mode === "doc"
+        store.mode === "doc" && !props.expanded
           ? {
               height: `${height()}px`,
               "min-height": `${DOC_MIN}px`,
@@ -1844,12 +2106,32 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             }
           : undefined
       }
+      on:focusin={() => setFocusWithin(true)}
+      on:focusout={() => {
+        // 다음 틱에 실제 활성 요소가 컴포저 밖이면 focus 해제(에디터 내부 이동 시 깜빡임 방지).
+        setTimeout(() => {
+          if (!rootRef) return
+          if (rootRef.contains(document.activeElement)) return
+          // 컴포저 안의 포커스 못 받는 버튼/컨트롤을 눌러 포커스가 body 로 빠진 경우는 이탈이 아니다.
+          if (pointerDownInside) return
+          setFocusWithin(false)
+        }, 0)
+      }}
     >
-      <Show when={store.mode === "doc"}>
+      <Show when={store.mode === "doc" && !props.expanded}>
         <div
           data-component="prompt-doc-resize-handle"
           class="group absolute -top-2.5 left-8 right-8 z-30 flex h-3 cursor-ns-resize touch-none items-center justify-center"
           onPointerDown={resize}
+        >
+          <div class="h-0.5 w-18 rounded-none bg-border-weaker-base transition-colors group-hover:bg-border-strong-base" />
+        </div>
+      </Show>
+      <Show when={props.expanded && props.composerShell}>
+        <div
+          data-component="prompt-composer-resize-handle"
+          class="group absolute -top-2.5 left-8 right-8 z-30 flex h-3 cursor-ns-resize touch-none items-center justify-center"
+          onPointerDown={shellResize}
         >
           <div class="h-0.5 w-18 rounded-none bg-border-weaker-base transition-colors group-hover:bg-border-strong-base" />
         </div>
@@ -1874,18 +2156,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         classList={{
           "group/prompt-input": true,
           "border-icon-info-active border-dashed": store.draggingType !== null,
-          "flex min-h-0 flex-1 flex-col": canvasMode(store.mode),
+          "flex min-h-0 flex-1 flex-col": canvasMode(store.mode) || props.expanded,
           [props.class ?? ""]: !!props.class,
         }}
       >
-        <Show when={store.mode !== "draw"}>
-          <PromptDragOverlay
-            type={store.draggingType}
-            label={language.t(
-              store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label",
-            )}
-          />
-        </Show>
+        <PromptDragOverlay
+          type={store.draggingType}
+          label={language.t(
+            store.draggingType === "@mention" ? "prompt.dropzone.file.label" : "prompt.dropzone.label",
+          )}
+        />
         <PromptContextItems
           items={contextItems()}
           active={(item) => {
@@ -1908,6 +2188,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           removeLabel={language.t("prompt.attachment.remove")}
         />
         <div
+          data-component="prompt-body"
           classList={{
             relative: true,
             "flex min-h-0 flex-1 flex-col": canvasMode(store.mode),
@@ -1918,7 +2199,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
             if (!(target instanceof HTMLElement)) return
             if (
               target.closest(
-                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-normal"], [data-action="prompt-draw"], [data-action="prompt-doc"], [data-action="prompt-draw-exit"], [data-action="prompt-doc-exit"], [data-action="prompt-permissions"]',
+                '[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-normal"], [data-action="prompt-doc"], [data-action="prompt-doc-exit"], [data-action="prompt-permissions"]',
               )
             ) {
               return
@@ -1927,82 +2208,69 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           }}
         >
           <Show
-            when={store.mode === "draw"}
-            keyed
+            when={store.mode === "doc"}
             fallback={
-              <Show
-                when={store.mode === "doc"}
-                fallback={
-                  <div
-                    class="relative max-h-[240px] overflow-y-auto no-scrollbar"
-                    ref={(el) => (scrollRef = el)}
-                    style={{ "scroll-padding-bottom": space }}
-                  >
-                    <div
-                      data-component="prompt-input"
-                      ref={(el) => {
-                        editorRef = el
-                        props.ref?.(el)
-                      }}
-                      role="textbox"
-                      aria-multiline="true"
-                      aria-label={placeholder()}
-                      contenteditable="true"
-                      autocapitalize={store.mode === "normal" ? "sentences" : "off"}
-                      autocorrect={store.mode === "normal" ? "on" : "off"}
-                      spellcheck={store.mode === "normal"}
-                      onInput={handleInput}
-                      onPaste={handlePaste}
-                      onCompositionStart={handleCompositionStart}
-                      onCompositionEnd={handleCompositionEnd}
-                      onBlur={handleBlur}
-                      onKeyDown={handleKeyDown}
-                      classList={{
-                        "select-text": true,
-                        "w-full text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
-                        "[&_[data-type=file]]:text-syntax-property": true,
-                        "[&_[data-type=agent]]:text-syntax-type": true,
-                        "font-mono!": store.mode === "shell",
-                      }}
-                      style={{ "padding-bottom": space }}
-                    />
-                    <Show when={!prompt.dirty()}>
-                      <div
-                        data-component="prompt-input-placeholder"
-                        class="absolute top-0 inset-x-0 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
-                        classList={{ "font-mono!": store.mode === "shell" }}
-                        style={{ "padding-bottom": space }}
-                      >
-                        {placeholder()}
-                      </div>
-                    </Show>
-                  </div>
-                }
+              <div
+                classList={{
+                  "relative overflow-y-auto no-scrollbar": true,
+                  "max-h-[240px]": !props.expanded,
+                  "flex-1 min-h-0": props.expanded,
+                }}
+                ref={(el) => (scrollRef = el)}
+                style={{ "scroll-padding-bottom": space }}
               >
-                <PromptDrawingShell
-                  variant="doc"
-                  drawing={drawing}
-                  doc={doc}
-                  submitIcon={submitIcon()}
-                  submitLabel={submitLabel()}
-                  submitDisabled={submitAction() === "send" && !hasDraft()}
-                  tip={tip()}
-                  onExit={exitDoc}
-                  modes={modeButtons()}
+                <div
+                  data-component="prompt-input"
+                  ref={(el) => {
+                    editorRef = el
+                    props.ref?.(el)
+                  }}
+                  role="textbox"
+                  aria-multiline="true"
+                  aria-label={placeholder()}
+                  contenteditable="true"
+                  autocapitalize={store.mode === "normal" ? "sentences" : "off"}
+                  autocorrect={store.mode === "normal" ? "on" : "off"}
+                  spellcheck={store.mode === "normal"}
+                  onInput={handleInput}
+                  onPaste={handlePaste}
+                  onCompositionStart={handleCompositionStart}
+                  onCompositionEnd={handleCompositionEnd}
+                  onBlur={handleBlur}
+                  onKeyDown={handleKeyDown}
+                  classList={{
+                    "select-text": true,
+                    "w-full text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
+                    "[&_[data-type=file]]:text-syntax-property": true,
+                    "[&_[data-type=agent]]:text-syntax-type": true,
+                    "font-mono!": store.mode === "shell",
+                  }}
+                  style={{ "padding-bottom": space }}
                 />
-              </Show>
+                <Show when={!prompt.dirty()}>
+                  <div
+                    data-component="prompt-input-placeholder"
+                    class="absolute top-0 inset-x-0 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
+                    classList={{ "font-mono!": store.mode === "shell" }}
+                    style={{ "padding-bottom": space }}
+                  >
+                    {placeholder()}
+                  </div>
+                </Show>
+              </div>
             }
           >
-            <PromptDrawingShell
-              variant="draw"
-              drawing={drawing}
+            <PromptDocShell
               doc={doc}
               submitIcon={submitIcon()}
               submitLabel={submitLabel()}
               submitDisabled={submitAction() === "send" && !hasDraft()}
               tip={tip()}
-              onExit={() => setMode("normal")}
+              onExit={exitDoc}
               modes={modeButtons()}
+              expand={composerExpand()}
+              autoExpand={{ enabled: autoExpand(), onToggle: toggleAutoExpand }}
+              capture={{ active: capturing(), onCapture: captureTab }}
             />
           </Show>
 
@@ -2080,6 +2348,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <Icon name="plus" class="size-4.5" />
                     </Button>
                   </TooltipKeybind>
+                  <Show when={!env.productionLayout()}>
+                    <Tooltip placement="top" value={language.t("prompt.action.captureTab")}>
+                      <Button
+                        data-action="prompt-capture-tab"
+                        type="button"
+                        variant="ghost"
+                        class="size-7.5 p-0"
+                        style={buttons()}
+                        onClick={captureTab}
+                        aria-disabled={capturing()}
+                        aria-label={language.t("prompt.action.captureTab")}
+                      >
+                        <Icon name="photo" class="size-4.5" />
+                      </Button>
+                    </Tooltip>
+                  </Show>
                   {modeButtons()}
                 </div>
               </Show>

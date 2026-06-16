@@ -65,6 +65,10 @@ export function formatCommentNote(input: { path: string; selection?: FileSelecti
   return `The user made the following comment regarding ${range} of ${input.path}: ${input.comment}`
 }
 
+export function formatFolderReferenceNote(path: string) {
+  return `The user referenced folder ${path} for context.`
+}
+
 export function formatReferenceNote(input: { path: string; selection?: FileSelection }) {
   const start = input.selection ? Math.min(input.selection.startLine, input.selection.endLine) : undefined
   const end = input.selection ? Math.max(input.selection.startLine, input.selection.endLine) : undefined

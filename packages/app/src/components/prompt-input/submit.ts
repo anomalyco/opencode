@@ -182,20 +182,20 @@ type PromptSubmitInput = {
   imageAttachments: Accessor<ImageAttachmentPart[]>
   commentCount: Accessor<number>
   autoAccept: Accessor<boolean>
-  mode: Accessor<"normal" | "shell" | "draw" | "doc">
+  mode: Accessor<"normal" | "shell" | "doc">
   working: Accessor<boolean>
   editor: () => HTMLDivElement | undefined
   queueScroll: () => void
   promptLength: (prompt: Prompt) => number
-  addToHistory: (prompt: Prompt, mode: "normal" | "shell" | "draw" | "doc") => void
+  addToHistory: (prompt: Prompt, mode: "normal" | "shell" | "doc") => void
   resetHistoryNavigation: () => void
-  setMode: (mode: "normal" | "shell" | "draw" | "doc") => void
+  setMode: (mode: "normal" | "shell" | "doc") => void
   setPopover: (popover: "at" | "slash" | null) => void
   newSessionWorktree?: Accessor<string | undefined>
   onNewSessionWorktreeReset?: () => void
   shouldQueue?: Accessor<boolean>
   onQueue?: (draft: FollowupDraft) => void
-  onQueued?: (input: { sessionID: string; mode: "normal" | "shell" | "draw" | "doc" }) => void | Promise<void>
+  onQueued?: (input: { sessionID: string; mode: "normal" | "shell" | "doc" }) => void | Promise<void>
   onAbort?: () => void
   onSubmit?: () => void
   approve?: (input: PromptApprovalInput) => Promise<boolean> | boolean
@@ -314,7 +314,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return
     }
 
-    input.addToHistory(currentPrompt, mode === "draw" || mode === "doc" ? "normal" : mode)
+    input.addToHistory(currentPrompt, mode === "doc" ? "normal" : mode)
     input.resetHistoryNavigation()
 
     const projectDirectory = sdk.directory
@@ -382,7 +382,9 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         if (shouldAutoAccept) permission.enableAutoAccept(session.id, sessionDirectory)
         local.session.promote(sessionDirectory, session.id)
         layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
-        navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
+        // Preserve the query string (notably the host-passed ?user=id||name identity) on the new
+        // session url so the identity is not dropped when a session is created from the prompt.
+        navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}${window.location.search}${window.location.hash}`)
       }
     }
     if (!session) {

@@ -15,11 +15,13 @@ import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
 import { usePrompt } from "@/context/prompt"
+import { usePromptDocBridge } from "@/context/prompt-doc-bridge"
+import { addLineContext } from "@/utils/doc-line-reference"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 
-function FileCommentMenu(props: {
+export function FileCommentMenu(props: {
   moreLabel: string
   editLabel: string
   deleteLabel: string
@@ -54,7 +56,7 @@ function FileCommentMenu(props: {
 
 type ScrollPos = { x: number; y: number }
 
-function createScrollSync(input: { tab: () => string; view: ReturnType<typeof useSessionLayout>["view"] }) {
+export function createScrollSync(input: { tab: () => string; view: ReturnType<typeof useSessionLayout>["view"] }) {
   let scroll: HTMLDivElement | undefined
   let scrollFrame: number | undefined
   let restoreFrame: number | undefined
@@ -183,12 +185,20 @@ export function FileTabContent(props: { tab: string }) {
   const comments = useComments()
   const language = useLanguage()
   const prompt = usePrompt()
+  const bridge = usePromptDocBridge()
   const fileComponent = useFileComponent()
   const { sessionKey, tabs, view } = useSessionLayout()
   const activeFileTab = createSessionTabs({
     tabs,
-    pathFromTab: file.pathFromTab,
-    normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
+    pathFromTab: (tab) => file.pathFromTab(tab) ?? file.pathFromDiffTab(tab),
+    normalizeTab: (tab) => {
+      if (tab.startsWith("file://")) return file.tab(tab)
+      if (tab.startsWith("diff://")) {
+        const path = file.pathFromDiffTab(tab)
+        if (path) return file.diffTab(path)
+      }
+      return tab
+    },
   }).activeFileTab
 
   let find: FileSearchHandle | null = null
@@ -240,21 +250,26 @@ export function FileTabContent(props: { tab: string }) {
   }) => {
     const selection = selectionFromLines(input.selection)
     const preview = input.preview ?? buildPreview(input.file, selection)
-
-    const saved = comments.add({
-      file: input.file,
-      selection: input.selection,
-      comment: input.comment,
-    })
-    prompt.context.add({
-      type: "file",
-      path: input.file,
-      selection,
-      comment: input.comment,
-      commentID: saved.id,
-      commentOrigin: input.origin,
-      preview,
-    })
+    addLineContext(
+      bridge,
+      { file: input.file, selection: input.selection, comment: input.comment, preview },
+      () => {
+        const saved = comments.add({
+          file: input.file,
+          selection: input.selection,
+          comment: input.comment,
+        })
+        prompt.context.add({
+          type: "file",
+          path: input.file,
+          selection,
+          comment: input.comment,
+          commentID: saved.id,
+          commentOrigin: input.origin,
+          preview,
+        })
+      },
+    )
   }
 
   const updateCommentInContext = (input: {

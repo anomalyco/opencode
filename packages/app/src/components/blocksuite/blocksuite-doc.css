@@ -7,7 +7,7 @@
   min-width: 0;
   height: 100%;
   min-height: 0;
-  border-radius: inherit;
+  border-radius: var(--radius-xs);
   overflow: hidden;
   --affine-editor-width: 100%;
   --affine-editor-side-padding: 14px;
@@ -30,6 +30,8 @@
   font-family: var(--affine-font-family);
   background: var(--affine-background-primary-color);
   color: var(--affine-text-primary-color);
+  border-radius: inherit;
+  overflow: hidden;
 }
 
 [data-component="prompt-doc"] .affine-page-viewport {
@@ -41,19 +43,43 @@
   overflow-y: auto;
 }
 
+/* The drag preview (affine-drag-preview) and drop indicator are appended to affine-page-root as
+   absolutely positioned children. Their containing block is the scroll viewport, so dragging a
+   block downward extends the viewport's scrollable overflow and the scrollbar grows endlessly.
+   Make the root span the full content (min panel height) and clip it, so out-of-flow drag
+   elements can never enlarge the scroll area. */
+[data-component="prompt-doc"] affine-page-root {
+  display: flex;
+  flex-direction: column;
+  height: auto;
+  min-height: 100%;
+  position: relative;
+  overflow: clip;
+}
+
 [data-component="prompt-doc"] .affine-page-root-block-container {
   width: 100%;
   max-width: none;
   margin: 0;
   padding-top: 12px;
+  height: auto;
   min-height: 100%;
+  flex: 1 0 auto;
   box-sizing: border-box;
+}
+
+/* The viewport and root container are flex columns, so the note is a flex item: by default
+   it shrinks to the panel height while its blocks overflow the box, and every point-based
+   feature (drag handle, drop indicator) treats the overflowed blocks as outside the note.
+   flex: 1 0 auto keeps the fill-the-panel behavior but lets the box grow with content. */
+[data-component="prompt-doc"] affine-note {
+  flex: 1 0 auto;
 }
 
 [data-component="prompt-doc"] affine-note,
 [data-component="prompt-doc"] .affine-note-block-container,
 [data-component="prompt-doc"] .affine-block-children-container {
-  height: 100%;
+  height: auto;
   min-height: 100%;
 }
 
@@ -68,8 +94,7 @@
   max-width: 100%;
   height: auto;
   min-height: 40px;
-  max-height: 650px;
-  overflow: hidden;
+  overflow: visible;
   white-space: normal;
   --affine-editor-width: 100%;
   --affine-editor-side-padding: 12px;
@@ -98,7 +123,7 @@
   width: 100%;
   height: 100%;
   min-width: 0;
-  overflow-y: auto;
+  overflow-y: visible;
   background: transparent;
 }
 

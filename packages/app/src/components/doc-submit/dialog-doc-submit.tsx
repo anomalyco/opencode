@@ -9,17 +9,81 @@ import { PendingRow } from "./pending-row"
 import { useCountdown } from "./use-countdown"
 import "./doc-submit.css"
 
+// What the vote will do once approved — drives the dialog copy.
+export type DocSubmitKind = "doc" | "question-send" | "question-dismiss" | "question-back" | "stop"
+
+// For question votes: the question(s) and the answer(s) being agreed on, shown so everyone sees
+// exactly what is about to be sent (or which question is being dismissed).
+export type DocSubmitPreviewItem = { question: string; answers: string[] }
+
 type Props = {
   state: Accessor<DocSubmitState | undefined>
   actorID: string
+  kind?: DocSubmitKind
+  preview?: () => DocSubmitPreviewItem[]
   approve: () => void
   cancel: () => void
   close: () => void
 }
 
-function role(actor: DocSubmitActor, state: DocSubmitState): "requester" | "agreed" | "rejected" | "timeout" | "pending" {
-  if (actor.actorID === state.actorID) return "requester"
+function Preview(props: { items: () => DocSubmitPreviewItem[]; dismiss?: boolean }) {
+  return (
+    <Show when={props.items().length > 0}>
+      <div class="ds-preview" data-multi={props.items().length > 1}>
+        <For each={props.items()}>
+          {(item, i) => (
+            <div class="ds-preview-item">
+              <Show when={props.items().length > 1}>
+                <span class="ds-preview-idx">{i() + 1}</span>
+              </Show>
+              <div class="ds-preview-body">
+                <div class="ds-preview-q">{item.question}</div>
+                <Show when={!props.dismiss}>
+                  <Show
+                    when={item.answers.length > 0}
+                    fallback={<div class="ds-preview-a ds-preview-a--empty">미선택</div>}
+                  >
+                    <div class="ds-preview-answers">
+                      <For each={item.answers}>{(answer) => <span class="ds-preview-a">{answer}</span>}</For>
+                    </div>
+                  </Show>
+                </Show>
+              </div>
+            </div>
+          )}
+        </For>
+      </div>
+    </Show>
+  )
+}
+
+function headline(kind: DocSubmitKind | undefined) {
+  if (kind === "question-send") return "이 답변, 보낼까요?"
+  if (kind === "question-dismiss") return "이 질문, 닫을까요?"
+  if (kind === "question-back") return "이전 질문으로 돌아갈까요?"
+  if (kind === "stop") return "AI 응답을 멈출까요?"
+  return "이 프롬프트, 보낼까요?"
+}
+
+function requestVerb(kind: DocSubmitKind | undefined) {
+  if (kind === "question-dismiss") return "닫기를"
+  if (kind === "question-back") return "되돌리기를"
+  if (kind === "stop") return "중지를"
+  return "전송을"
+}
+
+// Votes that show only the question text (no answers) in the preview.
+function hideAnswers(kind: DocSubmitKind | undefined) {
+  return kind === "question-dismiss" || kind === "question-back"
+}
+
+function role(
+  actor: DocSubmitActor,
+  state: DocSubmitState,
+): "requester" | "agreed" | "rejected" | "timeout" | "pending" | "left" {
   if (state.status === "cancelled" && actor.actorID === state.cancelledBy?.actorID) return "rejected"
+  if (state.status === "left" && actor.actorID === state.cancelledBy?.actorID) return "left"
+  if (actor.actorID === state.actorID) return "requester"
   if (actor.status === "approved") return "agreed"
   if (state.status === "expired") return "timeout"
   return "pending"
@@ -35,6 +99,8 @@ function IconBolt() {
 
 function VotingBody(props: {
   state: DocSubmitState
+  kind?: DocSubmitKind
+  preview?: () => DocSubmitPreviewItem[]
   approve: () => void
   cancel: () => void
 }) {
@@ -49,13 +115,14 @@ function VotingBody(props: {
 
   return (
     <>
+      <Show when={props.preview}>{(items) => <Preview items={items()} dismiss={hideAnswers(props.kind)} />}</Show>
       <div class="ds-ring-stage">
         <MatchAcceptRing remaining={remaining()} total={total()} />
         <div class="ds-ring-inner">
           <div class="ds-eyebrow">자동 거절까지 · {String(display()).padStart(2, "0")}s</div>
-          <h2 class="ds-headline">이 프롬프트, 보낼까요?</h2>
+          <h2 class="ds-headline">{headline(props.kind)}</h2>
           <div class="ds-sub">
-            <strong>{requester()?.name ?? "참여자"}</strong>님이 전송을 요청했어요
+            <strong>{requester()?.name ?? "참여자"}</strong>님이 {requestVerb(props.kind)} 요청했어요
           </div>
           <Show when={pending().length > 0}>
             <div class="ds-pending-list">
@@ -86,17 +153,30 @@ function VotingBody(props: {
   )
 }
 
-function WaitingBody(props: { state: DocSubmitState }) {
+function WaitingBody(props: {
+  state: DocSubmitState
+  kind?: DocSubmitKind
+  preview?: () => DocSubmitPreviewItem[]
+}) {
   const pending = createMemo(() => props.state.actors.filter((item) => item.status === "pending"))
 
   return (
     <>
+      <Show when={props.preview}>{(items) => <Preview items={items()} dismiss={hideAnswers(props.kind)} />}</Show>
       <div class="ds-ring-stage">
         <MatchAcceptRing full total={props.state.timeoutMs / 1000} />
         <div class="ds-ring-inner">
           <div class="ds-eyebrow ds-eyebrow--helmet">응답 전송됨</div>
           <h2 class="ds-headline ds-headline--waiting">팀원 응답을 기다리고 있어요</h2>
-          <div class="ds-sub">모두 동의하면 AI에 자동으로 전송됩니다</div>
+          <div class="ds-sub">
+            {props.kind === "stop"
+              ? "모두 동의하면 AI 응답을 멈춥니다"
+              : props.kind === "question-dismiss"
+                ? "모두 동의하면 질문을 닫습니다"
+                : props.kind === "question-back"
+                  ? "모두 동의하면 이전 질문으로 돌아갑니다"
+                  : "모두 동의하면 AI에 자동으로 전송됩니다"}
+          </div>
           <Show when={pending().length > 0}>
             <div class="ds-pending-list">
               <div class="ds-pending-label">응답 대기 · {pending().length}명</div>
@@ -118,18 +198,20 @@ function WaitingBody(props: { state: DocSubmitState }) {
   )
 }
 
-function loserRole(actor: DocSubmitActor, state: DocSubmitState): "rejected" | "timeout" {
+function loserRole(actor: DocSubmitActor, state: DocSubmitState): "rejected" | "timeout" | "left" {
+  if (state.status === "left" && actor.actorID === state.cancelledBy?.actorID) return "left"
   if (state.status === "cancelled" && actor.actorID === state.cancelledBy?.actorID) return "rejected"
   return "timeout"
 }
 
 function FailureBody(props: { state: DocSubmitState; close: () => void }) {
   const env = useClientEnv()
+  const leaver = createMemo(() => (props.state.status === "left" ? props.state.cancelledBy : undefined))
   const losers = createMemo(() =>
     props.state.actors
       .filter((item) => {
         const r = role(item, props.state)
-        return r === "rejected" || r === "timeout"
+        return r === "rejected" || r === "timeout" || r === "left"
       })
       .map((item) => ({ item, role: loserRole(item, props.state) })),
   )
@@ -157,14 +239,25 @@ function FailureBody(props: { state: DocSubmitState; close: () => void }) {
           <div class="ds-failure__icon">
             <Icon name="close" size="large" />
           </div>
-          <h2 class="ds-headline ds-headline--failure">합의가 무산됐어요</h2>
-          <div class="ds-sub">캔버스를 수정한 뒤 다시 시도하세요</div>
+          <h2 class="ds-headline ds-headline--failure">{leaver() ? "전송에 실패했어요" : "합의가 무산됐어요"}</h2>
+          <div class="ds-sub">
+            <Show
+              when={leaver()}
+              fallback={<>캔버스를 수정한 뒤 다시 시도하세요</>}
+            >
+              {(actor) => (
+                <>
+                  <strong>{actor().name}</strong>님이 나가서 전송하지 못했어요
+                </>
+              )}
+            </Show>
+          </div>
           <Show when={losers().length > 0}>
             <div class="ds-pending-list">
               <div class="ds-pending-row ds-pending-row--outcome" classList={{ "ds-pending-row--large": large() }}>
                 <For each={slots()}>
                   {(entry) => (
-                    <OutcomeAvatar name={entry.item.name} role={entry.role} compact={large()} />
+                    <OutcomeAvatar name={entry.item.name} color={entry.item.color} role={entry.role} compact={large()} />
                   )}
                 </For>
                 <Show when={more()}>
@@ -199,7 +292,7 @@ export function DialogDocSubmit(props: Props) {
   const approved = () => actor()?.status === "approved"
   const failed = () => {
     const value = state()?.status
-    return value === "cancelled" || value === "expired"
+    return value === "cancelled" || value === "expired" || value === "left"
   }
 
   return (
@@ -220,11 +313,17 @@ export function DialogDocSubmit(props: Props) {
                   when={pending() && approved()}
                   fallback={
                     <Show when={pending() && !approved()}>
-                      <VotingBody state={current()} approve={props.approve} cancel={props.cancel} />
+                      <VotingBody
+                        state={current()}
+                        kind={props.kind}
+                        preview={props.preview}
+                        approve={props.approve}
+                        cancel={props.cancel}
+                      />
                     </Show>
                   }
                 >
-                  <WaitingBody state={current()} />
+                  <WaitingBody state={current()} kind={props.kind} preview={props.preview} />
                 </Show>
               }
             >

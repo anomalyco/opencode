@@ -17,6 +17,7 @@ export interface TextPart extends PartBase {
   format?: "markdown"
   source?: "doc"
   docID?: string
+  actorID?: string
 }
 
 export interface FileAttachmentPart extends PartBase {

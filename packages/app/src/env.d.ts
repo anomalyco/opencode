@@ -42,6 +42,11 @@ interface ImportMetaEnv {
    * @example VITE_DISABLE_WYSIWYG_ONLY=true
    */
   readonly VITE_DISABLE_WYSIWYG_ONLY?: string
+  /**
+   * Hide the new-session intro (title, project path, branch, last modified).
+   * @example VITE_DISABLE_CHAT_INTRO=true
+   */
+  readonly VITE_DISABLE_CHAT_INTRO?: string
 }
 
 interface ImportMeta {

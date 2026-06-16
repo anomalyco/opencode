@@ -110,9 +110,17 @@ const sessionPath = (key: string) => {
 }
 
 const normalizeSessionTab = (path: ReturnType<typeof createPathHelpers> | undefined, tab: string) => {
-  if (!tab.startsWith("file://")) return tab
-  if (!path) return tab
-  return path.tab(tab)
+  if (tab.startsWith("file://")) {
+    if (!path) return tab
+    return path.tab(tab)
+  }
+  if (tab.startsWith("diff://")) {
+    if (!path) return tab
+    const value = path.pathFromDiffTab(tab)
+    if (!value) return tab
+    return path.diffTab(value)
+  }
+  return tab
 }
 
 const normalizeSessionTabList = (path: ReturnType<typeof createPathHelpers> | undefined, all: string[]) => {

@@ -86,6 +86,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
           ...(head.format ? { format: head.format } : {}),
           ...(head.source ? { source: head.source } : {}),
           ...(head.docID ? { docID: head.docID } : {}),
+          ...(head.actorID ? { actorID: head.actorID } : {}),
         }
       : undefined
   const requestParts: PromptRequestPart[] = [
