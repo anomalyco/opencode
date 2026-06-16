@@ -75,6 +75,30 @@ describe("tool.registry", () => {
     }),
   )
 
+  it.instance("exposes managed shell background tools and schema", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+      expect(ids).toContain("shell_status")
+      expect(ids).toContain("shell_wait")
+      expect(ids).toContain("shell_cancel")
+      expect(ids).toContain("shell_logs")
+
+      const agent = yield* Agent.Service
+      const build = yield* agent.get("build")
+      if (!build) throw new Error("build agent not found")
+      const bash = (yield* registry.tools({
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("test"),
+        agent: build,
+      })).find((tool) => tool.id === "bash")
+
+      expect(bash).toBeDefined()
+      const schema = bash ? ToolJsonSchema.fromTool(bash) : undefined
+      expect((schema?.properties as Record<string, unknown> | undefined)?.background).toBeDefined()
+    }),
+  )
+
   it.instance("hides task background parameter unless experimental background subagents are enabled", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service

@@ -5,6 +5,7 @@ import { PlanExitTool } from "./plan"
 import { Session } from "@/session/session"
 import { QuestionTool } from "./question"
 import { ShellTool } from "./shell"
+import { ShellCancelTool, ShellLogsTool, ShellStatusTool, ShellWaitTool } from "./shell-job"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
@@ -36,6 +37,8 @@ import { Effect, Layer, Context } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppProcess } from "@opencode-ai/core/process"
+import { ShellJob } from "@opencode-ai/core/shell-job"
 import { Format } from "../format"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
@@ -56,6 +59,11 @@ import { ModelV2 } from "@opencode-ai/core/model"
 export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
   return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
 }
+
+const shellJobLayer = ShellJob.defaultLayer.pipe(
+  Layer.provide(AppProcess.defaultLayer),
+  Layer.provide(BackgroundJob.defaultLayer),
+)
 
 type TaskDef = Tool.InferDef<typeof TaskTool>
 type ReadDef = Tool.InferDef<typeof ReadTool>
@@ -99,6 +107,10 @@ export const layer = Layer.effect(
     const webfetch = yield* WebFetchTool
     const websearch = yield* WebSearchTool
     const shell = yield* ShellTool
+    const shellStatus = yield* ShellStatusTool
+    const shellWait = yield* ShellWaitTool
+    const shellCancel = yield* ShellCancelTool
+    const shellLogs = yield* ShellLogsTool
     const globtool = yield* GlobTool
     const writetool = yield* WriteTool
     const edit = yield* EditTool
@@ -198,6 +210,10 @@ export const layer = Layer.effect(
         const tool = yield* Effect.all({
           invalid: Tool.init(invalid),
           shell: Tool.init(shell),
+          shell_status: Tool.init(shellStatus),
+          shell_wait: Tool.init(shellWait),
+          shell_cancel: Tool.init(shellCancel),
+          shell_logs: Tool.init(shellLogs),
           read: Tool.init(read),
           glob: Tool.init(globtool),
           grep: Tool.init(greptool),
@@ -220,6 +236,10 @@ export const layer = Layer.effect(
             tool.invalid,
             ...(questionEnabled ? [tool.question] : []),
             tool.shell,
+            tool.shell_status,
+            tool.shell_wait,
+            tool.shell_cancel,
+            tool.shell_logs,
             tool.read,
             tool.glob,
             tool.grep,
@@ -326,6 +346,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(Agent.defaultLayer),
       Layer.provide(Session.defaultLayer),
       Layer.provide(BackgroundJob.defaultLayer),
+      Layer.provide(shellJobLayer),
       Layer.provide(Provider.defaultLayer),
       Layer.provide(LSP.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
@@ -415,7 +436,7 @@ function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-export const node = LayerNode.make(layer.pipe(Layer.provide(Ripgrep.defaultLayer)), [
+export const node = LayerNode.make(layer.pipe(Layer.provide(Ripgrep.defaultLayer), Layer.provide(shellJobLayer)), [
   Config.node,
   Plugin.node,
   Question.node,

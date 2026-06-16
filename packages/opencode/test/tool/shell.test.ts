@@ -14,7 +14,10 @@ import { Agent } from "../../src/agent/agent"
 import { Truncate } from "@/tool/truncate"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { AppProcess } from "@opencode-ai/core/process"
+import { BackgroundJob } from "@/background/job"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { ShellJob } from "@opencode-ai/core/shell-job"
 import { Plugin } from "../../src/plugin"
 import { testEffect } from "../lib/effect"
 import { Tool } from "@/tool/tool"
@@ -29,6 +32,7 @@ const shellLayer = Layer.mergeAll(
   Config.defaultLayer,
   Agent.defaultLayer,
   RuntimeFlags.defaultLayer,
+  ShellJob.defaultLayer.pipe(Layer.provide(AppProcess.defaultLayer), Layer.provide(BackgroundJob.defaultLayer)),
   testInstanceStoreLayer,
 )
 const it = testEffect(shellLayer)

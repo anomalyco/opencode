@@ -13,6 +13,7 @@ import { fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Shell } from "@opencode-ai/core/shell"
+import { ShellJob } from "@opencode-ai/core/shell-job"
 import { ShellID } from "./shell/id"
 
 import * as Truncate from "./truncate"
@@ -25,6 +26,7 @@ import { BashArity } from "@/permission/arity"
 export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
+const DEFAULT_BACKGROUND_TIMEOUT_MS = 10 * 60 * 1000
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
@@ -350,6 +352,7 @@ export const ShellTool = Tool.define(
     const trunc = yield* Truncate.Service
     const plugin = yield* Plugin.Service
     const flags = yield* RuntimeFlags.Service
+    const shellJob = yield* ShellJob.Service
     const defaultTimeoutMs = flags.bashDefaultTimeoutMs ?? 2 * 60 * 1000
 
     const cygpath = Effect.fn("ShellTool.cygpath")(function* (shell: string, text: string) {
@@ -626,7 +629,7 @@ export const ShellTool = Tool.define(
               if (params.timeout !== undefined && params.timeout < 0) {
                 throw new Error(`Invalid timeout value: ${params.timeout}. Timeout must be a positive number.`)
               }
-              const timeout = params.timeout ?? defaultTimeoutMs
+              const timeout = params.timeout ?? (params.background ? DEFAULT_BACKGROUND_TIMEOUT_MS : defaultTimeoutMs)
               const ps = Shell.ps(shell)
               yield* Effect.scoped(
                 Effect.gen(function* () {
@@ -638,6 +641,49 @@ export const ShellTool = Tool.define(
                   yield* ask(ctx, scan, params)
                 }),
               )
+
+              if (params.background) {
+                const env = yield* shellEnv(ctx, cwd)
+                const job = yield* shellJob.start({
+                  sessionID: ctx.sessionID,
+                  command: params.command,
+                  cwd,
+                  process: cmd(shell, params.command, cwd, env),
+                  timeout,
+                })
+                const output = [
+                  `Background shell job ${job.jobId}: ${job.status}.`,
+                  `Command: ${params.command}`,
+                  `cwd: ${cwd}`,
+                  "",
+                  job.outputPreview,
+                  "",
+                  "Use shell_status, shell_logs, shell_wait, or shell_cancel with this jobId. Do not use '&' as the primary background mechanism.",
+                ].join("\n")
+                yield* ctx.metadata({
+                  metadata: {
+                    output: preview(output),
+                    exit: null,
+                    description: params.description,
+                    jobId: job.jobId,
+                    status: job.status,
+                    background: true,
+                  },
+                })
+                return {
+                  title: params.description,
+                  metadata: {
+                    output: preview(output),
+                    exit: null,
+                    description: params.description,
+                    jobId: job.jobId,
+                    status: job.status,
+                    background: true,
+                    truncated: false,
+                  },
+                  output,
+                }
+              }
 
               return yield* run(
                 {
