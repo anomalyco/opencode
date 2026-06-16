@@ -53,6 +53,15 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.error.freeUsageExceeded": "Перевищено ліміт безкоштовного використання",
   "ui.sessionTurn.error.addCredits": "Додати кредити",
 
+  "dialog.usageExceeded.freeTier.title": "Досягнуто безкоштовного ліміту",
+  "dialog.usageExceeded.freeTier.description":
+    "Оформіть підписку на OpenCode Go для стабільного доступу до найкращих моделей із відкритим кодом, всього від $5/місяць.",
+  "dialog.usageExceeded.freeTier.actionLabel": "Підписатися",
+  "dialog.usageExceeded.accountRateLimit.title": "Досягнуто ліміту Go",
+  "dialog.usageExceeded.accountRateLimit.description":
+    "Досягнуто ліміту використання. Щоб продовжити використовувати цю модель зараз, увімкніть використання з вашого доступного балансу",
+  "dialog.usageExceeded.accountRateLimit.actionLabel": "Відкрити налаштування",
+
   "ui.sessionTurn.status.delegating": "Делегування роботи",
   "ui.sessionTurn.status.planning": "Планування наступних кроків",
   "ui.sessionTurn.status.gatheringContext": "Дослідження",
@@ -160,7 +169,7 @@ export const dict: Record<string, string> = {
 
   "ui.question.subtitle.answered": "{{count}} відповідей",
   "ui.question.answer.none": "(немає відповіді)",
-  "ui.question.review.notAnswered": "(не відповіли)",
+  "ui.question.review.notAnswered": "(без відповіді)",
   "ui.question.multiHint": "Виберіть усі відповідні варіанти",
   "ui.question.singleHint": "Виберіть одну відповідь",
   "ui.question.custom.placeholder": "Введіть свою відповідь...",

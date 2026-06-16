@@ -235,6 +235,7 @@ export const dict = {
   "prompt.placeholder.shell": "Enter shell command... {{example}}",
   "prompt.placeholder.normal": 'Ask anything... "{{example}}"',
   "prompt.placeholder.simple": "Ask anything...",
+  "prompt.placeholder.newLayout": "Ask anything, / for commands, @ for context...",
   "prompt.placeholder.summarizeComments": "Summarize comments…",
   "prompt.placeholder.summarizeComment": "Summarize comment…",
   "prompt.mode.shell": "Shell",
@@ -723,6 +724,7 @@ export const dict = {
 
   "common.closeTab": "Close tab",
   "common.dismiss": "Dismiss",
+  "common.dontShowAgain": "Don't show again",
   "common.moreCountSuffix": " (+{{count}} more)",
   "common.requestFailed": "Request failed",
   "common.moreOptions": "More options",

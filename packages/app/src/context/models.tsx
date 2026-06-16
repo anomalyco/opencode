@@ -68,18 +68,19 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
             ) < 6,
         ),
         groupBy((x) => x.provider.id),
-        mapValues((models) =>
-          pipe(
-            models,
+        mapValues((models) => {
+          const typedModels = models as Array<ReturnType<typeof available>[number]>
+          return pipe(
+            typedModels,
             groupBy((x) => x.family),
             values(),
             (groups) =>
               groups.flatMap((g) => {
-                const first = firstBy(g, [(x) => x.release_date, "desc"])
+                const first = firstBy(g as Array<ReturnType<typeof available>[number]>, [(x) => x.release_date, "desc"])
                 return first ? [{ modelID: first.id, providerID: first.provider.id }] : []
               }),
-          ),
-        ),
+          )
+        }),
         values(),
         flat(),
       ),

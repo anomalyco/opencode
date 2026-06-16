@@ -104,6 +104,11 @@ export default defineConfig({
           lang: "ru-RU",
           dir: "ltr",
         },
+        uk: {
+          label: "Українська",
+          lang: "uk-UA",
+          dir: "ltr",
+        },
         th: {
           label: "ไทย",
           lang: "th-TH",
