@@ -21,6 +21,15 @@ export namespace SessionProcessor {
   const DOOM_LOOP_THRESHOLD = 3
   const log = Log.create({ service: "session.processor" })
 
+  // GitHub Copilot Claude can leak literal tool-call text into assistant prose.
+  function scrub(text: string) {
+    let out = text.replace(/(?:call\s+)?<invoke\b[\s\S]*?(?:<\/invoke>|$)/gi, "")
+    const leak =
+      /^\s*call\s+(read|write|edit|grep|bash|glob|list|task|skill|question|batch|multiedit|apply_patch|webfetch|websearch|codesearch|todowrite)\b[^\n]{0,40}$/gim
+    if ((out.match(leak)?.length ?? 0) >= 3) out = out.replace(leak, "")
+    return out.replace(/\n{3,}/g, "\n\n").trimEnd()
+  }
+
   export type Info = Awaited<ReturnType<typeof create>>
   export type Result = Awaited<ReturnType<Info["process"]>>
 
@@ -35,6 +44,9 @@ export namespace SessionProcessor {
     let blocked = false
     let attempt = 0
     let needsCompaction = false
+    const claude =
+      input.model.api.npm === "@ai-sdk/github-copilot" &&
+      `${input.model.id} ${input.model.api.id}`.toLowerCase().includes("claude")
 
     const result = {
       get message() {
@@ -48,8 +60,30 @@ export namespace SessionProcessor {
         needsCompaction = false
         const shouldBreak = (await Config.get()).experimental?.continue_loop_on_deny !== true
         while (true) {
+          let currentText: MessageV2.TextPart | undefined
+          const clean = async () => {
+            if (!claude || !currentText) return
+            const text = scrub(currentText.text.trimEnd())
+            if (!text) {
+              await Session.removePart({
+                sessionID: currentText.sessionID,
+                messageID: currentText.messageID,
+                partID: currentText.id,
+              })
+              currentText = undefined
+              return
+            }
+            if (text !== currentText.text) {
+              currentText.text = text
+              currentText.time = {
+                start: currentText.time?.start ?? Date.now(),
+                end: Date.now(),
+              }
+              await Session.updatePart(currentText)
+            }
+            currentText = undefined
+          }
           try {
-            let currentText: MessageV2.TextPart | undefined
             let reasoningMap: Record<string, MessageV2.ReasoningPart> = {}
             const stream = await LLM.stream(streamInput)
 
@@ -320,6 +354,18 @@ export namespace SessionProcessor {
                 case "text-end":
                   if (currentText) {
                     currentText.text = currentText.text.trimEnd()
+                    if (claude) {
+                      currentText.text = scrub(currentText.text)
+                      if (!currentText.text) {
+                        await Session.removePart({
+                          sessionID: currentText.sessionID,
+                          messageID: currentText.messageID,
+                          partID: currentText.id,
+                        })
+                        currentText = undefined
+                        break
+                      }
+                    }
                     const textOutput = await Plugin.trigger(
                       "experimental.text.complete",
                       {
@@ -384,6 +430,8 @@ export namespace SessionProcessor {
               })
               await SessionStatus.set(input.sessionID, { type: "idle" })
             }
+          } finally {
+            await clean().catch((e) => log.error("clean", { error: e }))
           }
           if (snapshot) {
             const patch = await Snapshot.patch(snapshot)

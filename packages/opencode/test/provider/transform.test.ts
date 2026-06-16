@@ -1162,6 +1162,77 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[0].content[1]).toEqual({ type: "text", text: "Result" })
   })
 
+  test("appends synthetic user after trailing assistant for GitHub Copilot Claude", () => {
+    const model = {
+      ...anthropicModel,
+      id: "github-copilot/claude-opus-4.8",
+      providerID: "github-copilot",
+      api: {
+        id: "claude-opus-4.8",
+        url: "https://api.githubcopilot.com/v1/messages",
+        npm: "@ai-sdk/github-copilot",
+      },
+    }
+
+    const result = ProviderTransform.message(
+      [
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: [{ type: "text", text: "partial" }] },
+      ] as any[],
+      model,
+      {},
+    )
+
+    expect(result).toHaveLength(3)
+    expect(result[1]?.role).toBe("assistant")
+    expect(Array.isArray(result[1]?.content) && result[1].content[0]?.type === "text" && result[1].content[0].text).toBe(
+      "partial",
+    )
+    expect(result[2]?.role).toBe("user")
+    expect(
+      Array.isArray(result[2]?.content) && result[2].content[0]?.type === "text" && result[2].content[0].text,
+    ).toBe("Continue.")
+  })
+
+  test("does not append synthetic user when Copilot Claude already ends with user", () => {
+    const model = {
+      ...anthropicModel,
+      id: "github-copilot/claude-opus-4.8",
+      providerID: "github-copilot",
+      api: {
+        id: "claude-opus-4.8",
+        url: "https://api.githubcopilot.com/v1/messages",
+        npm: "@ai-sdk/github-copilot",
+      },
+    }
+
+    const result = ProviderTransform.message(
+      [
+        { role: "assistant", content: [{ type: "text", text: "done" }] },
+        { role: "user", content: [{ type: "text", text: "Next" }] },
+      ] as any[],
+      model,
+      {},
+    )
+
+    expect(result).toHaveLength(2)
+    expect(result.at(-1)?.role).toBe("user")
+  })
+
+  test("keeps trailing assistant for non-Copilot Claude", () => {
+    const result = ProviderTransform.message(
+      [
+        { role: "user", content: "Hello" },
+        { role: "assistant", content: [{ type: "text", text: "partial" }] },
+      ] as any[],
+      anthropicModel,
+      {},
+    )
+
+    expect(result).toHaveLength(2)
+    expect(result.at(-1)?.role).toBe("assistant")
+  })
+
   test("filters empty content for bedrock provider", () => {
     const bedrockModel = {
       ...anthropicModel,

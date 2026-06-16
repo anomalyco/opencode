@@ -51,6 +51,19 @@ export namespace ProviderTransform {
     model: Provider.Model,
     options: Record<string, unknown>,
   ): ModelMessage[] {
+    // GitHub Copilot Claude (Opus 4.8 etc) rejects requests that end with an assistant
+    // message: "This model does not support assistant message prefill. The conversation
+    // must end with a user message." This happens after interrupted/partial turns and
+    // when isLastStep injects a trailing assistant MAX_STEPS instruction. Append a
+    // synthetic user message instead of dropping the assistant so MAX_STEPS and any
+    // partial content are preserved in context.
+    if (model.api.npm === "@ai-sdk/github-copilot" && `${model.id} ${model.api.id}`.toLowerCase().includes("claude")) {
+      const last = msgs.at(-1)
+      if (last?.role === "assistant") {
+        msgs = [...msgs, { role: "user", content: [{ type: "text", text: "Continue." }] }]
+      }
+    }
+
     // Anthropic rejects messages with empty content - filter out empty string messages
     // and remove empty text/reasoning parts from array content
     if (model.api.npm === "@ai-sdk/anthropic" || model.api.npm === "@ai-sdk/amazon-bedrock") {
