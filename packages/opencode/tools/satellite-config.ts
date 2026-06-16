@@ -12,6 +12,9 @@ interface SatelliteConfig {
   regruUsername?: string
   regruPassword?: string
   selectelApiToken?: string
+  cloudruKeyId?: string
+  cloudruKeySecret?: string
+  cloudruProjectId?: string
 }
 
 function ensureDir() {
@@ -45,6 +48,9 @@ export const tool = {
       regruUsername: "string",
       regruPassword: "string",
       selectelApiToken: "string",
+      cloudruKeyId: "string",
+      cloudruKeySecret: "string",
+      cloudruProjectId: "string",
     },
     output: {
       message: "string",
@@ -60,6 +66,9 @@ export default function satelliteConfig(input: {
   regruUsername?: string
   regruPassword?: string
   selectelApiToken?: string
+  cloudruKeyId?: string
+  cloudruKeySecret?: string
+  cloudruProjectId?: string
 }) {
   const current = read()
   const hasChanges = Object.values(input).some((v) => v !== undefined)
@@ -72,6 +81,9 @@ export default function satelliteConfig(input: {
       regruUsername: input.regruUsername ?? current.regruUsername,
       regruPassword: input.regruPassword ?? current.regruPassword,
       selectelApiToken: input.selectelApiToken ?? current.selectelApiToken,
+      cloudruKeyId: input.cloudruKeyId ?? current.cloudruKeyId,
+      cloudruKeySecret: input.cloudruKeySecret ?? current.cloudruKeySecret,
+      cloudruProjectId: input.cloudruProjectId ?? current.cloudruProjectId,
     }
     write(updated)
     return { message: "Satellite config saved", config: "" }

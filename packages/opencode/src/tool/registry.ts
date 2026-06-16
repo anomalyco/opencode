@@ -235,7 +235,7 @@ export const layer: Layer.Layer<
           }
         }
 
-        yield* initDynamic()
+        yield* initDynamic(runtime)
 
         yield* config.get()
         const questionEnabled = ["app", "cli", "desktop"].includes(flags.client) || flags.enableQuestionTool

@@ -12,6 +12,7 @@ import { Command } from "../../src/command"
 import { Config } from "@/config/config"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "../../src/mcp"
+import { Memory } from "../../src/memory/memory"
 import { Permission } from "../../src/permission"
 import { Plugin } from "../../src/plugin"
 import { Provider as ProviderSvc } from "@/provider/provider"
@@ -181,6 +182,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     mcp,
     AppFileSystem.defaultLayer,
     BackgroundJob.defaultLayer,
+    Memory.defaultLayer,
     status,
     SyncEvent.defaultLayer,
     EventV2Bridge.defaultLayer,

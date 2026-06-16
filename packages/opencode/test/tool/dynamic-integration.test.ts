@@ -18,6 +18,7 @@ import { Git } from "@/git"
 import { LSP } from "@/lsp/lsp"
 import { Instruction } from "@/session/instruction"
 import { Bus } from "@/bus"
+import { Memory } from "@/memory/memory"
 import { FetchHttpClient } from "effect/unstable/http"
 import { Format } from "@/format"
 import { Ripgrep } from "@/file/ripgrep"
@@ -51,12 +52,12 @@ const layer = ToolRegistry.layer
     Layer.provide(LSP.defaultLayer),
     Layer.provide(Instruction.defaultLayer),
     Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(Memory.defaultLayer),
     Layer.provide(Bus.layer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(Format.defaultLayer),
     Layer.provide(node),
-    Layer.provide(Ripgrep.defaultLayer),
-    Layer.provide(Truncate.defaultLayer),
+    Layer.provide(Layer.mergeAll(Ripgrep.defaultLayer, Truncate.defaultLayer)),
   )
   .pipe(Layer.provide(RuntimeFlags.layer({})))
   // Provide ToolRuntime to satisfy ToolRegistry's requirement AND expose

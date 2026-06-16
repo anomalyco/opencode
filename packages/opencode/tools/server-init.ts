@@ -97,7 +97,7 @@ export default function serverInit(input: {
   let ok = true
 
   function run(cmd: string, label: string) {
-    const r = runSSH(host, username, keyPath, port, cmd)
+    const r = runSSH(host!, username!, keyPath, port, cmd)
     logs.push(`## ${label}`)
     logs.push(`$ ${cmd}`)
     if (r.stdout) logs.push(r.stdout)

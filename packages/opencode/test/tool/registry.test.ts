@@ -23,6 +23,7 @@ import { Git } from "@/git"
 import { LSP } from "@/lsp/lsp"
 import { Instruction } from "@/session/instruction"
 import { Bus } from "@/bus"
+import { Memory } from "@/memory/memory"
 import { FetchHttpClient } from "effect/unstable/http"
 import { Format } from "@/format"
 import { Ripgrep } from "@/file/ripgrep"
@@ -63,12 +64,12 @@ const registryLayer = (opts: RegistryLayerOptions = {}) =>
       Layer.provide(LSP.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(AppFileSystem.defaultLayer),
+      Layer.provide(Memory.defaultLayer),
       Layer.provide(Bus.layer),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(Format.defaultLayer),
       Layer.provide(node),
-      Layer.provide(Ripgrep.defaultLayer),
-      Layer.provide(Layer.mergeAll(Truncate.defaultLayer, ToolRuntime.layer)),
+      Layer.provide(Layer.mergeAll(Ripgrep.defaultLayer, Truncate.defaultLayer, ToolRuntime.layer)),
     )
     .pipe(Layer.provide(RuntimeFlags.layer(opts.flags ?? {})))
 

@@ -1,7 +1,7 @@
 import fs from "fs"
 import path from "path"
 import { Glob } from "@opencode-ai/core/util/glob"
-import { ToolRuntime, ToolRuntimeError } from "@opencode-ai/database/tool/runtime"
+import { ToolRuntime, ToolRuntimeError, type ToolRuntimeInterface } from "@opencode-ai/database/tool/runtime"
 import { Tool } from "./tool"
 import { Effect, Schema } from "effect"
 import z from "zod"
@@ -30,7 +30,7 @@ const toZod = (input: Record<string, string>): z.ZodType => {
 
 export const resolveDynamic = Effect.fn("DynamicTools.resolve")(function* () {
   const runtime = yield* ToolRuntime
-  yield* initDynamic()
+  yield* initDynamic(runtime)
   const signatures = yield* runtime.list()
 
   return signatures.map((sig) => {
@@ -55,7 +55,7 @@ export const resolveDynamic = Effect.fn("DynamicTools.resolve")(function* () {
 
 export const resolveDynamicCatalog = Effect.fn("DynamicTools.resolveCatalog")(function* () {
   const runtime = yield* ToolRuntime
-  yield* initDynamic()
+  yield* initDynamic(runtime)
   const signatures = yield* runtime.listCatalog()
 
   return signatures.map((sig) => {
@@ -78,7 +78,7 @@ export const resolveDynamicCatalog = Effect.fn("DynamicTools.resolveCatalog")(fu
   })
 })
 
-export const syncDynamic = Effect.fn("DynamicTools.sync")(function* (runtime: ToolRuntime) {
+export const syncDynamic = Effect.fn("DynamicTools.sync")(function* (runtime: ToolRuntimeInterface) {
   const matches = Glob.scanSync("tools/*.ts", { cwd: process.cwd(), absolute: true, dot: true, symlink: true })
   if (matches.length === 0) return
 
@@ -108,7 +108,6 @@ export const syncDynamic = Effect.fn("DynamicTools.sync")(function* (runtime: To
   }
 })
 
-export const initDynamic = Effect.fn("DynamicTools.init")(function* () {
-  const runtime = yield* ToolRuntime
+export const initDynamic = Effect.fn("DynamicTools.init")(function* (runtime: ToolRuntimeInterface) {
   yield* syncDynamic(runtime)
 })
