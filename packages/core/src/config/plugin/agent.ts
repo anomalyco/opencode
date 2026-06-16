@@ -54,7 +54,7 @@ export const Plugin = PluginV2.define({
 
     const customPaths = entries.flatMap((entry) => {
       if (entry.type !== "document") return []
-      const pathsValue = entry.info.agent?.paths
+      const pathsValue = entry.info.agents?.paths
       return Array.isArray(pathsValue) ? pathsValue : []
     })
 
@@ -88,12 +88,12 @@ export const Plugin = PluginV2.define({
       }
 
       for (const document of allDocuments) {
-        const agentEntries = Object.entries(document.info.agent ?? {}).filter(
+        const agentEntries = Object.entries(document.info.agents ?? {}).filter(
           (entry): entry is [string, ConfigAgent.Info] => !Array.isArray(entry[1]),
         )
-        for (const [id, agentConfig] of agentEntries) {
+        for (const [id, item] of agentEntries) {
           const agentID = AgentV2.ID.make(id)
-          if (agentConfig.disabled) {
+          if (item.disabled) {
             editor.remove(agentID)
             continue
           }
@@ -101,24 +101,24 @@ export const Plugin = PluginV2.define({
           const exists = editor.get(agentID) !== undefined
           editor.update(agentID, (agent) => {
             if (!exists) agent.permissions.push(...globalPermissions)
-            if (agentConfig.model !== undefined) {
-              const model = ModelV2.parse(agentConfig.model)
+            if (item.model !== undefined) {
+              const model = ModelV2.parse(item.model)
               agent.model = { id: model.modelID, providerID: model.providerID, variant: agent.model?.variant }
             }
-            if (agentConfig.variant !== undefined && agent.model !== undefined) {
-              agent.model.variant = ModelV2.VariantID.make(agentConfig.variant)
+            if (item.variant !== undefined && agent.model !== undefined) {
+              agent.model.variant = ModelV2.VariantID.make(item.variant)
             }
-            if (agentConfig.request !== undefined) {
-              Object.assign(agent.request.headers, agentConfig.request.headers ?? {})
-              Object.assign(agent.request.body, agentConfig.request.body ?? {})
+            if (item.request !== undefined) {
+              Object.assign(agent.request.headers, item.request.headers ?? {})
+              Object.assign(agent.request.body, item.request.body ?? {})
             }
-            if (agentConfig.system !== undefined) agent.system = agentConfig.system
-            if (agentConfig.description !== undefined) agent.description = agentConfig.description
-            if (agentConfig.mode !== undefined) agent.mode = agentConfig.mode
-            if (agentConfig.hidden !== undefined) agent.hidden = agentConfig.hidden
-            if (agentConfig.color !== undefined) agent.color = agentConfig.color
-            if (agentConfig.steps !== undefined) agent.steps = agentConfig.steps
-            if (agentConfig.permissions !== undefined) agent.permissions.push(...agentConfig.permissions)
+            if (item.system !== undefined) agent.system = item.system
+            if (item.description !== undefined) agent.description = item.description
+            if (item.mode !== undefined) agent.mode = item.mode
+            if (item.hidden !== undefined) agent.hidden = item.hidden
+            if (item.color !== undefined) agent.color = item.color
+            if (item.steps !== undefined) agent.steps = item.steps
+            if (item.permissions !== undefined) agent.permissions.push(...item.permissions)
           })
         }
       }
@@ -166,9 +166,9 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
     .replace(/^(agent|agents|mode|modes)\//, "")
     .replace(/\.md$/, "")
   const body = markdown.content.trim()
-  const hasLegacyKeys = Object.keys(markdown.data).some((key) => !agentKeys.has(key))
+  const legacy = Object.keys(markdown.data).some((key) => !agentKeys.has(key))
   const agent = Option.getOrUndefined(
-    hasLegacyKeys
+    legacy
       ? Option.map(
           decodeLegacyAgent({ name, ...markdown.data, prompt: body }, { errors: "all", propertyOrder: "original" }),
           ConfigMigrateV1.migrateAgent,
@@ -178,7 +178,7 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
   if (!agent) return
   const info = Option.getOrUndefined(
     decodeConfig({
-      agent: { [name]: file.primary ? { ...agent, mode: "primary" } : agent },
+      agents: { [name]: file.primary ? { ...agent, mode: "primary" } : agent },
     }),
   )
   if (!info) return

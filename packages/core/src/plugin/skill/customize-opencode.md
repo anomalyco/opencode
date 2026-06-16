@@ -73,16 +73,6 @@ Every field is optional.
     "urls": ["https://example.com/.well-known/skills/"]
   },
 
-  "agent": {
-    "paths": ["~/shared-agents", "/abs/path/to/agents"],
-    "my-agent": {
-      "model": "anthropic/claude-sonnet-4-6",
-      "mode": "subagent",
-      "description": "...",
-      "permission": { "edit": "deny" }
-    }
-  },
-
   "references": {
     "docs": {
       "path": "../docs",
@@ -93,6 +83,16 @@ Every field is optional.
       "branch": "main",
       "description": "Use for SDK implementation details",
       "hidden": true
+    }
+  },
+
+  "agent": {
+    "paths": ["~/shared-agents", "/abs/path/to/agents"],
+    "my-agent": {
+      "model": "anthropic/claude-sonnet-4-6",
+      "mode": "subagent",
+      "description": "...",
+      "permission": { "edit": "deny" }
     }
   },
 

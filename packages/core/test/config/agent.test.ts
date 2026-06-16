@@ -39,7 +39,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
               type: "document",
               info: decode({
                 permissions: [{ action: "bash", resource: "*", effect: "ask" }],
-                agent: {
+                agents: {
                   build: {
                     permissions: [{ action: "bash", resource: "git *", effect: "allow" }],
                   },
@@ -60,7 +60,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
               type: "document",
               info: decode({
                 permissions: [{ action: "read", resource: "*", effect: "allow" }],
-                agent: {
+                agents: {
                   reviewer: { variant: "high", hidden: true },
                   removed: { disabled: true },
                   late: {
@@ -121,7 +121,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
             new Config.Document({
               type: "document",
               info: decode({
-                agent: {
+                agents: {
                   reviewer: {
                     model: "anthropic/claude-sonnet",
                     system: "Review carefully.",
@@ -141,7 +141,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
             new Config.Document({
               type: "document",
               info: decode({
-                agent: {
+                agents: {
                   reviewer: {
                     request: {
                       headers: { shared: "last", second: "two" },
@@ -189,7 +189,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
           Effect.succeed([
             new Config.Document({
               type: "document",
-              info: decode({ agent: { build: { disabled: true } } }),
+              info: decode({ agents: { build: { disabled: true } } }),
             }),
           ]),
       })
@@ -249,7 +249,7 @@ Use native v2 fields.`,
               Effect.succeed([
                 new Config.Document({
                   type: "document",
-                  info: decode({ agent: { reviewer: { description: "JSON description" } } }),
+                  info: decode({ agents: { reviewer: { description: "JSON description" } } }),
                 }),
                 new Config.Directory({ type: "directory", path: AbsolutePath.make(tmp.path) }),
               ]),
@@ -310,7 +310,7 @@ Help.`,
               Effect.succeed([
                 new Config.Document({
                   type: "document",
-                  info: decode({ agent: { paths: [tmp.path] } }),
+                  info: decode({ agents: { paths: [tmp.path] } }),
                 }),
               ]),
           })
@@ -365,7 +365,7 @@ Works with ~/.`,
               Effect.succeed([
                 new Config.Document({
                   type: "document",
-                  info: decode({ agent: { paths: [path.join("~", path.basename(tmp.path))] } }),
+                  info: decode({ agents: { paths: [path.join("~", path.basename(tmp.path))] } }),
                 }),
               ]),
           })
@@ -403,7 +403,7 @@ Works with ~/.`,
               Effect.succeed([
                 new Config.Document({
                   type: "document",
-                  info: decode({ agent: { paths: [tmp.path] } }),
+                  info: decode({ agents: { paths: [tmp.path] } }),
                 }),
               ]),
           })
@@ -435,7 +435,7 @@ Works with ~/.`,
             new Config.Document({
               type: "document",
               info: decode({
-                agent: {
+                agents: {
                   paths: [],
                   custom: {
                     description: "Inline agent",

@@ -20,6 +20,7 @@ const keys = new Set([
   "enabled_providers",
   "small_model",
   "mode",
+  "agent",
   "provider",
   "permission",
   "tools",
@@ -43,7 +44,7 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
     enterprise: info.enterprise,
     username: info.username,
     permissions: permissions(info.permission, info.tools),
-    agent: agents(info),
+    agents: agents(info),
     snapshots: info.snapshot,
     watcher: info.watcher,
     formatter: info.formatter,
@@ -96,11 +97,17 @@ function normalizeAction(action: string) {
 
 function agents(info: typeof ConfigV1.Info.Type) {
   const entries = [
-    ...Object.entries(info.agent ?? {}),
+    ...Object.entries(info.agent ?? {})
+      .filter(([name]) => name !== "paths"),
     ...Object.entries(info.mode ?? {}).map(([name, agent]) => [name, { ...agent, mode: "primary" as const }] as const),
   ]
-  if (!entries.length) return undefined
-  return Object.fromEntries(entries.flatMap(([name, agent]) => (agent ? [[name, migrateAgent(agent)]] : [])))
+  const pathsValue = info.agent?.paths?.options?.paths
+  const hasPaths = Array.isArray(pathsValue)
+  if (!entries.length && !hasPaths) return undefined
+  return {
+    ...(hasPaths ? { paths: pathsValue } : {}),
+    ...(entries.length ? Object.fromEntries(entries.flatMap(([name, agent]) => (agent ? [[name, migrateAgent(agent)]] : []))) : {}),
+  }
 }
 
 export function migrateAgent(info: ConfigAgentV1.Info) {
