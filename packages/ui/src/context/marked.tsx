@@ -6,14 +6,16 @@ import { bundledLanguages, type BundledLanguage } from "shiki"
 import { createSimpleContext } from "./helper"
 import { getSharedHighlighter, registerCustomTheme, ThemeRegistrationResolved } from "@pierre/diffs"
 
-registerCustomTheme("OpenCode", () => {
-  return Promise.resolve({
+export const OpenCodeTheme = {
     name: "OpenCode",
+    bg: "var(--color-background-stronger)",
+    fg: "var(--text-base)",
     colors: {
       "editor.background": "var(--color-background-stronger)",
       "editor.foreground": "var(--text-base)",
       "gitDecoration.addedResourceForeground": "var(--syntax-diff-add)",
       "gitDecoration.deletedResourceForeground": "var(--syntax-diff-delete)",
+      "gitDecoration.modifiedResourceForeground": "var(--syntax-diff-unknown)",
       // "gitDecoration.conflictingResourceForeground": "#ffca00",
       // "gitDecoration.modifiedResourceForeground": "#1a76d4",
       // "gitDecoration.untrackedResourceForeground": "#00cab1",
@@ -373,8 +375,9 @@ registerCustomTheme("OpenCode", () => {
       "variable.constant": "var(--syntax-constant)",
       "variable.defaultLibrary": "var(--syntax-unknown)",
     },
-  } as unknown as ThemeRegistrationResolved)
-})
+} as unknown as ThemeRegistrationResolved
+
+registerCustomTheme("OpenCode", () => Promise.resolve(OpenCodeTheme))
 
 function renderMathInText(text: string): string {
   let result = text
