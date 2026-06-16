@@ -40,7 +40,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   env.MODELS_DEV_API_JSON = "${models-dev}/dist/_api.json";
   env.OPENCODE_DISABLE_MODELS_FETCH = true;
   env.OPENCODE_VERSION = finalAttrs.version;
-  env.OPENCODE_CHANNEL = "local";
+  env.OPENCODE_CHANNEL = "prod";
 
   buildPhase = ''
     runHook preBuild
@@ -89,11 +89,12 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   passthru = {
     jsonschema = "${placeholder "out"}/share/opencode/schema.json";
+    env = finalAttrs.env;
   };
 
   meta = {
     description = "The open source coding agent";
-    homepage = "https://opencode.ai/";
+    homepage = "https://opencode.ai";
     license = lib.licenses.mit;
     mainProgram = "opencode";
     inherit (node_modules.meta) platforms;

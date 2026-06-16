@@ -7,7 +7,7 @@ import { Effect } from "effect"
 import { LLM, LLMClient } from "@opencode-ai/llm"
 import { OpenAI } from "@opencode-ai/llm/providers"
 
-const model = OpenAI.model("gpt-4o-mini", { apiKey: process.env.OPENAI_API_KEY })
+const model = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY }).responses("gpt-4o-mini")
 
 const request = LLM.request({
   model,
@@ -28,10 +28,10 @@ Run `LLMClient.stream(request)` instead of `generate` when you want incremental 
 
 - **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
 - **`LLM.generate` / `LLM.stream`** — re-exported from `LLMClient` for one-import use.
-- **`LLM.user(...)` / `LLM.assistant(...)` / `LLM.toolMessage(...)`** — message constructors.
-- **`LLM.toolCall(...)` / `LLM.toolResult(...)` / `LLM.toolDefinition(...)`** — tool-related parts.
+- **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
+- **`Model.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMClient.prepare(request)`** — compile a request through protocol body construction, validation, and HTTP preparation without sending. Useful for inspection and testing.
-- **`LLMEvent.is.*`** — typed guards (`is.text`, `is.toolCall`, `is.requestFinish`, …) for filtering streams.
+- **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
 
 ## Caching
 
@@ -92,17 +92,19 @@ Normalized cache usage is read back into `response.usage.cacheReadInputTokens` a
 
 ## Providers
 
-Each provider exports a `model(...)` helper that records identity, protocol, capabilities, auth, and defaults.
+Provider facades configure endpoint/auth/deployment details first, then expose model selectors that take only a model or deployment id. The selected model carries the executable route value used at runtime.
 
 ```ts
-import { Anthropic } from "@opencode-ai/llm/providers"
+import { OpenAI, CloudflareAIGateway } from "@opencode-ai/llm/providers"
 
-const model = Anthropic.model("claude-sonnet-4-6", {
-  apiKey: process.env.ANTHROPIC_API_KEY,
-})
+const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY }).responses("gpt-4o-mini")
+const gateway = CloudflareAIGateway.configure({
+  accountId: process.env.CLOUDFLARE_ACCOUNT_ID,
+  gatewayApiKey: process.env.CLOUDFLARE_API_TOKEN,
+}).model("workers-ai/@cf/meta/llama-3.1-8b-instruct")
 ```
 
-Included providers: OpenAI, Anthropic, Google (Gemini), Amazon Bedrock, Azure OpenAI, Cloudflare, GitHub Copilot, OpenRouter, xAI, plus generic OpenAI-compatible helpers for DeepSeek, Cerebras, Groq, Fireworks, Together, etc.
+Included providers: OpenAI, Anthropic, Google (Gemini), Amazon Bedrock, Azure OpenAI, Cloudflare AI Gateway, Cloudflare Workers AI, GitHub Copilot, OpenRouter, xAI, plus generic OpenAI-compatible helpers for DeepSeek, Cerebras, Groq, Fireworks, Together, etc.
 
 ## Provider options & HTTP overlays
 
@@ -112,15 +114,15 @@ Three escape hatches in order of stability:
 2. **`providerOptions: { <provider>: {...} }`** — typed-at-the-facade provider-specific knobs (OpenAI `promptCacheKey`, Anthropic `thinking`, Gemini `thinkingConfig`, OpenRouter routing).
 3. **`http: { body, headers, query }`** — last-resort serializable overlays merged into the final HTTP request. Reach for this only when a stable typed path doesn't yet exist.
 
-Model-level defaults are overridden by request-level values for each axis.
+Route/provider defaults are overridden by request-level values for each axis.
 
 ## Routes
 
-Adding a new model or deployment is usually 5–15 lines using `Route.make({ protocol, transport, ... })`. The four orthogonal pieces are protocol (body construction + stream parsing), transport (endpoint + auth + framing + encoding), defaults, and capabilities. See `AGENTS.md` for the architectural detail.
+Adding a new model or deployment is usually 5-15 lines using `Route.make({ protocol, endpoint, auth, framing, ... })`. The route owns endpoint/auth/framing and the protocol owns body construction plus stream parsing. Transports are reusable IO templates that receive route endpoint/auth at compile time. Capability/catalog metadata lives outside this low-level package; unsupported request shapes fail during protocol lowering. See `AGENTS.md` for the architectural detail.
 
 ## Effect
 
-This package is built on Effect. Public methods return `Effect` or `Stream`; provide `LLMClient.layer` (the default registers every shipped route) for runtime dispatch. The example at `example/tutorial.ts` is a runnable walkthrough.
+This package is built on Effect. Public methods return `Effect` or `Stream`; provide `LLMClient.layer` for runtime dispatch and import the provider/protocol modules for the routes you use. The example at `example/tutorial.ts` is a runnable walkthrough.
 
 ## See also
 

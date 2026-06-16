@@ -1,10 +1,9 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Queue } from "effect"
-import { HttpRouter } from "effect/unstable/http"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Worktree } from "@/worktree"
-import { ExperimentalHttpApiServer } from "../../src/server/routes/instance/httpapi/server"
+import { Server } from "../../src/server/server"
 import { ExperimentalPaths } from "../../src/server/routes/instance/httpapi/groups/experimental"
 import { WorkspacePaths } from "../../src/server/routes/instance/httpapi/groups/workspace"
 import { resetDatabase } from "../fixture/db"
@@ -30,21 +29,16 @@ const stateLayer = Layer.effectDiscard(
 
 const it = testEffect(stateLayer)
 const worktreeTest = process.platform === "win32" ? it.instance.skip : it.instance
-type TestServer = ReturnType<typeof HttpRouter.toWebHandler>
+type TestServer = ReturnType<typeof Server.Default>["app"]
 type CreatedWorktree = { directory: string }
 type ScopedWorktree = { directory: string; body: CreatedWorktree; ready: Effect.Effect<void, Error> }
 
 function serverScoped() {
-  return Effect.acquireRelease(
-    Effect.sync(() => HttpRouter.toWebHandler(ExperimentalHttpApiServer.routes, { disableLogger: true })),
-    (server) => Effect.promise(() => server.dispose()).pipe(Effect.ignore),
-  )
+  return Effect.sync(() => Server.Default().app)
 }
 
 function request(server: TestServer, input: string, init?: RequestInit) {
-  return Effect.promise(() =>
-    server.handler(new Request(new URL(input, "http://localhost"), init), ExperimentalHttpApiServer.context),
-  )
+  return Effect.promise(() => Promise.resolve(server.request(input, init)))
 }
 
 function withRequestTimeout(effect: Effect.Effect<Response>, label: string, ms = 5_000) {
@@ -129,6 +123,10 @@ function createWorktreeScoped(input: {
         input.timeoutLabel,
         input.timeoutMs,
       )
+      if (response.status !== 200) {
+        const message = yield* Effect.promise(() => response.text())
+        throw new Error(`${input.timeoutLabel} failed: ${response.status} ${message}`)
+      }
       expect(response.status).toBe(200)
       const body = yield* json<CreatedWorktree>(response)
       return { directory: body.directory, body, ready: waitReady(body.directory) } satisfies ScopedWorktree
@@ -182,6 +180,68 @@ describe("worktree endpoint reproduction", () => {
         })
 
         expect(response).toMatchObject({ directory: expect.any(String) })
+      }),
+    { git: true },
+  )
+
+  worktreeTest(
+    "direct HttpApi worktree create accepts missing body",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const server = yield* serverScoped()
+
+        const response = yield* createWorktreeScoped({
+          server,
+          directory: test.directory,
+          path: `${ExperimentalPaths.worktree}?directory=${encodeURIComponent(test.directory)}`,
+          init: { method: "POST", headers: { "content-type": "application/json" } },
+          timeoutLabel: "direct worktree create without body",
+        })
+
+        expect(response).toMatchObject({ directory: expect.any(String) })
+      }),
+    { git: true },
+  )
+
+  worktreeTest(
+    "direct HttpApi worktree create accepts missing content type and body",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const server = yield* serverScoped()
+
+        const response = yield* createWorktreeScoped({
+          server,
+          directory: test.directory,
+          path: `${ExperimentalPaths.worktree}?directory=${encodeURIComponent(test.directory)}`,
+          init: { method: "POST" },
+          timeoutLabel: "direct worktree create without content type or body",
+        })
+
+        expect(response).toMatchObject({ directory: expect.any(String) })
+      }),
+    { git: true },
+  )
+
+  worktreeTest(
+    "direct HttpApi worktree create rejects explicit null payload",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const server = yield* serverScoped()
+
+        const response = yield* request(
+          server,
+          `${ExperimentalPaths.worktree}?directory=${encodeURIComponent(test.directory)}`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: "null",
+          },
+        )
+
+        expect(response.status).toBe(400)
       }),
     { git: true },
   )

@@ -1,6 +1,9 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Config } from "@/config/config"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Provider } from "@/provider/provider"
-import { ModelID, ProviderID } from "../provider/schema"
+
 import { generateObject, streamObject, type ModelMessage } from "ai"
 import { Truncate } from "@/tool/truncate"
 import { Auth } from "../auth"
@@ -9,7 +12,6 @@ import { ProviderTransform } from "@/provider/transform"
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
-import PROMPT_SCOUT from "./prompt/scout.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
@@ -20,10 +22,15 @@ import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
 import { Effect, Context, Layer, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
-import { type DeepMutable } from "@opencode-ai/core/schema"
+import { AbsolutePath, type DeepMutable } from "@opencode-ai/core/schema"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { PluginBoot } from "@opencode-ai/core/plugin/boot"
+import { Reference } from "@opencode-ai/core/reference"
+import { Location } from "@opencode-ai/core/location"
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -34,11 +41,11 @@ export const Info = Schema.Struct({
   topP: Schema.optional(Schema.Finite),
   temperature: Schema.optional(Schema.Finite),
   color: Schema.optional(Schema.String),
-  permission: Permission.Ruleset,
+  permission: PermissionV1.Ruleset,
   model: Schema.optional(
     Schema.Struct({
-      modelID: ModelID,
-      providerID: ProviderID,
+      modelID: ModelV2.ID,
+      providerID: ProviderV2.ID,
     }),
   ),
   variant: Schema.optional(Schema.String),
@@ -61,17 +68,22 @@ export interface Interface {
   readonly defaultAgent: () => Effect.Effect<string>
   readonly generate: (input: {
     description: string
-    model?: { providerID: ProviderID; modelID: ModelID }
-  }) => Effect.Effect<{
-    identifier: string
-    whenToUse: string
-    systemPrompt: string
-  }>
+    model?: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
+  }) => Effect.Effect<
+    {
+      identifier: string
+      whenToUse: string
+      systemPrompt: string
+    },
+    Provider.DefaultModelError
+  >
 }
 
 type State = Omit<Interface, "generate">
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Agent") {}
+
+export const use = serviceUse(Service)
 
 export const layer = Layer.effect(
   Service,
@@ -81,16 +93,21 @@ export const layer = Layer.effect(
     const plugin = yield* Plugin.Service
     const skill = yield* Skill.Service
     const provider = yield* Provider.Service
-    const flags = yield* RuntimeFlags.Service
+    const locations = yield* LocationServiceMap
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Agent.state")(function* (ctx) {
         const cfg = yield* config.get()
         const skillDirs = yield* skill.dirs()
+        const referenceDirs = yield* Effect.gen(function* () {
+          yield* (yield* PluginBoot.Service).wait()
+          return (yield* (yield* Reference.Service).list()).map((reference) => reference.path)
+        }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
         const whitelistedDirs = [
           Truncate.GLOB,
           path.join(Global.Path.tmp, "*"),
           ...skillDirs.map((dir) => path.join(dir, "*")),
+          ...referenceDirs.map((dir) => path.join(dir, "*")),
         ]
         const readonlyExternalDirectory = {
           "*": "ask",
@@ -107,8 +124,6 @@ export const layer = Layer.effect(
           question: "deny",
           plan_enter: "deny",
           plan_exit: "deny",
-          repo_clone: "deny",
-          repo_overview: "deny",
           // mirrors github.com/github/gitignore Node.gitignore pattern for .env files
           read: {
             "*": "allow",
@@ -145,6 +160,9 @@ export const layer = Layer.effect(
               Permission.fromConfig({
                 question: "allow",
                 plan_exit: "allow",
+                task: {
+                  general: "deny",
+                },
                 external_directory: {
                   [path.join(Global.Path.data, "plans", "*")]: "allow",
                 },
@@ -196,36 +214,6 @@ export const layer = Layer.effect(
             mode: "subagent",
             native: true,
           },
-          ...(flags.experimentalScout
-            ? {
-                scout: {
-                  name: "scout",
-                  permission: Permission.merge(
-                    defaults,
-                    Permission.fromConfig({
-                      "*": "deny",
-                      grep: "allow",
-                      glob: "allow",
-                      webfetch: "allow",
-                      websearch: "allow",
-                      read: "allow",
-                      repo_clone: "allow",
-                      repo_overview: "allow",
-                      external_directory: {
-                        ...readonlyExternalDirectory,
-                        [path.join(Global.Path.repos, "*")]: "allow",
-                      },
-                    }),
-                    user,
-                  ),
-                  description: `Docs and dependency-source specialist. Use this when you need to inspect external documentation, clone dependency repositories into the managed cache, and research library implementation details without modifying the user's workspace.`,
-                  prompt: PROMPT_SCOUT,
-                  options: {},
-                  mode: "subagent" as const,
-                  native: true,
-                },
-              }
-            : {}),
           compaction: {
             name: "compaction",
             mode: "primary",
@@ -377,7 +365,7 @@ export const layer = Layer.effect(
       }),
       generate: Effect.fn("Agent.generate")(function* (input: {
         description: string
-        model?: { providerID: ProviderID; modelID: ModelID }
+        model?: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
       }) {
         const cfg = yield* config.get()
         const model = input.model ?? (yield* provider.defaultModel())
@@ -454,7 +442,18 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Auth.defaultLayer),
   Layer.provide(Config.defaultLayer),
   Layer.provide(Skill.defaultLayer),
-  Layer.provide(RuntimeFlags.defaultLayer),
+  Layer.provide(LocationServiceMap.layer),
 )
+
+const locationServiceMapNode = LayerNode.make(LocationServiceMap.layer, [])
+
+export const node = LayerNode.make(layer, [
+  Config.node,
+  Auth.node,
+  Plugin.node,
+  Skill.node,
+  Provider.node,
+  locationServiceMapNode,
+])
 
 export * as Agent from "./agent"

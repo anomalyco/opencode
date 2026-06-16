@@ -3,6 +3,7 @@ import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "./cross-spawn-spawner"
+import { LayerNode } from "./effect/layer-node"
 
 export class AppProcessError extends Schema.TaggedErrorClass<AppProcessError>()("AppProcessError", {
   command: Schema.String,
@@ -16,6 +17,7 @@ export interface RunOptions {
   readonly maxErrorBytes?: number
   readonly signal?: AbortSignal
   readonly timeout?: Duration.Input
+  readonly stdin?: string | Uint8Array | Stream.Stream<Uint8Array, PlatformError>
 }
 
 export interface RunStreamOptions {
@@ -30,7 +32,8 @@ export interface RunResult {
   readonly exitCode: number
   readonly stdout: Buffer
   readonly stderr: Buffer
-  readonly truncated: boolean
+  readonly stdoutTruncated: boolean
+  readonly stderrTruncated: boolean
 }
 
 export type Interface = ChildProcessSpawner["Service"] & {
@@ -77,7 +80,7 @@ const describeCommand = (command: ChildProcess.Command): string => {
 const wrapError = (description: string, cause: unknown): AppProcessError =>
   cause instanceof AppProcessError ? cause : new AppProcessError({ command: description, cause })
 
-const abortError = (signal: AbortSignal): Error => {
+export const abortError = (signal: AbortSignal): Error => {
   const reason = signal.reason
   if (reason instanceof Error) return reason
   const err = new Error("Aborted")
@@ -85,7 +88,7 @@ const abortError = (signal: AbortSignal): Error => {
   return err
 }
 
-const waitForAbort = (signal: AbortSignal) =>
+export const waitForAbort = (signal: AbortSignal) =>
   Effect.callback<never, Error>((resume) => {
     if (signal.aborted) {
       resume(Effect.fail(abortError(signal)))
@@ -96,7 +99,16 @@ const waitForAbort = (signal: AbortSignal) =>
     return Effect.sync(() => signal.removeEventListener("abort", onabort))
   })
 
-const collectStream = (stream: Stream.Stream<Uint8Array, PlatformError>, maxOutputBytes: number | undefined) =>
+const normalizeStdin = (
+  input: string | Uint8Array | Stream.Stream<Uint8Array, PlatformError>,
+): Stream.Stream<Uint8Array, PlatformError> =>
+  typeof input === "string"
+    ? Stream.make(new TextEncoder().encode(input))
+    : input instanceof Uint8Array
+      ? Stream.make(input)
+      : input
+
+export const collectStream = (stream: Stream.Stream<Uint8Array, PlatformError>, maxOutputBytes: number | undefined) =>
   Stream.runFold(
     stream,
     () => ({ chunks: [] as Uint8Array[], bytes: 0, truncated: false }),
@@ -119,7 +131,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner
 
-    const run = Effect.fn("AppProcess.run")(function* (command: ChildProcess.Command, options?: RunOptions) {
+    const runCommand = (command: ChildProcess.Command, options?: RunOptions) => {
       const description = describeCommand(command)
       const collect = Effect.scoped(
         Effect.gen(function* () {
@@ -137,7 +149,8 @@ export const layer = Layer.effect(
             exitCode,
             stdout: stdout.buffer,
             stderr: stderr.buffer,
-            truncated: stdout.truncated,
+            stdoutTruncated: stdout.truncated,
+            stderrTruncated: stderr.truncated,
           } satisfies RunResult
         }),
       )
@@ -154,7 +167,22 @@ export const layer = Layer.effect(
             ),
           )
         : timed
-      return yield* aborted.pipe(Effect.catch((cause) => Effect.fail(wrapError(description, cause))))
+      return aborted.pipe(Effect.catch((cause) => Effect.fail(wrapError(description, cause))))
+    }
+
+    const run = Effect.fn("AppProcess.run")(function* (command: ChildProcess.Command, options?: RunOptions) {
+      if (options?.stdin === undefined) return yield* runCommand(command, options)
+      if (command._tag !== "StandardCommand") {
+        return yield* new AppProcessError({
+          command: describeCommand(command),
+          cause: new Error("stdin option only supports StandardCommand; received PipedCommand"),
+        })
+      }
+      const next = ChildProcess.make(command.command, command.args, {
+        ...command.options,
+        stdin: normalizeStdin(options.stdin),
+      })
+      return yield* runCommand(next, options)
     })
 
     const runStream = (
@@ -203,5 +231,6 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(CrossSpawnSpawner.defaultLayer))
+export const node = LayerNode.make(layer, [CrossSpawnSpawner.node])
 
 export * as AppProcess from "./process"

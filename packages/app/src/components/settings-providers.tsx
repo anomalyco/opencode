@@ -2,16 +2,17 @@ import { Button } from "@opencode-ai/ui/button"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/tag"
-import { showToast } from "@opencode-ai/ui/toast"
+import { showToast } from "@/utils/toast"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
 import { createMemo, type Component, For, Show } from "solid-js"
 import { useLanguage } from "@/context/language"
-import { useGlobalSDK } from "@/context/global-sdk"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSDK } from "@/context/server-sdk"
+import { useServerSync } from "@/context/server-sync"
 import { DialogConnectProvider } from "./dialog-connect-provider"
 import { DialogSelectProvider } from "./dialog-select-provider"
 import { DialogCustomProvider } from "./dialog-custom-provider"
 import { SettingsList } from "./settings-list"
+import { SettingsServerPicker, SettingsServerScope } from "./settings-server-picker"
 
 type ProviderSource = "env" | "api" | "config" | "custom"
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
@@ -28,10 +29,18 @@ const PROVIDER_NOTES = [
 ] as const
 
 export const SettingsProviders: Component = () => {
+  return (
+    <SettingsServerScope>
+      <SettingsProvidersContent />
+    </SettingsServerScope>
+  )
+}
+
+const SettingsProvidersContent: Component = () => {
   const dialog = useDialog()
   const language = useLanguage()
-  const globalSDK = useGlobalSDK()
-  const globalSync = useGlobalSync()
+  const serverSDK = useServerSDK()
+  const serverSync = useServerSync()
   const providers = useProviders()
 
   const connected = createMemo(() => {
@@ -74,7 +83,7 @@ export const SettingsProviders: Component = () => {
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
   const isConfigCustom = (providerID: string) => {
-    const provider = globalSync.data.config.provider?.[providerID]
+    const provider = serverSync().data.config.provider?.[providerID]
     if (!provider) return false
     if (provider.npm !== "@ai-sdk/openai-compatible") return false
     if (!provider.models || Object.keys(provider.models).length === 0) return false
@@ -82,11 +91,11 @@ export const SettingsProviders: Component = () => {
   }
 
   const disableProvider = async (providerID: string, name: string) => {
-    const before = globalSync.data.config.disabled_providers ?? []
+    const before = serverSync().data.config.disabled_providers ?? []
     const next = before.includes(providerID) ? before : [...before, providerID]
-    globalSync.set("config", "disabled_providers", next)
+    serverSync().set("config", "disabled_providers", next)
 
-    await globalSync
+    await serverSync()
       .updateConfig({ disabled_providers: next })
       .then(() => {
         showToast({
@@ -97,7 +106,7 @@ export const SettingsProviders: Component = () => {
         })
       })
       .catch((err: unknown) => {
-        globalSync.set("config", "disabled_providers", before)
+        serverSync().set("config", "disabled_providers", before)
         const message = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description: message })
       })
@@ -105,14 +114,16 @@ export const SettingsProviders: Component = () => {
 
   const disconnect = async (providerID: string, name: string) => {
     if (isConfigCustom(providerID)) {
-      await globalSDK.client.auth.remove({ providerID }).catch(() => undefined)
+      await serverSDK()
+        .client.auth.remove({ providerID })
+        .catch(() => undefined)
       await disableProvider(providerID, name)
       return
     }
-    await globalSDK.client.auth
-      .remove({ providerID })
+    await serverSDK()
+      .client.auth.remove({ providerID })
       .then(async () => {
-        await globalSDK.client.global.dispose()
+        await serverSDK().client.global.dispose()
         showToast({
           variant: "success",
           icon: "circle-check",
@@ -129,8 +140,9 @@ export const SettingsProviders: Component = () => {
   return (
     <div class="flex flex-col h-full overflow-y-auto no-scrollbar px-4 pb-10 sm:px-10 sm:pb-10">
       <div class="sticky top-0 z-10 bg-[linear-gradient(to_bottom,var(--surface-stronger-non-alpha)_calc(100%_-_24px),transparent)]">
-        <div class="flex flex-col gap-1 pt-6 pb-8 max-w-[720px]">
+        <div class="flex items-center justify-between gap-4 pt-6 pb-8 max-w-[720px]">
           <h2 class="text-16-medium text-text-strong">{language.t("settings.providers.title")}</h2>
+          <SettingsServerPicker />
         </div>
       </div>
 

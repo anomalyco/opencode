@@ -1,5 +1,6 @@
-import { Schema } from "effect"
-import { type WorkspaceAdapter, WorkspaceInfo } from "../types"
+import { Effect, Schema } from "effect"
+import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
+import { type WorkspaceAdapter, type WorkspaceAdapterContext, WorkspaceInfo } from "../types"
 
 const WorktreeConfig = Schema.Struct({
   name: WorkspaceInfo.fields.name,
@@ -9,53 +10,81 @@ const WorktreeConfig = Schema.Struct({
 const decodeWorktreeConfig = Schema.decodeUnknownSync(WorktreeConfig)
 
 async function loadWorktree() {
-  const [{ AppRuntime }, { Instance }, { Worktree }] = await Promise.all([
-    import("@/effect/app-runtime"),
-    import("@/project/instance"),
-    import("@/worktree"),
-  ])
-  return { AppRuntime, Instance, Worktree }
+  const [{ AppRuntime }, { Worktree }] = await Promise.all([import("@/effect/app-runtime"), import("@/worktree")])
+  return { AppRuntime, Worktree }
 }
+
+function requireInstance(context: WorkspaceAdapterContext | undefined) {
+  if (!context?.instance) throw new Error("Worktree adapter requires an instance context")
+  return context.instance
+}
+
+const provideContext = <A, E, R>(effect: Effect.Effect<A, E, R>, context: WorkspaceAdapterContext | undefined) =>
+  effect.pipe(
+    Effect.provideService(InstanceRef, requireInstance(context)),
+    Effect.provideService(WorkspaceRef, context?.workspaceID),
+  )
 
 export const WorktreeAdapter: WorkspaceAdapter = {
   name: "Worktree",
   description: "Create a git worktree",
-  async configure(info) {
+  async configure(info, context) {
     const { AppRuntime, Worktree } = await loadWorktree()
-    const next = await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.makeWorktreeInfo({ detached: true })))
+    const next = await AppRuntime.runPromise(
+      provideContext(
+        Worktree.Service.use((svc) => svc.makeWorktreeInfo({ detached: true })),
+        context,
+      ),
+    )
     return {
       ...info,
       name: next.name,
       directory: next.directory,
     }
   },
-  async create(info) {
+  async create(info, _env, _from, context) {
     const { AppRuntime, Worktree } = await loadWorktree()
     const config = decodeWorktreeConfig(info)
     await AppRuntime.runPromise(
-      Worktree.Service.use((svc) =>
-        svc.createFromInfo({
-          name: config.name,
-          directory: config.directory,
-          ...(config.branch ? { branch: config.branch } : {}),
-        }),
+      provideContext(
+        Worktree.Service.use((svc) =>
+          svc.createFromInfo({
+            name: config.name,
+            directory: config.directory,
+            ...(config.branch ? { branch: config.branch } : {}),
+          }),
+        ),
+        context,
       ),
     )
   },
-  async list() {
-    const { AppRuntime, Instance, Worktree } = await loadWorktree()
-    return (await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.list()))).map((info) => ({
+  async list(context) {
+    const { AppRuntime, Worktree } = await loadWorktree()
+    const ctx = requireInstance(context)
+    return (
+      await AppRuntime.runPromise(
+        provideContext(
+          Worktree.Service.use((svc) => svc.list()),
+          context,
+        ),
+      )
+    ).map((info) => ({
       type: "worktree",
       name: info.name,
       branch: info.branch,
       directory: info.directory,
-      projectID: Instance.project.id,
+      projectID: ctx.project.id,
     }))
   },
-  async remove(info) {
+  async remove(info, context) {
     const { AppRuntime, Worktree } = await loadWorktree()
     const config = decodeWorktreeConfig(info)
-    await AppRuntime.runPromise(Worktree.Service.use((svc) => svc.remove({ directory: config.directory })))
+    await AppRuntime.runPromise(
+      provideContext(
+        Worktree.Service.use((svc) => svc.remove({ directory: config.directory })),
+        context,
+      ),
+    )
   },
   target(info) {
     const config = decodeWorktreeConfig(info)

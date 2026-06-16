@@ -16,6 +16,10 @@
   document.documentElement.dataset.theme = themeId
   document.documentElement.dataset.colorScheme = mode
 
+  // Update theme-color meta tag to match app color scheme
+  var metas = document.querySelectorAll("meta[name='theme-color']")
+  if (metas.length > 0) metas[0].setAttribute("content", isDark ? "#131010" : "#F8F7F7")
+
   if (themeId === "oc-2") return
 
   var css = localStorage.getItem("opencode-theme-css-" + mode)
