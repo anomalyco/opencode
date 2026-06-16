@@ -8,7 +8,7 @@ from pathlib import Path
 
 DEFAULT_CONFIG = {
     "vk_token": "token",
-    "opencode_url": "http://127.0.0.1:4096",
+    "opencode_url": "http://127.0.0.1:4098",
     "session_file": "sessions.json",
     "vk_api_version": "5.200",
     "longpoll_wait": 25,
@@ -64,7 +64,7 @@ CONFIG = load_config(args.config)
 
 # ---------- Глобальные константы из конфигурации ----------
 VK_TOKEN = CONFIG["vk_token"]
-OPENCODE_URL = CONFIG["opencode_url"]
+OPENCODE_URL = "http://127.0.0.1:4098" #CONFIG["opencode_url"]
 SESSION_FILE = Path(CONFIG["session_file"])
 VK_API_VERSION = CONFIG["vk_api_version"]
 LONGPOLL_WAIT = CONFIG["longpoll_wait"]
