@@ -670,7 +670,9 @@ const layer = Layer.effect(
       const config = cfg.mcp ?? {}
       const defaultTimeout = cfg.experimental?.mcp_timeout
 
-      for (const [clientName, client] of Object.entries(s.clients)) {
+      for (const [clientName, client] of Object.entries(s.clients).sort(
+        ([a], [b]) => McpCatalog.sanitize(a).localeCompare(McpCatalog.sanitize(b)) || a.localeCompare(b),
+      )) {
         if (s.status[clientName]?.status !== "connected") continue
         const mcpConfig = config[clientName]
         const listed = s.defs[clientName]
@@ -679,7 +681,10 @@ const layer = Layer.effect(
           continue
         }
         const timeout = requestTimeout(s, clientName, mcpConfig, defaultTimeout)
-        for (const def of listed) {
+        for (const def of [...listed].sort(
+          (a, b) =>
+            McpCatalog.sanitize(a.name).localeCompare(McpCatalog.sanitize(b.name)) || a.name.localeCompare(b.name),
+        )) {
           result[McpCatalog.toolName(clientName, def.name)] = { def, client, timeout }
         }
       }

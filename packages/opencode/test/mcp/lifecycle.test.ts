@@ -408,6 +408,36 @@ it.instance(
 )
 
 it.instance(
+  "tools() returns MCP tools in stable sanitized key order",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "z-server"
+        getOrCreateClientState("z-server").tools = [
+          { name: "z.tool", description: "Z tool", inputSchema: { type: "object", properties: {} } },
+          { name: "a-tool", description: "A tool", inputSchema: { type: "object", properties: {} } },
+        ]
+        yield* mcp.add("z-server", { type: "local", command: ["echo", "test"] })
+
+        lastCreatedClientName = "a.server"
+        getOrCreateClientState("a.server").tools = [
+          { name: "z-tool", description: "Z tool", inputSchema: { type: "object", properties: {} } },
+          { name: "a.tool", description: "A tool", inputSchema: { type: "object", properties: {} } },
+        ]
+        yield* mcp.add("a.server", { type: "local", command: ["echo", "test"] })
+
+        expect(Object.keys(yield* mcp.tools())).toEqual([
+          "a_server_a_tool",
+          "a_server_z-tool",
+          "z-server_a-tool",
+          "z-server_z_tool",
+        ])
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
   "follows cursors when listing tools, prompts, and resources",
   () =>
     MCP.Service.use((mcp: MCPNS.Interface) =>
