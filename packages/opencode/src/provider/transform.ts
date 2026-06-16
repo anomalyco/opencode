@@ -677,6 +677,15 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   }
   const adaptiveThinkingOmitted = anthropicOmitsThinking(model.api.id)
   const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
+  // GLM-5.2 exposes two meaningful thinking-effort levels (high and max).
+  // Older GLM models only had a binary toggle, so they fall through to the
+  // blanket exclusion below. See: https://docs.z.ai/devpack/latest-model
+  if (id.includes("glm-5.2")) {
+    return {
+      high: { reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+    }
+  }
   if (
     id.includes("deepseek-chat") ||
     id.includes("deepseek-reasoner") ||
