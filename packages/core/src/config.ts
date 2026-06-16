@@ -200,6 +200,26 @@ export const layer = Layer.effect(
     // Apply general settings first and more specific settings last:
     // global config, project files, then `.opencode` files.
     const configs = [...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()]
+    // When both opencode.json and opencode.jsonc live in the same directory they
+    // are loaded and merged silently, so a stale or partial file can override
+    // keys from the other with no indication. Warn so the conflict is visible.
+    const byDirectory = new Map<string, Set<string>>()
+    for (const config of configs) {
+      if (config.type !== "document" || !config.path) continue
+      const base = path.basename(config.path)
+      if (base !== "opencode.json" && base !== "opencode.jsonc") continue
+      const directory = path.dirname(config.path)
+      const seen = byDirectory.get(directory) ?? new Set<string>()
+      seen.add(base)
+      byDirectory.set(directory, seen)
+    }
+    for (const [directory, seen] of byDirectory) {
+      if (seen.has("opencode.json") && seen.has("opencode.jsonc")) {
+        yield* Effect.logWarning(
+          `both opencode.json and opencode.jsonc found in ${directory}; they are merged, so one file can silently override keys from the other`,
+        )
+      }
+    }
     // Rules use the opposite order so a user-global rule can override a
     // repository rule. Statement order inside each file stays unchanged.
     yield* policy.load(

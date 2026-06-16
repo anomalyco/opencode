@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer, Logger, Schema } from "effect"
 import { FastCheck } from "effect/testing"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigProvider } from "@opencode-ai/core/config/provider"
@@ -768,6 +768,40 @@ describe("Config", () => {
           )
         })
       }),
+    ),
+  )
+
+  it.live("warns when opencode.json and opencode.jsonc coexist in one directory", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Promise.all([
+              fs.writeFile(path.join(tmp.path, "opencode.json"), JSON.stringify({ model: "provider/a" })),
+              fs.writeFile(path.join(tmp.path, "opencode.jsonc"), JSON.stringify({ model: "provider/b" })),
+            ]),
+          )
+
+          const entries: Array<ReturnType<typeof Logger.formatStructured.log>> = []
+          const logger = Logger.formatStructured.pipe(
+            Logger.map((entry): void => {
+              entries.push(entry)
+            }),
+          )
+
+          yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            yield* config.entries()
+          }).pipe(Effect.provide(testLayer(tmp.path)), Effect.provide(Logger.layer([logger])))
+
+          const warning = entries.find((entry) => String(entry.message).includes("opencode.jsonc"))
+          expect(warning).toBeDefined()
+          expect(String(warning?.message)).toContain(tmp.path)
+        }),
+      ),
     ),
   )
 })
