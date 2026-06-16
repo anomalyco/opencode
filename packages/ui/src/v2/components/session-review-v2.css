@@ -279,7 +279,6 @@
 
 [data-component="tabs-v2"].session-review-v2-tabs .session-review-v2-tabs-list,
 [data-component="tabs-v2"].session-review-v2-tabs [data-slot="tabs-v2-list"].session-review-v2-tabs-list {
-  --session-review-v2-tabs-fade: 16px;
   box-sizing: border-box;
   flex: 1 1 0;
   min-width: 0;
@@ -296,21 +295,6 @@
   position: relative;
   flex-shrink: 0;
   background-color: var(--background-stronger, var(--v2-background-bg-base));
-}
-
-[data-component="tabs-v2"].session-review-v2-tabs .session-review-v2-tabs-actions::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: calc(var(--session-review-v2-tabs-fade) * -1);
-  width: var(--session-review-v2-tabs-fade);
-  pointer-events: none;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--background-stronger, var(--v2-background-bg-base))
-  );
 }
 
 [data-component="tabs-v2"].session-review-v2-tabs [data-slot="tabs-v2-trigger"] .tab-fileicon-color,
@@ -521,6 +505,7 @@
   align-items: center;
   justify-content: center;
   padding: 24px;
+  padding-bottom: 160px;
 }
 
 [data-slot="session-review-v2-empty-no-git"] {
@@ -531,6 +516,7 @@
   justify-content: center;
   gap: 16px;
   padding: 24px;
+  padding-bottom: 160px;
   text-align: center;
 }
 
@@ -569,6 +555,7 @@
   justify-content: center;
   gap: 16px;
   padding: 24px;
+  padding-bottom: 160px;
   text-align: center;
 }
 
@@ -605,6 +592,7 @@
   justify-content: center;
   gap: 16px;
   padding: 24px;
+  padding-bottom: 160px;
   text-align: center;
 }
 
