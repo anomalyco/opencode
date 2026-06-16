@@ -214,6 +214,8 @@ const mcpStub = Layer.succeed(
     removeAuth: () => Effect.void,
     supportsOAuth: () => Effect.succeed(false),
     hasStoredTokens: () => Effect.succeed(false),
+    instructions: () => Effect.succeed([]),
+    resourceTemplates: () => Effect.succeed({}),
     getAuthStatus: () => Effect.succeed("not_authenticated" as const),
   }),
 )
@@ -305,7 +307,7 @@ function makeRunLoopLayer(flagOn: boolean) {
       Layer.provide(Git.defaultLayer),
       Layer.provide(Ripgrep.defaultLayer),
       Layer.provide(Format.defaultLayer),
-      Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true, experimentalAgentMessaging: true })),
+      Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true, experimentalAgentMessaging: flagOn })),
       Layer.provideMerge(todo),
       Layer.provideMerge(question),
       Layer.provideMerge(messaging),
@@ -550,6 +552,136 @@ describe("runLoop coordinator inbox drain (Task 5)", () => {
           ),
         )
         expect(drainMsgs).toHaveLength(0)
+      }),
+  )
+
+  // Gating verification (Task 7): when the flag is off, the message tool is
+  // NOT in the ToolRegistry. The peer-send branch rides this gate — the only
+  // way to call enqueue from the model is through the message tool, so its
+  // absence means the entire peer-send surface is unreachable flag-off.
+  runLoopItFlagOff.instance(
+    "ToolRegistry excludes the message tool when experimentalAgentMessaging is off",
+    () =>
+      Effect.gen(function* () {
+        const registry = yield* ToolRegistry.Service
+        const ids = yield* registry.ids()
+        expect(ids).not.toContain("message")
+      }),
+  )
+})
+
+// ---------------------------------------------------------------------------
+// E2E: collaborative-implementer coordinator-messaging flow (Task 7)
+// ---------------------------------------------------------------------------
+//
+// Stitches Task 4 (peer-slug send through the real MessageTool) + Task 5
+// (runLoop drain) into ONE end-to-end flow:
+//   1. parent spawns siblings A + B (same parentID).
+//   2. registerSlug + setAllow cross-edge A → B.
+//   3. A calls MessageTool.execute({ target: "slug-B", body }) → lands in B's inbox.
+//   4. B's runLoop runs ONE turn with the flag on → drain block fires.
+//   5. B's transcript gains the ✉ marker (slug, not ses_) + synthetic frame,
+//      inbox is drained. No deadlock, budget/cap honored, no flag-off window.
+describe("e2e: collaborative-implementer coordinator-messaging flow", () => {
+  runLoopIt.instance(
+    "A→B peer send lands in B's inbox; B's runLoop drains and surfaces the ✉ marker (slug, not ses_)",
+    () =>
+      Effect.gen(function* () {
+        const { llm } = yield* useServerConfig(providerCfgFor)
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const messaging = yield* Messaging.Service
+
+        // 1. Seed parent + siblings A + B (same parentID → siblings under coordinator).
+        const sesP = yield* sessions.create({
+          title: "coordinator",
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        })
+        const sesA = yield* sessions.create({
+          parentID: sesP.id,
+          title: "implementer A",
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        })
+        const sesB = yield* sessions.create({
+          parentID: sesP.id,
+          title: "implementer B",
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        })
+
+        // 2. Register slugs and the cross-edge allow-list.
+        yield* messaging.registerSlug("impl-a", sesA.id)
+        yield* messaging.registerSlug("impl-b", sesB.id)
+        yield* messaging.setAllow(sesA.id, ["impl-b"])
+
+        // Seed an initial user message in B's session so the runLoop has work
+        // to do (mirrors the existing drain tests' pattern).
+        yield* prompt.prompt({
+          sessionID: sesB.id,
+          agent: "build",
+          noReply: true,
+          parts: [{ type: "text", text: "start" }],
+        })
+        yield* llm.text("ready")
+
+        // 3. A calls the real MessageTool to peer-send a message to B.
+        //    This exercises the full peer-slug branch end-to-end:
+        //    allow-list check → resolveSlug → sibling-hood check → slugFor → enqueue.
+        const tool = yield* MessageTool
+        const def = yield* tool.init()
+        const ctxA = ctxFor(sesA.id)
+        const sendResult = yield* def.execute({ target: "impl-b", body: "please review the plan" }, ctxA)
+        expect(sendResult.output).toBe("Queued to recipient inbox.")
+        expect(sendResult.metadata).toMatchObject({ target: "impl-b", expect_reply: false })
+
+        // 4. Run B's runLoop. The drain block at prompt.ts:1216-1262 sees the
+        //    enqueued item at the next turn boundary and injects a user message
+        //    with 2N parts (1 synthetic <agent_message> + 1 visible ✉ marker).
+        yield* prompt.loop({ sessionID: sesB.id })
+
+        // 5. B's inbox is drained.
+        expect((yield* messaging.drain(sesB.id))).toEqual([])
+
+        // 6. B's transcript gained exactly ONE new user message from the drain,
+        //    with 1 synthetic <agent_message> frame + 1 visible ✉ marker.
+        //    The visible marker must use the human slug "impl-a" (NOT a ses_ id).
+        const messages = yield* sessions.messages({ sessionID: sesB.id })
+        const drainMsgs = messages.filter(
+          (m) =>
+            m.info.role === "user" &&
+            m.parts.some(
+              (p) => p.type === "text" && p.synthetic === true && p.text.includes("<agent_message"),
+            ),
+        )
+        expect(drainMsgs).toHaveLength(1)
+        const drainMsg = drainMsgs[0]!
+
+        const syntheticFrames = drainMsg.parts.filter(
+          (p) => p.type === "text" && p.synthetic === true && p.text.includes("<agent_message"),
+        )
+        expect(syntheticFrames).toHaveLength(1)
+        for (const frame of syntheticFrames) {
+          if (frame.type !== "text") continue
+          expect(frame.text).toContain(`from="impl-a"`)
+          expect(frame.text).not.toMatch(/from="ses_/)
+          expect(frame.text).toContain("please review the plan")
+        }
+
+        const visibleMarkers = drainMsg.parts.filter(
+          (p) => p.type === "text" && p.synthetic === false && p.text.startsWith("✉ Inbox from "),
+        )
+        expect(visibleMarkers).toHaveLength(1)
+        for (const marker of visibleMarkers) {
+          if (marker.type !== "text") continue
+          expect(marker.text).toContain("impl-a")
+          expect(marker.text).not.toMatch(/ses_/)
+          expect(marker.metadata).toMatchObject({ marker: { kind: "inbox", from: "impl-a" } })
+        }
+
+        // 7. The original "start" user message is still there (drain appended,
+        //    it did not replace). Sanity: B's transcript has at least 2 user
+        //    messages — the seeded "start" and the drain-injected one.
+        const userMsgs = messages.filter((m) => m.info.role === "user")
+        expect(userMsgs.length).toBeGreaterThanOrEqual(2)
       }),
   )
 })
