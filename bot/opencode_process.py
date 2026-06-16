@@ -7,22 +7,23 @@ import subprocess
 import socket
 from pathlib import Path
 
-from config import OPENCODE_BIN, PROVIDER_URL, CLI_MODEL
+from config import OPENCODE_BIN, PROVIDER_URL, CLI_MODEL, REQUEST_TIMEOUT
 from logging_config import logger
 
 
 class OpenCodeProcess:
     """Управление процессом lildax serve."""
 
-    def __init__(self, model: str = None, provider_url: str = None, workdir: Path = None):
+    def __init__(self, model: str = None, provider_url: str = None, workdir: Path = None, timeout: int = None):
         self.logger = logger
         self.process = None
         self.opencode_port = 4098
         self.model = model or CLI_MODEL
         self.provider_url = provider_url or PROVIDER_URL
+        self.timeout = timeout or REQUEST_TIMEOUT
         self.workdir = workdir or Path.cwd()
         self.logger.debug(
-            f"OpenCodeProcess initialized: workdir={self.workdir}, model={self.model}, provider_url={self.provider_url}"
+            f"OpenCodeProcess initialized: workdir={self.workdir}, model={self.model}, provider_url={self.provider_url}, timeout={self.timeout}"
         )
 
     def _remove_password_file(self):
@@ -41,6 +42,8 @@ class OpenCodeProcess:
             args.extend(["--provider-url", self.provider_url])
         if self.model:
             args.extend(["--model", self.model])
+        if self.timeout:
+            args.extend(["--timeout", str(self.timeout)])
         return args
 
     async def start(self):
@@ -100,11 +103,13 @@ class OpenCodeProcess:
             if log_file:
                 log_file.close()
 
-    async def restart(self, model: str = None, provider_url: str = None, workdir: Path = None):
+    async def restart(self, model: str = None, provider_url: str = None, workdir: Path = None, timeout: int = None):
         if model:
             self.model = model
         if provider_url:
             self.provider_url = provider_url
+        if timeout:
+            self.timeout = timeout
         if workdir:
             self.logger.info(
                 f"restart: updating workdir from {self.workdir} to {workdir}"

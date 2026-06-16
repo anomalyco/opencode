@@ -112,7 +112,7 @@ async def main():
         workdir = Path(session_mgr.session_workdir[first_session_id])
         logger.info(f"Restored workdir from session {first_session_id}: {workdir}")
 
-    opencode_process = OpenCodeProcess(model=bot_config.CLI_MODEL, provider_url=bot_config.PROVIDER_URL, workdir=workdir)
+    opencode_process = OpenCodeProcess(model=bot_config.CLI_MODEL, provider_url=bot_config.PROVIDER_URL, workdir=workdir, timeout=bot_config.REQUEST_TIMEOUT)
     logger.info(f"OpenCodeProcess created with workdir={opencode_process.workdir}")
     await opencode_process.start()
 
