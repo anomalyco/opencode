@@ -64,7 +64,10 @@ export function pickerMode(mode: "directory" | "file", base?: string) {
 }
 
 export function pickerFileSearchQuery(root: string, input: string, home: string) {
-  const value = input.replace(/\\/g, "/").replace(/^~(?=\/|$)/, home).replace(/\/+$/, "")
+  const value = input
+    .replace(/\\/g, "/")
+    .replace(/^~(?=\/|$)/, home)
+    .replace(/\/+$/, "")
   const base = root.replace(/\\/g, "/").replace(/\/+$/, "")
   if (value === base) return ""
   if (value.startsWith(base + "/")) return value.slice(base.length + 1)
@@ -110,10 +113,7 @@ export function pickerRelativePath(base: string | undefined, path: string) {
   return targetPath.slice(prefix.length)
 }
 
-export function currentPickerSuggestions<T>(
-  result: { query: string; items: readonly T[] } | undefined,
-  query: string,
-) {
+export function currentPickerSuggestions<T>(result: { query: string; items: readonly T[] } | undefined, query: string) {
   if (result?.query !== query) return []
   return result.items
 }
