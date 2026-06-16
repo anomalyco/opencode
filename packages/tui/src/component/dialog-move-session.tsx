@@ -279,7 +279,9 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
     if (await removedCurrent(deletingCurrent)) return
   }
 
-  const fullHeight = createMemo(() => Math.max(8, Math.min(16, dimensions().height - Math.floor(dimensions().height / 4) - 2)))
+  const fullHeight = createMemo(() =>
+    Math.max(8, Math.min(16, dimensions().height - Math.floor(dimensions().height / 4) - 2)),
+  )
 
   return (
     <box minHeight={showError() ? 5 : fullHeight()}>
