@@ -3,6 +3,7 @@ import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "./cross-spawn-spawner"
+import { LayerNode } from "./effect/layer-node"
 
 export class AppProcessError extends Schema.TaggedErrorClass<AppProcessError>()("AppProcessError", {
   command: Schema.String,
@@ -79,7 +80,7 @@ const describeCommand = (command: ChildProcess.Command): string => {
 const wrapError = (description: string, cause: unknown): AppProcessError =>
   cause instanceof AppProcessError ? cause : new AppProcessError({ command: description, cause })
 
-const abortError = (signal: AbortSignal): Error => {
+export const abortError = (signal: AbortSignal): Error => {
   const reason = signal.reason
   if (reason instanceof Error) return reason
   const err = new Error("Aborted")
@@ -87,7 +88,7 @@ const abortError = (signal: AbortSignal): Error => {
   return err
 }
 
-const waitForAbort = (signal: AbortSignal) =>
+export const waitForAbort = (signal: AbortSignal) =>
   Effect.callback<never, Error>((resume) => {
     if (signal.aborted) {
       resume(Effect.fail(abortError(signal)))
@@ -107,7 +108,7 @@ const normalizeStdin = (
       ? Stream.make(input)
       : input
 
-const collectStream = (stream: Stream.Stream<Uint8Array, PlatformError>, maxOutputBytes: number | undefined) =>
+export const collectStream = (stream: Stream.Stream<Uint8Array, PlatformError>, maxOutputBytes: number | undefined) =>
   Stream.runFold(
     stream,
     () => ({ chunks: [] as Uint8Array[], bytes: 0, truncated: false }),
@@ -230,5 +231,6 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(Layer.provide(CrossSpawnSpawner.defaultLayer))
+export const node = LayerNode.make(layer, [CrossSpawnSpawner.node])
 
 export * as AppProcess from "./process"

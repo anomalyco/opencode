@@ -1,14 +1,11 @@
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { Session } from "@/session/session"
-import * as Log from "@opencode-ai/core/util/log"
-import { Server } from "../../src/server/server"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
 
-void Log.init({ print: false })
-
-const it = testEffect(Session.defaultLayer)
+const it = testEffect(Layer.mergeAll(Session.defaultLayer, httpApiLayer))
 
 describe("tui.selectSession endpoint", () => {
   it.instance(
@@ -18,22 +15,14 @@ describe("tui.selectSession endpoint", () => {
         const tmp = yield* TestInstance
         const session = yield* Session.use.create({})
 
-        const app = Server.Default().app
-        const response = yield* Effect.promise(() =>
-          Promise.resolve(
-            app.request("/tui/select-session", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-opencode-directory": tmp.directory,
-              },
-              body: JSON.stringify({ sessionID: session.id }),
-            }),
-          ),
-        )
+        const response = yield* requestInDirectory("/tui/select-session", tmp.directory, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionID: session.id }),
+        })
 
         expect(response.status).toBe(200)
-        const body = yield* Effect.promise(() => response.json())
+        const body = yield* response.json
         expect(body).toBe(true)
       }),
     { git: true },
@@ -46,19 +35,11 @@ describe("tui.selectSession endpoint", () => {
         const tmp = yield* TestInstance
         const nonExistentSessionID = "ses_nonexistent123"
 
-        const app = Server.Default().app
-        const response = yield* Effect.promise(() =>
-          Promise.resolve(
-            app.request("/tui/select-session", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-opencode-directory": tmp.directory,
-              },
-              body: JSON.stringify({ sessionID: nonExistentSessionID }),
-            }),
-          ),
-        )
+        const response = yield* requestInDirectory("/tui/select-session", tmp.directory, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionID: nonExistentSessionID }),
+        })
 
         expect(response.status).toBe(404)
       }),
@@ -72,19 +53,11 @@ describe("tui.selectSession endpoint", () => {
         const tmp = yield* TestInstance
         const invalidSessionID = "invalid_session_id"
 
-        const app = Server.Default().app
-        const response = yield* Effect.promise(() =>
-          Promise.resolve(
-            app.request("/tui/select-session", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                "x-opencode-directory": tmp.directory,
-              },
-              body: JSON.stringify({ sessionID: invalidSessionID }),
-            }),
-          ),
-        )
+        const response = yield* requestInDirectory("/tui/select-session", tmp.directory, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionID: invalidSessionID }),
+        })
 
         expect(response.status).toBe(400)
       }),

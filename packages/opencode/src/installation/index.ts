@@ -1,37 +1,36 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
 import { Effect, Layer, Schema, Context, Stream } from "effect"
-import { serviceUse } from "@/effect/service-use"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { errorMessage } from "@/util/error"
 import { ChildProcess } from "effect/unstable/process"
 import { AppProcess } from "@opencode-ai/core/process"
 import path from "path"
-import { BusEvent } from "@/bus/bus-event"
-import * as Log from "@opencode-ai/core/util/log"
+import { EventV2 } from "@opencode-ai/core/event"
 import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import semver from "semver"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { NpmConfig } from "@opencode-ai/core/npm-config"
-
-const log = Log.create({ service: "installation" })
 
 export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
 
 export type ReleaseType = "patch" | "minor" | "major"
 
 export const Event = {
-  Updated: BusEvent.define(
-    "installation.updated",
-    Schema.Struct({
+  Updated: EventV2.define({
+    type: "installation.updated",
+    schema: {
       version: Schema.String,
-    }),
-  ),
-  UpdateAvailable: BusEvent.define(
-    "installation.update-available",
-    Schema.Struct({
+    },
+  }),
+  UpdateAvailable: EventV2.define({
+    type: "installation.update-available",
+    schema: {
       version: Schema.String,
-    }),
-  ),
+    },
+  }),
 }
 
 export function getReleaseType(current: string, latest: string): ReleaseType {
@@ -149,13 +148,20 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
       return `Upgrade failed for ${method}.`
     }
 
+    const upgradeScriptShell = Effect.fnUntraced(function* () {
+      const bashVersion = yield* text(["bash", "--version"])
+      if (bashVersion) return "bash"
+      return "sh"
+    })
+
     const upgradeCurl = Effect.fnUntraced(
       function* (target: string) {
         const response = yield* httpOk.execute(HttpClientRequest.get("https://opencode.ai/install"))
         const body = yield* response.text
         const bodyBytes = new TextEncoder().encode(body)
+        const shell = yield* upgradeScriptShell()
         const result = yield* appProcess.run(
-          ChildProcess.make("bash", [], {
+          ChildProcess.make(shell, [], {
             stdin: Stream.make(bodyBytes),
             env: { VERSION: target },
             extendEnv: true,
@@ -317,7 +323,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
         if (!upgradeResult || upgradeResult.code !== 0) {
           return yield* new UpgradeFailedError({ stderr: upgradeFailure(m, upgradeResult) })
         }
-        log.info("upgraded", {
+        yield* Effect.logInfo("upgraded", {
           method: m,
           target,
           stdout: upgradeResult.stdout,
@@ -338,5 +344,7 @@ const { runPromise } = makeRuntime(Service, defaultLayer)
 export const latest = (...args: Parameters<Interface["latest"]>) => runPromise((s) => s.latest(...args))
 export const method = () => runPromise((s) => s.method())
 export const upgrade = (...args: Parameters<Interface["upgrade"]>) => runPromise((s) => s.upgrade(...args))
+
+export const node = LayerNode.make(layer, [httpClient, AppProcess.node])
 
 export * as Installation from "."

@@ -12,7 +12,7 @@ import { Process } from "@/util/process"
 import { NotFoundError } from "@/storage/storage"
 import { EOL } from "os"
 import path from "path"
-import { which } from "../../util/which"
+import { which } from "@opencode-ai/core/util/which"
 
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]

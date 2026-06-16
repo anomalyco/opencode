@@ -97,7 +97,7 @@ export function continuationRequest(input: {
     tools: features.has("tool-call") ? [continuationTool] : [],
     cache: "none",
     providerOptions: features.has("encrypted-reasoning")
-      ? { openai: { store: false, includeEncryptedReasoning: true, reasoningSummary: "auto" } }
+      ? { openai: { store: false, include: ["reasoning.encrypted_content"], reasoningSummary: "auto" } }
       : undefined,
     generation: { maxTokens: 80, temperature: 0 },
   })

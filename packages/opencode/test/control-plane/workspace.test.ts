@@ -7,23 +7,22 @@ import { NodeHttpServer } from "@effect/platform-node"
 import { Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { FetchHttpClient, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { eq } from "drizzle-orm"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
-import * as Log from "@opencode-ai/core/util/log"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
-import { Database } from "@/storage/db"
-import { ProjectID } from "@/project/schema"
-import { ProjectTable } from "@/project/project.sql"
+import { Database } from "@opencode-ai/core/database/database"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Session as SessionNs } from "@/session/session"
 import { SessionID } from "@/session/schema"
-import { SessionTable } from "@/session/session.sql"
-import { SyncEvent } from "@/sync"
-import { EventSequenceTable } from "@/sync/event.sql"
+import { SessionTable } from "@opencode-ai/core/session/sql"
+import { EventSequenceTable } from "@opencode-ai/core/event/sql"
 import { resetDatabase } from "../fixture/db"
 import { disposeAllInstances, provideTmpdirInstance, requireInstance, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { registerAdapter } from "../../src/control-plane/adapters"
-import { WorkspaceID } from "../../src/control-plane/schema"
-import { WorkspaceTable } from "../../src/control-plane/workspace.sql"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import type { Target, WorkspaceAdapter, WorkspaceInfo } from "../../src/control-plane/types"
 import * as Workspace from "../../src/control-plane/workspace"
 import { InstanceStore } from "@/project/instance-store"
@@ -33,8 +32,8 @@ import { SessionPrompt } from "@/session/prompt"
 import { Project } from "@/project/project"
 import { Vcs } from "@/project/vcs"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-
-void Log.init({ print: false })
+import { EventV2Bridge } from "@/event-v2-bridge"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 
 const originalEnv = {
   OPENCODE_AUTH_CONTENT: process.env.OPENCODE_AUTH_CONTENT,
@@ -48,13 +47,15 @@ const workspaceLayer = (experimentalWorkspaces: boolean) =>
   Workspace.layer.pipe(
     Layer.provide(Auth.defaultLayer),
     Layer.provide(SessionNs.defaultLayer),
-    Layer.provide(SyncEvent.defaultLayer),
     Layer.provide(SessionPrompt.defaultLayer),
     Layer.provide(Project.defaultLayer),
     Layer.provide(Vcs.defaultLayer),
+    Layer.provide(Database.defaultLayer),
+    Layer.provide(EventV2Bridge.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
-    Layer.provide(AppFileSystem.defaultLayer),
+    Layer.provide(FSUtil.defaultLayer),
     Layer.provide(RuntimeFlags.layer({ experimentalWorkspaces })),
+    Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(InstanceStore.defaultLayer.pipe(Layer.provide(InstanceBootstrap.defaultLayer))),
   )
 
@@ -62,6 +63,7 @@ const testServerLayer = Layer.mergeAll(
   NodeHttpServer.layer(Http.createServer, { host: "127.0.0.1", port: 0 }),
   workspaceLayer(true),
   SessionNs.defaultLayer,
+  Database.defaultLayer,
 )
 const it = testEffect(testServerLayer)
 
@@ -105,7 +107,6 @@ function restoreEnv() {
 }
 
 beforeEach(() => {
-  Database.close()
   restoreEnv()
   process.env.OPENCODE_EXPERIMENTAL_WORKSPACES = "true"
 })
@@ -129,7 +130,7 @@ async function initGitRepo(dir: string) {
   await $`git commit -m "base"`.cwd(dir).quiet()
 }
 
-const startWorkspaceSyncingWithFlag = (projectID: ProjectID, experimentalWorkspaces: boolean) =>
+const startWorkspaceSyncingWithFlag = (projectID: ProjectV2.ID, experimentalWorkspaces: boolean) =>
   Effect.runPromise(
     Workspace.use.startWorkspaceSyncing(projectID).pipe(Effect.provide(workspaceLayer(experimentalWorkspaces))),
   )
@@ -265,9 +266,9 @@ function serverUrl() {
   })
 }
 
-function workspaceInfo(projectID: ProjectID, type: string, input?: Partial<Workspace.Info>): Workspace.Info {
+function workspaceInfo(projectID: ProjectV2.ID, type: string, input?: Partial<Workspace.Info>): Workspace.Info {
   return {
-    id: input?.id ?? WorkspaceID.ascending(),
+    id: input?.id ?? WorkspaceV2.ID.ascending(),
     type,
     name: input?.name ?? unique("workspace"),
     branch: input?.branch ?? null,
@@ -279,7 +280,7 @@ function workspaceInfo(projectID: ProjectID, type: string, input?: Partial<Works
 }
 
 function insertWorkspace(info: Workspace.Info) {
-  Database.use((db) =>
+  return Database.Service.use(({ db }) =>
     db
       .insert(WorkspaceTable)
       .values({
@@ -292,55 +293,66 @@ function insertWorkspace(info: Workspace.Info) {
         project_id: info.projectID,
         time_used: info.timeUsed,
       })
-      .run(),
+      .run()
+      .pipe(Effect.orDie),
   )
 }
 
-function insertProject(id: ProjectID, worktree: string) {
-  Database.use((db) =>
+function insertProject(id: ProjectV2.ID, worktree: string) {
+  return Database.Service.use(({ db }) =>
     db
       .insert(ProjectTable)
       .values({
         id,
-        worktree,
+        worktree: AbsolutePath.make(worktree),
         vcs: null,
         name: null,
         time_created: Date.now(),
         time_updated: Date.now(),
         sandboxes: [],
       })
-      .run(),
+      .run()
+      .pipe(Effect.orDie),
   )
 }
 
-function attachSessionToWorkspace(sessionID: SessionID, workspaceID: WorkspaceID) {
-  Database.use((db) =>
-    db.update(SessionTable).set({ workspace_id: workspaceID }).where(eq(SessionTable.id, sessionID)).run(),
+function attachSessionToWorkspace(sessionID: SessionID, workspaceID: WorkspaceV2.ID) {
+  return Database.Service.use(({ db }) =>
+    db
+      .update(SessionTable)
+      .set({ workspace_id: workspaceID })
+      .where(eq(SessionTable.id, sessionID))
+      .run()
+      .pipe(Effect.orDie),
   )
 }
 
 function sessionSequence(sessionID: SessionID) {
-  return Database.use((db) =>
+  return Database.Service.use(({ db }) =>
     db
       .select({ seq: EventSequenceTable.seq })
       .from(EventSequenceTable)
       .where(eq(EventSequenceTable.aggregate_id, sessionID))
-      .get(),
-  )?.seq
+      .get()
+      .pipe(
+        Effect.orDie,
+        Effect.map((row) => row?.seq),
+      ),
+  )
 }
 
 function sessionSequenceOwner(sessionID: SessionID) {
-  return Database.use((db) =>
+  return Database.Service.use(({ db }) =>
     db
       .select({ ownerID: EventSequenceTable.owner_id })
       .from(EventSequenceTable)
       .where(eq(EventSequenceTable.aggregate_id, sessionID))
-      .get(),
-  )?.ownerID
-}
-
-function sessionUpdatedType() {
-  return SyncEvent.versionedType(SessionNs.Event.Updated.type, SessionNs.Event.Updated.version)
+      .get()
+      .pipe(
+        Effect.orDie,
+        Effect.map((row) => row?.ownerID),
+      ),
+  )
 }
 
 describe("workspace schemas and exports", () => {
@@ -352,10 +364,10 @@ describe("workspace schemas and exports", () => {
 
   test("validates create input with workspace id, project id, branch, type, and extra", () => {
     const input = {
-      id: WorkspaceID.ascending("wrk_schema_create"),
+      id: WorkspaceV2.ID.ascending("wrk_schema_create"),
       type: "worktree",
       branch: "feature/schema",
-      projectID: ProjectID.make("project-schema"),
+      projectID: ProjectV2.ID.make("project-schema"),
       extra: { nested: true },
     }
 
@@ -372,7 +384,7 @@ describe("workspace CRUD", () => {
     () =>
       Effect.gen(function* () {
         const workspace = yield* Workspace.Service
-        expect(yield* workspace.get(WorkspaceID.ascending("wrk_missing_get"))).toBeUndefined()
+        expect(yield* workspace.get(WorkspaceV2.ID.ascending("wrk_missing_get"))).toBeUndefined()
       }),
     { git: true },
   )
@@ -383,24 +395,24 @@ describe("workspace CRUD", () => {
       Effect.gen(function* () {
         const instance = yield* requireInstance
         const workspace = yield* Workspace.Service
-        const otherProjectID = ProjectID.make("project-other")
-        insertProject(otherProjectID, "/tmp/other")
+        const otherProjectID = ProjectV2.ID.make("project-other")
+        yield* insertProject(otherProjectID, "/tmp/other")
         const a = workspaceInfo(instance.project.id, "manual", {
-          id: WorkspaceID.ascending("wrk_a_list"),
+          id: WorkspaceV2.ID.ascending("wrk_a_list"),
           branch: "a",
           directory: "/a",
           extra: { a: true },
         })
         const b = workspaceInfo(instance.project.id, "manual", {
-          id: WorkspaceID.ascending("wrk_b_list"),
+          id: WorkspaceV2.ID.ascending("wrk_b_list"),
           branch: "b",
           directory: "/b",
           extra: ["b"],
         })
-        const other = workspaceInfo(otherProjectID, "manual", { id: WorkspaceID.ascending("wrk_c_list") })
-        insertWorkspace(b)
-        insertWorkspace(other)
-        insertWorkspace(a)
+        const other = workspaceInfo(otherProjectID, "manual", { id: WorkspaceV2.ID.ascending("wrk_c_list") })
+        yield* insertWorkspace(b)
+        yield* insertWorkspace(other)
+        yield* insertWorkspace(a)
 
         expect(yield* workspace.list(instance.project)).toEqual([a, b])
       }),
@@ -418,7 +430,7 @@ describe("workspace CRUD", () => {
         process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "https://otel.test"
         process.env.OTEL_RESOURCE_ATTRIBUTES = "service.name=opencode-test"
 
-        const workspaceID = WorkspaceID.ascending("wrk_create_local")
+        const workspaceID = WorkspaceV2.ID.ascending("wrk_create_local")
         const type = unique("create-local")
         const targetDir = path.join(instance.directory, "created-local")
         const recorded = recordedAdapter({
@@ -578,11 +590,11 @@ describe("workspace CRUD", () => {
         const workspace = yield* Workspace.Service
         const type = unique("list-sync")
         const existing = workspaceInfo(instance.project.id, type, {
-          id: WorkspaceID.ascending("wrk_list_sync_existing"),
+          id: WorkspaceV2.ID.ascending("wrk_list_sync_existing"),
           name: "existing",
           directory: path.join(instance.directory, "existing"),
         })
-        insertWorkspace(existing)
+        yield* insertWorkspace(existing)
 
         const discovered = {
           type,
@@ -748,7 +760,7 @@ describe("workspace CRUD", () => {
     () =>
       Effect.gen(function* () {
         const workspace = yield* Workspace.Service
-        expect(yield* workspace.remove(WorkspaceID.ascending("wrk_missing_remove"))).toBeUndefined()
+        expect(yield* workspace.remove(WorkspaceV2.ID.ascending("wrk_missing_remove"))).toBeUndefined()
       }),
     { git: true },
   )
@@ -767,8 +779,8 @@ describe("workspace CRUD", () => {
         const info = yield* workspace.create({ type, branch: null, projectID: instance.project.id, extra: null })
         const one = yield* sessionSvc.create({})
         const two = yield* sessionSvc.create({})
-        attachSessionToWorkspace(one.id, info.id)
-        attachSessionToWorkspace(two.id, info.id)
+        yield* attachSessionToWorkspace(one.id, info.id)
+        yield* attachSessionToWorkspace(two.id, info.id)
 
         const removed = yield* workspace.remove(info.id)
 
@@ -776,10 +788,14 @@ describe("workspace CRUD", () => {
         expect(yield* workspace.get(info.id)).toBeUndefined()
         expect(recorded.calls.remove).toEqual([info])
         expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBeUndefined()
+        const { db } = yield* Database.Service
         expect(
-          Database.use((db) =>
-            db.select({ id: SessionTable.id }).from(SessionTable).where(eq(SessionTable.workspace_id, info.id)).all(),
-          ),
+          yield* db
+            .select({ id: SessionTable.id })
+            .from(SessionTable)
+            .where(eq(SessionTable.workspace_id, info.id))
+            .all()
+            .pipe(Effect.orDie),
         ).toEqual([])
       })
     },
@@ -793,7 +809,7 @@ describe("workspace CRUD", () => {
         const instance = yield* requireInstance
         const workspace = yield* Workspace.Service
         const type = unique("remove-throws")
-        const info = workspaceInfo(instance.project.id, type, { id: WorkspaceID.ascending("wrk_remove_throws") })
+        const info = workspaceInfo(instance.project.id, type, { id: WorkspaceV2.ID.ascending("wrk_remove_throws") })
         registerAdapter(
           instance.project.id,
           type,
@@ -806,7 +822,7 @@ describe("workspace CRUD", () => {
             },
           }).adapter,
         )
-        insertWorkspace(info)
+        yield* insertWorkspace(info)
 
         expect(yield* workspace.remove(info.id)).toEqual(info)
         expect(yield* workspace.get(info.id)).toBeUndefined()
@@ -826,25 +842,25 @@ describe("workspace CRUD", () => {
         const targetType = unique("warp-target-local")
         const previous = workspaceInfo(instance.project.id, previousType)
         const target = workspaceInfo(instance.project.id, targetType)
-        insertWorkspace(previous)
-        insertWorkspace(target)
+        yield* insertWorkspace(previous)
+        yield* insertWorkspace(target)
         registerAdapter(instance.project.id, previousType, localAdapter(path.join(dir, "warp-prev-local")).adapter)
         registerAdapter(instance.project.id, targetType, localAdapter(path.join(dir, "warp-target-local")).adapter)
         const session = yield* sessionSvc.create({})
-        attachSessionToWorkspace(session.id, previous.id)
+        yield* attachSessionToWorkspace(session.id, previous.id)
 
         yield* workspace.sessionWarp({ workspaceID: target.id, sessionID: session.id })
 
+        const { db } = yield* Database.Service
         expect(
-          Database.use((db) =>
-            db
-              .select({ workspaceID: SessionTable.workspace_id })
-              .from(SessionTable)
-              .where(eq(SessionTable.id, session.id))
-              .get(),
-          )?.workspaceID,
+          (yield* db
+            .select({ workspaceID: SessionTable.workspace_id })
+            .from(SessionTable)
+            .where(eq(SessionTable.id, session.id))
+            .get()
+            .pipe(Effect.orDie))?.workspaceID,
         ).toBe(target.id)
-        expect(sessionSequenceOwner(session.id)).toBe(target.id)
+        expect(yield* sessionSequenceOwner(session.id)).toBe(target.id)
       })
     },
     { git: true },
@@ -869,12 +885,12 @@ describe("workspace CRUD", () => {
 
         const previous = workspaceInfo(instance.project.id, previousType)
         const target = workspaceInfo(instance.project.id, targetType)
-        insertWorkspace(previous)
-        insertWorkspace(target)
+        yield* insertWorkspace(previous)
+        yield* insertWorkspace(target)
         registerAdapter(instance.project.id, previousType, localAdapter(previousDir, { createDir: false }).adapter)
         registerAdapter(instance.project.id, targetType, localAdapter(targetDir, { createDir: false }).adapter)
         const session = yield* sessionSvc.create({})
-        attachSessionToWorkspace(session.id, previous.id)
+        yield* attachSessionToWorkspace(session.id, previous.id)
 
         yield* workspace.sessionWarp({ workspaceID: target.id, sessionID: session.id, copyChanges: true })
 
@@ -895,23 +911,23 @@ describe("workspace CRUD", () => {
         const sessionSvc = yield* SessionNs.Service
         const previousType = unique("warp-detach-local")
         const previous = workspaceInfo(instance.project.id, previousType)
-        insertWorkspace(previous)
+        yield* insertWorkspace(previous)
         registerAdapter(instance.project.id, previousType, localAdapter(path.join(dir, "warp-detach-local")).adapter)
         const session = yield* sessionSvc.create({})
-        attachSessionToWorkspace(session.id, previous.id)
+        yield* attachSessionToWorkspace(session.id, previous.id)
 
         yield* workspace.sessionWarp({ workspaceID: null, sessionID: session.id })
 
+        const { db } = yield* Database.Service
         expect(
-          Database.use((db) =>
-            db
-              .select({ workspaceID: SessionTable.workspace_id })
-              .from(SessionTable)
-              .where(eq(SessionTable.id, session.id))
-              .get(),
-          )?.workspaceID,
+          (yield* db
+            .select({ workspaceID: SessionTable.workspace_id })
+            .from(SessionTable)
+            .where(eq(SessionTable.id, session.id))
+            .get()
+            .pipe(Effect.orDie))?.workspaceID,
         ).toBeNull()
-        expect(sessionSequenceOwner(session.id)).toBe(instance.project.id)
+        expect(yield* sessionSequenceOwner(session.id)).toBe(instance.project.id)
       })
     },
     { git: true },
@@ -928,9 +944,9 @@ describe("workspace CRUD", () => {
         const sessionSvc = yield* SessionNs.Service
         const previousType = unique("warp-detach-workspace-instance")
         const previous = workspaceInfo(projectID, previousType)
-        insertWorkspace(previous)
+        yield* insertWorkspace(previous)
         const session = yield* sessionSvc.create({})
-        attachSessionToWorkspace(session.id, previous.id)
+        yield* attachSessionToWorkspace(session.id, previous.id)
 
         const workspaceProjectID = yield* provideTmpdirInstance(
           (workspaceDir) =>
@@ -944,17 +960,17 @@ describe("workspace CRUD", () => {
           { git: true },
         )
 
+        const { db } = yield* Database.Service
         expect(
-          Database.use((db) =>
-            db
-              .select({ workspaceID: SessionTable.workspace_id })
-              .from(SessionTable)
-              .where(eq(SessionTable.id, session.id))
-              .get(),
-          )?.workspaceID,
+          (yield* db
+            .select({ workspaceID: SessionTable.workspace_id })
+            .from(SessionTable)
+            .where(eq(SessionTable.id, session.id))
+            .get()
+            .pipe(Effect.orDie))?.workspaceID,
         ).toBeNull()
-        expect(sessionSequenceOwner(session.id)).toBe(projectID)
-        expect(sessionSequenceOwner(session.id)).not.toBe(workspaceProjectID)
+        expect(yield* sessionSequenceOwner(session.id)).toBe(projectID)
+        expect(yield* sessionSequenceOwner(session.id)).not.toBe(workspaceProjectID)
       }),
     { git: true },
   )
@@ -962,6 +978,7 @@ describe("workspace CRUD", () => {
   it.live("sessionWarp syncs previous remote history, replays it, steals, and claims the sequence", () => {
     const calls: FetchCall[] = []
     let historySessionID: SessionID | undefined
+    let historySession: SessionNs.Info | undefined
     let historyNextSeq = 0
     return Effect.gen(function* () {
       yield* HttpServer.serveEffect()(
@@ -982,8 +999,8 @@ describe("workspace CRUD", () => {
                 id: `evt_${unique("warp-source-history")}`,
                 aggregate_id: historySessionID!,
                 seq: historyNextSeq,
-                type: sessionUpdatedType(),
-                data: { sessionID: historySessionID!, info: { title: "from source history" } },
+                type: "session.updated.1",
+                data: { sessionID: historySessionID!, info: historySession! },
               },
             ])
           }
@@ -1007,14 +1024,15 @@ describe("workspace CRUD", () => {
             const targetType = unique("warp-remote-target")
             const previous = workspaceInfo(instance.project.id, previousType)
             const target = workspaceInfo(instance.project.id, targetType, { directory: "remote-target-dir" })
-            insertWorkspace(previous)
-            insertWorkspace(target)
+            yield* insertWorkspace(previous)
+            yield* insertWorkspace(target)
             registerAdapter(instance.project.id, previousType, remoteAdapter(`${url}/warp-source`).adapter)
             registerAdapter(instance.project.id, targetType, remoteAdapter(`${url}/warp-target`).adapter)
             const session = yield* sessionSvc.create({})
-            attachSessionToWorkspace(session.id, previous.id)
+            yield* attachSessionToWorkspace(session.id, previous.id)
             historySessionID = session.id
-            historyNextSeq = (sessionSequence(session.id) ?? -1) + 1
+            historySession = { ...session, workspaceID: previous.id, title: "from source history" }
+            historyNextSeq = ((yield* sessionSequence(session.id)) ?? -1) + 1
 
             yield* workspace.sessionWarp({ workspaceID: target.id, sessionID: session.id, copyChanges: true })
 
@@ -1033,18 +1051,18 @@ describe("workspace CRUD", () => {
                 {
                   aggregateID: session.id,
                   seq: 0,
-                  type: SyncEvent.versionedType(SessionNs.Event.Created.type, SessionNs.Event.Created.version),
+                  type: "session.created.1",
                 },
                 {
                   aggregateID: session.id,
                   seq: historyNextSeq,
-                  type: sessionUpdatedType(),
+                  type: "session.updated.1",
                 },
               ],
             })
             expect(calls[4].json).toEqual({ sessionID: session.id })
             expect((yield* sessionSvc.get(session.id)).title).toBe("from source history")
-            expect(sessionSequenceOwner(session.id)).toBe(target.id)
+            expect(yield* sessionSequenceOwner(session.id)).toBe(target.id)
           }),
         { git: true },
       )
@@ -1064,8 +1082,8 @@ describe("workspace sync state", () => {
         const type = unique("flag-disabled")
         const info = workspaceInfo(instance.project.id, type)
         const session = yield* sessionSvc.create({})
-        attachSessionToWorkspace(session.id, info.id)
-        insertWorkspace(info)
+        yield* attachSessionToWorkspace(session.id, info.id)
+        yield* insertWorkspace(info)
         registerAdapter(instance.project.id, type, localAdapter(path.join(dir, "flag-disabled")).adapter)
 
         yield* Effect.promise(() => startWorkspaceSyncingWithFlag(instance.project.id, false))
@@ -1090,12 +1108,10 @@ describe("workspace sync state", () => {
         const second = workspaceInfo(projectID, secondType)
         yield* Effect.promise(() => fs.mkdir(path.join(dir, "first"), { recursive: true }))
         yield* Effect.promise(() => fs.mkdir(path.join(dir, "second"), { recursive: true }))
-        yield* Effect.sync(() => {
-          insertWorkspace(first)
-          insertWorkspace(second)
-          registerAdapter(projectID, firstType, localAdapter(path.join(dir, "first")).adapter)
-          registerAdapter(projectID, secondType, localAdapter(path.join(dir, "second")).adapter)
-        })
+        yield* insertWorkspace(first)
+        yield* insertWorkspace(second)
+        registerAdapter(projectID, firstType, localAdapter(path.join(dir, "first")).adapter)
+        registerAdapter(projectID, secondType, localAdapter(path.join(dir, "second")).adapter)
         yield* Effect.addFinalizer(() =>
           Effect.all([workspace.remove(first.id), workspace.remove(second.id)], { discard: true }).pipe(Effect.ignore),
         )
@@ -1123,13 +1139,13 @@ describe("workspace sync state", () => {
         const sessionSvc = yield* SessionNs.Service
         const type = unique("missing-local")
         const info = workspaceInfo(instance.project.id, type)
-        insertWorkspace(info)
+        yield* insertWorkspace(info)
         registerAdapter(
           instance.project.id,
           type,
           localAdapter(path.join(dir, "missing-target"), { createDir: false }).adapter,
         )
-        attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+        yield* attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
 
         yield* workspace.startWorkspaceSyncing(instance.project.id)
 
@@ -1159,9 +1175,9 @@ describe("workspace sync state", () => {
         const info = workspaceInfo(instance.project.id, type)
         const target = path.join(dir, "dedupe-local")
         yield* Effect.promise(() => fs.mkdir(target, { recursive: true }))
-        insertWorkspace(info)
+        yield* insertWorkspace(info)
         registerAdapter(instance.project.id, type, localAdapter(target).adapter)
-        attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+        yield* attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
 
         yield* workspace.startWorkspaceSyncing(instance.project.id)
         yield* workspace.startWorkspaceSyncing(instance.project.id)
@@ -1213,9 +1229,9 @@ describe("workspace sync state", () => {
             try {
               const type = unique("remote-start")
               const info = workspaceInfo(instance.project.id, type)
-              insertWorkspace(info)
+              yield* insertWorkspace(info)
               registerAdapter(instance.project.id, type, remoteAdapter(`${url}/sync`).adapter)
-              attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+              yield* attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
 
               yield* workspace.startWorkspaceSyncing(instance.project.id)
               yield* eventuallyEffect(
@@ -1267,9 +1283,9 @@ describe("workspace sync state", () => {
             const instance = yield* requireInstance
             const type = unique("remote-connect-fail")
             const info = workspaceInfo(instance.project.id, type)
-            insertWorkspace(info)
+            yield* insertWorkspace(info)
             registerAdapter(instance.project.id, type, remoteAdapter(`${url}/failed`).adapter)
-            attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+            yield* attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
 
             yield* workspace.startWorkspaceSyncing(instance.project.id)
 
@@ -1308,9 +1324,9 @@ describe("workspace sync state", () => {
             const instance = yield* requireInstance
             const type = unique("remote-history-fail")
             const info = workspaceInfo(instance.project.id, type)
-            insertWorkspace(info)
+            yield* insertWorkspace(info)
             registerAdapter(instance.project.id, type, remoteAdapter(`${url}/history-failed`).adapter)
-            attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+            yield* attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
 
             yield* workspace.startWorkspaceSyncing(instance.project.id)
 
@@ -1330,6 +1346,7 @@ describe("workspace sync state", () => {
   it.live("sync history sends the local sequence fence and replays returned events in workspace context", () => {
     const historyBodies: unknown[] = []
     let historySessionID: SessionID | undefined
+    let historySession: SessionNs.Info | undefined
     let historyNextSeq = 0
     return Effect.gen(function* () {
       yield* HttpServer.serveEffect()(
@@ -1346,8 +1363,8 @@ describe("workspace sync state", () => {
                   id: `evt_${unique("history")}`,
                   aggregate_id: historySessionID!,
                   seq: historyNextSeq,
-                  type: sessionUpdatedType(),
-                  data: { sessionID: historySessionID!, info: { title: "from history" } },
+                  type: "session.updated.1",
+                  data: { sessionID: historySessionID!, info: historySession! },
                 },
               ]),
             )
@@ -1366,12 +1383,13 @@ describe("workspace sync state", () => {
             try {
               const type = unique("history-replay")
               const info = workspaceInfo(instance.project.id, type)
-              insertWorkspace(info)
+              yield* insertWorkspace(info)
               registerAdapter(instance.project.id, type, remoteAdapter(`${url}/history`).adapter)
               const session = yield* sessionSvc.create({ title: "before history" })
-              attachSessionToWorkspace(session.id, info.id)
+              yield* attachSessionToWorkspace(session.id, info.id)
               historySessionID = session.id
-              historyNextSeq = (sessionSequence(session.id) ?? -1) + 1
+              historySession = { ...session, workspaceID: info.id, title: "from history" }
+              historyNextSeq = ((yield* sessionSequence(session.id)) ?? -1) + 1
 
               yield* workspace.startWorkspaceSyncing(instance.project.id)
 
@@ -1385,8 +1403,9 @@ describe("workspace sync state", () => {
                 captured.events.some(
                   (event) =>
                     event.workspace === info.id &&
-                    event.payload.type === "sync" &&
-                    event.payload.syncEvent.seq === historyNextSeq,
+                    event.payload.type === "session.updated" &&
+                    event.payload.properties.sessionID === session.id &&
+                    event.payload.properties.info.title === "from history",
                 ),
               ).toBe(true)
               yield* workspace.remove(info.id)
@@ -1434,9 +1453,9 @@ describe("workspace sync state", () => {
             try {
               const type = unique("sse-forward")
               const info = workspaceInfo(instance.project.id, type)
-              insertWorkspace(info)
+              yield* insertWorkspace(info)
               registerAdapter(instance.project.id, type, remoteAdapter(`${url}/sse-forward`).adapter)
-              attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+              yield* attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
 
               yield* workspace.startWorkspaceSyncing(instance.project.id)
 
@@ -1473,6 +1492,7 @@ describe("workspace sync state", () => {
 
   it.live("SSE sync events are replayed and forwarded", () => {
     let sseSessionID: SessionID | undefined
+    let sseSession: SessionNs.Info | undefined
     let sseNextSeq = 0
     return Effect.gen(function* () {
       yield* HttpServer.serveEffect()(
@@ -1492,8 +1512,8 @@ describe("workspace sync state", () => {
                         id: `evt_${unique("sse")}`,
                         aggregateID: sseSessionID!,
                         seq: sseNextSeq,
-                        type: sessionUpdatedType(),
-                        data: { sessionID: sseSessionID!, info: { title: "from sse" } },
+                        type: "session.updated.1",
+                        data: { sessionID: sseSessionID!, info: sseSession! },
                       },
                     },
                   },
@@ -1516,12 +1536,13 @@ describe("workspace sync state", () => {
             try {
               const type = unique("sse-sync")
               const info = workspaceInfo(instance.project.id, type)
-              insertWorkspace(info)
+              yield* insertWorkspace(info)
               registerAdapter(instance.project.id, type, remoteAdapter(`${url}/sse-sync`).adapter)
               const session = yield* sessionSvc.create({ title: "before sse" })
-              attachSessionToWorkspace(session.id, info.id)
+              yield* attachSessionToWorkspace(session.id, info.id)
               sseSessionID = session.id
-              sseNextSeq = (sessionSequence(session.id) ?? -1) + 1
+              sseSession = { ...session, workspaceID: info.id, title: "from sse" }
+              sseNextSeq = ((yield* sessionSequence(session.id)) ?? -1) + 1
 
               yield* workspace.startWorkspaceSyncing(instance.project.id)
 
@@ -1555,7 +1576,7 @@ describe("workspace waitForSync", () => {
     () =>
       Effect.gen(function* () {
         const workspace = yield* Workspace.Service
-        expect(yield* workspace.waitForSync(WorkspaceID.ascending("wrk_wait_empty"), {})).toBeUndefined()
+        expect(yield* workspace.waitForSync(WorkspaceV2.ID.ascending("wrk_wait_empty"), {})).toBeUndefined()
       }),
     { git: true },
   )
@@ -1566,11 +1587,14 @@ describe("workspace waitForSync", () => {
       Effect.gen(function* () {
         const workspace = yield* Workspace.Service
         const sessionID = SessionID.descending("ses_wait_done")
-        Database.use((db) => db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 4 }).run())
+        const { db } = yield* Database.Service
+        yield* db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 4 }).run().pipe(Effect.orDie)
 
-        expect(yield* workspace.waitForSync(WorkspaceID.ascending("wrk_wait_done"), { [sessionID]: 4 })).toBeUndefined()
         expect(
-          yield* workspace.waitForSync(WorkspaceID.ascending("wrk_wait_done_2"), { [sessionID]: 3 }),
+          yield* workspace.waitForSync(WorkspaceV2.ID.ascending("wrk_wait_done"), { [sessionID]: 4 }),
+        ).toBeUndefined()
+        expect(
+          yield* workspace.waitForSync(WorkspaceV2.ID.ascending("wrk_wait_done_2"), { [sessionID]: 3 }),
         ).toBeUndefined()
       }),
     { git: true },
@@ -1581,22 +1605,22 @@ describe("workspace waitForSync", () => {
     () =>
       Effect.gen(function* () {
         const workspace = yield* Workspace.Service
-        const workspaceID = WorkspaceID.ascending("wrk_wait_event")
+        const workspaceID = WorkspaceV2.ID.ascending("wrk_wait_event")
         const sessionID = SessionID.descending("ses_wait_event")
-        Database.use((db) => db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 1 }).run())
+        const { db } = yield* Database.Service
+        yield* db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 1 }).run().pipe(Effect.orDie)
 
         yield* Effect.all(
           [
             workspace.waitForSync(workspaceID, { [sessionID]: 2 }),
             Effect.gen(function* () {
               yield* Effect.sleep("10 millis")
-              Database.use((db) =>
-                db
-                  .update(EventSequenceTable)
-                  .set({ seq: 2 })
-                  .where(eq(EventSequenceTable.aggregate_id, sessionID))
-                  .run(),
-              )
+              yield* db
+                .update(EventSequenceTable)
+                .set({ seq: 2 })
+                .where(eq(EventSequenceTable.aggregate_id, sessionID))
+                .run()
+                .pipe(Effect.orDie)
               GlobalBus.emit("event", { workspace: workspaceID, payload: { type: "anything" } })
             }),
           ],
@@ -1611,24 +1635,24 @@ describe("workspace waitForSync", () => {
     () =>
       Effect.gen(function* () {
         const workspace = yield* Workspace.Service
-        const workspaceID = WorkspaceID.ascending("wrk_wait_sync_any")
+        const workspaceID = WorkspaceV2.ID.ascending("wrk_wait_sync_any")
         const sessionID = SessionID.descending("ses_wait_sync_any")
-        Database.use((db) => db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 0 }).run())
+        const { db } = yield* Database.Service
+        yield* db.insert(EventSequenceTable).values({ aggregate_id: sessionID, seq: 0 }).run().pipe(Effect.orDie)
 
         yield* Effect.all(
           [
             workspace.waitForSync(workspaceID, { [sessionID]: 1 }),
             Effect.gen(function* () {
               yield* Effect.sleep("10 millis")
-              Database.use((db) =>
-                db
-                  .update(EventSequenceTable)
-                  .set({ seq: 1 })
-                  .where(eq(EventSequenceTable.aggregate_id, sessionID))
-                  .run(),
-              )
+              yield* db
+                .update(EventSequenceTable)
+                .set({ seq: 1 })
+                .where(eq(EventSequenceTable.aggregate_id, sessionID))
+                .run()
+                .pipe(Effect.orDie)
               GlobalBus.emit("event", {
-                workspace: WorkspaceID.ascending("wrk_other_workspace"),
+                workspace: WorkspaceV2.ID.ascending("wrk_other_workspace"),
                 payload: { type: "sync" },
               })
             }),
@@ -1648,7 +1672,7 @@ describe("workspace waitForSync", () => {
         const reason = new Error("caller aborted")
         const fiber = yield* Effect.forkChild(
           workspace.waitForSync(
-            WorkspaceID.ascending("wrk_wait_abort"),
+            WorkspaceV2.ID.ascending("wrk_wait_abort"),
             { [SessionID.descending("ses_wait_abort")]: 1 },
             abort.signal,
           ),
@@ -1668,7 +1692,7 @@ describe("workspace waitForSync", () => {
         const sessionID = SessionID.descending("ses_wait_timeout")
         expectExitContains(
           yield* Effect.exit(
-            workspace.waitForSync(WorkspaceID.ascending("wrk_wait_timeout"), { [sessionID]: 1 }, undefined, 25),
+            workspace.waitForSync(WorkspaceV2.ID.ascending("wrk_wait_timeout"), { [sessionID]: 1 }, undefined, 25),
           ),
           `Timed out waiting for sync fence: {"${sessionID}":1}`,
         )

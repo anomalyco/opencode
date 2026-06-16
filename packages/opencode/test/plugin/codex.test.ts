@@ -4,8 +4,9 @@ import {
   parseJwtClaims,
   extractAccountIdFromClaims,
   extractAccountId,
+  renderOAuthError,
   type IdTokenClaims,
-} from "../../src/plugin/codex"
+} from "../../src/plugin/openai/codex"
 
 function createTestJwt(payload: object): string {
   const header = Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url")
@@ -14,6 +15,14 @@ function createTestJwt(payload: object): string {
 }
 
 describe("plugin.codex", () => {
+  test("escapes provider errors in callback HTML", () => {
+    const error = `</div><script>alert("xss" & 'more')</script>`
+    const html = renderOAuthError(error)
+
+    expect(html).toContain("&lt;/div&gt;&lt;script&gt;alert(&quot;xss&quot; &amp; &#39;more&#39;)&lt;/script&gt;")
+    expect(html).not.toContain(error)
+  })
+
   describe("parseJwtClaims", () => {
     test("parses valid JWT with claims", () => {
       const payload = { email: "test@example.com", chatgpt_account_id: "acc-123" }
@@ -120,6 +129,24 @@ describe("plugin.codex", () => {
         }),
       ).toBe("acc-123")
     })
+  })
+
+  test("installs websocket transport only when experimental websockets are enabled", async () => {
+    const disabled = await CodexAuthPlugin({} as never)
+    const enabled = await CodexAuthPlugin({} as never, { experimentalWebSockets: true })
+
+    const disabledOptions = await disabled.auth!.loader!(
+      async () => ({ type: "api", key: "sk-test" }) as never,
+      {} as never,
+    )
+    const enabledOptions = await enabled.auth!.loader!(
+      async () => ({ type: "api", key: "sk-test" }) as never,
+      {} as never,
+    )
+
+    expect(disabledOptions.fetch).toBeUndefined()
+    expect(enabledOptions.fetch).toBeFunction()
+    await enabled.dispose?.()
   })
 
   test("deduplicates concurrent Codex token refreshes", async () => {

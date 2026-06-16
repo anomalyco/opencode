@@ -13,20 +13,20 @@ describe("AzureCognitiveServicesPlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(AzureCognitiveServicesPlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           catalog.provider.update(ProviderV2.ID.make("azure-cognitive-services"), (item) => {
-            item.endpoint = { type: "aisdk", package: "@ai-sdk/openai-compatible" }
+            item.api = { type: "aisdk", package: "@ai-sdk/openai-compatible" }
           })
         })
         const result = yield* catalog.provider.get(ProviderV2.ID.make("azure-cognitive-services"))
-        expect(result.endpoint).toEqual({
+        expect(result.api).toEqual({
           type: "aisdk",
           package: "@ai-sdk/openai-compatible",
           url: "https://cognitive.cognitiveservices.azure.com/openai",
         })
-        expect(result.options.aisdk.provider.baseURL).toBeUndefined()
-        expect(result.options.aisdk.provider.resourceName).toBeUndefined()
+        expect(result.request.body.baseURL).toBeUndefined()
+        expect(result.request.body.resourceName).toBeUndefined()
       }),
     ),
   )
@@ -37,25 +37,25 @@ describe("AzureCognitiveServicesPlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(AzureCognitiveServicesPlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) => {
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) => {
           const azure = provider("azure-cognitive-services", {
-            endpoint: { type: "aisdk", package: "@ai-sdk/openai-compatible" },
+            api: { type: "aisdk", package: "@ai-sdk/openai-compatible" },
           })
           const openai = provider("openai")
           catalog.provider.update(azure.id, (item) => {
-            item.endpoint = azure.endpoint
+            item.api = azure.api
           })
           catalog.provider.update(openai.id, (item) => {
-            item.endpoint = openai.endpoint
+            item.api = openai.api
           })
         })
         const azure = yield* catalog.provider.get(ProviderV2.ID.make("azure-cognitive-services"))
         const openai = yield* catalog.provider.get(ProviderV2.ID.openai)
-        expect(azure.options.aisdk.provider.baseURL).toBeUndefined()
-        expect(azure.endpoint).toEqual({ type: "aisdk", package: "@ai-sdk/openai-compatible" })
-        expect(openai.options.aisdk.provider.baseURL).toBeUndefined()
-        expect(openai.endpoint).toEqual({ type: "aisdk", package: "test-provider" })
+        expect(azure.request.body.baseURL).toBeUndefined()
+        expect(azure.api).toEqual({ type: "aisdk", package: "@ai-sdk/openai-compatible" })
+        expect(openai.request.body.baseURL).toBeUndefined()
+        expect(openai.api).toEqual({ type: "aisdk", package: "test-provider" })
       }),
     ),
   )

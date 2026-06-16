@@ -1,17 +1,17 @@
 import { Schema, Struct } from "effect"
-import { ProjectID } from "@/project/schema"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import type { InstanceContext } from "@/project/instance-context"
-import { WorkspaceID } from "./schema"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import type { DeepMutable } from "@opencode-ai/core/schema"
 
 export const WorkspaceInfo = Schema.Struct({
-  id: WorkspaceID,
+  id: WorkspaceV2.ID,
   type: Schema.String,
   name: Schema.String,
   branch: Schema.optional(Schema.NullOr(Schema.String)),
   directory: Schema.optional(Schema.NullOr(Schema.String)),
   extra: Schema.optional(Schema.NullOr(Schema.Unknown)),
-  projectID: ProjectID,
+  projectID: ProjectV2.ID,
 }).annotate({ identifier: "Workspace" })
 export type WorkspaceInfo = DeepMutable<Schema.Schema.Type<typeof WorkspaceInfo>>
 
@@ -40,7 +40,7 @@ export type Target =
 
 export type WorkspaceAdapterContext = {
   readonly instance?: InstanceContext
-  readonly workspaceID?: WorkspaceID
+  readonly workspaceID?: WorkspaceV2.ID
 }
 
 export type WorkspaceAdapter = {

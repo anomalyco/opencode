@@ -1,20 +1,14 @@
 // Pure state machine for the prompt input.
 //
-// Handles keybind parsing, history ring navigation, and the leader-key
-// sequence for variant cycling. All functions are pure -- they take state
-// in and return new state out, with no side effects.
+// Handles history ring navigation and prompt text helpers. All functions are
+// pure -- they take state in and return new state out, with no side effects.
 //
 // The history ring (PromptHistoryState) stores past prompts and tracks
 // the current browse position. When the user arrows up at cursor offset 0,
 // the current draft is saved and history begins. Arrowing past the end
 // restores the draft.
-//
-// The leader-key cycle (promptCycle) uses a two-step pattern: first press
-// arms the leader, second press within the timeout fires the action.
-import type { KeyBinding } from "@opentui/core"
 export { displayCharAt, displaySlice, mentionTriggerIndex } from "../prompt-display"
-import { formatBinding, parseBindings } from "./keymap.shared"
-import type { FooterKeybinds, RunPrompt } from "./types"
+import type { RunPrompt } from "./types"
 
 const HISTORY_LIMIT = 200
 
@@ -22,36 +16,6 @@ export type PromptHistoryState = {
   items: RunPrompt[]
   index: number | null
   draft: string
-}
-
-export function promptInfo(event: { name: string; ctrl?: boolean; meta?: boolean; shift?: boolean; super?: boolean }) {
-  return {
-    name: event.name === " " ? "space" : event.name,
-    ctrl: !!event.ctrl,
-    meta: !!event.meta,
-    shift: !!event.shift,
-    super: !!event.super,
-    leader: false,
-  }
-}
-
-type PromptInfo = ReturnType<typeof promptInfo>
-
-export type PromptKeys = {
-  leaders: PromptInfo[]
-  cycles: PromptInfo[]
-  interrupts: PromptInfo[]
-  previous: PromptInfo[]
-  next: PromptInfo[]
-  clear: PromptInfo[]
-  bindings: KeyBinding[]
-}
-
-export type PromptCycle = {
-  arm: boolean
-  clear: boolean
-  cycle: boolean
-  consume: boolean
 }
 
 export type PromptMove = {
@@ -66,103 +30,17 @@ export function promptCopy(prompt: RunPrompt): RunPrompt {
     text: prompt.text,
     parts: structuredClone(prompt.parts),
     ...(prompt.mode ? { mode: prompt.mode } : {}),
+    ...(prompt.command ? { command: prompt.command } : {}),
   }
 }
 
 export function promptSame(a: RunPrompt, b: RunPrompt): boolean {
-  return a.mode === b.mode && a.text === b.text && JSON.stringify(a.parts) === JSON.stringify(b.parts)
-}
-
-function promptKey(binding: ReturnType<typeof parseBindings>[number]): PromptInfo | undefined {
-  if (binding.event !== "press") {
-    return undefined
-  }
-
-  const first = binding.sequence[0]
-  const second = binding.sequence[1]
-
-  if (!first) {
-    return undefined
-  }
-
-  if (!second) {
-    return first.patternName || first.tokenName
-      ? undefined
-      : {
-          name: first.stroke.name,
-          ctrl: first.stroke.ctrl,
-          meta: first.stroke.meta,
-          shift: first.stroke.shift,
-          super: first.stroke.super,
-          leader: false,
-        }
-  }
-
-  if (binding.sequence.length !== 2 || first.tokenName !== "leader" || second.patternName || second.tokenName) {
-    return undefined
-  }
-
-  return {
-    name: second.stroke.name,
-    ctrl: second.stroke.ctrl,
-    meta: second.stroke.meta,
-    shift: second.stroke.shift,
-    super: second.stroke.super,
-    leader: true,
-  }
-}
-
-export function promptBindings(bindings: FooterKeybinds["commandList"], leader: string): PromptInfo[] {
-  return parseBindings(bindings, leader).flatMap((binding) => {
-    const key = promptKey(binding)
-    return key ? [key] : []
-  })
-}
-
-function mapInputBindings(
-  bindings: FooterKeybinds["inputSubmit"],
-  leader: string,
-  action: "submit" | "newline",
-): KeyBinding[] {
-  return promptBindings(bindings, leader).flatMap((key) => {
-    if (key.leader) {
-      return []
-    }
-
-    return [
-      {
-        name: key.name,
-        ctrl: key.ctrl || undefined,
-        meta: key.meta || undefined,
-        shift: key.shift || undefined,
-        super: key.super || undefined,
-        action,
-      },
-    ]
-  })
-}
-
-function textareaBindings(keybinds: FooterKeybinds): KeyBinding[] {
-  return [
-    ...mapInputBindings(keybinds.inputSubmit, keybinds.leader, "submit"),
-    ...mapInputBindings(keybinds.inputNewline, keybinds.leader, "newline"),
-  ]
-}
-
-export function promptKeys(keybinds: FooterKeybinds): PromptKeys {
-  return {
-    leaders: promptBindings([{ key: keybinds.leader }], keybinds.leader),
-    cycles: promptBindings(keybinds.variantCycle, keybinds.leader),
-    interrupts: promptBindings(keybinds.interrupt, keybinds.leader),
-    previous: promptBindings(keybinds.historyPrevious, keybinds.leader),
-    next: promptBindings(keybinds.historyNext, keybinds.leader),
-    clear: promptBindings(keybinds.inputClear, keybinds.leader),
-    bindings: textareaBindings(keybinds),
-  }
-}
-
-export function printableBinding(bindings: FooterKeybinds["commandList"], leader: string): string {
-  return formatBinding(bindings, leader)
+  return (
+    a.mode === b.mode &&
+    a.text === b.text &&
+    JSON.stringify(a.parts) === JSON.stringify(b.parts) &&
+    JSON.stringify(a.command) === JSON.stringify(b.command)
+  )
 }
 
 export function isExitCommand(input: string): boolean {
@@ -172,59 +50,6 @@ export function isExitCommand(input: string): boolean {
 
 export function isNewCommand(input: string): boolean {
   return input.trim().toLowerCase() === "/new"
-}
-
-export function promptHit(bindings: PromptInfo[], event: PromptInfo): boolean {
-  return bindings.some(
-    (item) =>
-      item.name === event.name &&
-      item.ctrl === event.ctrl &&
-      item.meta === event.meta &&
-      item.shift === event.shift &&
-      item.super === event.super &&
-      item.leader === event.leader,
-  )
-}
-
-export function promptCycle(
-  armed: boolean,
-  event: PromptInfo,
-  leaders: PromptInfo[],
-  cycles: PromptInfo[],
-): PromptCycle {
-  if (!armed && promptHit(leaders, event)) {
-    return {
-      arm: true,
-      clear: false,
-      cycle: false,
-      consume: true,
-    }
-  }
-
-  if (armed) {
-    return {
-      arm: false,
-      clear: true,
-      cycle: promptHit(cycles, { ...event, leader: true }),
-      consume: true,
-    }
-  }
-
-  if (!promptHit(cycles, event)) {
-    return {
-      arm: false,
-      clear: false,
-      cycle: false,
-      consume: false,
-    }
-  }
-
-  return {
-    arm: false,
-    clear: false,
-    cycle: true,
-    consume: true,
-  }
 }
 
 export function createPromptHistory(items?: RunPrompt[]): PromptHistoryState {
