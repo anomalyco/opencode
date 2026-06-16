@@ -469,6 +469,49 @@ export class BusyError extends Schema.TaggedErrorClass<BusyError>()("SessionBusy
 
 export type NotFound = NotFoundError
 
+export type ToolAbortSource =
+  | "processor-normal-timeout"
+  | "processor-interrupted"
+  | "processor-error"
+  | "orphan-finalizer"
+  | "user-cancel"
+  | "background-cancel"
+  | "tool-specific-interrupt"
+
+export type AbortToolPartInput = {
+  sessionID: SessionID
+  messageID: MessageID
+  partID: PartID
+  source: ToolAbortSource
+  reason?: string
+  error?: string
+  ownerMessageID?: MessageID
+  ownerRunID?: string
+  childSessionID?: SessionID
+  preservedOutput?: boolean
+  output?: string
+  metadata?: Record<string, unknown>
+}
+
+export type FinalizeOrphanedAssistantOptions = {
+  abortSource?: ToolAbortSource
+  abortReason?: string
+  staleAfterMs?: number
+}
+
+export const ORPHANED_ASSISTANT_STALE_AFTER_MS = 24 * 60 * 60 * 1000
+
+const formatDuration = (input: number): string => {
+  const hours = Math.floor(input / (60 * 60 * 1000))
+  if (hours >= 1) return `${hours}h`
+  const minutes = Math.floor(input / (60 * 1000))
+  if (minutes >= 1) return `${minutes}m`
+  return `${Math.max(0, Math.floor(input / 1000))}s`
+}
+
+export const staleOrphanedAssistantReason = (input: { elapsedMs: number; staleAfterMs: number }): string =>
+  `Assistant inactive for ${formatDuration(input.elapsedMs)} before orphan finalization; threshold is ${formatDuration(input.staleAfterMs)}.`
+
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
   readonly create: (input?: {
@@ -494,7 +537,11 @@ export interface Interface {
   readonly setSummary: (input: { sessionID: SessionID; summary: Info["summary"] }) => Effect.Effect<void>
   readonly diff: (sessionID: SessionID) => Effect.Effect<Snapshot.FileDiff[]>
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<MessageV2.WithParts[], NotFound>
-  readonly finalizeOrphanedAssistant: (sessionID: SessionID) => Effect.Effect<void>
+  readonly finalizeOrphanedAssistant: (
+    sessionID: SessionID,
+    options?: FinalizeOrphanedAssistantOptions,
+  ) => Effect.Effect<void>
+  readonly abortToolPart: (input: AbortToolPartInput) => Effect.Effect<MessageV2.ToolPart | undefined>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
   readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
   readonly updateMessage: <T extends MessageV2.Info>(msg: T) => Effect.Effect<T>
@@ -682,6 +729,48 @@ export const layer: Layer.Layer<
         sessionID: row.session_id,
         messageID: row.message_id,
       } as MessageV2.Part
+    })
+
+    const abortToolPart: Interface["abortToolPart"] = Effect.fn("Session.abortToolPart")(function* (input) {
+      const part = yield* getPart({
+        sessionID: input.sessionID,
+        messageID: input.messageID,
+        partID: input.partID,
+      })
+      if (!part || part.type !== "tool") return undefined
+      if (part.state.status === "completed" || part.state.status === "error") return undefined
+
+      const now = Date.now()
+      const existingMetadata = part.state.status === "running" ? (part.state.metadata ?? {}) : {}
+      const childMetadata =
+        input.childSessionID === undefined ? {} : { sessionId: input.childSessionID, childSessionID: input.childSessionID }
+      const outputMetadata = input.output === undefined ? {} : { output: input.output }
+      const metadata = {
+        ...existingMetadata,
+        ...(input.metadata ?? {}),
+        ...childMetadata,
+        ...outputMetadata,
+        ...(input.reason === undefined ? {} : { abortReason: input.reason }),
+        ...(input.ownerMessageID === undefined ? {} : { ownerMessageID: input.ownerMessageID }),
+        ...(input.ownerRunID === undefined ? {} : { ownerRunID: input.ownerRunID }),
+        ...(input.preservedOutput === undefined ? {} : { preservedOutput: input.preservedOutput }),
+        interrupted: true,
+        abortSource: input.source,
+      }
+
+      return yield* updatePart({
+        ...part,
+        state: {
+          status: "error",
+          input: part.state.input,
+          error: input.error ?? "Tool execution aborted",
+          metadata,
+          time: {
+            start: part.state.status === "running" ? part.state.time.start : now,
+            end: now,
+          },
+        },
+      })
     })
 
     const create = Effect.fn("Session.create")(function* (input?: {
@@ -896,7 +985,11 @@ export const layer: Layer.Layer<
       return child
     }
 
-    function finalizeOrphanedAssistantInner(sessionID: SessionID, visited: Set<SessionID>): Effect.Effect<void> {
+    function finalizeOrphanedAssistantInner(
+      sessionID: SessionID,
+      visited: Set<SessionID>,
+      options: FinalizeOrphanedAssistantOptions,
+    ): Effect.Effect<void> {
       return Effect.gen(function* () {
         if (visited.has(sessionID)) return
         visited.add(sessionID)
@@ -910,6 +1003,13 @@ export const layer: Layer.Layer<
         if (message.info.role !== "assistant") return
 
         const now = Date.now()
+        const elapsedMs = now - message.info.time.created
+        if (options.staleAfterMs !== undefined && elapsedMs < options.staleAfterMs) return
+        const abortReason =
+          options.abortReason ??
+          (options.staleAfterMs === undefined
+            ? undefined
+            : staleOrphanedAssistantReason({ elapsedMs, staleAfterMs: options.staleAfterMs }))
         const activeTaskParts = message.parts.filter(
           (part): part is MessageV2.ToolPart => isActiveTool(part) && part.tool === "task",
         )
@@ -927,30 +1027,20 @@ export const layer: Layer.Layer<
 
         yield* Effect.forEach(
           childCandidates,
-          (child) => finalizeOrphanedAssistantInner(child.id, visited),
+          (child) => finalizeOrphanedAssistantInner(child.id, visited, options),
           { concurrency: "unbounded", discard: true },
         )
 
         for (const part of message.parts) {
           if (!isActiveTool(part)) continue
-          const metadata = part.state.status === "running" ? part.state.metadata : undefined
           const child = linkedChildren.get(part.id)
-          yield* updatePart({
-            ...part,
-            state: {
-              status: "error",
-              input: part.state.input,
-              error: "Tool execution aborted",
-              metadata: {
-                ...(metadata ?? {}),
-                ...(child ? { sessionId: child.id } : {}),
-                interrupted: true,
-              },
-              time: {
-                start: part.state.status === "running" ? part.state.time.start : now,
-                end: now,
-              },
-            },
+          yield* abortToolPart({
+            sessionID,
+            messageID: message.info.id,
+            partID: part.id,
+            source: options.abortSource ?? "orphan-finalizer",
+            ...(abortReason === undefined ? {} : { reason: abortReason }),
+            ...(child === undefined ? {} : { childSessionID: child.id }),
           })
         }
 
@@ -973,8 +1063,8 @@ export const layer: Layer.Layer<
 
     const finalizeOrphanedAssistant: Interface["finalizeOrphanedAssistant"] = Effect.fn(
       "Session.finalizeOrphanedAssistant",
-    )(function* (sessionID) {
-      yield* finalizeOrphanedAssistantInner(sessionID, new Set())
+    )(function* (sessionID, options) {
+      yield* finalizeOrphanedAssistantInner(sessionID, new Set(), options ?? {})
     })
 
     return Service.of({
@@ -992,6 +1082,7 @@ export const layer: Layer.Layer<
       diff,
       messages,
       finalizeOrphanedAssistant,
+      abortToolPart,
       children,
       remove,
       updateMessage,

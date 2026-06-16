@@ -755,8 +755,13 @@ export const layer = Layer.effect(
         }
         ctx.reasoningMap = {}
 
-        const settleTimeout =
-          aborted || ctx.assistantMessage.error ? INTERRUPTED_TOOL_SETTLE_TIMEOUT : TOOL_SETTLE_TIMEOUT
+        const isErrorCleanup = ctx.assistantMessage.error !== undefined
+        const settleTimeout = aborted || isErrorCleanup ? INTERRUPTED_TOOL_SETTLE_TIMEOUT : TOOL_SETTLE_TIMEOUT
+        const abortSource: Session.ToolAbortSource = aborted
+          ? "processor-interrupted"
+          : isErrorCleanup
+            ? "processor-error"
+            : "processor-normal-timeout"
         yield* Effect.forEach(
           Object.values(ctx.toolcalls),
           (call) => Deferred.await(call.done).pipe(Effect.timeout(settleTimeout), Effect.ignore),
@@ -766,18 +771,12 @@ export const layer = Layer.effect(
         for (const toolCallID of Object.keys(ctx.toolcalls)) {
           const match = yield* readToolCall(toolCallID)
           if (!match) continue
-          const part = match.part
-          const end = Date.now()
-          const metadata = "metadata" in part.state && isRecord(part.state.metadata) ? part.state.metadata : {}
-          yield* session.updatePart({
-            ...part,
-            state: {
-              ...part.state,
-              status: "error",
-              error: "Tool execution aborted",
-              metadata: { ...metadata, interrupted: true },
-              time: { start: "time" in part.state ? part.state.time.start : end, end },
-            },
+          yield* session.abortToolPart({
+            sessionID: match.part.sessionID,
+            messageID: match.part.messageID,
+            partID: match.part.id,
+            source: abortSource,
+            ownerMessageID: ctx.assistantMessage.id,
           })
         }
         ctx.toolcalls = {}

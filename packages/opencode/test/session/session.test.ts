@@ -51,6 +51,50 @@ const subscribeGlobal = (type: string, callback: (event: NonNullable<GlobalEvent
   return () => GlobalBus.off("event", listener)
 }
 
+const createOrphanedToolSession = Effect.gen(function* () {
+  const session = yield* SessionNs.Service
+  const info = yield* session.create({})
+  const user = yield* session.updateMessage({
+    id: MessageID.ascending(),
+    sessionID: info.id,
+    role: "user",
+    time: { created: Date.now() },
+    agent: "build",
+    model: ref,
+  })
+  const assistant = yield* session.updateMessage({
+    id: MessageID.ascending(),
+    sessionID: info.id,
+    parentID: user.id,
+    role: "assistant",
+    mode: "build",
+    agent: "build",
+    path: { cwd: "/tmp", root: "/tmp" },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    modelID: ref.modelID,
+    providerID: ref.providerID,
+    time: { created: Date.now() },
+  } satisfies MessageV2.Assistant)
+  const started = Date.now()
+  const tool = yield* session.updatePart({
+    id: PartID.ascending(),
+    messageID: assistant.id,
+    sessionID: info.id,
+    type: "tool",
+    callID: "call_orphaned_task",
+    tool: "task",
+    state: {
+      status: "running",
+      input: { description: "inspect bug" },
+      metadata: { sessionId: "ses_child" },
+      time: { start: started },
+    },
+  } satisfies MessageV2.ToolPart)
+
+  return { info, assistant, started, tool }
+})
+
 describe("session.created event", () => {
   it.instance("should emit session.created event when session is created", () =>
     Effect.gen(function* () {
@@ -176,8 +220,8 @@ describe("step-finish token propagation via Bus event", () => {
   )
 })
 
-describe("orphaned assistant recovery", () => {
-  it.instance("finalizes incomplete assistant messages and aborts running tools", () =>
+describe("tool abort helper", () => {
+  it.instance("does not overwrite completed tool parts", () =>
     Effect.gen(function* () {
       const session = yield* SessionNs.Service
       const info = yield* session.create({})
@@ -203,21 +247,49 @@ describe("orphaned assistant recovery", () => {
         providerID: ref.providerID,
         time: { created: Date.now() },
       } satisfies MessageV2.Assistant)
-      const started = Date.now()
-      yield* session.updatePart({
+      const part = yield* session.updatePart({
         id: PartID.ascending(),
         messageID: assistant.id,
         sessionID: info.id,
         type: "tool",
-        callID: "call_orphaned_task",
-        tool: "task",
+        callID: "call_completed",
+        tool: "bash",
         state: {
-          status: "running",
-          input: { description: "inspect bug" },
-          metadata: { sessionId: "ses_child" },
-          time: { start: started },
+          status: "completed",
+          input: { command: "echo done" },
+          output: "done",
+          title: "echo",
+          metadata: { preserved: true },
+          time: { start: Date.now(), end: Date.now() },
         },
       } satisfies MessageV2.ToolPart)
+
+      const aborted = yield* session.abortToolPart({
+        sessionID: info.id,
+        messageID: assistant.id,
+        partID: part.id,
+        source: "orphan-finalizer",
+      })
+      expect(aborted).toBeUndefined()
+
+      const latest = yield* session.getPart({ sessionID: info.id, messageID: assistant.id, partID: part.id })
+      expect(latest?.type).toBe("tool")
+      if (!latest || latest.type !== "tool") return
+      expect(latest.state.status).toBe("completed")
+      if (latest.state.status !== "completed") return
+      expect(latest.state.output).toBe("done")
+      expect(latest.state.metadata.preserved).toBe(true)
+
+      yield* session.remove(info.id)
+    }),
+  )
+})
+
+describe("orphaned assistant recovery", () => {
+  it.instance("finalizes incomplete assistant messages and aborts running tools", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const { info, started } = yield* createOrphanedToolSession
 
       yield* session.finalizeOrphanedAssistant(info.id)
 
@@ -236,9 +308,61 @@ describe("orphaned assistant recovery", () => {
       expect(tool.state.error).toBe("Tool execution aborted")
       expect(tool.state.input).toEqual({ description: "inspect bug" })
       expect(tool.state.metadata?.interrupted).toBe(true)
+      expect(tool.state.metadata?.abortSource).toBe("orphan-finalizer")
       expect(tool.state.metadata?.sessionId).toBe("ses_child")
       expect(tool.state.time.start).toBe(started)
       expect(tool.state.time.end).toBeNumber()
+
+      yield* session.remove(info.id)
+    }),
+  )
+
+  it.instance("does not finalize fresh orphaned assistants when a stale threshold is provided", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const { info, assistant, tool } = yield* createOrphanedToolSession
+
+      yield* session.finalizeOrphanedAssistant(info.id, {
+        staleAfterMs: SessionNs.ORPHANED_ASSISTANT_STALE_AFTER_MS,
+      })
+
+      const messages = yield* session.messages({ sessionID: info.id })
+      const latest = messages.find((item) => item.info.id === assistant.id)
+      expect(latest?.info.role).toBe("assistant")
+      if (!latest || latest.info.role !== "assistant") return
+      expect(latest.info.time.completed).toBeUndefined()
+
+      const latestTool = latest.parts.find(
+        (part): part is MessageV2.ToolPart => part.type === "tool" && part.id === tool.id,
+      )
+      expect(latestTool?.state.status).toBe("running")
+
+      yield* session.remove(info.id)
+    }),
+  )
+
+  it.instance("records stale threshold reason when finalizing stale orphaned assistants", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const { info, assistant } = yield* createOrphanedToolSession
+      const staleAfterMs = 24 * 60 * 60 * 1000
+      yield* session.updateMessage({
+        ...assistant,
+        time: { created: Date.now() - staleAfterMs - 60 * 60 * 1000 },
+      })
+
+      yield* session.finalizeOrphanedAssistant(info.id, { staleAfterMs })
+
+      const messages = yield* session.messages({ sessionID: info.id })
+      const latest = messages.find((item) => item.info.id === assistant.id)
+      expect(latest?.info.role).toBe("assistant")
+      if (!latest || latest.info.role !== "assistant") return
+
+      const latestTool = latest.parts.find((part): part is MessageV2.ToolPart => part.type === "tool")
+      expect(latestTool?.state.status).toBe("error")
+      if (!latestTool || latestTool.state.status !== "error") return
+      expect(latestTool.state.metadata?.abortSource).toBe("orphan-finalizer")
+      expect(latestTool.state.metadata?.abortReason).toContain("threshold is 24h")
 
       yield* session.remove(info.id)
     }),
@@ -383,8 +507,10 @@ describe("orphaned assistant recovery", () => {
       if (!recoveredFirst || recoveredFirst.state.status !== "error") return
       if (!recoveredSecond || recoveredSecond.state.status !== "error") return
       expect(recoveredFirst.state.metadata?.interrupted).toBe(true)
+      expect(recoveredFirst.state.metadata?.abortSource).toBe("orphan-finalizer")
       expect(recoveredFirst.state.metadata?.sessionId).toBe(childA.id)
       expect(recoveredSecond.state.metadata?.interrupted).toBe(true)
+      expect(recoveredSecond.state.metadata?.abortSource).toBe("orphan-finalizer")
       expect(recoveredSecond.state.metadata?.sessionId).toBe(childB.id)
 
       const childAMessages = yield* session.messages({ sessionID: childA.id })
@@ -396,6 +522,7 @@ describe("orphaned assistant recovery", () => {
       expect(childATool?.state.status).toBe("error")
       if (!childATool || childATool.state.status !== "error") return
       expect(childATool.state.metadata?.interrupted).toBe(true)
+      expect(childATool.state.metadata?.abortSource).toBe("orphan-finalizer")
 
       const childBMessages = yield* session.messages({ sessionID: childB.id })
       const recoveredChildB = childBMessages.find((item) => item.info.role === "assistant")

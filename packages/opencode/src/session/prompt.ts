@@ -135,7 +135,7 @@ export const layer = Layer.effect(
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
       yield* elog.info("cancel", { sessionID })
       yield* state.cancel(sessionID)
-      yield* sessions.finalizeOrphanedAssistant(sessionID)
+      yield* sessions.finalizeOrphanedAssistant(sessionID, { abortSource: "user-cancel" })
     })
 
     const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
@@ -411,16 +411,14 @@ export const layer = Layer.effect(
                 assistantMessage.time.completed = Date.now()
                 yield* sessions.updateMessage(assistantMessage)
                 if (part.state.status === "running") {
-                  yield* sessions.updatePart({
-                    ...part,
-                    state: {
-                      status: "error",
-                      error: "Cancelled",
-                      time: { start: part.state.time.start, end: Date.now() },
-                      metadata: { ...(part.state.metadata ?? {}), interrupted: true },
-                      input: part.state.input,
-                    },
-                  } satisfies MessageV2.ToolPart)
+                  yield* sessions.abortToolPart({
+                    sessionID,
+                    messageID: assistantMessage.id,
+                    partID: part.id,
+                    source: "tool-specific-interrupt",
+                    error: "Cancelled",
+                    ownerMessageID: assistantMessage.id,
+                  })
                 }
               }),
             ),
@@ -1220,7 +1218,11 @@ export const layer = Layer.effect(
     )(function* (input: PromptInput) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
       const currentStatus = yield* status.get(input.sessionID)
-      if (currentStatus.type === "idle") yield* sessions.finalizeOrphanedAssistant(input.sessionID)
+      if (currentStatus.type === "idle") {
+        yield* sessions.finalizeOrphanedAssistant(input.sessionID, {
+          staleAfterMs: Session.ORPHANED_ASSISTANT_STALE_AFTER_MS,
+        })
+      }
       yield* revert.cleanup(session)
       const message = yield* createUserMessage(input)
       yield* sessions.touch(input.sessionID)
@@ -1367,7 +1369,7 @@ export const layer = Layer.effect(
           yield* sessions.updateMessage(msg)
 
           const finalizeInterruptedAssistant = Effect.gen(function* () {
-            yield* sessions.finalizeOrphanedAssistant(sessionID)
+            yield* sessions.finalizeOrphanedAssistant(sessionID, { abortSource: "processor-interrupted" })
           })
 
           const handle = yield* processor

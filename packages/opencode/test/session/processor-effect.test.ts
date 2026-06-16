@@ -850,6 +850,7 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
         if (call?.state.status === "error") {
           expect(call.state.error).toBe("Tool execution aborted")
           expect(call.state.metadata?.interrupted).toBe(true)
+          expect(call.state.metadata?.abortSource).toBe("processor-interrupted")
           expect(call.state.time.end).toBeDefined()
         }
       }),

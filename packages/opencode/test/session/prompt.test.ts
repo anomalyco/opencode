@@ -1056,6 +1056,7 @@ noLLMServer.instance(
       if (tool.state.status === "error") {
         expect(tool.state.error).toBe("Cancelled")
         expect(tool.state.metadata?.interrupted).toBe(true)
+        expect(tool.state.metadata?.abortSource).toBe("tool-specific-interrupt")
       }
       expect(taskMsg.info.time.completed).toBeDefined()
       expect(taskMsg.info.finish).toBeDefined()
@@ -2270,6 +2271,8 @@ noLLMServer.instance(
       expect(tool?.state.status).toBe("error")
       if (tool?.state.status === "error") {
         expect(tool.state.error).toBe("Tool execution aborted")
+        expect(tool.state.metadata?.interrupted).toBe(true)
+        expect(tool.state.metadata?.abortSource).toBe("user-cancel")
         expect(typeof tool.state.time.end).toBe("number")
       }
     }),
