@@ -40,6 +40,7 @@ export const Info = Schema.Struct({
   hidden: Schema.optional(Schema.Boolean),
   topP: Schema.optional(Schema.Finite),
   temperature: Schema.optional(Schema.Finite),
+  toolChoice: Schema.optional(Schema.Literals(["auto", "required", "none"])),
   color: Schema.optional(Schema.String),
   permission: PermissionV1.Ruleset,
   model: Schema.optional(
@@ -282,6 +283,7 @@ export const layer = Layer.effect(
           item.description = value.description ?? item.description
           item.temperature = value.temperature ?? item.temperature
           item.topP = value.top_p ?? item.topP
+          item.toolChoice = value.tool_choice ?? item.toolChoice
           item.mode = value.mode ?? item.mode
           item.color = value.color ?? item.color
           item.hidden = value.hidden ?? item.hidden

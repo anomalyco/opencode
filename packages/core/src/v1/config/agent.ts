@@ -17,6 +17,9 @@ const AgentSchema = Schema.StructWithRest(
     }),
     temperature: Schema.optional(Schema.Finite),
     top_p: Schema.optional(Schema.Finite),
+    tool_choice: Schema.optional(Schema.Literals(["auto", "required", "none"])).annotate({
+      description: "How the model should select tools: auto, required, or none",
+    }),
     prompt: Schema.optional(Schema.String),
     tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({
       description: "@deprecated Use 'permission' field instead",
@@ -48,6 +51,7 @@ const KNOWN_KEYS = new Set([
   "description",
   "temperature",
   "top_p",
+  "tool_choice",
   "mode",
   "hidden",
   "color",

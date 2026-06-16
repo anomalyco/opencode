@@ -74,6 +74,25 @@ it.instance("build agent has correct default properties", () =>
   }),
 )
 
+it.instance(
+  "agent tool_choice config is applied to the agent",
+  () =>
+    Effect.gen(function* () {
+      const build = yield* load((svc) => svc.get("build"))
+      expect(build).toBeDefined()
+      expect(build?.toolChoice).toBe("required")
+    }),
+  {
+    config: {
+      agent: {
+        build: {
+          tool_choice: "required",
+        },
+      },
+    },
+  },
+)
+
 it.instance("plan agent denies edits except .opencode/plans/*", () =>
   Effect.gen(function* () {
     const plan = yield* load((svc) => svc.get("plan"))

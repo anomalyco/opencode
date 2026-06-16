@@ -288,6 +288,28 @@ If no temperature is specified, OpenCode uses model-specific defaults; typically
 
 ---
 
+### Tool choice
+
+Control how the model decides whether to call a tool with the `tool_choice` config.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "build": {
+      "tool_choice": "required"
+    }
+  }
+}
+```
+
+- **`auto`**: The model decides whether to call a tool. This is the default.
+- **`required`**: The model must call a tool. Useful for models that don't reliably emit tool calls on their own.
+- **`none`**: The model is not allowed to call tools.
+
+If not set, OpenCode lets the provider use its default behavior (`auto`).
+
+---
+
 ### Max steps
 
 Control the maximum number of agentic iterations an agent can perform before being forced to respond with text only. This allows users who wish to control costs to set a limit on agentic actions.
