@@ -24,6 +24,8 @@ import { useEvent } from "../../context/event"
 import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
+import { CompactionProgress } from "../../component/compaction-progress"
+import { ContextCountdown } from "../../component/context-countdown"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
@@ -90,6 +92,8 @@ const GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT = "go_upsell_account_rate_limit_
 const GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW = "go_upsell_account_rate_limit_dont_show"
 const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
 const GO_UPSELL_PROVIDERS = new Set(["opencode", "opencode-go"])
+const COMPACTION_BUFFER = 20_000
+const OUTPUT_TOKEN_MAX = 32_000
 
 type RetryAction = Extract<SessionStatus, { type: "retry" }>["action"]
 
@@ -269,6 +273,59 @@ export function Session() {
   })
   const showTimestamps = createMemo(() => timestamps() === "show")
   const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const visibleSessionStatus = createMemo(() => {
+    if (session()?.parentID) return
+    return sync.data.session_status?.[route.sessionID]
+  })
+  const compactingStatus = createMemo(() => {
+    const status = visibleSessionStatus()
+    if (status?.type !== "compacting") return
+    return status
+  })
+  const [compactionFallback, setCompactionFallback] = createSignal<{ sessionID: string; startedAt: number }>()
+  const [compactionNow, setCompactionNow] = createSignal(Date.now())
+  const compactionElapsedSeconds = createMemo(() => {
+    const status = compactingStatus()
+    if (!status) return 0
+    const fallback = compactionFallback()
+    const startedAt = status.startedAt ?? (fallback?.sessionID === route.sessionID ? fallback.startedAt : compactionNow())
+    return Math.max(0, Math.floor((compactionNow() - startedAt) / 1000))
+  })
+  const contextUsage = createMemo(() => {
+    if (session()?.parentID) return
+    const last = messages().findLast(
+      (item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0 && !item.summary,
+    )
+    if (!last) return
+
+    const used =
+      last.tokens.total ??
+      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+    if (!Number.isFinite(used) || used <= 0) return
+
+    const model = sync.data.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
+    if (!model) return
+    const window = model.limit.context
+    if (!Number.isFinite(window) || window <= 0) return
+
+    const outputTokenMax =
+      Number.isFinite(model.limit.output) && model.limit.output > 0
+        ? Math.min(model.limit.output, OUTPUT_TOKEN_MAX)
+        : undefined
+    const reserved = sync.data.config.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, outputTokenMax ?? COMPACTION_BUFFER)
+    const usable = model.limit.input
+      ? Math.max(0, model.limit.input - reserved)
+      : outputTokenMax
+        ? Math.max(0, window - outputTokenMax)
+        : undefined
+    const threshold =
+      sync.data.config.compaction?.auto === false || usable === undefined || usable <= 0 || usable >= window
+        ? undefined
+        : usable
+
+    // Mirrors packages/opencode/src/session/overflow.ts usable(); with unknown output, keep the input-limit buffer fallback honest but omit no-input-limit thresholds.
+    return { used, window, threshold }
+  })
   const providers = createMemo(() => Model.index(sync.data.provider))
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
@@ -1139,6 +1196,23 @@ export function Session() {
     }
   })
 
+  createEffect(() => {
+    const status = compactingStatus()
+    if (!status) {
+      setCompactionFallback(undefined)
+      return
+    }
+    const now = Date.now()
+    const fallback = untrack(compactionFallback)
+    if (status.startedAt === undefined && fallback?.sessionID !== route.sessionID) {
+      setCompactionFallback({ sessionID: route.sessionID, startedAt: now })
+    }
+    if (status.startedAt !== undefined && fallback !== undefined) setCompactionFallback(undefined)
+    setCompactionNow(now)
+    const timer = setInterval(() => setCompactionNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(timer))
+  })
+
   // snap to bottom when session changes
   createEffect(on(() => route.sessionID, toBottom))
 
@@ -1295,6 +1369,25 @@ export function Session() {
                 </Show>
                 <Show when={session()?.parentID}>
                   <SubagentFooter />
+                </Show>
+                <Show when={visibleSessionStatus()?.type === "compacting"}>
+                  <CompactionProgress active={true} elapsedSeconds={compactionElapsedSeconds()} width={contentWidth()} />
+                </Show>
+                <Show when={contextUsage()}>
+                  {(usage) => {
+                    const current = usage()
+                    if (current.threshold === undefined) {
+                      return <ContextCountdown used={current.used} window={current.window} width={contentWidth()} />
+                    }
+                    return (
+                      <ContextCountdown
+                        used={current.used}
+                        window={current.window}
+                        threshold={current.threshold}
+                        width={contentWidth()}
+                      />
+                    )
+                  }}
                 </Show>
                 <Show when={visible()}>
                   <pluginRuntime.Slot
