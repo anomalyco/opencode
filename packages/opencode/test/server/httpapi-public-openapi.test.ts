@@ -97,7 +97,7 @@ describe("PublicApi OpenAPI v2 errors", () => {
   test("documents references separately from filesystem routes", () => {
     const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
 
-    for (const path of ["/api/fs/read", "/api/fs/list"]) {
+    for (const path of ["/api/fs/read/*", "/api/fs/list"]) {
       expect(spec.paths[path]?.get?.parameters, path).not.toContainEqual(expect.objectContaining({ name: "reference" }))
     }
     expect(spec.paths["/api/reference"]?.get).toBeDefined()
@@ -110,6 +110,32 @@ describe("PublicApi OpenAPI v2 errors", () => {
       "/api/session/{sessionID}/prompt",
       "/api/session/{sessionID}/permission/{requestID}/reply",
       "/api/session/{sessionID}/question/{requestID}/reply",
+    ]) {
+      expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
+    }
+  })
+
+  test("documents integration discovery and connection routes", () => {
+    const spec = OpenApi.fromApi(PublicApi) as OpenApiSpec
+
+    for (const [method, path] of [
+      ["get", "/api/integration"],
+      ["get", "/api/integration/{integrationID}"],
+      ["post", "/api/integration/{integrationID}/connect/key"],
+      ["post", "/api/integration/{integrationID}/connect/oauth"],
+      ["get", "/api/integration/attempt/{attemptID}"],
+      ["post", "/api/integration/attempt/{attemptID}/complete"],
+      ["delete", "/api/integration/attempt/{attemptID}"],
+      ["delete", "/api/credential/{credentialID}"],
+      ["patch", "/api/credential/{credentialID}"],
+    ] as const) {
+      expect(spec.paths[path]?.[method], `${method.toUpperCase()} ${path}`).toBeDefined()
+    }
+
+    for (const path of [
+      "/api/integration/{integrationID}/connect/key",
+      "/api/integration/{integrationID}/connect/oauth",
+      "/api/integration/attempt/{attemptID}/complete",
     ]) {
       expect(spec.paths[path]?.post?.requestBody?.required, path).toBe(true)
     }

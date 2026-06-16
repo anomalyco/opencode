@@ -86,6 +86,7 @@ Modellerimize aşağıdaki API uç noktaları aracılığıyla da erişebilirsin
 | Qwen3.7 Plus           | qwen3.7-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus           | qwen3.5-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
+| DeepSeek V4 Pro        | deepseek-v4-pro        | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash      | deepseek-v4-flash      | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7           | minimax-m2.7           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5           | minimax-m2.5           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
@@ -135,7 +136,8 @@ Kullandıkça öde modelini destekliyoruz. Aşağıda **1M token başına** fiya
 | Qwen3.7 Plus                      | $0.40  | $1.60   | $0.04       | $0.50        |
 | Qwen3.6 Plus                      | $0.50  | $3.00   | $0.05       | $0.625       |
 | Qwen3.5 Plus                      | $0.20  | $1.20   | $0.02       | $0.25        |
-| DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.03       | -            |
+| DeepSeek V4 Pro                   | $1.74  | $3.48   | $0.145      | -            |
+| DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.028      | -            |
 | Grok Build 0.1                    | $1.00  | $2.00   | $0.20       | -            |
 | Claude Fable 5                    | $10.00 | $50.00  | $1.00       | $12.50       |
 | Claude Opus 4.8                   | $5.00  | $25.00  | $0.50       | $6.25        |
@@ -236,7 +238,7 @@ Tüm modellerimiz US'de barındırılıyor. Sağlayıcılarımız zero-retention
 - Big Pickle: Ücretsiz döneminde toplanan veriler modeli iyileştirmek için kullanılabilir.
 - DeepSeek V4 Flash Free: Ücretsiz döneminde toplanan veriler modeli iyileştirmek için kullanılabilir.
 - MiMo-V2.5 Free: Ücretsiz döneminde toplanan veriler modeli iyileştirmek için kullanılabilir.
-- North Mini Code Free: Ücretsiz döneminde toplanan veriler modeli iyileştirmek için kullanılabilir.
+- North Mini Code Free: Ücretsiz kullanım süresi boyunca toplanan veriler saklanabilir ve modeli geliştirmek için kullanılabilir. Kişisel veya gizli veriler göndermeyin. [Kullanım Koşullarımıza](https://cohere.com/terms-of-use) ve [Gizlilik Politikamıza](https://cohere.com/privacy) bakın.
 - Nemotron 3 Ultra Free (ücretsiz NVIDIA uç noktaları): Yalnızca deneme amaçlıdır — kişisel veya gizli veri göndermeyin. Kullanımınız güvenlik amacıyla ve NVIDIA ürünlerini ve hizmetlerini geliştirmek için kaydedilir. Geliştirme amacıyla kaydedilen oturum verileri kimliğinizle veya herhangi bir kalıcı tanımlayıcıyla ilişkilendirilmez. Veri işleme uygulamalarımız hakkında daha fazla bilgi için [Gizlilik Politikamıza](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) bakın. Bu uç noktayla etkileşime geçerek, bu tür bilgileri toplamamıza, kaydetmemize ve kullanmamıza ve [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) koşullarına onay vermiş olursunuz.
 - OpenAI APIs: İstekler [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data) uyarınca 30 gün boyunca saklanır.
 - Anthropic APIs: İstekler [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage) uyarınca 30 gün boyunca saklanır.

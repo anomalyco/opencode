@@ -13,7 +13,8 @@ import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { toolDefinitions } from "./lib/tool"
 import { FSUtil } from "../src/fs-util"
-import { Auth } from "../src/auth"
+import { Credential } from "../src/credential"
+import { Database } from "../src/database/database"
 import { EventV2 } from "../src/event"
 import { Global } from "../src/global"
 import { ModelsDev } from "../src/models-dev"
@@ -26,14 +27,15 @@ import { ApplicationTools } from "../src/tool/application-tools"
 const applicationTools = ApplicationTools.layer
 const it = testEffect(
   Layer.merge(
-    applicationTools,
+    Layer.mergeAll(applicationTools, Database.defaultLayer, EventV2.defaultLayer),
     LocationServiceMap.layer.pipe(
       Layer.provide(applicationTools),
       Layer.provide(
         Layer.mergeAll(
           Project.defaultLayer,
           EventV2.defaultLayer,
-          Auth.defaultLayer,
+          Credential.defaultLayer,
+          Credential.layer.pipe(Layer.provide(Database.layerFromPath(":memory:").pipe(Layer.fresh))),
           Npm.defaultLayer,
           ModelsDev.defaultLayer,
           FSUtil.defaultLayer,

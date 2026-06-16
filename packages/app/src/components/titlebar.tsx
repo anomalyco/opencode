@@ -34,11 +34,13 @@ import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
 import { useGlobal } from "@/context/global"
 import { decode64 } from "@/utils/base64"
 import { ServerConnection, useServer } from "@/context/server"
 import { tabHref, useTabs, type Tab } from "@/context/tabs"
+import "./titlebar.css"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -289,7 +291,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     item.type === "session" && item.server === route.server && item.sessionId === route.sessionId,
                 )
                 if (main) return main
-                const sync = serverSync.createDirSyncContext(route.dir)
+                const sync = serverSync().createDirSyncContext(route.dir)
                 const session = sync.session.get(route.sessionId)
                 if (session?.parentID) {
                   const parentID = session.parentID
@@ -310,7 +312,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               if (tab) return
 
               if (route.type === "session") {
-                const sync = serverSync.createDirSyncContext(route.dir)
+                const sync = serverSync().createDirSyncContext(route.dir)
                 const session = sync.session.get(route.sessionId)
                 if (!session) return
                 const sessionId = session.parentID ?? session.id
@@ -435,92 +437,107 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   state={!!homeMatch() ? "pressed" : undefined}
                 />
 
-                <div
-                  class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
-                  ref={tabScrollRef}
-                >
-                  <div class="flex min-w-0 flex-row items-center gap-1.5">
-                    <For each={tabsStore}>
-                      {(tab, i) => {
-                        let ref!: HTMLDivElement
+                <div data-slot="titlebar-tabs" class="relative min-w-0">
+                  <div
+                    data-slot="titlebar-tabs-scroll"
+                    class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
+                    ref={(el) => {
+                      tabScrollRef = el
+                      createResizeObserver(el, refreshTabsAreOverflowing)
+                    }}
+                  >
+                    <div
+                      class="flex min-w-0 flex-row items-center gap-1.5"
+                      ref={(el) => createResizeObserver(el, refreshTabsAreOverflowing)}
+                    >
+                      <For each={tabsStore}>
+                        {(tab, i) => {
+                          let ref!: HTMLDivElement
 
-                        onMount(() => {
-                          refreshTabsAreOverflowing()
-                        })
+                          const divider = () =>
+                            i() !== 0 && (
+                              <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
+                            )
 
-                        const divider = () =>
-                          i() !== 0 && (
-                            <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
-                          )
+                          if (tab.type === "draft") {
+                            return (
+                              <>
+                                {divider()}
+                                <DraftTabItem
+                                  ref={ref}
+                                  href={tabHref(tab)}
+                                  title={language.t("command.session.new")}
+                                  active={currentTab() === tab}
+                                  onNavigate={() => {
+                                    navigateTab(tab)
+                                    ref.scrollIntoView({ behavior: "instant" })
+                                  }}
+                                  onClose={() => tabsStoreActions.removeTab(i())}
+                                />
+                              </>
+                            )
+                          }
 
-                        if (tab.type === "draft") {
                           return (
                             <>
                               {divider()}
-                              <DraftTabItem
+                              <TabNavItem
                                 ref={ref}
                                 href={tabHref(tab)}
-                                title={language.t("command.session.new")}
-                                active={currentTab() === tab}
+                                server={tab.server}
+                                directory={decode64(tab.dirBase64)!}
+                                sessionId={tab.sessionId}
                                 onNavigate={() => {
                                   navigateTab(tab)
+
                                   ref.scrollIntoView({ behavior: "instant" })
                                 }}
                                 onClose={() => tabsStoreActions.removeTab(i())}
+                                active={currentTab() === tab}
+                                activeServer={tab.server === server.key}
+                                forceTruncate={tabsAreOverflowing()}
                               />
                             </>
                           )
-                        }
+                        }}
+                      </For>
+                      <Show when={creating() && params.dir}>
+                        {(_) => {
+                          let ref!: HTMLDivElement
 
-                        return (
-                          <>
-                            {divider()}
-                            <TabNavItem
-                              ref={ref}
-                              href={tabHref(tab)}
-                              server={tab.server}
-                              directory={decode64(tab.dirBase64)!}
-                              sessionId={tab.sessionId}
-                              onNavigate={() => {
-                                navigateTab(tab)
+                          onMount(() => {
+                            ref.scrollIntoView({ behavior: "instant" })
+                          })
 
-                                ref.scrollIntoView({ behavior: "instant" })
-                              }}
-                              onClose={() => tabsStoreActions.removeTab(i())}
-                              active={currentTab() === tab}
-                              activeServer={tab.server === server.key}
-                              forceTruncate={tabsAreOverflowing()}
-                            />
-                          </>
-                        )
-                      }}
-                    </For>
-                    <Show when={creating() && params.dir}>
-                      {(_) => {
-                        let ref!: HTMLDivElement
-
-                        onMount(() => {
-                          ref.scrollIntoView({ behavior: "instant" })
-                        })
-
-                        return (
-                          <>
-                            <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
-                            <NewSessionTabItem
-                              ref={ref}
-                              href={`/${params.dir}/session`}
-                              title={language.t("command.session.new")}
-                              onClose={() => {
-                                const tab = tabsStore.at(-1)
-                                if (tab) navigateTab(tab)
-                                else navigate("/")
-                              }}
-                            />
-                          </>
-                        )
-                      }}
-                    </Show>
+                          return (
+                            <>
+                              <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
+                              <NewSessionTabItem
+                                ref={ref}
+                                href={`/${params.dir}/session`}
+                                title={language.t("command.session.new")}
+                                onClose={() => {
+                                  const tab = tabsStore.at(-1)
+                                  if (tab) navigateTab(tab)
+                                  else navigate("/")
+                                }}
+                              />
+                            </>
+                          )
+                        }}
+                      </Show>
+                    </div>
                   </div>
+                  <div
+                    data-slot="titlebar-tabs-fade-left"
+                    aria-hidden="true"
+                    class="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-[linear-gradient(to_right,var(--v2-background-bg-deep),transparent)]"
+                  />
+                  <div
+                    data-slot="titlebar-tabs-fade-right"
+                    aria-hidden="true"
+                    class="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-deep),transparent)]"
+                  />
                 </div>
                 <Show when={!(creating() && params.dir)}>
                   <IconButtonV2

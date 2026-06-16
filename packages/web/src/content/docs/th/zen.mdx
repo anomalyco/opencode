@@ -88,6 +88,7 @@ OpenCode Zen ทำงานเหมือน provider อื่น ๆ ใน 
 | Qwen3.7 Plus           | qwen3.7-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus           | qwen3.5-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
+| DeepSeek V4 Pro        | deepseek-v4-pro        | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash      | deepseek-v4-flash      | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7           | minimax-m2.7           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5           | minimax-m2.5           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
@@ -137,7 +138,8 @@ https://opencode.ai/zen/v1/models
 | Qwen3.7 Plus                      | $0.40  | $1.60   | $0.04       | $0.50        |
 | Qwen3.6 Plus                      | $0.50  | $3.00   | $0.05       | $0.625       |
 | Qwen3.5 Plus                      | $0.20  | $1.20   | $0.02       | $0.25        |
-| DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.03       | -            |
+| DeepSeek V4 Pro                   | $1.74  | $3.48   | $0.145      | -            |
+| DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.028      | -            |
 | Grok Build 0.1                    | $1.00  | $2.00   | $0.20       | -            |
 | Claude Fable 5                    | $10.00 | $50.00  | $1.00       | $12.50       |
 | Claude Opus 4.8                   | $5.00  | $25.00  | $0.50       | $6.25        |
@@ -238,7 +240,7 @@ https://opencode.ai/zen/v1/models
 - Big Pickle: ระหว่างช่วงที่เปิดให้ใช้ฟรี ข้อมูลที่เก็บรวบรวมอาจถูกนำไปใช้เพื่อปรับปรุงโมเดล
 - DeepSeek V4 Flash Free: ระหว่างช่วงที่เปิดให้ใช้ฟรี ข้อมูลที่เก็บรวบรวมอาจถูกนำไปใช้เพื่อปรับปรุงโมเดล
 - MiMo-V2.5 Free: ระหว่างช่วงที่เปิดให้ใช้ฟรี ข้อมูลที่เก็บรวบรวมอาจถูกนำไปใช้เพื่อปรับปรุงโมเดล
-- North Mini Code Free: ระหว่างช่วงที่เปิดให้ใช้ฟรี ข้อมูลที่เก็บรวบรวมอาจถูกนำไปใช้เพื่อปรับปรุงโมเดล
+- North Mini Code Free: ในช่วงที่เปิดให้ใช้ฟรี ข้อมูลที่เก็บรวบรวมอาจถูกเก็บรักษาและนำไปใช้เพื่อปรับปรุงโมเดล โปรดอย่าส่งข้อมูลส่วนบุคคลหรือข้อมูลที่เป็นความลับ ดู[ข้อกำหนดการใช้งาน](https://cohere.com/terms-of-use)และ[นโยบายความเป็นส่วนตัว](https://cohere.com/privacy)ของเรา
 - Nemotron 3 Ultra Free (endpoint ฟรีของ NVIDIA): ใช้สำหรับการทดลองเท่านั้น — โปรดอย่าส่งข้อมูลส่วนบุคคลหรือข้อมูลลับ การใช้งานของคุณจะถูกบันทึกเพื่อวัตถุประสงค์ด้านความปลอดภัยและเพื่อปรับปรุงผลิตภัณฑ์และบริการของ NVIDIA ข้อมูลเซสชันที่บันทึกไว้เพื่อวัตถุประสงค์ในการปรับปรุงจะไม่เชื่อมโยงกับตัวตนของคุณหรือตัวระบุถาวรใด ๆ สำหรับข้อมูลเพิ่มเติมเกี่ยวกับแนวปฏิบัติในการประมวลผลข้อมูลของเรา โปรดดู [นโยบายความเป็นส่วนตัว](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) ของเรา การโต้ตอบกับ endpoint นี้ถือว่าคุณยินยอมให้เราเก็บรวบรวม บันทึก และใช้ข้อมูลดังกล่าว รวมถึง [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)
 - OpenAI APIs: คำขอจะถูกเก็บไว้เป็นเวลา 30 วันตาม [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIs: คำขอจะถูกเก็บไว้เป็นเวลา 30 วันตาม [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).
