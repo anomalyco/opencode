@@ -866,6 +866,71 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
+    "keeps compacting visible while the compaction stream is busy",
+    () => {
+      let startStream = () => {}
+      let finishStream = () => {}
+      const streamStarted = new Promise<void>((resolve) => {
+        startStream = resolve
+      })
+      const streamFinished = new Promise<void>((resolve) => {
+        finishStream = resolve
+      })
+      const stub = llm()
+      stub.push(
+        Stream.fromAsyncIterable(
+          {
+            async *[Symbol.asyncIterator]() {
+              startStream()
+              await streamFinished
+              yield LLMEvent.textStart({ id: "txt-0" })
+              yield LLMEvent.textDelta({ id: "txt-0", text: "summary" })
+              yield LLMEvent.textEnd({ id: "txt-0" })
+              yield LLMEvent.stepFinish({ index: 0, reason: "stop", usage: basicUsage() })
+              yield LLMEvent.finish({ reason: "stop", usage: basicUsage() })
+            },
+          },
+          (err) => err,
+        ),
+      )
+
+      return Effect.gen(function* () {
+        const status = yield* SessionStatus.Service
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "hello")
+        const statuses = yield* recordStatusEvents(session.id)
+
+        yield* createSummaryCompaction(session.id)
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        const fiber = yield* SessionCompaction.use
+          .process({
+            parentID: parent!,
+            messages: msgs,
+            sessionID: session.id,
+            auto: false,
+          })
+          .pipe(Effect.forkChild)
+
+        yield* Effect.promise(() => streamStarted).pipe(Effect.timeout("1 second"))
+        expect(statuses.map((item) => item.type)).toStrictEqual(["compacting"])
+        expect(yield* status.get(session.id)).toMatchObject({ type: "compacting" })
+
+        yield* Effect.sync(() => finishStream())
+        const exit = yield* Fiber.await(fiber).pipe(Effect.timeout("1 second"))
+
+        expect(Exit.isSuccess(exit)).toBe(true)
+        if (Exit.isSuccess(exit)) expect(exit.value).toBe("continue")
+        expect(statuses.map((item) => item.type)).toStrictEqual(["compacting", "busy"])
+        expect(yield* status.get(session.id)).toMatchObject({ type: "busy" })
+      }).pipe(Effect.ensuring(Effect.sync(() => finishStream())), withCompaction({ llm: stub.layer }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
     "emits compacting then restores busy for auto compaction",
     () => {
       const stub = llm()
