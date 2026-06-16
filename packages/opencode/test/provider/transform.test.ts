@@ -2694,6 +2694,24 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
+  test("glm-5.2 returns high and max effort variants", () => {
+    const model = createMockModel({
+      id: "zhipuai/glm-5.2",
+      providerID: "zhipuai",
+      api: {
+        id: "glm-5.2",
+        url: "https://api.z.ai/api/coding/paas/v4",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      capabilities: { reasoning: true },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(result).toEqual({
+      high: { reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+    })
+  })
+
   test("mistral models with reasoning support return variants", () => {
     const model = createMockModel({
       id: "mistral/mistral-small-latest",
