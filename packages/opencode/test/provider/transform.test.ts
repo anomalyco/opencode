@@ -918,7 +918,7 @@ describe("ProviderTransform.schema - openai supported schema subset", () => {
       patternProperties: {
         "^extra": { type: "string" },
       },
-      required: ["query", 123],
+      required: ["query"],
       additionalProperties: false,
     } as any) as any
 
@@ -945,9 +945,7 @@ describe("ProviderTransform.schema - openai supported schema subset", () => {
         },
         tuple: {
           type: "array",
-          items: {
-            anyOf: [{ type: "number" }, { type: "string" }],
-          },
+          items: [{ type: "number" }, { type: "string" }],
         },
         metadata: {
           type: "object",
@@ -962,7 +960,7 @@ describe("ProviderTransform.schema - openai supported schema subset", () => {
     })
   })
 
-  test("keeps local references and sanitizes definitions", () => {
+  test("keeps transitively referenced definitions and prunes unused definitions", () => {
     const result = ProviderTransform.schema(openaiModel, {
       type: "object",
       properties: {
@@ -974,9 +972,17 @@ describe("ProviderTransform.schema - openai supported schema subset", () => {
       },
       $defs: {
         Value: {
-          type: "string",
-          pattern: "^value$",
+          type: "object",
           description: "Definition description",
+          properties: {
+            detail: { $ref: "#/$defs/Detail" },
+          },
+        },
+        Detail: {
+          type: "object",
+          properties: {
+            owner: { $ref: "#/$defs/Value" },
+          },
         },
         Unused: {
           type: "number",
@@ -991,12 +997,43 @@ describe("ProviderTransform.schema - openai supported schema subset", () => {
     })
     expect(result.$defs).toEqual({
       Value: {
-        type: "string",
+        type: "object",
         description: "Definition description",
+        properties: {
+          detail: { $ref: "#/$defs/Detail" },
+        },
       },
-      Unused: {
-        type: "number",
+      Detail: {
+        type: "object",
+        properties: {
+          owner: { $ref: "#/$defs/Value" },
+        },
       },
+    })
+  })
+
+  test("recognizes legacy, nested, and encoded local references", () => {
+    const result = ProviderTransform.schema(openaiModel, {
+      type: "object",
+      properties: {
+        name: { $ref: "#/definitions/User/properties/name" },
+        profile: { $ref: "#/%24defs/Profile%7E0Name" },
+      },
+      definitions: {
+        User: { type: "object", properties: { name: { type: "string" } } },
+        Unused: { type: "string" },
+      },
+      $defs: {
+        "Profile~Name": { type: "string" },
+        Unused: { type: "string" },
+      },
+    } as any) as any
+
+    expect(result.definitions).toEqual({
+      User: { type: "object", properties: { name: { type: "string" } } },
+    })
+    expect(result.$defs).toEqual({
+      "Profile~Name": { type: "string" },
     })
   })
 
@@ -1023,27 +1060,38 @@ describe("ProviderTransform.schema - openai supported schema subset", () => {
     expect(result.properties.query.pattern).toBe("^https://")
   })
 
-  test("does not sanitize custom providers that use the openai sdk package", () => {
-    const result = ProviderTransform.schema(
-      {
-        providerID: "custom-openai-compatible",
-        api: {
-          id: "custom-model",
-          npm: "@ai-sdk/openai",
-        },
-      } as any,
-      {
-        type: "object",
-        properties: {
-          query: {
-            type: "string",
-            pattern: "^https://",
+  test.each([
+    ["opencode", "@ai-sdk/openai"],
+    ["custom-openai-compatible", "@ai-sdk/openai"],
+    ["azure", "@ai-sdk/azure"],
+  ])("sanitizes %s models using %s", (providerID, npm) => {
+    expect(
+      ProviderTransform.schema(
+        {
+          providerID,
+          api: {
+            id: "custom-model",
+            npm,
           },
+        } as any,
+        {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              pattern: "^https://",
+            },
+          },
+        } as any,
+      ),
+    ).toEqual({
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
         },
-      } as any,
-    ) as any
-
-    expect(result.properties.query.pattern).toBe("^https://")
+      },
+    })
   })
 })
 

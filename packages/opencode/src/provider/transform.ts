@@ -1280,13 +1280,16 @@ export function maxOutputTokens(model: Provider.Model): number {
   return Math.min(model.limit.output, OUTPUT_TOKEN_MAX) || OUTPUT_TOKEN_MAX
 }
 
+type JsonRecord = Record<string, unknown>
+
+function isPlainObject(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
 // Mirrors Codex's Rust JSON schema compatibility lowering for OpenAI tool schemas.
 function sanitizeOpenAISchema(value: unknown): unknown {
-  type JsonRecord = Record<string, unknown>
   const types = ["string", "number", "boolean", "integer", "object", "array", "null"]
   const compositionKeys = ["anyOf", "oneOf", "allOf"]
-  const isPlainObject = (value: unknown): value is JsonRecord =>
-    typeof value === "object" && value !== null && !Array.isArray(value)
 
   // JSON Schema's boolean form (`true`/`false`) is unsupported by OpenAI tool schemas.
   if (typeof value === "boolean") return { type: "string" }
@@ -1310,15 +1313,7 @@ function sanitizeOpenAISchema(value: unknown): unknown {
     result.required = value.required.filter((item) => typeof item === "string")
   }
 
-  if ("items" in value) {
-    result.items = Array.isArray(value.items)
-      ? value.items.length === 0
-        ? {}
-        : value.items.length === 1
-          ? sanitizeOpenAISchema(value.items[0])
-          : { anyOf: value.items.map(sanitizeOpenAISchema) }
-      : sanitizeOpenAISchema(value.items)
-  }
+  if ("items" in value) result.items = sanitizeOpenAISchema(value.items)
 
   if ("additionalProperties" in value) {
     result.additionalProperties =
@@ -1375,6 +1370,75 @@ function sanitizeOpenAISchema(value: unknown): unknown {
   return result
 }
 
+function pruneOpenAISchemaDefinitions(value: unknown) {
+  type Definition = { table: "$defs" | "definitions"; name: string }
+  const parseRef = (value: unknown): Definition | undefined => {
+    if (typeof value !== "string" || !value.startsWith("#")) return
+    const tokens = (() => {
+      try {
+        const pointer = decodeURIComponent(value.slice(1))
+        return pointer.startsWith("/") ? pointer.slice(1).split("/") : []
+      } catch {
+        return []
+      }
+    })()
+    if (tokens.length < 2) return
+    const decode = (token: string) => {
+      if (/~(?:[^01]|$)/.test(token)) return
+      return token.replaceAll("~1", "/").replaceAll("~0", "~")
+    }
+    const table = decode(tokens[0])
+    const name = decode(tokens[1])
+    if ((table !== "$defs" && table !== "definitions") || name === undefined) return
+    return { table, name }
+  }
+  const collectRef = (node: JsonRecord, pending: Definition[]) => {
+    const ref = parseRef(node.$ref)
+    if (ref) pending.push(ref)
+  }
+  const collectAll = (node: unknown, pending: Definition[]) => {
+    if (Array.isArray(node)) return node.forEach((item) => collectAll(item, pending))
+    if (!isPlainObject(node)) return
+    collectRef(node, pending)
+    Object.values(node).forEach((item) => collectAll(item, pending))
+  }
+  const collectOutsideDefinitions = (node: unknown, pending: Definition[]) => {
+    if (Array.isArray(node)) return node.forEach((item) => collectOutsideDefinitions(item, pending))
+    if (!isPlainObject(node)) return
+    collectRef(node, pending)
+    if (isPlainObject(node.properties)) {
+      Object.values(node.properties).forEach((item) => collectOutsideDefinitions(item, pending))
+    }
+    for (const key of ["items", "anyOf", "oneOf", "allOf"] as const) {
+      if (key in node) collectOutsideDefinitions(node[key], pending)
+    }
+    if ("additionalProperties" in node && typeof node.additionalProperties !== "boolean") {
+      collectOutsideDefinitions(node.additionalProperties, pending)
+    }
+  }
+
+  if (!isPlainObject(value)) return
+  const pending: Definition[] = []
+  const reachable = new Set<string>()
+  collectOutsideDefinitions(value, pending)
+  while (pending.length > 0) {
+    const definition = pending.pop()!
+    const key = JSON.stringify([definition.table, definition.name])
+    if (reachable.has(key)) continue
+    reachable.add(key)
+    const table = value[definition.table]
+    if (isPlainObject(table)) collectAll(table[definition.name], pending)
+  }
+  for (const tableName of ["$defs", "definitions"] as const) {
+    const table = value[tableName]
+    if (!isPlainObject(table)) continue
+    for (const name of Object.keys(table)) {
+      if (!reachable.has(JSON.stringify([tableName, name]))) delete table[name]
+    }
+    if (Object.keys(table).length === 0) delete value[tableName]
+  }
+}
+
 export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 {
   /*
   if (["openai", "azure"].includes(providerID)) {
@@ -1394,8 +1458,10 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
   }
   */
 
-  if (model.providerID === "openai" || model.providerID === "azure") {
+  if (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/azure") {
     schema = sanitizeOpenAISchema(schema) as JSONSchema7
+    pruneOpenAISchemaDefinitions(schema)
+    // Codex also applies lossy compaction above 4 KB; defer that until OpenCode needs the same schema budget.
   }
 
   if (model.providerID === "moonshotai" || model.api.id.toLowerCase().includes("kimi")) {
