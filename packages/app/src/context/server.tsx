@@ -3,6 +3,7 @@ import { type Accessor, batch, createMemo } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import { ServerScope } from "@/utils/server-scope"
+import { isBroadWatchRoot } from "@opencode-ai/core/filesystem/watch-root"
 
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
@@ -31,16 +32,42 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
+function sanitizeStoredProject(project: StoredProject): StoredProject | undefined {
+  if (!project.worktree) return undefined
+  if (isBroadWatchRoot(project.worktree)) return undefined
+  return project
+}
+
+function sanitizeServerProjectState<T extends ServerProjectState>(value: T): T {
+  const projects = value.projects ?? {}
+  const lastProject = value.lastProject ?? {}
+  const nextProjects: Record<string, StoredProject[]> = {}
+  for (const [scope, list] of Object.entries(projects)) {
+    const filtered = (Array.isArray(list) ? list : [])
+      .map((project) => (isRecord(project) ? sanitizeStoredProject(project as StoredProject) : undefined))
+      .filter((project): project is StoredProject => !!project)
+    if (filtered.length > 0) nextProjects[scope] = filtered
+  }
+  const nextLastProject: Record<string, string> = {}
+  for (const [scope, directory] of Object.entries(lastProject)) {
+    if (typeof directory !== "string") continue
+    if (isBroadWatchRoot(directory)) continue
+    nextLastProject[scope] = directory
+  }
+  return { ...value, projects: nextProjects, lastProject: nextLastProject }
+}
+
 export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalServer?: ServerConnection.Key) {
-  if (!canonicalLocalServer || canonicalLocalServer === "local") return value
-  if (!isRecord(value)) return value
-  const projects = isRecord(value.projects) ? value.projects : undefined
-  const lastProject = isRecord(value.lastProject) ? value.lastProject : undefined
+  const sanitized = isRecord(value) ? sanitizeServerProjectState(value as ServerProjectState) : value
+  if (!canonicalLocalServer || canonicalLocalServer === "local") return sanitized
+  if (!isRecord(sanitized)) return sanitized
+  const projects = isRecord(sanitized.projects) ? sanitized.projects : undefined
+  const lastProject = isRecord(sanitized.lastProject) ? sanitized.lastProject : undefined
   const previousProjects = projects?.[canonicalLocalServer]
   const previousLastProject = lastProject?.[canonicalLocalServer]
-  if (!Array.isArray(previousProjects) && typeof previousLastProject !== "string") return value
+  if (!Array.isArray(previousProjects) && typeof previousLastProject !== "string") return sanitized
 
-  const next = { ...value }
+  const next = { ...sanitized }
   if (projects && Array.isArray(previousProjects)) {
     const local = Array.isArray(projects.local) ? projects.local : []
     const worktrees = new Set(
@@ -48,6 +75,7 @@ export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalS
     )
     const migrated = previousProjects.filter((project) => {
       if (!isRecord(project) || typeof project.worktree !== "string") return true
+      if (isBroadWatchRoot(project.worktree)) return false
       if (worktrees.has(project.worktree)) return false
       worktrees.add(project.worktree)
       return true
@@ -76,6 +104,7 @@ export function createServerProjects<T extends ServerProjectState>(input: {
     list: current,
     open(directory: string) {
       const scope = input.scope()
+      if (isBroadWatchRoot(directory)) return
       if (current().some((project) => project.worktree === directory)) return
       setStore("projects", scope, [{ worktree: directory, expanded: true }, ...current()])
     },
