@@ -68,14 +68,13 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
   const customFetch = options.fetch
   const chunkTimeout = options.chunkTimeout
   delete options.chunkTimeout
+  const requestTimeout = typeof options.timeout === "number" ? options.timeout : 1_800_000
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const opts = { ...(init ?? {}) }
     const signals = [
       opts.signal,
       typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined,
-      options.timeout !== undefined && options.timeout !== null && options.timeout !== false
-        ? AbortSignal.timeout(options.timeout)
-        : undefined,
+      AbortSignal.timeout(requestTimeout),
     ].filter((item): item is AbortSignal | AbortController => Boolean(item))
     const chunkAbortCtl = signals.find((item): item is AbortController => item instanceof AbortController)
     const abortSignals = signals.map((item) => (item instanceof AbortController ? item.signal : item))
