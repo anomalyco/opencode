@@ -1,0 +1,41 @@
+name: Sync Upstream
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 每天 UTC 0点（北京时间8点）自动检查
+  workflow_dispatch:      # 支持手动触发
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync with upstream
+        run: |
+          git remote add upstream https://github.com/anomalyco/opencode.git
+          git fetch upstream
+          git checkout dev
+          git merge upstream/dev --no-edit
+
+          # 检查是否有更新
+          if git diff --quiet HEAD@{1}; then
+            echo "No updates from upstream"
+          else
+            echo "Updates found, pushing to origin"
+            git push origin dev
+          fi
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "::warning::Sync failed. There might be merge conflicts that need manual resolution."
