@@ -235,6 +235,41 @@ export type ConfigGroupPatchRequest = {
 export type ConfigModelResponse = {
     id: string;
     status: string;
+    /**
+     * Non-fatal warnings produced while applying the request, e.g. offload knobs unsupported by the model's backend. Omitted when there are none.
+     */
+    warnings?: Array<string>;
+};
+
+/**
+ * Full stored config for a model plus llama-server flags parsed out of its command. ctx_size and n_gpu_layers are the raw flag values (strings); offload fields reflect the current command.
+ */
+export type ConfigModelDetail = {
+    id: string;
+    cmd: string;
+    name?: string;
+    description?: string;
+    aliases?: Array<string>;
+    ttl?: number;
+    concurrencyLimit?: number;
+    ctx_size?: string;
+    n_gpu_layers?: string;
+    cache_type_k?: string;
+    cache_type_v?: string;
+    n_cpu_moe?: number;
+    cpu_moe?: boolean;
+    cpu_offload_gb?: number;
+    override_tensor?: string;
+    /**
+     * All --flags parsed from the command, as raw string values.
+     */
+    flags?: {
+        [key: string]: string;
+    };
+};
+
+export type ReloadResponse = {
+    status: string;
 };
 
 export type ConfigDefaultModelRequest = {
@@ -482,9 +517,9 @@ export type GetConfigModelErrors = {
 
 export type GetConfigModelResponses = {
     /**
-     * Model configuration response.
+     * Model configuration and parsed llama-server flags.
      */
-    200: ConfigModelResponse;
+    200: ConfigModelDetail;
 };
 
 export type GetConfigModelResponse = GetConfigModelResponses[keyof GetConfigModelResponses];
@@ -587,9 +622,7 @@ export type ReloadConfigResponses = {
     /**
      * Reload initiated asynchronously.
      */
-    202: {
-        status: string;
-    };
+    202: ReloadResponse;
 };
 
 export type ReloadConfigResponse = ReloadConfigResponses[keyof ReloadConfigResponses];
