@@ -4,7 +4,7 @@ import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
-import { Cause, Config, Effect, Exit, Layer } from "effect"
+import { Cause, Config, Effect, Exit, Fiber, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http"
 import { layerWebSocketConstructorGlobal } from "effect/unstable/socket/Socket"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -23,7 +23,6 @@ import * as HttpSessionError from "../../src/server/routes/instance/httpapi/hand
 import { SessionPaths } from "../../src/server/routes/instance/httpapi/groups/session"
 import { Session } from "@/session/session"
 import { MessageID, PartID, SessionID, type SessionID as SessionIDType } from "../../src/session/schema"
-import { MessageV2 } from "../../src/session/message-v2"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionMessage } from "@opencode-ai/core/session/message"
@@ -434,6 +433,41 @@ describe("session HttpApi", () => {
         root: sessionDirectory,
       })
     }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+  )
+
+  it.live("deleteMessage cancels a busy session before deleting the message", () =>
+    Effect.gen(function* () {
+      const llm = yield* TestLLMServer
+      yield* llm.hang
+
+      const config = testProviderConfig(llm.url)
+      const directory = yield* tmpdirScoped({ git: true, config })
+      const headers = { "x-opencode-directory": directory, "content-type": "application/json" }
+      const session = yield* createSession({ title: "delete busy" }).pipe(provideInstanceEffect(directory))
+      const message = yield* createTextMessage(session.id, "stuck").pipe(provideInstanceEffect(directory))
+
+      const prompt = yield* request(pathFor(SessionPaths.prompt, { sessionID: session.id }), {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          agent: "build",
+          model: { providerID: "test", modelID: "test-model" },
+          parts: [{ type: "text", text: "hang" }],
+        }),
+      }).pipe(Effect.forkScoped)
+      yield* llm.wait(1)
+
+      expect(
+        yield* requestJson<boolean>(
+          pathFor(SessionPaths.deleteMessage, { sessionID: session.id, messageID: message.info.id }),
+          { method: "DELETE", headers },
+        ),
+      ).toBe(true)
+
+      const exit = yield* Fiber.await(prompt).pipe(Effect.timeout("5 seconds"))
+      expect(Exit.isSuccess(exit)).toBe(true)
+    }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(CrossSpawnSpawner.defaultLayer)),
+    10_000,
   )
 
   it.instance(

@@ -16,7 +16,7 @@ import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { NamedError } from "@opencode-ai/core/util/error"
-import { Cause, Effect, Option, Schema, Scope } from "effect"
+import { Cause, Effect, Exit, Option, Schema, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
@@ -379,7 +379,14 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID; messageID: MessageID }
     }) {
       yield* requireSession(ctx.params.sessionID)
-      yield* SessionError.mapBusy(runState.assertNotBusy(ctx.params.sessionID))
+      const busy = yield* runState.assertNotBusy(ctx.params.sessionID).pipe(Effect.exit)
+      if (Exit.isFailure(busy)) {
+        if (Cause.squash(busy.cause) instanceof Session.BusyError) {
+          yield* runState.cancel(ctx.params.sessionID)
+        } else {
+          yield* SessionError.mapBusy(Effect.failCause(busy.cause))
+        }
+      }
       yield* session.removeMessage(ctx.params)
       return true
     })
