@@ -66,11 +66,6 @@ export function SessionSidePanel(props: {
     return `${layout.fileTree.width()}px`
   })
   const treeWidth = createMemo(() => (fileOpen() ? `${layout.fileTree.width()}px` : "0px"))
-  const offset = createMemo(() => {
-    if (!fileOpen()) return "-4px"
-    if (reviewOpen()) return `calc(${treeWidth()} - 10px)`
-    return `calc(${treeWidth()} - 24px)`
-  })
 
   const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
   const diffs = createMemo(() => (params.id ? (sync.data.session_diff[params.id] ?? []) : []))
@@ -267,7 +262,15 @@ export function SessionSidePanel(props: {
         }}
         style={{ width: panelWidth() }}
       >
-        <div class="size-full flex border-l border-border-weaker-base">
+        <div class="size-full flex flex-col border-l border-border-weaker-base">
+          {/* 브라우저 chrome 바 — 시안처럼 상단 전체 폭을 차지(탐색기·미리보기 위). */}
+          <SessionBrowserChrome
+            address={browserAddress()}
+            url={preview.previewUrl()}
+            onReload={preview.reload}
+            onHome={() => tabs().setActive("preview")}
+          />
+          <div class="flex-1 min-h-0 flex">
           <div
             aria-hidden={!reviewOpen()}
             inert={!reviewOpen()}
@@ -276,14 +279,7 @@ export function SessionSidePanel(props: {
               "pointer-events-none": !reviewOpen(),
             }}
           >
-            <div class="size-full min-w-0 h-full bg-background-base flex flex-col">
-              <SessionBrowserChrome
-                address={browserAddress()}
-                url={preview.previewUrl()}
-                onReload={preview.reload}
-                onHome={() => tabs().setActive("preview")}
-              />
-              <div class="flex-1 min-h-0">
+            <div class="size-full min-w-0 h-full bg-background-base">
               <DragDropProvider
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
@@ -436,7 +432,6 @@ export function SessionSidePanel(props: {
                   </Show>
                 </DragOverlay>
               </DragDropProvider>
-              </div>
             </div>
           </div>
 
@@ -444,7 +439,7 @@ export function SessionSidePanel(props: {
             id="file-tree-panel"
             aria-hidden={!fileOpen()}
             inert={!fileOpen()}
-            class="relative min-w-0 h-full shrink-0 overflow-hidden"
+            class="order-first relative min-w-0 h-full shrink-0 overflow-hidden"
             classList={{
               "pointer-events-none": !fileOpen(),
               "transition-[width] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none":
@@ -454,7 +449,7 @@ export function SessionSidePanel(props: {
           >
             <div
               class="h-full flex flex-col overflow-hidden group/filetree"
-              classList={{ "border-l border-border-weaker-base": reviewOpen() }}
+              classList={{ "border-r border-border-weaker-base": reviewOpen() }}
             >
               <Tabs
                 variant="pill"
@@ -463,17 +458,19 @@ export function SessionSidePanel(props: {
                 class="h-full"
                 data-scope="filetree"
               >
-                <Tabs.List>
-                  <Show when={!env.disableChangeFiles()}>
+                {/* Changes/All 탭이 둘 다 의미 있을 때만 pill 헤더 노출. 변경 파일 탭이 꺼져
+                    "모든 파일" 하나뿐이면(시안처럼) 헤더를 숨기고 트리만 보인다. */}
+                <Show when={!env.disableChangeFiles()}>
+                  <Tabs.List>
                     <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
                       <span data-slot="tabs-trigger-badge">{reviewCount()}</span>
                       {language.t(reviewCount() === 1 ? "session.review.change.one" : "session.review.change.other")}
                     </Tabs.Trigger>
-                  </Show>
-                  <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
-                    {language.t("session.files.all")}
-                  </Tabs.Trigger>
-                </Tabs.List>
+                    <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
+                      {language.t("session.files.all")}
+                    </Tabs.Trigger>
+                  </Tabs.List>
+                </Show>
                 <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">
                   <Switch>
                     <Match when={hasReview()}>
@@ -530,7 +527,7 @@ export function SessionSidePanel(props: {
               <div onPointerDown={() => props.size.start()}>
                 <ResizeHandle
                   direction="horizontal"
-                  edge="start"
+                  edge="end"
                   size={layout.fileTree.width()}
                   min={200}
                   max={360}
@@ -542,31 +539,7 @@ export function SessionSidePanel(props: {
               </div>
             </Show>
           </div>
-          <Show when={reviewOpen() || fileOpen()}>
-            <TooltipKeybind
-              title={language.t("session.header.open.fileExplorer")}
-              keybind={command.keybind("fileTree.toggle")}
-            >
-              <IconButton
-                icon={fileOpen() ? "chevron-right" : "chevron-left"}
-                variant="secondary"
-                size="small"
-                class="absolute top-1/2 !h-8 !w-5 -translate-y-1/2 cursor-pointer bg-background-stronger"
-                classList={{
-                  "rounded-r-none border-r-0": !fileOpen(),
-                }}
-                style={{ right: offset() }}
-                onPointerDown={(event) => event.stopPropagation()}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  layout.fileTree.toggle()
-                }}
-                aria-label={language.t("session.header.open.fileExplorer")}
-                aria-expanded={layout.fileTree.opened()}
-                aria-controls="file-tree-panel"
-              />
-            </TooltipKeybind>
-          </Show>
+          </div>
         </div>
       </aside>
     </Show>

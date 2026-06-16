@@ -4,6 +4,7 @@ import type { PromptApprovalInput } from "./submit"
 export type DocSubmitActor = {
   actorID: string
   name: string
+  color: string
   status: "pending" | "approved"
 }
 

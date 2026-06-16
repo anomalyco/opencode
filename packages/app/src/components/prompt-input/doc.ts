@@ -16,7 +16,7 @@ type PromptDocInput = {
   directory: () => string
   client: OpencodeClient
   submit: () => void
-  user?: () => { id: string; name: string } | undefined
+  user?: () => { id: string; name: string; color?: string } | undefined
 }
 
 // Bootstrap requests (actor registration + prompt doc lookup) run before the sync layer exists, so a
@@ -49,6 +49,7 @@ async function register(input: PromptDocInput, sessionID: string, alive?: () => 
       directory: input.directory(),
       ...(stored ? { actorID: stored } : {}),
       ...(user ? { userID: user.id, name: user.name } : {}),
+      ...(user?.color ? { color: user.color } : {}),
     })
     const value = res.data as SessionActor | undefined
     if (!value) throw new Error("actor registration failed")

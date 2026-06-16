@@ -1,12 +1,19 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 
-type IdName = { id: string; name: string }
+type IdName = { id: string; name: string; color?: string }
 type ParentParams = { user: IdName[]; team: IdName[] }
 
+const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
+
+// Identity can arrive as `id||name` or `id||name||color`. The optional 3rd segment is a hex color
+// (e.g. `#FF8800`) the host wants this user to wear as their collaborative color (cursor label +
+// avatar). Note: in a query string `#` is the fragment delimiter, so the host must percent-encode it
+// (`%23FF8800`); `URLSearchParams.getAll` decodes it back before we see it here. Invalid colors are
+// dropped so the server falls back to its own assigned color.
 const parseIdName = (value: string): IdName | undefined => {
-  const [id, name] = value.split("||")
+  const [id, name, color] = value.split("||")
   if (!id || !name) return undefined
-  return { id, name }
+  return color && HEX_COLOR.test(color) ? { id, name, color } : { id, name }
 }
 
 const filterIdName = (values: string[]): IdName[] =>

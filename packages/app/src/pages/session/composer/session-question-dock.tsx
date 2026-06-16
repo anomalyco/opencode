@@ -590,6 +590,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
           directory: sdk.directory,
           ...(stored ? { actorID: stored } : {}),
           ...(user ? { userID: user.id, name: user.name } : {}),
+          ...(user?.color ? { color: user.color } : {}),
         })
         a = res.data
         if (a) break

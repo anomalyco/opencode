@@ -1,14 +1,15 @@
 import { Show } from "solid-js"
 import { avatarLabel } from "./avatar-label"
-import { actorColor } from "./actor-color"
 
 type Props = {
   name: string
+  // Server-assigned hex color (same source as the doc cursor label / question dock avatar), so the
+  // "동의 전송" avatar always matches the participant's collaborative color.
+  color: string
   compact?: boolean
 }
 
 export function PendingAvatar(props: Props) {
-  const color = () => actorColor(props.name)
   const size = () => (props.compact ? 32 : 40)
   const fs = () => (props.compact ? 11 : 12)
 
@@ -20,8 +21,8 @@ export function PendingAvatar(props: Props) {
           width: `${size()}px`,
           height: `${size()}px`,
           "font-size": `${fs()}px`,
-          background: color().background,
-          color: color().foreground,
+          background: props.color,
+          color: "#fff",
         }}
       >
         {avatarLabel(props.name)}

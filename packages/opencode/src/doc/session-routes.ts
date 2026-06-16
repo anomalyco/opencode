@@ -433,6 +433,7 @@ export const SessionDocRoutes = () =>
           actorID: ActorID.zod.optional(),
           userID: z.string().optional(),
           name: z.string().optional(),
+          color: z.string().optional(),
         }),
       ),
       async (c) => {
@@ -444,6 +445,7 @@ export const SessionDocRoutes = () =>
             actorID: body.actorID,
             userID: body.userID,
             name: body.name,
+            color: body.color,
           }),
         )
       },

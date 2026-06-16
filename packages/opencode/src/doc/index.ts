@@ -10,6 +10,7 @@ import { SessionID } from "@/session/schema"
 import { SessionPrompt } from "@/session/prompt"
 import { Database, NotFoundError } from "@/storage/db"
 import { fn } from "@/util/fn"
+import { Color } from "@/util/color"
 import { NamedError } from "@opencode-ai/util/error"
 import * as Room from "./room"
 import { MSG_DOC, pack, unpack } from "./wire"
@@ -57,7 +58,10 @@ export namespace Doc {
   // - Otherwise move to a free palette color (heals a pre-existing hash collision when one reconnects).
   // - Collision-free up to COLORS.length (12) active participants; beyond that, fall back to the stable
   //   hash color. The "recently active" window keeps stale/historical actors from hogging the palette.
-  function pickColor(sessionID: SessionID, selfActorID: ActorID, current?: string) {
+  function pickColor(sessionID: SessionID, selfActorID: ActorID, current?: string, preferred?: string) {
+    // A client-supplied valid hex (from `?user=id||name||color`) is an explicit choice — honor it
+    // verbatim, bypassing palette/collision logic.
+    if (Color.isValidHex(preferred)) return preferred
     const now = Date.now()
     const used = new Set(
       Database.use((db) => db.select().from(SessionActorTable).where(eq(SessionActorTable.session_id, sessionID)).all())
@@ -489,6 +493,7 @@ export namespace Doc {
     .object({
       actorID: ActorID.zod,
       name: z.string(),
+      color: z.string(),
       status: SubmitActorStatus,
     })
     .meta({ ref: "DocSubmitActor" })
@@ -590,11 +595,20 @@ export namespace Doc {
   }
 
   function read(row: SubmitRow) {
+    // Color is read live from SessionActorTable (the single source of truth shared with doc cursors /
+    // question dock) rather than snapshotted into DocSubmitActorTable, so the "동의 전송" avatar always
+    // matches the participant's current collaborative color.
+    const colors = new Map(
+      Database.use((db) =>
+        db.select().from(SessionActorTable).where(eq(SessionActorTable.session_id, row.session_id)).all(),
+      ).map((actor) => [actor.actor_id, actor.color]),
+    )
     const actors = Database.use((db) =>
       db.select().from(DocSubmitActorTable).where(eq(DocSubmitActorTable.submit_id, row.id)).all(),
     ).map((item) => ({
       actorID: item.actor_id,
       name: item.name,
+      color: colors.get(item.actor_id) ?? color(item.actor_id),
       status: SubmitActorStatus.parse(item.status),
     }))
     const questionAction: "send" | "dismiss" | "back" | undefined = (() => {
@@ -1361,6 +1375,7 @@ export namespace Doc {
       actorID: ActorID.zod.optional(),
       userID: z.string().optional(),
       name: z.string().optional(),
+      color: z.string().optional(),
     }),
     (input) => {
       Session.get(input.sessionID)
@@ -1398,7 +1413,7 @@ export namespace Doc {
         actor_id: actorID,
         user_id: input.userID ?? existing?.user_id ?? null,
         name,
-        color: pickColor(input.sessionID, actorID, existing?.color),
+        color: pickColor(input.sessionID, actorID, existing?.color, input.color),
         time_seen: Date.now(),
       }
 

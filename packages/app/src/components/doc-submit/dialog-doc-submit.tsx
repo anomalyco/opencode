@@ -257,7 +257,7 @@ function FailureBody(props: { state: DocSubmitState; close: () => void }) {
               <div class="ds-pending-row ds-pending-row--outcome" classList={{ "ds-pending-row--large": large() }}>
                 <For each={slots()}>
                   {(entry) => (
-                    <OutcomeAvatar name={entry.item.name} role={entry.role} compact={large()} />
+                    <OutcomeAvatar name={entry.item.name} color={entry.item.color} role={entry.role} compact={large()} />
                   )}
                 </For>
                 <Show when={more()}>
