@@ -1180,10 +1180,15 @@ export function UserMessageDisplay(props: {
     return str.replace(/<(\/?[a-zA-Z][a-zA-Z0-9-]*(?:\s[^>]*)??)>/g, '&lt;$1&gt;')
   }
 
+  // Preserve line breaks by converting them to <br> tags for proper rendering
+  const preserveLineBreaks = (str: string) => {
+    return str.replace(/\n/g, '  \n') // Markdown requires 2 spaces before \n for line break
+  }
+
   const displayText = createMemo(() => {
     const fullText = text()
     const textToDisplay = (!isLongMessage() || expanded()) ? fullText : fullText.slice(0, MAX_PREVIEW_LENGTH)
-    return escapeHtmlTags(textToDisplay)
+    return preserveLineBreaks(escapeHtmlTags(textToDisplay))
   })
 
   const skillTemplatePart = createMemo(() => skillText(props.parts))
