@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { ContentBlock } from "@agentclientprotocol/sdk"
+import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { contentBlockToParts, partsToContentChunks, promptContentToParts } from "../../src/acp/content"
 
@@ -115,6 +116,34 @@ describe("acp content conversion", () => {
       expect(result[0].text.includes("context.txt")).toBe(true)
       expect(result[0].text.includes("12")).toBe(true)
     }
+  })
+
+  test("resource with text prefixes the file source location", () => {
+    const filePath = path.resolve("tmp", "context.txt")
+    expect(
+      contentBlockToParts({
+        type: "resource",
+        resource: {
+          uri: pathToFileURL(filePath).href,
+          mimeType: "text/plain",
+          text: "context",
+        },
+      }),
+    ).toEqual([{ type: "text", text: `[${filePath}]\ncontext` }])
+  })
+
+  test("resource with text includes the line range from the uri fragment", () => {
+    const filePath = path.resolve("tmp", "app.ts")
+    expect(
+      contentBlockToParts({
+        type: "resource",
+        resource: {
+          uri: `${pathToFileURL(filePath).href}#L12-15`,
+          mimeType: "text/typescript",
+          text: "const x = 1",
+        },
+      }),
+    ).toEqual([{ type: "text", text: `[${filePath}:12-15]\nconst x = 1` }])
   })
 
   test("resource with text uses URI fallback for non-file resources", () => {

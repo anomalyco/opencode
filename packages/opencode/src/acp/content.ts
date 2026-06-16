@@ -76,26 +76,12 @@ export function contentBlockToParts(block: ContentBlock): PromptPart[] {
 
     case "resource":
       if ("text" in block.resource) {
-        try {
-          const parsed = new URL(block.resource.uri)
-          if (parsed.protocol === "file:") {
-            const line = parsed.hash.match(/^#L(\d+)/)?.[1]
-            let filepath: string
-            try {
-              filepath = fileURLToPath(parsed)
-            } catch {
-              filepath = decodeURIComponent(parsed.pathname)
-            }
-            if (path.sep === "\\") filepath = filepath.replace(/\\/g, "/")
-            return [
-              {
-                type: "text",
-                text: `[${filepath}${line ? `:${line}` : ""}]\n${block.resource.text}`,
-              },
-            ]
-          }
-        } catch {}
-        return [{ type: "text", text: `[${block.resource.uri}]\n${block.resource.text}` }]
+        // Prefix selected text with its source location when the editor supplies
+        // a URI, so the LLM and session replays can trace the snippet back to
+        // its file (and line range). See #32558.
+        const source = fileSourcePrefix(block.resource.uri) ?? `[${block.resource.uri}]`
+        return [{ type: "text", text: `${source}
+${block.resource.text}` }]
       }
       if (block.resource.mimeType) {
         return [
@@ -254,6 +240,21 @@ function partAudience(part: Extract<ReplayPart, { type: "text" }>) {
   const audience: Role[] | undefined = part.synthetic ? ["assistant"] : part.ignored ? ["user"] : undefined
   if (!audience) return {}
   return { annotations: { audience } }
+}
+
+function fileSourcePrefix(uri: string | undefined) {
+  if (!uri || !uri.startsWith("file://")) return undefined
+  try {
+    const hashIndex = uri.indexOf("#")
+    const base = hashIndex === -1 ? uri : uri.slice(0, hashIndex)
+    const fragment = hashIndex === -1 ? "" : uri.slice(hashIndex + 1)
+    const filePath = fileURLToPath(base)
+    // ACP encodes line ranges as a `#L12` or `#L12-15` fragment.
+    const lines = /^L?(\d+(?:-\d+)?)/.exec(fragment)
+    return `[${filePath}${lines ? `:${lines[1]}` : ""}]`
+  } catch {
+    return undefined
+  }
 }
 
 function filenameFromUri(uri: string | undefined) {
