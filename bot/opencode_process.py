@@ -17,7 +17,7 @@ class OpenCodeProcess:
     def __init__(self, model: str = None, provider_url: str = None, workdir: Path = None):
         self.logger = logger
         self.process = None
-        self.opencode_port = 4096
+        self.opencode_port = 4098
         self.model = model or CLI_MODEL
         self.provider_url = provider_url or PROVIDER_URL
         self.workdir = workdir or Path.cwd()
