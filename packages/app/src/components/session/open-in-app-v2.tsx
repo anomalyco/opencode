@@ -26,7 +26,7 @@ export function OpenInAppV2(props: { directory: () => string }) {
             disabled={state.opening()}
             aria-label={language.t("session.header.open.ariaLabel", { app: state.current().label })}
           >
-            <Show when={state.opening()} fallback={<AppIcon id={state.current().icon} />}>
+            <Show when={state.opening()} fallback={<AppIcon id={state.current().icon} class="size-[18px]" />}>
               <Spinner class="size-3.5" />
             </Show>
           </SplitButtonV2Action>
