@@ -16,6 +16,7 @@ import { GoogleVertexAnthropicPlugin, GoogleVertexPlugin } from "./provider/goog
 import { GroqPlugin } from "./provider/groq"
 import { KiloPlugin } from "./provider/kilo"
 import { LLMGatewayPlugin } from "./provider/llmgateway"
+import { ManifestPlugin } from "./provider/manifest"
 import { MistralPlugin } from "./provider/mistral"
 import { NvidiaPlugin } from "./provider/nvidia"
 import { OpenAIPlugin } from "./provider/openai"
@@ -51,6 +52,7 @@ export const ProviderPlugins = [
   GroqPlugin,
   KiloPlugin,
   LLMGatewayPlugin,
+  ManifestPlugin,
   MistralPlugin,
   NvidiaPlugin,
   OpencodePlugin,

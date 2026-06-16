@@ -451,6 +451,65 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    manifest: Effect.fnUntraced(function* (provider: Info) {
+      const config = yield* dep.config()
+      const baseURL = provider.options?.baseURL ?? config.provider?.["manifest"]?.options?.baseURL
+
+      return {
+        autoload: false,
+        options: {
+          headers: {
+            "X-Source": "opencode",
+          },
+        },
+        async discoverModels() {
+          if (!baseURL) return {}
+
+          const modelsURL = `${baseURL.replace(/\/+$/, "")}/models`
+          const apiKey = provider.options?.apiKey ?? config.provider?.["manifest"]?.options?.apiKey
+          const headers: Record<string, string> = { Accept: "application/json" }
+          if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`
+
+          try {
+            const res = await fetch(modelsURL, { headers, signal: AbortSignal.timeout(5_000) })
+            if (!res.ok) return {}
+            const body = (await res.json()) as { data?: Array<{ id: string; display_name?: string }> }
+            if (!body.data || !Array.isArray(body.data)) return {}
+
+            const models: Record<string, Model> = {}
+            for (const item of body.data) {
+              if (!item.id || typeof item.id !== "string") continue
+              models[item.id] = {
+                id: ModelV2.ID.make(item.id),
+                providerID: ProviderV2.ID.make("manifest"),
+                name: item.display_name ?? item.id,
+                family: "manifest",
+                api: { id: item.id, url: baseURL, npm: "@ai-sdk/openai-compatible" },
+                status: "active",
+                headers: {},
+                options: {},
+                cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                limit: { context: 1_000_000, output: 32_768 },
+                capabilities: {
+                  temperature: true,
+                  reasoning: true,
+                  attachment: false,
+                  toolcall: true,
+                  input: { text: true, audio: false, image: true, video: false, pdf: false },
+                  output: { text: true, audio: false, image: false, video: false, pdf: false },
+                  interleaved: false,
+                },
+                release_date: "",
+                variants: {},
+              }
+            }
+            return models
+          } catch {
+            return {}
+          }
+        },
+      }
+    }),
     openrouter: () =>
       Effect.succeed({
         autoload: false,
@@ -1551,6 +1610,20 @@ export const layer = Layer.effect(
               for (const [modelID, model] of Object.entries(discovered)) {
                 if (!providers[gitlab].models[modelID]) {
                   providers[gitlab].models[modelID] = model
+                }
+              }
+            } catch (e) {}
+          })
+        }
+
+        const manifest = ProviderV2.ID.make("manifest")
+        if (discoveryLoaders[manifest] && providers[manifest] && isProviderAllowed(manifest)) {
+          yield* Effect.promise(async () => {
+            try {
+              const discovered = await discoveryLoaders[manifest]()
+              for (const [modelID, model] of Object.entries(discovered)) {
+                if (!providers[manifest].models[modelID]) {
+                  providers[manifest].models[modelID] = model
                 }
               }
             } catch (e) {}

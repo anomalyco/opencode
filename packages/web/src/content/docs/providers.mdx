@@ -1796,6 +1796,61 @@ OpenCode Zen is a list of tested and verified models provided by the OpenCode te
 
 ---
 
+### Manifest
+
+[Manifest](https://manifest.build) is a model router for AI agents. It sits between your agent and LLM providers, scores each request by complexity, and routes it to the best model that can handle it. Manifest tracks costs, tokens, and messages across all your agents.
+
+1. Get your Manifest API key from the Manifest dashboard. Keys use the `mnfst_` prefix.
+
+2. Add Manifest to your `opencode.json` configuration:
+
+   ```json title="opencode.json"
+   {
+     "$schema": "https://opencode.ai/config.json",
+     "provider": {
+       "manifest": {
+         "npm": "@ai-sdk/openai-compatible",
+         "name": "Manifest",
+         "options": {
+           "baseURL": "http://localhost:3001/v1",
+           "apiKey": "mnfst_YOUR_KEY"
+         },
+         "models": {
+           "auto": {
+             "name": "Manifest Auto"
+           }
+         }
+       }
+     },
+     "model": "manifest/auto"
+   }
+   ```
+
+   Replace `http://localhost:3001/v1` with your Manifest instance URL and `mnfst_YOUR_KEY` with your API key.
+
+3. Run the `/connect` command and search for Manifest.
+
+   ```txt
+   /connect
+   ```
+
+4. Enter your API key.
+
+   ```txt
+   ┌ API key
+   │
+   │
+   └ enter
+   ```
+
+5. The `auto` model routes requests through Manifest's scoring engine. Run `/models` to confirm it's available.
+
+   ```txt
+   /models
+   ```
+
+---
+
 ### SAP AI Core
 
 SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon, Meta, Mistral, and AI21 through a unified platform.
