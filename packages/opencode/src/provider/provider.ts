@@ -290,7 +290,9 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       // In ANR mode, credentials are set on process.env after the Env snapshot is taken,
       // so we read directly from process.env for region as well.
       const envRegion = isANR ? process.env.AWS_REGION : env["AWS_REGION"]
-      const defaultRegion = isANR ? (envRegion ?? configRegion ?? "us-east-1") : (configRegion ?? envRegion ?? "us-east-1")
+      const defaultRegion = isANR
+        ? (envRegion ?? configRegion ?? "us-east-1")
+        : (configRegion ?? envRegion ?? "us-east-1")
 
       // Profile: config file takes precedence over env var
       const configProfile = providerConfig?.options?.profile
@@ -369,47 +371,15 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         async getModel(sdk: any, modelID: string, options?: Record<string, any>, model?: Model) {
           if (model?.api.npm === "@ai-sdk/amazon-bedrock/mantle") return selectBedrockMantleLanguageModel(sdk, modelID)
 
+          // ANR mode: catalog is the source of truth. model.api.id is already
+          // the exact identifier (ARN or model ID) the SDK needs — no rewriting.
+          if (isANR) return sdk.languageModel(modelID)
+
           // Region resolution precedence (highest to lowest):
-          // ANR mode: defaultRegion always wins (credentials are partition-bound)
-          // Normal: 1. options.region from opencode.json provider config
-          //         2. defaultRegion from AWS_REGION environment variable
-          const region = isANR ? defaultRegion : (options?.region ?? defaultRegion)
+          // 1. options.region from opencode.json provider config
+          // 2. defaultRegion from AWS_REGION environment variable
+          const region = options?.region ?? defaultRegion
           const isGovCloud = region.startsWith("us-gov")
-
-          // ANR mode: DynamoDB model IDs are the source of truth for each environment.
-          // GovCloud stores e.g. us-gov.anthropic.claude-..., commercial stores us.anthropic.claude-...
-          // Models without prefixes (amazon.nova-lite-v1:0) are used directly without modification.
-          if (isANR) {
-            if (modelID.startsWith("arn:aws:bedrock:")) {
-              return sdk.languageModel(modelID)
-            }
-
-            const crossRegionPrefixes = ["global.", "us-gov.", "us.", "eu.", "jp.", "apac.", "au."]
-            if (crossRegionPrefixes.some((prefix) => modelID.startsWith(prefix))) {
-              return sdk.languageModel(modelID)
-            }
-
-            // Backward-compatibility fallback for API datasets that still store bare
-            // foundation IDs (for example anthropic.claude-opus-4-6-v1) instead of
-            // inference profile IDs. Prefer fixing data at source, but avoid hard-failing.
-            const requiresCrossRegionPrefix = modelID.includes("claude") || modelID.includes("nova-")
-            if (requiresCrossRegionPrefix) {
-              const normalizedPrefix = region.startsWith("us-gov")
-                ? "us-gov"
-                : region.startsWith("us-")
-                  ? "us"
-                  : region.startsWith("eu-")
-                    ? "eu"
-                    : region === "ap-northeast-1"
-                      ? "jp"
-                      : ["ap-southeast-2", "ap-southeast-4"].includes(region)
-                        ? "au"
-                        : "apac"
-              modelID = `${normalizedPrefix}.${modelID}`
-            }
-
-            return sdk.languageModel(modelID)
-          }
 
           // In GovCloud, strip any commercial cross-region prefix (us., global., etc.)
           // and let the GovCloud prefixing logic below handle it correctly
@@ -1225,9 +1195,9 @@ function cost(c: ModelsDev.Model["cost"]): Model["cost"] {
   return result
 }
 
-function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
+function fromModelsDevModel(provider: ModelsDev.Provider, key: string, model: ModelsDev.Model): Model {
   const base: Model = {
-    id: ModelV2.ID.make(model.id),
+    id: ModelV2.ID.make(key),
     providerID: ProviderV2.ID.make(provider.id),
     name: model.name,
     family: model.family,
@@ -1279,10 +1249,10 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
 export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   const models: Record<string, Model> = {}
   for (const [key, model] of Object.entries(provider.models)) {
-    models[key] = fromModelsDevModel(provider, model)
+    models[key] = fromModelsDevModel(provider, key, model)
     for (const [mode, opts] of Object.entries(model.experimental?.modes ?? {})) {
-      const id = `${model.id}-${mode}`
-      const base = fromModelsDevModel(provider, model)
+      const id = `${key}-${mode}`
+      const base = fromModelsDevModel(provider, key, model)
       models[id] = {
         ...base,
         id: ModelV2.ID.make(id),

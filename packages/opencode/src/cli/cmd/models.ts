@@ -38,6 +38,7 @@ export const ModelsCommand = effectCmd({
       const sorted = Object.entries(p.models).sort(([a], [b]) => a.localeCompare(b))
       for (const [modelID, model] of sorted) {
         process.stdout.write(`${providerID}/${modelID}`)
+        if (model.api.id && model.api.id !== modelID) process.stdout.write(`  → ${model.api.id}`)
         process.stdout.write(EOL)
         if (verbose) {
           process.stdout.write(JSON.stringify(model, null, 2))
