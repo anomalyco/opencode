@@ -53,6 +53,7 @@ const integrations = Integration.locationLayer.pipe(
   Layer.provide(
     Layer.mock(Credential.Service)({
       create: () => Effect.die("unexpected credential creation"),
+      all: () => Effect.succeed([]),
       list: () => Effect.succeed([]),
     }),
   ),

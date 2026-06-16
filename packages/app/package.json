@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/app",
-  "version": "1.17.4",
+  "version": "1.17.7",
   "description": "",
   "type": "module",
   "exports": {
@@ -46,6 +46,7 @@
     "@opencode-ai/core": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
+    "@pierre/trees": "1.0.0-beta.4",
     "@sentry/solid": "catalog:",
     "@shikijs/transformers": "3.9.2",
     "@solid-primitives/active-element": "2.1.3",

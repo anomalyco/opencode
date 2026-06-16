@@ -123,6 +123,12 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
 
     event.subscribe((event, metadata) => {
       switch (event.type) {
+        case "catalog.updated":
+          void Promise.all([
+            result.location.model.refresh({ directory: metadata.directory, workspaceID: metadata.workspace }),
+            result.location.provider.refresh({ directory: metadata.directory, workspaceID: metadata.workspace }),
+          ])
+          break
         case "session.next.agent.switched":
           message.update(event.properties.sessionID, (draft) => {
             message.prepend(draft, {
@@ -424,7 +430,11 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           void result.location.reference.refresh()
           break
         case "integration.updated":
-          void result.location.integration.refresh({ directory: metadata.directory, workspaceID: metadata.workspace })
+          void Promise.all([
+            result.location.integration.refresh({ directory: metadata.directory, workspaceID: metadata.workspace }),
+            result.location.model.refresh({ directory: metadata.directory, workspaceID: metadata.workspace }),
+            result.location.provider.refresh({ directory: metadata.directory, workspaceID: metadata.workspace }),
+          ])
           break
       }
     })
