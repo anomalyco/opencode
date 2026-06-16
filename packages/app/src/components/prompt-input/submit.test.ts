@@ -97,6 +97,26 @@ beforeAll(async () => {
     base64Encode: (value: string) => value,
   }))
 
+  mock.module("@tanstack/solid-query", () => ({
+    useMutation: (factory: () => { mutationFn: (input?: unknown) => unknown }) => {
+      const options = factory()
+      const mutation = {
+        isPending: false,
+        variables: undefined as unknown,
+        async mutateAsync(input?: unknown) {
+          mutation.isPending = true
+          mutation.variables = input
+          try {
+            return await options.mutationFn(input)
+          } finally {
+            mutation.isPending = false
+          }
+        },
+      }
+      return mutation
+    },
+  }))
+
   mock.module("@/context/local", () => ({
     useLocal: () => ({
       model: {

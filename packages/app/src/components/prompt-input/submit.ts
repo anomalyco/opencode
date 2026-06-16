@@ -1,4 +1,5 @@
 import type { Message, Session } from "@opencode-ai/sdk/v2/client"
+import { useMutation } from "@tanstack/solid-query"
 import { showToast } from "@/utils/toast"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { Binary } from "@opencode-ai/core/util/binary"
@@ -295,19 +296,6 @@ export function createPromptSubmit(input: PromptSubmitInput) {
     })
   }
 
-  let submitting = false
-  const handleSubmit = async (event: Event) => {
-    event.preventDefault()
-
-    if (submitting) return
-    submitting = true
-    try {
-      return await submit()
-    } finally {
-      submitting = false
-    }
-  }
-
   const submit = async () => {
     const currentPrompt = prompt.current()
     const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
@@ -601,6 +589,17 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       restoreCommentItems(commentItems)
       restoreInput()
     })
+  }
+
+  const submitMutation = useMutation(() => ({
+    mutationFn: submit,
+  }))
+
+  const handleSubmit = (event: Event) => {
+    event.preventDefault()
+
+    if (submitMutation.isPending) return
+    return submitMutation.mutateAsync()
   }
 
   return {
