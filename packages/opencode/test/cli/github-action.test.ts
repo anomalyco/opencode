@@ -1,7 +1,7 @@
 import { test, expect, describe } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { extractResponseText, formatPromptTooLargeError } from "../../src/cli/cmd/github"
-import type { MessageV2 } from "../../src/session/message-v2"
+import { buildPromptDataForPR, type GitHubPullRequest } from "../../src/cli/cmd/github.handler"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
 // Helper to create minimal valid parts
@@ -195,5 +195,63 @@ describe("formatPromptTooLargeError", () => {
     expect(result).toInclude("img1.png (3 KB)")
     expect(result).toInclude("img2.jpg (6 KB)")
     expect(result).toInclude("img3.gif (9 KB)")
+  })
+})
+
+describe("buildPromptDataForPR", () => {
+  test("includes authoritative PR identity in pull request context", () => {
+    const pr = {
+      number: 42,
+      url: "https://github.com/octocat/example-repo/pull/42",
+      title: "docs: fix stale release notes",
+      body: "Fix stale docs",
+      author: { login: "alice" },
+      baseRefName: "main",
+      headRefName: "docs-fix",
+      headRefOid: "abc123",
+      createdAt: "2026-06-13T12:00:00Z",
+      additions: 4,
+      deletions: 2,
+      state: "OPEN",
+      baseRepository: { nameWithOwner: "octocat/example-repo" },
+      headRepository: { nameWithOwner: "octocat/example-repo" },
+      commits: {
+        totalCount: 1,
+        nodes: [],
+      },
+      files: {
+        nodes: [],
+      },
+      comments: {
+        nodes: [
+          {
+            id: "IC_1",
+            databaseId: "100",
+            body: "/oc fix pr title to comply the policy",
+            author: { login: "bob" },
+            createdAt: "2026-06-13T12:05:00Z",
+          },
+          {
+            id: "IC_2",
+            databaseId: "101",
+            body: "please keep this context",
+            author: { login: "carol" },
+            createdAt: "2026-06-13T12:10:00Z",
+          },
+        ],
+      },
+      reviews: {
+        nodes: [],
+      },
+    } satisfies GitHubPullRequest
+
+    const prompt = buildPromptDataForPR(pr, 100)
+
+    expect(prompt).toContain("<pull_request>")
+    expect(prompt).toContain("Number: 42")
+    expect(prompt).toContain("URL: https://github.com/octocat/example-repo/pull/42")
+    expect(prompt.indexOf("Number: 42")).toBeLessThan(prompt.indexOf("Title: docs:"))
+    expect(prompt).not.toContain("/oc fix pr title to comply the policy")
+    expect(prompt).toContain("please keep this context")
   })
 })
