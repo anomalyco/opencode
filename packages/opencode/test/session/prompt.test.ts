@@ -108,28 +108,31 @@ function errorTool(parts: SessionV1.Part[]) {
   return part?.state.status === "error" ? (part as ErrorToolPart) : undefined
 }
 
-const mcp = Layer.succeed(
-  MCP.Service,
-  MCP.Service.of({
-    status: () => Effect.succeed({}),
-    clients: () => Effect.succeed({}),
-    tools: () => Effect.succeed({}),
-    prompts: () => Effect.succeed({}),
-    resources: () => Effect.succeed({}),
-    add: () => Effect.succeed({ status: { status: "disabled" as const } }),
-    connect: () => Effect.void,
-    disconnect: () => Effect.void,
-    getPrompt: () => Effect.succeed(undefined),
-    readResource: () => Effect.succeed(undefined),
-    startAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
-    authenticate: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
-    finishAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
-    removeAuth: () => Effect.void,
-    supportsOAuth: () => Effect.succeed(false),
-    hasStoredTokens: () => Effect.succeed(false),
-    getAuthStatus: () => Effect.succeed("not_authenticated" as const),
-  }),
-)
+function makeMcp(instructions: string[] = []) {
+  return Layer.succeed(
+    MCP.Service,
+    MCP.Service.of({
+      status: () => Effect.succeed({}),
+      clients: () => Effect.succeed({}),
+      instructions: () => Effect.succeed(instructions),
+      tools: () => Effect.succeed({}),
+      prompts: () => Effect.succeed({}),
+      resources: () => Effect.succeed({}),
+      add: () => Effect.succeed({ status: { status: "disabled" as const } }),
+      connect: () => Effect.void,
+      disconnect: () => Effect.void,
+      getPrompt: () => Effect.succeed(undefined),
+      readResource: () => Effect.succeed(undefined),
+      startAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
+      authenticate: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
+      finishAuth: () => Effect.die("unexpected MCP auth in prompt-effect tests"),
+      removeAuth: () => Effect.void,
+      supportsOAuth: () => Effect.succeed(false),
+      hasStoredTokens: () => Effect.succeed(false),
+      getAuthStatus: () => Effect.succeed("not_authenticated" as const),
+    }),
+  )
+}
 
 const lsp = Layer.succeed(
   LSP.Service,
@@ -163,7 +166,7 @@ const blockingProcessor = Layer.succeed(
   }),
 )
 
-function makePrompt(input?: { processor?: "blocking" }) {
+function makePrompt(input?: { mcpInstructions?: string[]; processor?: "blocking" }) {
   const deps = Layer.mergeAll(
     Session.defaultLayer,
     Snapshot.defaultLayer,
@@ -176,7 +179,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Config.defaultLayer,
     ProviderSvc.defaultLayer,
     lsp,
-    mcp,
+    makeMcp(input?.mcpInstructions),
     FSUtil.defaultLayer,
     BackgroundJob.defaultLayer,
     status,
@@ -229,17 +232,29 @@ function makePrompt(input?: { processor?: "blocking" }) {
   )
 }
 
-function makeHttp(input?: { processor?: "blocking" }) {
+function makeHttp(input?: { mcpInstructions?: string[]; processor?: "blocking" }) {
   return Layer.mergeAll(TestLLMServer.layer, makePrompt(input))
 }
 
-function makeHttpNoLLMServer(input?: { processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: { mcpInstructions?: string[]; processor?: "blocking" }) {
   return makePrompt(input)
 }
 
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
 const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
+const withMcpInstructions = testEffect(
+  makeHttp({
+    mcpInstructions: [
+      [
+        "Instructions from: MCP server guide-server",
+        "These instructions apply to MCP tools whose names start with `guide-server_`, and to prompts/resources from this MCP server.",
+        "",
+        "Use lookup before mutate.",
+      ].join("\n"),
+    ],
+  }),
+)
 const unix = process.platform !== "win32" ? it.instance : it.instance.skip
 const unixNoLLMServer = process.platform !== "win32" ? noLLMServer.instance : noLLMServer.instance.skip
 
@@ -504,6 +519,31 @@ it.instance("loop calls LLM and returns assistant message", () =>
     expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
     expect(yield* llm.hits).toHaveLength(1)
   }),
+)
+
+withMcpInstructions.instance("loop includes MCP instructions in model system context", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* llm.hang
+    yield* user(chat.id, "hello")
+
+    const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+    yield* awaitWithTimeout(llm.wait(1), "timed out waiting for MCP instruction request", "10 seconds")
+
+    const hits = yield* llm.hits
+    const body = JSON.stringify(hits[0]?.body)
+    expect(body).toContain("Instructions from: MCP server guide-server")
+    expect(body).toContain("guide-server_")
+    expect(body).toContain("Use lookup before mutate.")
+    yield* Fiber.interrupt(fiber)
+  }),
+  15_000,
 )
 
 it.instance("loop surfaces content-filter finishes as session errors", () =>

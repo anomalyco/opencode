@@ -13,6 +13,7 @@ import { TestInstance } from "../fixture/fixture"
 interface MockClientState {
   capabilities: { tools?: object; prompts?: object; resources?: object }
   capabilitiesShouldThrow: boolean
+  instructions?: string
   tools: Array<{ name: string; description?: string; inputSchema: object; outputSchema?: object }>
   listToolsCalls: number
   listPromptsCalls: number
@@ -179,6 +180,10 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
       return this._state?.capabilities
     }
 
+    getInstructions() {
+      return this._state?.instructions
+    }
+
     async listTools(params?: { cursor?: string }) {
       if (this._state) this._state.listToolsCalls++
       if (this._state?.listToolsShouldFail) {
@@ -326,6 +331,63 @@ it.instance(
         expect(Object.keys(toolsA).length).toBeGreaterThan(0)
         expect(Object.keys(toolsB).length).toBeGreaterThan(0)
         expect(serverState.listToolsCalls).toBe(1)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "instructions() returns connected server instructions with tool prefix guidance",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "guide-server"
+        const serverState = getOrCreateClientState("guide-server")
+        serverState.instructions = "Use lookup before mutate."
+
+        yield* mcp.add("guide-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(yield* mcp.instructions()).toContain(
+          [
+            "Instructions from: MCP server guide-server",
+            "These instructions apply to MCP tools whose names start with `guide-server_`, and to prompts/resources from this MCP server.",
+            "",
+            "Use lookup before mutate.",
+          ].join("\n"),
+        )
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "instructions() omits empty and disconnected server instructions",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "temporary-server"
+        getOrCreateClientState("temporary-server").instructions = "Temporary guidance."
+
+        yield* mcp.add("temporary-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+        yield* mcp.disconnect("temporary-server")
+
+        lastCreatedClientName = "blank-server"
+        getOrCreateClientState("blank-server").instructions = "   "
+
+        yield* mcp.add("blank-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        const instructions = yield* mcp.instructions()
+        expect(instructions.some((item) => item.includes("temporary-server"))).toBe(false)
+        expect(instructions.some((item) => item.includes("blank-server"))).toBe(false)
       }),
     ),
   { config: { mcp: {} } },
