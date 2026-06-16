@@ -14,6 +14,7 @@ import { Location } from "../location"
 import { lazy } from "../util/lazy"
 import { Ignore } from "./ignore"
 import { Protected } from "./protected"
+import { isBroadWatchRoot } from "./watch-root"
 
 declare const OPENCODE_LIBC: string | undefined
 
@@ -67,6 +68,12 @@ export const layer = Layer.effect(
 
     const backend = getBackend()
     const location = yield* Location.Service
+    if (isBroadWatchRoot(location.directory)) {
+      yield* Effect.logWarning("skipping file watcher for broad root directory", {
+        directory: location.directory,
+      })
+      return Service.of({})
+    }
     if (!backend) {
       yield* Effect.logError("watcher backend not supported", {
         directory: location.directory,

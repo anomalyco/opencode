@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import os from "os"
 import { createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
@@ -115,6 +116,20 @@ describe("createServerProjects", () => {
       dispose()
     })
   })
+
+  test("refuses to register home or filesystem root as a project", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open(os.homedir())
+      projects.open("/")
+      projects.open("/repo")
+      expect(projects.list()).toEqual([{ worktree: "/repo", expanded: true }])
+      dispose()
+    })
+  })
 })
 
 describe("migrateCanonicalLocalServerState", () => {
@@ -158,6 +173,25 @@ describe("migrateCanonicalLocalServerState", () => {
         ],
       },
       lastProject: { local: "/local" },
+    })
+  })
+
+  test("drops home and filesystem root from persisted desktop projects", () => {
+    const home = os.homedir()
+    expect(
+      migrateCanonicalLocalServerState({
+        projects: {
+          local: [
+            { worktree: home, expanded: true },
+            { worktree: "/", expanded: true },
+            { worktree: "/repo", expanded: true },
+          ],
+        },
+        lastProject: { local: home },
+      }),
+    ).toEqual({
+      projects: { local: [{ worktree: "/repo", expanded: true }] },
+      lastProject: {},
     })
   })
 })
