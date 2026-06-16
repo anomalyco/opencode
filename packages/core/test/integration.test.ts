@@ -1,8 +1,7 @@
 import { describe, expect } from "bun:test"
-import { Duration, Effect, Exit, Layer, Scope } from "effect"
+import { Duration, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { Integration } from "@opencode-ai/core/integration"
-import { IntegrationConnection } from "@opencode-ai/core/integration/connection"
 import { Credential } from "@opencode-ai/core/credential"
 import { EventV2 } from "@opencode-ai/core/event"
 import { it } from "./lib/effect"
@@ -25,7 +24,7 @@ function connectionLayer(
   }>,
 ) {
   return Integration.locationLayer.pipe(
-    Layer.provide(EventV2.defaultLayer),
+    Layer.provideMerge(EventV2.defaultLayer),
     Layer.provide(
       Layer.mock(Credential.Service)({
         create: (input) =>
@@ -103,7 +102,7 @@ describe("Integration", () => {
         .update((editor) =>
           editor.method.update({
             integrationID,
-            method: new Integration.OAuthMethod({ id: methodID, type: "oauth", label: "ChatGPT" }),
+            method: { id: methodID, type: "oauth", label: "ChatGPT" },
             authorize,
           }),
         )
@@ -117,7 +116,7 @@ describe("Integration", () => {
           ])
           editor.method.update({
             integrationID,
-            method: new Integration.OAuthMethod({ id: methodID, type: "oauth", label: "ChatGPT Override" }),
+            method: { id: methodID, type: "oauth", label: "ChatGPT Override" },
             authorize,
           })
         })
@@ -140,15 +139,20 @@ describe("Integration", () => {
     }> = []
     return Effect.gen(function* () {
       const integrations = yield* Integration.Service
+      const events = yield* EventV2.Service
       const integrationID = Integration.ID.make("openai")
       yield* integrations.update((editor) =>
         editor.method.update({
           integrationID,
-          method: new Integration.KeyMethod({ type: "key", label: "API key" }),
+          method: { type: "key", label: "API key" },
         }),
       )
+      const updated = yield* events
+        .subscribe(Integration.Event.Updated)
+        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      yield* Effect.yieldNow
 
-      yield* integrations.connect.key({
+      yield* integrations.connection.key({
         integrationID,
         key: "secret",
         label: "Work",
@@ -161,6 +165,7 @@ describe("Integration", () => {
           value: new Credential.Key({ type: "key", key: "secret" }),
         },
       ])
+      expect((yield* Fiber.join(updated)).length).toBe(1)
     }).pipe(Effect.provide(connectionLayer(created)))
   })
 
@@ -177,7 +182,7 @@ describe("Integration", () => {
       yield* integrations.update((editor) =>
         editor.method.update({
           integrationID,
-          method: new Integration.OAuthMethod({ id: methodID, type: "oauth", label: "ChatGPT" }),
+          method: { id: methodID, type: "oauth", label: "ChatGPT" },
           authorize: () =>
             Effect.succeed({
               mode: "code" as const,
@@ -198,7 +203,7 @@ describe("Integration", () => {
         }),
       )
 
-      const attempt = yield* integrations.connect.oauth({
+      const attempt = yield* integrations.connection.oauth({
         integrationID,
         methodID,
         inputs: {},
@@ -236,7 +241,7 @@ describe("Integration", () => {
       yield* integrations.update((editor) =>
         editor.method.update({
           integrationID,
-          method: new Integration.OAuthMethod({ id: methodID, type: "oauth", label: "ChatGPT" }),
+          method: { id: methodID, type: "oauth", label: "ChatGPT" },
           authorize: () =>
             Effect.addFinalizer(() => Effect.sync(() => (closed = true))).pipe(
               Effect.as({
@@ -249,7 +254,7 @@ describe("Integration", () => {
         }),
       )
 
-      const attempt = yield* integrations.connect.oauth({ integrationID, methodID, inputs: {} })
+      const attempt = yield* integrations.connection.oauth({ integrationID, methodID, inputs: {} })
       expect(yield* integrations.attempt.complete({ attemptID: attempt.attemptID }).pipe(Effect.flip)).toBeInstanceOf(
         Integration.CodeRequiredError,
       )
@@ -273,7 +278,7 @@ describe("Integration", () => {
       yield* integrations.update((editor) =>
         editor.method.update({
           integrationID,
-          method: new Integration.OAuthMethod({ id: methodID, type: "oauth", label: "Browser" }),
+          method: { id: methodID, type: "oauth", label: "Browser" },
           authorize: () =>
             Effect.succeed({
               mode: "auto" as const,
@@ -286,7 +291,7 @@ describe("Integration", () => {
         }),
       )
 
-      const attempt = yield* integrations.connect.oauth({ integrationID, methodID, inputs: {} })
+      const attempt = yield* integrations.connection.oauth({ integrationID, methodID, inputs: {} })
       yield* Effect.yieldNow
       expect(yield* integrations.attempt.status(attempt.attemptID)).toEqual({
         status: "complete",
@@ -310,7 +315,7 @@ describe("Integration", () => {
       yield* integrations.update((editor) =>
         editor.method.update({
           integrationID,
-          method: new Integration.OAuthMethod({ id: methodID, type: "oauth", label: "Browser" }),
+          method: { id: methodID, type: "oauth", label: "Browser" },
           authorize: () =>
             Effect.addFinalizer(() => Effect.sync(() => (closed = true))).pipe(
               Effect.as({
@@ -323,7 +328,7 @@ describe("Integration", () => {
         }),
       )
 
-      const attempt = yield* integrations.connect.oauth({ integrationID, methodID, inputs: {} })
+      const attempt = yield* integrations.connection.oauth({ integrationID, methodID, inputs: {} })
       expect(attempt.time.expires - attempt.time.created).toBe(Duration.toMillis(Duration.minutes(10)))
       yield* TestClock.adjust(Duration.minutes(10))
       yield* Effect.yieldNow
@@ -373,23 +378,28 @@ describe("Integration", () => {
           yield* integrations.update((editor) =>
             editor.method.update({
               integrationID,
-              method: new Integration.EnvMethod({
+              method: {
                 type: "env",
                 names: ["INTEGRATION_TEST_ACME_KEY", "INTEGRATION_TEST_ACME_MISSING"],
-              }),
+              },
             }),
           )
 
           // Stored credentials and detected env vars appear as connections.
           expect((yield* integrations.get(integrationID))?.connections).toEqual([
-            new IntegrationConnection.CredentialInfo({ type: "credential", id: rows[0]!.id, label: "Work" }),
-            new IntegrationConnection.CredentialInfo({
+            { type: "credential", id: rows[0]!.id, label: "Work" },
+            {
               type: "credential",
               id: rows[1]!.id,
               label: "Personal",
-            }),
-            new IntegrationConnection.EnvInfo({ type: "env", name: "INTEGRATION_TEST_ACME_KEY" }),
+            },
+            { type: "env", name: "INTEGRATION_TEST_ACME_KEY" },
           ])
+          expect(yield* integrations.connection.forIntegration(integrationID)).toEqual({
+            type: "credential",
+            id: rows[1]!.id,
+            label: "Personal",
+          })
         }).pipe(Effect.provide(projectionLayer)),
       (previous) =>
         Effect.sync(() => {
