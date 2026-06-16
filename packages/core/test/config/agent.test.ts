@@ -1,12 +1,16 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
+import os from "os"
 import path from "path"
 import { Effect, Layer, Schema } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigAgentPlugin } from "@opencode-ai/core/config/plugin/agent"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Global } from "@opencode-ai/core/global"
+import { Location } from "@opencode-ai/core/location"
 import { PermissionV2 } from "@opencode-ai/core/permission"
+import { Project } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
@@ -274,5 +278,191 @@ Use native v2 fields.`,
         }),
       ),
     ),
+  )
+
+  it.live("loads agents from agent_paths with absolute path", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.writeFile(
+              path.join(tmp.path, "reviewer.md"),
+              `---
+description: Reviews changes
+mode: subagent
+---
+Review carefully.`,
+            )
+            await fs.writeFile(
+              path.join(tmp.path, "helper.md"),
+              `---
+description: Helps with tasks
+---
+Help.`,
+            )
+          })
+          const agents = yield* AgentV2.Service
+          const config = Config.Service.of({
+            entries: () =>
+              Effect.succeed([
+                new Config.Document({
+                  type: "document",
+                  info: decode({ agent_paths: [tmp.path] }),
+                }),
+              ]),
+          })
+
+          yield* ConfigAgentPlugin.Plugin.effect.pipe(
+            Effect.provideService(Config.Service, config),
+            Effect.provideService(AgentV2.Service, agents),
+            Effect.provideService(Global.Service, Global.Service.of(Global.make({ home: os.homedir() }))),
+            Effect.provideService(Location.Service, Location.Service.of({
+              directory: AbsolutePath.make(tmp.path),
+              workspaceID: undefined as any,
+              project: { id: "test" as Project.ID, directory: AbsolutePath.make(tmp.path) },
+            })),
+          )
+
+          expect(yield* agents.get(AgentV2.ID.make("reviewer"))).toMatchObject({
+            system: "Review carefully.",
+            description: "Reviews changes",
+            mode: "subagent",
+          })
+          expect(yield* agents.get(AgentV2.ID.make("helper"))).toMatchObject({
+            system: "Help.",
+            description: "Helps with tasks",
+          })
+        }),
+      ),
+    ),
+  )
+
+  it.live("loads agents from agent_paths with ~/ expansion", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.writeFile(
+              path.join(tmp.path, "expanded.md"),
+              `---
+description: Expanded agent
+mode: subagent
+---
+Works with ~/.`,
+            )
+          })
+          const homeDir = path.dirname(tmp.path)
+
+          const agents = yield* AgentV2.Service
+          const config = Config.Service.of({
+            entries: () =>
+              Effect.succeed([
+                new Config.Document({
+                  type: "document",
+                  info: decode({ agent_paths: [path.join("~", path.basename(tmp.path))] }),
+                }),
+              ]),
+          })
+
+          yield* ConfigAgentPlugin.Plugin.effect.pipe(
+            Effect.provideService(Config.Service, config),
+            Effect.provideService(AgentV2.Service, agents),
+            Effect.provideService(Global.Service, Global.Service.of(Global.make({ home: homeDir }))),
+            Effect.provideService(Location.Service, Location.Service.of({
+              directory: AbsolutePath.make(tmp.path),
+              workspaceID: undefined as any,
+              project: { id: "test" as Project.ID, directory: AbsolutePath.make(tmp.path) },
+            })),
+          )
+
+          expect(yield* agents.get(AgentV2.ID.make("expanded"))).toMatchObject({
+            system: "Works with ~/.",
+            description: "Expanded agent",
+          })
+        }),
+      ),
+    ),
+  )
+
+  it.live("handles empty agent_paths directory gracefully", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const agents = yield* AgentV2.Service
+          const config = Config.Service.of({
+            entries: () =>
+              Effect.succeed([
+                new Config.Document({
+                  type: "document",
+                  info: decode({ agent_paths: [tmp.path] }),
+                }),
+              ]),
+          })
+
+          yield* ConfigAgentPlugin.Plugin.effect.pipe(
+            Effect.provideService(Config.Service, config),
+            Effect.provideService(AgentV2.Service, agents),
+            Effect.provideService(Global.Service, Global.Service.of(Global.make({ home: os.homedir() }))),
+            Effect.provideService(Location.Service, Location.Service.of({
+              directory: AbsolutePath.make(tmp.path),
+              workspaceID: undefined as any,
+              project: { id: "test" as Project.ID, directory: AbsolutePath.make(tmp.path) },
+            })),
+          )
+
+          // No crash, no agents loaded
+          expect(yield* agents.get(AgentV2.ID.make("nonexistent"))).toBeUndefined()
+        }),
+      ),
+    ),
+  )
+
+  it.effect("merges agent_paths agents with inline agents (last-wins)", () =>
+    Effect.gen(function* () {
+      const agents = yield* AgentV2.Service
+      const config = Config.Service.of({
+        entries: () =>
+          Effect.succeed([
+            new Config.Document({
+              type: "document",
+              info: decode({
+                agent_paths: [],
+                agents: {
+                  custom: {
+                    description: "Inline agent",
+                    mode: "subagent",
+                  },
+                },
+              }),
+            }),
+          ]),
+      })
+      const globalHome = "/fake-home"
+
+      yield* ConfigAgentPlugin.Plugin.effect.pipe(
+        Effect.provideService(Config.Service, config),
+        Effect.provideService(AgentV2.Service, agents),
+        Effect.provideService(Global.Service, Global.Service.of(Global.make({ home: globalHome }))),
+        Effect.provideService(Location.Service, Location.Service.of({
+          directory: AbsolutePath.make("/tmp"),
+          workspaceID: undefined as any,
+          project: { id: "test" as Project.ID, directory: AbsolutePath.make("/tmp") },
+        })),
+      )
+
+      expect(yield* agents.get(AgentV2.ID.make("custom"))).toMatchObject({
+        description: "Inline agent",
+        mode: "subagent",
+      })
+    }),
   )
 })

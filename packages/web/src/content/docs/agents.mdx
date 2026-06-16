@@ -217,6 +217,24 @@ The markdown file name becomes the agent name. For example, `review.md` creates 
 
 ---
 
+### Agent paths
+
+You can also load agents from external directories using the `agent_paths` config option. Each `.md` file in these directories is loaded as a subagent — the filename (without `.md`) becomes the agent name.
+
+```json
+{
+  "agent_paths": [
+    "~/.config/shared-agents",
+    "/absolute/path/to/more-agents",
+    "./relative/to/config"
+  ]
+}
+```
+
+Paths support `~/` for home directory expansion, absolute paths, and paths relative to the config file declaring them.
+
+---
+
 ## Options
 
 Let's look at these configuration options in detail.

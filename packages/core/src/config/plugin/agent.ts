@@ -7,6 +7,8 @@ import { Config } from "../../config"
 import { ConfigAgent } from "../agent"
 import { ConfigMarkdown } from "../markdown"
 import { FSUtil } from "../../fs-util"
+import { Global } from "../../global"
+import { Location } from "../../location"
 import { ModelV2 } from "../../model"
 import { PluginV2 } from "../../plugin"
 import { ConfigAgentV1 } from "../../v1/config/agent"
@@ -39,7 +41,8 @@ export const Plugin = PluginV2.define({
     const agent = yield* AgentV2.Service
     const config = yield* Config.Service
     const fs = yield* FSUtil.Service
-    const documents = yield* Effect.forEach(yield* config.entries(), (entry) => {
+    const entries = yield* config.entries()
+    const documents = yield* Effect.forEach(entries, (entry) => {
       if (entry.type === "document") return Effect.succeed([entry])
       return Effect.gen(function* () {
         const files = yield* discover(fs, entry.path)
@@ -55,16 +58,46 @@ export const Plugin = PluginV2.define({
         )
       })
     }).pipe(Effect.map((documents) => documents.flat()))
+    const userPathItems = entries.flatMap(
+      (entry) => (entry.type === "document" ? (entry.info.agent_paths ?? []) : []),
+    )
+    const userDocuments = userPathItems.length === 0
+      ? []
+      : yield* Effect.flatMap(
+          Effect.all([Effect.serviceOption(Global.Service), Effect.serviceOption(Location.Service)]),
+          ([global, location]) => {
+            const g = Option.getOrUndefined(global)
+            const l = Option.getOrUndefined(location)
+            if (!g || !l) return Effect.succeed([] as Config.Document[])
+            return Effect.forEach(userPathItems, (item) => {
+              const expanded = item.startsWith("~/") ? path.join(g.home, item.slice(2)) : item
+              const resolved = path.isAbsolute(expanded) ? expanded : path.join(l.directory, expanded)
+              return discoverFlat(fs, resolved).pipe(
+                Effect.flatMap((files) =>
+                  Effect.forEach(files, (file) =>
+                    fs.readFileStringSafe(file.filepath).pipe(
+                      Effect.map((content) => content && decode(file, content)),
+                      Effect.catch(() => Effect.succeed(undefined)),
+                    ),
+                  ).pipe(
+                    Effect.map((docs) => docs.filter((d): d is Config.Document => d !== undefined)),
+                  ),
+                ),
+              )
+            }).pipe(Effect.map((docs) => docs.flat()))
+          },
+        )
+    const allDocuments = [...documents, ...userDocuments]
 
     yield* agent.update((editor) => {
-      const global = documents.flatMap((document) => document.info.permissions ?? [])
-      const configuredDefault = Config.latest(documents, "default_agent")
+      const globalPermissions = allDocuments.flatMap((document) => document.info.permissions ?? [])
+      const configuredDefault = Config.latest(allDocuments, "default_agent")
       if (configuredDefault !== undefined) editor.default(AgentV2.ID.make(configuredDefault))
       for (const current of editor.list()) {
-        editor.update(current.id, (agent) => agent.permissions.push(...global))
+        editor.update(current.id, (agent) => agent.permissions.push(...globalPermissions))
       }
 
-      for (const document of documents) {
+      for (const document of allDocuments) {
         for (const [id, item] of Object.entries(document.info.agents ?? {})) {
           const agentID = AgentV2.ID.make(id)
           if (item.disabled) {
@@ -74,7 +107,7 @@ export const Plugin = PluginV2.define({
 
           const exists = editor.get(agentID) !== undefined
           editor.update(agentID, (agent) => {
-            if (!exists) agent.permissions.push(...global)
+            if (!exists) agent.permissions.push(...globalPermissions)
             if (item.model !== undefined) {
               const model = ModelV2.parse(item.model)
               agent.model = { id: model.modelID, providerID: model.providerID, variant: agent.model?.variant }
@@ -109,6 +142,13 @@ function discover(fs: FSUtil.Interface, directory: string) {
       ),
   ).pipe(
     Effect.map((files) => files.flat()),
+    Effect.catch(() => Effect.succeed([])),
+  )
+}
+
+function discoverFlat(fs: FSUtil.Interface, directory: string) {
+  return fs.glob("*.md", { cwd: directory, absolute: true, dot: true }).pipe(
+    Effect.map((files) => files.toSorted().map((filepath) => ({ directory, filepath, primary: false }))),
     Effect.catch(() => Effect.succeed([])),
   )
 }

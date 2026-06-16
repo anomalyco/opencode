@@ -73,6 +73,8 @@ Every field is optional.
     "urls": ["https://example.com/.well-known/skills/"]
   },
 
+  "agent_paths": ["~/shared-agents", "/abs/path/to/agents"],
+
   "references": {
     "docs": {
       "path": "../docs",
@@ -154,6 +156,7 @@ Shape notes worth being explicit about:
 - `plugin` is an array of strings or `[name, options]` tuples, not an object.
 - `mcp[name].command` is an array of strings, never a single string. `type` is required.
 - `permission` is either a string action or an object keyed by tool name.
+- `agent_paths` is an array of paths, not an object.
 
 ## Skills
 
@@ -276,6 +279,20 @@ file, `disable: true` in frontmatter.
 opencode ships with `build`, `plan`, `general`, `explore`. Hidden internal agents:
 `compaction`, `title`, `summary`. To override a built-in's fields, define the
 same key in `agent: { <name>: { ... } }`.
+
+### External directories (`agent_paths`)
+
+Load agents from directories outside the project via `agent_paths`:
+
+```json
+{
+  "agent_paths": ["~/shared-agents", "/absolute/path", "./relative/to/config"]
+}
+```
+
+Each `.md` file in these directories is loaded as a subagent. The filename
+(without `.md`) becomes the agent name. Paths support `~/`, absolute, and
+relative-to-config resolution, matching the `skills` pattern.
 
 ## Plugins
 
