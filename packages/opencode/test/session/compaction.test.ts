@@ -231,6 +231,7 @@ const deps = Layer.mergeAll(
   Agent.defaultLayer,
   Plugin.defaultLayer,
   EventV2Bridge.defaultLayer,
+  SessionStatus.defaultLayer,
   Config.defaultLayer,
   RuntimeFlags.layer({ experimentalEventSystem: true }),
   Database.defaultLayer,
@@ -241,6 +242,7 @@ const env = Layer.mergeAll(
   SessionNs.defaultLayer,
   Database.defaultLayer,
   EventV2Bridge.defaultLayer,
+  SessionStatus.defaultLayer,
   CrossSpawnSpawner.defaultLayer,
   SessionCompaction.layer.pipe(Layer.provide(SessionNs.defaultLayer), Layer.provideMerge(deps)),
 )
@@ -261,6 +263,7 @@ type CompactionProcessOptions = {
   plugin?: Layer.Layer<Plugin.Service>
   provider?: ReturnType<typeof ProviderTest.fake>
   config?: Layer.Layer<Config.Service>
+  experimentalEventSystem?: boolean
 }
 
 function withCompaction(options?: CompactionProcessOptions) {
@@ -270,11 +273,12 @@ function withCompaction(options?: CompactionProcessOptions) {
 function compactionProcessLayer(options?: CompactionProcessOptions) {
   const events = EventV2Bridge.defaultLayer
   const status = SessionStatus.layer.pipe(Layer.provide(events))
+  const flags = RuntimeFlags.layer({ experimentalEventSystem: options?.experimentalEventSystem ?? true })
   const processor = options?.llm
     ? SessionProcessorModule.SessionProcessor.layer.pipe(
         Layer.provide(summary),
         Layer.provide(Image.defaultLayer),
-        Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+        Layer.provide(flags),
         Layer.provide(status),
       )
     : layer(options?.result ?? "continue")
@@ -289,7 +293,7 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
     Layer.provide(status),
     Layer.provide(events),
     Layer.provide(options?.config ?? Config.defaultLayer),
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
+    Layer.provide(flags),
     Layer.provide(EventV2Bridge.defaultLayer),
   )
 }
@@ -380,6 +384,19 @@ function autocontinue(enabled: boolean) {
     init: () => Effect.void,
   })
 }
+
+const recordStatusEvents = Effect.fn("TestSessionCompaction.recordStatusEvents")(function* (sessionID: SessionID) {
+  const events = yield* EventV2Bridge.Service
+  const statuses: SessionStatus.Info[] = []
+  const off = yield* events.listen((evt) => {
+    if (evt.type !== SessionStatus.Event.Status.type) return Effect.void
+    const data = evt.data as typeof SessionStatus.Event.Status.data.Type
+    if (data.sessionID === sessionID) statuses.push(data.status)
+    return Effect.void
+  })
+  yield* Effect.addFinalizer(() => off)
+  return statuses
+})
 
 describe("session.compaction.isOverflow", () => {
   it.live(
@@ -815,6 +832,128 @@ describe("session.compaction.prune", () => {
 })
 
 describe("session.compaction.process", () => {
+  itCompaction.instance(
+    "emits compacting then restores busy for manual compaction",
+    () => {
+      const stub = llm()
+      stub.push(reply("summary"))
+
+      return Effect.gen(function* () {
+        const status = yield* SessionStatus.Service
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "hello")
+        const statuses = yield* recordStatusEvents(session.id)
+
+        yield* createSummaryCompaction(session.id)
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        const result = yield* SessionCompaction.use.process({
+          parentID: parent!,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        expect(result).toBe("continue")
+        expect(statuses.map((item) => item.type)).toStrictEqual(["compacting", "busy"])
+        expect(statuses[0]).toMatchObject({ type: "compacting", startedAt: expect.any(Number) })
+        expect(yield* status.get(session.id)).toMatchObject({ type: "busy" })
+      }).pipe(withCompaction({ llm: stub.layer }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "emits compacting then restores busy for auto compaction",
+    () => {
+      const stub = llm()
+      stub.push(reply("summary"))
+
+      return Effect.gen(function* () {
+        const status = yield* SessionStatus.Service
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "hello")
+        const statuses = yield* recordStatusEvents(session.id)
+
+        yield* SessionCompaction.use.create({ sessionID: session.id, agent: "build", model: ref, auto: true })
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        const result = yield* SessionCompaction.use.process({
+          parentID: parent!,
+          messages: msgs,
+          sessionID: session.id,
+          auto: true,
+        })
+
+        expect(result).toBe("continue")
+        expect(statuses.map((item) => item.type)).toStrictEqual(["compacting", "busy"])
+        expect(statuses[0]).toMatchObject({ type: "compacting", startedAt: expect.any(Number) })
+        expect(yield* status.get(session.id)).toMatchObject({ type: "busy" })
+      }).pipe(withCompaction({ llm: stub.layer }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "restores busy when compaction overflows again",
+    Effect.gen(function* () {
+      const status = yield* SessionStatus.Service
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      yield* createUserMessage(session.id, "hello")
+      const statuses = yield* recordStatusEvents(session.id)
+
+      yield* createSummaryCompaction(session.id)
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+      const parent = msgs.at(-1)?.info.id
+      expect(parent).toBeTruthy()
+      const result = yield* SessionCompaction.use.process({
+        parentID: parent!,
+        messages: msgs,
+        sessionID: session.id,
+        auto: false,
+      })
+
+      expect(result).toBe("stop")
+      expect(statuses.map((item) => item.type)).toStrictEqual(["compacting", "busy"])
+      expect(yield* status.get(session.id)).toMatchObject({ type: "busy" })
+    }).pipe(withCompaction({ result: "compact" })),
+  )
+
+  itCompaction.instance(
+    "does not emit compacting when experimental event system is disabled",
+    () => {
+      const stub = llm()
+      stub.push(reply("summary"))
+
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "hello")
+        const statuses = yield* recordStatusEvents(session.id)
+
+        yield* createSummaryCompaction(session.id)
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        const result = yield* SessionCompaction.use.process({
+          parentID: parent!,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        expect(result).toBe("continue")
+        expect(statuses.map((item) => item.type)).toStrictEqual(["busy"])
+      }).pipe(withCompaction({ llm: stub.layer, experimentalEventSystem: false }))
+    },
+    { git: true },
+  )
+
   it.instance(
     "throws when parent is not a user message",
     Effect.gen(function* () {

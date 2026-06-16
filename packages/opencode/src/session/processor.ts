@@ -30,7 +30,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
 import { RuntimeFlags } from "@/effect/runtime-flags"
-import { ToolOutput, Usage, type LLMEvent } from "@opencode-ai/llm"
+import { Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
@@ -970,7 +970,9 @@ export const layer = Layer.effect(
             ctx.currentText = undefined
             ctx.currentTextID = undefined
             ctx.reasoningMap = {}
-            yield* status.set(ctx.sessionID, { type: "busy" })
+            if ((yield* status.get(ctx.sessionID)).type !== "compacting") {
+              yield* status.set(ctx.sessionID, { type: "busy" })
+            }
             const stream = llm.stream(streamInput)
 
             yield* stream.pipe(

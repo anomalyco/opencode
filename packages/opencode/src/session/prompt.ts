@@ -1139,7 +1139,9 @@ export const layer = Layer.effect(
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
-          yield* status.set(sessionID, { type: "busy" })
+          if ((yield* status.get(sessionID)).type !== "compacting") {
+            yield* status.set(sessionID, { type: "busy" })
+          }
           yield* Effect.logInfo("loop", { "session.id": sessionID, step })
 
           let msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
@@ -1200,6 +1202,9 @@ export const layer = Layer.effect(
           }
 
           if (task?.type === "compaction") {
+            if (flags.experimentalEventSystem && (yield* status.get(sessionID)).type !== "compacting") {
+              yield* status.set(sessionID, { type: "compacting", startedAt: Date.now() })
+            }
             const result = yield* compaction.process({
               messages: msgs,
               parentID: lastUser.id,
