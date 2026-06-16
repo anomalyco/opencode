@@ -306,6 +306,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Поиск папок",
   "dialog.directory.empty": "Папки не найдены",
+  "dialog.directory.action.selectFile": "Выбрать файл",
+  "dialog.directory.action.selectFolder": "Выбрать папку",
+  "dialog.directory.root": "Корень",
+  "dialog.directory.parent": "Родительская папка",
+  "dialog.directory.readError": "Не удалось прочитать эту папку",
 
   "dialog.server.title": "Серверы",
   "dialog.server.description": "Переключите сервер OpenCode к которому подключается приложение.",
