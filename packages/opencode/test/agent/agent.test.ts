@@ -323,6 +323,24 @@ it.instance(
 )
 
 it.instance(
+  "agent maxStepsMessage config sets maxStepsMessage property",
+  () =>
+    Effect.gen(function* () {
+      const build = yield* load((svc) => svc.get("build"))
+      const plan = yield* load((svc) => svc.get("plan"))
+      expect(build?.maxStepsMessage).toBe(false)
+      expect(plan?.maxStepsMessage).toBe(true)
+    }),
+  {
+    config: {
+      agent: {
+        build: { maxStepsMessage: false },
+      },
+    },
+  },
+)
+
+it.instance(
   "agent mode can be overridden",
   () =>
     Effect.gen(function* () {
