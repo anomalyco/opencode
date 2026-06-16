@@ -41,6 +41,8 @@ already-loaded config until then.
 | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Project config                | `./opencode.json`, `./opencode.jsonc`, or `.opencode/opencode.json` (opencode walks up from the cwd to the worktree root) |
 | Global config                 | `~/.config/opencode/opencode.json` (NOT `~/.opencode/`)                                                                   |
+| Project TUI config            | `./tui.json`, `./tui.jsonc`, or `.opencode/tui.json`                                                                     |
+| Global TUI config             | `~/.config/opencode/tui.json`                                                                                            |
 | Project agents                | `.opencode/agent/<name>.md` or `.opencode/agents/<name>.md`                                                               |
 | Global agents                 | `~/.config/opencode/agent(s)/<name>.md`                                                                                   |
 | Project skills                | `.opencode/skill(s)/<name>/SKILL.md`                                                                                      |
@@ -49,6 +51,45 @@ already-loaded config until then.
 
 Configs from each scope are deep-merged. Project overrides global. Unknown
 top-level keys in `opencode.json` are rejected with `ConfigInvalidError`.
+
+## TUI config (tui.json)
+
+The TUI (terminal UI) has its own parallel config system with a separate file,
+`tui.json` (or `tui.jsonc`). It is loaded by the TUI plugin system
+(`plugin/tui/runtime.ts`), independently from the server plugin system that
+reads `opencode.json`.
+
+**Where it's loaded from** (merged in order, project overrides global):
+`~/.config/opencode/tui.json` → `./tui.json` → `.opencode/tui.json`. It can
+also be overridden with `OPENCODE_TUI_CONFIG`.
+
+**Valid top-level fields:**
+
+- `$schema` - JSON Schema URL
+- `theme` - Theme name
+- `keybinds` - Keybinding overrides
+- `plugin` - Array of plugin specs (same shape as `opencode.json`'s `plugin`)
+- `plugin_enabled` - Object mapping plugin name to boolean
+- `leader_timeout` - Leader key timeout in ms (default: 2000)
+- `attention` - Attention notification and sound settings
+- `prompt` - Prompt textarea size settings
+- `scroll_speed` - TUI scroll speed
+- `scroll_acceleration` - Scroll acceleration settings
+- `diff_style` - `"auto"` (adapts to terminal width) or `"stacked"` (always single column)
+- `mouse` - Enable/disable mouse capture (default: `true`)
+
+**Why this matters for plugins:**
+
+A plugin can be declared in either or both configs. Plugins with only a server
+export (`dist/index.js`) are typically declared in `opencode.json`. Plugins with
+a TUI export (`src/tui/`) must be declared in `tui.json`. Some plugins (like
+`@cortexkit/opencode-magic-context`) provide **both** exports and can be listed
+in either file — if you remove it from `opencode.json` but it's still in
+`tui.json`, it will continue loading via the TUI side.
+
+The `/plugins` TUI panel lists **TUI plugins only** — server plugins from
+`opencode.json` do not appear there. To see all plugins, check both config
+files.
 
 ## opencode.json
 
@@ -263,8 +304,8 @@ frontmatter.
 `mode` is one of `"primary"`, `"subagent"`, `"all"`.
 
 Allowed top-level frontmatter fields: `name, model, variant, description, mode,
-hidden, color, steps, options, permission, disable, temperature, top_p`. Any
-unknown field is silently routed into `options`.
+hidden, color, steps, tools (deprecated), options, permission, disable,
+temperature, top_p`. Any unrecognized field is silently routed into `options`.
 
 To disable a built-in agent: `agent: { build: { disable: true } }`, or in a
 file, `disable: true` in frontmatter.
@@ -381,11 +422,23 @@ rules last.
 `permission: "allow"` (a string at the top level) is shorthand for "allow
 everything" and is rarely what the user wants.
 
-Known permission keys: `read, edit, glob, grep, list, bash, task,
-external_directory, todowrite, question, webfetch, websearch, lsp, doom_loop,
-skill`. Some of these (`todowrite,
+Known permission keys: `read, edit, glob, grep, list, bash, task, skill, lsp,
+question, webfetch, websearch, external_directory, todowrite, doom_loop`. Some
+of these (`todowrite,
 question, webfetch, websearch, doom_loop`) only accept a flat
 action, not a per-pattern object.
+
+> **MCP tools cannot be controlled via a `mcp` permission key** — `mcp` is not
+> a recognized permission key. To restrict MCP tools on an agent, use the
+> `"*"` catch-all pattern:
+>
+> ```json
+> { "permission": { "*": "deny", "read": "allow" } }
+> ```
+>
+> The `"*"` key at the top level of the permission object matches **any tool**,
+> including MCP tools. Insertion order still applies (last matching rule wins),
+> so put broad `"*"` rules first and specific tool rules after.
 
 `external_directory` patterns are filesystem paths (use `~/`, absolute paths,
 or globs like `~/projects/**`).
