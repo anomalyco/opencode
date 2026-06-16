@@ -27,9 +27,12 @@ export function createTimelineProjection(input: {
     return result
   })
   const activeMessageID = createMemo(() => {
-    const parentID = input.messages().findLast(
-      (message): message is AssistantMessage => message.role === "assistant" && typeof message.time.completed !== "number",
-    )?.parentID
+    const parentID = input
+      .messages()
+      .findLast(
+        (message): message is AssistantMessage =>
+          message.role === "assistant" && typeof message.time.completed !== "number",
+      )?.parentID
     if (parentID) {
       const messages = input.messages()
       const result = Binary.search(messages, parentID, (message) => message.id)

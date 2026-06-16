@@ -172,7 +172,9 @@ test.describe("smoke: session timeline", () => {
                 })
                 .map((element) => element.dataset.messageId!)
                 .filter((id) => ids.has(id))
-              const bottom = root.querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')?.getBoundingClientRect()
+              const bottom = root
+                .querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')
+                ?.getBoundingClientRect()
               samples.push({ ids: visible, last: visible.includes(last), bottomError: bottom?.bottom - view.bottom })
               if (!firstPaint && visible.includes(last) && Math.abs((bottom?.bottom ?? Infinity) - view.bottom) <= 1) {
                 firstPaint = true
@@ -187,9 +189,11 @@ test.describe("smoke: session timeline", () => {
             requestAnimationFrame(sample)
           }, 0)
         }
-        ;(window as Window & {
-          __sessionTabPaint?: { samples: typeof samples; removed: () => number; stop: () => void }
-        }).__sessionTabPaint = {
+        ;(
+          window as Window & {
+            __sessionTabPaint?: { samples: typeof samples; removed: () => number; stop: () => void }
+          }
+        ).__sessionTabPaint = {
           samples,
           removed: () => removedFirstPaintNodes,
           stop: () => {
@@ -203,19 +207,21 @@ test.describe("smoke: session timeline", () => {
 
     await switchTitlebarSession(page, fixture.targetID, fixture.expected.targetTitle)
     await page.waitForFunction(() =>
-      (window as Window & { __sessionTabPaint?: { samples: Array<{ ids: string[] }> } }).__sessionTabPaint?.samples.some(
-        (sample) => sample.ids.length > 0,
-      ),
+      (
+        window as Window & { __sessionTabPaint?: { samples: Array<{ ids: string[] }> } }
+      ).__sessionTabPaint?.samples.some((sample) => sample.ids.length > 0),
     )
     await page.waitForTimeout(200)
     const first = await page.evaluate(() => {
-      const probe = (window as Window & {
-        __sessionTabPaint?: {
-          samples: Array<{ ids: string[]; last: boolean; bottomError?: number }>
-          removed: () => number
-          stop: () => void
+      const probe = (
+        window as Window & {
+          __sessionTabPaint?: {
+            samples: Array<{ ids: string[]; last: boolean; bottomError?: number }>
+            removed: () => number
+            stop: () => void
+          }
         }
-      }).__sessionTabPaint!
+      ).__sessionTabPaint!
       probe.stop()
       return { first: probe.samples.find((sample) => sample.ids.length > 0), removed: probe.removed() }
     })
@@ -253,31 +259,36 @@ test.describe("smoke: session timeline", () => {
     await expectSessionTitle(page, fixture.expected.sourceTitle)
     const last = fixture.expected.targetMessageIDs.at(-1)!
     const destination = fixture.messages[fixture.targetID].map((message) => message.info.id)
-    await page.evaluate(({ destination, last }) => {
-      const ids = new Set(destination)
-      const samples: Array<{ destination: boolean; last: boolean; bottomError?: number }> = []
-      const sample = () => {
-        const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
-          element.querySelector("[data-timeline-row]"),
-        )
-        if (root) {
-          const view = root.getBoundingClientRect()
-          const spacer = root.querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')?.getBoundingClientRect()
-          const messages = [...root.querySelectorAll<HTMLElement>("[data-message-id]")].filter((element) => {
-            const rect = element.getBoundingClientRect()
-            return rect.bottom > view.top && rect.top < view.bottom
-          })
-          samples.push({
-            destination: messages.some((element) => ids.has(element.dataset.messageId!)),
-            last: messages.some((element) => element.dataset.messageId === last),
-            bottomError: spacer ? spacer.bottom - view.bottom : undefined,
-          })
+    await page.evaluate(
+      ({ destination, last }) => {
+        const ids = new Set(destination)
+        const samples: Array<{ destination: boolean; last: boolean; bottomError?: number }> = []
+        const sample = () => {
+          const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
+            element.querySelector("[data-timeline-row]"),
+          )
+          if (root) {
+            const view = root.getBoundingClientRect()
+            const spacer = root
+              .querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')
+              ?.getBoundingClientRect()
+            const messages = [...root.querySelectorAll<HTMLElement>("[data-message-id]")].filter((element) => {
+              const rect = element.getBoundingClientRect()
+              return rect.bottom > view.top && rect.top < view.bottom
+            })
+            samples.push({
+              destination: messages.some((element) => ids.has(element.dataset.messageId!)),
+              last: messages.some((element) => element.dataset.messageId === last),
+              bottomError: spacer ? spacer.bottom - view.bottom : undefined,
+            })
+          }
+          requestAnimationFrame(() => setTimeout(sample, 0))
         }
+        ;(window as Window & { __coldTabSamples?: typeof samples }).__coldTabSamples = samples
         requestAnimationFrame(() => setTimeout(sample, 0))
-      }
-      ;(window as Window & { __coldTabSamples?: typeof samples }).__coldTabSamples = samples
-      requestAnimationFrame(() => setTimeout(sample, 0))
-    }, { destination, last })
+      },
+      { destination, last },
+    )
 
     await switchTitlebarSession(page, fixture.targetID, fixture.expected.targetTitle)
     await page.waitForFunction(() =>
@@ -286,9 +297,11 @@ test.describe("smoke: session timeline", () => {
       ),
     )
     const result = await page.evaluate(() => {
-      const samples = (window as Window & {
-        __coldTabSamples?: Array<{ destination: boolean; last: boolean; bottomError?: number }>
-      }).__coldTabSamples!
+      const samples = (
+        window as Window & {
+          __coldTabSamples?: Array<{ destination: boolean; last: boolean; bottomError?: number }>
+        }
+      ).__coldTabSamples!
       return samples.find((sample) => sample.destination)!
     })
     expect(result.last).toBe(true)
