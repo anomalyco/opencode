@@ -71,6 +71,7 @@ export async function read() {
   const { default: clipboardy } = await import("clipboardy")
   const text = await clipboardy.read().catch(() => undefined)
   if (text) return { data: text, mime: "text/plain" }
+  return undefined
 }
 
 export function copyCommand(
@@ -91,6 +92,38 @@ export function copyCommand(
       "[Console]::InputEncoding = [System.Text.Encoding]::UTF8; Set-Clipboard -Value ([Console]::In.ReadToEnd())",
     ]
   }
+  return undefined
+}
+
+type ClipboardyModule = {
+  default: {
+    write(text: string): Promise<void>
+  }
+}
+
+export function createCopyMethod(input: {
+  os: NodeJS.Platform
+  wayland: boolean
+  has: (name: string) => boolean
+  run: (command: string, args?: string[], input?: string) => Promise<Buffer>
+  loadClipboardy: () => Promise<ClipboardyModule>
+}) {
+  const native = copyCommand(input.os, input.wayland, input.has)
+  if (native?.[0] === "osascript") {
+    return async (text: string) => {
+      const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
+      await input.run("osascript", ["-e", `set the clipboard to "${escaped}"`])
+    }
+  }
+  if (native) {
+    return async (text: string) => {
+      await input.run(native[0], native.slice(1), text)
+    }
+  }
+  return async (text: string) => {
+    const { default: clipboardy } = await input.loadClipboardy()
+    await clipboardy.write(text)
+  }
 }
 
 let copyMethod: Promise<(text: string) => Promise<void>> | undefined
@@ -98,22 +131,13 @@ let copyMethod: Promise<(text: string) => Promise<void>> | undefined
 function getCopyMethod() {
   return (copyMethod ??= (async () => {
     const { which } = await import("@opencode-ai/core/util/which")
-    const native = copyCommand(platform(), Boolean(process.env.WAYLAND_DISPLAY), (name) => Boolean(which(name)))
-    if (native?.[0] === "osascript") {
-      return async (text: string) => {
-        const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
-        await command("osascript", ["-e", `set the clipboard to "${escaped}"`]).catch(() => undefined)
-      }
-    }
-    if (native) {
-      return async (text: string) => {
-        await command(native[0], native.slice(1), text).catch(() => undefined)
-      }
-    }
-    return async (text: string) => {
-      const { default: clipboardy } = await import("clipboardy")
-      await clipboardy.write(text).catch(() => undefined)
-    }
+    return createCopyMethod({
+      os: platform(),
+      wayland: Boolean(process.env.WAYLAND_DISPLAY),
+      has: (name) => Boolean(which(name)),
+      run: command,
+      loadClipboardy: () => import("clipboardy"),
+    })
   })())
 }
 
