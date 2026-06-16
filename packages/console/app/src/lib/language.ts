@@ -17,6 +17,7 @@ export const LOCALES = [
   "br",
   "th",
   "tr",
+  "id",
 ] as const
 
 export type Locale = (typeof LOCALES)[number]
@@ -48,6 +49,7 @@ const LABEL = {
   br: "Português (Brasil)",
   th: "ไทย",
   tr: "Türkçe",
+  id: "Bahasa Indonesia",
 } satisfies Record<Locale, string>
 
 const TAG = {
@@ -69,6 +71,7 @@ const TAG = {
   br: "pt-BR",
   th: "th",
   tr: "tr",
+  id: "id",
 } satisfies Record<Locale, string>
 
 const DOCS = {
@@ -90,6 +93,7 @@ const DOCS = {
   br: "pt-br",
   th: "th",
   tr: "tr",
+  id: "id",
 } satisfies Record<Locale, string>
 
 const DOCS_SEGMENT = new Set([
@@ -99,6 +103,7 @@ const DOCS_SEGMENT = new Set([
   "de",
   "es",
   "fr",
+  "id",
   "it",
   "ja",
   "ko",
@@ -120,6 +125,7 @@ const DOCS_LOCALE = {
   en: "en",
   es: "es",
   fr: "fr",
+  id: "id",
   it: "it",
   ja: "ja",
   ko: "ko",
@@ -247,6 +253,7 @@ function match(input: string): Locale | null {
   if (value.startsWith("ru")) return "ru"
   if (value.startsWith("uk")) return "uk"
   if (value.startsWith("ar")) return "ar"
+  if (value.startsWith("id")) return "id"
   if (value.startsWith("tr")) return "tr"
   if (value.startsWith("th")) return "th"
   if (value.startsWith("pt")) return "br"
