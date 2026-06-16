@@ -7,15 +7,14 @@ import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { resetDatabase } from "../fixture/db"
 import { testEffect } from "../lib/effect"
-import { findResumableSession, GITHUB_RUN_METADATA_KEY, shouldSendContinuation } from "../../src/cli/cmd/github"
+import {
+  GITHUB_RUN_METADATA_KEY,
+  GITHUB_RUN_RESUME_PROMPT,
+  githubRunPrompt,
+  shouldSendContinuation,
+} from "../../src/cli/cmd/github"
 
-// `opencode github run` stamps GITHUB_RUN_ID into session metadata at creation
-// and, on a retry within the same runner (a wrapper re-spawn after a transient
-// failure), looks the prior session up by that key to continue rather than start
-// fresh. The resolution sequence in the handler is: list -> findResumableSession
-// -> count prior messages -> shouldSendContinuation. These tests drive that exact
-// sequence against the real Session service and SQLite so the metadata round-trip
-// and the empty-session fallback are what's verified, not hand-built stand-ins.
+// Same-runner retries resolve by workflow identity, not by "latest session".
 const it = testEffect(Layer.mergeAll(Session.defaultLayer))
 
 afterEach(async () => {
@@ -39,7 +38,7 @@ const addMessage = (sessionID: SessionID) =>
 // Mirrors the handler's session resolution against the real service.
 const resolve = (runId: string) =>
   Effect.gen(function* () {
-    const prior = findResumableSession(yield* Session.use.list(), runId)
+    const prior = yield* Session.use.findByMetadata({ key: GITHUB_RUN_METADATA_KEY, value: runId })
     const priorMessageCount = prior ? (yield* Session.use.messages({ sessionID: prior.id, limit: 1 })).length : 0
     return { prior, continuation: shouldSendContinuation({ foundPrior: prior !== undefined, priorMessageCount }) }
   })
@@ -104,9 +103,8 @@ describe("github run session resolution", () => {
         const a = yield* Session.use.create({ metadata: { [GITHUB_RUN_METADATA_KEY]: "gh-run-a" } })
         const b = yield* Session.use.create({ metadata: { [GITHUB_RUN_METADATA_KEY]: "gh-run-b" } })
 
-        const sessions = yield* Session.use.list()
-        expect(findResumableSession(sessions, "gh-run-a")?.id).toBe(a.id)
-        expect(findResumableSession(sessions, "gh-run-b")?.id).toBe(b.id)
+        expect((yield* Session.use.findByMetadata({ key: GITHUB_RUN_METADATA_KEY, value: "gh-run-a" }))?.id).toBe(a.id)
+        expect((yield* Session.use.findByMetadata({ key: GITHUB_RUN_METADATA_KEY, value: "gh-run-b" }))?.id).toBe(b.id)
       }),
     { git: true },
   )
@@ -118,38 +116,39 @@ describe("github run session resolution", () => {
         yield* TestInstance
         const runId = "gh-run-forked"
         const original = yield* Session.use.create({ metadata: { [GITHUB_RUN_METADATA_KEY]: runId } })
+        yield* Effect.sleep("1 millis")
         // Forks copy metadata in this codebase, so the fork carries the same run id
         // and is not distinguishable by parentID (forks have none). The lookup must
         // still resolve to a single, deterministic session.
         const fork = yield* Session.use.fork({ sessionID: original.id })
         expect(fork.metadata?.[GITHUB_RUN_METADATA_KEY]).toBe(runId)
 
-        const sessions = yield* Session.use.list()
-        const matches = sessions.filter((s) => s.metadata?.[GITHUB_RUN_METADATA_KEY] === runId)
-        expect(matches.length).toBe(2)
-
-        const earliest = matches.reduce((a, b) => (a.time.created <= b.time.created ? a : b))
-        expect(findResumableSession(sessions, runId)?.id).toBe(earliest.id)
+        const prior = yield* Session.use.findByMetadata({ key: GITHUB_RUN_METADATA_KEY, value: runId })
+        expect(prior?.id).toBe(original.id)
       }),
     { git: true },
   )
-})
 
-describe("findResumableSession (pure)", () => {
-  test("picks the earliest-created session when several share a run id", () => {
-    const runId = "dup"
-    const sessions = [
-      { id: "later", metadata: { [GITHUB_RUN_METADATA_KEY]: runId }, time: { created: 200 } },
-      { id: "original", metadata: { [GITHUB_RUN_METADATA_KEY]: runId }, time: { created: 100 } },
-      { id: "unrelated", metadata: { [GITHUB_RUN_METADATA_KEY]: "other" }, time: { created: 50 } },
-    ]
-    expect(findResumableSession(sessions, runId)?.id).toBe("original")
-  })
+  it.instance(
+    "finds an old matching session without depending on the session list limit",
+    () =>
+      Effect.gen(function* () {
+        yield* TestInstance
+        const runId = "gh-run-old-match"
+        const created = yield* Session.use.create({ metadata: { [GITHUB_RUN_METADATA_KEY]: runId } })
 
-  test("returns undefined when no session carries the run id", () => {
-    const sessions = [{ id: "x", metadata: { [GITHUB_RUN_METADATA_KEY]: "a" }, time: { created: 1 } }]
-    expect(findResumableSession(sessions, "b")).toBeUndefined()
-  })
+        yield* Effect.all(
+          Array.from({ length: 125 }, (_, index) =>
+            Session.use.create({ metadata: { [GITHUB_RUN_METADATA_KEY]: `other-${index}` } }),
+          ),
+          { concurrency: 1 },
+        )
+
+        const prior = yield* Session.use.findByMetadata({ key: GITHUB_RUN_METADATA_KEY, value: runId })
+        expect(prior?.id).toBe(created.id)
+      }),
+    { git: true },
+  )
 })
 
 describe("shouldSendContinuation (pure)", () => {
@@ -163,5 +162,22 @@ describe("shouldSendContinuation (pure)", () => {
 
   test("prior session with history means continuation nudge", () => {
     expect(shouldSendContinuation({ foundPrior: true, priorMessageCount: 1 })).toBe(true)
+  })
+})
+
+describe("githubRunPrompt", () => {
+  test("keeps the full prompt and files for a fresh run", () => {
+    const promptFiles = ["screenshot"]
+    expect(githubRunPrompt({ continuation: false, message: "full prompt", promptFiles })).toEqual({
+      message: "full prompt",
+      promptFiles,
+    })
+  })
+
+  test("sends only the continuation nudge when resuming a recorded attempt", () => {
+    expect(githubRunPrompt({ continuation: true, message: "full prompt", promptFiles: ["screenshot"] })).toEqual({
+      message: GITHUB_RUN_RESUME_PROMPT,
+      promptFiles: [],
+    })
   })
 })

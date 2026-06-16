@@ -9,26 +9,8 @@ export { parseGitHubRemote } from "@/util/repository"
  */
 export const GITHUB_RUN_METADATA_KEY = "githubRunId"
 
-/**
- * Picks the session to resume for a GitHub Actions run, keyed by the stable
- * GITHUB_RUN_ID stamped into session metadata at creation. Returns undefined
- * when no session for this run exists yet (fresh runner or first attempt); the
- * caller then creates a new one.
- *
- * `github run` creates exactly one session per run id, so normally a single
- * session matches. If more than one ever does (someone forked the session, and
- * forks copy metadata), resume the earliest-created one: the original task
- * session carrying the real context, not a later copy.
- */
-export function findResumableSession<S extends { metadata?: Record<string, unknown>; time: { created: number } }>(
-  sessions: readonly S[],
-  runId: string,
-): S | undefined {
-  return sessions
-    .filter((s) => s.metadata?.[GITHUB_RUN_METADATA_KEY] === runId)
-    .sort((a, b) => a.time.created - b.time.created)
-    .at(0)
-}
+export const GITHUB_RUN_RESUME_PROMPT =
+  "The previous attempt in this session was interrupted before finishing. Continue the task to completion."
 
 /**
  * Whether a resumed `github run` should send a short continuation nudge instead
@@ -39,6 +21,15 @@ export function findResumableSession<S extends { metadata?: Record<string, unkno
  */
 export function shouldSendContinuation(input: { foundPrior: boolean; priorMessageCount: number }): boolean {
   return input.foundPrior && input.priorMessageCount > 0
+}
+
+export function githubRunPrompt<T>(input: {
+  continuation: boolean
+  message: string
+  promptFiles: T[]
+}): { message: string; promptFiles: T[] } {
+  if (!input.continuation) return { message: input.message, promptFiles: input.promptFiles }
+  return { message: GITHUB_RUN_RESUME_PROMPT, promptFiles: [] }
 }
 
 /**

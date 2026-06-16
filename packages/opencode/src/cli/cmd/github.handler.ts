@@ -35,9 +35,9 @@ import { parseGitHubRemote } from "@/util/repository"
 import { Effect } from "effect"
 import {
   extractResponseText,
-  findResumableSession,
   formatPromptTooLargeError,
   GITHUB_RUN_METADATA_KEY,
+  githubRunPrompt,
   shouldSendContinuation,
 } from "./github.shared"
 
@@ -500,16 +500,9 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         await addReaction(commentType)
       }
 
-      // Setup opencode session. Reuse the prior session for this GitHub run when
-      // one already exists in the local DB (a wrapper/in-runner retry after a
-      // transient failure), so the agent continues its earlier work instead of
-      // re-fetching context and re-prompting the model from scratch. GITHUB_RUN_ID
-      // is stable across re-runs (only GITHUB_RUN_ATTEMPT increments), so it is a
-      // safe idempotency key. A cross-runner re-run starts on a fresh disk with an
-      // empty DB and still creates a new session; covering that needs the data dir
-      // persisted across runners, out of scope here.
+      // Same-runner retries reuse the session stamped with this workflow run id.
       const repoData = await fetchRepo()
-      const prior = findResumableSession(await runLocalEffect(sessionSvc.list()), runId)
+      const prior = await runLocalEffect(sessionSvc.findByMetadata({ key: GITHUB_RUN_METADATA_KEY, value: runId }))
       const priorMessageCount = prior
         ? (await runLocalEffect(sessionSvc.messages({ sessionID: prior.id, limit: 1 }))).length
         : 0
@@ -537,13 +530,10 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
       })()
       console.log(prior ? "resuming opencode session" : "opencode session", session.id)
 
-      // When continuing, the full task prompt and PR/issue context already live in
-      // the session history; send a short nudge instead of re-injecting everything
-      // (the point of resuming is to not re-spend those tokens).
-      const RESUME_PROMPT =
-        "The previous attempt in this session was interrupted before finishing. Continue the task to completion."
-      const runTask = (message: string) =>
-        chat(continuation ? RESUME_PROMPT : message, continuation ? [] : promptFiles)
+      const runTask = (message: string) => {
+        const prompt = githubRunPrompt({ continuation, message, promptFiles })
+        return chat(prompt.message, prompt.promptFiles)
+      }
 
       // Handle event types:
       // REPO_EVENTS (schedule, workflow_dispatch): no issue/PR context, output to logs/PR only

@@ -21,6 +21,7 @@ import { and } from "drizzle-orm"
 import { gte } from "drizzle-orm"
 import { isNull } from "drizzle-orm"
 import { desc } from "drizzle-orm"
+import { asc } from "drizzle-orm"
 import { like } from "drizzle-orm"
 import { sql } from "drizzle-orm"
 import { inArray } from "drizzle-orm"
@@ -461,6 +462,7 @@ export type NotFound = NotFoundError
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
   readonly listGlobal: (input?: GlobalListInput) => Effect.Effect<GlobalInfo[]>
+  readonly findByMetadata: (input: { key: string; value: string }) => Effect.Effect<Info | undefined>
   readonly create: (input?: {
     parentID?: SessionID
     title?: string
@@ -592,6 +594,24 @@ export const layer: Layer.Layer<
         experimentalWorkspaces: flags.experimentalWorkspaces,
         ...input,
       })
+    })
+
+    const findByMetadata = Effect.fn("Session.findByMetadata")(function* (input: { key: string; value: string }) {
+      const ctx = yield* InstanceState.context
+      const row = yield* db
+        .select()
+        .from(SessionTable)
+        .where(
+          and(
+            eq(SessionTable.project_id, ctx.project.id),
+            sql`json_extract(${SessionTable.metadata}, ${`$.${input.key}`}) = ${input.value}`,
+          ),
+        )
+        .orderBy(asc(SessionTable.time_created), asc(SessionTable.id))
+        .limit(1)
+        .get()
+        .pipe(Effect.orDie)
+      return row ? fromRow(row) : undefined
     })
 
     const listGlobal = Effect.fn("Session.listGlobal")(function* (input?: GlobalListInput) {
@@ -935,6 +955,7 @@ export const layer: Layer.Layer<
     return Service.of({
       list,
       listGlobal,
+      findByMetadata,
       create,
       fork,
       touch,

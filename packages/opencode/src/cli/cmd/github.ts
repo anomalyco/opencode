@@ -4,9 +4,10 @@ import { effectCmd } from "../effect-cmd"
 
 export {
   extractResponseText,
-  findResumableSession,
   formatPromptTooLargeError,
   GITHUB_RUN_METADATA_KEY,
+  GITHUB_RUN_RESUME_PROMPT,
+  githubRunPrompt,
   parseGitHubRemote,
   shouldSendContinuation,
 } from "./github.shared"
