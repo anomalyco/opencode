@@ -16,7 +16,7 @@ import aiohttp
 
 # ---------- Конфигурация ----------
 TIMERS_FILE = Path(__file__).parent / "timers.json"
-OPENCODE_URL = os.environ.get("OPENCODE_URL", "http://127.0.0.1:4096")
+OPENCODE_URL = os.environ.get("OPENCODE_URL", "http://127.0.0.1:4098")
 SESSIONS_FILE = Path(__file__).parent / "sessions.json"
 CHECK_INTERVAL = 1  # секунды между проверками таймеров
 
