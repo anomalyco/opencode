@@ -9,6 +9,7 @@ import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { usePlatform } from "./platform"
 import { uuid } from "@/utils/uuid"
 import { SessionTabsRemovedDetail } from "@/components/titlebar-session-events"
+import { sessionHref } from "@/utils/session-route"
 
 export type SessionTab = {
   type: "session"
@@ -30,7 +31,7 @@ export type Tab = SessionTab | DraftTab
 export const draftHref = (draftID: string) => `/new-session?draftId=${encodeURIComponent(draftID)}`
 
 export const tabHref = (tab: Tab) =>
-  tab.type === "draft" ? draftHref(tab.draftID) : `/${tab.dirBase64}/session/${tab.sessionId}`
+  tab.type === "draft" ? draftHref(tab.draftID) : sessionHref(tab.server, tab.sessionId)
 
 export const tabKey = (tab: Tab) => (tab.type === "draft" ? `draft:${tab.draftID}` : `${tab.server}\n${tabHref(tab)}`)
 
@@ -82,14 +83,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
     const navigateTab = (tab: Tab) => {
       const href = tabHref(tab)
-      if (tab.server === server.key) {
-        navigate(href)
-        return
-      }
-      void startTransition(() => {
-        server.setActive(tab.server)
-        navigate(href)
-      })
+      navigate(href)
     }
 
     const actions = {

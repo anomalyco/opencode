@@ -29,7 +29,7 @@ import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { Button } from "@opencode-ai/ui/button"
 import { showToast } from "@/utils/toast"
-import { checksum } from "@opencode-ai/core/util/encode"
+import { base64Encode, checksum } from "@opencode-ai/core/util/encode"
 import { useLocation, useSearchParams } from "@solidjs/router"
 import { NewSessionView, SessionHeader } from "@/components/session"
 import { useComments } from "@/context/comments"
@@ -57,7 +57,6 @@ import {
 import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
-import { useServer } from "@/context/server"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
@@ -199,7 +198,6 @@ export default function Page() {
   const prompt = usePrompt()
   const comments = useComments()
   const terminal = useTerminal()
-  const server = useServer()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const location = useLocation()
   const { params, sessionKey, workspaceKey, tabs, view } = useSessionLayout()
@@ -244,11 +242,11 @@ export default function Page() {
           layout.handoff.clearTabs()
           return
         }
-        if (pending.scope !== server.scope()) return
+        if (pending.scope !== serverSDK().scope) return
 
         if (pending.id !== id) return
         layout.handoff.clearTabs()
-        if (pending.dir !== (params.dir ?? "")) return
+        if (pending.dir !== base64Encode(sdk().directory)) return
 
         const from = workspaceTabs().tabs()
         if (from.all.length === 0 && !from.active) return
@@ -378,7 +376,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => ({ dir: params.dir, id: params.id }),
+      () => ({ dir: sdk().directory, id: params.id }),
       (next, prev) => {
         if (!prev) return
         if (next.dir === prev.dir && next.id === prev.id) return
@@ -740,7 +738,7 @@ export default function Page() {
 
   createEffect(
     on(
-      () => params.dir,
+      () => sdk().directory,
       (dir) => {
         if (!dir) return
         setStore("newSessionWorktree", "main")

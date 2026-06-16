@@ -63,6 +63,8 @@ import { useSessionKey } from "@/pages/session/session-layout"
 import { useServerSDK } from "@/context/server-sdk"
 import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
+import { useTabs } from "@/context/tabs"
+import { legacySessionHref, requireServerKey, sessionHref } from "@/utils/session-route"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { notifySessionTabsRemoved } from "@/components/titlebar-session-events"
@@ -290,6 +292,7 @@ export function MessageTimeline(props: {
   const sdk = useSDK()
   const sync = useSync()
   const settings = useSettings()
+  const tabs = useTabs()
   const dialog = useDialog()
   const language = useLanguage()
   const { params, sessionKey } = useSessionKey()
@@ -834,12 +837,18 @@ export function MessageTimeline(props: {
 
   const navigateAfterSessionRemoval = (sessionID: string, parentID?: string, nextSessionID?: string) => {
     if (params.id !== sessionID) return
+    const href = (id: string) =>
+      params.serverKey ? sessionHref(requireServerKey(params.serverKey), id) : legacySessionHref(sdk().directory, id)
     if (parentID) {
-      navigate(`/${params.dir}/session/${parentID}`)
+      navigate(href(parentID))
       return
     }
     if (nextSessionID) {
-      navigate(`/${params.dir}/session/${nextSessionID}`)
+      navigate(href(nextSessionID))
+      return
+    }
+    if (params.serverKey) {
+      tabs.newDraft({ server: requireServerKey(params.serverKey), directory: sdk().directory })
       return
     }
     navigate(`/${params.dir}/session`)
@@ -941,7 +950,9 @@ export function MessageTimeline(props: {
   const navigateParent = () => {
     const id = parentID()
     if (!id) return
-    navigate(`/${params.dir}/session/${id}`)
+    navigate(
+      params.serverKey ? sessionHref(requireServerKey(params.serverKey), id) : legacySessionHref(sdk().directory, id),
+    )
   }
 
   function DialogDeleteSession(props: { sessionID: string }) {

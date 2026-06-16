@@ -7,7 +7,6 @@ import {
   Match,
   onMount,
   Show,
-  startTransition,
   Switch,
   untrack,
 } from "solid-js"
@@ -269,15 +268,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             const tabsStore = tabs.store
             const tabsStoreActions = tabs
             const navigateTab = (tab: Tab) => {
-              const href = tabHref(tab)
-              if (tab.server === server.key) {
-                navigate(href)
-                return
-              }
-              void startTransition(() => {
-                server.setActive(tab.server)
-                navigate(href)
-              })
+              navigate(tabHref(tab))
             }
 
             const matchRoute = (route: LayoutRoute) => {
