@@ -10,6 +10,7 @@ import {
   startTransition,
   Switch,
   untrack,
+  type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocation, useMatch, useNavigate, useParams } from "@solidjs/router"
@@ -35,11 +36,22 @@ import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import {
+  DragDropProvider,
+  DragDropSensors,
+  DragOverlay,
+  SortableProvider,
+  closestCenter,
+  createSortable,
+} from "@thisbeyond/solid-dnd"
+import type { DragEvent } from "@thisbeyond/solid-dnd"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
 import { useGlobal } from "@/context/global"
 import { decode64 } from "@/utils/base64"
 import { ServerConnection, useServer } from "@/context/server"
-import { tabHref, useTabs, type Tab } from "@/context/tabs"
+import { tabHref, tabKey, useTabs, type Tab } from "@/context/tabs"
+import { getDraggableId } from "@/utils/solid-dnd"
+import { getTabReorderIndex } from "@/pages/session/helpers"
 import "./titlebar.css"
 
 type TauriDesktopWindow = {
@@ -409,11 +421,30 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
             })
 
             const [tabsAreOverflowing, setTabsAreOverflowing] = createSignal(false)
+            const [tabDrag, setTabDrag] = createStore({ activeDraggable: undefined as string | undefined })
             let tabScrollRef!: HTMLDivElement
 
             function refreshTabsAreOverflowing() {
               setTabsAreOverflowing(tabScrollRef.scrollWidth > tabScrollRef.clientWidth)
             }
+
+            const tabIds = createMemo(() => tabsStore.map(tabKey))
+            const handleTabDragStart = (event: unknown) => setTabDrag("activeDraggable", getDraggableId(event))
+            const handleTabDragEnd = () => setTabDrag("activeDraggable", undefined)
+            const handleTabDragOver = (event: DragEvent) => {
+              const { draggable, droppable } = event
+              if (!draggable || !droppable) return
+              const next = [...tabIds()]
+              const toIndex = getTabReorderIndex(next, draggable.id.toString(), droppable.id.toString())
+              if (toIndex === undefined) return
+              next.splice(toIndex, 0, ...next.splice(next.indexOf(draggable.id.toString()), 1))
+              tabsStoreActions.reorder(next)
+            }
+            const draggedTab = createMemo(() => {
+              const key = tabDrag.activeDraggable
+              if (!key) return
+              return tabsStore.find((tab) => tabKey(tab) === key)
+            })
 
             return (
               <div
@@ -437,108 +468,138 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                   state={!!homeMatch() ? "pressed" : undefined}
                 />
 
-                <div data-slot="titlebar-tabs" class="relative min-w-0">
-                  <div
-                    data-slot="titlebar-tabs-scroll"
-                    class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
-                    ref={(el) => {
-                      tabScrollRef = el
-                      createResizeObserver(el, refreshTabsAreOverflowing)
-                    }}
-                  >
+                <DragDropProvider
+                  onDragStart={handleTabDragStart}
+                  onDragEnd={handleTabDragEnd}
+                  onDragOver={handleTabDragOver}
+                  collisionDetector={closestCenter}
+                >
+                  <DragDropSensors />
+                  <div data-slot="titlebar-tabs" class="relative min-w-0">
                     <div
-                      class="flex min-w-0 flex-row items-center gap-1.5"
-                      ref={(el) => createResizeObserver(el, refreshTabsAreOverflowing)}
+                      data-slot="titlebar-tabs-scroll"
+                      class="flex min-w-0 flex-row items-center gap-1.5 overflow-x-auto no-scrollbar [app-region:no-drag]"
+                      ref={(el) => {
+                        tabScrollRef = el
+                        createResizeObserver(el, refreshTabsAreOverflowing)
+                      }}
                     >
-                      <For each={tabsStore}>
-                        {(tab, i) => {
-                          let ref!: HTMLDivElement
+                      <div
+                        class="flex min-w-0 flex-row items-center"
+                        ref={(el) => createResizeObserver(el, refreshTabsAreOverflowing)}
+                      >
+                        <SortableProvider ids={tabIds()}>
+                          <For each={tabsStore}>
+                            {(tab, i) => {
+                              let ref!: HTMLDivElement
+                              const key = tabKey(tab)
 
-                          const divider = () =>
-                            i() !== 0 && (
-                              <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
-                            )
+                              const divider = () =>
+                                i() !== 0 && (
+                                  <div class="ml-1.5 w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
+                                )
 
-                          if (tab.type === "draft") {
+                              if (tab.type === "draft") {
+                                return (
+                                  <SortableTitlebarTab id={key}>
+                                    {divider()}
+                                    <DraftTabItem
+                                      ref={ref}
+                                      href={tabHref(tab)}
+                                      title={language.t("command.session.new")}
+                                      active={currentTab() === tab}
+                                      onNavigate={() => {
+                                        navigateTab(tab)
+                                        ref.scrollIntoView({ behavior: "instant" })
+                                      }}
+                                      onClose={() => {
+                                        const index = tabsStore.findIndex((item) => tabKey(item) === key)
+                                        if (index !== -1) tabsStoreActions.removeTab(index)
+                                      }}
+                                    />
+                                  </SortableTitlebarTab>
+                                )
+                              }
+
+                              return (
+                                <SortableTitlebarTab id={key}>
+                                  {divider()}
+                                  <TabNavItem
+                                    ref={ref}
+                                    href={tabHref(tab)}
+                                    server={tab.server}
+                                    directory={decode64(tab.dirBase64)!}
+                                    sessionId={tab.sessionId}
+                                    onNavigate={() => {
+                                      navigateTab(tab)
+
+                                      ref.scrollIntoView({ behavior: "instant" })
+                                    }}
+                                    onClose={() => {
+                                      const index = tabsStore.findIndex((item) => tabKey(item) === key)
+                                      if (index !== -1) tabsStoreActions.removeTab(index)
+                                    }}
+                                    active={currentTab() === tab}
+                                    activeServer={tab.server === server.key}
+                                    forceTruncate={tabsAreOverflowing()}
+                                  />
+                                </SortableTitlebarTab>
+                              )
+                            }}
+                          </For>
+                        </SortableProvider>
+                        <Show when={creating() && params.dir}>
+                          {(_) => {
+                            let ref!: HTMLDivElement
+
+                            onMount(() => {
+                              ref.scrollIntoView({ behavior: "instant" })
+                            })
+
                             return (
                               <>
-                                {divider()}
-                                <DraftTabItem
+                                <div class="ml-1.5 mr-1.5 w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
+                                <NewSessionTabItem
                                   ref={ref}
-                                  href={tabHref(tab)}
+                                  href={`/${params.dir}/session`}
                                   title={language.t("command.session.new")}
-                                  active={currentTab() === tab}
-                                  onNavigate={() => {
-                                    navigateTab(tab)
-                                    ref.scrollIntoView({ behavior: "instant" })
+                                  onClose={() => {
+                                    const tab = tabsStore.at(-1)
+                                    if (tab) navigateTab(tab)
+                                    else navigate("/")
                                   }}
-                                  onClose={() => tabsStoreActions.removeTab(i())}
                                 />
                               </>
                             )
-                          }
-
-                          return (
-                            <>
-                              {divider()}
-                              <TabNavItem
-                                ref={ref}
-                                href={tabHref(tab)}
-                                server={tab.server}
-                                directory={decode64(tab.dirBase64)!}
-                                sessionId={tab.sessionId}
-                                onNavigate={() => {
-                                  navigateTab(tab)
-
-                                  ref.scrollIntoView({ behavior: "instant" })
-                                }}
-                                onClose={() => tabsStoreActions.removeTab(i())}
-                                active={currentTab() === tab}
-                                activeServer={tab.server === server.key}
-                                forceTruncate={tabsAreOverflowing()}
-                              />
-                            </>
-                          )
-                        }}
-                      </For>
-                      <Show when={creating() && params.dir}>
-                        {(_) => {
-                          let ref!: HTMLDivElement
-
-                          onMount(() => {
-                            ref.scrollIntoView({ behavior: "instant" })
-                          })
-
-                          return (
-                            <>
-                              <div class="w-[1.5px] h-3 shrink-0 rounded-full bg-[var(--v2-background-bg-layer-02)]" />
-                              <NewSessionTabItem
-                                ref={ref}
-                                href={`/${params.dir}/session`}
-                                title={language.t("command.session.new")}
-                                onClose={() => {
-                                  const tab = tabsStore.at(-1)
-                                  if (tab) navigateTab(tab)
-                                  else navigate("/")
-                                }}
-                              />
-                            </>
-                          )
-                        }}
-                      </Show>
+                          }}
+                        </Show>
+                      </div>
                     </div>
+                    <div
+                      data-slot="titlebar-tabs-fade-left"
+                      aria-hidden="true"
+                      class="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-[linear-gradient(to_right,var(--v2-background-bg-deep),transparent)]"
+                    />
+                    <div
+                      data-slot="titlebar-tabs-fade-right"
+                      aria-hidden="true"
+                      class="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-deep),transparent)]"
+                    />
                   </div>
-                  <div
-                    data-slot="titlebar-tabs-fade-left"
-                    aria-hidden="true"
-                    class="pointer-events-none absolute inset-y-0 left-0 z-10 w-6 bg-[linear-gradient(to_right,var(--v2-background-bg-deep),transparent)]"
-                  />
-                  <div
-                    data-slot="titlebar-tabs-fade-right"
-                    aria-hidden="true"
-                    class="pointer-events-none absolute inset-y-0 right-0 z-10 w-6 bg-[linear-gradient(to_left,var(--v2-background-bg-deep),transparent)]"
-                  />
-                </div>
+                  <DragOverlay>
+                    <Show when={draggedTab()} keyed>
+                      {(tab) => (
+                        <TitlebarTabDragPreview
+                          tab={tab}
+                          active={currentTab() === tab}
+                          activeServerKey={server.key}
+                          forceTruncate={tabsAreOverflowing()}
+                          newSessionTitle={language.t("command.session.new")}
+                        />
+                      )}
+                    </Show>
+                  </DragOverlay>
+                </DragDropProvider>
                 <Show when={!(creating() && params.dir)}>
                   <IconButtonV2
                     type="button"
@@ -772,6 +833,53 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
   )
 }
 
+function SortableTitlebarTab(props: { id: string; children: JSX.Element | JSX.Element[] }) {
+  const sortable = createSortable(props.id)
+  return (
+    <div
+      use:sortable
+      class="flex h-full shrink-0 items-center gap-1.5"
+      classList={{ "opacity-0": sortable.isActiveDraggable }}
+    >
+      {props.children}
+    </div>
+  )
+}
+
+function TitlebarTabDragPreview(props: {
+  tab: Tab
+  active: boolean
+  activeServerKey: ServerConnection.Key
+  forceTruncate: boolean
+  newSessionTitle: string
+}) {
+  if (props.tab.type === "draft") {
+    return (
+      <DraftTabItem
+        href={tabHref(props.tab)}
+        title={props.newSessionTitle}
+        active={props.active}
+        onNavigate={() => {}}
+        onClose={() => {}}
+      />
+    )
+  }
+
+  return (
+    <TabNavItem
+      href={tabHref(props.tab)}
+      server={props.tab.server}
+      directory={decode64(props.tab.dirBase64)!}
+      sessionId={props.tab.sessionId}
+      onNavigate={() => {}}
+      onClose={() => {}}
+      active={props.active}
+      activeServer={props.tab.server === props.activeServerKey}
+      forceTruncate={props.forceTruncate}
+    />
+  )
+}
+
 function TabNavItem(props: {
   ref?: HTMLDivElement
   href: string
@@ -827,6 +935,8 @@ function TabNavItem(props: {
           return (
             <a
               href={props.href}
+              draggable={false}
+              onDragStart={(event) => event.preventDefault()}
               onClick={(event) => {
                 event.preventDefault()
                 props.onNavigate()
@@ -915,6 +1025,8 @@ function DraftTabItem(props: {
     >
       <a
         href={props.href}
+        draggable={false}
+        onDragStart={(event) => event.preventDefault()}
         onClick={(event) => {
           event.preventDefault()
           props.onNavigate()
@@ -960,6 +1072,8 @@ function NewSessionTabItem(props: { ref?: HTMLDivElement; href: string; title: s
     >
       <a
         href={props.href}
+        draggable={false}
+        onDragStart={(event) => event.preventDefault()}
         aria-current="page"
         class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-5 text-[var(--v2-text-text-base)]"
       >
