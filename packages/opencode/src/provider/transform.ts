@@ -1114,11 +1114,6 @@ export function options(input: {
 
   const modelId = input.model.api.id.toLowerCase()
 
-  // MiniMax's Anthropic interface defaults thinking off, unlike Chat Completions.
-  if (modelId.includes("minimax-m3") && input.model.api.npm === "@ai-sdk/anthropic") {
-    result["thinking"] = { type: "adaptive" }
-  }
-
   // Enable thinking by default for kimi models using anthropic SDK
   if (
     (input.model.api.npm === "@ai-sdk/anthropic" || input.model.api.npm === "@ai-sdk/google-vertex/anthropic") &&

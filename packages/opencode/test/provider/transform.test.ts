@@ -189,13 +189,13 @@ describe("ProviderTransform.options - minimax m3 thinking", () => {
       limit: { output: 64_000 },
     }) as any
 
-  test("explicitly enables adaptive thinking with the anthropic SDK", () => {
+  test("uses the native default with the anthropic SDK", () => {
     expect(
       ProviderTransform.options({
         model: createModel("@ai-sdk/anthropic"),
         sessionID: "test-session-123",
       }).thinking,
-    ).toEqual({ type: "adaptive" })
+    ).toBeUndefined()
   })
 
   test("uses the native default with the openai-compatible SDK", () => {
