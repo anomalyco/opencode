@@ -306,6 +306,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "ค้นหาโฟลเดอร์",
   "dialog.directory.empty": "ไม่พบโฟลเดอร์",
+  "dialog.directory.action.selectFile": "เลือกไฟล์",
+  "dialog.directory.action.selectFolder": "เลือกโฟลเดอร์",
+  "dialog.directory.root": "ราก",
+  "dialog.directory.parent": "โฟลเดอร์หลัก",
+  "dialog.directory.readError": "ไม่สามารถอ่านโฟลเดอร์นี้ได้",
 
   "dialog.server.title": "เซิร์ฟเวอร์",
   "dialog.server.description": "สลับเซิร์ฟเวอร์ OpenCode ที่แอปนี้เชื่อมต่อด้วย",
