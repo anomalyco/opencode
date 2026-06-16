@@ -1,4 +1,4 @@
-import { WorkspaceID } from "@/control-plane/schema"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import type { Target } from "@/control-plane/types"
 import { Workspace } from "@/control-plane/workspace"
 import { WorkspaceAdapterRuntime } from "@/control-plane/workspace-adapter-runtime"
@@ -9,7 +9,7 @@ import { getWorkspaceRouteSessionID, isLocalWorkspaceRoute, workspaceProxyURL } 
 import { NotFoundError } from "@/storage/storage"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Context, Data, Effect, Layer, Option, Schema } from "effect"
-import { HttpClient, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { HttpClient, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 import { InvalidRequestError } from "../errors"
@@ -30,8 +30,8 @@ type RemoteTarget = Extract<Target, { type: "remote" }>
 
 type RequestPlan = Data.TaggedEnum<{
   InvalidWorkspace: {}
-  MissingWorkspace: { readonly workspaceID: WorkspaceID }
-  Local: { readonly directory: string; readonly workspaceID?: WorkspaceID }
+  MissingWorkspace: { readonly workspaceID: WorkspaceV2.ID }
+  Local: { readonly directory: string; readonly workspaceID?: WorkspaceV2.ID }
   Remote: {
     readonly request: HttpServerRequest.HttpServerRequest
     readonly workspace: Workspace.Info
@@ -46,7 +46,7 @@ export class WorkspaceRouteContext extends Context.Service<
   WorkspaceRouteContext,
   {
     readonly directory: string
-    readonly workspaceID?: WorkspaceID
+    readonly workspaceID?: WorkspaceV2.ID
   }
 >()("@opencode/ExperimentalHttpApiWorkspaceRouteContext") {}
 
@@ -62,23 +62,23 @@ function requestURL(request: HttpServerRequest.HttpServerRequest): URL {
   return new URL(request.url, "http://localhost")
 }
 
-function configuredWorkspaceID(): WorkspaceID | undefined {
-  return Flag.OPENCODE_WORKSPACE_ID ? WorkspaceID.make(Flag.OPENCODE_WORKSPACE_ID) : undefined
+function configuredWorkspaceID(): WorkspaceV2.ID | undefined {
+  return Flag.OPENCODE_WORKSPACE_ID ? WorkspaceV2.ID.make(Flag.OPENCODE_WORKSPACE_ID) : undefined
 }
 
-function selectedWorkspaceID(url: URL, sessionWorkspaceID?: WorkspaceID): WorkspaceID | undefined {
+function selectedWorkspaceID(url: URL, sessionWorkspaceID?: WorkspaceV2.ID): WorkspaceV2.ID | undefined {
   const workspaceParam = url.searchParams.get("workspace")
-  return sessionWorkspaceID ?? (workspaceParam ? WorkspaceID.make(workspaceParam) : undefined)
+  return sessionWorkspaceID ?? (workspaceParam ? WorkspaceV2.ID.make(workspaceParam) : undefined)
 }
 
 function selectedV2WorkspaceID(
   url: URL,
-  sessionWorkspaceID?: WorkspaceID,
-): WorkspaceID | typeof InvalidWorkspaceID | undefined {
+  sessionWorkspaceID?: WorkspaceV2.ID,
+): WorkspaceV2.ID | typeof InvalidWorkspaceID | undefined {
   if (sessionWorkspaceID) return sessionWorkspaceID
   const workspaceParam = url.searchParams.get("workspace")
   if (!workspaceParam) return undefined
-  const workspaceID = Schema.decodeUnknownOption(WorkspaceID)(workspaceParam)
+  const workspaceID = Schema.decodeUnknownOption(WorkspaceV2.ID)(workspaceParam)
   if (Option.isNone(workspaceID)) return InvalidWorkspaceID
   return workspaceID.value
 }
@@ -92,14 +92,14 @@ function shouldStayOnControlPlane(request: HttpServerRequest.HttpServerRequest, 
 }
 
 function resolveWorkspace(
-  id: WorkspaceID | undefined,
-  envWorkspaceID: WorkspaceID | undefined,
+  id: WorkspaceV2.ID | undefined,
+  envWorkspaceID: WorkspaceV2.ID | undefined,
 ): Effect.Effect<Workspace.Info | void, never, Workspace.Service> {
   if (!id || envWorkspaceID) return Effect.void
   return Workspace.Service.use((workspace) => workspace.get(id))
 }
 
-function missingWorkspaceResponse(id: WorkspaceID): HttpServerResponse.HttpServerResponse {
+function missingWorkspaceResponse(id: WorkspaceV2.ID): HttpServerResponse.HttpServerResponse {
   return HttpServerResponse.text(`Workspace not found: ${id}`, {
     status: 500,
     contentType: "text/plain; charset=utf-8",
@@ -159,14 +159,14 @@ function planWorkspaceRequest(
 
 function planRequest(
   request: HttpServerRequest.HttpServerRequest,
-  sessionWorkspaceID?: WorkspaceID,
+  session?: Session.Info,
 ): Effect.Effect<RequestPlan, never, Workspace.Service> {
   return Effect.gen(function* () {
     const url = requestURL(request)
     const envWorkspaceID = configuredWorkspaceID()
     const workspaceID = url.pathname.startsWith("/api/")
-      ? selectedV2WorkspaceID(url, sessionWorkspaceID)
-      : selectedWorkspaceID(url, sessionWorkspaceID)
+      ? selectedV2WorkspaceID(url, session?.workspaceID)
+      : selectedWorkspaceID(url, session?.workspaceID)
     if (workspaceID === InvalidWorkspaceID) return RequestPlan.InvalidWorkspace()
     const workspace = yield* resolveWorkspace(workspaceID, envWorkspaceID)
 
@@ -178,7 +178,10 @@ function planRequest(
       return yield* planWorkspaceRequest(request, url, workspace)
     }
 
-    return RequestPlan.Local({ directory: defaultDirectory(request, url), workspaceID: envWorkspaceID ?? workspaceID })
+    return RequestPlan.Local({
+      directory: session?.directory || defaultDirectory(request, url),
+      workspaceID: envWorkspaceID ?? workspaceID,
+    })
   })
 }
 
@@ -219,11 +222,14 @@ function routeHttpApiWorkspace<E>(
     const sessionID = getWorkspaceRouteSessionID(requestURL(request))
     const session = sessionID
       ? yield* Session.Service.use((svc) => svc.get(sessionID)).pipe(
-          Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)),
+          Effect.catchIf(
+            (error): error is NotFoundError => NotFoundError.isInstance(error),
+            () => Effect.succeed(undefined),
+          ),
           Effect.catchDefect(() => Effect.succeed(undefined)),
         )
       : undefined
-    const plan = yield* planRequest(request, session?.workspaceID)
+    const plan = yield* planRequest(request, session)
     return yield* routeWorkspace(client, effect, plan)
   })
 }
@@ -240,22 +246,5 @@ export const workspaceRoutingLayer = Layer.effect(
         Effect.provideService(Workspace.Service, workspace),
       ),
     )
-  }),
-)
-
-export const workspaceRouterMiddleware = HttpRouter.middleware<{ provides: WorkspaceRouteContext }>()(
-  Effect.gen(function* () {
-    const makeWebSocket = yield* Socket.WebSocketConstructor
-    const workspace = yield* Workspace.Service
-    const client = yield* HttpClient.HttpClient
-    return (effect) =>
-      Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest
-        const plan = yield* planRequest(request)
-        return yield* routeWorkspace(client, effect, plan)
-      }).pipe(
-        Effect.provideService(Socket.WebSocketConstructor, makeWebSocket),
-        Effect.provideService(Workspace.Service, workspace),
-      )
   }),
 )

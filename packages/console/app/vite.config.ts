@@ -9,7 +9,7 @@ export default defineConfig({
     }) as PluginOption,
     nitro({
       compatibilityDate: "2024-09-19",
-      preset: "cloudflare_module",
+      preset: "cloudflare-module",
       cloudflare: {
         nodeCompat: true,
       },
@@ -17,6 +17,7 @@ export default defineConfig({
   ],
   server: {
     allowedHosts: true,
+    port: 3001,
   },
   build: {
     rollupOptions: {

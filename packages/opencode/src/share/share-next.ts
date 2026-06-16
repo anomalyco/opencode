@@ -1,22 +1,25 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
 import type * as SDK from "@opencode-ai/sdk/v2"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Effect, Exit, Layer, Option, Schema, Scope, Context, Stream } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Account } from "@/account/account"
-import { Bus } from "@/bus"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { Provider } from "@/provider/provider"
-import { ModelID, ProviderID } from "@/provider/schema"
+
 import { Session } from "@/session/session"
 import { MessageV2 } from "@/session/message-v2"
 import type { SessionID } from "@/session/schema"
-import { Database } from "@/storage/db"
+import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import { Config } from "@/config/config"
-import * as Log from "@opencode-ai/core/util/log"
-import { SessionShareTable } from "./share.sql"
+import { SessionShareTable } from "@opencode-ai/core/share/sql"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { EventV2 } from "@opencode-ai/core/event"
 
-const log = Log.create({ service: "share-next" })
 const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
 
 export type Api = {
@@ -79,9 +82,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Sh
 
 export const use = serviceUse(Service)
 
-const db = <T>(fn: (d: Parameters<typeof Database.use>[0] extends (trx: infer D) => any ? D : never) => T) =>
-  Effect.sync(() => Database.use(fn))
-
 function api(resource: string): Api {
   return {
     create: `/api/${resource}`,
@@ -113,14 +113,15 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const account = yield* Account.Service
-    const bus = yield* Bus.Service
+    const events = yield* EventV2Bridge.Service
     const cfg = yield* Config.Service
+    const { db } = yield* Database.Service
     const http = yield* HttpClient.HttpClient
     const httpOk = HttpClient.filterStatusOk(http)
     const provider = yield* Provider.Service
     const session = yield* Session.Service
 
-    function sync(sessionID: SessionID, data: Data[]): Effect.Effect<void> {
+    function sync(sessionID: SessionID, data: Data[]) {
       return Effect.gen(function* () {
         if (disabled) return
         const share = yield* getCached(sessionID)
@@ -139,11 +140,7 @@ export const layer = Layer.effect(
         s.queue.set(sessionID, next)
         yield* flush(sessionID).pipe(
           Effect.delay(1000),
-          Effect.catchCause((cause) =>
-            Effect.sync(() => {
-              log.error("share flush failed", { sessionID, cause })
-            }),
-          ),
+          Effect.catchCause((cause) => Effect.logError("share flush failed", { sessionID: sessionID, cause: cause })),
           Effect.forkIn(s.scope),
         )
       })
@@ -166,49 +163,41 @@ export const layer = Layer.effect(
 
         if (disabled) return cache
 
-        const watch = <D extends { type: string }>(
+        const watch = <D extends EventV2.Definition>(
           def: D,
-          fn: (evt: { properties: any }) => Effect.Effect<void, unknown>,
+          fn: (data: EventV2.Data<D>) => Effect.Effect<void, unknown>,
         ) =>
-          bus.subscribe(def as never).pipe(
-            Effect.flatMap((stream) =>
-              stream.pipe(
-                Stream.runForEach((evt) =>
-                  fn(evt).pipe(
-                    Effect.catchCause((cause) =>
-                      Effect.sync(() => {
-                        log.error("share subscriber failed", { type: def.type, cause })
-                      }),
-                    ),
-                  ),
-                ),
-                Effect.forkScoped,
+          events.listen((event) => {
+            if (event.type !== def.type || event.location?.directory !== _ctx.directory) return Effect.void
+            return fn(event.data as EventV2.Data<D>).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logError("share subscriber failed", { type: def.type, cause: cause }),
               ),
-            ),
-          )
+            )
+          })
 
-        yield* watch(Session.Event.Updated, (evt) =>
+        yield* watch(Session.Event.Updated, (data) =>
           Effect.gen(function* () {
-            const info = evt.properties.info
-            yield* sync(info.id, [{ type: "session", data: info }])
+            const info = data.info
+            yield* sync(info.id, [{ type: "session", data: structuredClone(info) as SDK.Session }])
           }),
         )
-        yield* watch(MessageV2.Event.Updated, (evt) =>
+        yield* watch(MessageV2.Event.Updated, (data) =>
           Effect.gen(function* () {
-            const info = evt.properties.info
-            yield* sync(info.sessionID, [{ type: "message", data: info }])
+            const info = data.info
+            yield* sync(info.sessionID, [{ type: "message", data: structuredClone(info) as SDK.Message }])
             if (info.role !== "user") return
             const model = yield* provider.getModel(info.model.providerID, info.model.modelID)
             yield* sync(info.sessionID, [{ type: "model", data: [model] }])
           }),
         )
-        yield* watch(MessageV2.Event.PartUpdated, (evt) =>
-          sync(evt.properties.part.sessionID, [{ type: "part", data: evt.properties.part }]),
+        yield* watch(MessageV2.Event.PartUpdated, (data) =>
+          sync(data.part.sessionID, [{ type: "part", data: structuredClone(data.part) as SDK.Part }]),
         )
-        yield* watch(Session.Event.Diff, (evt) =>
-          sync(evt.properties.sessionID, [{ type: "session_diff", data: evt.properties.diff }]),
+        yield* watch(Session.Event.Diff, (data) =>
+          sync(data.sessionID, [{ type: "session_diff", data: structuredClone(data.diff) as SDK.SnapshotFileDiff[] }]),
         )
-        yield* watch(Session.Event.Deleted, (evt) => remove(evt.properties.sessionID))
+        yield* watch(Session.Event.Deleted, (data) => remove(data.sessionID))
 
         return cache
       }),
@@ -233,9 +222,12 @@ export const layer = Layer.effect(
     })
 
     const get = Effect.fnUntraced(function* (sessionID: SessionID) {
-      const row = yield* db((db) =>
-        db.select().from(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).get(),
-      )
+      const row = yield* db
+        .select()
+        .from(SessionShareTable)
+        .where(eq(SessionShareTable.session_id, sessionID))
+        .get()
+        .pipe(Effect.orDie)
       if (!row) return
       return { id: row.id, secret: row.secret, url: row.url } satisfies Share
     })
@@ -271,12 +263,16 @@ export const layer = Layer.effect(
       )
 
       if (res.status >= 400) {
-        log.warn("failed to sync share", { sessionID, shareID: share.id, status: res.status })
+        yield* Effect.logWarning("failed to sync share", {
+          sessionID: sessionID,
+          shareID: share.id,
+          status: res.status,
+        })
       }
     })
 
     const full = Effect.fn("ShareNext.full")(function* (sessionID: SessionID) {
-      log.info("full sync", { sessionID })
+      yield* Effect.logInfo("full sync", { sessionID: sessionID })
       const info = yield* session.get(sessionID)
       const diffs = yield* session.diff(sessionID)
       const messages = yield* session.messages({ sessionID })
@@ -289,7 +285,7 @@ export const layer = Layer.effect(
               .map((item) => [`${item.providerID}/${item.modelID}`, item] as const),
           ).values(),
         ),
-        (item) => provider.getModel(ProviderID.make(item.providerID), ModelID.make(item.modelID)),
+        (item) => provider.getModel(ProviderV2.ID.make(item.providerID), ModelV2.ID.make(item.modelID)),
         { concurrency: 8 },
       )
 
@@ -313,7 +309,7 @@ export const layer = Layer.effect(
 
     const create = Effect.fn("ShareNext.create")(function* (sessionID: SessionID) {
       if (disabled) return { id: "", url: "", secret: "" }
-      log.info("creating share", { sessionID })
+      yield* Effect.logInfo("creating share", { sessionID: sessionID })
       const req = yield* request()
       const result = yield* HttpClientRequest.post(`${req.baseUrl}${req.api.create}`).pipe(
         HttpClientRequest.setHeaders(req.headers),
@@ -321,24 +317,19 @@ export const layer = Layer.effect(
         Effect.flatMap((r) => httpOk.execute(r)),
         Effect.flatMap(HttpClientResponse.schemaBodyJson(ShareSchema)),
       )
-      yield* db((db) =>
-        db
-          .insert(SessionShareTable)
-          .values({ session_id: sessionID, id: result.id, secret: result.secret, url: result.url })
-          .onConflictDoUpdate({
-            target: SessionShareTable.session_id,
-            set: { id: result.id, secret: result.secret, url: result.url },
-          })
-          .run(),
-      )
+      yield* db
+        .insert(SessionShareTable)
+        .values({ session_id: sessionID, id: result.id, secret: result.secret, url: result.url })
+        .onConflictDoUpdate({
+          target: SessionShareTable.session_id,
+          set: { id: result.id, secret: result.secret, url: result.url },
+        })
+        .run()
+        .pipe(Effect.orDie)
       const s = yield* InstanceState.get(state)
       s.shared.set(sessionID, result)
       yield* full(sessionID).pipe(
-        Effect.catchCause((cause) =>
-          Effect.sync(() => {
-            log.error("share full sync failed", { sessionID, cause })
-          }),
-        ),
+        Effect.catchCause((cause) => Effect.logError("share full sync failed", { sessionID: sessionID, cause: cause })),
         Effect.forkIn(s.scope),
       )
       return result
@@ -346,7 +337,7 @@ export const layer = Layer.effect(
 
     const remove = Effect.fn("ShareNext.remove")(function* (sessionID: SessionID) {
       if (disabled) return
-      log.info("removing share", { sessionID })
+      yield* Effect.logInfo("removing share", { sessionID: sessionID })
       const s = yield* InstanceState.get(state)
       const share = yield* getCached(sessionID)
       if (!share) {
@@ -362,7 +353,7 @@ export const layer = Layer.effect(
         Effect.flatMap((r) => httpOk.execute(r)),
       )
 
-      yield* db((db) => db.delete(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).run())
+      yield* db.delete(SessionShareTable).where(eq(SessionShareTable.session_id, sessionID)).run().pipe(Effect.orDie)
       s.shared.delete(sessionID)
       s.queue.delete(sessionID)
     })
@@ -372,12 +363,23 @@ export const layer = Layer.effect(
 )
 
 export const defaultLayer = layer.pipe(
-  Layer.provide(Bus.layer),
+  Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(Account.defaultLayer),
   Layer.provide(Config.defaultLayer),
+  Layer.provide(Database.defaultLayer),
   Layer.provide(FetchHttpClient.layer),
   Layer.provide(Provider.defaultLayer),
   Layer.provide(Session.defaultLayer),
 )
+
+export const node = LayerNode.make(layer, [
+  Account.node,
+  EventV2Bridge.node,
+  Config.node,
+  Database.node,
+  httpClient,
+  Provider.node,
+  Session.node,
+])
 
 export * as ShareNext from "./share-next"

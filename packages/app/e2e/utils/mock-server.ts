@@ -18,6 +18,7 @@ export interface MockServerConfig {
   project: unknown
   sessions: ({ id: string } & Record<string, unknown>)[]
   pageMessages: (sessionId: string, limit: number, before?: string) => { items: unknown[]; cursor?: string }
+  events?: () => unknown[]
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
@@ -43,7 +44,8 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     if (url.port !== targetPort) return route.fallback()
 
     const path = url.pathname
-    if (path === "/global/event" || path === "/event") return sse(route)
+    if (path === "/global/event" || path === "/event") return sse(route, config.events?.())
+    if (path === "/global/health") return json(route, { healthy: true })
     if (emptyObject.has(path)) return json(route, {})
     if (emptyList.has(path)) return json(route, [])
     if (path in staticRoutes) return json(route, staticRoutes[path])
@@ -81,6 +83,10 @@ function json(route: Route, body: unknown, headers?: Record<string, string>) {
   })
 }
 
-function sse(route: Route) {
-  return route.fulfill({ status: 200, contentType: "text/event-stream", body: ": ok\n\n" })
+function sse(route: Route, events?: unknown[]) {
+  return route.fulfill({
+    status: 200,
+    contentType: "text/event-stream",
+    body: events?.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("") || ": ok\n\n",
+  })
 }

@@ -87,7 +87,7 @@ describe("MistralPlugin", () => {
     }),
   )
 
-  it.effect("leaves Mistral language selection on the default sdk.languageModel(apiID) path", () =>
+  it.effect("leaves Mistral language selection on the default sdk.languageModel(api.id) path", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const calls: string[] = []
@@ -95,10 +95,10 @@ describe("MistralPlugin", () => {
       yield* plugin.add(MistralPlugin)
       const result = yield* plugin.trigger(
         "aisdk.language",
-        { model: model("mistral", "alias", { apiID: ModelV2.ID.make("mistral-large") }), sdk, options: {} },
+        { model: model("mistral", "alias", { api: { id: ModelV2.ID.make("mistral-large") } }), sdk, options: {} },
         {},
       )
-      const language = result.language ?? sdk.languageModel(result.model.apiID)
+      const language = result.language ?? sdk.languageModel(result.model.api.id)
       expect(calls).toEqual(["languageModel:mistral-large"])
       expect(language).toBeDefined()
     }),

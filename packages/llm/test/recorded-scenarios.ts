@@ -1,19 +1,21 @@
 import { expect } from "bun:test"
-import { Effect, Schema, Stream } from "effect"
+import { Effect, Schema } from "effect"
 import {
   LLM,
   LLMEvent,
   LLMResponse,
   Message,
+  ToolRuntime,
   ToolChoice,
   ToolDefinition,
+  toDefinitions,
   type ContentPart,
   type FinishReason,
   type LLMRequest,
   type Model,
 } from "../src"
 import { LLMClient } from "../src/route"
-import { tool } from "../src/tool"
+import { Tool } from "../src/tool"
 
 export const weatherToolName = "get_weather"
 
@@ -40,7 +42,7 @@ export const weatherTool = ToolDefinition.make({
   },
 })
 
-export const weatherRuntimeTool = tool({
+export const weatherRuntimeTool = Tool.make({
   description: weatherTool.description,
   parameters: Schema.Struct({ city: Schema.String }),
   success: Schema.Struct({ temperature: Schema.Number, condition: Schema.String }),
@@ -87,14 +89,60 @@ const restroomImage = () =>
   )
 
 export const runWeatherToolLoop = (request: LLMRequest) =>
-  LLMClient.stream({
-    request,
-    tools: { [weatherToolName]: weatherRuntimeTool },
-    stopWhen: LLMClient.stepCountIs(10),
-  }).pipe(
-    Stream.runCollect,
-    Effect.map((events) => Array.from(events)),
-  )
+  Effect.gen(function* () {
+    const tools = { [weatherToolName]: weatherRuntimeTool }
+    let next = LLM.updateRequest(request, { tools: toDefinitions(tools) })
+    const events: LLMEvent[] = []
+
+    for (let step = 0; step < 10; step++) {
+      const response = yield* LLMClient.generate(next)
+      events.push(...response.events.filter((event) => event.type !== "finish"))
+      const calls = response.events.filter(LLMEvent.is.toolCall).filter((call) => !call.providerExecuted)
+      if (calls.length === 0) {
+        const finish = response.events.find(LLMEvent.is.finish)
+        if (finish) events.push(finish)
+        return events
+      }
+
+      const dispatched = yield* Effect.forEach(calls, (call) =>
+        ToolRuntime.dispatch(tools, call).pipe(Effect.map((result) => [call, result] as const)),
+      )
+      events.push(...dispatched.flatMap(([, result]) => result.events))
+      next = LLM.updateRequest(next, {
+        messages: [
+          ...next.messages,
+          Message.assistant(assistantContent(response.events)),
+          ...dispatched.map(([call, result]) => Message.tool({ id: call.id, name: call.name, result: result.result })),
+        ],
+      })
+    }
+
+    throw new Error("Weather tool loop exceeded 10 steps")
+  })
+
+const assistantContent = (events: ReadonlyArray<LLMEvent>) => {
+  const content: ContentPart[] = []
+  for (const event of events) {
+    if (event.type === "text-delta" || event.type === "reasoning-delta") {
+      const type = event.type === "text-delta" ? "text" : "reasoning"
+      const last = content.at(-1)
+      if (last?.type === type) {
+        content[content.length - 1] = { ...last, text: `${last.text}${event.text}` }
+      } else {
+        content.push({ type, text: event.text })
+      }
+      continue
+    }
+    if (event.type === "text-end" || event.type === "reasoning-end") {
+      const type = event.type === "text-end" ? "text" : "reasoning"
+      const last = content.at(-1)
+      if (last?.type === type) content[content.length - 1] = { ...last, providerMetadata: event.providerMetadata }
+      continue
+    }
+    if (event.type === "tool-call") content.push(event)
+  }
+  return content
+}
 
 export const expectFinish = (
   events: ReadonlyArray<LLMEvent>,
@@ -340,7 +388,7 @@ const runImageToolResultScenario = (context: GoldenScenarioContext) =>
             resultType: "content",
             result: [
               { type: "text", text: "Image read successfully" },
-              { type: "media", mediaType: "image/png", data: image },
+              { type: "file", uri: `data:image/png;base64,${image}`, mime: "image/png" },
             ],
           }),
         ],

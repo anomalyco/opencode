@@ -22,15 +22,15 @@ describe("GoogleVertexAnthropicPlugin", () => {
           const plugin = yield* PluginV2.Service
           const catalog = yield* Catalog.Service
           yield* plugin.add(GoogleVertexAnthropicPlugin)
-          const load = yield* catalog.loader()
-          yield* load((catalog) =>
+          const transform = yield* catalog.transform()
+          yield* transform((catalog) =>
             catalog.provider.update(ProviderV2.ID.make("google-vertex-anthropic"), (provider) => {
-              provider.endpoint = { type: "aisdk", package: "@ai-sdk/google-vertex/anthropic" }
+              provider.api = { type: "aisdk", package: "@ai-sdk/google-vertex/anthropic" }
             }),
           )
           const provider = yield* catalog.provider.get(ProviderV2.ID.make("google-vertex-anthropic"))
-          expect(provider.options.aisdk.provider.project).toBe("cloud-project")
-          expect(provider.options.aisdk.provider.location).toBe("cloud-location")
+          expect(provider.request.body.project).toBe("cloud-project")
+          expect(provider.request.body.location).toBe("cloud-location")
         }),
     ),
   )
@@ -41,17 +41,17 @@ describe("GoogleVertexAnthropicPlugin", () => {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
         yield* plugin.add(GoogleVertexAnthropicPlugin)
-        const load = yield* catalog.loader()
-        yield* load((catalog) =>
+        const transform = yield* catalog.transform()
+        yield* transform((catalog) =>
           catalog.provider.update(ProviderV2.ID.make("google-vertex-anthropic"), (provider) => {
-            provider.endpoint = { type: "aisdk", package: "@ai-sdk/google-vertex/anthropic" }
-            provider.options.aisdk.provider.project = "configured-project"
-            provider.options.aisdk.provider.location = "configured-location"
+            provider.api = { type: "aisdk", package: "@ai-sdk/google-vertex/anthropic" }
+            provider.request.body.project = "configured-project"
+            provider.request.body.location = "configured-location"
           }),
         )
         const provider = yield* catalog.provider.get(ProviderV2.ID.make("google-vertex-anthropic"))
-        expect(provider.options.aisdk.provider.project).toBe("configured-project")
-        expect(provider.options.aisdk.provider.location).toBe("configured-location")
+        expect(provider.request.body.project).toBe("configured-project")
+        expect(provider.request.body.location).toBe("configured-location")
       }),
     ),
   )

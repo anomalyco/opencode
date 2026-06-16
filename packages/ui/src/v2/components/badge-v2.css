@@ -10,19 +10,18 @@
   user-select: none;
 
   border-radius: 2px;
-  border: 0.5px solid var(--border-border-base);
-  background: var(--background-bg-layer-02);
+  border: 0.5px solid var(--v2-border-border-base);
+  background: var(--v2-background-bg-layer-02);
 
-  font-family: var(--font-family-sans);
   font-style: normal;
   font-weight: 530;
   font-size: 11px;
   line-height: 1;
   letter-spacing: 0.05px;
-  color: var(--text-text-muted);
+  color: var(--v2-text-text-muted);
   font-variant-numeric: tabular-nums;
 }
 
 [data-component="tag"][data-high-contrast] {
-  border-color: var(--border-border-strong);
+  border-color: var(--v2-border-border-strong);
 }

@@ -1,4 +1,5 @@
 import { Agent } from "@/agent/agent"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { MCP } from "@/mcp"
@@ -7,19 +8,18 @@ import { Tool } from "@/tool/tool"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
-import { ModelID } from "@/provider/schema"
+
 import { Plugin } from "@/plugin"
 import type { TaskPromptOps } from "@/tool/task"
 import { type Tool as AITool, tool, jsonSchema, type ToolExecutionOptions, asSchema } from "ai"
 import { Effect } from "effect"
 import { MessageV2 } from "./message-v2"
-import * as Session from "./session"
+import { Session } from "./session"
 import { SessionProcessor } from "./processor"
 import { PartID } from "./schema"
-import * as Log from "@opencode-ai/core/util/log"
 import { EffectBridge } from "@/effect/bridge"
-
-const log = Log.create({ service: "session.tools" })
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
@@ -27,10 +27,9 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   session: Session.Info
   processor: Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
   bypassAgentCheck: boolean
-  messages: MessageV2.WithParts[]
+  messages: SessionV1.WithParts[]
   promptOps: TaskPromptOps
 }) {
-  using _ = log.time("resolveTools")
   const tools: Record<string, AITool> = {}
   const run = yield* EffectBridge.make()
   const plugin = yield* Plugin.Service
@@ -73,7 +72,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   })
 
   for (const item of yield* registry.tools({
-    modelID: ModelID.make(input.model.api.id),
+    modelID: ModelV2.ID.make(input.model.api.id),
     providerID: input.model.providerID,
     agent: input.agent,
   })) {
@@ -151,7 +150,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           )
 
           const textParts: string[] = []
-          const attachments: Omit<MessageV2.FilePart, "id" | "sessionID" | "messageID">[] = []
+          const attachments: Omit<SessionV1.FilePart, "id" | "sessionID" | "messageID">[] = []
           for (const contentItem of result.content) {
             if (contentItem.type === "text") textParts.push(contentItem.text)
             else if (contentItem.type === "image") {

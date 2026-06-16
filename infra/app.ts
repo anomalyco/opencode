@@ -30,7 +30,7 @@ export const api = new sst.cloudflare.Worker("Api", {
   transform: {
     worker: (args) => {
       args.logpush = true
-      if ($app.stage === "vimtor") return
+      if ($app.stage === "vimtor" || $app.stage === "adam") return
       args.bindings = $resolve(args.bindings).apply((bindings) => [
         ...bindings,
         {
