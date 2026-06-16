@@ -28,6 +28,7 @@ const jobOutput = (job: ShellJob.Snapshot) =>
     job.exitCode === undefined ? undefined : `exitCode: ${job.exitCode}`,
     job.error === undefined ? undefined : `error: ${job.error}`,
     "",
+    "[recent output preview]",
     job.outputPreview,
   ]
     .filter((line): line is string => line !== undefined)
@@ -39,7 +40,10 @@ const metadata = (job: ShellJob.Snapshot) => ({
   status: job.status,
   exit: job.exitCode,
   background: true,
+  preview: true,
   truncated: job.stdoutTruncated === true || job.stderrTruncated === true,
+  stdoutTruncated: job.stdoutTruncated === true,
+  stderrTruncated: job.stderrTruncated === true,
 })
 
 function missing(jobId: string) {
@@ -119,17 +123,27 @@ export const ShellLogsTool = Tool.define(
       parameters: JobLogsInput,
       execute: (params: typeof JobLogsInput.Type, ctx: Tool.Context) =>
         Effect.gen(function* () {
+          const job = yield* shellJob.status({ sessionID: ctx.sessionID, jobId: params.jobId })
+          if (!job) return yield* Effect.die(missing(params.jobId))
           const logs = yield* shellJob.logs({ sessionID: ctx.sessionID, jobId: params.jobId, lines: params.lines })
           if (logs === undefined) return yield* Effect.die(missing(params.jobId))
+          const output = [
+            params.lines === undefined ? "[current buffered logs]" : `[recent logs, last ${params.lines} lines requested]`,
+            "",
+            logs,
+          ].join("\n")
           return {
             title: "Shell job logs",
             metadata: {
-              output: logs,
+              output,
               jobId: params.jobId,
               background: true,
-              truncated: false,
+              preview: true,
+              truncated: params.lines !== undefined || job.stdoutTruncated === true || job.stderrTruncated === true,
+              stdoutTruncated: job.stdoutTruncated === true,
+              stderrTruncated: job.stderrTruncated === true,
             },
-            output: logs,
+            output,
           }
         }),
     }

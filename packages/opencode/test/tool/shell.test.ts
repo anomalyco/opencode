@@ -24,6 +24,7 @@ import { Tool } from "@/tool/tool"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstanceStore } from "@/project/instance-store"
 
+const backgroundLayer = BackgroundJob.defaultLayer
 const shellLayer = Layer.mergeAll(
   CrossSpawnSpawner.defaultLayer,
   FSUtil.defaultLayer,
@@ -32,7 +33,8 @@ const shellLayer = Layer.mergeAll(
   Config.defaultLayer,
   Agent.defaultLayer,
   RuntimeFlags.defaultLayer,
-  ShellJob.defaultLayer.pipe(Layer.provide(AppProcess.defaultLayer), Layer.provide(BackgroundJob.defaultLayer)),
+  backgroundLayer,
+  ShellJob.defaultLayer.pipe(Layer.provide(AppProcess.defaultLayer), Layer.provide(backgroundLayer)),
   testInstanceStoreLayer,
 )
 const it = testEffect(shellLayer)

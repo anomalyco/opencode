@@ -104,19 +104,20 @@ const withTool = <A, E, R>(
   )
   const mutation = LocationMutation.layer.pipe(Layer.provide(filesystem), Layer.provide(activeLocation))
   const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
+  const background = BackgroundJob.defaultLayer
   const bash = BashTool.layer.pipe(
     Layer.provide(registry),
     Layer.provide(permission),
     Layer.provide(mutation),
     Layer.provide(filesystem),
     Layer.provide(ShellJob.defaultLayer),
-    Layer.provide(BackgroundJob.defaultLayer),
+    Layer.provide(background),
     Layer.provide(processLayer),
     Layer.provide(config),
   )
   return Effect.gen(function* () {
     return yield* body(yield* ToolRegistry.Service)
-  }).pipe(Effect.provide(Layer.mergeAll(registry, bash)))
+  }).pipe(Effect.provide(Layer.mergeAll(registry, background, bash)))
 }
 
 const call = (input: typeof BashTool.Input.Type, id = "call-bash") => ({
@@ -435,6 +436,17 @@ describe("BashTool", () => {
               expect(jobId).toMatch(/^shell_/)
               expect(launched.output?.structured).toMatchObject({ status: "running" })
 
+              const background = yield* BackgroundJob.Service
+              const shared = yield* background.get(jobId!)
+              expect(shared).toMatchObject({
+                id: jobId,
+                status: "running",
+                metadata: expect.objectContaining({
+                  background: true,
+                  sessionId: sessionID,
+                }),
+              })
+
               const logs = yield* settleTool(registry, toolCall("shell_logs", { jobId, lines: 5 }))
               expect(logs.result).toMatchObject({ type: "text", value: expect.stringContaining("ready") })
 
@@ -446,6 +458,9 @@ describe("BashTool", () => {
 
               const status = yield* settleTool(registry, toolCall("shell_status", { jobId }))
               expect(status.output?.structured).toMatchObject({ status: "cancelled" })
+
+              const settled = yield* background.get(jobId!)
+              expect(settled).toMatchObject({ id: jobId, status: "cancelled" })
             }),
           AppProcess.defaultLayer,
         )

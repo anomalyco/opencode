@@ -60,9 +60,10 @@ export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false
   return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
 }
 
+const backgroundLayer = BackgroundJob.defaultLayer
 const shellJobLayer = ShellJob.defaultLayer.pipe(
   Layer.provide(AppProcess.defaultLayer),
-  Layer.provide(BackgroundJob.defaultLayer),
+  Layer.provide(backgroundLayer),
 )
 
 type TaskDef = Tool.InferDef<typeof TaskTool>
@@ -345,7 +346,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(Skill.defaultLayer),
       Layer.provide(Agent.defaultLayer),
       Layer.provide(Session.defaultLayer),
-      Layer.provide(BackgroundJob.defaultLayer),
+      Layer.provide(backgroundLayer),
       Layer.provide(shellJobLayer),
       Layer.provide(Provider.defaultLayer),
       Layer.provide(LSP.defaultLayer),
@@ -436,26 +437,29 @@ function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
-export const node = LayerNode.make(layer.pipe(Layer.provide(Ripgrep.defaultLayer), Layer.provide(shellJobLayer)), [
-  Config.node,
-  Plugin.node,
-  Question.node,
-  Todo.node,
-  Agent.node,
-  Skill.node,
-  Session.node,
-  BackgroundJob.node,
-  Provider.node,
-  LSP.node,
-  Instruction.node,
-  FSUtil.node,
-  EventV2Bridge.node,
-  httpClient,
-  CrossSpawnSpawner.node,
-  Format.node,
-  Truncate.node,
-  RuntimeFlags.node,
-  Database.node,
-])
+export const node = LayerNode.make(
+  layer.pipe(Layer.provide(Ripgrep.defaultLayer), Layer.provide(backgroundLayer), Layer.provide(shellJobLayer)),
+  [
+    Config.node,
+    Plugin.node,
+    Question.node,
+    Todo.node,
+    Agent.node,
+    Skill.node,
+    Session.node,
+    BackgroundJob.node,
+    Provider.node,
+    LSP.node,
+    Instruction.node,
+    FSUtil.node,
+    EventV2Bridge.node,
+    httpClient,
+    CrossSpawnSpawner.node,
+    Format.node,
+    Truncate.node,
+    RuntimeFlags.node,
+    Database.node,
+  ],
+)
 
 export * as ToolRegistry from "./registry"

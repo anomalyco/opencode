@@ -173,7 +173,7 @@ export const make = Effect.gen(function* () {
       title: input.command,
       metadata: {
         background: true,
-        sessionID: input.sessionID,
+        sessionId: input.sessionID,
         command: input.command,
         cwd: input.cwd,
       },
@@ -230,7 +230,8 @@ export const make = Effect.gen(function* () {
   const logs: Interface["logs"] = Effect.fn("ShellJob.logs")(function* (input) {
     const job = yield* read(input)
     if (!job) return
-    return trimLines(job.chunks.join(""), input.lines ?? DEFAULT_LOG_LINES) || "(no output)"
+    const text = job.chunks.join("")
+    return (input.lines === undefined ? text : trimLines(text, input.lines)) || "(no output)"
   })
 
   const cancel: Interface["cancel"] = Effect.fn("ShellJob.cancel")(function* (input) {

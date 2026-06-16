@@ -26,7 +26,7 @@ import { BashArity } from "@/permission/arity"
 export { Parameters } from "./shell/prompt"
 
 const MAX_METADATA_LENGTH = 30_000
-const DEFAULT_BACKGROUND_TIMEOUT_MS = 10 * 60 * 1000
+const DEFAULT_BACKGROUND_TIMEOUT_MS = 24 * 60 * 60 * 1000
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const FILES = new Set([
   ...CWD,
