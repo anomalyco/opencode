@@ -55,11 +55,7 @@ export function createTimelineModel(input: {
     const id = input.sessionID()
     return !id || sync().data.message[id] !== undefined
   })
-  const userMessages = createMemo(
-    () => selectUserMessages(messages()),
-    emptyUserMessages,
-    { equals: same },
-  )
+  const userMessages = createMemo(() => selectUserMessages(messages()), emptyUserMessages, { equals: same })
   const visibleUserMessages = createMemo(
     () => {
       return selectVisibleUserMessages(userMessages(), input.revertMessageID())

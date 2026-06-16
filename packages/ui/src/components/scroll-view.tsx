@@ -38,10 +38,7 @@ export function scrollTopFromThumbPointer(input: {
   const padding = 8
   const maxThumbTop = input.clientHeight - padding * 2 - input.thumbHeight
   if (maxThumbTop <= 0) return 0
-  const thumbTop = Math.max(
-    0,
-    Math.min(input.pointer - input.viewportTop - padding - input.grabOffset, maxThumbTop),
-  )
+  const thumbTop = Math.max(0, Math.min(input.pointer - input.viewportTop - padding - input.grabOffset, maxThumbTop))
   return (thumbTop / maxThumbTop) * Math.max(0, input.scrollHeight - input.clientHeight)
 }
 

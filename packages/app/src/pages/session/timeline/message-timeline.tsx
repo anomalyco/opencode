@@ -82,10 +82,7 @@ type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, { _tag: "TurnGap" }>
 type TimelineRowByTag<T extends TimelineRow.TimelineRow["_tag"]> = Extract<TimelineRow.TimelineRow, { _tag: T }>
 
 const timelineFallbackItemSize = 60
-const timelineCache = new Map<
-  string,
-  { measurements: VirtualItem[]; toolOpen: Record<string, boolean | undefined> }
->()
+const timelineCache = new Map<string, { measurements: VirtualItem[]; toolOpen: Record<string, boolean | undefined> }>()
 
 const taskDescription = (part: PartType, sessionID: string) => {
   if (part.type !== "tool" || part.tool !== "task") return

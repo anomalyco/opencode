@@ -196,7 +196,8 @@ test.describe("regression: session timeline local row state", () => {
     const events: EventPayload[] = []
     const lines = Array.from({ length: 1_000 }, (_, index) => `export const value${index} = ${index}\n`).join("")
     const after = [100, 300, 500, 700, 900].reduce(
-      (result, index) => result.replace(`export const value${index} = ${index}`, `export const value${index} = compute(${index})`),
+      (result, index) =>
+        result.replace(`export const value${index} = ${index}`, `export const value${index} = compute(${index})`),
       lines,
     )
     const part = {
@@ -385,11 +386,7 @@ function readExpanded(element: Element) {
   return !!content && content.getBoundingClientRect().height > 0
 }
 
-async function mockServer(
-  page: Page,
-  events: EventPayload[],
-  messages = [userMessage, assistantMessage],
-) {
+async function mockServer(page: Page, events: EventPayload[], messages = [userMessage, assistantMessage]) {
   await mockOpenCodeServer(page, {
     directory,
     project: project(),

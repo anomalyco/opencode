@@ -3,7 +3,16 @@ import { useI18n } from "../context/i18n"
 import DOMPurify from "dompurify"
 import morphdom from "morphdom"
 import { checksum } from "@opencode-ai/core/util/encode"
-import { ComponentProps, createEffect, createMemo, createResource, createSignal, createUniqueId, onCleanup, splitProps } from "solid-js"
+import {
+  ComponentProps,
+  createEffect,
+  createMemo,
+  createResource,
+  createSignal,
+  createUniqueId,
+  onCleanup,
+  splitProps,
+} from "solid-js"
 import { isServer } from "solid-js/web"
 import { bundledLanguages } from "shiki"
 import { canReusePendingBlock, project, type Block, type Projection } from "./markdown-stream"
@@ -439,9 +448,9 @@ export function Markdown(
     nextCodeKeys.forEach((key) => activeCodeKeys.add(key))
     content.forEach((block, index) => updateBlock(container, index, block, labels))
     while (container.children.length > content.length) container.lastElementChild?.remove()
-    container.querySelectorAll<HTMLButtonElement>('[data-slot="markdown-copy-button"]').forEach((button) =>
-      setCopyState(button, labels, button.dataset.copied === "true"),
-    )
+    container
+      .querySelectorAll<HTMLButtonElement>('[data-slot="markdown-copy-button"]')
+      .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
     if (!copyCleanup)
       copyCleanup = setupCodeCopy(container, () => ({
         copy: i18n.t("ui.message.copy"),
@@ -549,8 +558,7 @@ function updateCodeBlock(
   block: Extract<RenderedBlock, { mode: "code" }>,
   labels: CopyLabels,
 ) {
-  const existing =
-    current instanceof HTMLDivElement && current.dataset.markdownKey === block.key ? current : undefined
+  const existing = current instanceof HTMLDivElement && current.dataset.markdownKey === block.key ? current : undefined
   const next = existing ?? document.createElement("div")
   next.dataset.markdownBlock = ""
   next.dataset.markdownKey = block.key
@@ -574,7 +582,10 @@ function updateCodeBlock(
     const prefix = prior.findIndex((token, index) => !sameToken(token, tail[index]))
     const keep = stableCount + (prefix < 0 ? Math.min(prior.length, tail.length) : prefix)
     while (code.children.length > keep) code.lastElementChild?.remove()
-    tail.slice(keep - stableCount).map(createTokenSpan).forEach((span) => code.appendChild(span))
+    tail
+      .slice(keep - stableCount)
+      .map(createTokenSpan)
+      .forEach((span) => code.appendChild(span))
     renderedCodeTokens.set(next, {
       language: block.language,
       generation: block.generation,

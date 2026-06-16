@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test"
-import { applyMarkdownWorkerResponse, markdownBlockKey, shouldReleaseMarkdownWorkerState } from "./markdown-worker-protocol"
+import {
+  applyMarkdownWorkerResponse,
+  markdownBlockKey,
+  shouldReleaseMarkdownWorkerState,
+} from "./markdown-worker-protocol"
 
 const token = (content: string): [string, string] => [content, ""]
 const response = (id: number, reset: boolean, stable: [string, string][], unstable: [string, string][]) => ({

@@ -123,8 +123,12 @@ describe("markdown stream", () => {
   })
 
   test("only reuses pending blocks with compatible identity and content", () => {
-    expect(canReusePendingBlock({ mode: "full", raw: "First\n\n" }, { mode: "full", raw: "# Inserted\n\n", src: "", })).toBe(false)
-    expect(canReusePendingBlock({ mode: "code", raw: "```ts\none" }, { mode: "code", raw: "```ts\none two", src: "" })).toBe(true)
+    expect(
+      canReusePendingBlock({ mode: "full", raw: "First\n\n" }, { mode: "full", raw: "# Inserted\n\n", src: "" }),
+    ).toBe(false)
+    expect(
+      canReusePendingBlock({ mode: "code", raw: "```ts\none" }, { mode: "code", raw: "```ts\none two", src: "" }),
+    ).toBe(true)
     expect(canReusePendingBlock({ mode: "code", raw: "```ts\none" }, { mode: "live", raw: "one", src: "" })).toBe(false)
   })
 
