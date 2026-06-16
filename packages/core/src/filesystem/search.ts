@@ -1,5 +1,6 @@
 export * as FileSystemSearch from "./search"
 
+import os from "os"
 import path from "path"
 import { Context, Effect, Layer, Scope } from "effect"
 import { Fff } from "#fff"
@@ -10,6 +11,7 @@ import { Location } from "../location"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
 import { Flag } from "../flag/flag"
+import { shouldScanUpward } from "./search-scan"
 
 export interface Interface {
   readonly find: (input: FileSystem.FindInput) => Effect.Effect<FileSystem.Entry[]>
@@ -127,13 +129,14 @@ export const fffLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const location = yield* Location.Service
+    const scanUpward = shouldScanUpward(location.directory, os.homedir())
     const result = yield* Effect.try({
       try: () =>
         Fff.create({
           basePath: location.directory,
           aiMode: true,
-          enableFsRootScanning: true,
-          enableHomeDirScanning: true,
+          enableFsRootScanning: scanUpward,
+          enableHomeDirScanning: scanUpward,
         }),
       catch: (cause) => cause,
     }).pipe(Effect.orDie)

@@ -1,7 +1,8 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
+import { shouldScanUpward } from "@opencode-ai/core/filesystem/search-scan"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "../fixture/tmpdir"
@@ -40,4 +41,25 @@ describe("Ripgrep", () => {
       }),
     ),
   )
+})
+
+describe("shouldScanUpward", () => {
+  const home = path.resolve("/home/alice")
+
+  test("scans upward from a project directory inside home", () => {
+    expect(shouldScanUpward(path.join(home, "projects", "app"), home)).toBe(true)
+  })
+
+  test("does not scan when the directory is home itself", () => {
+    expect(shouldScanUpward(home, home)).toBe(false)
+  })
+
+  test("does not scan from the filesystem root", () => {
+    const root = path.parse(home).root
+    expect(shouldScanUpward(root, home)).toBe(false)
+  })
+
+  test("does not scan from an ancestor of home", () => {
+    expect(shouldScanUpward(path.dirname(home), home)).toBe(false)
+  })
 })
