@@ -463,6 +463,10 @@ export type SessionStatus =
   | {
       type: "busy"
     }
+  | {
+      type: "compacting"
+      startedAt?: number
+    }
 
 export type EventSessionStatus = {
   type: "session.status"

@@ -165,6 +165,32 @@ describe("internal notifications TUI plugin", () => {
     ])
   })
 
+  test("treats compacting as active until idle", async () => {
+    const harness = await setup()
+
+    harness.emit({
+      id: "event-1",
+      type: "session.status",
+      properties: { sessionID: "session", status: { type: "compacting", startedAt: 123 } },
+    })
+    expect(harness.notifications).toEqual([])
+
+    harness.emit({
+      id: "event-2",
+      type: "session.status",
+      properties: { sessionID: "session", status: { type: "idle" } },
+    })
+
+    expect(harness.notifications).toEqual([
+      {
+        title: "Demo session",
+        message: "Session done",
+        notification: { when: "blurred" },
+        sound: { name: "done", when: "always" },
+      },
+    ])
+  })
+
   test("uses sound-only notifications and subagent_done sound for subagent sessions", async () => {
     const harness = await setup()
 

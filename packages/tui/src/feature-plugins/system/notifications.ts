@@ -3,6 +3,7 @@ import type { TuiAttentionSoundName, TuiPlugin, TuiPluginApi } from "@opencode-a
 import type { BuiltinTuiPlugin } from "../builtins"
 
 const id = "internal:notifications"
+const activeSessionStatusTypes = ["busy", "retry", "compacting"]
 
 type SessionError = Extract<Event, { type: "session.error" }>["properties"]["error"]
 
@@ -58,7 +59,7 @@ const tui: TuiPlugin = async (api) => {
 
   api.event.on("session.status", (event) => {
     const sessionID = event.properties.sessionID
-    if (event.properties.status.type === "busy" || event.properties.status.type === "retry") {
+    if (activeSessionStatusTypes.includes(event.properties.status.type)) {
       active.add(sessionID)
       errored.delete(sessionID)
       return

@@ -18,6 +18,8 @@ import { errorMessage } from "../util/error"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 import { useCommandShortcut } from "../keymap"
 
+const workingSessionStatusTypes = ["busy", "retry", "compacting"]
+
 export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
@@ -179,7 +181,7 @@ export function DialogSessionList() {
 
       const isDeleting = toDelete() === x.id
       const status = sync.data.session_status?.[x.id]
-      const isWorking = status?.type === "busy" || status?.type === "retry"
+      const isWorking = workingSessionStatusTypes.includes(status?.type ?? "")
       const slot = slotByID.get(x.id)
       const gutter = isWorking
         ? () => <Spinner />

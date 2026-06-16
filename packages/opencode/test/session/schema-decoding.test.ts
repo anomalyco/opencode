@@ -229,6 +229,11 @@ describe("SessionStatus.Info", () => {
     expect(decode({ type: "busy" })).toEqual({ type: "busy" })
   })
 
+  test("compacting carries optional startedAt", () => {
+    expect(decode({ type: "compacting" })).toEqual({ type: "compacting" })
+    expect(decode({ type: "compacting", startedAt: 123 })).toEqual({ type: "compacting", startedAt: 123 })
+  })
+
   test("retry carries attempt/message/action/next", () => {
     const input = {
       type: "retry" as const,
