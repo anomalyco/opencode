@@ -19,7 +19,7 @@ export const DialogSelectMcp: Component = () => {
   const language = useLanguage()
 
   const items = createMemo(() =>
-    Object.entries(sync.data.mcp ?? {})
+    Object.entries(sync().data.mcp ?? {})
       .map(([name, status]) => ({ name, status: status.status }))
       .sort((a, b) => a.name.localeCompare(b.name)),
   )
@@ -48,7 +48,7 @@ export const DialogSelectMcp: Component = () => {
         }}
       >
         {(i) => {
-          const mcpStatus = () => sync.data.mcp[i.name]
+          const mcpStatus = () => sync().data.mcp[i.name]
           const status = () => mcpStatus()?.status
           const statusLabel = () => {
             const key = status() ? statusLabels[status() as keyof typeof statusLabels] : undefined

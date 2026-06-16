@@ -1,62 +1,68 @@
 import { Config as EffectConfig, Context, Effect, Layer } from "effect"
 import { HttpApiBuilder, OpenApi } from "effect/unstable/httpapi"
-import {
-  FetchHttpClient,
-  HttpClient,
-  HttpMiddleware,
-  HttpRouter,
-  HttpServer,
-  HttpServerResponse,
-} from "effect/unstable/http"
+import { HttpClient, HttpMiddleware, HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http"
 import * as Socket from "effect/unstable/socket/Socket"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import * as Observability from "@opencode-ai/core/observability"
 import { Account } from "@/account/account"
 import { Agent } from "@/agent/agent"
 import { Auth } from "@/auth"
 import { BackgroundJob } from "@/background/job"
-import { Config } from "@/config/config"
 import { Command } from "@/command"
-import * as Observability from "@opencode-ai/core/observability"
-import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { Config } from "@/config/config"
+import { Workspace } from "@/control-plane/workspace"
+import { Env } from "@/env"
+import { EventV2Bridge } from "@/event-v2-bridge"
 import { Format } from "@/format"
-import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Git } from "@/git"
+import { Installation } from "@/installation"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
+import { McpAuth } from "@/mcp/auth"
 import { Permission } from "@/permission"
-import { Installation } from "@/installation"
-import { InstanceLayer } from "@/project/instance-layer"
 import { Plugin } from "@/plugin"
+import { PluginPtyEnvironment } from "@/plugin/pty-environment"
+import { InstanceStore } from "@/project/instance-store"
 import { Project } from "@/project/project"
-import { ProjectV2 } from "@opencode-ai/core/project"
-import { ProjectCopy } from "@opencode-ai/core/project/copy"
-import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
+import { Vcs } from "@/project/vcs"
 import { ProviderAuth } from "@/provider/auth"
-import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
-import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { Question } from "@/question"
-import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
+import { Instruction } from "@/session/instruction"
 import { LLM } from "@/session/llm"
+import { SessionProcessor } from "@/session/processor"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
+import { Session } from "@/session/session"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
 import { SessionShare } from "@/share/session"
 import { ShareNext } from "@/share/share-next"
-import { EventV2Bridge } from "@/event-v2-bridge"
-import { EventV2 } from "@opencode-ai/core/event"
-import { Database } from "@opencode-ai/core/database/database"
 import { Skill } from "@/skill"
+import { Discovery } from "@/skill/discovery"
 import { Snapshot } from "@/snapshot"
+import { Storage } from "@/storage/storage"
 import { ToolRegistry } from "@/tool/registry"
-import { lazy } from "@/util/lazy"
-import { Vcs } from "@/project/vcs"
+import { Truncate } from "@/tool/truncate"
 import { Worktree } from "@/worktree"
-import { Workspace } from "@/control-plane/workspace"
-import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@/server/cors"
+import { RuntimeFlags } from "@/effect/runtime-flags"
+import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
+import { Database } from "@opencode-ai/core/database/database"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
+import { EventV2 } from "@opencode-ai/core/event"
+import { ModelsDev } from "@opencode-ai/core/models-dev"
+import { Npm } from "@opencode-ai/core/npm"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { ProjectCopy } from "@opencode-ai/core/project/copy"
+import { PtyTicket } from "@opencode-ai/core/pty/ticket"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { lazy } from "@/util/lazy"
+import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@opencode-ai/server/cors"
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
 import { InstanceHttpApi, RootHttpApi } from "./api"
@@ -161,6 +167,7 @@ const instanceRoutes = instanceApiRoutes.pipe(
 )
 const serverRoutes = HttpApiBuilder.layer(Api).pipe(
   Layer.provide(handlers),
+  Layer.provide(PluginPtyEnvironment.layer),
   Layer.provide([serverHttpApiAuthLayer, v2SchemaErrorLayer]),
 )
 
@@ -193,6 +200,64 @@ type RouteRequirements =
   | HttpRouter.Request<"Requires", unknown>
   | HttpRouter.Request<"GlobalRequires", never>
 
+const app = LayerNode.group([
+  Npm.node,
+  FSUtil.node,
+  Database.node,
+  Auth.node,
+  Account.node,
+  Config.node,
+  Env.node,
+  Git.node,
+  Ripgrep.node,
+  Storage.node,
+  Snapshot.node,
+  Plugin.node,
+  ModelsDev.node,
+  Provider.node,
+  ProviderAuth.node,
+  Agent.node,
+  Skill.node,
+  Discovery.node,
+  Question.node,
+  Permission.node,
+  Todo.node,
+  Session.node,
+  SessionProjector.node,
+  SessionStatus.node,
+  BackgroundJob.node,
+  RuntimeFlags.node,
+  EventV2Bridge.node,
+  SessionRunState.node,
+  SessionProcessor.node,
+  SessionCompaction.node,
+  SessionRevert.node,
+  SessionSummary.node,
+  SessionPrompt.node,
+  Instruction.node,
+  LLM.node,
+  LSP.node,
+  MCP.node,
+  McpAuth.node,
+  Command.node,
+  Truncate.node,
+  ToolRegistry.node,
+  Format.node,
+  Project.node,
+  Vcs.node,
+  Workspace.node,
+  Worktree.node,
+  Installation.node,
+  ShareNext.node,
+  SessionShare.node,
+  InstanceStore.node,
+  httpClient,
+  EventV2.node,
+  ProjectV2.node,
+  ProjectCopy.node,
+  PtyTicket.node,
+])
+
 export function createRoutes(
   corsOptions?: CorsOptions,
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
@@ -209,58 +274,14 @@ export function createRoutes(
       errorLayer,
       compressionLayer,
       corsVaryFix,
-      fenceLayer.pipe(Layer.provide(Database.defaultLayer)),
+      fenceLayer,
       cors(corsOptions),
-      Database.defaultLayer,
-      Account.defaultLayer,
-      Agent.defaultLayer,
-      Auth.defaultLayer,
-      BackgroundJob.defaultLayer,
-      Command.defaultLayer,
-      Config.defaultLayer,
-      Format.defaultLayer,
-      LSP.defaultLayer,
-      LLM.defaultLayer,
-      Installation.defaultLayer,
-      MCP.defaultLayer,
-      ModelsDev.defaultLayer,
-      Permission.defaultLayer,
-      Plugin.defaultLayer,
-      Project.defaultLayer,
-      ProjectV2.defaultLayer,
-      ProjectCopy.defaultLayer,
       MoveSession.defaultLayer,
-      ProviderAuth.defaultLayer,
-      Provider.defaultLayer,
-      PtyTicket.defaultLayer,
-      Question.defaultLayer,
-      RuntimeFlags.defaultLayer,
-      Session.defaultLayer,
-      SessionCompaction.defaultLayer,
-      SessionPrompt.defaultLayer,
-      SessionRevert.defaultLayer,
-      SessionShare.defaultLayer,
-      SessionRunState.defaultLayer,
-      SessionStatus.defaultLayer,
-      SessionSummary.defaultLayer,
-      ShareNext.defaultLayer,
-      Snapshot.defaultLayer,
-      EventV2Bridge.defaultLayer,
-      EventV2.defaultLayer,
-      Skill.defaultLayer,
-      Todo.defaultLayer,
-      ToolRegistry.defaultLayer,
-      Vcs.defaultLayer,
-      Workspace.defaultLayer,
-      Worktree.appLayer,
-      FSUtil.defaultLayer,
-      FetchHttpClient.layer,
       HttpServer.layerServices,
     ]),
+    Layer.provide(LayerNode.buildLayer(app)),
     Layer.provide(Layer.succeed(CorsConfig)(corsOptions)),
-    Layer.provideMerge(Ripgrep.defaultLayer),
-    Layer.provide(InstanceLayer.layer),
-    Layer.provideMerge(Observability.layer),
+    Layer.provide(Observability.layer),
   )
 }
 

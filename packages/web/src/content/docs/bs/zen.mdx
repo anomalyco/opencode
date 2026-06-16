@@ -95,6 +95,7 @@ Našim modelima možete pristupiti i preko sljedećih API endpointa.
 | Qwen3.7 Plus           | qwen3.7-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus           | qwen3.5-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
+| DeepSeek V4 Pro        | deepseek-v4-pro        | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash      | deepseek-v4-flash      | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7           | minimax-m2.7           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5           | minimax-m2.5           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
@@ -146,7 +147,8 @@ Podržavamo pay-as-you-go model. Ispod su cijene **po 1M tokena**.
 | Qwen3.7 Plus                      | $0.40  | $1.60   | $0.04       | $0.50        |
 | Qwen3.6 Plus                      | $0.50  | $3.00   | $0.05       | $0.625       |
 | Qwen3.5 Plus                      | $0.20  | $1.20   | $0.02       | $0.25        |
-| DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.03       | -            |
+| DeepSeek V4 Pro                   | $1.74  | $3.48   | $0.145      | -            |
+| DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.028      | -            |
 | Grok Build 0.1                    | $1.00  | $2.00   | $0.20       | -            |
 | Claude Fable 5                    | $10.00 | $50.00  | $1.00       | $12.50       |
 | Claude Opus 4.8                   | $5.00  | $25.00  | $0.50       | $6.25        |
@@ -252,7 +254,7 @@ i ne koriste vaše podatke za treniranje modela, uz sljedeće izuzetke:
 - Big Pickle: Tokom besplatnog perioda, prikupljeni podaci mogu se koristiti za poboljšanje modela.
 - DeepSeek V4 Flash Free: Tokom besplatnog perioda, prikupljeni podaci mogu se koristiti za poboljšanje modela.
 - MiMo-V2.5 Free: Tokom besplatnog perioda, prikupljeni podaci mogu se koristiti za poboljšanje modela.
-- North Mini Code Free: Tokom besplatnog perioda, prikupljeni podaci mogu se koristiti za poboljšanje modela.
+- North Mini Code Free: Tokom besplatnog perioda, prikupljeni podaci mogu biti zadržani i korišteni za poboljšanje modela. Nemojte slati lične ili povjerljive podatke. Pogledajte naše [Uslove korištenja](https://cohere.com/terms-of-use) i [Politiku privatnosti](https://cohere.com/privacy).
 - Nemotron 3 Ultra Free (besplatni NVIDIA endpointi): Samo za probnu upotrebu — nemojte slati lične ili povjerljive podatke. Vaše korištenje se bilježi radi sigurnosti i poboljšanja NVIDIA proizvoda i usluga. Zabilježeni podaci sesije koji se koriste u svrhu poboljšanja nisu povezani s vašim identitetom niti bilo kojim trajnim identifikatorom. Za više informacija o našim praksama obrade podataka pogledajte našu [Politiku privatnosti](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Interakcijom s ovim endpointom pristajete na naše prikupljanje, bilježenje i korištenje takvih informacija te na [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).
 - OpenAI APIs: Requests are retained for 30 days in accordance with [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data).
 - Anthropic APIs: Requests are retained for 30 days in accordance with [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage).

@@ -86,6 +86,7 @@ Du kannst auch über die folgenden API-Endpunkte auf unsere Modelle zugreifen.
 | Qwen3.7 Plus           | qwen3.7-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.6 Plus           | qwen3.6-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
 | Qwen3.5 Plus           | qwen3.5-plus           | `https://opencode.ai/zen/v1/messages`                | `@ai-sdk/anthropic`         |
+| DeepSeek V4 Pro        | deepseek-v4-pro        | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash      | deepseek-v4-flash      | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.7           | minimax-m2.7           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
 | MiniMax M2.5           | minimax-m2.5           | `https://opencode.ai/zen/v1/chat/completions`        | `@ai-sdk/openai-compatible` |
@@ -135,7 +136,8 @@ Wir unterstützen ein Pay-as-you-go-Modell. Unten findest du die Preise **pro 1M
 | Qwen3.7 Plus                      | $0.40  | $1.60   | $0.04       | $0.50        |
 | Qwen3.6 Plus                      | $0.50  | $3.00   | $0.05       | $0.625       |
 | Qwen3.5 Plus                      | $0.20  | $1.20   | $0.02       | $0.25        |
-| DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.03       | -            |
+| DeepSeek V4 Pro                   | $1.74  | $3.48   | $0.145      | -            |
+| DeepSeek V4 Flash                 | $0.14  | $0.28   | $0.028      | -            |
 | Grok Build 0.1                    | $1.00  | $2.00   | $0.20       | -            |
 | Claude Fable 5                    | $10.00 | $50.00  | $1.00       | $12.50       |
 | Claude Opus 4.8                   | $5.00  | $25.00  | $0.50       | $6.25        |
@@ -236,7 +238,7 @@ Alle unsere Modelle werden in den USA gehostet. Unsere Provider folgen einer Zer
 - Big Pickle: Während des kostenlosen Zeitraums können gesammelte Daten zur Verbesserung des Modells verwendet werden.
 - DeepSeek V4 Flash Free: Während des kostenlosen Zeitraums können gesammelte Daten zur Verbesserung des Modells verwendet werden.
 - MiMo-V2.5 Free: Während des kostenlosen Zeitraums können gesammelte Daten zur Verbesserung des Modells verwendet werden.
-- North Mini Code Free: Während des kostenlosen Zeitraums können gesammelte Daten zur Verbesserung des Modells verwendet werden.
+- North Mini Code Free: Während des kostenlosen Zeitraums können erhobene Daten gespeichert und zur Verbesserung des Modells verwendet werden. Übermitteln Sie keine personenbezogenen oder vertraulichen Daten. Weitere Informationen finden Sie in unseren [Nutzungsbedingungen](https://cohere.com/terms-of-use) und unserer [Datenschutzerklärung](https://cohere.com/privacy).
 - Nemotron 3 Ultra Free (kostenlose NVIDIA-Endpunkte): Nur für Testzwecke — übermitteln Sie keine personenbezogenen oder vertraulichen Daten. Ihre Nutzung wird zu Sicherheitszwecken und zur Verbesserung der Produkte und Dienste von NVIDIA protokolliert. Die zu Verbesserungszwecken protokollierten Sitzungsdaten sind nicht mit Ihrer Identität oder einem dauerhaften Identifikator verknüpft. Weitere Informationen zu unseren Datenverarbeitungspraktiken finden Sie in unserer [Datenschutzrichtlinie](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Durch die Interaktion mit diesem Endpunkt stimmen Sie unserer Erhebung, Aufzeichnung und Nutzung solcher Informationen sowie den [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf) zu.
 - OpenAI APIs: Anfragen werden in Übereinstimmung mit [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data) 30 Tage lang gespeichert.
 - Anthropic APIs: Anfragen werden in Übereinstimmung mit [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage) 30 Tage lang gespeichert.
