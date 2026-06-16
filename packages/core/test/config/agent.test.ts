@@ -280,7 +280,7 @@ Use native v2 fields.`,
     ),
   )
 
-  it.live("loads agents from agent_paths with absolute path", () =>
+  it.live("loads agents from agents.paths with absolute path", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -310,7 +310,7 @@ Help.`,
               Effect.succeed([
                 new Config.Document({
                   type: "document",
-                  info: decode({ agent_paths: [tmp.path] }),
+                  info: decode({ agents: { paths: [tmp.path] } }),
                 }),
               ]),
           })
@@ -340,7 +340,7 @@ Help.`,
     ),
   )
 
-  it.live("loads agents from agent_paths with ~/ expansion", () =>
+  it.live("loads agents from agents.paths with ~/ expansion", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -365,7 +365,7 @@ Works with ~/.`,
               Effect.succeed([
                 new Config.Document({
                   type: "document",
-                  info: decode({ agent_paths: [path.join("~", path.basename(tmp.path))] }),
+                  info: decode({ agents: { paths: [path.join("~", path.basename(tmp.path))] } }),
                 }),
               ]),
           })
@@ -390,7 +390,7 @@ Works with ~/.`,
     ),
   )
 
-  it.live("handles empty agent_paths directory gracefully", () =>
+  it.live("handles empty agents.paths directory gracefully", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -403,7 +403,7 @@ Works with ~/.`,
               Effect.succeed([
                 new Config.Document({
                   type: "document",
-                  info: decode({ agent_paths: [tmp.path] }),
+                  info: decode({ agents: { paths: [tmp.path] } }),
                 }),
               ]),
           })
@@ -426,7 +426,7 @@ Works with ~/.`,
     ),
   )
 
-  it.effect("merges agent_paths agents with inline agents (last-wins)", () =>
+  it.effect("merges agents.paths agents with inline agents", () =>
     Effect.gen(function* () {
       const agents = yield* AgentV2.Service
       const config = Config.Service.of({
@@ -435,8 +435,8 @@ Works with ~/.`,
             new Config.Document({
               type: "document",
               info: decode({
-                agent_paths: [],
                 agents: {
+                  paths: [],
                   custom: {
                     description: "Inline agent",
                     mode: "subagent",

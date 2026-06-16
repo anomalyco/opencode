@@ -46,48 +46,38 @@ export const Plugin = PluginV2.define({
       if (entry.type === "document") return Effect.succeed([entry])
       return Effect.gen(function* () {
         const files = yield* discover(fs, entry.path)
-        return yield* Effect.forEach(files, (file) =>
-          fs.readFileStringSafe(file.filepath).pipe(
-            Effect.map((content) => content && decode(file, content)),
-            Effect.catch(() => Effect.succeed(undefined)),
-          ),
-        ).pipe(
-          Effect.map((documents) =>
-            documents.filter((document): document is Config.Document => document !== undefined),
-          ),
+        return yield* Effect.forEach(files, (file) => readAndDecode(fs, file)).pipe(
+          Effect.map(filterDocuments),
         )
       })
-    }).pipe(Effect.map((documents) => documents.flat()))
-    const userPathItems = entries.flatMap(
-      (entry) => (entry.type === "document" ? (entry.info.agent_paths ?? []) : []),
-    )
-    const userDocuments = userPathItems.length === 0
-      ? []
-      : yield* Effect.flatMap(
-          Effect.all([Effect.serviceOption(Global.Service), Effect.serviceOption(Location.Service)]),
-          ([global, location]) => {
-            const g = Option.getOrUndefined(global)
-            const l = Option.getOrUndefined(location)
-            if (!g || !l) return Effect.succeed([] as Config.Document[])
-            return Effect.forEach(userPathItems, (item) => {
-              const expanded = item.startsWith("~/") ? path.join(g.home, item.slice(2)) : item
-              const resolved = path.isAbsolute(expanded) ? expanded : path.join(l.directory, expanded)
-              return discoverFlat(fs, resolved).pipe(
-                Effect.flatMap((files) =>
-                  Effect.forEach(files, (file) =>
-                    fs.readFileStringSafe(file.filepath).pipe(
-                      Effect.map((content) => content && decode(file, content)),
-                      Effect.catch(() => Effect.succeed(undefined)),
-                    ),
-                  ).pipe(
-                    Effect.map((docs) => docs.filter((d): d is Config.Document => d !== undefined)),
-                  ),
-                ),
-              )
-            }).pipe(Effect.map((docs) => docs.flat()))
-          },
+    }).pipe(Effect.map((documentGroups) => documentGroups.flat()))
+
+    const customPaths = entries.flatMap((entry) => {
+      if (entry.type !== "document") return []
+      const pathsValue = entry.info.agents?.paths
+      return Array.isArray(pathsValue) ? pathsValue : []
+    })
+
+    const customDocuments = yield* Effect.gen(function* () {
+      const maybeGlobal = yield* Effect.serviceOption(Global.Service)
+      const maybeLocation = yield* Effect.serviceOption(Location.Service)
+      if (Option.isNone(maybeGlobal) || Option.isNone(maybeLocation)) return []
+      const globalService = maybeGlobal.value
+      const locationService = maybeLocation.value
+      return yield* Effect.forEach(customPaths, (item) => {
+        const expanded = item.startsWith("~/") ? path.join(globalService.home, item.slice(2)) : item
+        const resolved = path.isAbsolute(expanded) ? expanded : path.join(locationService.directory, expanded)
+        return discoverFlat(fs, resolved).pipe(
+          Effect.flatMap((files) =>
+            Effect.forEach(files, (file) => readAndDecode(fs, file)).pipe(
+              Effect.map(filterDocuments),
+            ),
+          ),
         )
-    const allDocuments = [...documents, ...userDocuments]
+      }).pipe(Effect.map((documentGroups) => documentGroups.flat()))
+    })
+
+    const allDocuments = [...documents, ...customDocuments]
 
     yield* agent.update((editor) => {
       const globalPermissions = allDocuments.flatMap((document) => document.info.permissions ?? [])
@@ -98,9 +88,12 @@ export const Plugin = PluginV2.define({
       }
 
       for (const document of allDocuments) {
-        for (const [id, item] of Object.entries(document.info.agents ?? {})) {
+        const agentEntries = Object.entries(document.info.agents ?? {}).filter(
+          (entry): entry is [string, ConfigAgent.Info] => !Array.isArray(entry[1]),
+        )
+        for (const [id, agentConfig] of agentEntries) {
           const agentID = AgentV2.ID.make(id)
-          if (item.disabled) {
+          if (agentConfig.disabled) {
             editor.remove(agentID)
             continue
           }
@@ -108,24 +101,24 @@ export const Plugin = PluginV2.define({
           const exists = editor.get(agentID) !== undefined
           editor.update(agentID, (agent) => {
             if (!exists) agent.permissions.push(...globalPermissions)
-            if (item.model !== undefined) {
-              const model = ModelV2.parse(item.model)
+            if (agentConfig.model !== undefined) {
+              const model = ModelV2.parse(agentConfig.model)
               agent.model = { id: model.modelID, providerID: model.providerID, variant: agent.model?.variant }
             }
-            if (item.variant !== undefined && agent.model !== undefined) {
-              agent.model.variant = ModelV2.VariantID.make(item.variant)
+            if (agentConfig.variant !== undefined && agent.model !== undefined) {
+              agent.model.variant = ModelV2.VariantID.make(agentConfig.variant)
             }
-            if (item.request !== undefined) {
-              Object.assign(agent.request.headers, item.request.headers ?? {})
-              Object.assign(agent.request.body, item.request.body ?? {})
+            if (agentConfig.request !== undefined) {
+              Object.assign(agent.request.headers, agentConfig.request.headers ?? {})
+              Object.assign(agent.request.body, agentConfig.request.body ?? {})
             }
-            if (item.system !== undefined) agent.system = item.system
-            if (item.description !== undefined) agent.description = item.description
-            if (item.mode !== undefined) agent.mode = item.mode
-            if (item.hidden !== undefined) agent.hidden = item.hidden
-            if (item.color !== undefined) agent.color = item.color
-            if (item.steps !== undefined) agent.steps = item.steps
-            if (item.permissions !== undefined) agent.permissions.push(...item.permissions)
+            if (agentConfig.system !== undefined) agent.system = agentConfig.system
+            if (agentConfig.description !== undefined) agent.description = agentConfig.description
+            if (agentConfig.mode !== undefined) agent.mode = agentConfig.mode
+            if (agentConfig.hidden !== undefined) agent.hidden = agentConfig.hidden
+            if (agentConfig.color !== undefined) agent.color = agentConfig.color
+            if (agentConfig.steps !== undefined) agent.steps = agentConfig.steps
+            if (agentConfig.permissions !== undefined) agent.permissions.push(...agentConfig.permissions)
           })
         }
       }
@@ -153,6 +146,17 @@ function discoverFlat(fs: FSUtil.Interface, directory: string) {
   )
 }
 
+function readAndDecode(fs: FSUtil.Interface, file: { directory: string; filepath: string; primary: boolean }) {
+  return fs.readFileStringSafe(file.filepath).pipe(
+    Effect.map((content): Config.Document | undefined => content ? decode(file, content) : undefined),
+    Effect.catch(() => Effect.succeed(undefined as Config.Document | undefined)),
+  )
+}
+
+function filterDocuments(documents: (Config.Document | undefined)[]) {
+  return documents.filter((document): document is Config.Document => document !== undefined)
+}
+
 function decode(file: { directory: string; filepath: string; primary: boolean }, content: string) {
   const markdown = ConfigMarkdown.parseOption(content)
   if (!markdown) return
@@ -162,9 +166,9 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
     .replace(/^(agent|agents|mode|modes)\//, "")
     .replace(/\.md$/, "")
   const body = markdown.content.trim()
-  const legacy = Object.keys(markdown.data).some((key) => !agentKeys.has(key))
+  const hasLegacyKeys = Object.keys(markdown.data).some((key) => !agentKeys.has(key))
   const agent = Option.getOrUndefined(
-    legacy
+    hasLegacyKeys
       ? Option.map(
           decodeLegacyAgent({ name, ...markdown.data, prompt: body }, { errors: "all", propertyOrder: "original" }),
           ConfigMigrateV1.migrateAgent,

@@ -4,6 +4,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer, Schema } from "effect"
 import { FastCheck } from "effect/testing"
 import { Config } from "@opencode-ai/core/config"
+import { ConfigAgent } from "@opencode-ai/core/config/agent"
 import { ConfigProvider } from "@opencode-ai/core/config/provider"
 import { ConfigMigrateV1 } from "@opencode-ai/core/v1/config/migrate"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
@@ -354,7 +355,7 @@ describe("Config", () => {
               { action: "bash", resource: "*", effect: "ask" },
               { action: "bash", resource: "git status", effect: "allow" },
             ])
-            const reviewer = documents[0]?.info.agents?.reviewer
+            const reviewer = documents[0]?.info.agents?.reviewer as ConfigAgent.Info | undefined
             expect(reviewer?.model).toBe("openrouter/openai/gpt-5")
             expect(reviewer?.variant).toBe("high")
             expect(reviewer?.request).toEqual({

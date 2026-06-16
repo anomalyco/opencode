@@ -73,7 +73,15 @@ Every field is optional.
     "urls": ["https://example.com/.well-known/skills/"]
   },
 
-  "agent_paths": ["~/shared-agents", "/abs/path/to/agents"],
+  "agents": {
+    "paths": ["~/shared-agents", "/abs/path/to/agents"],
+    "my-agent": {
+      "model": "anthropic/claude-sonnet-4-6",
+      "mode": "subagent",
+      "description": "...",
+      "permission": { "edit": "deny" }
+    }
+  },
 
   "references": {
     "docs": {
@@ -85,15 +93,6 @@ Every field is optional.
       "branch": "main",
       "description": "Use for SDK implementation details",
       "hidden": true
-    }
-  },
-
-  "agent": {
-    "my-agent": {
-      "model": "anthropic/claude-sonnet-4-6",
-      "mode": "subagent",
-      "description": "...",
-      "permission": { "edit": "deny" }
     }
   },
 
@@ -152,11 +151,10 @@ Shape notes worth being explicit about:
 - `model` always carries a provider prefix: `"anthropic/claude-sonnet-4-6"`.
 - `skills` is an object with `paths` and/or `urls`, not an array.
 - `references` is an object keyed by alias. Each value is a local path, Git repository, or string shorthand.
-- `agent` is an object keyed by agent name, not an array.
+- `agents` is an object with keyed agent definitions and an optional `paths` entry for external directories, not an array.
 - `plugin` is an array of strings or `[name, options]` tuples, not an object.
 - `mcp[name].command` is an array of strings, never a single string. `type` is required.
 - `permission` is either a string action or an object keyed by tool name.
-- `agent_paths` is an array of paths, not an object.
 
 ## Skills
 
@@ -280,19 +278,22 @@ opencode ships with `build`, `plan`, `general`, `explore`. Hidden internal agent
 `compaction`, `title`, `summary`. To override a built-in's fields, define the
 same key in `agent: { <name>: { ... } }`.
 
-### External directories (`agent_paths`)
+### External directories (`agents.paths`)
 
-Load agents from directories outside the project via `agent_paths`:
+Load agents from directories outside the project via the `paths` key inside the `agents` config:
 
 ```json
 {
-  "agent_paths": ["~/shared-agents", "/absolute/path", "./relative/to/config"]
+  "agents": {
+    "paths": ["~/shared-agents", "/absolute/path", "./relative/to/config"]
+  }
 }
 ```
 
 Each `.md` file in these directories is loaded as a subagent. The filename
 (without `.md`) becomes the agent name. Paths support `~/`, absolute, and
-relative-to-config resolution, matching the `skills` pattern.
+relative-to-config resolution, matching the `skills` pattern. Can be combined
+with inline agent definitions in the same `agents` block.
 
 ## Plugins
 

@@ -59,8 +59,8 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   permissions: PermissionSchema.Ruleset.pipe(Schema.optional).annotate({
     description: "Ordered tool permission rules applied to agent tool use",
   }),
-  agents: Schema.Record(Schema.String, ConfigAgent.Info).pipe(Schema.optional).annotate({
-    description: "Named built-in agent overrides and custom agent definitions",
+  agents: Schema.Record(Schema.String, Schema.Union([ConfigAgent.Info, Schema.Array(Schema.String)])).pipe(Schema.optional).annotate({
+    description: "Named built-in agent overrides, custom agent definitions, and external agent directory paths via 'paths' key",
   }),
   snapshots: Schema.Boolean.pipe(Schema.optional).annotate({
     description: "Enable snapshots used for undo and revert behavior",
@@ -88,9 +88,6 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   skills: Schema.String.pipe(Schema.Array, Schema.optional).annotate({
     description: "Additional paths or URLs to discover skills from",
-  }),
-  agent_paths: Schema.String.pipe(Schema.Array, Schema.optional).annotate({
-    description: "Additional paths to discover agent files from",
   }),
   commands: Schema.Record(Schema.String, ConfigCommand.Info).pipe(Schema.optional).annotate({
     description: "Named slash command definitions",
