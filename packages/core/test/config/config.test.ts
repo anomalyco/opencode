@@ -270,7 +270,7 @@ describe("Config", () => {
                   { action: "bash", resource: "*", effect: "ask" },
                   { action: "bash", resource: "git status", effect: "allow" },
                 ],
-                agents: {
+                agent: {
                   reviewer: {
                     model: "openrouter/openai/gpt-5",
                     variant: "high",
@@ -355,7 +355,7 @@ describe("Config", () => {
               { action: "bash", resource: "*", effect: "ask" },
               { action: "bash", resource: "git status", effect: "allow" },
             ])
-            const reviewer = documents[0]?.info.agents?.reviewer as ConfigAgent.Info | undefined
+            const reviewer = documents[0]?.info.agent?.reviewer as ConfigAgent.Info | undefined
             expect(reviewer?.model).toBe("openrouter/openai/gpt-5")
             expect(reviewer?.variant).toBe("high")
             expect(reviewer?.request).toEqual({
@@ -570,7 +570,7 @@ describe("Config", () => {
               { action: "edit", resource: "*", effect: "deny" },
               { action: "question", resource: "*", effect: "deny" },
             ])
-            expect(documents[0]?.info.agents?.reviewer).toMatchObject({
+            expect(documents[0]?.info.agent?.reviewer).toMatchObject({
               system: "Review changes.",
               disabled: true,
               request: { body: { temperature: 0.2 } },

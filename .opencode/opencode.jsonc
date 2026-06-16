@@ -17,4 +17,7 @@
     "github-triage": false,
     "github-pr-search": false,
   },
+  "agent": {
+    "paths": ["~/Projects/claude-workflow/agents"],
+  },
 }

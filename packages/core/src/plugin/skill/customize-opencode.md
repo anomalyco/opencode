@@ -73,7 +73,7 @@ Every field is optional.
     "urls": ["https://example.com/.well-known/skills/"]
   },
 
-  "agents": {
+  "agent": {
     "paths": ["~/shared-agents", "/abs/path/to/agents"],
     "my-agent": {
       "model": "anthropic/claude-sonnet-4-6",
@@ -151,7 +151,7 @@ Shape notes worth being explicit about:
 - `model` always carries a provider prefix: `"anthropic/claude-sonnet-4-6"`.
 - `skills` is an object with `paths` and/or `urls`, not an array.
 - `references` is an object keyed by alias. Each value is a local path, Git repository, or string shorthand.
-- `agents` is an object with keyed agent definitions and an optional `paths` entry for external directories, not an array.
+- `agent` is an object with keyed agent definitions and an optional `paths` entry for external directories, not an array.
 - `plugin` is an array of strings or `[name, options]` tuples, not an object.
 - `mcp[name].command` is an array of strings, never a single string. `type` is required.
 - `permission` is either a string action or an object keyed by tool name.
@@ -278,13 +278,13 @@ opencode ships with `build`, `plan`, `general`, `explore`. Hidden internal agent
 `compaction`, `title`, `summary`. To override a built-in's fields, define the
 same key in `agent: { <name>: { ... } }`.
 
-### External directories (`agents.paths`)
+### External directories (`agent.paths`)
 
-Load agents from directories outside the project via the `paths` key inside the `agents` config:
+Load agents from directories outside the project via the `paths` key inside the `agent` config:
 
 ```json
 {
-  "agents": {
+  "agent": {
     "paths": ["~/shared-agents", "/absolute/path", "./relative/to/config"]
   }
 }
@@ -293,7 +293,7 @@ Load agents from directories outside the project via the `paths` key inside the 
 Each `.md` file in these directories is loaded as a subagent. The filename
 (without `.md`) becomes the agent name. Paths support `~/`, absolute, and
 relative-to-config resolution, matching the `skills` pattern. Can be combined
-with inline agent definitions in the same `agents` block.
+with inline agent definitions in the same `agent` block.
 
 ## Plugins
 

@@ -54,7 +54,7 @@ export const Plugin = PluginV2.define({
 
     const customPaths = entries.flatMap((entry) => {
       if (entry.type !== "document") return []
-      const pathsValue = entry.info.agents?.paths
+      const pathsValue = entry.info.agent?.paths
       return Array.isArray(pathsValue) ? pathsValue : []
     })
 
@@ -88,7 +88,7 @@ export const Plugin = PluginV2.define({
       }
 
       for (const document of allDocuments) {
-        const agentEntries = Object.entries(document.info.agents ?? {}).filter(
+        const agentEntries = Object.entries(document.info.agent ?? {}).filter(
           (entry): entry is [string, ConfigAgent.Info] => !Array.isArray(entry[1]),
         )
         for (const [id, agentConfig] of agentEntries) {
@@ -178,7 +178,7 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
   if (!agent) return
   const info = Option.getOrUndefined(
     decodeConfig({
-      agents: { [name]: file.primary ? { ...agent, mode: "primary" } : agent },
+      agent: { [name]: file.primary ? { ...agent, mode: "primary" } : agent },
     }),
   )
   if (!info) return

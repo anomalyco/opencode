@@ -59,8 +59,8 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   permissions: PermissionSchema.Ruleset.pipe(Schema.optional).annotate({
     description: "Ordered tool permission rules applied to agent tool use",
   }),
-  agents: Schema.Record(Schema.String, Schema.Union([ConfigAgent.Info, Schema.Array(Schema.String)])).pipe(Schema.optional).annotate({
-    description: "Named built-in agent overrides, custom agent definitions, and external agent directory paths via 'paths' key",
+  agent: Schema.Record(Schema.String, Schema.Union([ConfigAgent.Info, Schema.Array(Schema.String)])).pipe(Schema.optional).annotate({
+    description: "Named built-in agent overrides, custom agent definitions, and external agent directory paths via the 'paths' key",
   }),
   snapshots: Schema.Boolean.pipe(Schema.optional).annotate({
     description: "Enable snapshots used for undo and revert behavior",
