@@ -319,7 +319,7 @@ Hook surface (mutate `output` in place; return `void`):
 - `event(input)`: every bus event
 - `config(cfg)`: once on init with the merged config
 - `chat.message`, `chat.params`, `chat.headers`
-- `tool.execute.before`, `tool.execute.after`
+- `tool.execute.before`, `tool.execute.after`, `tool.execute.error`
 - `tool.definition`
 - `command.execute.before`
 - `shell.env`

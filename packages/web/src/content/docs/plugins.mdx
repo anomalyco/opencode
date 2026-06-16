@@ -200,6 +200,7 @@ Plugins can subscribe to events as seen below in the Examples section. Here is a
 
 - `tool.execute.after`
 - `tool.execute.before`
+- `tool.execute.error`
 
 #### TUI Events
 
@@ -250,6 +251,27 @@ export const EnvProtection = async ({ project, client, $, directory, worktree })
     "tool.execute.before": async (input, output) => {
       if (input.tool === "read" && output.args.filePath.includes(".env")) {
         throw new Error("Do not read .env files")
+      }
+    },
+  }
+}
+```
+
+---
+
+### React to tool failures
+
+`tool.execute.after` only fires when a tool call succeeds. To observe failures —
+for retry, fallback routing, or policy decisions — use `tool.execute.error`. Its
+`callID` matches the `tool.execute.before` for the same call.
+
+```javascript title=".opencode/plugins/retry-logger.js"
+export const RetryLogger = async () => {
+  return {
+    "tool.execute.error": async (input, output) => {
+      // output: { error: string, retryable: boolean, authority: "tool" | "runtime" | "plugin" }
+      if (output.retryable) {
+        console.log(`Tool ${input.tool} (${input.callID}) failed but may be retried: ${output.error}`)
       }
     },
   }

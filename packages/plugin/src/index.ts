@@ -279,6 +279,29 @@ export interface Hooks {
       metadata: any
     },
   ) => Promise<void>
+  /**
+   * Fires when a tool call fails. Complements `tool.execute.after`, which only fires
+   * on success — a failed call routes its error to the message stream without a
+   * plugin-visible `after`-side signal. The `callID` correlates deterministically
+   * with the matching `tool.execute.before`, so frameworks doing admission control
+   * (reflexion/retry, fallback routing, circuit-breaking, policy gates) can react to
+   * failures without reconciling callIDs against the assistant message stream.
+   *
+   * - `error` — the human-readable failure message.
+   * - `retryable` — whether re-issuing the call could plausibly succeed (false for
+   *   deterministic failures like rejected permissions or invalid arguments).
+   * - `authority` — what raised the failure: `tool` (the tool's own logic),
+   *   `runtime` (opencode, e.g. a rejected permission), or `plugin` (a `before`/`after`
+   *   hook threw).
+   */
+  "tool.execute.error"?: (
+    input: { tool: string; sessionID: string; callID: string; args: any },
+    output: {
+      error: string
+      retryable: boolean
+      authority: "tool" | "runtime" | "plugin"
+    },
+  ) => Promise<void>
   "experimental.chat.messages.transform"?: (
     input: {},
     output: {
