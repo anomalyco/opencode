@@ -8,6 +8,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { Flag } from "./flag/flag"
 import { FSUtil } from "./fs-util"
 import { which } from "./util/which"
+import { PowerShell } from "./shell/powershell"
 
 const SIGKILL_TIMEOUT_MS = 200
 const META: Record<string, { deny?: boolean; login?: boolean; posix?: boolean; ps?: boolean }> = {
@@ -195,7 +196,7 @@ export function args(file: string, command: string, cwd: string) {
     ]
   }
   if (n === "cmd") return ["/c", command]
-  if (ps(file)) return ["-NoProfile", "-Command", command]
+  if (ps(file)) return PowerShell.args(command)
   return ["-c", command]
 }
 

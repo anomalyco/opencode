@@ -11,6 +11,7 @@ import { LocationMutation } from "../location-mutation"
 import { AppProcess } from "../process"
 import { PermissionV2 } from "../permission"
 import { PositiveInt } from "../schema"
+import { PowerShell } from "../shell/powershell"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -47,6 +48,31 @@ const Output = Schema.Struct({
 type Output = typeof Output.Type
 
 const defaultShell = () => (process.platform === "win32" ? (process.env.COMSPEC ?? "cmd.exe") : "/bin/sh")
+const POWERSHELL_SHELLS = new Set(["powershell", "powershell.exe", "pwsh", "pwsh.exe"])
+
+const isPowerShell = (shell: string) => {
+  const name = path.basename(shell.trim().replace(/^["']|["']$/g, "")).toLowerCase()
+  return POWERSHELL_SHELLS.has(name)
+}
+
+function makeShellCommand(command: string, shell: string, cwd: string) {
+  if (process.platform === "win32" && isPowerShell(shell)) {
+    return ChildProcess.make(shell, PowerShell.args(command), {
+      cwd,
+      stdin: "ignore",
+      detached: false,
+      forceKillAfter: Duration.seconds(3),
+    })
+  }
+
+  return ChildProcess.make(command, [], {
+    cwd,
+    shell,
+    stdin: "ignore",
+    detached: process.platform !== "win32",
+    forceKillAfter: Duration.seconds(3),
+  })
+}
 
 const modelOutput = (output: Output) => {
   const warnings = output.warnings?.length
@@ -155,13 +181,7 @@ const layer = Layer.effectDiscard(
               const shell =
                 Object.assign({}, ...entries.flatMap((entry) => (entry.type === "document" ? [entry.info] : [])))
                   .shell ?? defaultShell()
-              const command = ChildProcess.make(input.command, [], {
-                cwd: target.canonical,
-                shell,
-                stdin: "ignore",
-                detached: process.platform !== "win32",
-                forceKillAfter: Duration.seconds(3),
-              })
+              const command = makeShellCommand(input.command, shell, target.canonical)
               const timeout = input.timeout ?? DEFAULT_TIMEOUT_MS
               const result = yield* appProcess
                 .run(command, {
