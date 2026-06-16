@@ -583,9 +583,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         list,
         open(directory: string) {
           const root = rootFor(directory)
-          if (server.projects.list().find((x) => x.worktree === root)) return
+          if (server.projects.list().find((x) => x.worktree === root)) return true
+          if (!server.projects.open(root)) return false
           void serverSync().project.loadSessions(root)
-          server.projects.open(root)
+          return true
         },
         close(directory: string) {
           server.projects.close(directory)

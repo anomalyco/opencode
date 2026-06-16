@@ -30,7 +30,7 @@ The script:
 1. Kills stuck `opencode-cli` processes
 2. Deletes bad workspace state files
 3. Resets `opencode.global.dat` to a single project
-4. Sets `HOME` via `flatpak override` to the project (sidecar reloads login-shell env)
+4. Sets `HOME` for this launch via transient `flatpak run --env` (sidecar reloads login-shell env)
 5. Unsets `OPENAI_API_KEY` / `OPENAI_BASE_URL` if they override OAuth
 
 ## Verify

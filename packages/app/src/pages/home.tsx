@@ -255,10 +255,10 @@ function HomeDesign() {
   }
 
   function addProjects(conn: ServerConnection.Any, directories: string[]) {
-    const directory = directories[0]
-    if (!directory) return
     const ctx = global.createServerCtx(conn)
-    directories.forEach(ctx.projects.open)
+    const opened = directories.filter((directory) => ctx.projects.open(directory))
+    const directory = opened[0]
+    if (!directory) return
     ctx.projects.touch(directory)
     setSelection({ server: ServerConnection.key(conn), directory })
   }
@@ -282,7 +282,7 @@ function HomeDesign() {
 
   function openProjectNewSession(conn: ServerConnection.Any, directory: string) {
     const ctx = global.createServerCtx(conn)
-    ctx.projects.open(directory)
+    if (!ctx.projects.open(directory)) return
     ctx.projects.touch(directory)
     navigateOnServer(conn, `/${base64Encode(directory)}/session`)
   }
@@ -311,7 +311,7 @@ function HomeDesign() {
     if (!conn) return
     const directory = project?.worktree ?? session.directory
     const ctx = global.createServerCtx(conn)
-    ctx.projects.open(directory)
+    if (!ctx.projects.open(directory)) return
     ctx.projects.touch(directory)
     navigateOnServer(conn, `/${base64Encode(session.directory)}/session/${session.id}`)
   }
@@ -1119,7 +1119,7 @@ function LegacyHome() {
 
   function openProject(server: ServerConnection.Any, directory: string) {
     const serverCtx = global.createServerCtx(server)
-    serverCtx.projects.open(directory)
+    if (!serverCtx.projects.open(directory)) return
     serverCtx.projects.touch(directory)
     navigate(`/${base64Encode(directory)}`)
   }

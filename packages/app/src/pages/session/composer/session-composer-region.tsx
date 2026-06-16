@@ -80,7 +80,7 @@ export function SessionComposerRegion(props: {
   const globalProvidersQuery = createQuery(() => queryOptions().providers(null))
   const providersQuery = createQuery(() => queryOptions().providers(pathKey(sdk().directory)))
   const selectProject = (worktree: string) => {
-    layout.projects.open(worktree)
+    if (!layout.projects.open(worktree)) return
     server.projects.touch(worktree)
     if (search.draftId) {
       tabs.updateDraft(search.draftId, { server: server.key, directory: worktree })

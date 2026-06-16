@@ -123,9 +123,9 @@ describe("createServerProjects", () => {
       const [store, setStore] = createStore({ projects: {}, lastProject: {} })
       const projects = createServerProjects({ scope, store, setStore })
 
-      projects.open(os.homedir())
-      projects.open("/")
-      projects.open("/repo")
+      expect(projects.open(os.homedir())).toBe(false)
+      expect(projects.open("/")).toBe(false)
+      expect(projects.open("/repo")).toBe(true)
       expect(projects.list()).toEqual([{ worktree: "/repo", expanded: true }])
       dispose()
     })
@@ -192,6 +192,20 @@ describe("migrateCanonicalLocalServerState", () => {
     ).toEqual({
       projects: { local: [{ worktree: "/repo", expanded: true }] },
       lastProject: {},
+    })
+  })
+
+  test("tolerates corrupted persisted project state", () => {
+    expect(
+      migrateCanonicalLocalServerState({
+        projects: "bad",
+        lastProject: null,
+        list: [],
+      }),
+    ).toEqual({
+      projects: {},
+      lastProject: {},
+      list: [],
     })
   })
 })

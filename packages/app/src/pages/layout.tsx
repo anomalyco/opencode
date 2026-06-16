@@ -1360,7 +1360,7 @@ export default function Layout(props: ParentProps) {
   }
 
   function openProject(directory: string, navigate = true) {
-    layout.projects.open(directory)
+    if (!layout.projects.open(directory)) return
     if (navigate) return navigateToProject(directory)
   }
 
@@ -1525,7 +1525,7 @@ export default function Layout(props: ParentProps) {
     setStore("workspaceOrder", root, (order) => (order ?? []).filter((workspace) => workspace !== directory))
 
     layout.projects.close(directory)
-    layout.projects.open(root)
+    if (!layout.projects.open(root)) return
 
     if (shouldLeave) return
 

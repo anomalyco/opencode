@@ -2,8 +2,10 @@
 # Launch OpenCode Flatpak without watching all of $HOME (client-side workaround).
 set -euo pipefail
 
-REAL_HOME="${HOME:?}"
-PROJECT="${OPENCODE_PROJECT:-$REAL_HOME}"
+REAL_HOME=$(cd "${HOME:?}" && pwd)
+PROJECT_DIR="${OPENCODE_PROJECT:-$REAL_HOME}"
+mkdir -p "$PROJECT_DIR"
+PROJECT=$(cd "$PROJECT_DIR" && pwd)
 CONFIG_DIR="${OPENCODE_CONFIG_DIR:-$REAL_HOME/.local/share/opencode-cfg}"
 DESKTOP_STATE="$REAL_HOME/.var/app/ai.opencode.opencode/data/ai.opencode.desktop"
 FLATPAK_APP="${OPENCODE_FLATPAK_APP:-ai.opencode.opencode}"
@@ -79,24 +81,12 @@ data["layout.page"] = json.dumps(page)
 path.write_text(json.dumps(data, indent=2) + "\n")
 PY
 
-flatpak override --user "$FLATPAK_APP" \
-  --env="HOME=$PROJECT" \
-  --env="OPENCODE_CONFIG_DIR=$CONFIG_DIR" \
-  --env="XDG_CONFIG_HOME=$REAL_HOME/.config" \
-  --env="XDG_DATA_HOME=$REAL_HOME/.local/share" \
-  --env="XDG_STATE_HOME=$REAL_HOME/.local/state" \
-  --unset-env=OPENAI_API_KEY \
-  --unset-env=OPENAI_BASE_URL
-
-cleanup() {
-  flatpak override --user "$FLATPAK_APP" \
-    --reset-env=HOME \
-    --reset-env=OPENCODE_CONFIG_DIR \
-    --reset-env=XDG_CONFIG_HOME \
-    --reset-env=XDG_DATA_HOME \
-    --reset-env=XDG_STATE_HOME 2>/dev/null || true
-}
-trap cleanup EXIT INT TERM
-
-exec env -u OPENAI_API_KEY -u OPENAI_BASE_URL \
-  flatpak run --cwd="$PROJECT" "$FLATPAK_APP" "$@"
+env -u OPENAI_API_KEY -u OPENAI_BASE_URL \
+  flatpak run \
+    --env="HOME=$PROJECT" \
+    --env="OPENCODE_CONFIG_DIR=$CONFIG_DIR" \
+    --env="XDG_CONFIG_HOME=$REAL_HOME/.config" \
+    --env="XDG_DATA_HOME=$REAL_HOME/.local/share" \
+    --env="XDG_STATE_HOME=$REAL_HOME/.local/state" \
+    --cwd="$PROJECT" \
+    "$FLATPAK_APP" "$@"
