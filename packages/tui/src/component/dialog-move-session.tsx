@@ -22,14 +22,16 @@ import { useRoute } from "../context/route"
 export type MoveSessionSelection = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new" }
 type ProjectDirectory = ProjectDirectories[number]
 
-export function DialogMoveSession(props: {
+type DialogMoveSessionProps = {
   projectID: string
   current?: MoveSessionSelection
   onSelect: (selection: MoveSessionSelection) => void
   onCurrentChange?: (selection: MoveSessionSelection) => void
   initialDirectories?: ProjectDirectory[]
   initialRemoving?: string
-}) {
+}
+
+export function DialogMoveSession(props: DialogMoveSessionProps) {
   const dialog = useDialog()
   const sdk = useSDK()
   const dimensions = useTerminalDimensions()
@@ -43,69 +45,75 @@ export function DialogMoveSession(props: {
   const [toDelete, setToDelete] = createSignal<string>()
   const [removing, setRemoving] = createSignal(props.initialRemoving)
   const [replacementCurrent, setReplacementCurrent] = createSignal<string>()
+  const [loadError, setLoadError] = createSignal<unknown>()
   const deleteHint = useCommandShortcut("dialog.move_session.delete")
+  onMount(() => dialog.setSize("xlarge"))
 
   function reopen(initialRemoving?: string) {
     dialog.replace(() => (
-      <DialogMoveSession {...props} initialDirectories={directories()} initialRemoving={initialRemoving} />
+      <DialogMoveSession {...props} initialDirectories={directoryData()} initialRemoving={initialRemoving} />
     ))
   }
 
+  // A failed current-checkout lookup only affects which row is highlighted, so
+  // swallow it and let the directory list render without a current marker.
   const [loadedProject] = createResource(
     () => (projectContext.project() === props.projectID ? undefined : props.projectID),
-    async (projectID) => {
-      const result = await sdk.client.project.current({}, { throwOnError: true })
-      return result.data?.id === projectID ? result.data.worktree : undefined
-    },
+    (projectID) =>
+      sdk.client.project
+        .current({}, { throwOnError: true })
+        .then((result) => (result.data?.id === projectID ? result.data.worktree : undefined))
+        .catch(() => undefined),
   )
-  const currentCheckout = createMemo(() =>
-    projectContext.project() === props.projectID ? projectContext.instance.path().worktree : loadedProject(),
-  )
+  const currentCheckout = createMemo(() => {
+    if (projectContext.project() === props.projectID) return projectContext.instance.path().worktree
+    return loadedProject()
+  })
 
   const [directories, { refetch }] = createResource(
     () => (props.initialRemoving ? undefined : props.projectID),
-    async (projectID) => {
-      setWorking(true)
+    async (projectID, info): Promise<ProjectDirectory[] | undefined> => {
       try {
         await sdk.client.v2.projectCopy.refresh(
           { projectID, location: { directory: sdk.directory } },
           { throwOnError: true },
         )
         const directories = await sdk.client.project.directories({ projectID }, { throwOnError: true })
+        setLoadError(undefined)
         return directories.data ?? []
       } catch (error) {
-        toast.show({
-          variant: "error",
-          title: "Failed to load project directories",
-          message: errorMessage(error),
-        })
-        return []
-      } finally {
-        setWorking(false)
+        setLoadError(error)
+        // An initial load with no data surfaces the inline error view below. A
+        // failed refresh intentionally stays quiet and keeps the already-shown
+        // list interactive; reopening the dialog retries the load.
+        return info.value
       }
     },
-    { initialValue: props.initialDirectories },
   )
+  const directoryData = createMemo(() => directories() ?? props.initialDirectories)
+  // Show the locked error view only when we have nothing to display. A refresh
+  // that fails after the list rendered keeps the list and its actions.
+  const showError = createMemo(() => Boolean(loadError()) && !directoryData())
 
   const currentDirectory = createMemo(
     () => replacementCurrent() ?? (props.current?.type === "directory" ? props.current.directory : currentCheckout()),
   )
   const currentRoot = createMemo<ProjectDirectory | undefined>(() => {
+    if (showError()) return
     const directory = currentDirectory()
     if (!directory) return
     return (
-      directories()
+      directoryData()
         ?.filter((root) => contains(root.directory, directory))
         .toSorted((a, b) => b.directory.length - a.directory.length)[0] ?? { directory }
     )
   })
 
   const options = createMemo<DialogSelectOption<MoveSessionSelection | undefined>[]>(() => {
-    const data = directories()
+    if (showError()) return []
+    const data = directoryData()
     const current = currentRoot()?.directory
     if (directories.loading && !data && !current) return [{ title: "Loading project directories...", value: undefined }]
-    if (directories.error && !data && !current)
-      return [{ title: "Failed to load project directories", value: undefined }]
     const roots = [...(data ?? [])]
     if (current && !roots.some((item) => item.directory === current)) roots.unshift({ directory: current })
     roots.sort((a, b) => {
@@ -201,7 +209,7 @@ export function DialogMoveSession(props: {
 
   async function remove(option: DialogSelectOption<MoveSessionSelection | undefined>) {
     if (!option.value || option.value.type !== "directory" || option.value.subdirectory || removing()) return
-    const data = directories()
+    const data = directoryData()
     const selected = option.value
     const root = data?.find((item) => item.directory === selected.directory)
     if (!root?.strategy) return
@@ -271,10 +279,12 @@ export function DialogMoveSession(props: {
     if (await removedCurrent(deletingCurrent)) return
   }
 
-  onMount(() => dialog.setSize("xlarge"))
+  const fullHeight = createMemo(() =>
+    Math.max(8, Math.min(16, dimensions().height - Math.floor(dimensions().height / 4) - 2)),
+  )
 
   return (
-    <box minHeight={Math.max(8, Math.min(16, dimensions().height - Math.floor(dimensions().height / 4) - 2))}>
+    <box minHeight={showError() ? 5 : fullHeight()}>
       <DialogSelect
         title="Move session"
         titleView={
@@ -282,40 +292,55 @@ export function DialogMoveSession(props: {
             <text fg={theme.text} attributes={TextAttributes.BOLD}>
               Move session
             </text>
-            <Show when={working()}>
+            <Show when={working() || directories.loading || loadedProject.loading}>
               <Spinner />
             </Show>
           </box>
         }
+        renderFilter={!showError()}
         options={options()}
-        locked={directories.loading || loadedProject.loading || Boolean(removing())}
+        emptyView={
+          showError() ? (
+            <box paddingLeft={4} paddingRight={4}>
+              <text fg={theme.error} attributes={TextAttributes.BOLD}>
+                Could not load project directories
+              </text>
+              <text fg={theme.textMuted}>{errorMessage(loadError())}</text>
+            </box>
+          ) : undefined
+        }
+        locked={showError() || directories.loading || loadedProject.loading || Boolean(removing())}
         current={current()}
         onSelect={(option) => {
           if (option.value) props.onSelect(option.value)
         }}
         onMove={() => setToDelete(undefined)}
-        actions={[
-          {
-            command: "dialog.move_session.new",
-            title: "new",
-            onTrigger: () => props.onSelect({ type: "new" }),
-          },
-          {
-            command: "dialog.move_session.delete",
-            title: "delete",
-            disabled: (option) => {
-              const value = option?.value
-              if (!value || value.type !== "directory" || value.subdirectory) return true
-              return !directories()?.find((item) => item.directory === value.directory)?.strategy
-            },
-            onTrigger: remove,
-          },
-          {
-            command: "dialog.move_session.refresh",
-            title: "refresh",
-            onTrigger: () => void refetch(),
-          },
-        ]}
+        actions={
+          showError()
+            ? []
+            : [
+                {
+                  command: "dialog.move_session.new",
+                  title: "new",
+                  onTrigger: () => props.onSelect({ type: "new" }),
+                },
+                {
+                  command: "dialog.move_session.delete",
+                  title: "delete",
+                  disabled: (option) => {
+                    const value = option?.value
+                    if (!value || value.type !== "directory" || value.subdirectory) return true
+                    return !directoryData()?.find((item) => item.directory === value.directory)?.strategy
+                  },
+                  onTrigger: remove,
+                },
+                {
+                  command: "dialog.move_session.refresh",
+                  title: "refresh",
+                  onTrigger: () => void refetch(),
+                },
+              ]
+        }
       />
     </box>
   )

@@ -33,6 +33,7 @@ export interface ImageAttachmentPart {
   type: "image"
   id: string
   filename: string
+  sourcePath?: string
   mime: string
   dataUrl: string
 }
