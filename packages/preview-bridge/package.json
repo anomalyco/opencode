@@ -1,0 +1,20 @@
+{
+  "name": "@opencode-ai/preview-bridge",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "미리보기 결과물(iframe) 안에서 실행되어 부모 앱과 penpal 로 통신하는 자식측 브릿지. 빌드 산출물은 docker/preview-bridge.js 로 위치한다.",
+  "exports": {
+    "./bridge": "./src/bridge.ts"
+  },
+  "scripts": {
+    "build:bridge": "bun build src/bridge.ts --outfile ../../docker/preview-bridge.js --minify --format iife",
+    "build:plugin": "bun build src/plugin.ts --outfile ../../docker/preview-bridge-plugin.js --target node --format esm --minify",
+    "build:preview-bridge": "bun run build:bridge && bun run build:plugin"
+  },
+  "dependencies": {
+    "html-to-image": "catalog:",
+    "node-html-parser": "catalog:",
+    "penpal": "catalog:"
+  }
+}

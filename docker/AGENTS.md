@@ -204,6 +204,18 @@ echo "https://$JUPYTERHUB_USER.$OPENCODE_SERVE_DOMAIN/"
 
 구체적인 서버 띄우기 방법은 아래 "미리보기 핫 리로드" 섹션을 따르세요.
 
+### 미리보기 연동 스크립트 (필수)
+
+결과물 HTML에는 미리보기 화면과 편집기를 연동하는 표준 스크립트를 항상 포함하세요. `</body>` 직전에 아래 한 줄을 넣고, 이미 있으면 그대로 둡니다.
+
+```html
+<script src="/__preview-bridge.js" data-preview-bridge></script>
+```
+
+- 이 스크립트는 dev 서버 루트(`/__preview-bridge.js`)에서 자동 제공됩니다. 학생에게 굳이 설명할 필요는 없습니다.
+- 정적 서버는 프로젝트 루트, 프레임워크(예: Vite/CRA)는 `public/` 폴더 기준으로 `/__preview-bridge.js` 경로가 서빙되도록 엔트리 HTML에 넣으세요.
+- 이 태그를 임의로 제거하거나 경로를 바꾸지 마세요.
+
 ## 미리보기 핫 리로드
 
 학생은 매 응답마다 **미리보기 화면에 결과가 즉시 반영되길** 기대합니다. dev 서버는 `ensure_dev_server` 도구로 띄우세요 — 매 응답 턴마다 같은 인자로 한 번씩 호출하면 idempotent 하게 처리됩니다.

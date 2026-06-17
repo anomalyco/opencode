@@ -39,6 +39,7 @@ import { ModelsProvider } from "@/context/models"
 import { NotificationProvider } from "@/context/notification"
 import { PermissionProvider } from "@/context/permission"
 import { PromptDocBridgeProvider } from "@/context/prompt-doc-bridge"
+import { SessionPreviewBridgeProvider } from "@/context/session-preview-bridge"
 import { PromptProvider } from "@/context/prompt"
 import { ServerConnection, ServerProvider, serverName, useServer } from "@/context/server"
 import { SettingsProvider } from "@/context/settings"
@@ -125,7 +126,9 @@ function SessionProviders(props: ParentProps) {
       <FileProvider>
         <PromptProvider>
           <PromptDocBridgeProvider>
-            <CommentsProvider>{props.children}</CommentsProvider>
+            <SessionPreviewBridgeProvider>
+              <CommentsProvider>{props.children}</CommentsProvider>
+            </SessionPreviewBridgeProvider>
           </PromptDocBridgeProvider>
         </PromptProvider>
       </FileProvider>

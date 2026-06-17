@@ -20,6 +20,7 @@ import { useFile, type SelectedLineRange } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
 import { usePromptDocBridge } from "@/context/prompt-doc-bridge"
+import { useSessionPreviewBridge } from "@/context/session-preview-bridge"
 import { useSync } from "@/context/sync"
 import { createFileTabListSync } from "@/pages/session/file-tab-scroll"
 import { DiffTabContent } from "@/pages/session/diff-tab"
@@ -169,6 +170,9 @@ export function SessionSidePanel(props: {
 
   // 미리보기 브라우저 chrome 바(시안 SafariChrome) — URL·새로고침 공유.
   const preview = createSessionPreview()
+  // 미리보기 헤더의 스크린샷 버튼 ↔ 컴포저(PromptInput)의 캡처 플로우를 공유.
+  const previewBridge = useSessionPreviewBridge()
+  previewBridge.setBridge(preview.bridge)
   const browserAddress = createMemo(() => {
     const active = activeFileTab()
     if (active) {
@@ -272,6 +276,8 @@ export function SessionSidePanel(props: {
               tabs().setActive("preview")
               preview.reload()
             }}
+            onCapture={previewBridge.requestCapture}
+            capturing={previewBridge.capturing()}
           />
           <div class="flex-1 min-h-0 flex">
           <div
@@ -381,7 +387,7 @@ export function SessionSidePanel(props: {
                   <Show when={previewTab()}>
                     <Tabs.Content value="preview" class="flex flex-col h-full overflow-hidden contain-strict">
                       <Show when={activeTab() === "preview"}>
-                        <SessionPreviewPanel src={preview.previewSrc()} />
+                        <SessionPreviewPanel src={preview.previewSrc()} bridge={preview.bridge} />
                       </Show>
                     </Tabs.Content>
                   </Show>

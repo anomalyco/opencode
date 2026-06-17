@@ -1,6 +1,7 @@
 import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Spinner } from "@opencode-ai/ui/spinner"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
@@ -8,6 +9,7 @@ import { useLayout } from "@/context/layout"
 import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
 import { SessionPreviewFallback } from "./session-preview-fallback"
+import { createPreviewBridge, type PreviewBridge } from "./preview-bridge"
 
 export function createSessionPreview() {
   const sdk = useSDK()
@@ -83,15 +85,19 @@ export function createSessionPreview() {
   // 새로고침 버튼 — reloadCount 를 올려 iframe src 를 바꿔 재탐색(DOM remount 없음).
   const reload = () => setReloadCount((n) => n + 1)
 
-  return { previewUrl, previewSrc, reload }
+  // 미리보기 결과물(iframe)과 penpal 로 연결되는 부모측 브릿지. previewUrl 을 오리진으로 사용.
+  const bridge = createPreviewBridge({ origin: previewUrl })
+
+  return { previewUrl, previewSrc, reload, bridge }
 }
 
-export function SessionPreviewPanel(props: { src?: string }) {
+export function SessionPreviewPanel(props: { src?: string; bridge?: PreviewBridge }) {
   return (
     <div data-component="codle-preview-panel" class="size-full min-w-0 overflow-hidden rounded-none">
       <Show when={props.src} fallback={<SessionPreviewFallback />}>
         {(src) => (
           <iframe
+            ref={(el) => props.bridge?.attach(el)}
             src={src()}
             class="w-full h-full border-0"
             sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
@@ -109,6 +115,8 @@ export function SessionBrowserChrome(props: {
   url?: string
   onReload: () => void
   onHome?: () => void
+  onCapture?: () => void
+  capturing?: boolean
 }) {
   const layout = useLayout()
   const language = useLanguage()
@@ -193,8 +201,21 @@ export function SessionBrowserChrome(props: {
         </div>
       </div>
 
-      {/* 우 그룹 — 새 탭에서 열기 + 주소 복사 */}
+      {/* 우 그룹 — 스크린샷 + 새 탭에서 열기 + 주소 복사 */}
       <div class="flex flex-1 min-w-0 items-center justify-end gap-1">
+        <Show when={props.onCapture}>
+          <button
+            type="button"
+            class={ghostBtn}
+            onClick={() => props.onCapture!()}
+            aria-disabled={props.capturing}
+            aria-label={language.t("prompt.action.captureTab")}
+          >
+            <Show when={props.capturing} fallback={<Icon name="photo" size="small" />}>
+              <Spinner class="size-4" />
+            </Show>
+          </button>
+        </Show>
         <button type="button" class={ghostBtn} aria-label={language.t("common.openInNewTab")} onClick={openInNewTab}>
           <Icon name="external-link" size="small" />
         </button>

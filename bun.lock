@@ -67,6 +67,7 @@
         "luxon": "catalog:",
         "marked": "catalog:",
         "marked-shiki": "catalog:",
+        "penpal": "catalog:",
         "remeda": "catalog:",
         "shiki": "catalog:",
         "solid-js": "catalog:",
@@ -462,6 +463,28 @@
         "@opentui/solid",
       ],
     },
+    "packages/preview-bridge": {
+      "name": "@opencode-ai/preview-bridge",
+      "version": "0.0.0",
+      "dependencies": {
+        "html-to-image": "catalog:",
+        "node-html-parser": "catalog:",
+        "penpal": "catalog:",
+      },
+    },
+    "packages/result-preview": {
+      "name": "@opencode-ai/result-preview",
+      "version": "0.0.0",
+      "dependencies": {
+        "@opencode-ai/preview-bridge": "workspace:*",
+        "@solidjs/router": "catalog:",
+        "solid-js": "catalog:",
+      },
+      "devDependencies": {
+        "vite": "catalog:",
+        "vite-plugin-solid": "catalog:",
+      },
+    },
     "packages/script": {
       "name": "@opencode-ai/script",
       "dependencies": {
@@ -664,9 +687,12 @@
     "fuzzysort": "3.1.0",
     "hono": "4.10.7",
     "hono-openapi": "1.1.2",
+    "html-to-image": "1.11.13",
     "luxon": "3.6.1",
     "marked": "17.0.1",
     "marked-shiki": "1.2.1",
+    "node-html-parser": "7.1.0",
+    "penpal": "7.0.6",
     "remeda": "2.26.0",
     "remend": "1.3.0",
     "shiki": "3.20.0",
@@ -1518,6 +1544,10 @@
     "@opencode-ai/function": ["@opencode-ai/function@workspace:packages/function"],
 
     "@opencode-ai/plugin": ["@opencode-ai/plugin@workspace:packages/plugin"],
+
+    "@opencode-ai/preview-bridge": ["@opencode-ai/preview-bridge@workspace:packages/preview-bridge"],
+
+    "@opencode-ai/result-preview": ["@opencode-ai/result-preview@workspace:packages/result-preview"],
 
     "@opencode-ai/script": ["@opencode-ai/script@workspace:packages/script"],
 
@@ -4136,6 +4166,8 @@
     "peek-readable": ["peek-readable@5.4.2", "", {}, "sha512-peBp3qZyuS6cNIJ2akRNG1uo1WJ1d0wTxg/fxMdZ0BqCVhx242bSFHM9eNqflfJVS9SsgkzgT/1UgnsurBOTMg=="],
 
     "pend": ["pend@1.2.0", "", {}, "sha512-F3asv42UuXchdzt+xXqfW1OGlVBe+mxa2mqI0pg5yAHZPvFmY3Y6drSf/GQ1A86WgWEN9Kzh/WrgKa6iGcHXLg=="],
+
+    "penpal": ["penpal@7.0.6", "", {}, "sha512-iZ70OhtiZ959V57j7vSKBuv1UEXwCEu7C+TK7YxAkrB1JahB4pElHs1S1ThzMuGYNQ+SbExOXmvqrEeGwX/A8g=="],
 
     "perfect-debounce": ["perfect-debounce@2.1.0", "", {}, "sha512-LjgdTytVFXeUgtHZr9WYViYSM/g8MkcTPYDlPa3cDqMirHjKiSZPYd6DoL7pK8AJQr+uWkQvCjHNdiMqsrJs+g=="],
 
