@@ -6,13 +6,14 @@ SUMMARY_FILE="${SUMMARY_FILE:-/tmp/resolution-summary.md}"
 ESCALATION_LOG="${ESCALATION_LOG:-.github/conflict-escalations.log}"
 GITHUB_OUTPUT="${GITHUB_OUTPUT:-/tmp/resolve-conflicts-output}"
 
+touch "$GITHUB_OUTPUT"
+
 if [ ! -f "$RULES_FILE" ]; then
   echo "Error: conflict rules file not found: $RULES_FILE" >&2
   echo "can_complete_merge=false" >> "$GITHUB_OUTPUT"
   exit 1
 fi
 
-touch "$GITHUB_OUTPUT"
 mkdir -p "$(dirname "$ESCALATION_LOG")"
 
 patterns=()
@@ -127,6 +128,7 @@ append_first_conflict_hunk() {
   echo "<summary>First conflict hunk</summary>"
   echo
   echo '```'
+
   if [ -f "$file" ]; then
     awk '
       /^<<<<<<< / { in_hunk=1 }
@@ -143,20 +145,29 @@ append_first_conflict_hunk() {
   else
     echo "File not available in workspace."
   fi
+
   echo '```'
   echo
   echo "</details>"
 }
 
+write_outputs() {
+  local can_complete_merge="$1"
+  local resolved_count="${#resolved_files[@]}"
+  local escalated_count="${#escalated_files[@]}"
+
+  {
+    echo "resolved_count=$resolved_count"
+    echo "escalated_count=$escalated_count"
+    echo "resolved_files=$(join_by_comma "${resolved_files[@]+"${resolved_files[@]}"}")"
+    echo "escalated_files=$(join_by_comma "${escalated_files[@]+"${escalated_files[@]}"}")"
+    echo "can_complete_merge=$can_complete_merge"
+  } >> "$GITHUB_OUTPUT"
+}
+
 if [ -z "$conflicted_files" ]; then
   echo "No conflicted files detected." >> "$SUMMARY_FILE"
-  {
-    echo "resolved_count=0"
-    echo "escalated_count=0"
-    echo "resolved_files="
-    echo "escalated_files="
-    echo "can_complete_merge=true"
-  } >> "$GITHUB_OUTPUT"
+  write_outputs "true"
   exit 0
 fi
 
@@ -199,6 +210,7 @@ while IFS= read -r file; do
       now="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
       append_unresolved_rule "$file" "$now"
       count="$(record_escalation "$file" "$now")"
+
       {
         echo "### Escalated: \`$file\`"
         echo
@@ -248,13 +260,7 @@ else
   can_complete_merge="true"
 fi
 
-{
-  echo "resolved_count=${#resolved_files[@]}"
-  echo "escalated_count=${#escalated_files[@]}"
-  echo "resolved_files=$(join_by_comma "${resolved_files[@]}")"
-  echo "escalated_files=$(join_by_comma "${escalated_files[@]}")"
-  echo "can_complete_merge=$can_complete_merge"
-} >> "$GITHUB_OUTPUT"
+write_outputs "$can_complete_merge"
 
 if [ "$can_complete_merge" = "false" ]; then
   echo "Automated conflict resolution escalated one or more files for manual review." >&2
