@@ -96,7 +96,7 @@ Every field is optional.
   },
 
   "command": {
-    "deploy": { "description": "...", "prompt": "..." }
+    "deploy": { "description": "...", "template": "..." }
   },
 
   "provider": {
