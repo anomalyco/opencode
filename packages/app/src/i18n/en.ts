@@ -313,6 +313,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Search folders",
   "dialog.directory.empty": "No folders found",
+  "dialog.directory.action.selectFile": "Select file",
+  "dialog.directory.action.selectFolder": "Select folder",
+  "dialog.directory.root": "Root",
+  "dialog.directory.parent": "Parent",
+  "dialog.directory.readError": "Unable to read this folder",
 
   "app.server.unreachable": "Could not reach {{server}}",
   "app.server.retrying": "Retrying automatically...",

@@ -6,14 +6,13 @@ import { Data, Equal } from "effect"
 export type SummaryDiff = SnapshotFileDiff & { file: string }
 
 export type TimelineRowMap = {
+  TurnGap: { userMessageID: string }
   CommentStrip: {
     userMessageID: string
-    previousUserMessage: boolean
   }
   UserMessage: {
     userMessageID: string
     anchor: boolean
-    previousUserMessage: boolean
   }
   TurnDivider: {
     userMessageID: string
@@ -28,18 +27,18 @@ export type TimelineRowMap = {
   Retry: { userMessageID: string }
   DiffSummary: { userMessageID: string; diffs: SummaryDiff[] }
   Error: { userMessageID: string; text: string }
-  BottomSpacer: {}
 }
 
 export namespace TimelineRow {
+  export class TurnGap extends Data.TaggedClass("TurnGap")<{
+    userMessageID: string
+  }> {}
   export class CommentStrip extends Data.TaggedClass("CommentStrip")<{
     userMessageID: string
-    previousUserMessage: boolean
   }> {}
   export class UserMessage extends Data.TaggedClass("UserMessage")<{
     userMessageID: string
     anchor: boolean
-    previousUserMessage: boolean
   }> {}
   export class TurnDivider extends Data.TaggedClass("TurnDivider")<{
     userMessageID: string
@@ -65,9 +64,9 @@ export namespace TimelineRow {
   export class Retry extends Data.TaggedClass("Retry")<{
     userMessageID: string
   }> {}
-  export class BottomSpacer extends Data.TaggedClass("BottomSpacer")<{}> {}
 
   export type TimelineRow =
+    | TurnGap
     | CommentStrip
     | UserMessage
     | TurnDivider
@@ -76,10 +75,11 @@ export namespace TimelineRow {
     | DiffSummary
     | Error
     | Retry
-    | BottomSpacer
 
   export const key = (row: TimelineRow) => {
     switch (row._tag) {
+      case "TurnGap":
+        return `turn-gap:${row.userMessageID}`
       case "CommentStrip":
         return `comment-strip:${row.userMessageID}`
       case "UserMessage":
@@ -96,8 +96,6 @@ export namespace TimelineRow {
         return `error:${row.userMessageID}`
       case "Retry":
         return `retry:${row.userMessageID}`
-      case "BottomSpacer":
-        return "bottom-spacer"
     }
   }
 
@@ -149,11 +147,12 @@ export namespace Timeline {
             ),
           ]
         : groupParts(assistantPartRefs).map((group) => ({ type: "part" as const, group }))
+    if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: userMessage.id }))
+
     if (comments.length > 0)
       rows.push(
         new TimelineRow.CommentStrip({
           userMessageID: userMessage.id,
-          previousUserMessage,
         }),
       )
 
@@ -161,7 +160,6 @@ export namespace Timeline {
       new TimelineRow.UserMessage({
         userMessageID: userMessage.id,
         anchor: comments.length === 0,
-        previousUserMessage: comments.length === 0 && previousUserMessage,
       }),
     )
 
