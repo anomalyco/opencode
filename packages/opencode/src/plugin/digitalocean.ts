@@ -311,9 +311,13 @@ export async function DigitalOceanAuthPlugin(input: PluginInput): Promise<Hooks>
                 path: { id: "digitalocean" },
                 body: { type: "api", key: ctx.auth.key, metadata: updated },
               })
-              .catch(() => {})
+              .catch((error) => {
+                console.warn("[digitalocean] failed to persist refreshed routers", error)
+              })
           } else if (result.status === 401 || result.status === 403) {
+            console.warn("[digitalocean] router list unauthorized; using cached routers")
           } else if (result.status !== 0) {
+            console.warn(`[digitalocean] router refresh failed (${result.status}); using cached routers`)
           }
         }
 

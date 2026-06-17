@@ -7,16 +7,22 @@ import type { MessageV2 } from "./message-v2"
 
 const COMPACTION_BUFFER = 20_000
 
+export function tokenCount(tokens: SessionV1.Assistant["tokens"]) {
+  const components =
+    tokens.input + tokens.output + tokens.cache.read + tokens.cache.write
+  if (tokens.total === undefined) return components
+  if (tokens.total <= 0) return components
+  return Math.max(tokens.total, components)
+}
+
 export function usable(input: { cfg: ConfigV1.Info; model: Provider.Model; outputTokenMax?: number }) {
   const context = input.model.limit.context
   if (context === 0) return 0
 
-  const reserved =
-    input.cfg.compaction?.reserved ??
-    Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax))
-  return input.model.limit.input
-    ? Math.max(0, input.model.limit.input - reserved)
-    : Math.max(0, context - ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax))
+  const output = ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax)
+  const reserved = input.cfg.compaction?.reserved ?? Math.min(COMPACTION_BUFFER, output)
+  const budget = input.model.limit.input ?? context
+  return Math.max(0, budget - Math.max(reserved, output))
 }
 
 export function isOverflow(input: {
@@ -28,7 +34,5 @@ export function isOverflow(input: {
   if (input.cfg.compaction?.auto === false) return false
   if (input.model.limit.context === 0) return false
 
-  const count =
-    input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
-  return count >= usable(input)
+  return tokenCount(input.tokens) >= usable(input)
 }

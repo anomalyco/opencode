@@ -324,6 +324,90 @@ download_with_progress() {
     return $ret
 }
 
+install_rtk() {
+    if [ "${RTK_DISABLED:-}" = "1" ] || [ "${OPENCODE_DISABLE_RTK:-}" = "1" ]; then
+        return 0
+    fi
+
+    local install_os="${os:-}"
+    local install_arch="${arch:-}"
+    if [ -z "$install_os" ]; then
+        local raw_os
+        raw_os=$(uname -s)
+        install_os=$(echo "$raw_os" | tr '[:upper:]' '[:lower:]')
+        case "$raw_os" in
+          Darwin*) install_os="darwin" ;;
+          Linux*) install_os="linux" ;;
+          MINGW*|MSYS*|CYGWIN*) install_os="windows" ;;
+        esac
+    fi
+    if [ -z "$install_arch" ]; then
+        install_arch=$(uname -m)
+        if [[ "$install_arch" == "aarch64" ]]; then
+          install_arch="arm64"
+        fi
+        if [[ "$install_arch" == "x86_64" ]]; then
+          install_arch="x64"
+        fi
+    fi
+
+    local rtk_version="${RTK_VERSION:-${OPENCODE_RTK_VERSION:-v0.42.4}}"
+    rtk_version="${rtk_version#v}"
+
+    local rtk_target=""
+    if [ "$install_os" = "darwin" ]; then
+        if [ "$install_arch" = "arm64" ]; then
+            rtk_target="aarch64-apple-darwin"
+        else
+            rtk_target="x86_64-apple-darwin"
+        fi
+    elif [ "$install_os" = "windows" ]; then
+        if [ "$install_arch" = "arm64" ]; then
+            rtk_target="aarch64-pc-windows-msvc"
+        else
+            rtk_target="x86_64-pc-windows-msvc"
+        fi
+    elif [ "$install_arch" = "arm64" ]; then
+        rtk_target="aarch64-unknown-linux-gnu"
+    else
+        rtk_target="x86_64-unknown-linux-musl"
+    fi
+
+    local rtk_archive=""
+    if [ "$install_os" = "windows" ]; then
+        rtk_archive="rtk-${rtk_target}.zip"
+    else
+        rtk_archive="rtk-${rtk_target}.tar.gz"
+    fi
+
+    local rtk_url="https://github.com/rtk-ai/rtk/releases/download/v${rtk_version}/${rtk_archive}"
+    local rtk_tmp="${TMPDIR:-/tmp}/rtk_install_$$"
+    mkdir -p "$rtk_tmp"
+
+    print_message info "${MUTED}Installing ${NC}rtk ${MUTED}version: ${NC}v${rtk_version}"
+
+    if ! curl -fsSL -o "$rtk_tmp/$rtk_archive" "$rtk_url"; then
+        print_message warning "Failed to download RTK — continuing without bundled rtk"
+        rm -rf "$rtk_tmp"
+        return 0
+    fi
+
+    if [ "$install_os" = "linux" ]; then
+        tar -xzf "$rtk_tmp/$rtk_archive" -C "$rtk_tmp"
+        mv "$rtk_tmp/rtk" "$INSTALL_DIR/rtk"
+        chmod 755 "${INSTALL_DIR}/rtk"
+    elif [ "$install_os" = "windows" ]; then
+        unzip -q "$rtk_tmp/$rtk_archive" -d "$rtk_tmp"
+        mv "$rtk_tmp/rtk.exe" "$INSTALL_DIR/rtk.exe"
+    else
+        tar -xzf "$rtk_tmp/$rtk_archive" -C "$rtk_tmp"
+        mv "$rtk_tmp/rtk" "$INSTALL_DIR/rtk"
+        chmod 755 "${INSTALL_DIR}/rtk"
+    fi
+
+    rm -rf "$rtk_tmp"
+}
+
 download_and_install() {
     print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}version: ${NC}$specific_version"
     local tmp_dir="${TMPDIR:-/tmp}/opencode_install_$$"
@@ -343,12 +427,14 @@ download_and_install() {
     mv "$tmp_dir/opencode" "$INSTALL_DIR"
     chmod 755 "${INSTALL_DIR}/opencode"
     rm -rf "$tmp_dir"
+    install_rtk
 }
 
 install_from_binary() {
     print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}from: ${NC}$binary_path"
     cp "$binary_path" "${INSTALL_DIR}/opencode"
     chmod 755 "${INSTALL_DIR}/opencode"
+    install_rtk
 }
 
 if [ -n "$binary_path" ]; then

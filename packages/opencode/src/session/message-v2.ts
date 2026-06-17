@@ -713,31 +713,37 @@ export function fromError(
     case e instanceof Error:
       return new NamedError.Unknown({ message: errorMessage(e) }, { cause: e }).toObject()
     default:
-      try {
-        const parsed = ProviderError.parseStreamError(e)
-        if (parsed) {
-          if (parsed.type === "context_overflow") {
-            return new ContextOverflowError(
-              {
-                message: parsed.message,
-                responseBody: parsed.responseBody,
-              },
-              { cause: e },
-            ).toObject()
-          }
-          return new APIError(
+      const parsed = parseStreamErrorSafe(e)
+      if (parsed) {
+        if (parsed.type === "context_overflow") {
+          return new ContextOverflowError(
             {
               message: parsed.message,
-              isRetryable: parsed.isRetryable,
               responseBody: parsed.responseBody,
             },
-            {
-              cause: e,
-            },
+            { cause: e },
           ).toObject()
         }
-      } catch {}
+        return new APIError(
+          {
+            message: parsed.message,
+            isRetryable: parsed.isRetryable,
+            responseBody: parsed.responseBody,
+          },
+          {
+            cause: e,
+          },
+        ).toObject()
+      }
       return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
+  }
+}
+
+function parseStreamErrorSafe(value: unknown) {
+  try {
+    return ProviderError.parseStreamError(value)
+  } catch {
+    return undefined
   }
 }
 

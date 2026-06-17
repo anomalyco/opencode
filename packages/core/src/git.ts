@@ -1,7 +1,7 @@
 export * as Git from "./git"
 
 import path from "path"
-import { Context, Effect, Layer, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { AbsolutePath } from "./schema"
 import { FSUtil } from "./fs-util"
@@ -411,7 +411,15 @@ export interface Result {
 
 function run(cwd: string, proc: AppProcess.Interface) {
   return (args: string[]) =>
-    execute(cwd, proc)(args).pipe(Effect.catch(() => Effect.succeed({ exitCode: 1, text: "", stderr: "" })))
+    execute(cwd, proc)(args).pipe(
+      Effect.catch((cause) =>
+        Effect.succeed({
+          exitCode: 1,
+          text: "",
+          stderr: Cause.pretty(cause),
+        } satisfies Result),
+      ),
+    )
 }
 
 function execute(cwd: string, proc: AppProcess.Interface) {

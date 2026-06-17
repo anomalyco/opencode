@@ -98,7 +98,18 @@ export const layer = Layer.effect(
       withTargetLock(input.target)(
         Effect.gen(function* () {
           const existed = yield* fs.exists(input.target.canonical)
-          yield* fs.writeWithDirs(input.target.canonical, input.content)
+          const tempfile = `${input.target.canonical}.${process.pid}.${Date.now()}.tmp`
+          yield* fs
+            .writeWithDirs(tempfile, input.content)
+            .pipe(
+              Effect.andThen(fs.rename(tempfile, input.target.canonical)),
+              Effect.catch((error) =>
+                Effect.gen(function* () {
+                  yield* fs.remove(tempfile, { force: true }).pipe(Effect.ignore)
+                  return yield* Effect.fail(error)
+                }),
+              ),
+            )
           return writeResult(input.target, existed)
         }),
       ),
@@ -111,11 +122,21 @@ export const layer = Layer.effect(
           const current = yield* fs
             .readFile(input.target.canonical)
             .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
-          yield* fs.writeWithDirs(
-            input.target.canonical,
-            joinBom(next.text, Boolean(current && hasUtf8Bom(current)) || next.bom),
-          )
-          return writeResult(input.target, current !== undefined)
+          const content = joinBom(next.text, Boolean(current && hasUtf8Bom(current)) || next.bom)
+          const existed = current !== undefined
+          const tempfile = `${input.target.canonical}.${process.pid}.${Date.now()}.tmp`
+          yield* fs
+            .writeWithDirs(tempfile, content)
+            .pipe(
+              Effect.andThen(fs.rename(tempfile, input.target.canonical)),
+              Effect.catch((error) =>
+                Effect.gen(function* () {
+                  yield* fs.remove(tempfile, { force: true }).pipe(Effect.ignore)
+                  return yield* Effect.fail(error)
+                }),
+              ),
+            )
+          return writeResult(input.target, existed)
         }),
       ),
     )

@@ -32,13 +32,23 @@ export class Handler {
     const previous = this.queues.get(permission.sessionID) ?? Promise.resolve()
     const next = previous
       .then(() => this.process(event))
-      .catch(() => {})
+      .catch((error) => this.fail(event, error))
       .finally(() => {
         if (this.queues.get(permission.sessionID) === next) {
           this.queues.delete(permission.sessionID)
         }
       })
     this.queues.set(permission.sessionID, next)
+  }
+
+  private async fail(event: PermissionEvent, error: unknown) {
+    console.error("[acp/permission] failed to process permission request", error)
+    const permission = event.properties
+    const session = await Effect.runPromise(this.input.session.tryGet(permission.sessionID)).catch(() => undefined)
+    if (!session) return
+    await this.reply(permission.id, "reject", session.cwd).catch((replyError) => {
+      console.error("[acp/permission] failed to reject after error", replyError)
+    })
   }
 
   private async process(event: PermissionEvent) {
@@ -78,7 +88,7 @@ export class Handler {
     }
 
     if (permission.permission === "edit") {
-      await this.writeProposedEdit(session.id, permission.metadata).catch(() => {})
+      await this.writeProposedEdit(session.id, permission.metadata)
     }
 
     await this.reply(permission.id, reply, session.cwd)
@@ -100,14 +110,19 @@ export class Handler {
     const content = (await exists(filepath)) ? await readText(filepath) : ""
     const next = applyPatch(content, diff)
     if (next === false) {
+      console.warn("[acp/permission] failed to apply proposed edit preview", { filepath })
       return
     }
 
-    void this.input.connection.writeTextFile({
-      sessionId,
-      path: filepath,
-      content: next,
-    })
+    await this.input.connection
+      .writeTextFile({
+        sessionId,
+        path: filepath,
+        content: next,
+      })
+      .catch((error) => {
+        console.error("[acp/permission] failed to write proposed edit preview", { filepath, error })
+      })
   }
 }
 

@@ -16,6 +16,7 @@ const generated = await import("./generate.ts")
 
 import { Script } from "@opencode-ai/script"
 import pkg from "../package.json"
+import { RtkBinary } from "../src/rtk/binary"
 
 const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
@@ -155,6 +156,19 @@ for (const item of targets) {
     .join("-")
   console.log(`building ${name}`)
   await $`mkdir -p dist/${name}/bin`
+
+  const rtkDest = path.join(dir, `dist/${name}/bin`, RtkBinary.executableName())
+  try {
+    await RtkBinary.install({
+      os: item.os,
+      arch: item.arch,
+      abi: item.abi,
+      dest: rtkDest,
+    })
+    console.log(`bundled RTK to dist/${name}/bin/${RtkBinary.executableName()}`)
+  } catch (error) {
+    console.warn(`failed to bundle RTK for ${name}:`, error)
+  }
 
   const localPath = path.resolve(dir, "node_modules/@opentui/core/parser.worker.js")
   const rootPath = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
