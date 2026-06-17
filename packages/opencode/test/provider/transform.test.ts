@@ -2771,6 +2771,202 @@ describe("ProviderTransform.message - bedrock caching with non-bedrock providerI
   })
 })
 
+describe("ProviderTransform.message - MiniMax tool results", () => {
+  const minimax = {
+    id: "minimax-m3",
+    providerID: "opencode-go",
+    api: {
+      id: "minimax-m3",
+      url: "https://opencode.ai/zen/go/v1/messages",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    name: "MiniMax M3",
+    capabilities: {},
+    options: {},
+    headers: {},
+  } as any
+
+  test("inserts a stub tool call before the minimal orphan tool-result that MiniMax rejects", () => {
+    const toolResult = {
+      type: "tool-result",
+      toolCallId: "call_orphan",
+      toolName: "bash",
+      output: { type: "text", value: "stdout" },
+    }
+    const msgs = [
+      {
+        role: "user",
+        content: [toolResult],
+      },
+    ] as any[]
+
+    expect(ProviderTransform.message(msgs, minimax, {})).toEqual([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call_orphan",
+            toolName: "bash",
+            input: {},
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [toolResult],
+      },
+    ])
+  })
+
+  test("keeps valid immediately-following tool results and splits trailing text", () => {
+    const toolCall = {
+      type: "tool-call",
+      toolCallId: "call_1",
+      toolName: "bash",
+      input: { command: "git diff --stat" },
+    }
+    const toolResult = {
+      type: "tool-result",
+      toolCallId: "call_1",
+      toolName: "bash",
+      output: { type: "text", value: "diff output" },
+    }
+    const trailingText = {
+      type: "text",
+      text: "Continue if you have next steps.",
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        content: [toolCall],
+      },
+      {
+        role: "user",
+        content: [toolResult, trailingText],
+      },
+    ] as any[]
+
+    expect(ProviderTransform.message(msgs, minimax, {})).toEqual([
+      msgs[0],
+      {
+        role: "user",
+        content: [toolResult],
+      },
+      {
+        role: "user",
+        content: [trailingText],
+      },
+    ])
+  })
+
+  test("inserts a stub before non-immediate tool results", () => {
+    const toolCall = {
+      type: "tool-call",
+      toolCallId: "call_1",
+      toolName: "bash",
+      input: { command: "git diff --stat" },
+    }
+    const toolResult = {
+      type: "tool-result",
+      toolCallId: "call_1",
+      toolName: "bash",
+      output: { type: "text", value: "late output" },
+    }
+    const msgs = [
+      {
+        role: "assistant",
+        content: [toolCall],
+      },
+      {
+        role: "user",
+        content: "thanks",
+      },
+      {
+        role: "user",
+        content: [toolResult],
+      },
+    ] as any[]
+
+    expect(ProviderTransform.message(msgs, minimax, {})).toEqual([
+      msgs[0],
+      msgs[1],
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call_1",
+            toolName: "bash",
+            input: {},
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [toolResult],
+      },
+    ])
+  })
+
+  test("also supports provider prompt tool_result shape", () => {
+    const toolResult = {
+      type: "tool_result",
+      tool_use_id: "call_orphan",
+      content: "diff output",
+    }
+    const msgs = [
+      {
+        role: "user",
+        content: [toolResult],
+      },
+    ] as any[]
+
+    expect(ProviderTransform.message(msgs, minimax, {})).toEqual([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "call_orphan",
+            toolName: "historical_tool_result",
+            input: {},
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [toolResult],
+      },
+    ])
+  })
+
+  test("does not change non-MiniMax tool-result messages", () => {
+    const msgs = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool-result",
+            toolCallId: "call_orphan",
+            toolName: "bash",
+            output: { type: "text", value: "stdout" },
+          },
+        ],
+      },
+    ] as any[]
+
+    const nonMinimax = {
+      ...minimax,
+      id: "deepseek-v4-flash-free",
+      providerID: "opencode",
+      api: { ...minimax.api, id: "deepseek-v4-flash-free" },
+    }
+
+    expect(ProviderTransform.message(msgs, nonMinimax, {})).toEqual(msgs)
+  })
+})
+
 describe("ProviderTransform.message - cache control on gateway", () => {
   const createModel = (overrides: Partial<any> = {}) =>
     ({

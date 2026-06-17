@@ -373,7 +373,7 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
 
 function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMessage[] {
   return msgs.map((msg) => {
-    if (msg.role !== "user" || !Array.isArray(msg.content)) return msg
+    if ((msg.role !== "tool" && msg.role !== "user") || !Array.isArray(msg.content)) return msg
 
     const filtered = msg.content.map((part) => {
       if (part.type !== "file" && part.type !== "image") return part
@@ -409,6 +409,103 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
   })
 }
 
+function isToolResultPart(part: any): part is ToolResultPart | { type: "tool_result"; tool_use_id?: string } {
+  return part.type === "tool-result" || part.type === "tool_result"
+}
+
+function toolCallID(part: any) {
+  if (part.type === "tool-call") return part.toolCallId
+  if (part.type === "tool_use") return part.id
+  return undefined
+}
+
+function toolResultID(part: any) {
+  if (part.type === "tool-result") return part.toolCallId
+  if (part.type === "tool_result") return part.tool_use_id
+  return undefined
+}
+
+function stubToolCallForResult(part: any) {
+  const id = toolResultID(part) ?? "historical_tool_result"
+  return {
+    type: "tool-call" as const,
+    toolCallId: id,
+    toolName: part.toolName ?? part.name ?? "historical_tool_result",
+    input: {},
+  }
+}
+
+function sanitizeStrictToolResultOrder(msgs: ModelMessage[]) {
+  let expectedToolResults = new Set<string>()
+
+  return msgs.flatMap((msg): ModelMessage[] => {
+    if (!Array.isArray(msg.content)) {
+      expectedToolResults = new Set()
+      return [msg]
+    }
+
+    if (msg.role === "assistant") {
+      expectedToolResults = new Set(msg.content.map(toolCallID).filter((id): id is string => !!id))
+      return [msg]
+    }
+
+    const toolResults = msg.content.filter(isToolResultPart)
+    if (toolResults.length === 0) {
+      expectedToolResults = new Set()
+      return [msg]
+    }
+
+    const output: ModelMessage[] = []
+    const validToolResults = [] as typeof msg.content
+    const trailingContent = msg.content.filter((part) => !isToolResultPart(part))
+
+    for (const part of toolResults) {
+      const id = toolResultID(part)
+      if (id && expectedToolResults.has(id)) {
+        validToolResults.push(part)
+        expectedToolResults.delete(id)
+        continue
+      }
+
+      output.push(
+        {
+          role: "assistant",
+          content: [stubToolCallForResult(part)],
+        },
+        {
+          ...msg,
+          role: "user",
+          content: [part],
+        },
+      )
+    }
+
+    expectedToolResults = new Set()
+
+    if (validToolResults.length > 0) {
+      output.unshift({
+        ...msg,
+        content: validToolResults,
+      })
+    }
+
+    if (trailingContent.length > 0) {
+      output.push({
+        ...msg,
+        role: "user",
+        content: trailingContent,
+      })
+    }
+
+    return output
+  })
+}
+
+function requiresStrictToolResultOrder(model: Provider.Model) {
+  const id = `${model.providerID}/${model.id}/${model.api.id}`.toLowerCase()
+  return id.includes("minimax")
+}
+
 function mapProviderOptions(
   msgs: ModelMessage[],
   transform: (options: Record<string, any> | undefined) => Record<string, any> | undefined,
@@ -430,6 +527,9 @@ function mapProviderOptions(
 export function message(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>) {
   msgs = unsupportedParts(msgs, model)
   msgs = normalizeMessages(msgs, model, options)
+  if (requiresStrictToolResultOrder(model)) {
+    msgs = sanitizeStrictToolResultOrder(msgs)
+  }
   if (
     (model.providerID === "anthropic" ||
       model.providerID === "google-vertex-anthropic" ||
