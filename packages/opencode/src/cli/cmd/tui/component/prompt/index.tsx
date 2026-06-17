@@ -1016,7 +1016,7 @@ export function Prompt(props: PromptProps) {
     if (props.disabled) return false
     if (workspaceCreating()) return false
     if (auto()?.visible) return false
-    if (!store.prompt.input) return false
+    if (!store.prompt.input.trim()) return false
     const agent = local.agent.current()
     if (!agent) return false
     const trimmed = store.prompt.input.trim()
