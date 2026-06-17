@@ -870,117 +870,111 @@
       );
   }
 
-  [data-component="codle-preview-loader"] {
-    position: relative;
-    width: 86px;
-    height: 70px;
-    color: var(--app-ink);
+  /* ── 미리보기 생성 중 마스코트(DIG) — 곡괭이 스윙/몸 끄덕/흙/그림자 동기 ──
+     디자인 시안(Jitda UI design / tokens.css)의 jt-dig-* 키프레임 이식. */
+  @keyframes jt-dig-swing {
+    0% {
+      transform: rotate(38deg);
+    }
+    15% {
+      transform: rotate(50deg);
+    }
+    46% {
+      transform: rotate(-108deg);
+    }
+    54% {
+      transform: rotate(-100deg);
+    }
+    100% {
+      transform: rotate(38deg);
+    }
   }
 
-  [data-component="codle-preview-loader"]::before,
-  [data-component="codle-preview-loader"]::after {
-    content: "";
-    position: absolute;
-    left: 8px;
-    right: 8px;
-    border-radius: 999px;
-    background: color-mix(in srgb, currentColor 18%, transparent);
+  .jt-dig-swing {
+    animation: jt-dig-swing 1s cubic-bezier(0.4, 0.04, 0.38, 1) infinite;
+    will-change: transform;
   }
 
-  [data-component="codle-preview-loader"]::before {
-    top: 7px;
-    height: 2px;
+  @keyframes jt-dig-bob {
+    0%,
+    100% {
+      transform: translateX(-50%) translateY(0) rotate(6deg);
+    }
+    15% {
+      transform: translateX(-50%) translateY(calc(var(--bob) * -1)) rotate(9deg);
+    }
+    46% {
+      transform: translateX(-50%) translateY(var(--bob)) rotate(-7deg);
+    }
+    56% {
+      transform: translateX(-50%) translateY(0) rotate(0deg);
+    }
+  }
+
+  .jt-dig-bob {
+    animation: jt-dig-bob 1s cubic-bezier(0.4, 0.04, 0.38, 1) infinite;
+  }
+
+  @keyframes jt-dig-dirt {
+    0%,
+    42% {
+      opacity: 0;
+      transform: translateY(0) scale(0.35);
+    }
+    52% {
+      opacity: 0.85;
+      transform: translateY(calc(var(--pop) * -0.85)) scale(1);
+    }
+    68% {
+      opacity: 0.8;
+      transform: translateY(calc(var(--pop) * -1)) scale(0.95);
+    }
+    86% {
+      opacity: 0;
+      transform: translateY(calc(var(--pop) * -0.4)) scale(0.55);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(0) scale(0.35);
+    }
+  }
+
+  .jt-dig-dirt {
+    animation: jt-dig-dirt 1s linear infinite;
+  }
+
+  @keyframes jt-dig-shadow {
+    0%,
+    100% {
+      transform: scaleX(1);
+      opacity: 0.16;
+    }
+    15% {
+      transform: scaleX(0.76);
+      opacity: 0.07;
+    }
+    46% {
+      transform: scaleX(1.12);
+      opacity: 0.2;
+    }
+    56% {
+      transform: scaleX(1);
+      opacity: 0.16;
+    }
+  }
+
+  .jt-dig-shadow {
     transform-origin: 50% 50%;
-    animation: codle-preview-scan 2.4s ease-in-out infinite;
-  }
-
-  [data-component="codle-preview-loader"]::after {
-    bottom: 0;
-    height: 1px;
-  }
-
-  [data-component="codle-preview-loader"] [data-slot="block"] {
-    position: absolute;
-    width: 22px;
-    height: 14px;
-    border-radius: 4px;
-    background: currentColor;
-    opacity: 0.2;
-    transform: translateY(7px) scale(0.9);
-    animation: codle-preview-build 2.4s ease-in-out infinite;
-  }
-
-  [data-component="codle-preview-loader"] [data-slot="block"]:nth-child(1) {
-    left: 15px;
-    bottom: 6px;
-    animation-delay: 0s;
-  }
-
-  [data-component="codle-preview-loader"] [data-slot="block"]:nth-child(2) {
-    left: 41px;
-    bottom: 6px;
-    animation-delay: 0.2s;
-  }
-
-  [data-component="codle-preview-loader"] [data-slot="block"]:nth-child(3) {
-    left: 28px;
-    bottom: 24px;
-    animation-delay: 0.4s;
-  }
-
-  [data-component="codle-preview-loader"] [data-slot="block"]:nth-child(4) {
-    left: 15px;
-    bottom: 42px;
-    animation-delay: 0.6s;
-  }
-
-  [data-component="codle-preview-loader"] [data-slot="block"]:nth-child(5) {
-    left: 41px;
-    bottom: 42px;
-    animation-delay: 0.8s;
-  }
-
-  @keyframes codle-preview-build {
-    0%,
-    18% {
-      opacity: 0.12;
-      transform: translateY(7px) scale(0.9);
-    }
-
-    34%,
-    74% {
-      opacity: 0.72;
-      transform: translateY(0) scale(1);
-    }
-
-    100% {
-      opacity: 0.18;
-      transform: translateY(-2px) scale(0.96);
-    }
-  }
-
-  @keyframes codle-preview-scan {
-    0%,
-    100% {
-      transform: translateY(0) scaleX(0.55);
-      opacity: 0.22;
-    }
-
-    50% {
-      transform: translateY(50px) scaleX(1);
-      opacity: 0.45;
-    }
+    opacity: 0.16;
+    animation: jt-dig-shadow 1s cubic-bezier(0.4, 0.04, 0.38, 1) infinite;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    [data-component="codle-preview-loader"]::before,
-    [data-component="codle-preview-loader"] [data-slot="block"] {
+    .jt-dig-swing,
+    .jt-dig-bob,
+    .jt-dig-dirt,
+    .jt-dig-shadow {
       animation: none;
-    }
-
-    [data-component="codle-preview-loader"] [data-slot="block"] {
-      opacity: 0.55;
-      transform: none;
     }
   }
 
@@ -1351,6 +1345,10 @@
    진해지고(text-base), 드래그 시 더 진해지며(text-strong) 길이가 40→52px 로 늘어 잡힌 느낌을 준다.
    디자인 토큰 매핑: c-ink-3→text-base, c-ink→text-strong. */
 :root[data-theme="jitda"] [data-component="resize-handle"][data-direction="horizontal"].session-panel-resize > div {
+  /* 그립(알약)을 1px 디바이더(::before, positioned) 위에 올린다. 비-positioned flex 자식은
+     positioned ::before 보다 먼저 페인트돼 선이 그립을 덮으므로, relative+z-index 로 끌어올림. */
+  position: relative;
+  z-index: 1;
   width: 4px;
   height: 40px;
   border-radius: 999px;

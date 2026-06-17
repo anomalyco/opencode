@@ -16,6 +16,7 @@ import { LineReferenceBlockSpec, withLineReferenceSchema } from "./line-referenc
 import { lineReferenceUrl, normLineRef, type LineRefInput } from "./line-reference-url"
 import { actor, label, type DocActor } from "./actor"
 import { patchSlashMenu } from "./slash-menu-patch"
+import { patchFormatBar } from "./format-bar-patch"
 
 export type { DocActor } from "./actor"
 
@@ -80,10 +81,18 @@ export async function createPage(input: DocMountInput) {
   await ensureEffects()
   const [
     { PageEditor },
-    { AffineSlashMenuWidget, DocModeExtension, PageEditorBlockSpecs, PreviewEditorBlockSpecs, ThemeProvider },
+    {
+      AffineFormatBarWidget,
+      AffineSlashMenuWidget,
+      DocModeExtension,
+      PageEditorBlockSpecs,
+      PreviewEditorBlockSpecs,
+      ThemeProvider,
+    },
   ] = await Promise.all([import("@blocksuite/presets"), import("@blocksuite/blocks")])
 
   patchSlashMenu(AffineSlashMenuWidget)
+  patchFormatBar(AffineFormatBarWidget)
 
   const schema = new Schema().register(withLineReferenceSchema(withFileReferenceSchema(AffineSchemas)))
   const page = "page"

@@ -118,6 +118,10 @@
     &:disabled {
       color: var(--icon-invert-base);
       cursor: not-allowed;
+
+      [data-slot="icon-svg"] {
+        color: var(--icon-disabled);
+      }
     }
   }
 
