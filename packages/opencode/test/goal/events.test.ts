@@ -6,14 +6,10 @@ import type { GoalEvent } from "@/goal/types"
 import type { InstanceContext } from "@/project/instance-context"
 import { tmpdir } from "../fixture/fixture"
 
-function context(root: string): InstanceContext {
+function context(root: string): Pick<InstanceContext, "directory" | "worktree"> {
   return {
     directory: path.join(root, "packages", "opencode"),
     worktree: root,
-    project: {
-      id: "project_123",
-      time: { created: 0, updated: 0 },
-    } as InstanceContext["project"],
   }
 }
 

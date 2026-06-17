@@ -4,22 +4,17 @@ import path from "path"
 import { ActiveGoalExistsError } from "@/goal/errors"
 import { createGoalManager } from "@/goal/manager"
 import { loadActiveGoal } from "@/goal/store"
-import type { Goal } from "@/goal/types"
 import type { InstanceContext } from "@/project/instance-context"
 import { tmpdir } from "../fixture/fixture"
 
-function context(root: string): InstanceContext {
+function context(root: string): Pick<InstanceContext, "directory" | "worktree"> {
   return {
     directory: path.join(root, "packages", "opencode"),
     worktree: root,
-    project: {
-      id: "project_123",
-      time: { created: 0, updated: 0 },
-    } as InstanceContext["project"],
   }
 }
 
-function manager(ctx: InstanceContext) {
+function manager(ctx: Pick<InstanceContext, "directory" | "worktree">) {
   return createGoalManager(ctx, {
     now: () => "2026-06-17T00:00:00.000Z",
     id: () => "goal_123",
@@ -62,7 +57,14 @@ describe("goal manager", () => {
 
     await mgr.create("First goal")
 
-    await expect(mgr.create("Second goal")).rejects.toThrow(ActiveGoalExistsError)
+    let error: unknown
+    try {
+      await mgr.create("Second goal")
+    } catch (cause) {
+      error = cause
+    }
+
+    expect(error).toBeInstanceOf(ActiveGoalExistsError)
   })
 
   test("returns no-active status when no goal exists", async () => {
@@ -96,7 +98,7 @@ describe("goal manager", () => {
     expect(await loadActiveGoal(ctx)).toBeNull()
 
     const history = path.join(tmp.path, ".opencode", "goals", "history", created.id)
-    const archivedGoal = JSON.parse(await fs.readFile(path.join(history, "goal.json"), "utf8")) as Goal
+    const archivedGoal = await Bun.file(path.join(history, "goal.json")).json()
     const events = await fs.readFile(path.join(history, "events.jsonl"), "utf8")
     const checkpointExists = await Bun.file(path.join(history, "checkpoints", "checkpoint_001.json")).exists()
 

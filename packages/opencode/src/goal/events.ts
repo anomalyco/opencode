@@ -13,13 +13,17 @@ export async function appendGoalEvent(
   await fs.appendFile(paths.activeEvents, JSON.stringify(event) + "\n", "utf8")
 }
 
+function hasErrorCode(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code
+}
+
 export async function readGoalEvents(ctx: Pick<InstanceContext, "directory" | "worktree">): Promise<GoalEvent[]> {
   const paths = goalPaths(ctx)
   let text: string
   try {
     text = await fs.readFile(paths.activeEvents, "utf8")
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return []
+    if (hasErrorCode(error, "ENOENT")) return []
     throw error
   }
 
@@ -27,7 +31,7 @@ export async function readGoalEvents(ctx: Pick<InstanceContext, "directory" | "w
   for (const line of text.split("\n")) {
     if (!line.trim()) continue
     try {
-      events.push(JSON.parse(line) as GoalEvent)
+      events.push(JSON.parse(line))
     } catch {
       continue
     }

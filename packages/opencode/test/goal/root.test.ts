@@ -3,14 +3,10 @@ import path from "path"
 import { goalPaths, goalRoot } from "@/goal/root"
 import type { InstanceContext } from "@/project/instance-context"
 
-function context(input: Pick<InstanceContext, "directory" | "worktree">): InstanceContext {
+function context(input: Pick<InstanceContext, "directory" | "worktree">): Pick<InstanceContext, "directory" | "worktree"> {
   return {
     directory: input.directory,
     worktree: input.worktree,
-    project: {
-      id: "project_123",
-      time: { created: 0, updated: 0 },
-    } as InstanceContext["project"],
   }
 }
 

@@ -35,6 +35,10 @@ export async function createGoalCheckpoint(
   return checkpoint
 }
 
+function hasErrorCode(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code
+}
+
 export async function listGoalCheckpoints(
   ctx: Pick<InstanceContext, "directory" | "worktree">,
 ): Promise<GoalCheckpoint[]> {
@@ -43,13 +47,13 @@ export async function listGoalCheckpoints(
   try {
     entries = await fs.readdir(paths.activeCheckpoints)
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") return []
+    if (hasErrorCode(error, "ENOENT")) return []
     throw error
   }
 
   const checkpoints: GoalCheckpoint[] = []
   for (const entry of entries.filter((item) => item.endsWith(".json")).sort()) {
-    checkpoints.push(JSON.parse(await fs.readFile(path.join(paths.activeCheckpoints, entry), "utf8")) as GoalCheckpoint)
+    checkpoints.push(JSON.parse(await fs.readFile(path.join(paths.activeCheckpoints, entry), "utf8")))
   }
   return checkpoints
 }

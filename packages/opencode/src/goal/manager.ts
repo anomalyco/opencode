@@ -1,7 +1,7 @@
 import { ActiveGoalExistsError } from "./errors"
 import { createGoalCheckpoint } from "./checkpoints"
 import { appendGoalEvent } from "./events"
-import { renderGoalCleared, renderGoalStatus, renderNoActiveGoal } from "./renderer"
+import { renderGoalStatus, renderNoActiveGoal } from "./renderer"
 import { archiveActiveGoal, loadActiveGoal, saveActiveGoal, type ActiveGoalState } from "./store"
 import { transitionGoal } from "./state-machine"
 import type { Goal, GoalEvent } from "./types"

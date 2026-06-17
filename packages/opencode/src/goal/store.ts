@@ -26,11 +26,15 @@ async function writeJsonAtomic(filepath: string, data: unknown): Promise<void> {
   await fs.rename(tmp, filepath)
 }
 
+function hasErrorCode(error: unknown, code: string): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === code
+}
+
 async function readJsonFile<T>(filepath: string): Promise<T> {
   try {
-    return JSON.parse(await fs.readFile(filepath, "utf8")) as T
+    return JSON.parse(await fs.readFile(filepath, "utf8"))
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "ENOENT") throw error
+    if (hasErrorCode(error, "ENOENT")) throw error
     throw new MalformedGoalStateError({ path: filepath, reason: error instanceof Error ? error.message : String(error) })
   }
 }

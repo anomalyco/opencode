@@ -7,14 +7,10 @@ import type { Goal, GoalPlan } from "@/goal/types"
 import type { InstanceContext } from "@/project/instance-context"
 import { tmpdir } from "../fixture/fixture"
 
-function context(root: string): InstanceContext {
+function context(root: string): Pick<InstanceContext, "directory" | "worktree"> {
   return {
     directory: path.join(root, "packages", "opencode"),
     worktree: root,
-    project: {
-      id: "project_123",
-      time: { created: 0, updated: 0 },
-    } as InstanceContext["project"],
   }
 }
 
@@ -82,7 +78,14 @@ describe("goal store", () => {
     await fs.mkdir(active, { recursive: true })
     await fs.writeFile(path.join(active, "goal.json"), "{ invalid json", "utf8")
 
-    await expect(loadActiveGoal(ctx)).rejects.toThrow(MalformedGoalStateError)
+    let error: unknown
+    try {
+      await loadActiveGoal(ctx)
+    } catch (cause) {
+      error = cause
+    }
+
+    expect(error).toBeInstanceOf(MalformedGoalStateError)
   })
 
   test("archives active goal assets into history and clears active state", async () => {
