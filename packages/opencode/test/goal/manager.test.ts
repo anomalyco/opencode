@@ -155,6 +155,35 @@ describe("goal manager", () => {
     expect(resumeError).toBeInstanceOf(NoActiveGoalError)
   })
 
+  test("marks active goal as budget exceeded when budget is over limit", async () => {
+    await using tmp = await tmpdir()
+    const ctx = context(tmp.path)
+    const mgr = manager(ctx)
+
+    const created = await mgr.create("Migrate repository to Bun")
+    const active = await loadActiveGoal(ctx)
+    await saveActiveGoal(ctx, {
+      goal: {
+        ...created,
+        state: "ACTIVE",
+        budget: { ...created.budget, usedSteps: 2, maxSteps: 1 },
+      },
+      plan: active?.plan,
+    })
+
+    const exceeded = await mgr.enforceBudget()
+
+    expect(exceeded.state).toBe("BUDGET_EXCEEDED")
+    expect((await loadActiveGoal(ctx))?.goal.state).toBe("BUDGET_EXCEEDED")
+
+    const activePath = path.join(tmp.path, ".opencode", "goals", "active")
+    const events = await fs.readFile(path.join(activePath, "events.jsonl"), "utf8")
+    const checkpointExists = await Bun.file(path.join(activePath, "checkpoints", "checkpoint_001.json")).exists()
+
+    expect(events).toContain("BUDGET_EXCEEDED")
+    expect(checkpointExists).toBe(true)
+  })
+
   test("resume rejects invalid transitions", async () => {
     await using tmp = await tmpdir()
     const ctx = context(tmp.path)

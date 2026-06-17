@@ -1,4 +1,5 @@
 import { ActiveGoalExistsError, NoActiveGoalError } from "./errors"
+import { checkGoalBudget } from "./budget"
 import { createGoalCheckpoint } from "./checkpoints"
 import { appendGoalEvent } from "./events"
 import { createDeterministicGoalPlan } from "./planner"
@@ -19,6 +20,7 @@ export interface GoalManager {
   status(): Promise<GoalStatusResult>
   pause(): Promise<Goal>
   resume(): Promise<Goal>
+  enforceBudget(): Promise<Goal>
   clear(): Promise<Goal>
 }
 
@@ -131,6 +133,29 @@ export function createGoalManager(ctx: Pick<InstanceContext, "directory" | "work
         createdAt: now(),
       })
       return resumed
+    },
+
+    async enforceBudget() {
+      const active = await loadActiveGoal(ctx)
+      if (!active) throw new NoActiveGoalError({ operation: "budget" })
+
+      const exceeded = checkGoalBudget(active.goal)
+      if (!exceeded) return active.goal
+
+      const budgetExceeded = transitionGoal(active.goal, "BUDGET_EXCEEDED", { now: now() })
+      await saveActiveGoal(ctx, { goal: budgetExceeded, plan: active.plan })
+      await event(budgetExceeded, "BUDGET_EXCEEDED", "Goal budget exceeded", {
+        metric: exceeded.metric,
+        used: exceeded.used,
+        max: exceeded.max,
+      })
+      await createGoalCheckpoint(ctx, {
+        id: checkpointId(),
+        goal: budgetExceeded,
+        plan: active.plan,
+        createdAt: now(),
+      })
+      return budgetExceeded
     },
 
     async clear() {

@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test"
-import { renderGoalCleared, renderGoalPaused, renderGoalResumed, renderGoalStatus, renderNoActiveGoal } from "@/goal/renderer"
+import {
+  renderGoalBudget,
+  renderGoalCleared,
+  renderGoalPaused,
+  renderGoalResumed,
+  renderGoalStatus,
+  renderNoActiveGoal,
+} from "@/goal/renderer"
 import type { Goal, GoalPlan } from "@/goal/types"
 
 function goal(overrides: Partial<Goal> = {}): Goal {
@@ -68,6 +75,14 @@ describe("goal renderer", () => {
     expect(output).toContain("Current Step: Run typecheck")
     expect(output).toContain("Steps: 1 / 10")
     expect(output).toContain("Tokens: 100 / 1000")
+  })
+
+  test("renders budget details", () => {
+    const output = renderGoalBudget(goal())
+
+    expect(output).toContain("Budget")
+    expect(output).toContain("Steps: 1 / 10")
+    expect(output).toContain("Runtime: 60000 / 600000")
   })
 
   test("renders pause confirmation", () => {

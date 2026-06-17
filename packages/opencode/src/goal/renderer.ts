@@ -1,4 +1,5 @@
 import type { ActiveGoalState } from "./store"
+import { renderBudgetSummary } from "./budget"
 import type { Goal } from "./types"
 
 function formatLimit(used: number, max?: number): string {
@@ -28,6 +29,10 @@ export function renderGoalStatus(active: ActiveGoalState): string {
   ]
 
   return lines.join("\n")
+}
+
+export function renderGoalBudget(goal: Goal): string {
+  return renderBudgetSummary(goal.budget)
 }
 
 export function renderGoalPaused(goal: Goal): string {
