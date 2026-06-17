@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { ActiveGoalExistsError } from "@/goal/errors"
+import { ActiveGoalExistsError, InvalidGoalTransitionError, NoActiveGoalError } from "@/goal/errors"
 import { createGoalManager } from "@/goal/manager"
-import { loadActiveGoal } from "@/goal/store"
+import { loadActiveGoal, saveActiveGoal } from "@/goal/store"
 import type { InstanceContext } from "@/project/instance-context"
 import { tmpdir } from "../fixture/fixture"
 
@@ -86,6 +86,90 @@ describe("goal manager", () => {
 
     expect(status.active?.goal.title).toBe("Migrate repository to Bun")
     expect(status.output).toContain("State: CREATED")
+  })
+
+  test("pause transitions active goal to paused, emits event, checkpoints, and persists state", async () => {
+    await using tmp = await tmpdir()
+    const ctx = context(tmp.path)
+    const mgr = manager(ctx)
+
+    const created = await mgr.create("Migrate repository to Bun")
+    const active = await loadActiveGoal(ctx)
+    await saveActiveGoal(ctx, { goal: { ...created, state: "ACTIVE" }, plan: active?.plan })
+
+    const paused = await mgr.pause()
+
+    expect(paused.state).toBe("PAUSED")
+    expect((await loadActiveGoal(ctx))?.goal.state).toBe("PAUSED")
+
+    const activePath = path.join(tmp.path, ".opencode", "goals", "active")
+    const events = await fs.readFile(path.join(activePath, "events.jsonl"), "utf8")
+    const checkpointExists = await Bun.file(path.join(activePath, "checkpoints", "checkpoint_001.json")).exists()
+
+    expect(events).toContain("GOAL_PAUSED")
+    expect(checkpointExists).toBe(true)
+  })
+
+  test("resume transitions paused goal to active, emits event, checkpoints, and persists state", async () => {
+    await using tmp = await tmpdir()
+    const ctx = context(tmp.path)
+    const mgr = manager(ctx)
+
+    const created = await mgr.create("Migrate repository to Bun")
+    const active = await loadActiveGoal(ctx)
+    await saveActiveGoal(ctx, { goal: { ...created, state: "ACTIVE" }, plan: active?.plan })
+
+    await mgr.pause()
+    const resumed = await mgr.resume()
+
+    expect(resumed.state).toBe("ACTIVE")
+    expect((await loadActiveGoal(ctx))?.goal.state).toBe("ACTIVE")
+
+    const activePath = path.join(tmp.path, ".opencode", "goals", "active")
+    const events = await fs.readFile(path.join(activePath, "events.jsonl"), "utf8")
+    const checkpointExists = await Bun.file(path.join(activePath, "checkpoints", "checkpoint_001.json")).exists()
+
+    expect(events).toContain("GOAL_RESUMED")
+    expect(checkpointExists).toBe(true)
+  })
+
+  test("pause and resume fail when no active goal exists", async () => {
+    await using tmp = await tmpdir()
+    const mgr = manager(context(tmp.path))
+
+    let pauseError: unknown
+    try {
+      await mgr.pause()
+    } catch (cause) {
+      pauseError = cause
+    }
+
+    let resumeError: unknown
+    try {
+      await mgr.resume()
+    } catch (cause) {
+      resumeError = cause
+    }
+
+    expect(pauseError).toBeInstanceOf(NoActiveGoalError)
+    expect(resumeError).toBeInstanceOf(NoActiveGoalError)
+  })
+
+  test("resume rejects invalid transitions", async () => {
+    await using tmp = await tmpdir()
+    const ctx = context(tmp.path)
+    const mgr = manager(ctx)
+
+    await mgr.create("Migrate repository to Bun")
+
+    let error: unknown
+    try {
+      await mgr.resume()
+    } catch (cause) {
+      error = cause
+    }
+
+    expect(error).toBeInstanceOf(InvalidGoalTransitionError)
   })
 
   test("clear cancels, checkpoints, emits events, archives, and clears active state", async () => {

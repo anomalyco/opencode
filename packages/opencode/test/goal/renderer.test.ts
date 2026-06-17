@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { renderGoalCleared, renderGoalStatus, renderNoActiveGoal } from "@/goal/renderer"
+import { renderGoalCleared, renderGoalPaused, renderGoalResumed, renderGoalStatus, renderNoActiveGoal } from "@/goal/renderer"
 import type { Goal, GoalPlan } from "@/goal/types"
 
 function goal(overrides: Partial<Goal> = {}): Goal {
@@ -68,6 +68,20 @@ describe("goal renderer", () => {
     expect(output).toContain("Current Step: Run typecheck")
     expect(output).toContain("Steps: 1 / 10")
     expect(output).toContain("Tokens: 100 / 1000")
+  })
+
+  test("renders pause confirmation", () => {
+    const output = renderGoalPaused(goal({ state: "PAUSED" }))
+
+    expect(output).toContain("Goal paused")
+    expect(output).toContain("goal_123")
+  })
+
+  test("renders resume confirmation", () => {
+    const output = renderGoalResumed(goal({ state: "ACTIVE" }))
+
+    expect(output).toContain("Goal resumed")
+    expect(output).toContain("goal_123")
   })
 
   test("renders clear/archive confirmation", () => {

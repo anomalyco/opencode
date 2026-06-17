@@ -1,4 +1,4 @@
-import { ActiveGoalExistsError } from "./errors"
+import { ActiveGoalExistsError, NoActiveGoalError } from "./errors"
 import { createGoalCheckpoint } from "./checkpoints"
 import { appendGoalEvent } from "./events"
 import { createDeterministicGoalPlan } from "./planner"
@@ -17,6 +17,8 @@ export interface GoalManager {
   init(): Promise<ActiveGoalState | null>
   create(objective: string): Promise<Goal>
   status(): Promise<GoalStatusResult>
+  pause(): Promise<Goal>
+  resume(): Promise<Goal>
   clear(): Promise<Goal>
 }
 
@@ -97,6 +99,38 @@ export function createGoalManager(ctx: Pick<InstanceContext, "directory" | "work
         active,
         output: active ? renderGoalStatus(active) : renderNoActiveGoal(),
       }
+    },
+
+    async pause() {
+      const active = await loadActiveGoal(ctx)
+      if (!active) throw new NoActiveGoalError({ operation: "pause" })
+
+      const paused = transitionGoal(active.goal, "PAUSED", { now: now() })
+      await saveActiveGoal(ctx, { goal: paused, plan: active.plan })
+      await event(paused, "GOAL_PAUSED", "Goal paused")
+      await createGoalCheckpoint(ctx, {
+        id: checkpointId(),
+        goal: paused,
+        plan: active.plan,
+        createdAt: now(),
+      })
+      return paused
+    },
+
+    async resume() {
+      const active = await loadActiveGoal(ctx)
+      if (!active) throw new NoActiveGoalError({ operation: "resume" })
+
+      const resumed = transitionGoal(active.goal, "ACTIVE", { now: now() })
+      await saveActiveGoal(ctx, { goal: resumed, plan: active.plan })
+      await event(resumed, "GOAL_RESUMED", "Goal resumed")
+      await createGoalCheckpoint(ctx, {
+        id: checkpointId(),
+        goal: resumed,
+        plan: active.plan,
+        createdAt: now(),
+      })
+      return resumed
     },
 
     async clear() {

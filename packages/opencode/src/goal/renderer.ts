@@ -30,6 +30,14 @@ export function renderGoalStatus(active: ActiveGoalState): string {
   return lines.join("\n")
 }
 
+export function renderGoalPaused(goal: Goal): string {
+  return `Goal paused: ${goal.id}`
+}
+
+export function renderGoalResumed(goal: Goal): string {
+  return `Goal resumed: ${goal.id}`
+}
+
 export function renderGoalCleared(goal: Goal): string {
   return `Goal cancelled and archived: ${goal.id}`
 }
