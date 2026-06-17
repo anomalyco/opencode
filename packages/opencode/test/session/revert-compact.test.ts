@@ -636,4 +636,41 @@ describe("revert + compact workflow", () => {
       { git: true },
     ),
   )
+
+  it.live(
+    "reverting a turn with no file changes leaves the working tree untouched",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+
+          yield* write(path.join(dir, "a.txt"), "a0")
+
+          const info = yield* session.create({})
+          const sid = info.id
+
+          // A turn that only chats (no `patch` parts) — nothing changed on disk.
+          const u = yield* user(sid)
+          yield* text(sid, u.id, "what is the capital of France?")
+          const a = yield* assistant(sid, u.id, dir)
+          yield* text(sid, a.id, "Paris.")
+
+          // The user edits a file after the turn; this is unstaged work that an
+          // undo of a no-op turn must not clobber.
+          yield* write(path.join(dir, "a.txt"), "unstaged-edit")
+
+          yield* revert.revert({
+            sessionID: sid,
+            messageID: u.id,
+          })
+
+          // Revert state is still recorded even though no files were touched.
+          expect((yield* session.get(sid)).revert?.messageID).toBe(u.id)
+          // The working tree is left exactly as the user left it.
+          expect(yield* read(path.join(dir, "a.txt"))).toBe("unstaged-edit")
+        }),
+      { git: true },
+    ),
+  )
 })

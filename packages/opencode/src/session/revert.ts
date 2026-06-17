@@ -68,8 +68,13 @@ export const layer = Layer.effect(
       if (!rev) return session
 
       rev.snapshot = session.revert?.snapshot ?? (yield* snap.track())
-      if (session.revert?.snapshot) yield* snap.restore(session.revert.snapshot)
-      yield* snap.revert(patches)
+      // A reverted turn that produced no file changes must not touch the working
+      // tree: the forced read-tree/checkout-index would clobber unstaged changes.
+      // Only run the file-restore path when there are patches to revert.
+      if (patches.length > 0) {
+        if (session.revert?.snapshot) yield* snap.restore(session.revert.snapshot)
+        yield* snap.revert(patches)
+      }
       if (rev.snapshot) rev.diff = yield* snap.diff(rev.snapshot)
       const range = all.filter((msg) => msg.info.id >= rev.messageID)
       const diffs = yield* summary.computeDiff({ messages: range })
