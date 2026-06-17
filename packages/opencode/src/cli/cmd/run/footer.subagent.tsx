@@ -15,6 +15,10 @@ function statusColor(theme: RunFooterTheme, status: FooterSubagentTab["status"])
     return theme.highlight
   }
 
+  if (status === "cancelled") {
+    return theme.muted
+  }
+
   if (status === "error") {
     return theme.error
   }
@@ -25,6 +29,10 @@ function statusColor(theme: RunFooterTheme, status: FooterSubagentTab["status"])
 function statusIcon(status: FooterSubagentTab["status"]) {
   if (status === "completed") {
     return "●"
+  }
+
+  if (status === "cancelled") {
+    return "○"
   }
 
   if (status === "error") {
@@ -111,13 +119,7 @@ export function RunFooterSubagentBody(props: {
   })
 
   return (
-    <box
-      id="run-direct-footer-subagent"
-      width="100%"
-      height="100%"
-      flexDirection="column"
-      backgroundColor={footer().surface}
-    >
+    <box width="100%" height="100%" flexDirection="column" backgroundColor={footer().surface}>
       <box paddingTop={1} paddingLeft={1} paddingRight={3} paddingBottom={1} flexDirection="column" flexGrow={1}>
         <Show when={tab()}>
           {(current) => (

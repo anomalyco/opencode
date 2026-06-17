@@ -86,7 +86,15 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
                 totalTokens: geoStat.total_tokens,
               })
               .from(geoStat)
-              .where(and(eq(geoStat.grain, "day"), eq(geoStat.client, "all"), eq(geoStat.source, "all"), scope))
+              .where(
+                and(
+                  eq(geoStat.grain, "day"),
+                  eq(geoStat.client, "all"),
+                  eq(geoStat.source, "all"),
+                  inArray(geoStat.tier, ["Go", "go"]),
+                  scope,
+                ),
+              )
               .orderBy(asc(geoStat.period_key)),
           catch: (cause) => DatabaseError.make({ cause }),
         })

@@ -1,9 +1,9 @@
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import os from "os"
 import fuzzysort from "fuzzysort"
 import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
-import { Log } from "@opencode-ai/core/util/log"
 import { Npm } from "@opencode-ai/core/npm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Plugin } from "../plugin"
@@ -35,8 +35,11 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+// fork: legacy logger shim (upstream removed core/util/log in #31310)
+import * as Log from "@opencode-ai/core/util/log"
 
 const log = Log.create({ service: "provider" })
+
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
@@ -630,7 +633,6 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         },
         async discoverModels(): Promise<Record<string, Model>> {
           if (!apiKey) {
-            log.info("gitlab model discovery skipped: no apiKey")
             return {}
           }
 
@@ -639,18 +641,9 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             const getHeaders = (): Record<string, string> =>
               auth?.type === "api" ? { "PRIVATE-TOKEN": token } : { Authorization: `Bearer ${token}` }
 
-            log.info("gitlab model discovery starting", { instanceUrl })
             const result = await discoverWorkflowModels({ instanceUrl, getHeaders }, { workingDirectory: directory })
 
             if (!result.models.length) {
-              log.info("gitlab model discovery skipped: no models found", {
-                project: result.project
-                  ? {
-                      id: result.project.id,
-                      path: result.project.pathWithNamespace,
-                    }
-                  : null,
-              })
               return {}
             }
 
@@ -699,13 +692,8 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
               }
             }
 
-            log.info("gitlab model discovery complete", {
-              count: Object.keys(models).length,
-              models: Object.keys(models),
-            })
             return models
           } catch (e) {
-            log.warn("gitlab model discovery failed", { error: e })
             return {}
           }
         },
@@ -814,7 +802,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         apiKey: apiToken,
         ...(Object.values(opts).some((v) => v !== undefined) ? { options: opts } : {}),
       })
-      const unified = createUnified()
+      const unified = createUnified({ apiKey: apiToken })
 
       return {
         autoload: true,
@@ -844,6 +832,106 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    "snowflake-cortex": Effect.fnUntraced(function* (input: Info) {
+      const env = yield* dep.env()
+      const auth = yield* dep.auth(input.id)
+
+      const account =
+        env["SNOWFLAKE_ACCOUNT"] ??
+        (auth?.type === "api" ? auth.metadata?.account : undefined) ??
+        (auth?.type === "oauth" ? auth.accountId : undefined) ??
+        input.options?.account
+
+      const envToken = env["SNOWFLAKE_CORTEX_TOKEN"] ?? env["SNOWFLAKE_CORTEX_PAT"]
+      const apiKeyToken = auth?.type === "api" ? auth.key : undefined
+      const oauthToken = auth?.type === "oauth" ? auth.access : undefined
+      const configToken = input.options?.token ?? input.options?.apiKey
+
+      const token = envToken ?? apiKeyToken ?? oauthToken ?? configToken
+
+      if (!account || !token) {
+        const missing = [!account && "SNOWFLAKE_ACCOUNT", !token && "SNOWFLAKE_CORTEX_TOKEN"].filter(Boolean).join(", ")
+        return {
+          autoload: false,
+          async getModel() {
+            throw new Error(
+              `Snowflake Cortex: missing credentials (${missing}). Provide a bearer token (OAuth, JWT, or PAT) via env var, opencode auth, or provider options.`,
+            )
+          },
+        }
+      }
+
+      const baseURL = `https://${account}.snowflakecomputing.com/api/v2/cortex/v1`
+
+      const options: Record<string, any> = { baseURL, apiKey: token }
+
+      // Only skip provider-level fetch when the token is from OAuth with no override.
+      // For OAuth tokens, the plugin auth loader's combined fetch handles
+      // OAuth refresh + snowflake transformations in one place.
+      // For env/config/API-key tokens, the provider fetch applies snowflake
+      // transformations directly.
+      const useOAuthHandler =
+        oauthToken !== undefined && envToken === undefined && apiKeyToken === undefined && configToken === undefined
+      if (!useOAuthHandler) {
+        options.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
+          if (init?.body && typeof init.body === "string") {
+            try {
+              const body = JSON.parse(init.body)
+              if ("max_tokens" in body) {
+                body.max_completion_tokens = body.max_tokens
+                delete body.max_tokens
+                init = { ...init, body: JSON.stringify(body) }
+              }
+            } catch {}
+          }
+
+          const response = await fetch(url, init)
+
+          if (!response.ok && response.status === 400) {
+            try {
+              const errorData = await response.clone().json()
+              const errorMessage = String(errorData.message || errorData.error || "")
+              if (errorMessage.toLowerCase().includes("conversation complete")) {
+                return new Response(
+                  JSON.stringify({
+                    choices: [{ finish_reason: "stop", message: { content: "", role: "assistant" } }],
+                  }),
+                  { status: 200, headers: new Headers({ "content-type": "application/json" }) },
+                )
+              }
+            } catch {}
+          }
+
+          if (response.body && response.headers.get("content-type")?.includes("text/event-stream")) {
+            const reader = response.body.getReader()
+            const encoder = new TextEncoder()
+            const decoder = new TextDecoder()
+            const stream = new ReadableStream({
+              async pull(ctrl) {
+                const { done, value } = await reader.read()
+                if (done) {
+                  ctrl.close()
+                  return
+                }
+                const text = decoder.decode(value, { stream: true })
+                ctrl.enqueue(encoder.encode(text.replace(/"role"\s*:\s*""/g, '"role":"assistant"')))
+              },
+              cancel() {
+                reader.cancel()
+              },
+            })
+            return new Response(stream, { headers: response.headers, status: response.status })
+          }
+
+          return response
+        }
+      }
+
+      return {
+        autoload: input.source === "config",
+        options,
+      }
+    }),
   }
 }
 
@@ -864,7 +952,7 @@ const ProviderModalities = Schema.Struct({
 const ProviderInterleaved = Schema.Union([
   Schema.Boolean,
   Schema.Struct({
-    field: Schema.Literals(["reasoning_content", "reasoning_details"]),
+    field: Schema.Literals(["reasoning", "reasoning_content", "reasoning_details"]),
   }),
 ])
 
@@ -1321,7 +1409,6 @@ export const layer = Layer.effect(
 
     const state = yield* InstanceState.make<State>(() =>
       Effect.gen(function* () {
-        using _ = log.time("state")
         const bridge = yield* EffectBridge.make()
         const cfg = yield* config.get()
         const modelsDev = yield* modelsDevSvc.get()
@@ -1346,8 +1433,6 @@ export const layer = Layer.effect(
           env: () => env.all(),
           get: (key: string) => env.get(key),
         }
-
-        log.info("init")
 
         function mergeProvider(providerID: ProviderV2.ID, provider: Partial<Info>) {
           const existing = providers[providerID]
@@ -1549,7 +1634,6 @@ export const layer = Layer.effect(
           if (disabled.has(providerID)) continue
           const data = database[providerID]
           if (!data) {
-            log.error("Provider does not exist in model list " + providerID)
             continue
           }
           const result = yield* fn(data)
@@ -1606,9 +1690,7 @@ export const layer = Layer.effect(
                   providers[gitlab].models[modelID] = model
                 }
               }
-            } catch (e) {
-              log.warn("state discovery error", { id: "gitlab", error: e })
-            }
+            } catch (e) {}
           })
         }
 
@@ -1659,8 +1741,6 @@ export const layer = Layer.effect(
             delete providers[providerID]
             continue
           }
-
-          log.info("found", { providerID })
         }
 
         return {
@@ -1678,9 +1758,6 @@ export const layer = Layer.effect(
 
     async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
       try {
-        using _ = log.time("getSDK", {
-          providerID: model.providerID,
-        })
         const provider = s.providers[model.providerID]
         const options = { ...provider.options }
 
@@ -1790,24 +1867,6 @@ export const layer = Layer.effect(
           const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
           if (combined) opts.signal = combined
 
-          // Strip openai itemId metadata following what codex does
-          if (
-            (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/azure") &&
-            opts.body &&
-            opts.method === "POST"
-          ) {
-            const body = JSON.parse(opts.body as string)
-            const keepIds = body.store === true
-            if (!keepIds && Array.isArray(body.input)) {
-              for (const item of body.input) {
-                if ("id" in item) {
-                  delete item.id
-                }
-              }
-              opts.body = JSON.stringify(body)
-            }
-          }
-
           const res = await fetchFn(input, {
             ...opts,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
@@ -1820,10 +1879,6 @@ export const layer = Layer.effect(
 
         const bundledLoader = BUNDLED_PROVIDERS[model.api.npm]
         if (bundledLoader) {
-          log.info("using bundled provider", {
-            providerID: model.providerID,
-            pkg: model.api.npm,
-          })
           const factory = await bundledLoader()
           const loaded = factory({
             name: model.providerID,
@@ -1835,7 +1890,6 @@ export const layer = Layer.effect(
 
         const installedPath = await (async () => {
           if (model.api.npm.startsWith("file://")) {
-            log.info("loading local provider", { pkg: model.api.npm })
             return model.api.npm
           }
           const item = await Npm.add(model.api.npm)
@@ -2050,5 +2104,15 @@ export function parseModel(model: string) {
     modelID: ModelV2.ID.make(rest.join("/")),
   }
 }
+
+export const node = LayerNode.make(layer, [
+  FSUtil.node,
+  Config.node,
+  Auth.node,
+  Env.node,
+  Plugin.node,
+  ModelsDev.node,
+  RuntimeFlags.node,
+])
 
 export * as Provider from "./provider"

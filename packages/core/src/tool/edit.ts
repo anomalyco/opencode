@@ -2,12 +2,11 @@
  * Model-facing V2 exact-edit leaf. Relative paths resolve within the active
  * Location. Absolute paths inside that Location are accepted, while explicit
  * absolute external paths retain mutation capability through a separate
- * external_directory approval before edit approval. Named project references
- * are read-oriented and deliberately are not accepted by mutation tools.
+ * external_directory approval before edit approval.
  */
 export * as EditTool from "./edit"
 
-import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
 import { FileMutation } from "../file-mutation"
 import { FSUtil } from "../fs-util"
@@ -21,7 +20,7 @@ export const name = "edit"
 export const Input = Schema.Struct({
   path: Schema.String.annotate({
     description:
-      "File path to edit. Relative paths resolve within the active Location. Absolute paths inside that Location are accepted; external absolute paths require external_directory approval. Named project references are read-oriented and are not accepted.",
+      "File path to edit. Relative paths resolve within the active Location. Absolute paths inside that Location are accepted; external absolute paths require external_directory approval.",
   }),
   oldString: Schema.String.annotate({ description: "Exact text to replace" }),
   newString: Schema.String.annotate({ description: "Replacement text, which must differ from oldString" }),
@@ -100,11 +99,11 @@ export const layer = Layer.effectDiscard(
         [name]: Tool.withPermission(
           Tool.make({
             description:
-              "Replace exact text in one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval. Named project references are read-oriented and are not accepted.",
+              "Replace exact text in one file. Relative paths resolve within the active Location. Absolute paths inside the Location are accepted. Explicit external absolute paths require external_directory approval before edit approval.",
             input: Input,
             output: Output,
             toModelOutput: ({ input, output }) => [
-              toolText({ type: "text", text: toModelOutput(output, input.oldString, input.newString) }),
+              { type: "text", text: toModelOutput(output, input.oldString, input.newString) },
             ],
             execute: (input, context) => {
               const unableToEdit = <A, E, R>(effect: Effect.Effect<A, E, R>) =>

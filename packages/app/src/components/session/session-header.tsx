@@ -155,11 +155,9 @@ export function SessionHeader() {
   })
   const hotkey = createMemo(() => command.keybind("file.open"))
   const os = createMemo(() => detectOS(platform))
-  const isDesktopV2 = createMemo(() => platform.platform === "desktop" && settings.general.newLayoutDesigns())
-  const search = createMemo(() => (isDesktopV2() ? settings.general.showSearch() : true))
-  const tree = createMemo(() => (isDesktopV2() ? settings.general.showFileTree() : true))
-  const term = createMemo(() => (isDesktopV2() ? settings.general.showTerminal() : true))
-  const status = createMemo(() => (isDesktopV2() ? settings.general.showStatus() : true))
+  const isV2 = settings.general.newLayoutDesigns
+  const search = settings.visibility.search
+  const status = settings.visibility.status
 
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
     finder: true,
@@ -231,7 +229,7 @@ export function SessionHeader() {
   )
   const opening = createMemo(() => openRequest.app !== undefined)
   const tint = createMemo(() =>
-    messageAgentColor(params.id ? sync.data.message[params.id] : undefined, sync.data.agent),
+    messageAgentColor(params.id ? sync().data.message[params.id] : undefined, sync().data.agent),
   )
   const v2ActionsState = createMemo<SessionHeaderV2ActionsState>(() => ({
     statusVisible: status(),
@@ -322,7 +320,7 @@ export function SessionHeader() {
         {(mount) => (
           <Portal mount={mount()}>
             <Show
-              when={isDesktopV2}
+              when={isV2}
               fallback={
                 <div class="flex items-center gap-2">
                   <Show when={projectDirectory()}>
@@ -444,23 +442,21 @@ export function SessionHeader() {
                         <StatusPopover />
                       </Tooltip>
                     </Show>
-                    <Show when={term()}>
-                      <TooltipKeybind
-                        title={language.t("command.terminal.toggle")}
-                        keybind={command.keybind("terminal.toggle")}
+                    <TooltipKeybind
+                      title={language.t("command.terminal.toggle")}
+                      keybind={command.keybind("terminal.toggle")}
+                    >
+                      <Button
+                        variant="ghost"
+                        class="group/terminal-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
+                        onClick={toggleTerminal}
+                        aria-label={language.t("command.terminal.toggle")}
+                        aria-expanded={view().terminal.opened()}
+                        aria-controls="terminal-panel"
                       >
-                        <Button
-                          variant="ghost"
-                          class="group/terminal-toggle titlebar-icon w-8 h-6 p-0 box-border shrink-0"
-                          onClick={toggleTerminal}
-                          aria-label={language.t("command.terminal.toggle")}
-                          aria-expanded={view().terminal.opened()}
-                          aria-controls="terminal-panel"
-                        >
-                          <Icon size="small" name={view().terminal.opened() ? "terminal-active" : "terminal"} />
-                        </Button>
-                      </TooltipKeybind>
-                    </Show>
+                        <Icon size="small" name={view().terminal.opened() ? "terminal-active" : "terminal"} />
+                      </Button>
+                    </TooltipKeybind>
 
                     <div class="hidden md:flex items-center gap-1 shrink-0">
                       <TooltipKeybind
@@ -479,32 +475,30 @@ export function SessionHeader() {
                         </Button>
                       </TooltipKeybind>
 
-                      <Show when={tree()}>
-                        <TooltipKeybind
-                          title={language.t("command.fileTree.toggle")}
-                          keybind={command.keybind("fileTree.toggle")}
+                      <TooltipKeybind
+                        title={language.t("command.fileTree.toggle")}
+                        keybind={command.keybind("fileTree.toggle")}
+                      >
+                        <Button
+                          variant="ghost"
+                          class="titlebar-icon w-8 h-6 p-0 box-border"
+                          onClick={() => layout.fileTree.toggle()}
+                          aria-label={language.t("command.fileTree.toggle")}
+                          aria-expanded={layout.fileTree.opened()}
+                          aria-controls="file-tree-panel"
                         >
-                          <Button
-                            variant="ghost"
-                            class="titlebar-icon w-8 h-6 p-0 box-border"
-                            onClick={() => layout.fileTree.toggle()}
-                            aria-label={language.t("command.fileTree.toggle")}
-                            aria-expanded={layout.fileTree.opened()}
-                            aria-controls="file-tree-panel"
-                          >
-                            <div class="relative flex items-center justify-center size-4">
-                              <Icon
-                                size="small"
-                                name={layout.fileTree.opened() ? "file-tree-active" : "file-tree"}
-                                classList={{
-                                  "text-icon-strong": layout.fileTree.opened(),
-                                  "text-icon-weak": !layout.fileTree.opened(),
-                                }}
-                              />
-                            </div>
-                          </Button>
-                        </TooltipKeybind>
-                      </Show>
+                          <div class="relative flex items-center justify-center size-4">
+                            <Icon
+                              size="small"
+                              name={layout.fileTree.opened() ? "file-tree-active" : "file-tree"}
+                              classList={{
+                                "text-icon-strong": layout.fileTree.opened(),
+                                "text-icon-weak": !layout.fileTree.opened(),
+                              }}
+                            />
+                          </div>
+                        </Button>
+                      </TooltipKeybind>
                     </div>
                   </div>
                 </div>

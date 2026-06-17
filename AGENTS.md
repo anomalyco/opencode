@@ -64,6 +64,12 @@ bun run build:llama-skein-client
 - Default branch is `dev`. Local `main` ref may not exist; use `dev` or `origin/dev` for diffs.
 - Do not manually mirror llama-skein OpenAPI schemas in handwritten TypeScript when generated types exist.
 
+## Branch Names
+
+Use a short branch name of at most three words, separated by hyphens. Do not use slashes or type prefixes such as `feat/` or `fix/`.
+
+Examples: `session-recovery`, `fix-scroll-state`, `regenerate-sdk`.
+
 ## Commits and PR Titles
 
 Use conventional commit-style messages and PR titles: `type(scope): summary`.

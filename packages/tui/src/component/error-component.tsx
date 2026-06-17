@@ -1,19 +1,19 @@
 import { TextAttributes } from "@opentui/core"
-import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
+import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
 import { createSignal } from "solid-js"
 import { getScrollAcceleration } from "../util/scroll"
 import { useClipboard } from "../context/clipboard"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { destroyRenderer } from "../util/renderer"
+import { useExit } from "../context/exit"
 
 export function ErrorComponent(props: { error: Error; reset: () => void; mode?: "dark" | "light" }) {
   const term = useTerminalDimensions()
-  const renderer = useRenderer()
+  const exit = useExit()
   const clipboard = useClipboard()
 
   useKeyboard((evt) => {
     if (evt.ctrl && evt.name === "c") {
-      destroyRenderer(renderer)
+      void exit()
     }
   })
   const [copied, setCopied] = createSignal(false)
@@ -66,7 +66,7 @@ export function ErrorComponent(props: { error: Error; reset: () => void; mode?: 
         <box onMouseUp={props.reset} backgroundColor={colors.primary} padding={1}>
           <text fg={colors.bg}>Reset TUI</text>
         </box>
-        <box onMouseUp={() => destroyRenderer(renderer)} backgroundColor={colors.primary} padding={1}>
+        <box onMouseUp={() => void exit()} backgroundColor={colors.primary} padding={1}>
           <text fg={colors.bg}>Exit</text>
         </box>
       </box>

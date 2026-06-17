@@ -1,0 +1,46 @@
+@keyframes titlebar-tab-fade-left {
+  from {
+    visibility: hidden;
+  }
+  to {
+    visibility: visible;
+  }
+}
+
+@keyframes titlebar-tab-fade-right {
+  from {
+    visibility: visible;
+  }
+  to {
+    visibility: hidden;
+  }
+}
+
+/* The narrow ranges preserve the binary thresholds of scrollLeft > 0 and
+   remaining scroll distance > 1px. Hidden defaults make an inactive timeline
+   (no overflow) a no-op. Unsupported browsers also degrade to no fades. */
+[data-slot="titlebar-tabs"] {
+  timeline-scope: --titlebar-tabs-scroll;
+
+  [data-slot^="titlebar-tabs-fade-"] {
+    visibility: hidden;
+  }
+}
+
+@supports (animation-timeline: --titlebar-tabs-scroll) and (timeline-scope: --titlebar-tabs-scroll) {
+  [data-slot="titlebar-tabs-scroll"] {
+    scroll-timeline: --titlebar-tabs-scroll x;
+  }
+
+  [data-slot="titlebar-tabs-fade-left"] {
+    animation: titlebar-tab-fade-left linear both;
+    animation-timeline: --titlebar-tabs-scroll;
+    animation-range: 0 0.1px;
+  }
+
+  [data-slot="titlebar-tabs-fade-right"] {
+    animation: titlebar-tab-fade-right linear both;
+    animation-timeline: --titlebar-tabs-scroll;
+    animation-range: calc(100% - 1.1px) calc(100% - 1px);
+  }
+}

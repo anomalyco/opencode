@@ -1,6 +1,6 @@
 export * as QuestionTool from "./question"
 
-import { ToolFailure, toolText } from "@opencode-ai/llm"
+import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
 import { PermissionV2 } from "../permission"
 import { QuestionV2 } from "../question"
@@ -55,7 +55,7 @@ export const layer = Layer.effectDiscard(
           input: Input,
           output: Output,
           toModelOutput: ({ input, output }) => [
-            toolText({ type: "text", text: toModelOutput(input.questions, output.answers) }),
+            { type: "text", text: toModelOutput(input.questions, output.answers) },
           ],
           execute: (input, context) =>
             permission

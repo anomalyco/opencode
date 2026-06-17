@@ -145,8 +145,10 @@ const main = Effect.gen(function* () {
       })
     },
     {
-      log: (message, meta) => logger.log(message, meta),
-      error: (message, meta) => logger.error(message, meta),
+      logger: {
+        log: (message, meta) => logger.log(message, meta),
+        error: (message, meta) => logger.error(message, meta),
+      },
     },
   )
   const stopSidecars = async () => {
@@ -327,7 +329,9 @@ const main = Effect.gen(function* () {
       password,
     })
 
-    void wslServers.initialize().catch((error) => logger.error("wsl server initialization failed", error))
+    if (process.platform === "win32") {
+      void wslServers.initialize().catch((error) => logger.error("wsl server initialization failed", error))
+    }
 
     yield* Effect.promise(() => health.wait).pipe(
       Effect.timeout("30 seconds"),

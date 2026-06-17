@@ -1,197 +1,78 @@
-export * as Log from "./log"
+// fork: compatibility shim for the legacy logger.
+//
+// Upstream removed this module in #31310 ("refactor(core): replace legacy
+// logger with Effect logging"). Several fork-only modules still use the old
+// `Log.create({ service }).info/warn/error/debug` API — beads, local-provider
+// sync, and the provider openai-compatible discovery path. Rather than rewrite
+// each to Effect logging mid-sync, we keep a minimal console-backed
+// implementation at the original import path. Upstream has abandoned this path,
+// so it will never conflict on future syncs.
+//
+// To retire this shim later, migrate those callers to upstream's Effect logging
+// and delete this file (and its manifest entry).
 
-import path from "path"
-import fs from "fs/promises"
-import { createWriteStream } from "fs"
-import * as Global from "../global"
-import { Schema } from "effect"
-import { Glob } from "./glob"
+const LEVELS = { DEBUG: 10, INFO: 20, WARN: 30, ERROR: 40 } as const
+type LevelName = keyof typeof LEVELS
 
-export const Level = Schema.Literals(["DEBUG", "INFO", "WARN", "ERROR"]).annotate({
-  identifier: "LogLevel",
-  description: "Log level",
-})
-export type Level = Schema.Schema.Type<typeof Level>
-
-const levelPriority: Record<Level, number> = {
-  DEBUG: 0,
-  INFO: 1,
-  WARN: 2,
-  ERROR: 3,
-}
-const keep = 10
-const initializedRunID = "OPENCODE_LOG_INITIALIZED_RUN_ID"
-
-let level: Level = "INFO"
-
-function shouldLog(input: Level): boolean {
-  return levelPriority[input] >= levelPriority[level]
+function threshold(): number {
+  const env = (process.env["OPENCODE_LOG_LEVEL"] ?? "INFO").toUpperCase()
+  return LEVELS[env as LevelName] ?? LEVELS.INFO
 }
 
 export type Logger = {
   debug(message?: any, extra?: Record<string, any>): void
   info(message?: any, extra?: Record<string, any>): void
-  error(message?: any, extra?: Record<string, any>): void
   warn(message?: any, extra?: Record<string, any>): void
+  error(message?: any, extra?: Record<string, any>): void
   tag(key: string, value: string): Logger
   clone(): Logger
-  time(
-    message: string,
-    extra?: Record<string, any>,
-  ): {
-    stop(): void
-    [Symbol.dispose](): void
-  }
+  time(message: string, extra?: Record<string, any>): { stop(): void; [Symbol.dispose](): void }
 }
 
-const loggers = new Map<string, Logger>()
+const cache = new Map<string, Logger>()
 
-export const Default = create({ service: "default" })
+export function create(tags: Record<string, any> = {}): Logger {
+  const service = typeof tags["service"] === "string" ? (tags["service"] as string) : undefined
+  if (service && cache.has(service)) return cache.get(service)!
 
-export interface Options {
-  print: boolean
-  dev?: boolean
-  level?: Level
-}
-
-let logpath = ""
-export function file() {
-  return logpath
-}
-export function getLevel(): Level {
-  return level
-}
-let write = (msg: any) => {
-  process.stderr.write(msg)
-  return msg.length
-}
-
-export async function init(options: Options) {
-  if (options.level) level = options.level
-  void cleanup(Global.Path.log)
-  if (options.print) return
-  logpath = path.join(
-    Global.Path.log,
-    options.dev ? "dev.log" : new Date().toISOString().split(".")[0].replace(/:/g, "") + ".log",
-  )
-  const runID = process.env.OPENCODE_RUN_ID
-  const shouldTruncate = !options.dev || !runID || process.env[initializedRunID] !== runID
-  if (shouldTruncate) await fs.truncate(logpath).catch(() => {})
-  if (options.dev && runID) process.env[initializedRunID] = runID
-  const stream = createWriteStream(logpath, { flags: "a" })
-  write = async (msg: any) => {
-    return new Promise((resolve, reject) => {
-      stream.write(msg, (err) => {
-        if (err) reject(err)
-        else resolve(msg.length)
-      })
-    })
-  }
-}
-
-async function cleanup(dir: string) {
-  const files = (
-    await Glob.scan("????-??-??T??????.log", {
-      cwd: dir,
-      absolute: false,
-      include: "file",
-    }).catch(() => [])
-  )
-    .filter((file) => path.basename(file) === file)
-    .sort()
-  if (files.length <= keep) return
-
-  const doomed = files.slice(0, -keep)
-  await Promise.all(doomed.map((file) => fs.unlink(path.join(dir, file)).catch(() => {})))
-}
-
-function formatError(error: Error, depth = 0): string {
-  const result = error.message
-  return error.cause instanceof Error && depth < 10
-    ? result + " Caused by: " + formatError(error.cause, depth + 1)
-    : result
-}
-
-let last = Date.now()
-export function create(tags?: Record<string, any>) {
-  tags = tags || {}
-
-  const service = tags["service"]
-  if (service && typeof service === "string") {
-    const cached = loggers.get(service)
-    if (cached) {
-      return cached
-    }
-  }
-
-  function build(message: any, extra?: Record<string, any>) {
-    const prefix = Object.entries({
-      ...tags,
-      ...extra,
-    })
-      .filter(([_, value]) => value !== undefined && value !== null)
-      .map(([key, value]) => {
-        const prefix = `${key}=`
-        if (value instanceof Error) return prefix + formatError(value)
-        if (typeof value === "object") return prefix + JSON.stringify(value)
-        return prefix + value
-      })
+  const format = (level: LevelName, message: any, extra?: Record<string, any>) => {
+    const merged = { ...tags, ...extra }
+    const fields = Object.entries(merged)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
       .join(" ")
-    const next = new Date()
-    const diff = next.getTime() - last
-    last = next.getTime()
-    return [next.toISOString().split(".")[0], "+" + diff + "ms", prefix, message].filter(Boolean).join(" ") + "\n"
+    return [new Date().toISOString().split(".")[0], level.padEnd(5), message, fields].filter(Boolean).join(" ")
   }
+
+  const emit = (level: LevelName, message?: any, extra?: Record<string, any>) => {
+    if (LEVELS[level] < threshold()) return
+    const line = format(level, message, extra)
+    if (level === "ERROR" || level === "WARN") process.stderr.write(line + "\n")
+    else process.stdout.write(line + "\n")
+  }
+
   const result: Logger = {
-    debug(message?: any, extra?: Record<string, any>) {
-      if (shouldLog("DEBUG")) {
-        write("DEBUG " + build(message, extra))
-      }
-    },
-    info(message?: any, extra?: Record<string, any>) {
-      if (shouldLog("INFO")) {
-        write("INFO  " + build(message, extra))
-      }
-    },
-    error(message?: any, extra?: Record<string, any>) {
-      if (shouldLog("ERROR")) {
-        write("ERROR " + build(message, extra))
-      }
-    },
-    warn(message?: any, extra?: Record<string, any>) {
-      if (shouldLog("WARN")) {
-        write("WARN  " + build(message, extra))
-      }
-    },
-    tag(key: string, value: string) {
-      if (tags) tags[key] = value
+    debug: (m, e) => emit("DEBUG", m, e),
+    info: (m, e) => emit("INFO", m, e),
+    warn: (m, e) => emit("WARN", m, e),
+    error: (m, e) => emit("ERROR", m, e),
+    tag(key, value) {
+      tags[key] = value
       return result
     },
     clone() {
       return create({ ...tags })
     },
-    time(message: string, extra?: Record<string, any>) {
-      const now = Date.now()
+    time(message, extra) {
+      const start = Date.now()
       result.info(message, { status: "started", ...extra })
-      function stop() {
-        result.info(message, {
-          status: "completed",
-          duration: Date.now() - now,
-          ...extra,
-        })
-      }
-      return {
-        stop,
-        [Symbol.dispose]() {
-          stop()
-        },
-      }
+      const stop = () => result.info(message, { status: "completed", duration: Date.now() - start, ...extra })
+      return { stop, [Symbol.dispose]: stop }
     },
   }
 
-  if (service && typeof service === "string") {
-    loggers.set(service, result)
-  }
-
+  if (service) cache.set(service, result)
   return result
 }
+
+export const Default = create({ service: "default" })

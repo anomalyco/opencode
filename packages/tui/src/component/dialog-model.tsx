@@ -1,6 +1,5 @@
 import { createMemo, createSignal, onMount } from "solid-js"
 import { useLocal } from "../context/local"
-import { useSync } from "../context/sync"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
@@ -10,6 +9,7 @@ import { DialogModelCtx } from "./dialog-model-ctx"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 import { useToast } from "../ui/toast"
+import { useSync } from "../context/sync"
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
@@ -36,7 +36,7 @@ export function DialogModel(props: { providerID?: string }) {
     function toOptions(items: typeof favorites, category: string) {
       if (!showSections) return []
       return items.flatMap((item) => {
-        const provider = sync.data.provider.find((x) => x.id === item.providerID)
+        const provider = sync.data.provider.find((provider) => provider.id === item.providerID)
         if (!provider) return []
         const model = provider.models[item.modelID]
         if (!model) return []
@@ -91,11 +91,19 @@ export function DialogModel(props: { providerID?: string }) {
               onSelect(provider.id, model)
             },
           })),
-          filter((x) => {
+          filter((option) => {
             if (!showSections) return true
-            if (favorites.some((item) => item.providerID === x.value.providerID && item.modelID === x.value.modelID))
+            if (
+              favorites.some(
+                (item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID,
+              )
+            )
               return false
-            if (recents.some((item) => item.providerID === x.value.providerID && item.modelID === x.value.modelID))
+            if (
+              recents.some(
+                (item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID,
+              )
+            )
               return false
             return true
           }),
@@ -126,7 +134,7 @@ export function DialogModel(props: { providerID?: string }) {
   })
 
   const provider = createMemo(() =>
-    props.providerID ? sync.data.provider.find((x) => x.id === props.providerID) : null,
+    props.providerID ? sync.data.provider.find((item) => item.id === props.providerID) : null,
   )
 
   const title = createMemo(() => {
@@ -193,7 +201,7 @@ export function DialogModel(props: { providerID?: string }) {
   )
 }
 
-export function sortModelOptions<T extends { footer?: string; releaseDate: string; title: string }>(
+export function sortModelOptions<T extends { footer?: string; releaseDate: string | number; title: string }>(
   options: T[],
   newestFirst: boolean,
 ) {
