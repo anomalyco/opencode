@@ -237,6 +237,16 @@ export function DialogSessionList() {
       const status = sync.data.session_status?.[x.id]
       const isWorking = status?.type === "busy" || status?.type === "retry"
       const slot = slotByID.get(x.id)
+      // TODO(s2s): unread badge from S2SStore.countUndelivered once a list-data
+      // path exists. The TUI's session list is fed by `sync.data.session`
+      // (populated via session.updated SSE events) and currently has no inbox
+      // count field. Wiring it requires a new server route (S2SStore is an
+      // Effect service on the opencode server side, not reachable from the
+      // TUI client) + a new SDK method + a sync-store field + a subscription
+      // that updates as rows are claimed — a heavy new sync wire that's out
+      // of scope for v1. Once that exists, render the count here (e.g. a small
+      // badge next to the slot / spinner) so users can see undelivered s2s
+      // inbox messages at a glance.
       const gutter = isWorking
         ? () => <Spinner />
         : slot !== undefined

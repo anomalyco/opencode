@@ -60,8 +60,10 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
   )
 
-const it = testEffect(layer())
-const background = testEffect(layer({ experimentalBackgroundSubagents: true }))
+const withRipgrep = (flags: Partial<RuntimeFlags.Info> = {}) => layer(flags).pipe(Layer.provide(Ripgrep.defaultLayer))
+
+const it = testEffect(withRipgrep())
+const background = testEffect(withRipgrep({ experimentalBackgroundSubagents: true }))
 
 function defer<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
