@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { Effect, Layer, Option } from "effect"
 import { Session as SessionNs } from "@/session/session"
@@ -7,11 +7,9 @@ import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 
 import { NotFoundError } from "@/storage/storage"
-import * as Log from "@opencode-ai/core/util/log"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-
-void Log.init({ print: false })
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const it = testEffect(Layer.mergeAll(SessionNs.defaultLayer, Database.defaultLayer))
 
@@ -48,7 +46,7 @@ const fill = Effect.fn("Test.fill")(function* (
       model: { providerID: "test", modelID: "test" },
       tools: {},
       mode: "",
-    } as unknown as SessionLegacy.Info)
+    } as unknown as SessionV1.Info)
     yield* session.updatePart({
       id: PartID.ascending(),
       sessionID,
@@ -72,7 +70,7 @@ const addUser = Effect.fn("Test.addUser")(function* (sessionID: SessionID, text?
     model: { providerID: "test", modelID: "test" },
     tools: {},
     mode: "",
-  } as unknown as SessionLegacy.Info)
+  } as unknown as SessionV1.Info)
   if (text) {
     yield* session.updatePart({
       id: PartID.ascending(),
@@ -88,7 +86,7 @@ const addUser = Effect.fn("Test.addUser")(function* (sessionID: SessionID, text?
 const addAssistant = Effect.fn("Test.addAssistant")(function* (
   sessionID: SessionID,
   parentID: MessageID,
-  opts?: { summary?: boolean; finish?: string; error?: SessionLegacy.Assistant["error"] },
+  opts?: { summary?: boolean; finish?: string; error?: SessionV1.Assistant["error"] },
 ) {
   const session = yield* SessionNs.Service
   const id = MessageID.ascending()
@@ -98,7 +96,7 @@ const addAssistant = Effect.fn("Test.addAssistant")(function* (
     role: "assistant",
     time: { created: Date.now() },
     parentID,
-    modelID: ProviderV2.ModelID.make("test"),
+    modelID: ModelV2.ID.make("test"),
     providerID: ProviderV2.ID.make("test"),
     mode: "",
     agent: "default",
@@ -108,7 +106,7 @@ const addAssistant = Effect.fn("Test.addAssistant")(function* (
     summary: opts?.summary,
     finish: opts?.finish,
     error: opts?.error,
-  } as unknown as SessionLegacy.Info)
+  } as unknown as SessionV1.Info)
   return id
 })
 
@@ -388,7 +386,7 @@ describe("MessageV2.parts", () => {
         const result = yield* MessageV2.parts(id)
         expect(result).toHaveLength(1)
         expect(result[0].type).toBe("text")
-        expect((result[0] as SessionLegacy.TextPart).text).toBe("m0")
+        expect((result[0] as SessionV1.TextPart).text).toBe("m0")
       }),
     ),
   )
@@ -426,9 +424,9 @@ describe("MessageV2.parts", () => {
 
         const result = yield* MessageV2.parts(id)
         expect(result).toHaveLength(3)
-        expect((result[0] as SessionLegacy.TextPart).text).toBe("m0")
-        expect((result[1] as SessionLegacy.TextPart).text).toBe("second")
-        expect((result[2] as SessionLegacy.TextPart).text).toBe("third")
+        expect((result[0] as SessionV1.TextPart).text).toBe("m0")
+        expect((result[1] as SessionV1.TextPart).text).toBe("second")
+        expect((result[2] as SessionV1.TextPart).text).toBe("third")
       }),
     ),
   )
@@ -465,7 +463,7 @@ describe("MessageV2.get", () => {
         expect(result.info.sessionID).toBe(sessionID)
         expect(result.info.role).toBe("user")
         expect(result.parts).toHaveLength(1)
-        expect((result.parts[0] as SessionLegacy.TextPart).text).toBe("m0")
+        expect((result.parts[0] as SessionV1.TextPart).text).toBe("m0")
       }),
     ),
   )
@@ -535,7 +533,7 @@ describe("MessageV2.get", () => {
         const result = yield* MessageV2.get({ sessionID, messageID: aid })
         expect(result.info.role).toBe("assistant")
         expect(result.parts).toHaveLength(1)
-        expect((result.parts[0] as SessionLegacy.TextPart).text).toBe("response")
+        expect((result.parts[0] as SessionV1.TextPart).text).toBe("response")
       }),
     ),
   )
@@ -671,10 +669,10 @@ describe("MessageV2.filterCompacted", () => {
         const u1 = yield* addUser(sessionID, "hello")
         yield* addCompactionPart(sessionID, u1)
 
-        const error = new SessionLegacy.APIError({
+        const error = new SessionV1.APIError({
           message: "boom",
           isRetryable: true,
-        }).toObject() as SessionLegacy.Assistant["error"]
+        }).toObject() as SessionV1.Assistant["error"]
         yield* addAssistant(sessionID, u1, { summary: true, finish: "end_turn", error })
         yield* addUser(sessionID, "retry")
 
@@ -950,7 +948,7 @@ describe("MessageV2.filterCompacted", () => {
   test("works with array input", () => {
     // filterCompacted accepts any Iterable, not just generators
     const id = MessageID.ascending()
-    const items: SessionLegacy.WithParts[] = [
+    const items: SessionV1.WithParts[] = [
       {
         info: {
           id,
@@ -959,8 +957,8 @@ describe("MessageV2.filterCompacted", () => {
           time: { created: 1 },
           agent: "test",
           model: { providerID: "test", modelID: "test" },
-        } as unknown as SessionLegacy.Info,
-        parts: [{ type: "text", text: "hello" }] as unknown as SessionLegacy.Part[],
+        } as unknown as SessionV1.Info,
+        parts: [{ type: "text", text: "hello" }] as unknown as SessionV1.Part[],
       },
     ]
     const result = MessageV2.filterCompacted(items)
@@ -1026,7 +1024,7 @@ describe("MessageV2 consistency", () => {
 
         const streamed = yield* MessageV2.stream(sessionID)
 
-        const paged = [] as SessionLegacy.WithParts[]
+        const paged = [] as SessionV1.WithParts[]
         let cursor: string | undefined
         while (true) {
           const result = yield* MessageV2.page({ sessionID, limit: 3, before: cursor })

@@ -50,21 +50,28 @@ export function ProjectAvatar(props: ProjectAvatarProps) {
     <div
       {...rest}
       data-component="project-avatar-v2"
-      data-variant={split.variant ?? "gray"}
-      data-has-image={src ? "" : undefined}
       data-unread={split.unread ? "" : undefined}
-      data-loading={split.loading ? "" : undefined}
       classList={{
         ...split.classList,
         [split.class ?? ""]: !!split.class,
       }}
       style={typeof split.style === "object" ? split.style : undefined}
     >
-      <Show when={src} fallback={first(split.fallback)}>
-        {(value) => <img src={value()} draggable={false} data-slot="project-avatar-image" />}
-      </Show>
-      <Show when={split.loading}>
-        <span data-slot="project-avatar-loader" aria-hidden="true" />
+      <div
+        data-slot="project-avatar-surface"
+        data-variant={split.variant ?? "gray"}
+        data-has-image={src ? "" : undefined}
+        data-loading={split.loading ? "" : undefined}
+      >
+        <Show when={src} fallback={first(split.fallback)}>
+          {(value) => <img src={value()} draggable={false} data-slot="project-avatar-image" />}
+        </Show>
+        <Show when={split.loading}>
+          <span data-slot="project-avatar-loader" aria-hidden="true" />
+        </Show>
+      </div>
+      <Show when={split.unread}>
+        <span data-slot="project-avatar-unread-dot" aria-hidden="true" />
       </Show>
     </div>
   )

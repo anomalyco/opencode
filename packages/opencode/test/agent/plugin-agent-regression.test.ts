@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { Effect, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import path from "path"
@@ -18,14 +19,14 @@ import { SkillTest } from "../fake/skill"
 import { testEffect } from "../lib/effect"
 import { PLUGIN_AGENT } from "../fixture/agent-plugin.constants"
 
-// `it.instance` skips InstanceBootstrap so FileWatcher / LSP / MCP don't spin
-// up — those services hang during scope teardown on Windows and aren't needed
+// `it.instance` skips InstanceBootstrap so LSP / MCP don't spin up — those
+// services hang during scope teardown on Windows and aren't needed
 // to verify plugin → config hook → Agent.list.
 const pluginUrl = pathToFileURL(path.join(import.meta.dir, "..", "fixture", "agent-plugin.ts")).href
 
 const provider = ProviderTest.fake()
 const configLayer = Config.layer.pipe(
-  Layer.provide(AppFileSystem.defaultLayer),
+  Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Env.defaultLayer),
   Layer.provide(AuthTest.empty),
   Layer.provide(AccountTest.empty),
@@ -43,6 +44,7 @@ const agentLayer = Agent.layer.pipe(
   Layer.provide(SkillTest.empty),
   Layer.provide(provider.layer),
   Layer.provide(pluginLayer),
+  Layer.provide(LocationServiceMap.layer),
   Layer.provide(RuntimeFlags.layer({ disableDefaultPlugins: true })),
 )
 

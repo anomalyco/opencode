@@ -1,5 +1,5 @@
 import type { Session as SDKSession, Message, Part } from "@opencode-ai/sdk/v2"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Session } from "@/session/session"
 import { MessageV2 } from "../../session/message-v2"
 import { CliError, effectCmd } from "../effect-cmd"
@@ -9,12 +9,12 @@ import { InstanceRef } from "@/effect/instance-ref"
 import { ShareNext } from "@/share/share-next"
 import { EOL } from "os"
 import path from "path"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, Schema } from "effect"
 import type { InstanceContext } from "@/project/instance-context"
 
-const decodeMessageInfo = Schema.decodeUnknownSync(SessionLegacy.Info)
-const decodePart = Schema.decodeUnknownSync(SessionLegacy.Part)
+const decodeMessageInfo = Schema.decodeUnknownSync(SessionV1.Info)
+const decodePart = Schema.decodeUnknownSync(SessionV1.Part)
 
 /** Discriminated union returned by the ShareNext API (GET /api/shares/:id/data) */
 export type ShareData =
@@ -98,7 +98,7 @@ export const ImportCommand = effectCmd({
 
 const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: InstanceContext) {
   const share = yield* ShareNext.Service
-  const fs = yield* AppFileSystem.Service
+  const fs = yield* FSUtil.Service
   const { db } = yield* Database.Service
 
   let exportData: ExportData | undefined
@@ -188,7 +188,7 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
     .pipe(Effect.orDie)
 
   for (const msg of exportData.messages) {
-    const msgInfo = decodeMessageInfo(msg.info) as SessionLegacy.Info
+    const msgInfo = decodeMessageInfo(msg.info) as SessionV1.Info
     const { id, sessionID: _, ...msgData } = msgInfo
     yield* db
       .insert(MessageTable)
@@ -203,7 +203,7 @@ const runImport = Effect.fn("Cli.import.body")(function* (file: string, ctx: Ins
       .pipe(Effect.orDie)
 
     for (const part of msg.parts) {
-      const partInfo = decodePart(part) as SessionLegacy.Part
+      const partInfo = decodePart(part) as SessionV1.Part
       const { id: partId, sessionID: _s, messageID, ...partData } = partInfo
       yield* db
         .insert(PartTable)

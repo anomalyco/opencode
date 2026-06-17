@@ -1,13 +1,15 @@
-import { and, asc, eq } from "drizzle-orm"
+import { and, asc, eq, inArray } from "drizzle-orm"
 import { Effect, Layer } from "effect"
 import * as Context from "effect/Context"
 import { DatabaseError, DrizzleClient } from "../database"
 import { providerStat } from "../database/schema"
+import { RETIRED_STAT_PROVIDERS } from "./model-normalization"
 import {
   chunks,
   collapseRows,
   inserted,
   rankRowsWithMarketShare,
+  statRowScope,
   synthesizeAllTierRows,
   toStatBaseRow,
   UPSERT_CHUNK_SIZE,
@@ -36,6 +38,7 @@ export declare namespace ProviderStatRepo {
       readonly source?: string
     }) => Effect.Effect<ProviderStatRow[], DatabaseError>
     readonly upsert: (rows: ProviderStatRow[]) => Effect.Effect<void, DatabaseError>
+    readonly deleteRetiredDimensions: (rows: ProviderStatRow[]) => Effect.Effect<void, DatabaseError>
   }
 }
 
@@ -59,7 +62,14 @@ export class ProviderStatRepo extends Context.Service<ProviderStatRepo, Provider
                 totalTokens: providerStat.total_tokens,
               })
               .from(providerStat)
-              .where(and(eq(providerStat.grain, "day"), eq(providerStat.client, "all"), eq(providerStat.source, "all")))
+              .where(
+                and(
+                  eq(providerStat.grain, "day"),
+                  eq(providerStat.client, "all"),
+                  eq(providerStat.source, "all"),
+                  inArray(providerStat.tier, ["Go", "go"]),
+                ),
+              )
               .orderBy(asc(providerStat.period_key)),
           catch: (cause) => DatabaseError.make({ cause }),
         })
@@ -138,7 +148,31 @@ export class ProviderStatRepo extends Context.Service<ProviderStatRepo, Provider
         )
       })
 
-      return ProviderStatRepo.of({ listDaily, listByPeriod, upsert })
+      const deleteRetiredDimensions = Effect.fn("ProviderStatRepo.deleteRetiredDimensions")(function* (
+        rows: ProviderStatRow[],
+      ) {
+        const scope = statRowScope(rows)
+        if (!scope) return
+
+        yield* Effect.tryPromise({
+          try: () =>
+            db
+              .delete(providerStat)
+              .where(
+                and(
+                  inArray(providerStat.grain, scope.grains),
+                  inArray(providerStat.period_key, scope.periodKeys),
+                  inArray(providerStat.dataset, scope.datasets),
+                  inArray(providerStat.client, scope.clients),
+                  inArray(providerStat.source, scope.sources),
+                  inArray(providerStat.provider, RETIRED_STAT_PROVIDERS),
+                ),
+              ),
+          catch: (cause) => DatabaseError.make({ cause }),
+        })
+      })
+
+      return ProviderStatRepo.of({ listDaily, listByPeriod, upsert, deleteRetiredDimensions })
     }),
   )
 }

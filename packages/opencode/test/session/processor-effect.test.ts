@@ -1,18 +1,13 @@
-import { NodeFileSystem } from "@effect/platform-node"
-import { SessionLegacy } from "@opencode-ai/core/session/legacy"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
 import { tool } from "ai"
-import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import path from "path"
 import z from "zod"
 import type { Agent } from "../../src/agent/agent"
-import { Agent as AgentSvc } from "../../src/agent/agent"
-import { Config } from "@/config/config"
-import { Image } from "@/image/image"
-import { Permission } from "../../src/permission"
-import { Plugin } from "../../src/plugin"
 import { Provider } from "@/provider/provider"
 
 import { Session } from "@/session/session"
@@ -22,16 +17,16 @@ import { SessionProcessor } from "../../src/session/processor"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
-import { Snapshot } from "../../src/snapshot"
-import * as Log from "@opencode-ai/core/util/log"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { provideTmpdirServer } from "../fixture/fixture"
+import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { raw, reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-
-void Log.init({ print: false })
+import { ModelV2 } from "@opencode-ai/core/model"
+import { SessionEvent } from "@opencode-ai/core/session/event"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { LLMEvent } from "@opencode-ai/llm"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -44,7 +39,7 @@ const summary = Layer.succeed(
 
 const ref = {
   providerID: ProviderV2.ID.make("test"),
-  modelID: ProviderV2.ModelID.make("test-model"),
+  modelID: ModelV2.ID.make("test-model"),
 }
 
 const cfg = {
@@ -146,7 +141,7 @@ const assistant = Effect.fn("TestSession.assistant")(function* (
   root: string,
 ) {
   const session = yield* Session.Service
-  const msg: SessionLegacy.Assistant = {
+  const msg: SessionV1.Assistant = {
     id: MessageID.ascending(),
     role: "assistant",
     sessionID,
@@ -171,32 +166,67 @@ const assistant = Effect.fn("TestSession.assistant")(function* (
   return msg
 })
 
-const status = SessionStatus.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer))
-const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
-const deps = Layer.mergeAll(
-  Session.defaultLayer,
-  Snapshot.defaultLayer,
-  AgentSvc.defaultLayer,
-  Permission.defaultLayer,
-  Plugin.defaultLayer,
-  Config.defaultLayer,
-  LLM.defaultLayer,
-  Provider.defaultLayer,
-  status,
-  Database.defaultLayer,
-  EventV2Bridge.defaultLayer,
-).pipe(Layer.provideMerge(infra))
-const env = Layer.mergeAll(
-  TestLLMServer.layer,
-  SessionProcessor.layer.pipe(
-    Layer.provide(summary),
-    Layer.provide(Image.defaultLayer),
-    Layer.provide(RuntimeFlags.layer({ experimentalEventSystem: true })),
-    Layer.provideMerge(deps),
-  ),
-)
+const root = LayerNode.group([
+  SessionProcessor.node,
+  Session.node,
+  SessionProjector.node,
+  Provider.node,
+  Database.node,
+  EventV2Bridge.node,
+  SessionStatus.node,
+  CrossSpawnSpawner.node,
+])
+const replacements = [
+  LayerNode.replace(SessionSummary.node, summary),
+  LayerNode.replace(RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true })),
+]
+const env = LayerNode.buildLayer(LayerNode.group([root, LayerNode.make(TestLLMServer.layer, [])]), { replacements })
 
 const it = testEffect(env)
+
+const providerErrorLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.make(
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolInputStart({ id: "call-1", name: "lookup" }),
+        LLMEvent.toolInputEnd({ id: "call-1", name: "lookup" }),
+        LLMEvent.toolCall({ id: "call-1", name: "lookup", input: {}, providerExecuted: true }),
+        LLMEvent.toolResult({
+          id: "call-1",
+          name: "lookup",
+          result: { type: "error", value: "provider boom" },
+          providerExecuted: true,
+        }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ),
+  }),
+)
+const providerErrorEnv = LayerNode.buildLayer(root, {
+  replacements: [...replacements, LayerNode.replace(LLM.node, providerErrorLLM)],
+})
+const itProviderError = testEffect(providerErrorEnv)
+
+const fragmentFailureLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.make(
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.reasoningStart({ id: "reasoning-1" }),
+        LLMEvent.reasoningDelta({ id: "reasoning-1", text: "thinking" }),
+        LLMEvent.textStart({ id: "text-1" }),
+        LLMEvent.textDelta({ id: "text-1", text: "partial" }),
+        LLMEvent.providerError({ message: "provider boom" }),
+      ),
+  }),
+)
+const fragmentFailureEnv = LayerNode.buildLayer(root, {
+  replacements: [...replacements, LayerNode.replace(LLM.node, fragmentFailureLLM)],
+})
+const itFragmentFailure = testEffect(fragmentFailureEnv)
 
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
@@ -236,7 +266,7 @@ it.live("session.processor effect tests capture llm input cleanly", () =>
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -309,7 +339,7 @@ it.live("session.processor effect tests preserve text start time", () =>
               time: parent.time,
               agent: parent.agent,
               model: { providerID: ref.providerID, modelID: ref.modelID },
-            } satisfies SessionLegacy.User,
+            } satisfies SessionV1.User,
             sessionID: chat.id,
             model: mdl,
             agent: agent(),
@@ -321,7 +351,7 @@ it.live("session.processor effect tests preserve text start time", () =>
 
         yield* waitFor(
           MessageV2.parts(msg.id).pipe(
-            Effect.map((parts) => parts.find((part): part is SessionLegacy.TextPart => part.type === "text")),
+            Effect.map((parts) => parts.find((part): part is SessionV1.TextPart => part.type === "text")),
             Effect.provideService(Database.Service, database),
           ),
           "timed out waiting for text part",
@@ -330,9 +360,7 @@ it.live("session.processor effect tests preserve text start time", () =>
         gate.resolve()
 
         const exit = yield* Fiber.await(run)
-        const text = (yield* MessageV2.parts(msg.id)).find(
-          (part): part is SessionLegacy.TextPart => part.type === "text",
-        )
+        const text = (yield* MessageV2.parts(msg.id)).find((part): part is SessionV1.TextPart => part.type === "text")
 
         expect(Exit.isSuccess(exit)).toBe(true)
         expect(text?.text).toBe("hello")
@@ -373,7 +401,7 @@ it.live("session.processor effect tests stop after token overflow requests compa
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -419,7 +447,7 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -429,8 +457,8 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
         })
 
         const parts = yield* MessageV2.parts(msg.id)
-        const reasoning = parts.find((part): part is SessionLegacy.ReasoningPart => part.type === "reasoning")
-        const text = parts.find((part): part is SessionLegacy.TextPart => part.type === "text")
+        const reasoning = parts.find((part): part is SessionV1.ReasoningPart => part.type === "reasoning")
+        const text = parts.find((part): part is SessionV1.TextPart => part.type === "text")
 
         expect(value).toBe("continue")
         expect(yield* llm.calls).toBe(1)
@@ -467,7 +495,7 @@ it.live("session.processor effect tests reset reasoning state across retries", (
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -477,7 +505,7 @@ it.live("session.processor effect tests reset reasoning state across retries", (
         })
 
         const parts = yield* MessageV2.parts(msg.id)
-        const reasoning = parts.filter((part): part is SessionLegacy.ReasoningPart => part.type === "reasoning")
+        const reasoning = parts.filter((part): part is SessionV1.ReasoningPart => part.type === "reasoning")
 
         expect(value).toBe("continue")
         expect(yield* llm.calls).toBe(2)
@@ -514,7 +542,7 @@ it.live("session.processor effect tests do not retry unknown json errors", () =>
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -558,7 +586,7 @@ it.live("session.processor effect tests retry recognized structured json errors"
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -613,7 +641,7 @@ it.live("session.processor effect tests publish retry status updates", () =>
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -658,7 +686,7 @@ it.live("session.processor effect tests compact on structured context overflow",
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -701,7 +729,7 @@ it.live("session.processor effect tests complete AI SDK tool calls when native f
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -721,7 +749,7 @@ it.live("session.processor effect tests complete AI SDK tool calls when native f
         })
 
         const parts = yield* MessageV2.parts(msg.id)
-        const call = parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")
+        const call = parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
 
         expect(value).toBe("continue")
         expect(yield* llm.calls).toBe(1)
@@ -768,7 +796,7 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
               time: parent.time,
               agent: parent.agent,
               model: { providerID: ref.providerID, modelID: ref.modelID },
-            } satisfies SessionLegacy.User,
+            } satisfies SessionV1.User,
             sessionID: chat.id,
             model: mdl,
             agent: agent(),
@@ -781,7 +809,7 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
         yield* llm.wait(1)
         yield* waitFor(
           MessageV2.parts(msg.id).pipe(
-            Effect.map((parts) => parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")),
+            Effect.map((parts) => parts.find((part): part is SessionV1.ToolPart => part.type === "tool")),
             Effect.provideService(Database.Service, database),
           ),
           "timed out waiting for tool part",
@@ -790,7 +818,7 @@ it.live("session.processor effect tests mark pending tools as aborted on cleanup
 
         const exit = yield* Fiber.await(run)
         const parts = yield* MessageV2.parts(msg.id)
-        const call = parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")
+        const call = parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
 
         expect(Exit.isFailure(exit)).toBe(true)
         if (Exit.isFailure(exit)) {
@@ -847,7 +875,7 @@ it.live("session.processor effect tests record aborted errors and idle state", (
               time: parent.time,
               agent: parent.agent,
               model: { providerID: ref.providerID, modelID: ref.modelID },
-            } satisfies SessionLegacy.User,
+            } satisfies SessionV1.User,
             sessionID: chat.id,
             model: mdl,
             agent: agent(),
@@ -910,7 +938,7 @@ it.live("session.processor effect tests mark interruptions aborted without manua
               time: parent.time,
               agent: parent.agent,
               model: { providerID: ref.providerID, modelID: ref.modelID },
-            } satisfies SessionLegacy.User,
+            } satisfies SessionV1.User,
             sessionID: chat.id,
             model: mdl,
             agent: agent(),
@@ -936,5 +964,113 @@ it.live("session.processor effect tests mark interruptions aborted without manua
         expect(state).toMatchObject({ type: "idle" })
       }),
     { config: (url) => providerCfg(url) },
+  ),
+)
+
+itProviderError.live("session.processor effect tests fail provider-executed error results", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const events = yield* EventV2Bridge.Service
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "provider tool error")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const settlements: Array<typeof SessionEvent.Tool.Failed.Type> = []
+        const off = yield* events.listen((event) => {
+          if (event.type === SessionEvent.Tool.Failed.type)
+            settlements.push(event as typeof SessionEvent.Tool.Failed.Type)
+          return Effect.void
+        })
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+        yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "provider tool error" }],
+          tools: {},
+        })
+        yield* off
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const call = parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
+        expect(call?.state.status).toBe("error")
+        if (call?.state.status === "error") expect(call.state.error).toBe("provider boom")
+        expect(settlements).toHaveLength(1)
+        expect(settlements[0]?.data).toMatchObject({
+          callID: "call-1",
+          error: { type: "unknown", message: "provider boom" },
+          result: { type: "error", value: "provider boom" },
+          provider: { executed: true },
+        })
+      }),
+    { config: cfg },
+  ),
+)
+
+itFragmentFailure.live("session.processor effect tests flush partial v2 fragments before step failure", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const events = yield* EventV2Bridge.Service
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "provider failure")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const seen: string[] = []
+        let text: string | undefined
+        let reasoning: string | undefined
+        const off = yield* events.listen((event) => {
+          seen.push(event.type)
+          if (event.type === SessionEvent.Text.Ended.type)
+            text = (event.data as typeof SessionEvent.Text.Ended.data.Type).text
+          if (event.type === SessionEvent.Reasoning.Ended.type)
+            reasoning = (event.data as typeof SessionEvent.Reasoning.Ended.data.Type).text
+          return Effect.void
+        })
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+        expect(
+          yield* handle.process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies SessionV1.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "provider failure" }],
+            tools: {},
+          }),
+        ).toBe("stop")
+        yield* off
+
+        const failed = seen.indexOf(SessionEvent.Step.Failed.type)
+        expect(failed).toBeGreaterThan(-1)
+        expect(seen.indexOf(SessionEvent.Text.Ended.type)).toBeLessThan(failed)
+        expect(seen.indexOf(SessionEvent.Reasoning.Ended.type)).toBeLessThan(failed)
+        expect(text).toBe("partial")
+        expect(reasoning).toBe("thinking")
+      }),
+    { config: cfg },
   ),
 )

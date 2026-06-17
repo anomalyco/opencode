@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { pathToFileURL } from "url"
 import { Effect, Layer } from "effect"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { ProviderAuth } from "@/provider/auth"
 
@@ -15,7 +15,7 @@ import { testEffect } from "../lib/effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 
-const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, AppFileSystem.defaultLayer))
+const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, FSUtil.defaultLayer))
 
 function layer(directory: string, plugins: string[]) {
   return ProviderAuth.layer.pipe(
@@ -49,7 +49,7 @@ describe("plugin.auth-override", () => {
     () =>
       Effect.gen(function* () {
         const tmp = yield* TestInstance
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const pluginDir = path.join(tmp.directory, ".opencode", "plugin")
 
         yield* fs.writeWithDirs(

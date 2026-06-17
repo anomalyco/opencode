@@ -1,14 +1,16 @@
 export * as Catalog from "./catalog"
 
-import { Context, Effect, Layer, Option, Order, pipe, Schema, Array, Scope, Stream } from "effect"
+import { Array, Context, Effect, Layer, Option, Order, pipe, Schema, Scope, Stream } from "effect"
 import { castDraft, enableMapSet, type Draft } from "immer"
 import { ModelV2 } from "./model"
+import { ModelRequest } from "./model-request"
 import { PluginV2 } from "./plugin"
 import { ProviderV2 } from "./provider"
 import { Location } from "./location"
 import { EventV2 } from "./event"
 import { Policy } from "./policy"
 import { State } from "./state"
+import { Integration } from "./integration"
 
 export type ProviderRecord = {
   provider: ProviderV2.Info
@@ -32,12 +34,7 @@ export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundErr
 export const PolicyActions = Schema.Literals(["provider.use"])
 
 export const Event = {
-  ModelUpdated: EventV2.define({
-    type: "catalog.model.updated",
-    schema: {
-      model: ModelV2.Info,
-    },
-  }),
+  Updated: EventV2.define({ type: "catalog.updated", schema: {} }),
 }
 
 type Data = {
@@ -93,38 +90,33 @@ export const layer = Layer.effect(
     const plugin = yield* PluginV2.Service
     const events = yield* EventV2.Service
     const policy = yield* Policy.Service
+    const integrations = yield* Integration.Service
     const scope = yield* Scope.Scope
 
-    const resolve = (model: ModelV2.Info) => {
-      const provider = state.get().providers.get(model.providerID)!.provider
-      const endpoint =
-        model.endpoint.type === "unknown"
-          ? provider.endpoint
-          : model.endpoint.type === "aisdk" && provider.endpoint.type === "aisdk" && !model.endpoint.url
-            ? { ...model.endpoint, url: provider.endpoint.url }
-            : model.endpoint
-      const options = {
-        headers: {
-          ...provider.options.headers,
-          ...model.options.headers,
-        },
-        body: {
-          ...provider.options.body,
-          ...model.options.body,
-        },
-        aisdk: {
-          provider: {
-            ...provider.options.aisdk.provider,
-            ...model.options.aisdk.provider,
-          },
-          request: model.options.aisdk.request,
-        },
-        variant: model.options.variant,
+    const available = (provider: ProviderV2.Info, integration: Integration.Info | undefined, connected: boolean) => {
+      if (provider.disabled) return false
+      if (typeof provider.request.body.apiKey === "string") return true
+      if (connected) return true
+      return !integration
+    }
+
+    const projectModel = (model: ModelV2.Info, provider: ProviderV2.Info) => {
+      const api =
+        model.api.type === "native" && !model.api.url && Object.keys(model.api.settings).length === 0
+          ? { ...provider.api, id: model.api.id }
+          : model.api.type === "aisdk" && provider.api.type === "aisdk" && !model.api.url
+            ? { ...model.api, url: provider.api.url, settings: { ...provider.api.settings, ...model.api.settings } }
+            : model.api.type === "aisdk" && provider.api.type === "aisdk"
+              ? { ...model.api, settings: { ...provider.api.settings, ...model.api.settings } }
+              : model.api
+      const request = {
+        ...ModelRequest.merge({ ...provider.request, generation: {}, options: {} }, model.request),
+        variant: model.request.variant,
       }
       return new ModelV2.Info({
         ...model,
-        endpoint,
-        options,
+        api,
+        request,
       })
     }
 
@@ -134,10 +126,10 @@ export const layer = Layer.effect(
       return match
     }
 
-    const normalizeEndpoint = (item: Draft<ProviderV2.Info> | Draft<ModelV2.Info>) => {
-      if (item.endpoint.type !== "aisdk" || typeof item.options.aisdk.provider.baseURL !== "string") return
-      item.endpoint.url = item.options.aisdk.provider.baseURL
-      delete item.options.aisdk.provider.baseURL
+    const normalizeApi = (item: Draft<ProviderV2.Info> | Draft<ModelV2.Info>) => {
+      if (typeof item.request.body.baseURL !== "string") return
+      item.api.url = item.request.body.baseURL
+      delete item.request.body.baseURL
     }
 
     const state = State.create<Data, Editor>({
@@ -157,7 +149,7 @@ export const layer = Layer.effect(
                 draft.providers.set(providerID, current)
               }
               fn(current.provider)
-              normalizeEndpoint(current.provider)
+              normalizeApi(current.provider)
             },
             remove: (providerID) => {
               draft.providers.delete(providerID)
@@ -179,7 +171,7 @@ export const layer = Layer.effect(
               fn(model)
               model.id = modelID
               model.providerID = providerID
-              normalizeEndpoint(model)
+              normalizeApi(model)
             },
             remove: (providerID, modelID) => {
               draft.providers.get(providerID)?.models.delete(modelID)
@@ -196,15 +188,16 @@ export const layer = Layer.effect(
       },
       finalize: Effect.fn("CatalogV2.finalize")(function* (catalog, reason) {
         if (reason !== "plugin.added") yield* plugin.trigger("catalog.transform", catalog, {}).pipe(Effect.asVoid)
-        if (!policy.hasStatements()) return
-        for (const record of [...catalog.provider.list()]) {
-          if ((yield* policy.evaluate("provider.use", record.provider.id, "allow")) === "deny") {
-            catalog.provider.remove(record.provider.id)
+        if (policy.hasStatements()) {
+          for (const record of [...catalog.provider.list()]) {
+            if ((yield* policy.evaluate("provider.use", record.provider.id, "allow")) === "deny") {
+              catalog.provider.remove(record.provider.id)
+            }
           }
         }
+        yield* events.publish(Event.Updated, {})
       }),
     })
-
     yield* events.subscribe(PluginV2.Event.Added).pipe(
       // Plugin registries are location scoped even though the event bus is process scoped.
       Stream.filter(
@@ -212,7 +205,7 @@ export const layer = Layer.effect(
           event.location?.directory === location.directory && event.location.workspaceID === location.workspaceID,
       ),
       Stream.runForEach((event) =>
-        state.update((catalog) => plugin.triggerFor(event.data.id, "catalog.transform", catalog, {}), "plugin.added"),
+        state.mutate((catalog) => plugin.triggerFor(event.data.id, "catalog.transform", catalog, {}), "plugin.added"),
       ),
       Effect.forkIn(scope, { startImmediately: true }),
     )
@@ -231,9 +224,15 @@ export const layer = Layer.effect(
         }),
 
         available: Effect.fn("CatalogV2.provider.available")(function* () {
-          return Array.fromIterable(state.get().providers.values())
-            .map((record) => record.provider)
-            .filter((provider) => provider.enabled)
+          const active = new Map((yield* integrations.list()).map((integration) => [integration.id, integration]))
+          const connections = yield* integrations.connection.list()
+          return (yield* result.provider.all()).filter((provider) =>
+            available(
+              provider,
+              active.get(Integration.ID.make(provider.id)),
+              connections.has(Integration.ID.make(provider.id)),
+            ),
+          )
         }),
       },
 
@@ -242,30 +241,35 @@ export const layer = Layer.effect(
           const record = yield* getRecord(providerID)
           const model = record.models.get(modelID)
           if (!model) return yield* new ModelNotFoundError({ providerID, modelID })
-          return resolve(model)
+          return projectModel(model, record.provider)
         }),
 
         all: Effect.fn("CatalogV2.model.all")(function* () {
           return pipe(
             Array.fromIterable(state.get().providers.values()),
-            Array.flatMap((record) => Array.fromIterable(record.models.values())),
-            Array.map(resolve),
+            Array.flatMap((record) => {
+              return Array.fromIterable(record.models.values()).map((model) => projectModel(model, record.provider))
+            }),
             Array.sortWith((item) => item.time.released.epochMilliseconds, Order.flip(Order.Number)),
           )
         }),
 
         available: Effect.fn("CatalogV2.model.available")(function* () {
-          return (yield* result.model.all()).filter((model) => {
-            const record = state.get().providers.get(model.providerID)
-            return record?.provider.enabled !== false && model.enabled
-          })
+          const providers = new Set((yield* result.provider.available()).map((provider) => provider.id))
+          return (yield* result.model.all()).filter((model) => providers.has(model.providerID) && model.enabled)
         }),
 
         default: Effect.fn("CatalogV2.model.default")(function* () {
           const defaultModel = state.get().defaultModel
           if (defaultModel) {
-            const model = yield* result.model.get(defaultModel.providerID, defaultModel.modelID).pipe(Effect.option)
-            if (Option.isSome(model) && model.value.enabled) return model
+            const provider = yield* result.provider.get(defaultModel.providerID).pipe(Effect.option)
+            if (
+              Option.isSome(provider) &&
+              (yield* result.provider.available()).some((item) => item.id === provider.value.id)
+            ) {
+              const model = yield* result.model.get(defaultModel.providerID, defaultModel.modelID).pipe(Effect.option)
+              if (Option.isSome(model) && model.value.enabled) return model
+            }
           }
 
           return pipe(
@@ -278,10 +282,11 @@ export const layer = Layer.effect(
         small: Effect.fn("CatalogV2.model.small")(function* (providerID) {
           const record = state.get().providers.get(providerID)
           if (!record) return Option.none<ModelV2.Info>()
+          const provider = record.provider
 
           if (providerID === ProviderV2.ID.opencode) {
             const gpt5Nano = record.models.get(ModelV2.ID.make("gpt-5-nano"))
-            if (gpt5Nano?.enabled && gpt5Nano.status === "active") return Option.some(resolve(gpt5Nano))
+            if (gpt5Nano?.enabled && gpt5Nano.status === "active") return Option.some(projectModel(gpt5Nano, provider))
           }
 
           const candidates = pipe(
@@ -309,7 +314,7 @@ export const layer = Layer.effect(
             return pipe(
               items,
               Array.sortWith((item) => (item.cost / maxCost) * 0.8 + (item.age / maxAge) * 0.2, Order.Number),
-              Array.map((item) => resolve(item.model)),
+              Array.map((item) => projectModel(item.model, provider)),
               Array.head,
             )
           }
@@ -330,6 +335,7 @@ export const layer = Layer.effect(
 const SMALL_MODEL_RE = /\b(nano|flash|lite|mini|haiku|small|fast)\b/
 
 export const locationLayer = layer.pipe(
+  Layer.provideMerge(Integration.locationLayer),
   Layer.provideMerge(PluginV2.locationLayer),
   Layer.provideMerge(Policy.locationLayer),
 )
