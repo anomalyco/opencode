@@ -59,20 +59,8 @@
     {
       "file": "packages/tui/src/context/theme.tsx",
       "marker": "ThemeState.set",
-      "note": "ThemeState.set(store.active) createEffect to sync active theme.",
-      "status": "REGRESSED — identical to upstream as of baseline; this patch was lost in a prior sync and needs re-applying."
-    },
-    {
-      "file": "packages/core/src/github-copilot/chat/openai-compatible-chat-language-model.ts",
-      "marker": "cache_creation_tokens",
-      "note": "Parse cache_creation_tokens from SSE usage.",
-      "status": "REGRESSED — identical to upstream as of baseline; this patch was lost in a prior sync and needs re-applying."
-    },
-    {
-      "file": "packages/llm/src/protocols/openai-chat.ts",
-      "marker": "cache_creation_tokens",
-      "note": "OpenAIChatUsage schema includes cache_creation_tokens.",
-      "status": "REGRESSED — identical to upstream as of baseline; this patch was lost in a prior sync and needs re-applying."
+      "note": "createEffect writing ThemeState.set(store.active) — the writer half of the local-backend themed-loading-screen feature (reader is provider.ts ThemeState.get). Lost when upstream relocated the TUI into packages/tui; re-apply with a tui-relative import to @opencode-ai/.../local/theme-state.",
+      "status": "REGRESSED — lost in a prior sync; recovery pending."
     }
   ]
 }
