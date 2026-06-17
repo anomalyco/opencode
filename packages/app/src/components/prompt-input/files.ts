@@ -93,6 +93,6 @@ export async function attachmentMime(file: File) {
 
   if (textMime(type)) return "text/plain"
   const bytes = new Uint8Array(await file.slice(0, SAMPLE).arrayBuffer())
-  if (!textBytes(bytes)) return
-  return "text/plain"
+  if (textBytes(bytes)) return "text/plain"
+  return type || "application/octet-stream"
 }

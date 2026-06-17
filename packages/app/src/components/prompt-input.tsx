@@ -1165,7 +1165,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       ref={(el) => (fileInputRef = el)}
       type="file"
       multiple
-      accept={ACCEPTED_FILE_TYPES.join(",")}
+      accept={ACCEPTED_FILE_TYPES.length > 0 ? ACCEPTED_FILE_TYPES.join(",") : undefined}
       class="hidden"
       onChange={(e) => {
         const list = e.currentTarget.files
@@ -1793,7 +1793,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   ref={fileInputRef}
                   type="file"
                   multiple
-                  accept={ACCEPTED_FILE_TYPES.join(",")}
+                  accept={ACCEPTED_FILE_TYPES.length > 0 ? ACCEPTED_FILE_TYPES.join(",") : undefined}
                   class="hidden"
                   onChange={(e) => {
                     const list = e.currentTarget.files

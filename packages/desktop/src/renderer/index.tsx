@@ -1,7 +1,6 @@
 // @refresh reload
 
 import {
-  ACCEPTED_FILE_EXTENSIONS,
   AppBaseProviders,
   AppInterface,
   handleNotificationClick,
@@ -149,7 +148,7 @@ const createPlatform = (): Platform => {
         multiple: opts?.multiple ?? false,
         title: opts?.title ?? t("desktop.dialog.chooseFile"),
         defaultPath: opts?.defaultPath,
-        extensions: opts?.extensions ?? ACCEPTED_FILE_EXTENSIONS,
+        extensions: opts?.extensions?.length ? opts.extensions : undefined,
       })
       if (!result) return
       try {

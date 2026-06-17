@@ -1,8 +1,6 @@
 import { onMount } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { showToast } from "@/utils/toast"
 import { type ContentPart, type ImageAttachmentPart, type usePrompt } from "@/context/prompt"
-import { useLanguage } from "@/context/language"
 import { uuid } from "@/utils/uuid"
 import { getCursorPosition } from "./editor-dom"
 import { attachmentMime } from "./files"
@@ -38,22 +36,9 @@ type PromptAttachmentsInput = {
 
 export function createPromptAttachments(input: PromptAttachmentsInput) {
   const prompt = input.prompt
-  const language = useLanguage()
 
-  const warn = () => {
-    showToast({
-      title: language.t("prompt.toast.pasteUnsupported.title"),
-      description: language.t("prompt.toast.pasteUnsupported.description"),
-    })
-  }
-
-  const add = async (file: File, toast = true) => {
+  const add = async (file: File) => {
     const mime = await attachmentMime(file)
-    if (!mime) {
-      if (toast) warn()
-      return false
-    }
-
     const editor = input.editor()
     if (!editor) return false
 
@@ -75,15 +60,14 @@ export function createPromptAttachments(input: PromptAttachmentsInput) {
 
   const addAttachment = (file: File) => add(file)
 
-  const addAttachments = async (files: File[], toast = true) => {
+  const addAttachments = async (files: File[]) => {
     let found = false
 
     for (const file of files) {
-      const ok = await add(file, false)
+      const ok = await add(file)
       if (ok) found = true
     }
 
-    if (!found && files.length > 0 && toast) warn()
     return found
   }
 
