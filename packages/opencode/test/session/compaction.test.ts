@@ -454,20 +454,16 @@ describe("session.compaction.isOverflow", () => {
     ),
   )
 
-  // ─── Bug reproduction tests ───────────────────────────────────────────
-  // These tests demonstrate that when limit.input is set, isOverflow()
-  // does not subtract any headroom for the next model response. This means
-  // compaction only triggers AFTER we've already consumed the full input
-  // budget, leaving zero room for the next API call's output tokens.
+  // ─── Symmetry verification tests ──────────────────────────────────────
+  // These tests verify that both paths (with and without limit.input)
+  // reserve the same headroom (maxOutputTokens). Previously the
+  // limit.input path was capped at 20K via COMPACTION_BUFFER, causing
+  // compaction to trigger 12K later for input-limited models.
   //
-  // Compare: without limit.input, usable = context - output (reserves space).
-  // With limit.input, usable = limit.input (reserves nothing).
-  //
-  // Related issues: #10634, #8089, #11086, #12621
-  // Open PRs: #6875, #12924
+  // Related issues: #10634, #8089, #11086, #12621, #32656
 
   it.live(
-    "BUG: no headroom when limit.input is set — compaction should trigger near boundary but does not",
+    "limit.input model reserves full output headroom — compaction triggers near boundary",
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const compact = yield* SessionCompaction.Service
@@ -479,21 +475,15 @@ describe("session.compaction.isOverflow", () => {
         // plus the model needs room to generate output — this WILL overflow.
         const tokens = { input: 180_000, output: 15_000, reasoning: 0, cache: { read: 3_000, write: 0 } }
         // count = 180K + 3K + 15K = 198K
-        // usable = limit.input = 200K (no output subtracted!)
-        // 198K > 200K = false → no compaction triggered
-
-        // WITHOUT limit.input: usable = 200K - 32K = 168K, and 198K > 168K = true ✓
-        // WITH limit.input: usable = 200K, and 198K > 200K = false ✗
-
-        // With 198K used and only 2K headroom, the next turn will overflow.
-        // Compaction MUST trigger here.
+        // usable = limit.input - maxOutputTokens = 200K - 32K = 168K
+        // 198K >= 168K = true → compaction triggered
         expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
       }),
     ),
   )
 
   it.live(
-    "BUG: without limit.input, same token count correctly triggers compaction",
+    "without limit.input, same token count correctly triggers compaction",
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const compact = yield* SessionCompaction.Service
@@ -513,7 +503,7 @@ describe("session.compaction.isOverflow", () => {
   )
 
   it.live(
-    "BUG: asymmetry — limit.input model allows 30K more usage before compaction than equivalent model without it",
+    "symmetric — limit.input model and equivalent model without it both trigger compaction at same boundary",
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const compact = yield* SessionCompaction.Service
@@ -530,6 +520,24 @@ describe("session.compaction.isOverflow", () => {
         // Both models have identical real capacity — they should agree:
         expect(withLimit).toBe(true) // should compact (170K leaves no room for 32K output)
         expect(withoutLimit).toBe(true) // correctly compacts (170K > 168K)
+      }),
+    ),
+  )
+
+  it.live(
+    "pins the 12K asymmetry fix — compaction fires in the gap between 20K and full output reservation",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        // Model: input limit 200K, output 32K
+        // maxOutputTokens = min(32K, 32K) = 32K
+        const model = createModel({ context: 200_000, input: 200_000, output: 32_000 })
+
+        // 175K total tokens — falls in the 12K window:
+        //   Old code: reserved = min(20K, 32K) = 20K, usable = 200K - 20K = 180K → no compaction (175K < 180K)
+        //   New code: reserved = 32K, usable = 200K - 32K = 168K → compaction (175K >= 168K)
+        const tokens = { input: 160_000, output: 10_000, reasoning: 0, cache: { read: 5_000, write: 0 } }
+        expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
       }),
     ),
   )
