@@ -55,15 +55,14 @@ const mergeOptions = (target: Record<string, any>, source: Record<string, any> |
 
 export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: PrepareInput) {
   const isOpenaiOauth = input.provider.id === "openai" && input.auth?.type === "oauth"
-  const system = [
-    [
-      ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
-      ...input.system,
-      ...(input.user.system ? [input.user.system] : []),
-    ]
-      .filter((x) => x)
-      .join("\n"),
-  ]
+  const hasGoalFirst = input.system.length > 0 && input.system[0].startsWith("<session-goal")
+  const systemBase = [
+    ...(input.agent.prompt ? [input.agent.prompt] : SystemPrompt.provider(input.model)),
+    ...(hasGoalFirst ? [] : input.system),
+    ...(input.user.system ? [input.user.system] : []),
+  ].filter((x) => x)
+  const parts = hasGoalFirst ? [input.system[0], ...systemBase, ...input.system.slice(1)] : systemBase
+  const system = [parts.join("\n")]
 
   const header = system[0]
   yield* input.plugin.trigger(
@@ -71,7 +70,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     { sessionID: input.sessionID, model: input.model },
     { system },
   )
-  if (system.length > 2 && system[0] === header) {
+  if (system.length > 2 && system[0] === header && !header.startsWith("<session-goal")) {
     const rest = system.slice(1)
     system.length = 0
     system.push(header, rest.join("\n"))

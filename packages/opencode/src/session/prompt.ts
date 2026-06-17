@@ -13,6 +13,7 @@ import { Provider } from "@/provider/provider"
 import { type Tool as AITool, tool, jsonSchema } from "ai"
 import type { JSONSchema7 } from "@ai-sdk/provider"
 import { SessionCompaction } from "./compaction"
+import { Goal } from "./goal"
 import { SystemPrompt } from "./system"
 import { Instruction } from "./instruction"
 import { Plugin } from "../plugin"
@@ -83,9 +84,23 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   return part.state.status === "error" && part.state.metadata?.interrupted === true
 }
 
+// Default token budget applied to goal pursuit when the goal has no explicit
+// budgetTokens, so "pursue until done" can never run away unbounded. Per-turn
+// input/output/cache tokens are summed (each turn re-sends context, which is the
+// real billed cost). A hard step cap backstops the loop if usage can't be read.
+const GOAL_DEFAULT_BUDGET_TOKENS = 200_000
+const GOAL_MAX_STEPS = 50
+
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
   readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
+  /**
+   * Autonomously drive the session toward its active goal: take turns until the
+   * model marks the goal complete, the goal is paused, the token budget is
+   * exhausted, or a hard step cap is reached. Safe to call repeatedly — only one
+   * pursuit runs per session at a time.
+   */
+  readonly pursue: (input: { sessionID: SessionID }) => Effect.Effect<void>
   readonly loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError>
   readonly command: (input: CommandInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
@@ -120,6 +135,10 @@ export const layer = Layer.effect(
     const revert = yield* SessionRevert.Service
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
+    const goals = yield* Goal.Service
+    // Sessions with an in-flight goal pursuit; guards against starting a second
+    // autonomous loop for the same session (e.g. rapid set/resume calls).
+    const pursuing = new Set<SessionID>()
     const llm = yield* LLM.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
@@ -1330,7 +1349,20 @@ export const layer = Layer.effect(
               instruction.system().pipe(Effect.orDie),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])
-            const system = [...env, ...instructions, ...(skills ? [skills] : [])]
+            // get() succeeds with `undefined` when no goal is set, so Effect.option
+            // yields some(undefined); unwrap to a plain value before reading fields.
+            const g = yield* goals.get(sessionID).pipe(Effect.option)
+            const goal = Option.isSome(g) ? g.value : undefined
+            let goalBlock: string | undefined
+            if (goal) {
+              goalBlock = `<session-goal>\ntext: ${goal.text}\nstatus: ${goal.status}\n${goal.budgetTokens ? `budgetTokens: ${goal.budgetTokens}\n` : ""}${goal.verification ? `verification: ${goal.verification}\n` : ""}</session-goal>`
+            }
+            const system = [
+              ...(goalBlock ? [goalBlock] : []),
+              ...env,
+              ...instructions,
+              ...(skills ? [skills] : []),
+            ]
             const format = lastUser.format ?? { type: "text" as const }
             if (format.type === "json_schema") system.push(STRUCTURED_OUTPUT_SYSTEM_PROMPT)
             const result = yield* handle.process({
@@ -1406,6 +1438,53 @@ export const layer = Layer.effect(
     ) {
       return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
     })
+
+    const pursue: (input: { sessionID: SessionID }) => Effect.Effect<void> = Effect.fn("SessionPrompt.pursue")(
+      function* (input) {
+        // Only one autonomous pursuit per session at a time.
+        if (pursuing.has(input.sessionID)) return
+        pursuing.add(input.sessionID)
+        yield* Effect.ensuring(
+          Effect.gen(function* () {
+            let step = 0
+            while (step < GOAL_MAX_STEPS) {
+              const goal = yield* goals.get(input.sessionID)
+              // Stop when the goal is gone or no longer active (completed/paused).
+              if (!goal || goal.status !== "active") break
+              // Stop when the (default or explicit) token budget is spent; pause so
+              // it does not immediately re-trigger and the user can resume/raise it.
+              const budget = goal.budgetTokens ?? GOAL_DEFAULT_BUDGET_TOKENS
+              if (goal.tokensUsed >= budget) {
+                yield* goals.pause(input.sessionID)
+                break
+              }
+
+              const text =
+                step === 0
+                  ? `You are now autonomously pursuing this session's goal:\n\n${goal.text}\n\nWork toward it using the available tools. When it is fully achieved, call the goal tool with action "complete" and a concise verification of what was accomplished. If you become blocked or need input from the user, call the goal tool with action "pause".`
+                  : `The session goal is not yet complete:\n\n${goal.text}\n\nKeep working toward it. When it is done, call the goal tool with action "complete" (include a short verification). If you are blocked, call it with action "pause".`
+
+              const start = Date.now()
+              const result = yield* prompt({
+                sessionID: input.sessionID,
+                parts: [{ type: "text", text }],
+              }).pipe(Effect.catch(() => Effect.succeed(undefined)))
+              // A failed/interrupted turn ends the pursuit rather than spinning.
+              if (!result) break
+
+              const info = result.info
+              if (info.role === "assistant" && info.tokens) {
+                const t = info.tokens
+                const used = t.input + t.output + t.reasoning + t.cache.read + t.cache.write
+                yield* goals.recordUsage({ sessionID: input.sessionID, tokens: used, durationMs: Date.now() - start })
+              }
+              step++
+            }
+          }),
+          Effect.sync(() => pursuing.delete(input.sessionID)),
+        )
+      },
+    )
 
     const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError> = Effect.fn(
       "SessionPrompt.shell",
@@ -1544,6 +1623,7 @@ export const layer = Layer.effect(
     return Service.of({
       cancel,
       prompt,
+      pursue,
       loop,
       shell,
       command,
@@ -1577,6 +1657,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.mergeAll(
         Agent.defaultLayer,
         Database.defaultLayer,
+        Goal.defaultLayer,
         SystemPrompt.defaultLayer,
         LLM.defaultLayer,
         CrossSpawnSpawner.defaultLayer,
@@ -1712,6 +1793,7 @@ export const node = LayerNode.make(layer, [
   SessionRunState.node,
   SessionRevert.node,
   SessionSummary.node,
+  Goal.node,
   SystemPrompt.node,
   LLM.node,
   EventV2Bridge.node,

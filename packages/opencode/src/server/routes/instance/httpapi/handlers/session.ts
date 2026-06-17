@@ -14,6 +14,7 @@ import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
 import { Todo } from "@/session/todo"
+import { Goal } from "@/session/goal"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Cause, Effect, Option, Schema, Scope } from "effect"
@@ -25,6 +26,8 @@ import {
   CommandPayload,
   DiffQuery,
   ForkPayload,
+  GoalSetPayload,
+  GoalUpdatePayload,
   InitPayload,
   ListQuery,
   MessagesQuery,
@@ -35,7 +38,7 @@ import {
   SummarizePayload,
   UpdatePayload,
 } from "../groups/session"
-import { PermissionNotFoundError } from "../errors"
+import { notFound, PermissionNotFoundError } from "../errors"
 import * as SessionError from "./session-errors"
 
 const tryParseJson = (text: string) =>
@@ -56,6 +59,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const permissionSvc = yield* Permission.Service
     const statusSvc = yield* SessionStatus.Service
     const todoSvc = yield* Todo.Service
+    const goalSvc = yield* Goal.Service
     const summary = yield* SessionSummary.Service
     const events = yield* EventV2Bridge.Service
     const scope = yield* Scope.Scope
@@ -92,6 +96,66 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const todo = Effect.fn("SessionHttpApi.todo")(function* (ctx: { params: { sessionID: SessionID } }) {
       yield* requireSession(ctx.params.sessionID)
       return yield* todoSvc.get(ctx.params.sessionID)
+    })
+
+    // Autonomously drive the session toward its active goal in the background so
+    // the set/resume request returns immediately. Pursuit is self-guarded against
+    // duplicate runs and stops on complete/pause/budget.
+    const startGoalPursuit = (sessionID: SessionID) =>
+      promptSvc.pursue({ sessionID }).pipe(
+        Effect.catchCause((cause) => Effect.logError("goal pursuit failed", { sessionID, cause })),
+        Effect.forkIn(scope, { startImmediately: true }),
+      )
+
+    const goalGet = Effect.fn("SessionHttpApi.goalGet")(function* (ctx: { params: { sessionID: SessionID } }) {
+      yield* requireSession(ctx.params.sessionID)
+      const g = yield* goalSvc.get(ctx.params.sessionID)
+      return g ?? null
+    })
+
+    const goalSet = Effect.fn("SessionHttpApi.goalSet")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof GoalSetPayload.Type
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      const g = yield* goalSvc.set({
+        sessionID: ctx.params.sessionID,
+        text: ctx.payload.text,
+        budgetTokens: ctx.payload.budgetTokens,
+      })
+      yield* startGoalPursuit(ctx.params.sessionID)
+      return g
+    })
+
+    const goalUpdate = Effect.fn("SessionHttpApi.goalUpdate")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof GoalUpdatePayload.Type
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      const g = yield* goalSvc.update({
+        sessionID: ctx.params.sessionID,
+        text: ctx.payload.text,
+        status: ctx.payload.status,
+        budgetTokens: ctx.payload.budgetTokens,
+        verification: ctx.payload.verification,
+      })
+      if (!g) return yield* notFound("Goal not found")
+      if (g.status === "active") {
+        // Resuming (or re-stating) an active goal restarts autonomous pursuit.
+        yield* startGoalPursuit(ctx.params.sessionID)
+      } else {
+        // Pausing or completing must take effect mid-run: cancel the in-flight
+        // turn so the agent stops now rather than after the current (possibly
+        // long) turn finishes. Pursuit then observes the non-active status and halts.
+        yield* promptSvc.cancel(ctx.params.sessionID)
+      }
+      return g
+    })
+
+    const goalClear = Effect.fn("SessionHttpApi.goalClear")(function* (ctx: { params: { sessionID: SessionID } }) {
+      yield* requireSession(ctx.params.sessionID)
+      yield* goalSvc.clear(ctx.params.sessionID)
+      return true
     })
 
     const diff = Effect.fn("SessionHttpApi.diff")(function* (ctx: {
@@ -436,5 +500,9 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("deleteMessage", deleteMessage)
       .handle("deletePart", deletePart)
       .handle("updatePart", updatePart)
+      .handle("goal", goalGet)
+      .handle("goalSet", goalSet)
+      .handle("goalUpdate", goalUpdate)
+      .handle("goalClear", goalClear)
   }),
 )

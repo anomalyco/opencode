@@ -1,13 +1,14 @@
 export * as SessionCompaction from "./compaction"
 
 import { LLM, LLMError, LLMEvent, Message, type LLMRequest, type Model } from "@opencode-ai/llm"
-import { DateTime, Effect, Stream } from "effect"
+import { DateTime, Effect, Stream, Option } from "effect"
 import type { Config } from "../config"
 import type { EventV2 } from "../event"
 import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
 import { Token } from "../util/token"
+import { SessionGoal } from "./goal"
 
 const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 8_000
@@ -67,6 +68,9 @@ type Dependencies = {
     readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
   }
   readonly config: readonly Config.Entry[]
+  readonly goals?: {
+    readonly get: (sessionID: SessionSchema.ID) => Effect.Effect<SessionGoal.Info | undefined>
+  }
 }
 
 type Input = {
@@ -181,10 +185,20 @@ export const make = (dependencies: Dependencies) => {
     const selected = select(input.entries, config.tokens)
     const previousSummary = input.entries.find((entry) => entry.message.type === "compaction")?.message
     if (!selected || (selected.head.length === 0 && previousSummary?.type !== "compaction")) return false
-    const summaryPrompt = buildPrompt({
+    const g = dependencies.goals
+      ? yield* dependencies.goals.get(input.sessionID).pipe(Effect.option)
+      : Option.none()
+    let summaryPrompt = buildPrompt({
       previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
       context: [previousSummary?.type === "compaction" ? previousSummary.recent : "", selected.head].filter(Boolean),
     })
+    if (Option.isSome(g) && g.value) {
+      const goalLine = `- ${g.value.text} (status: ${g.value.status})`
+      summaryPrompt = summaryPrompt.replace(
+        "## Goal\n- [single-sentence task summary]",
+        `## Goal\n${goalLine}`,
+      )
+    }
     const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
     if (Token.estimate(summaryPrompt) > context - summaryOutput) return false
     const messageID = SessionMessage.ID.create()

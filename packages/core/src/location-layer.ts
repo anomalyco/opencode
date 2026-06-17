@@ -40,6 +40,7 @@ import { ToolOutputStore } from "./tool-output-store"
 import { AppProcess } from "./process"
 import { SessionStore } from "./session/store"
 import { SessionTodo } from "./session/todo"
+import { SessionGoal } from "./session/goal"
 import { QuestionV2 } from "./question"
 import { LLMClient } from "@opencode-ai/llm"
 import { RequestExecutor } from "@opencode-ai/llm/route"
@@ -86,12 +87,14 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     const skillGuidance = SkillGuidance.locationLayer.pipe(Layer.provide(services))
     const referenceGuidance = ReferenceGuidance.locationLayer.pipe(Layer.provide(services))
     const todos = SessionTodo.layer.pipe(Layer.provide(services))
+    const goals = SessionGoal.layer.pipe(Layer.provide(services))
     const questions = QuestionV2.locationLayer.pipe(Layer.provide(services))
     const builtInTools = BuiltInTools.locationLayer.pipe(
       Layer.provide(services),
       Layer.provide(mutation),
       Layer.provide(resources),
       Layer.provide(todos),
+      Layer.provide(goals),
       Layer.provide(questions),
       Layer.provide(image),
     )
@@ -114,6 +117,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       mutation,
       resources,
       todos,
+      goals,
       questions,
       model,
       runner,
