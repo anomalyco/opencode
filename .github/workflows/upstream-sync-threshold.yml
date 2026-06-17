@@ -1,12 +1,10 @@
-name: upstream-sync-threshold
+name: Upstream Sync Threshold
 
 on:
-  schedule:
-    - cron: "0 * * * *" # hourly
   workflow_dispatch:
     inputs:
       upstream_ref:
-        description: "Upstream branch or ref to sync from (default: dev)"
+        description: "Upstream branch/ref to sync from"
         required: false
         default: "dev"
         type: string
@@ -15,85 +13,148 @@ on:
         required: false
         default: "75"
         type: string
+  schedule:
+    - cron: "0 * * * *"
 
 concurrency:
-  group: ${{ github.workflow }}
-  cancel-in-progress: true
+  group: upstream-sync-threshold
+  cancel-in-progress: false
 
 permissions:
   contents: write
   pull-requests: write
-  issues: write
 
 jobs:
-  sync:
+  upstream-sync-threshold:
+    name: Threshold-based upstream sync
     runs-on: ubuntu-latest
+
     env:
-      HUSKY: "0"
-      SYNC_BRANCH: sync/upstream
       UPSTREAM_REPO: https://github.com/sst/opencode.git
-      UPSTREAM_REF: ${{ inputs.upstream_ref || 'dev' }}
+      UPSTREAM_REF: ${{ github.event.inputs.upstream_ref || 'dev' }}
       TARGET_BRANCH: dev
-      MIN_COMMITS: ${{ inputs.min_commits || '75' }}
+      MIN_COMMITS: ${{ github.event.inputs.min_commits || '75' }}
+      SYNC_BRANCH: sync/upstream-threshold
+
     steps:
       - name: Checkout dev
         uses: actions/checkout@v4
         with:
+          ref: ${{ env.TARGET_BRANCH }}
           fetch-depth: 0
-          ref: dev
-          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup Bun
-        uses: ./.github/actions/setup-bun
-
-      - name: Setup Git Committer
-        id: setup-git-committer
-        uses: ./.github/actions/setup-git-committer
-        with:
-          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
-          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
-
-      - name: Fetch upstream
+      - name: Configure git
         run: |
-          git remote add upstream "$UPSTREAM_REPO" || true
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream remote
+        run: |
+          git remote add upstream "$UPSTREAM_REPO" || git remote set-url upstream "$UPSTREAM_REPO"
+          git fetch origin "$TARGET_BRANCH"
           git fetch upstream "$UPSTREAM_REF"
 
-      - name: Check upstream commit threshold
+      - name: Check upstream threshold
         id: threshold
         run: |
-          BEHIND=$(git rev-list --right-only --count "origin/$TARGET_BRANCH...upstream/$UPSTREAM_REF")
-          echo "behind_count=$BEHIND" >> "$GITHUB_OUTPUT"
+          behind_count="$(git rev-list --count "origin/${TARGET_BRANCH}..upstream/${UPSTREAM_REF}")"
 
-          if [ "$BEHIND" -lt "$MIN_COMMITS" ]; then
-            echo "should_sync=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping sync. Upstream is only $BEHIND commits ahead."
-          else
+          echo "behind_count=$behind_count" >> "$GITHUB_OUTPUT"
+          echo "minimum_commits=$MIN_COMMITS" >> "$GITHUB_OUTPUT"
+
+          if [ "$behind_count" -ge "$MIN_COMMITS" ]; then
             echo "should_sync=true" >> "$GITHUB_OUTPUT"
+            echo "Upstream is $behind_count commits ahead. Sync threshold met."
+          else
+            echo "should_sync=false" >> "$GITHUB_OUTPUT"
+            echo "Upstream is $behind_count commits ahead. Sync threshold not met."
           fi
 
-      - name: Create sync branch from dev
-        if: steps.threshold.outputs.should_sync == 'true'
-        run: git checkout -B "$SYNC_BRANCH"
+          {
+            echo "## Upstream Sync Threshold Check"
+            echo
+            echo "- Target branch: \`$TARGET_BRANCH\`"
+            echo "- Upstream ref: \`$UPSTREAM_REF\`"
+            echo "- Commits behind upstream: \`$behind_count\`"
+            echo "- Minimum threshold: \`$MIN_COMMITS\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Merge upstream into sync branch
+      - name: Stop when threshold is not met
+        if: steps.threshold.outputs.should_sync != 'true'
+        run: |
+          echo "Skipping upstream sync because threshold was not met."
+
+      - name: Create sync branch
+        if: steps.threshold.outputs.should_sync == 'true'
+        run: |
+          git checkout -B "$SYNC_BRANCH" "origin/$TARGET_BRANCH"
+
+      - name: Merge upstream
         id: merge
         if: steps.threshold.outputs.should_sync == 'true'
         run: |
-          if git merge "upstream/$UPSTREAM_REF" --no-edit; then
+          set +e
+          git merge --no-ff --no-edit "upstream/${UPSTREAM_REF}"
+          merge_status=$?
+          set -e
+
+          if [ "$merge_status" -eq 0 ]; then
             echo "result=success" >> "$GITHUB_OUTPUT"
-            echo "conflicted_files=" >> "$GITHUB_OUTPUT"
-          else
-            echo "result=conflict" >> "$GITHUB_OUTPUT"
-            conflicted_files=$(git diff --name-only --diff-filter=U | paste -sd "," -)
-            echo "conflicted_files=$conflicted_files" >> "$GITHUB_OUTPUT"
-            echo "Conflicted files:"
-            git diff --name-only --diff-filter=U || true
+            echo "Upstream merge completed without conflicts."
+            exit 0
           fi
+
+          if git diff --name-only --diff-filter=U | grep -q .; then
+            conflicted_files="$(git diff --name-only --diff-filter=U || true)"
+
+            echo "result=conflict" >> "$GITHUB_OUTPUT"
+            {
+              echo "conflicted_files<<EOF"
+              echo "$conflicted_files"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+
+            echo "Merge conflicts detected:"
+            echo "$conflicted_files"
+            exit 0
+          fi
+
+          echo "result=failed" >> "$GITHUB_OUTPUT"
+          echo "Merge failed for a reason other than conflicts."
+          exit "$merge_status"
 
       - name: Attempt automated conflict resolution
         id: resolution
         if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict'
+        continue-on-error: true
         run: .github/scripts/resolve-conflicts.sh
+
+      - name: Publish conflict resolution summary
+        if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict'
+        run: |
+          if [ -f /tmp/resolution-summary.md ]; then
+            cat /tmp/resolution-summary.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No conflict resolution summary was generated." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload conflict resolution artifacts
+        if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict'
+        uses: actions/upload-artifact@v4
+        with:
+          name: upstream-sync-conflict-resolution
+          path: |
+            /tmp/resolution-summary.md
+            .github/conflict-rules.conf
+            .github/conflict-escalations.log
+          if-no-files-found: ignore
+
+      - name: Fail if conflicts require manual review
+        if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge != 'true'
+        run: |
+          echo "Automated conflict resolution escalated one or more files for manual review."
+          echo "Review the workflow summary and uploaded conflict resolution artifacts."
+          exit 1
 
       - name: Commit automated resolution
         if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge == 'true'
@@ -104,156 +165,73 @@ jobs:
             git commit -m "chore(sync): automated conflict resolution"
           fi
 
-      - name: Run typecheck after automated resolution
-        id: resolution_typecheck
-        if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge == 'true'
-        continue-on-error: true
+      - name: Check sync changes
+        id: sync_changes
+        if: steps.threshold.outputs.should_sync == 'true' && (steps.merge.outputs.result == 'success' || steps.resolution.outputs.can_complete_merge == 'true')
+        run: |
+          if git diff --quiet "origin/${TARGET_BRANCH}..HEAD"; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            echo "No sync changes detected after merge."
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+            echo "Sync changes detected."
+          fi
+
+      - name: Setup Bun
+        if: steps.threshold.outputs.should_sync == 'true' && steps.sync_changes.outputs.has_changes == 'true'
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        if: steps.threshold.outputs.should_sync == 'true' && steps.sync_changes.outputs.has_changes == 'true'
+        run: bun install --frozen-lockfile
+
+      - name: Run typecheck after sync
+        if: steps.threshold.outputs.should_sync == 'true' && steps.sync_changes.outputs.has_changes == 'true'
         run: bun --cwd packages/opencode typecheck
-
-      - name: Run tests after automated resolution
-        id: resolution_tests
-        if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge == 'true' && steps.resolution_typecheck.outcome == 'success'
-        continue-on-error: true
-        run: bun turbo test
-
-      - name: Push automated resolution branch
-        if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge == 'true' && steps.resolution_typecheck.outcome == 'success' && steps.resolution_tests.outcome == 'success'
-        run: git push origin "$SYNC_BRANCH" --force-with-lease
-
-      - name: Count new commits
-        id: diff
-        if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'success'
-        run: echo "count=$(git rev-list origin/$TARGET_BRANCH..HEAD --count)" >> "$GITHUB_OUTPUT"
-
-      - name: Run typecheck
-        id: typecheck
-        if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'success' && steps.diff.outputs.count != '0'
-        run: bun --cwd packages/opencode typecheck
-
-      - name: Run tests
-        id: tests
-        if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'success' && steps.diff.outputs.count != '0' && steps.typecheck.outcome == 'success'
-        run: bun turbo test
 
       - name: Push sync branch
-        if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'success' && steps.diff.outputs.count != '0' && steps.typecheck.outcome == 'success' && steps.tests.outcome == 'success'
-        run: git push origin "$SYNC_BRANCH" --force-with-lease
+        if: steps.threshold.outputs.should_sync == 'true' && steps.sync_changes.outputs.has_changes == 'true'
+        run: |
+          git push --force-with-lease origin "$SYNC_BRANCH"
 
-      - name: Create or update PR
-        if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'success' && steps.diff.outputs.count != '0' && steps.typecheck.outcome == 'success' && steps.tests.outcome == 'success'
+      - name: Create or update upstream sync PR
+        if: steps.threshold.outputs.should_sync == 'true' && steps.sync_changes.outputs.has_changes == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          date=$(date +%Y-%m-%d)
-          body="Automated upstream sync from \`sst/opencode\` — $date.
+          existing_pr="$(gh pr list \
+            --head "$SYNC_BRANCH" \
+            --base "$TARGET_BRANCH" \
+            --state open \
+            --json number \
+            --jq '.[0].number')"
 
-          Upstream commits detected: \`${{ steps.threshold.outputs.behind_count }}\`
+          pr_title="chore(sync): upstream sync after threshold met"
 
-          Validation (typecheck + tests) passed. Awaiting team review before merge into \`$TARGET_BRANCH\`."
+          pr_body="$(cat <<EOF
+          ## Upstream sync
 
-          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number')
-          if [ -n "$existing" ]; then
-            gh pr edit "$existing" --repo "$GITHUB_REPOSITORY" --title "chore: upstream sync $date" --body "$body"
+          This PR was created by the threshold-based upstream sync workflow.
+
+          - Upstream ref: \`$UPSTREAM_REF\`
+          - Target branch: \`$TARGET_BRANCH\`
+          - Commits behind upstream: \`${{ steps.threshold.outputs.behind_count }}\`
+          - Minimum threshold: \`${{ steps.threshold.outputs.minimum_commits }}\`
+
+          The workflow attempted to merge upstream changes and ran validation after the sync branch was prepared.
+          EOF
+          )"
+
+          if [ -n "$existing_pr" ]; then
+            echo "Updating existing PR #$existing_pr"
+            gh pr edit "$existing_pr" \
+              --title "$pr_title" \
+              --body "$pr_body"
           else
-            gh pr create --repo "$GITHUB_REPOSITORY" --title "chore: upstream sync $date" --body "$body" --head "$SYNC_BRANCH" --base "$TARGET_BRANCH"
+            echo "Creating new upstream sync PR"
+            gh pr create \
+              --base "$TARGET_BRANCH" \
+              --head "$SYNC_BRANCH" \
+              --title "$pr_title" \
+              --body "$pr_body"
           fi
-
-      - name: Create or update automated resolution PR
-        if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge == 'true' && steps.resolution_typecheck.outcome == 'success' && steps.resolution_tests.outcome == 'success'
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          date=$(date +%Y-%m-%d)
-          summary=$(cat /tmp/resolution-summary.md 2>/dev/null || echo "No automated resolution summary was generated.")
-          body="Automated upstream sync from \`sst/opencode\` — $date.
-
-          Upstream commits detected: \`${{ steps.threshold.outputs.behind_count }}\`
-
-          Merge conflicts were detected and the automated resolution pipeline resolved them successfully.
-
-          Validation (typecheck + tests) passed. Awaiting team review before merge into \`$TARGET_BRANCH\`.
-
-          $summary"
-
-          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number')
-          if [ -n "$existing" ]; then
-            gh pr edit "$existing" --repo "$GITHUB_REPOSITORY" --title "chore: upstream sync automated resolution $date" --body "$body"
-          else
-            gh pr create --repo "$GITHUB_REPOSITORY" --title "chore: upstream sync automated resolution $date" --body "$body" --head "$SYNC_BRANCH" --base "$TARGET_BRANCH"
-          fi
-
-      - name: Create sync branch from upstream for conflict review
-        if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && (steps.resolution.outputs.can_complete_merge != 'true' || steps.resolution_typecheck.outcome == 'failure' || steps.resolution_tests.outcome == 'failure')
-        run: |
-          git merge --abort || true
-          git checkout -B "$SYNC_BRANCH" "upstream/$UPSTREAM_REF"
-          git rm -rf .github/workflows/
-          git checkout "origin/$TARGET_BRANCH" -- .github/workflows/
-          git commit -m "chore: restore fork workflow files for sync PR"
-          git push origin "$SYNC_BRANCH" --force-with-lease
-
-      - name: Create or update conflict review PR
-        if: steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && (steps.resolution.outputs.can_complete_merge != 'true' || steps.resolution_typecheck.outcome == 'failure' || steps.resolution_tests.outcome == 'failure')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          date=$(date +%Y-%m-%d)
-          summary=$(cat /tmp/resolution-summary.md 2>/dev/null || echo "No automated resolution summary was generated.")
-          body="Automated upstream sync from \`sst/opencode\` hit merge conflicts on $date.
-
-          Upstream commits detected: \`${{ steps.threshold.outputs.behind_count }}\`
-
-          The automated resolution pipeline attempted to resolve the conflicts but could not safely complete the sync.
-
-          Conflicted files:
-          \`${{ steps.merge.outputs.conflicted_files }}\`
-
-          $summary"
-
-          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --json number --jq '.[0].number')
-          if [ -n "$existing" ]; then
-            gh pr edit "$existing" --repo "$GITHUB_REPOSITORY" --title "chore: upstream sync conflict review $date" --body "$body"
-          else
-            gh pr create --repo "$GITHUB_REPOSITORY" --draft --title "chore: upstream sync conflict review $date" --body "$body" --head "$SYNC_BRANCH" --base "$TARGET_BRANCH"
-          fi
-
-      - name: Open issue on merge conflict
-        if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && (steps.resolution.outputs.can_complete_merge != 'true' || steps.resolution_typecheck.outcome == 'failure' || steps.resolution_tests.outcome == 'failure')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          date=$(date +%Y-%m-%d)
-          summary=$(cat /tmp/resolution-summary.md 2>/dev/null || echo "No automated resolution summary was generated.")
-          gh issue create \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Upstream sync conflict — $date" \
-            --body "The upstream sync from \`sst/opencode\` detected merge conflicts on $date.
-
-          Upstream commits detected: \`${{ steps.threshold.outputs.behind_count }}\`
-
-          Conflicted files:
-          \`${{ steps.merge.outputs.conflicted_files }}\`
-
-          Automated resolution was attempted but the workflow fell back to human review.
-
-          $summary" \
-            --label bug
-
-      - name: Fail on unresolved merge conflict
-        if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && (steps.resolution.outputs.can_complete_merge != 'true' || steps.resolution_typecheck.outcome == 'failure' || steps.resolution_tests.outcome == 'failure')
-        run: exit 1
-
-      - name: Open issue on validation failure
-        if: always() && steps.threshold.outputs.should_sync == 'true' && (steps.typecheck.outcome == 'failure' || steps.tests.outcome == 'failure')
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh issue create \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Upstream sync validation failed — $(date +%Y-%m-%d)" \
-            --body "The upstream sync from \`sst/opencode\` merged successfully on $(date +%Y-%m-%d) but failed validation (typecheck or tests).
-
-          Upstream commits detected: \`${{ steps.threshold.outputs.behind_count }}\`
-
-          The sync branch \`$SYNC_BRANCH\` has not been pushed because validation failed. Manual review is required before merging into \`$TARGET_BRANCH\`." \
-            --label bug
