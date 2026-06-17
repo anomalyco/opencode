@@ -76,7 +76,19 @@ export function contentBlockToParts(block: ContentBlock): PromptPart[] {
 
     case "resource":
       if ("text" in block.resource) {
-        return [{ type: "text", text: block.resource.text }]
+        const { uri, text } = block.resource
+        let source = uri
+        try {
+          if (uri.startsWith("zed://")) {
+            source = new URL(uri).searchParams.get("path") ?? uri
+          } else if (uri.startsWith("file://")) {
+            const u = new URL(uri)
+            source = u.pathname + u.hash
+          }
+        } catch {
+          // keep uri as-is
+        }
+        return [{ type: "text", text: `${source}\n${text}` }]
       }
       if (block.resource.mimeType) {
         return [

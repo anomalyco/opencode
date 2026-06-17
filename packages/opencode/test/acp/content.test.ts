@@ -99,7 +99,7 @@ describe("acp content conversion", () => {
     ])
   })
 
-  test("resource with text becomes a text part", () => {
+  test("resource with text includes file path prefix so LLM knows the source", () => {
     expect(
       contentBlockToParts({
         type: "resource",
@@ -109,7 +109,31 @@ describe("acp content conversion", () => {
           text: "context",
         },
       }),
-    ).toEqual([{ type: "text", text: "context" }])
+    ).toEqual([{ type: "text", text: "/tmp/context.txt\ncontext" }])
+  })
+
+  test("resource with zed:// uri decodes path for the prefix", () => {
+    expect(
+      contentBlockToParts({
+        type: "resource",
+        resource: {
+          uri: "zed://workspace?path=/home/user/project/src/main.ts",
+          text: "export function main() {}",
+        },
+      }),
+    ).toEqual([{ type: "text", text: "/home/user/project/src/main.ts\nexport function main() {}" }])
+  })
+
+  test("resource with file:// uri preserves line-range fragment in prefix", () => {
+    expect(
+      contentBlockToParts({
+        type: "resource",
+        resource: {
+          uri: "file:///src/app.ts#L10-L20",
+          text: "const x = 1",
+        },
+      }),
+    ).toEqual([{ type: "text", text: "/src/app.ts#L10-L20\nconst x = 1" }])
   })
 
   test("resource with blob and mimeType becomes a data URL file part", () => {
