@@ -48,7 +48,9 @@ describe("goal manager", () => {
       objective: "Migrate repository to Bun",
       state: "CREATED",
     })
-    expect(await loadActiveGoal(ctx)).toMatchObject({ goal: created })
+    const active = await loadActiveGoal(ctx)
+    expect(active).toMatchObject({ goal: created })
+    expect(active?.plan).toMatchObject({ goalId: created.id, version: 1 })
   })
 
   test("rejects duplicate active goal creation", async () => {

@@ -1,6 +1,7 @@
 import { ActiveGoalExistsError } from "./errors"
 import { createGoalCheckpoint } from "./checkpoints"
 import { appendGoalEvent } from "./events"
+import { createDeterministicGoalPlan } from "./planner"
 import { renderGoalStatus, renderNoActiveGoal } from "./renderer"
 import { archiveActiveGoal, loadActiveGoal, saveActiveGoal, type ActiveGoalState } from "./store"
 import { transitionGoal } from "./state-machine"
@@ -24,6 +25,7 @@ export interface GoalManagerOptions {
   id?: () => string
   eventId?: () => string
   checkpointId?: () => string
+  planId?: () => string
 }
 
 function titleFromObjective(objective: string): string {
@@ -59,6 +61,7 @@ export function createGoalManager(ctx: Pick<InstanceContext, "directory" | "work
   const id = options.id ?? (() => `goal_${crypto.randomUUID()}`)
   const eventId = options.eventId ?? (() => `event_${crypto.randomUUID()}`)
   const checkpointId = options.checkpointId ?? (() => `checkpoint_${crypto.randomUUID()}`)
+  const planId = options.planId ?? (() => `plan_${crypto.randomUUID()}`)
 
   async function event(goal: Goal, type: GoalEvent["type"], message: string, metadata?: Record<string, unknown>) {
     await appendGoalEvent(ctx, {
@@ -81,9 +84,11 @@ export function createGoalManager(ctx: Pick<InstanceContext, "directory" | "work
       if (existing) throw new ActiveGoalExistsError({ goalId: existing.goal.id })
 
       const created = initialGoal(id(), objective, now())
-      await saveActiveGoal(ctx, { goal: created })
-      await event(created, "GOAL_CREATED", "Goal created")
-      return created
+      const plan = createDeterministicGoalPlan(created, { id: planId(), now: now() })
+      const planned = { ...created, planId: plan.id, progress: { ...created.progress, totalSteps: plan.steps.length } }
+      await saveActiveGoal(ctx, { goal: planned, plan })
+      await event(planned, "GOAL_CREATED", "Goal created")
+      return planned
     },
 
     async status() {
