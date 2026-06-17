@@ -1101,6 +1101,93 @@ const scenarios: Scenario[] = [
       check(stable(body) === stable(ctx.state.todos), "todos should match seeded state")
     }),
   http.protected
+    .get("/session/{sessionID}/goal", "session.goal")
+    .seeded((ctx) =>
+      Effect.gen(function* () {
+        const session = yield* ctx.session({ title: "Goal session" })
+        yield* ctx.goals(session.id, { text: "cover session goal", budgetTokens: 10000 })
+        return { session, goal: { text: "cover session goal", budgetTokens: 10000 } }
+      }),
+    )
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/goal", { sessionID: ctx.state.session.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body, ctx) => {
+      object(body)
+      check(body.text === ctx.state.goal.text, "goal should match seeded state")
+    }),
+  http.protected
+    .post("/session/{sessionID}/goal", "session.goal.set")
+    .mutating()
+    .seeded((ctx) => ctx.session({ title: "Goal set session" }))
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/goal", { sessionID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: { text: "set via post", budgetTokens: 5000 },
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(body.text === "set via post", "set should return the goal with text")
+    }),
+  http.protected
+    .patch("/session/{sessionID}/goal", "session.goal.update")
+    .mutating()
+    .seeded((ctx) =>
+      Effect.gen(function* () {
+        const session = yield* ctx.session({ title: "Goal update session" })
+        yield* ctx.goals(session.id, { text: "initial goal" })
+        return { session }
+      }),
+    )
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/goal", { sessionID: ctx.state.session.id }),
+      headers: ctx.headers(),
+      body: { text: "updated goal text", status: "paused" },
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(body.text === "updated goal text", "patch should update text")
+      check(body.status === "paused", "patch should set status to paused")
+    }),
+  http.protected
+    .patch("/session/{sessionID}/goal", "session.goal.complete")
+    .mutating()
+    .seeded((ctx) =>
+      Effect.gen(function* () {
+        const session = yield* ctx.session({ title: "Goal complete session" })
+        yield* ctx.goals(session.id, { text: "finish the work" })
+        return { session }
+      }),
+    )
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/goal", { sessionID: ctx.state.session.id }),
+      headers: ctx.headers(),
+      body: { status: "completed", verification: "all tests pass" },
+    }))
+    .json(200, (body) => {
+      object(body)
+      check(body.status === "completed", "patch should mark the goal completed")
+      check(body.verification === "all tests pass", "patch should persist the verification note")
+    }),
+  http.protected
+    .delete("/session/{sessionID}/goal", "session.goal.clear")
+    .mutating()
+    .seeded((ctx) =>
+      Effect.gen(function* () {
+        const session = yield* ctx.session({ title: "Goal clear session" })
+        yield* ctx.goals(session.id, { text: "to be cleared" })
+        return { session }
+      }),
+    )
+    .at((ctx) => ({
+      path: route("/session/{sessionID}/goal", { sessionID: ctx.state.session.id }),
+      headers: ctx.headers(),
+    }))
+    .json(200, (body) => {
+      check(body === true, "clear should return true")
+    }),
+  http.protected
     .get("/session/{sessionID}/diff", "session.diff")
     .seeded((ctx) => ctx.session({ title: "Diff session" }))
     .at((ctx) => ({ path: route("/session/{sessionID}/diff", { sessionID: ctx.state.id }), headers: ctx.headers() }))

@@ -177,6 +177,7 @@ function withContext<A, E>(
           messages: (sessionID) =>
             run(modules.Session.Service.use((svc) => svc.messages({ sessionID }).pipe(Effect.orDie))),
           todos: (sessionID, todos) => run(modules.Todo.Service.use((svc) => svc.update({ sessionID, todos }))),
+          goals: (sessionID, g) => run(modules.Goal.Service.use((svc) => svc.set({ sessionID, text: g.text, budgetTokens: g.budgetTokens }).pipe(Effect.asVoid)).pipe(Effect.provide(modules.GoalLayer))),
           worktree: (input) => run(modules.Worktree.Service.use((svc) => svc.create(input).pipe(Effect.orDie))),
           worktreeRemove: (directory) =>
             run(modules.Worktree.Service.use((svc) => svc.remove({ directory })).pipe(Effect.ignore)),
