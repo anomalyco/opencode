@@ -12,6 +12,9 @@ import { makeRuntime } from "@opencode-ai/core/effect/runtime"
 import semver from "semver"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { NpmConfig } from "@opencode-ai/core/npm-config"
+// fork: distribution targets (install URL, release repo, brew/npm names) point
+// at the fork, not upstream — so the updater can never overwrite our binary.
+import { ForkDistribution as distribution } from "@/fork/distribution"
 
 const log = Log.create({ service: "installation" })
 
@@ -84,15 +87,6 @@ const ChocoPackage = Schema.Struct({
   d: Schema.Struct({ results: Schema.Array(Schema.Struct({ Version: Schema.String })) }),
 })
 const ScoopManifest = NpmPackage
-const distribution = {
-  installUrl: process.env.OPENCODE_INSTALL_URL ?? "https://opencode.ai/install",
-  releaseRepo: process.env.OPENCODE_RELEASE_REPO ?? "androidand/opencode",
-  brewTap: process.env.OPENCODE_BREW_TAP ?? "androidand/tap",
-  brewFormula: "opencode",
-  npmPackage: "opencode-ai",
-  scoopPackage: "opencode",
-  chocoPackage: "opencode",
-}
 
 export interface Interface {
   readonly info: () => Effect.Effect<Info>
@@ -241,7 +235,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
             return info.formulae[0].versions.stable
           }
           const response = yield* httpOk.execute(
-            HttpClientRequest.get("https://formulae.brew.sh/api/formula/opencode.json").pipe(
+            HttpClientRequest.get(`https://formulae.brew.sh/api/formula/${distribution.brewFormula}.json`).pipe(
               HttpClientRequest.acceptJson,
             ),
           )

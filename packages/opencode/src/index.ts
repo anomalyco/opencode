@@ -34,10 +34,9 @@ import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
 import { ensureProcessMetadata } from "@opencode-ai/core/util/opencode-process"
 import { isRecord } from "@/util/record"
-import { LoopCommand, LoopListCommand, LoopCancelCommand, LoopPauseCommand, LoopResumeCommand } from "./cli/cmd/loop"
-import { AutoReplyToggleCommand } from "./cli/cmd/auto-reply"
-import { PatternDetectionCommand } from "./cli/cmd/pattern-detection"
-import { HookCommand } from "./cli/cmd/hook"
+// fork: all custom CLI commands funnel through one array — keep this the only
+// fork-owned import in this block. See src/fork/commands.ts.
+import { ForkCommands } from "./fork/commands"
 
 const processMetadata = ensureProcessMetadata("main")
 
@@ -116,37 +115,30 @@ const cli = yargs(args)
   })
   .usage("")
   .completion("completion", "generate shell completion script")
-   .command(AcpCommand)
-   .command(McpCommand)
-   .command(TuiThreadCommand)
-   .command(AttachCommand)
-   .command(RunCommand)
-   .command(GenerateCommand)
-   .command(DebugCommand)
-   .command(ConsoleCommand)
-   .command(ProvidersCommand)
-   .command(AgentCommand)
-   .command(UpgradeCommand)
-   .command(UninstallCommand)
-   .command(ServeCommand)
-   .command(WebCommand)
-   .command(ModelsCommand)
-   .command(StatsCommand)
-   .command(ExportCommand)
-   .command(ImportCommand)
-   .command(GithubCommand)
-   .command(PrCommand)
-   .command(SessionCommand)
-   .command(PluginCommand)
-   .command(DbCommand)
-   .command(LoopCommand)
-   .command(LoopListCommand)
-   .command(LoopCancelCommand)
-   .command(LoopPauseCommand)
-   .command(LoopResumeCommand)
-   .command(AutoReplyToggleCommand)
-   .command(PatternDetectionCommand)
-   .command(HookCommand)
+  .command(AcpCommand)
+  .command(McpCommand)
+  .command(TuiThreadCommand)
+  .command(AttachCommand)
+  .command(RunCommand)
+  .command(GenerateCommand)
+  .command(DebugCommand)
+  .command(ConsoleCommand)
+  .command(ProvidersCommand)
+  .command(AgentCommand)
+  .command(UpgradeCommand)
+  .command(UninstallCommand)
+  .command(ServeCommand)
+  .command(WebCommand)
+  .command(ModelsCommand)
+  .command(StatsCommand)
+  .command(ExportCommand)
+  .command(ImportCommand)
+  .command(GithubCommand)
+  .command(PrCommand)
+  .command(SessionCommand)
+  .command(PluginCommand)
+  .command(DbCommand)
+  .command(ForkCommands)
   .fail((msg, err) => {
     if (
       msg?.startsWith("Unknown argument") ||

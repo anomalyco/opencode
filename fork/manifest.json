@@ -1,0 +1,78 @@
+{
+  "fork": "opencode-skein",
+  "upstreamRemote": "anomalyco/opencode",
+  "note": "Machine-readable inventory of everything this fork adds on top of upstream. Drives `bun run fork:verify` (run after every sync to prove nothing was silently dropped) and `bun run sync:check` (detect when upstream has moved past our baseline). Update `baseline` after each successful sync. Keep the human-readable rationale in FORK_WORKFLOW.md in step with this file.",
+  "baseline": {
+    "upstreamRef": "914a643ab26053df463ef78a1deadcdb223e8783",
+    "upstreamBranch": "upstream/dev",
+    "syncedAt": "2026-06-17",
+    "forkTag": null,
+    "comment": "Last upstream commit fully merged into dev. sync:check compares upstream/dev against this ref. Bump it (and forkTag) after every sync."
+  },
+  "owned": [
+    "packages/opencode/src/fork/commands.ts",
+    "packages/opencode/src/fork/distribution.ts",
+    "packages/opencode/src/auto-reply/auto-reply.ts",
+    "packages/opencode/src/automation/automation-features.ts",
+    "packages/opencode/src/pattern-detection/pattern-detection.ts",
+    "packages/opencode/src/scheduler/scheduler.ts",
+    "packages/opencode/src/cli/cmd/loop.ts",
+    "packages/opencode/src/cli/cmd/auto-reply.ts",
+    "packages/opencode/src/cli/cmd/pattern-detection.ts",
+    "packages/opencode/src/cli/cmd/hook.ts",
+    "packages/opencode/src/local/mdns.ts",
+    "packages/opencode/src/server/routes/instance/httpapi/handlers/local.ts",
+    "packages/opencode/src/server/routes/instance/httpapi/groups/local.ts",
+    "packages/tui/src/component/dialog-model-ctx.tsx"
+  ],
+  "patched": [
+    {
+      "file": "packages/opencode/src/index.ts",
+      "marker": "ForkCommands",
+      "note": "Registers all fork CLI commands via a single .command(ForkCommands). The upstream command block must stay byte-identical to upstream."
+    },
+    {
+      "file": "packages/opencode/src/installation/index.ts",
+      "marker": "ForkDistribution",
+      "note": "In-app updater points at the fork (releaseRepo/installUrl/npm/brew), never upstream, so an update prompt cannot clobber our binary."
+    },
+    {
+      "file": "packages/opencode/src/provider/provider.ts",
+      "marker": "mergeDiscoveredModel",
+      "note": "mergeDiscoveredModel + openAICompatibleDiscoveryEnabled; keep ModelV2.ID (not ProviderV2.ModelID)."
+    },
+    {
+      "file": "packages/tui/src/component/dialog-provider.tsx",
+      "marker": "LOCAL_PROVIDER_OPTION_VALUE",
+      "note": "Multi-select discovered local providers; graceful mDNS failure."
+    },
+    {
+      "file": "packages/tui/src/feature-plugins/sidebar/context.tsx",
+      "marker": "freeMb",
+      "note": "Unified context bar, % inline, breakdown below; Context label; cost for cloud providers."
+    },
+    {
+      "file": "packages/tui/src/config/keybind.ts",
+      "marker": "dialog.local",
+      "note": "dialog.local.toggle + dialog.local.connect keybinds."
+    },
+    {
+      "file": "packages/tui/src/context/theme.tsx",
+      "marker": "ThemeState.set",
+      "note": "ThemeState.set(store.active) createEffect to sync active theme.",
+      "status": "REGRESSED — identical to upstream as of baseline; this patch was lost in a prior sync and needs re-applying."
+    },
+    {
+      "file": "packages/core/src/github-copilot/chat/openai-compatible-chat-language-model.ts",
+      "marker": "cache_creation_tokens",
+      "note": "Parse cache_creation_tokens from SSE usage.",
+      "status": "REGRESSED — identical to upstream as of baseline; this patch was lost in a prior sync and needs re-applying."
+    },
+    {
+      "file": "packages/llm/src/protocols/openai-chat.ts",
+      "marker": "cache_creation_tokens",
+      "note": "OpenAIChatUsage schema includes cache_creation_tokens.",
+      "status": "REGRESSED — identical to upstream as of baseline; this patch was lost in a prior sync and needs re-applying."
+    }
+  ]
+}

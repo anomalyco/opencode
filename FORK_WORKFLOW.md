@@ -1,130 +1,133 @@
-# Fork Workflow
+# Fork Workflow — `opencode-skein`
 
-This fork tracks upstream on the `dev` branch.
+This is a permanent fork of opencode. It tracks upstream on the `dev` branch and
+adds local features (loop/auto-reply/pattern-detection, llama-skein local
+provider discovery, context sidebar, etc.) on top.
 
-## Upstream Sync
+Two rules keep syncs from being a mess:
 
-Use a dedicated worktree and sync branch instead of merging directly into your active checkout.
+1. **The fork's custom surface is inventoried in [`fork/manifest.json`](fork/manifest.json).**
+   Nothing custom is "remembered" — it's listed, and `bun run fork:verify` proves
+   it survived every sync.
+2. **Custom code lives in its own files; shared upstream files get the smallest
+   possible patch.** New CLI commands are registered through one array
+   (`src/fork/commands.ts` → a single `.command(ForkCommands)` in `index.ts`), so
+   upstream can reshuffle its command list without ever conflicting with ours.
 
-### Quick Sync
+## The inventory: `fork/manifest.json`
+
+| Section | Meaning | Verified by |
+|---------|---------|-------------|
+| `owned` | Fork-only files (don't exist upstream). Can't content-conflict, but *can* be dropped during conflict resolution. | must exist |
+| `patched` | Upstream files we edit. Each has a `marker` string — the fingerprint of our change. | must exist **and** contain marker |
+| `baseline` | The upstream commit our `dev` currently contains. | drives `sync:check` |
+
+`bun run fork:verify` checks all of the above. A `patched` entry with
+`"status": "REGRESSED"` is a patch already known to be lost — reported as a
+non-blocking warning so you can re-apply it deliberately. Pass `--strict` to fail
+on those too.
+
+> **Outstanding regressions** (lost in earlier syncs, need re-applying):
+> - `packages/tui/src/context/theme.tsx` — `ThemeState.set(store.active)` createEffect
+> - `packages/core/src/github-copilot/chat/openai-compatible-chat-language-model.ts` — `cache_creation_tokens` parsing
+> - `packages/llm/src/protocols/openai-chat.ts` — `cache_creation_tokens` in `OpenAIChatUsage`
+
+When you add a new custom file or patch a new upstream file, **add it to the
+manifest in the same commit.** That is the single source of truth; the table that
+used to live in this doc was stale (wrong paths after upstream moved the TUI into
+`packages/tui/`), which is how features got lost.
+
+## Distribution & the updater (`src/fork/distribution.ts`)
+
+The in-app updater used to resolve "latest version" + "where to install from"
+against upstream, so saying "yes" to an update prompt would overwrite the fork
+binary with upstream's. All distribution targets now point at the fork:
+
+| Target | Value | Env override |
+|--------|-------|--------------|
+| install script | `raw.githubusercontent.com/androidand/opencode/dev/install` | `OPENCODE_INSTALL_URL` |
+| GitHub releases | `androidand/opencode` | `OPENCODE_RELEASE_REPO` |
+| brew tap/formula | `androidand/tap` / `opencode-skein` | `OPENCODE_BREW_TAP` / `OPENCODE_BREW_FORMULA` |
+| npm / scoop / choco | `opencode-skein` | `OPENCODE_NPM_PACKAGE` etc. |
+
+`installation/index.ts` is otherwise a near-verbatim copy of upstream — it just
+imports `ForkDistribution`. The on-disk binary is still named `opencode` (renaming
+the `bin` would break existing installs); collision is avoided by the updater only
+ever pulling fork artifacts.
+
+> **Publishing not wired yet.** Upstream's `publish.yml` is gated to
+> `github.repository == 'anomalyco/opencode'`, so it does not run on the fork. Until
+> a fork release pipeline exists, `opencode upgrade` will find no newer fork release
+> and simply no-op — which is the safe outcome (it will not pull upstream).
+
+## "New upstream version" = sync trigger, not an upgrade
+
+The updater's "new version available" signal now refers to **our** releases. The
+*upstream* signal is handled separately, on purpose:
 
 ```bash
-# Dry run — inspect the plan
-bun run sync-upstream
-
-# Execute — creates worktree and merges upstream
-bun run sync-upstream:apply
+bun run sync:check          # fetch upstream, compare to manifest baseline, report
+bun run sync:check --apply  # ...and scaffold the sync worktree if upstream is ahead
 ```
 
-This creates a sibling worktree at `../opencode-sync-YYYYMMDD` and a branch `sync/upstream-YYYYMMDD` based on `origin/dev`, then merges `upstream/dev` into it.
+`sync:check` reads `baseline.upstreamRef` from the manifest, fetches `upstream/dev`,
+and tells you exactly how many commits you're behind (with the changelog). It never
+merges into `dev` or pushes — it stops at a prepared worktree.
 
-### Full Sync Procedure
+## Sync procedure
 
-1. **Dry run** — inspect what will happen:
+1. **Check / scaffold:**
    ```bash
-   bun run sync-upstream
+   bun run sync:check            # is a sync due?
+   bun run sync-upstream:apply   # or: bun run sync:check --apply
    ```
+   Creates a sibling worktree `../opencode-sync-YYYYMMDD` on branch
+   `sync/upstream-YYYYMMDD` based on `origin/dev`, and merges `upstream/dev` in.
 
-2. **Execute** — creates worktree and merges:
-   ```bash
-   bun run sync-upstream:apply
-   ```
+2. **Resolve conflicts** in the sync worktree. Thanks to the modular layout, most
+   conflicts are confined to the `patched` files in the manifest.
 
-3. **Validate** in the sync worktree:
+3. **Verify nothing was lost:**
    ```bash
    cd ../opencode-sync-YYYYMMDD
-
-   # Build and typecheck
    bun install
-   cd packages/opencode && bun typecheck
-
-   # Smoke test
-   bun run build
+   (cd packages/opencode && bun typecheck)
+   bun run fork:verify          # ← every owned file present + every marker intact
    ```
+   If `fork:verify` reports a dropped file or lost marker, re-apply it before
+   continuing.
 
-4. **Resolve conflicts** (if any) in the sync worktree.
-
-5. **Merge back** into `dev` in the original checkout:
+4. **Merge back** into `dev`:
    ```bash
-   # In original repo
-   git fetch origin
-   git checkout dev
+   git fetch origin && git checkout dev
    git merge --no-ff sync/upstream-YYYYMMDD --no-edit
    ```
 
-6. **Tag** the resulting `dev` commit:
+5. **Update the baseline + tag:**
    ```bash
-   git tag fork/2026-05-29.1
-   git push origin fork/2026-05-29.1
+   # set fork/manifest.json baseline.upstreamRef to the new upstream/dev sha,
+   # baseline.forkTag to the tag below, baseline.syncedAt to today
+   git commit -am "fork: sync upstream <sha>, bump baseline"
+   git tag fork/YYYY-MM-DD.N
+   git push origin dev fork/YYYY-MM-DD.N
    ```
 
-7. **Clean up** the sync worktree:
+6. **Clean up:**
    ```bash
    git worktree remove ../opencode-sync-YYYYMMDD
-   rm -rf ../opencode-sync-YYYYMMDD
    ```
 
-## Upstream Update = Sync Trigger
+## Skein port chain
 
-When the opencode in-app updater shows a new version available, that is the signal to sync this fork with upstream. Do not run the auto-updater — run the sync workflow above instead.
+Keep the dependency chain one-way: `upstream/dev` → fork `dev` → a tagged fork
+snapshot (`fork/YYYY-MM-DD.N`) → skein port work based on that tag. Port from
+tagged snapshots, not a moving branch, so you can always say exactly which fork
+state skein is based on. Record the tag in the skein change notes before starting
+Go-side work.
 
-After each sync, tag the result and record which upstream commit it aligns with:
+## OpenAPI specs — two separate concerns
 
-```bash
-git tag fork/YYYY-MM-DD.N   # e.g. fork/2026-06-06.1
-git push origin fork/YYYY-MM-DD.N
-```
-
-Then update `docs/ECOSYSTEM.md` in skein with the new tag before porting any API changes.
-
-## Custom Changes to Preserve
-
-When merging upstream, these custom changes may conflict and need re-applying:
-
-| Area | Files | Description |
-|------|-------|-------------|
-| Token cache_write | `packages/core/src/github-copilot/chat/openai-compatible-chat-language-model.ts` | Parse `cache_creation_tokens` from SSE `usage` |
-| Token cache_write | `packages/llm/src/protocols/openai-chat.ts` | `OpenAIChatUsage` schema includes `cache_creation_tokens` |
-| Local mDNS discovery | `packages/opencode/src/local/mdns.ts` | mDNS-based `_llamaswap._tcp.local.` discovery for `/connect` |
-| Local LAN scan | `packages/opencode/src/server/routes/instance/httpapi/handlers/local.ts` | Probe llama-swap + Ollama + LM Studio ports on LAN |
-| Local LAN scan | `packages/opencode/src/server/routes/instance/httpapi/groups/local.ts` | Fleet provider probing (configured skein backends) |
-| Local provider dialog | `packages/opencode/src/cli/cmd/tui/component/dialog-provider.tsx` | Multi-select discovered providers; graceful mDNS failure |
-| Context window display | `packages/opencode/src/cli/cmd/tui/feature-plugins/sidebar/context.tsx` | Unified bar, %, inline breakdown; Context label; cost for cloud |
-| Context window display | `packages/opencode/src/cli/cmd/tui/component/dialog-model-ctx.tsx` | Live KV-based ctx recommendation; 4k preset steps |
-| Provider metadata | `packages/opencode/src/provider/provider.ts` | `mergeDiscoveredModel` + `openAICompatibleDiscoveryEnabled`; keep `ModelV2.ID` not `ProviderV2.ModelID` |
-| Provider metadata | `packages/opencode/src/local/mdns.ts` | Refresh discovered local model metadata on reconnect |
-| Context set handler | `packages/opencode/src/server/routes/instance/httpapi/handlers/local.ts` | `ctx.params` (not `ctx.pathParams`); generated LlamaSkeinClient |
-| Keybinds | `packages/opencode/src/cli/cmd/tui/config/keybind.ts` | `dialog.local.toggle` + `dialog.local.connect` |
-| Theme sync | `packages/opencode/src/cli/cmd/tui/context/theme.tsx` | `ThemeState.set(store.active)` createEffect |
-| Build scripts | `packages/opencode/package.json` | `build:llama-skein-client`, `fix-node-pty` scripts; `bun-pty` dep |
-
-## Known Post-Merge Type Errors (upstream's own code)
-
-After each sync, upstream ships with type errors in its own files that we cannot fix:
-- `src/server/routes/instance/httpapi/handlers/pty.ts` — Effect Layer/Brand type strictness
-- `src/server/routes/instance/httpapi/handlers/file.ts` — same
-- `src/session/session.ts`, `src/share/share-next.ts` — upstream any-type drift
-- `src/acp/service.ts` — Provider brand cast
-
-These are pre-existing in upstream's own typecheck. Push with `--no-verify` when the hook fails on these. Our code must typecheck cleanly excluding those files.
-
-## OpenAPI Specs — Two Separate Concerns
-
-**Our llama-skein spec** (`~/dev/llama-skein/contracts/llama-skein.openapi.json`) defines the backend LLM proxy API. It has nothing to do with the opencode HTTP API and should NOT be aligned with it.
-
-**Upstream opencode spec** (`packages/sdk/openapi.json`) defines the opencode agent runner's public HTTP API. We extend it with our `/local/*` routes but the spec file itself is taken from upstream unchanged.
-
-These serve different purposes and should not be merged.
-
-## Skein Port Chain
-
-Keep the dependency chain one-way:
-
-1. `upstream/dev`
-2. your fork `dev`
-3. a tagged fork snapshot
-4. skein port work based on that tag
-
-Do not port directly from a moving branch into skein. Port from tagged snapshots so you can answer exactly which opencode fork state skein is based on.
-
-Tag pattern: `fork/YYYY-MM-DD.N` — record the tag in the skein change notes before starting Go-side work.
+- **llama-skein spec** (`~/dev/llama-skein/contracts/llama-skein.openapi.json`) —
+  the backend LLM proxy API. Unrelated to opencode's HTTP API; do not align them.
+- **opencode spec** (`packages/sdk/openapi.json`) — taken from upstream unchanged;
+  we extend it at runtime with `/local/*` routes but never edit the spec file.
