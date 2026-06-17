@@ -7,6 +7,9 @@ import { HttpRecorderInternal } from "@opencode-ai/http-recorder/internal"
 import { describe, expect, test } from "bun:test"
 import { tool, type ModelMessage, type JSONValue } from "ai"
 import { Effect, Layer, Option, Schema, Stream } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
+import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import path from "node:path"
 import z from "zod"
 import { Auth } from "@/auth"
@@ -270,6 +273,7 @@ function recordedNativeLLMLayer(scenario: RecordedScenario) {
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(ModelsDev.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
+    Layer.provide(LayerNode.buildLayer(httpClient)),
   )
   // Only the HTTP client is recorded; RequestExecutor and the opencode LLM stack remain real.
   const metadata = {

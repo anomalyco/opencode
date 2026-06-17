@@ -18,7 +18,9 @@ import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
-import { Effect, Layer, Context, Schema, Types } from "effect"
+import { Duration, Effect, Exit, Layer, Context, Option, Schema, Types } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { httpClient } from "@opencode-ai/core/effect/layer-node-platform"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
@@ -136,6 +138,16 @@ const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>
 type CustomModelLoader = (sdk: any, modelID: string, options?: Record<string, any>, model?: Model) => Promise<any>
 type CustomVarsLoader = (options: Record<string, any>) => Record<string, string>
 type CustomDiscoverModels = () => Promise<Record<string, Model>>
+interface OpenAIModelsResponse {
+  data: Array<{
+    id: string
+  }>
+}
+
+type DiscoveryResult =
+  | { action: "delete"; providerID: string }
+  | { action: "update"; providerID: string; models: Record<string, Model> }
+  | { action: "skip" }
 type CustomLoader = (provider: Info) => Effect.Effect<{
   autoload: boolean
   getModel?: CustomModelLoader
@@ -1131,6 +1143,8 @@ interface State {
   modelLoaders: Record<string, CustomModelLoader>
   varsLoaders: Record<string, CustomVarsLoader>
   discoveryLoaders: Record<string, CustomDiscoverModels>
+  discoveryDone: boolean
+  cfg: ConfigV1.Info
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
@@ -1294,6 +1308,7 @@ export const layer = Layer.effect(
     const plugin = yield* Plugin.Service
     const modelsDevSvc = yield* ModelsDev.Service
     const runtimeFlags = yield* RuntimeFlags.Service
+    const http = yield* HttpClient.HttpClient
 
     const state = yield* InstanceState.make<State>(() =>
       Effect.gen(function* () {
@@ -1608,19 +1623,21 @@ export const layer = Layer.effect(
           varsLoaders,
           discoveryLoaders,
           discoveryDone: false,
+          cfg,
         }
       }),
     )
 
     const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
 
-   const init = Effect.fn("Provider.init")(function* () {
+    const init = Effect.fn("Provider.init")(function* () {
       const s = yield* InstanceState.get(state)
-      const cfg = yield* config.get()
+      if (s.discoveryDone) return
+      const cfg = s.cfg
 
       const providersToDiscover: Array<{
         providerID: string
-        discover?: () => Promise<Record<string, any>>
+        discover?: CustomDiscoverModels
         inlineFetch: boolean
       }> = []
 
@@ -1637,127 +1654,154 @@ export const layer = Layer.effect(
         providersToDiscover.push({ providerID, inlineFetch: true })
       }
 
-      yield* Effect.forEach(
+      const discoveryResults = yield* Effect.forEach(
         providersToDiscover,
-        ({ providerID, discover, inlineFetch }) =>
-          Effect.gen(function* () {
-            const provider = s.providers[ProviderV2.ID.make(providerID)]
-            if (!provider || provider.source !== "config") return
-
-            const api = provider.options?.baseURL ?? ""
-            if (!api) return
-
-            const authExit = yield* auth.get(ProviderV2.ID.make(providerID)).pipe(Effect.exit)
-            const authResult = authExit._tag === "Success" ? authExit.value : undefined
-
-            const headers: Record<string, string> = {}
-            if (authResult?.type === "api" && authResult.key) {
-              headers["Authorization"] = `Bearer ${authResult.key}`
-            }
-            if (!headers["Authorization"] && provider.key) {
-              headers["Authorization"] = `Bearer ${provider.key}`
-            }
-            if (!headers["Authorization"] && provider.options?.apiKey) {
-              headers["Authorization"] = `Bearer ${provider.options.apiKey}`
-            }
-
-            let discovered: Set<string>
-            if (inlineFetch) {
-              const url = api.endsWith("/v1") ? `${api}/models` : `${api}/v1/models`
-              const fetchExit = yield* Effect.promise(() =>
-                fetch(url, { headers, signal: AbortSignal.timeout(3000) }),
-              ).pipe(Effect.exit)
-              if (fetchExit._tag === "Failure") {
-                if (Object.keys(provider.models).length === 0) delete s.providers[ProviderV2.ID.make(providerID)]
-                return
-              }
-              const res = fetchExit.value
-              if (!res.ok) {
-                if (Object.keys(provider.models).length === 0) delete s.providers[ProviderV2.ID.make(providerID)]
-                return
-              }
-
-              const jsonExit = yield* Effect.promise(() => res.json()).pipe(Effect.exit)
-              if (jsonExit._tag === "Failure") {
-                if (Object.keys(provider.models).length === 0) delete s.providers[ProviderV2.ID.make(providerID)]
-                return
-              }
-              const json: any = jsonExit.value
-              discovered = new Set<string>(
-                (json.data ?? [])
-                  .filter((m: any) => m.id && typeof m.id === "string")
-                  .map((m: any) => m.id as string),
-              )
-            } else if (discover) {
-              const discoverExit = yield* Effect.promise(() => discover()).pipe(Effect.exit)
-              if (discoverExit._tag === "Failure") {
-                if (Object.keys(provider.models).length === 0) delete s.providers[ProviderV2.ID.make(providerID)]
-                return
-              }
-              const result = discoverExit.value
-              discovered = new Set<string>(
-                Object.entries(result)
-                  .filter(([_, m]) => m && typeof m.id === "string")
-                  .map(([id]) => id),
-              )
-            } else {
-              return
-            }
-
-            // Filter out Models.dev models not returned by discovery (only for inlineFetch)
-            // Preserve config-defined models (they were explicitly configured by the user)
-            if (inlineFetch) {
-              const configProvider = cfg.provider?.[providerID]
-              if (configProvider) {
-                const configModelIDs = configProvider.models ? Object.keys(configProvider.models) : []
-                const modelIDs: string[] = []
-                for (const k in provider.models) modelIDs.push(k)
-                for (const modelID of modelIDs) {
-                  // Keep config-defined models, remove only Models.dev models not in discovery
-                  if (configModelIDs.includes(modelID)) continue
-                  if (!discovered.has(modelID)) {
-                    delete provider.models[modelID]
-                  }
-                }
-              }
-            }
-
-            // Merge discovered models
-            const npm = cfg.provider?.[providerID]?.npm ?? "@ai-sdk/openai-compatible"
-            for (const modelID of discovered) {
-              if (provider.models[modelID]) continue
-              provider.models[modelID] = {
-                id: ModelV2.ID.make(modelID),
-                providerID: ProviderV2.ID.make(providerID),
-                name: modelID,
-                api: { id: modelID, url: api, npm },
-                status: "active",
-                headers: {},
-                options: {},
-                cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-                limit: { context: 128000, output: 128000 },
-                capabilities: {
-                  temperature: false,
-                  reasoning: false,
-                  attachment: false,
-                  toolcall: true,
-                  input: { text: true, audio: false, image: false, video: false, pdf: false },
-                  output: { text: true, audio: false, image: false, video: false, pdf: false },
-                  interleaved: false,
-                },
-                release_date: "",
-                variants: {},
-              }
-            }
-
-            // Remove provider if no models remain after successful discovery
-            if (inlineFetch && Object.keys(provider.models).length === 0) {
-              delete s.providers[ProviderV2.ID.make(providerID)]
-            }
-          }).pipe(Effect.ignore),
+        ({ providerID, discover, inlineFetch }): Effect.Effect<DiscoveryResult> => {
+          const provider = s.providers[ProviderV2.ID.make(providerID)]
+          if (!provider || provider.source !== "config") {
+            return Effect.succeed({ action: "skip" })
+          }
+          return discoverProviderModels(providerID, discover, inlineFetch, provider, cfg, s, http, auth)
+        },
         { concurrency: "unbounded" },
       )
+
+      // Apply all discovery results atomically
+      for (const result of discoveryResults) {
+        if (result.action === "skip") continue
+        const key = ProviderV2.ID.make(result.providerID)
+        if (result.action === "delete") {
+          delete s.providers[key]
+        } else {
+          const p = s.providers[key]
+          if (p) s.providers[key] = { ...p, models: result.models }
+        }
+      }
+      s.discoveryDone = true
     })
+
+    function discoverProviderModels(
+      providerID: string,
+      discover: CustomDiscoverModels | undefined,
+      inlineFetch: boolean,
+      provider: Info,
+      cfg: ConfigV1.Info,
+      s: State,
+      http: HttpClient.HttpClient,
+      auth: Auth.Interface,
+    ): Effect.Effect<DiscoveryResult> {
+      return Effect.gen(function* () {
+        const api = provider.options?.baseURL ?? ""
+        if (!api) return { action: "skip" }
+
+        const authExit = yield* auth.get(ProviderV2.ID.make(providerID)).pipe(Effect.exit)
+        const authResult = Exit.isSuccess(authExit) ? authExit.value : undefined
+
+        const headers: Record<string, string> = {}
+        if (authResult?.type === "api" && authResult.key) {
+          headers["Authorization"] = `Bearer ${authResult.key}`
+        }
+        if (!headers["Authorization"] && provider.key) {
+          headers["Authorization"] = `Bearer ${provider.key}`
+        }
+        if (!headers["Authorization"] && provider.options?.apiKey) {
+          headers["Authorization"] = `Bearer ${provider.options.apiKey}`
+        }
+
+        // Helper: return "delete" if provider has no models, otherwise "skip"
+        const emptyOrSkip = (): DiscoveryResult =>
+          Object.keys(provider.models).length === 0
+            ? { action: "delete", providerID }
+            : { action: "skip" }
+
+        let discovered: Set<string>
+        if (inlineFetch) {
+          const url = api.endsWith("/v1") ? `${api}/models` : `${api}/v1/models`
+          const request = HttpClientRequest.get(url).pipe(
+            HttpClientRequest.setHeaders(headers),
+          )
+          const fetchExit = yield* http.execute(request).pipe(
+            Effect.timeout("10 seconds"),
+            Effect.exit,
+          )
+          if (Exit.isFailure(fetchExit)) return emptyOrSkip()
+
+          const res = fetchExit.value
+          if (res.status < 200 || res.status >= 300) return emptyOrSkip()
+
+          const jsonExit = yield* res.json.pipe(Effect.exit)
+          if (Exit.isFailure(jsonExit)) return emptyOrSkip()
+
+          const json = jsonExit.value as unknown as OpenAIModelsResponse
+          discovered = new Set<string>(
+            (json.data ?? [])
+              .filter((m) => typeof m.id === "string")
+              .map((m) => m.id),
+          )
+        } else if (discover) {
+          const discoverExit = yield* Effect.promise(() => discover()).pipe(Effect.exit)
+          if (Exit.isFailure(discoverExit)) return emptyOrSkip()
+
+          const result = discoverExit.value
+          discovered = new Set<string>(
+            Object.entries(result)
+              .filter(([_, m]) => m && typeof m.id === "string")
+              .map(([id]) => id),
+          )
+        } else {
+          return { action: "skip" }
+        }
+
+        // Build new models record — never mutate provider.models
+        const newModels = { ...provider.models }
+
+        // Filter out Models.dev models not returned by discovery (only for inlineFetch)
+        // Preserve config-defined models (they were explicitly configured by the user)
+        if (inlineFetch) {
+          const configProvider = cfg.provider?.[providerID]
+          if (configProvider) {
+            const configModelIDs = configProvider.models ? Object.keys(configProvider.models) : []
+            for (const modelID of Object.keys(newModels)) {
+              if (configModelIDs.includes(modelID)) continue
+              if (!discovered.has(modelID)) delete newModels[modelID]
+            }
+          }
+        }
+
+        // Merge discovered models into newModels
+        const npm = cfg.provider?.[providerID]?.npm ?? "@ai-sdk/openai-compatible"
+        for (const modelID of discovered) {
+          if (newModels[modelID]) continue
+          newModels[modelID] = {
+            id: ModelV2.ID.make(modelID),
+            providerID: ProviderV2.ID.make(providerID),
+            name: modelID,
+            api: { id: modelID, url: api, npm },
+            family: "discovered",
+            status: "active",
+            headers: {},
+            options: {},
+            cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+            limit: { context: 128000, output: 128000 },
+            capabilities: {
+              temperature: false,
+              reasoning: false,
+              attachment: false,
+              toolcall: true,
+              input: { text: true, audio: false, image: false, video: false, pdf: false },
+              output: { text: true, audio: false, image: false, video: false, pdf: false },
+              interleaved: false,
+            },
+            release_date: "",
+            variants: {},
+          }
+        }
+
+        // If no models remain after discovery, signal deletion
+        if (Object.keys(newModels).length === 0) return { action: "delete", providerID }
+        return { action: "update", providerID, models: newModels }
+      })
+    }
 
     async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
       try {
@@ -2066,18 +2110,18 @@ export const layer = Layer.effect(
         providerID: provider.id,
         modelID: model.id,
       }
-    })
+   })
 
-     return Service.of({
-        init: () => init(),
-        list,
-        getProvider,
-        getModel,
-        getLanguage,
-        closest,
-        getSmallModel,
-        defaultModel,
-      })
+    return Service.of({
+      init: () => init(),
+      list,
+      getProvider,
+      getModel,
+      getLanguage,
+      closest,
+      getSmallModel,
+      defaultModel,
+    })
   }),
 )
 
@@ -2090,6 +2134,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(ModelsDev.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
+    Layer.provide(FetchHttpClient.layer),
   ),
 )
 
@@ -2119,6 +2164,7 @@ export const node = LayerNode.make(layer, [
   Plugin.node,
   ModelsDev.node,
   RuntimeFlags.node,
+  httpClient,
 ])
 
 export * as Provider from "./provider"

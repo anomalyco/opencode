@@ -1,7 +1,8 @@
-import { afterEach, expect, mock, test } from "bun:test"
+import { afterEach, expect, test } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
+import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -22,7 +23,6 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
 const originalEnv = new Map<string, string | undefined>()
-const originalFetch = globalThis.fetch
 
 const rememberEnv = (k: string) => {
   if (!originalEnv.has(k)) originalEnv.set(k, process.env[k])
@@ -54,7 +54,6 @@ afterEach(async () => {
     else process.env[key] = value
   }
   originalEnv.clear()
-  globalThis.fetch = originalFetch
   await disposeAllInstances()
 })
 
@@ -67,6 +66,7 @@ const providerLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(ModelsDev.defaultLayer),
     Layer.provide(RuntimeFlags.layer(flags)),
+    Layer.provide(FetchHttpClient.layer),
   )
 
 const list = Provider.use.list()
@@ -80,6 +80,36 @@ const paid = (providers: Record<string, { models: Record<string, { cost: { input
 const languageBaseURL = (language: unknown) => (language as { config: { baseURL: string } }).config.baseURL
 
 const it = testEffect(Layer.mergeAll(Provider.defaultLayer, Env.defaultLayer, Plugin.defaultLayer))
+
+// Mock HTTP client for discovery tests - replaces globalThis.fetch mocking
+const mockHttpClientResponse = (handler: (request: HttpClientRequest.HttpClientRequest) => Response) => {
+  const client = HttpClient.make(
+    (request) => Effect.succeed(HttpClientResponse.fromWeb(request, handler(request))),
+  )
+  return Layer.succeed(HttpClient.HttpClient, client)
+}
+
+const jsonResponse = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } })
+
+const textResponse = (text: string, status = 200) =>
+  new Response(text, { status, headers: { "Content-Type": "text/html" } })
+
+const discoveryTestLayer = (handler: (request: HttpClientRequest.HttpClientRequest) => Response) =>
+  Provider.layer.pipe(
+    Layer.provide(FSUtil.defaultLayer),
+    Layer.provide(Env.defaultLayer),
+    Layer.provide(Config.defaultLayer),
+    Layer.provide(Auth.defaultLayer),
+    Layer.provide(Plugin.defaultLayer),
+    Layer.provide(ModelsDev.defaultLayer),
+    Layer.provide(RuntimeFlags.layer({})),
+    Layer.provide(mockHttpClientResponse(handler)),
+  )
+
+const discoveryTestEffect = (handler: (request: HttpClientRequest.HttpClientRequest) => Response) =>
+  testEffect(discoveryTestLayer(handler))
+
 const experimentalModels = testEffect(providerLayer({ enableExperimentalModels: true }))
 
 const alphaProviderConfig = {
@@ -1794,27 +1824,17 @@ it.effect("opencode loader keeps paid models when auth exists", () =>
   }).pipe(provideMultiInstance),
 )
 
-it.instance(
+discoveryTestEffect(() =>
+  jsonResponse({
+    data: [
+      { id: "llama-3.1-8b", object: "model" },
+      { id: "mistral-7b", object: "model" },
+    ],
+  }),
+).instance(
   "custom provider with baseURL discovers models from remote /models endpoint",
   () =>
     Effect.gen(function* () {
-      globalThis.fetch = mock((url: string) => {
-        if (url === "http://localhost:8080/v1/models") {
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                data: [
-                  { id: "llama-3.1-8b", object: "model" },
-                  { id: "mistral-7b", object: "model" },
-                ],
-              }),
-              { status: 200 },
-            ),
-          )
-        }
-        return Promise.resolve(originalFetch(url))
-      }) as unknown as typeof fetch
-
       const provider = yield* Provider.Service
       yield* provider.init()
       const providers = yield* list
@@ -1847,17 +1867,10 @@ it.instance(
   },
 )
 
-it.instance(
+discoveryTestEffect(() => jsonResponse({}, 500)).instance(
   "custom provider with failing /models endpoint is removed gracefully",
   () =>
     Effect.gen(function* () {
-      globalThis.fetch = mock((url: string) => {
-        if (url === "http://localhost:8080/v1/models") {
-          return Promise.resolve(new Response("Internal Server Error", { status: 500 }))
-        }
-        return Promise.resolve(originalFetch(url))
-      }) as unknown as typeof fetch
-
       const provider = yield* Provider.Service
       yield* provider.init()
       yield* pollWithTimeout(
@@ -1885,17 +1898,10 @@ it.instance(
   },
 )
 
-it.instance(
+discoveryTestEffect(() => textResponse("<html>error</html>")).instance(
   "custom provider handles non-JSON response gracefully",
   () =>
     Effect.gen(function* () {
-      globalThis.fetch = mock((url: string) => {
-        if (url === "http://localhost:8080/v1/models") {
-          return Promise.resolve(new Response("<html>error</html>", { status: 200 }))
-        }
-        return Promise.resolve(originalFetch(url))
-      }) as unknown as typeof fetch
-
       const provider = yield* Provider.Service
       yield* provider.init()
       yield* pollWithTimeout(
@@ -1923,22 +1929,10 @@ it.instance(
   },
 )
 
-it.instance(
+discoveryTestEffect(() => jsonResponse({ data: [] })).instance(
   "custom provider handles empty data array gracefully",
   () =>
     Effect.gen(function* () {
-      globalThis.fetch = mock((url: string) => {
-        if (url === "http://localhost:8080/v1/models") {
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({ data: [] }),
-              { status: 200 },
-            ),
-          )
-        }
-        return Promise.resolve(originalFetch(url))
-      }) as unknown as typeof fetch
-
       const provider = yield* Provider.Service
       yield* provider.init()
       yield* pollWithTimeout(
@@ -1966,28 +1960,18 @@ it.instance(
   },
 )
 
-it.instance(
+discoveryTestEffect(() =>
+  jsonResponse({
+    data: [
+      { id: "llama-3.1-8b", object: "model" },
+      { id: "mistral-7b", object: "model" },
+      { id: "gemma-2-9b", object: "model" },
+    ],
+  }),
+).instance(
   "custom provider discovers additional models while preserving config-defined model settings",
   () =>
     Effect.gen(function* () {
-      globalThis.fetch = mock((url: string) => {
-        if (url === "http://localhost:8080/v1/models") {
-          return Promise.resolve(
-            new Response(
-              JSON.stringify({
-                data: [
-                  { id: "llama-3.1-8b", object: "model" },
-                  { id: "mistral-7b", object: "model" },
-                  { id: "gemma-2-9b", object: "model" },
-                ],
-              }),
-              { status: 200 },
-            ),
-          )
-        }
-        return Promise.resolve(originalFetch(url))
-      }) as unknown as typeof fetch
-
       const provider = yield* Provider.Service
       yield* provider.init()
       const providers = yield* list
