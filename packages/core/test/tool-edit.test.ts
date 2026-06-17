@@ -365,6 +365,263 @@ describe("EditTool", () => {
     ),
   )
 
+  it.live("fuzzy-matches trailing whitespace differences via line-trimmed replacer", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "trailing.txt")
+        return Effect.promise(() => fs.writeFile(target, "const x = 1\nconst y = 2")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              settleTool(registry, call({ path: "trailing.txt", oldString: "const x = 1  \nconst y = 2", newString: "const x = 1\nconst y = 2" })),
+            ),
+          ),
+          Effect.andThen((settled) =>
+            Effect.gen(function* () {
+              expect(settled.output?.structured).toMatchObject({ replacements: 1 })
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("const x = 1\nconst y = 2")
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("fuzzy-matches extra whitespace via whitespace-normalized replacer", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "spaces.txt")
+        return Effect.promise(() => fs.writeFile(target, "const    x   =   1")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              settleTool(registry, call({ path: "spaces.txt", oldString: "const x = 1", newString: "const x = 2" })),
+            ),
+          ),
+          Effect.andThen((settled) =>
+            Effect.gen(function* () {
+              expect(settled.output?.structured).toMatchObject({ replacements: 1 })
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("const x = 2")
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("fuzzy-matches indentation differences via indentation-flexible replacer", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "indent.txt")
+        return Effect.promise(() => fs.writeFile(target, "    const x = 1\n    const y = 2")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              settleTool(
+                registry,
+                call({ path: "indent.txt", oldString: "const x = 1\nconst y = 2", newString: "const z = 3\nconst w = 4" }),
+              ),
+            ),
+          ),
+          Effect.andThen((settled) =>
+            Effect.gen(function* () {
+              expect(settled.output?.structured).toMatchObject({ replacements: 1 })
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("const z = 3\nconst w = 4")
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("fuzzy-matches escaped characters via escape-normalized replacer", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "escape.txt")
+        return Effect.promise(() => fs.writeFile(target, "hello\nworld")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              settleTool(registry, call({ path: "escape.txt", oldString: "hello\\nworld", newString: "hi\\nthere" })),
+            ),
+          ),
+          Effect.andThen((settled) =>
+            Effect.gen(function* () {
+              expect(settled.output?.structured).toMatchObject({ replacements: 1 })
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("hi\\nthere")
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("fuzzy-matches trimmed boundary via trimmed-boundary replacer", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "boundary.txt")
+        return Effect.promise(() => fs.writeFile(target, "hello world")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              settleTool(
+                registry,
+                call({ path: "boundary.txt", oldString: "  hello world  ", newString: "goodbye" }),
+              ),
+            ),
+          ),
+          Effect.andThen((settled) =>
+            Effect.gen(function* () {
+              expect(settled.output?.structured).toMatchObject({ replacements: 1 })
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("goodbye")
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("finds no match when content differs entirely", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "missing.txt")
+        return Effect.promise(() => fs.writeFile(target, "completely different content")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              executeTool(
+                registry,
+                call({ path: "missing.txt", oldString: "not found anywhere", newString: "replacement" }),
+              ),
+            ),
+          ),
+          Effect.andThen((result) =>
+            Effect.gen(function* () {
+              expect(result).toEqual({
+                type: "error",
+                value: "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
+              })
+              expect(writes).toEqual([])
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("completely different content")
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("fuzzy-matches with replaceAll via multi-occurrence replacer", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "fuzzy-all.txt")
+        return Effect.promise(() => fs.writeFile(target, "before\nbefore\nbefore")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              settleTool(
+                registry,
+                call({ path: "fuzzy-all.txt", oldString: "before", newString: "after", replaceAll: true }),
+              ),
+            ),
+          ),
+          Effect.andThen((settled) =>
+            Effect.gen(function* () {
+              expect(settled.output?.structured).toMatchObject({ replacements: 3 })
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("after\nafter\nafter")
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("fuzzy-matches block by anchors when middle content differs slightly", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "anchor.txt")
+        return Effect.promise(() =>
+          fs.writeFile(target, "function foo() {\n  let x = 1;\n  let y = 2;\n  return x + y;\n}"),
+        ).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              settleTool(
+                registry,
+                call({
+                  path: "anchor.txt",
+                  oldString: "function foo() {\n  let x = 1;\n  let y = 3;\n  return x + y;\n}",
+                  newString: "function foo() {\n  let x = 2;\n  let y = 2;\n  return x + y;\n}",
+                }),
+              ),
+            ),
+          ),
+          Effect.andThen((settled) =>
+            Effect.gen(function* () {
+              expect(settled.output?.structured).toMatchObject({ replacements: 1 })
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(
+                "function foo() {\n  let x = 2;\n  let y = 2;\n  return x + y;\n}",
+              )
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("rejects replacement when fuzzy match span is disproportionately large", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const pad = " ".repeat(300)
+        const content = `${pad}a\n${pad}b\n${pad}c`
+        const target = path.join(tmp.path, "disprop.txt")
+        return Effect.promise(() => fs.writeFile(target, content)).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              executeTool(
+                registry,
+                call({
+                  path: "disprop.txt",
+                  oldString: "a\nb\nc",
+                  newString: "x\ny\nz",
+                }),
+              ),
+            ),
+          ),
+          Effect.andThen((result) =>
+            Effect.gen(function* () {
+              expect(result).toEqual({
+                type: "error",
+                value:
+                  "Refusing replacement because the matched span is much larger than oldString. Re-read the file and provide the full exact oldString for the intended replacement.",
+              })
+              expect(writes).toEqual([])
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(content)
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("rejects an in-place content change after matching but before conditional commit", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
@@ -403,11 +660,24 @@ test("keeps the locked edit schema, semantics docstring, and deferred TODOs visi
   const schema = definition[0]?.inputSchema as { readonly properties?: Record<string, unknown> }
 
   expect(Object.keys(schema.properties ?? {}).sort()).toEqual(["newString", "oldString", "path", "replaceAll"])
+  expect(Object.keys(schema.properties ?? {}).sort()).toEqual(["newString", "oldString", "path", "replaceAll"])
   expect(source).toContain(
     "absolute external paths retain mutation capability through a separate\n * external_directory approval before edit approval.",
   )
+  expect(source).toContain("Model-facing V2 exact-edit leaf")
+  expect(source).toContain("Deferred V2 edit behavior")
+  expect(source).toContain("lineTrimmedReplacer")
+  expect(source).toContain("blockAnchorReplacer")
+  expect(source).toContain("whitespaceNormalizedReplacer")
+  expect(source).toContain("indentationFlexibleReplacer")
+  expect(source).toContain("escapeNormalizedReplacer")
+  expect(source).toContain("trimmedBoundaryReplacer")
+  expect(source).toContain("contextAwareReplacer")
+  expect(source).toContain("multiOccurrenceReplacer")
+  expect(source).toContain("levenshtein")
+  expect(source).toContain("isDisproportionateMatch")
+  expect(source).toContain("fuzzyMatch")
   for (const todo of [
-    "Port V1 fuzzy correction strategies only after exact-edit behavior is established: line-trimmed matching, block-anchor fallback, indentation correction, and similarity-threshold review.",
     "Add formatter integration after V2 formatter runtime exists.",
     "Publish watcher/file-edit events after V2 watcher integration exists.",
     "Add snapshots / undo after design exists.",
