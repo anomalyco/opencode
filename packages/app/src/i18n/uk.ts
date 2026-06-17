@@ -313,6 +313,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Пошук папок",
   "dialog.directory.empty": "Папок не знайдено",
+  "dialog.directory.action.selectFile": "Вибрати файл",
+  "dialog.directory.action.selectFolder": "Вибрати папку",
+  "dialog.directory.root": "Корінь",
+  "dialog.directory.parent": "Батьківська папка",
+  "dialog.directory.readError": "Не вдалося прочитати цю папку",
 
   "app.server.unreachable": "Не вдалося досягти {{server}}",
   "app.server.retrying": "Автоматичне повторення...",
