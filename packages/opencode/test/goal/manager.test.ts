@@ -77,6 +77,26 @@ describe("goal manager", () => {
     expect(status.output).toContain("No active goal")
   })
 
+  test("returns active goal logs output", async () => {
+    await using tmp = await tmpdir()
+    const mgr = manager(context(tmp.path))
+
+    await mgr.create("Migrate repository to Bun")
+    const logs = await mgr.logs()
+
+    expect(logs.events.map((event) => event.type)).toContain("GOAL_CREATED")
+    expect(logs.output).toContain("GOAL LOGS")
+    expect(logs.output).toContain("GOAL_CREATED")
+  })
+
+  test("returns empty logs output when no active goal exists", async () => {
+    await using tmp = await tmpdir()
+    const logs = await manager(context(tmp.path)).logs()
+
+    expect(logs.events).toEqual([])
+    expect(logs.output).toContain("No goal events")
+  })
+
   test("returns active status output for current goal", async () => {
     await using tmp = await tmpdir()
     const mgr = manager(context(tmp.path))

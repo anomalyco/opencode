@@ -1,9 +1,9 @@
 import { ActiveGoalExistsError, NoActiveGoalError } from "./errors"
 import { checkGoalBudget } from "./budget"
 import { createGoalCheckpoint } from "./checkpoints"
-import { appendGoalEvent } from "./events"
+import { appendGoalEvent, readGoalEvents } from "./events"
 import { createDeterministicGoalPlan } from "./planner"
-import { renderGoalStatus, renderNoActiveGoal } from "./renderer"
+import { renderGoalLogs, renderGoalStatus, renderNoActiveGoal } from "./renderer"
 import { archiveActiveGoal, loadActiveGoal, saveActiveGoal, type ActiveGoalState } from "./store"
 import { transitionGoal } from "./state-machine"
 import type { Goal, GoalEvent } from "./types"
@@ -14,10 +14,16 @@ export interface GoalStatusResult {
   output: string
 }
 
+export interface GoalLogsResult {
+  events: GoalEvent[]
+  output: string
+}
+
 export interface GoalManager {
   init(): Promise<ActiveGoalState | null>
   create(objective: string): Promise<Goal>
   status(): Promise<GoalStatusResult>
+  logs(): Promise<GoalLogsResult>
   pause(): Promise<Goal>
   resume(): Promise<Goal>
   enforceBudget(): Promise<Goal>
@@ -101,6 +107,13 @@ export function createGoalManager(ctx: Pick<InstanceContext, "directory" | "work
         active,
         output: active ? renderGoalStatus(active) : renderNoActiveGoal(),
       }
+    },
+
+    async logs() {
+      const active = await loadActiveGoal(ctx)
+      if (!active) return { events: [], output: renderGoalLogs([]) }
+      const events = await readGoalEvents(ctx)
+      return { events, output: renderGoalLogs(events) }
     },
 
     async pause() {

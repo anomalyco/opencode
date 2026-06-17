@@ -1,6 +1,6 @@
 import type { ActiveGoalState } from "./store"
 import { renderBudgetSummary } from "./budget"
-import type { Goal } from "./types"
+import type { Goal, GoalEvent } from "./types"
 
 function formatLimit(used: number, max?: number): string {
   return max === undefined ? String(used) : `${used} / ${max}`
@@ -29,6 +29,14 @@ export function renderGoalStatus(active: ActiveGoalState): string {
   ]
 
   return lines.join("\n")
+}
+
+export function renderGoalLogs(events: GoalEvent[]): string {
+  if (events.length === 0) return "GOAL LOGS\nNo goal events."
+  return [
+    "GOAL LOGS",
+    ...events.map((event) => `${event.createdAt} ${event.type} ${event.message}`),
+  ].join("\n")
 }
 
 export function renderGoalBudget(goal: Goal): string {

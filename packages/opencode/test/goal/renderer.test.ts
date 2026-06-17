@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   renderGoalBudget,
   renderGoalCleared,
+  renderGoalLogs,
   renderGoalPaused,
   renderGoalResumed,
   renderGoalStatus,
@@ -75,6 +76,33 @@ describe("goal renderer", () => {
     expect(output).toContain("Current Step: Run typecheck")
     expect(output).toContain("Steps: 1 / 10")
     expect(output).toContain("Tokens: 100 / 1000")
+  })
+
+  test("renders goal logs chronologically", () => {
+    const output = renderGoalLogs([
+      {
+        id: "event_1",
+        goalId: "goal_123",
+        type: "GOAL_CREATED",
+        message: "Goal created",
+        createdAt: "2026-06-17T00:00:00.000Z",
+      },
+      {
+        id: "event_2",
+        goalId: "goal_123",
+        type: "STATE_CHANGED",
+        message: "Goal moved to planning",
+        createdAt: "2026-06-17T00:00:01.000Z",
+      },
+    ])
+
+    expect(output).toContain("GOAL LOGS")
+    expect(output).toContain("2026-06-17T00:00:00.000Z GOAL_CREATED Goal created")
+    expect(output).toContain("2026-06-17T00:00:01.000Z STATE_CHANGED Goal moved to planning")
+  })
+
+  test("renders empty goal logs", () => {
+    expect(renderGoalLogs([])).toContain("No goal events")
   })
 
   test("renders budget details", () => {

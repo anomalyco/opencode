@@ -35,6 +35,7 @@ function manager(overrides: Partial<GoalManager> = {}): GoalManager {
     init: async () => active,
     create: async (objective) => goal({ objective, title: objective }),
     status: async () => ({ active, output: "GOAL\nState: CREATED" }),
+    logs: async () => ({ events: [], output: "GOAL LOGS\nNo goal events." }),
     pause: async () => goal({ state: "PAUSED" }),
     resume: async () => goal({ state: "ACTIVE" }),
     enforceBudget: async () => goal({ state: "BUDGET_EXCEEDED" }),
@@ -63,8 +64,11 @@ describe("native goal command handler", () => {
     expect(await runGoalCommand(manager(), "budget")).toContain("Budget")
   })
 
-  test("returns explicit safe output for logs and history until implemented", async () => {
-    expect(await runGoalCommand(manager(), "logs")).toContain("not implemented")
+  test("routes logs subcommand to manager logs", async () => {
+    expect(await runGoalCommand(manager({ logs: async () => ({ events: [], output: "GOAL LOGS\nNo goal events." }) }), "logs")).toContain("No goal events")
+  })
+
+  test("returns explicit safe output for history until implemented", async () => {
     expect(await runGoalCommand(manager(), "history")).toContain("not implemented")
   })
 
