@@ -254,6 +254,7 @@ export const dict = {
   "prompt.context.removeActiveFile": "컨텍스트에서 활성 파일 제거",
   "prompt.context.removeFile": "컨텍스트에서 파일 제거",
   "prompt.action.attachFile": "파일 첨부",
+  "prompt.action.recordVoice": "Record voice",
   "prompt.attachment.remove": "첨부 파일 제거",
   "prompt.action.send": "전송",
   "prompt.action.stop": "중지",

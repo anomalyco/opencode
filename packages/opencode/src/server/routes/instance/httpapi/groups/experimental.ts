@@ -50,6 +50,14 @@ const ToolListItem = Schema.Struct({
   parameters: Schema.Unknown,
 }).annotate({ identifier: "ToolListItem" })
 const ToolList = Schema.Array(ToolListItem).annotate({ identifier: "ToolList" })
+export const VoiceTranscribePayload = Schema.Struct({
+  audio: Schema.String,
+  filename: Schema.optional(Schema.String),
+  mime: Schema.optional(Schema.String),
+}).annotate({ identifier: "VoiceTranscribePayload" })
+const VoiceTranscribeResult = Schema.Struct({
+  text: Schema.String,
+}).annotate({ identifier: "VoiceTranscribeResult" })
 export const ToolListQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
   provider: ProviderV2.ID,
@@ -89,6 +97,7 @@ export const ExperimentalPaths = {
   consoleSwitch: "/experimental/console/switch",
   tool: "/experimental/tool",
   toolIDs: "/experimental/tool/ids",
+  voiceTranscribe: "/experimental/voice/transcribe",
   worktree: "/experimental/worktree",
   worktreeReset: "/experimental/worktree/reset",
   session: "/experimental/session",
@@ -156,6 +165,18 @@ export const ExperimentalApi = HttpApi.make("experimental")
             summary: "List tool IDs",
             description:
               "Get a list of all available tool IDs, including both built-in tools and dynamically registered tools.",
+          }),
+        ),
+        HttpApiEndpoint.post("voiceTranscribe", ExperimentalPaths.voiceTranscribe, {
+          query: WorkspaceRoutingQuery,
+          payload: VoiceTranscribePayload,
+          success: described(VoiceTranscribeResult, "Voice transcription"),
+          error: HttpApiError.BadRequest,
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.voice.transcribe",
+            summary: "Transcribe voice input",
+            description: "Transcribe browser-recorded audio with a configured local whisper.cpp server.",
           }),
         ),
         HttpApiEndpoint.get("worktree", ExperimentalPaths.worktree, {

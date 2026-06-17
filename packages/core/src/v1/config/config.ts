@@ -179,6 +179,16 @@ export const Info = Schema.Struct({
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),
+      voice: Schema.optional(
+        Schema.Struct({
+          enabled: Schema.optional(Schema.Boolean).annotate({
+            description: "Enable experimental browser voice input backed by a local whisper.cpp server",
+          }),
+          whisper_url: Schema.optional(Schema.String).annotate({
+            description: "Local whisper.cpp server URL required to enable browser voice input",
+          }),
+        }),
+      ).annotate({ description: "Experimental browser voice input configuration" }),
       policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
         description: "Policy statements applied to supported resources, such as provider access",
       }),

@@ -254,6 +254,7 @@ export const dict = {
   "prompt.context.removeActiveFile": "コンテキストからアクティブなファイルを削除",
   "prompt.context.removeFile": "コンテキストからファイルを削除",
   "prompt.action.attachFile": "ファイルを添付",
+  "prompt.action.recordVoice": "Record voice",
   "prompt.attachment.remove": "添付ファイルを削除",
   "prompt.action.send": "送信",
   "prompt.action.stop": "停止",

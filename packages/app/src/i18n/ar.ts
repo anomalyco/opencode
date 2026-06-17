@@ -255,6 +255,7 @@ export const dict = {
   "prompt.context.removeActiveFile": "إزالة الملف النشط من السياق",
   "prompt.context.removeFile": "إزالة الملف من السياق",
   "prompt.action.attachFile": "إرفاق ملف",
+  "prompt.action.recordVoice": "Record voice",
   "prompt.attachment.remove": "إزالة المرفق",
   "prompt.action.send": "إرسال",
   "prompt.action.stop": "توقف",

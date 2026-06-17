@@ -13,6 +13,16 @@ export class Policy extends Schema.Class<Policy>("ConfigV2.Experimental.Policy")
   action: PolicyAction,
 }) {}
 
+export class Voice extends Schema.Class<Voice>("ConfigV2.Experimental.Voice")({
+  enabled: Schema.Boolean.pipe(Schema.optional).annotate({
+    description: "Enable experimental browser voice input backed by a local whisper.cpp server",
+  }),
+  whisper_url: Schema.String.pipe(Schema.optional).annotate({
+    description: "Local whisper.cpp server URL required to enable browser voice input",
+  }),
+}) {}
+
 export class Experimental extends Schema.Class<Experimental>("ConfigV2.Experimental")({
   policies: Policy.pipe(Schema.Array, Schema.optional),
+  voice:    Voice.pipe(Schema.optional),
 }) {}

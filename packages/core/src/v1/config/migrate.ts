@@ -67,7 +67,10 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
     plugins: info.plugin?.map((plugin) =>
       typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] },
     ),
-    experimental: info.experimental?.policies && { policies: info.experimental.policies },
+    experimental:
+      info.experimental?.policies || info.experimental?.voice
+        ? { policies: info.experimental.policies, voice: info.experimental.voice }
+        : undefined,
     providers: providers(info.provider),
   }
 }

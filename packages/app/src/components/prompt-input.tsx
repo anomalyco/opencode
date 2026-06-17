@@ -44,6 +44,7 @@ import { Select } from "@opencode-ai/ui/select"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { useCommand } from "@/context/command"
+import { useServer } from "@/context/server"
 import { Persist, persisted } from "@/utils/persist"
 import { usePermission } from "@/context/permission"
 import { useLanguage } from "@/context/language"
@@ -71,6 +72,12 @@ import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { pathKey } from "@/utils/path-key"
 import { displayName } from "@/pages/layout/helpers"
+import {
+  appendVoiceTranscript,
+  createVoiceFetch,
+  createVoiceInputController,
+  transcribeVoice,
+} from "@/utils/voice-input"
 
 export type PromptInputState = ReturnType<typeof usePrompt>
 
@@ -217,6 +224,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const permission = usePermission()
   const language = useLanguage()
   const platform = usePlatform()
+  const server = useServer()
   const tabs = () => props.controls.session.tabs
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
@@ -542,6 +550,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
   }
 
+  const voiceConfig = createMemo(
+    () => (sync().data.config.experimental as { voice?: { enabled?: boolean; whisper_url?: string } } | undefined)?.voice,
+  )
+
+  const insertVoiceTranscript = (text: string) => {
+    const next = appendVoiceTranscript(prompt.current(), text)
+    prompt.set(next.prompt, next.cursor)
+    requestAnimationFrame(() => {
+      editorRef.focus()
+      setCursorPosition(editorRef, next.cursor)
+      queueScroll()
+    })
+  }
+
   const setMode = (mode: "normal" | "shell") => {
     setStore("mode", mode)
     setStore("popover", null)
@@ -640,6 +662,33 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
   const [composing, setComposing] = createSignal(false)
   const isImeComposing = (event: KeyboardEvent) => event.isComposing || composing() || event.keyCode === 229
+  const voice = createVoiceInputController({
+    config: voiceConfig,
+    disabled: () => store.mode !== "normal",
+    holdDisabled: () => !!store.popover,
+    isComposing: isImeComposing,
+    transcribe: (audio) =>
+      transcribeVoice({
+        fetch: createVoiceFetch(platform.fetch),
+        serverUrl: sdk().url,
+        directory: sdk().directory,
+        audio,
+        auth: server.current?.http,
+      }),
+    onTranscript: insertVoiceTranscript,
+    onError: (error) =>
+      showToast({
+        variant: "error",
+        title: language.t("common.requestFailed"),
+        description: error instanceof Error ? error.message : String(error),
+      }),
+  })
+  const voiceLabel = createMemo(() =>
+    voice.recording() ? language.t("prompt.action.stop") : language.t("prompt.action.recordVoice"),
+  )
+  const handleVoiceHoldKeyUp = (event: KeyboardEvent) => {
+    voice.handleHoldKeyUp(event, () => addPart({ type: "text", content: " ", start: 0, end: 0 }))
+  }
 
   const handleBlur = () => {
     closePopover()
@@ -1212,6 +1261,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     })
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    if (voice.handleHoldKeyDown(event)) return
+
     if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "u") {
       event.preventDefault()
       if (store.mode !== "normal") return
@@ -1581,6 +1632,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     onCompositionEnd={handleCompositionEnd}
                     onBlur={handleBlur}
                     onKeyDown={handleKeyDown}
+                    onKeyUp={handleVoiceHoldKeyUp}
                     classList={{
                       "select-text": true,
                       "min-h-[52px] w-full px-4 pt-4 pb-2 focus:outline-none whitespace-pre-wrap leading-5 text-[13px] font-[440] text-v2-text-text-base": true,
@@ -1660,22 +1712,35 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     </div>
                   </Show>
                 </div>
-                <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
-                  <IconButton
-                    data-action="prompt-submit"
-                    type="submit"
-                    disabled={!working() && blank()}
-                    tabIndex={store.mode === "normal" ? undefined : -1}
-                    icon={stopping() ? "stop" : store.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
-                    variant="primary"
-                    class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
-                    style={{
-                      "background-image":
-                        "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
-                    }}
-                    aria-label={stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
-                  />
-                </Tooltip>
+                <div class="flex items-center gap-1">
+                  <Show when={voice.available()}>
+                    <PromptVoiceButton
+                      label={voiceLabel()}
+                      recording={voice.recording()}
+                      disabled={voice.disabled()}
+                      class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted disabled:opacity-50"
+                      style={buttons()}
+                      tabIndex={store.mode === "normal" ? undefined : -1}
+                      onClick={() => void voice.toggle()}
+                    />
+                  </Show>
+                  <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
+                    <IconButton
+                      data-action="prompt-submit"
+                      type="submit"
+                      disabled={!working() && blank()}
+                      tabIndex={store.mode === "normal" ? undefined : -1}
+                      icon={stopping() ? "stop" : store.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
+                      variant="primary"
+                      class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
+                      style={{
+                        "background-image":
+                          "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
+                      }}
+                      aria-label={stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                    />
+                  </Tooltip>
+                </div>
               </div>
             </DockShellForm>
             <Show when={newSession() && selectedProject()}>
@@ -1727,7 +1792,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onMouseDown={(e) => {
                 const target = e.target
                 if (!(target instanceof HTMLElement)) return
-                if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"]')) {
+                if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-voice"]')) {
                   return
                 }
                 editorRef?.focus()
@@ -1760,6 +1825,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   onCompositionEnd={handleCompositionEnd}
                   onBlur={handleBlur}
                   onKeyDown={handleKeyDown}
+                  onKeyUp={handleVoiceHoldKeyUp}
                   classList={{
                     "select-text": true,
                     "w-full pl-3 pr-2 pt-2 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
@@ -1803,6 +1869,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 />
 
                 <div class="flex items-center gap-1 pointer-events-auto">
+                  <Show when={voice.available()}>
+                    <PromptVoiceButton
+                      label={voiceLabel()}
+                      recording={voice.recording()}
+                      disabled={voice.disabled()}
+                      class="size-8 disabled:opacity-50"
+                      tabIndex={store.mode === "normal" ? undefined : -1}
+                      onClick={() => void voice.toggle()}
+                    />
+                  </Show>
                   <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                     <IconButton
                       data-action="prompt-submit"
@@ -2029,6 +2105,33 @@ type ComposerPickerItemState = {
   label: string
   selected?: boolean
   onSelect: () => void
+}
+
+function PromptVoiceButton(props: {
+  label: string
+  recording: boolean
+  disabled: boolean
+  class: string
+  style?: JSX.CSSProperties
+  tabIndex?: number
+  onClick: () => void
+}) {
+  return (
+    <Tooltip placement="top" value={props.label}>
+      <IconButton
+        data-action="prompt-voice"
+        type="button"
+        icon={props.recording ? "stop" : "microphone"}
+        variant={props.recording ? "primary" : "ghost"}
+        class={props.class}
+        style={props.style}
+        onClick={props.onClick}
+        disabled={props.disabled}
+        tabIndex={props.tabIndex}
+        aria-label={props.label}
+      />
+    </Tooltip>
+  )
 }
 
 type ComposerPickerTriggerState = {

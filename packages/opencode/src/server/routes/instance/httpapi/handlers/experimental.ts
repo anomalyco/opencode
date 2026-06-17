@@ -15,12 +15,64 @@ import { Effect, Option } from "effect"
 import * as HttpServerResponse from "effect/unstable/http/HttpServerResponse"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
-import { ConsoleSwitchPayload, SessionListQuery, ToolListQuery, WorktreeApiError } from "../groups/experimental"
+import {
+  ConsoleSwitchPayload,
+  SessionListQuery,
+  ToolListQuery,
+  VoiceTranscribePayload,
+  WorktreeApiError,
+} from "../groups/experimental"
+
+const MAX_VOICE_AUDIO_BYTES = 25 * 1024 * 1024
+const MAX_VOICE_AUDIO_BASE64_LENGTH = Math.ceil(MAX_VOICE_AUDIO_BYTES / 3) * 4
+const BASE64_AUDIO_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/
 
 function mapWorktreeError<A, R>(self: Effect.Effect<A, Worktree.Error, R>) {
   return self.pipe(
     Effect.mapError((error) => new WorktreeApiError({ name: error._tag, data: { message: error.message } })),
   )
+}
+
+function badRequest() {
+  return new HttpApiError.BadRequest({})
+}
+
+function whisperEndpoint(input: string) {
+  try {
+    const base = new URL(input)
+    if (base.protocol !== "http:" && base.protocol !== "https:") return
+    if (!localHost(base.hostname)) return
+    return new URL("/inference", base)
+  } catch {
+    return
+  }
+}
+
+function localHost(hostname: string) {
+  const host = hostname.toLowerCase()
+  return (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host === "[::1]" ||
+    host.startsWith("127.")
+  )
+}
+
+function decodeVoiceAudio(input: string) {
+  const value = input.trim()
+  if (!value || value.length > MAX_VOICE_AUDIO_BASE64_LENGTH) return
+  if (value.length % 4 === 1 || !BASE64_AUDIO_PATTERN.test(value)) return
+  return Buffer.from(value, "base64")
+}
+
+function parseWhisperText(body: string) {
+  try {
+    const json = JSON.parse(body) as Record<string, unknown>
+    if (typeof json.text === "string") return json.text
+    if (typeof json.transcription === "string") return json.transcription
+  } catch {}
+  return body
 }
 
 export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "experimental", (handlers) =>
@@ -170,12 +222,47 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
       return yield* mcp.resources()
     })
 
+    const voiceTranscribe = Effect.fn("ExperimentalHttpApi.voiceTranscribe")(function* (ctx: {
+      payload: typeof VoiceTranscribePayload.Type
+    }) {
+      const cfg = yield* config.get()
+      const voice = cfg.experimental?.voice
+      if (voice?.enabled !== true || !voice.whisper_url?.trim()) return yield* Effect.fail(badRequest())
+
+      const endpoint = whisperEndpoint(voice.whisper_url)
+      if (!endpoint) return yield* Effect.fail(badRequest())
+
+      const audio = decodeVoiceAudio(ctx.payload.audio)
+      if (!audio || audio.byteLength === 0) return yield* Effect.fail(badRequest())
+      if (audio.byteLength > MAX_VOICE_AUDIO_BYTES) return yield* Effect.fail(badRequest())
+
+      return yield* Effect.tryPromise({
+        try: async () => {
+          const form = new FormData()
+          form.append(
+            "file",
+            new File([new Uint8Array(audio)], ctx.payload.filename ?? "opencode-voice.wav", {
+              type: ctx.payload.mime ?? "audio/wav",
+            }),
+          )
+          form.append("response_format", "json")
+
+          const response = await fetch(endpoint, { method: "POST", body: form, signal: AbortSignal.timeout(60_000) })
+          const body = await response.text()
+          if (!response.ok) throw new Error(body || `whisper.cpp returned HTTP ${response.status}`)
+          return { text: parseWhisperText(body).trim() }
+        },
+        catch: () => badRequest(),
+      })
+    })
+
     return handlers
       .handle("console", getConsole)
       .handle("consoleOrgs", listConsoleOrgs)
       .handle("consoleSwitch", switchConsole)
       .handle("tool", tool)
       .handle("toolIDs", toolIDs)
+      .handle("voiceTranscribe", voiceTranscribe)
       .handle("worktree", worktree)
       .handle("worktreeCreate", worktreeCreate)
       .handle("worktreeRemove", worktreeRemove)

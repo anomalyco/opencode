@@ -275,6 +275,7 @@ export const dict = {
   "prompt.context.removeActiveFile": "Ukloni aktivnu datoteku iz konteksta",
   "prompt.context.removeFile": "Ukloni datoteku iz konteksta",
   "prompt.action.attachFile": "Priloži datoteku",
+  "prompt.action.recordVoice": "Record voice",
   "prompt.attachment.remove": "Ukloni prilog",
   "prompt.action.send": "Pošalji",
   "prompt.action.stop": "Zaustavi",

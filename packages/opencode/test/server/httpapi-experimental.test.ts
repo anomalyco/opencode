@@ -196,6 +196,118 @@ describe("experimental HttpApi", () => {
     },
   )
 
+  {
+    let whisper: Bun.Server<unknown> | undefined
+    let forwardedFile: File | undefined
+    let responseFormat: FormDataEntryValue | null = null
+
+    it.instance(
+      "proxies voice transcription to a local whisper.cpp server",
+      () =>
+        Effect.gen(function* () {
+          if (!whisper) return yield* Effect.fail(new Error("missing test whisper server"))
+          yield* Effect.addFinalizer(() => Effect.sync(() => whisper?.stop(true)))
+
+          const tmp = yield* TestInstance
+          const response = yield* request(ExperimentalPaths.voiceTranscribe, tmp.directory, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              audio: Buffer.from("abc").toString("base64"),
+              filename: "voice.wav",
+              mime: "audio/wav",
+            }),
+          })
+
+          expect(response.status).toBe(200)
+          expect(yield* json(response)).toEqual({ text: "hello voice" })
+          expect(responseFormat).toBe("json")
+          expect(forwardedFile?.name).toBe("voice.wav")
+          expect(forwardedFile?.type).toMatch(/^audio\/(x-)?wav$/)
+          expect(yield* Effect.promise(() => forwardedFile!.text())).toBe("abc")
+        }),
+      {
+        config: () => {
+          whisper = Bun.serve({
+            hostname: "127.0.0.1",
+            port: 0,
+            async fetch(request) {
+              expect(new URL(request.url).pathname).toBe("/inference")
+              const form = await request.formData()
+              responseFormat = form.get("response_format")
+              const file = form.get("file")
+              if (file instanceof File) forwardedFile = file
+              return Response.json({ text: "hello voice" })
+            },
+          })
+          return {
+            formatter: false,
+            lsp: false,
+            experimental: {
+              voice: {
+                enabled: true,
+                whisper_url: `http://127.0.0.1:${whisper.port}`,
+              },
+            },
+          }
+        },
+      },
+    )
+  }
+
+  it.instance(
+    "rejects voice transcription without a configured whisper server",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const response = yield* request(ExperimentalPaths.voiceTranscribe, tmp.directory, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ audio: Buffer.from("abc").toString("base64") }),
+        })
+
+        expect(response.status).toBe(400)
+      }),
+    {
+      config: {
+        formatter: false,
+        lsp: false,
+        experimental: {
+          voice: {
+            enabled: true,
+          },
+        },
+      },
+    },
+  )
+
+  it.instance(
+    "rejects voice transcription to a non-local whisper server",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const response = yield* request(ExperimentalPaths.voiceTranscribe, tmp.directory, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ audio: Buffer.from("abc").toString("base64") }),
+        })
+
+        expect(response.status).toBe(400)
+      }),
+    {
+      config: {
+        formatter: false,
+        lsp: false,
+        experimental: {
+          voice: {
+            enabled: true,
+            whisper_url: "https://example.com",
+          },
+        },
+      },
+    },
+  )
+
   it.instance("returns declared worktree errors", () =>
     Effect.gen(function* () {
       const tmp = yield* TestInstance

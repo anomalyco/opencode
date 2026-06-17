@@ -66,6 +66,7 @@ const names = [
   "mcp",
   "glasses",
   "magnifying-glass-menu",
+  "microphone",
   "window-cursor",
   "task",
   "stop",

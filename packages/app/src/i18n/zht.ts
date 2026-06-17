@@ -274,6 +274,7 @@ export const dict = {
   "prompt.context.removeActiveFile": "從上下文移除目前檔案",
   "prompt.context.removeFile": "從上下文移除檔案",
   "prompt.action.attachFile": "附加檔案",
+  "prompt.action.recordVoice": "Record voice",
   "prompt.attachment.remove": "移除附件",
   "prompt.action.send": "傳送",
   "prompt.action.stop": "停止",
