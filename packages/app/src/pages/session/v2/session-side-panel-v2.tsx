@@ -387,10 +387,11 @@ export function SessionSidePanelV2(props: {
                 <Show when={tabsV2.drag.active && tabsV2.drag.draggedTab} keyed>
                   {(tab) => {
                     const path = file.pathFromTab(tab)
+                    const temporary = tabsV2.temporaryTab() === tab
                     return (
                       <Portal>
                         <div style={tabsV2.floaterStyle()}>
-                          <div data-component="tabs-v2-drag-preview">
+                          <div data-component="tabs-v2-drag-preview" data-temporary={temporary ? "" : undefined}>
                             <Show
                               when={path}
                               fallback={

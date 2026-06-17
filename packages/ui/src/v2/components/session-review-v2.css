@@ -375,6 +375,10 @@
   box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
 }
 
+[data-component="tabs-v2-drag-preview"][data-temporary] {
+  font-style: italic;
+}
+
 [data-component="tabs-v2-drag-preview"] > * {
   position: relative;
   z-index: 1;
