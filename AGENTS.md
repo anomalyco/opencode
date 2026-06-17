@@ -150,3 +150,53 @@ const table = sqliteTable("session", {
 - Keep delivery vocabulary explicit. Prompts steer by default and coalesce into the active activity at the next safe provider-turn boundary. Explicit `queue` inputs open FIFO future activities one at a time after the active activity settles.
 - Keep EventV2 replay owner claims separate from clustered Session execution ownership.
 - Keep the System Context algebra, registry, and built-ins in `src/system-context`; keep Context Source producers with their observed domains, and keep Session History selection plus Context Epoch persistence Session-owned.
+
+---
+
+## Development Process
+
+All non-trivial work follows the **PLAN → BUILD → GATE** loop. Two tracks, three stages.
+
+### Track selection (do this first)
+
+| Track | When | Discipline |
+|-------|------|------------|
+| **CODE** | TypeScript features, bugfixes, refactors, Effect services, new test coverage | Vertical TDD (`/tdd`) |
+| **CHANGE** | Config, docs, skills, commands, agents, AGENTS.md edits, ops | Verify by observation |
+
+Mixed tasks → split and run each part in its track.
+
+### Stage 1: PLAN — grill first (`/grill-me`)
+
+Stress-test the plan before any edit. One question at a time, recommend an answer for each, explore the codebase instead of asking when the answer is there. No open forks when work begins.
+
+### Stage 2: BUILD
+
+**CODE track** — vertical slices only. One `RED → GREEN → REFACTOR` cycle at a time, never "all tests then all code." Integration tests through public interfaces; mock only at system boundaries; behavior over implementation. Run `bun test` from the package dir, never from repo root. Run `bun typecheck` before gating.
+
+**CHANGE track** — make the change, then verify by direct observation. An unobserved result ("should work", empty output) is never a pass. State the evidence inline.
+
+### Stage 3: GATE — no-mistakes
+
+Every non-trivial change goes through `no-mistakes` before reaching origin:
+
+```
+git push no-mistakes <branch>
+```
+
+Runs review → test → docs → lint in a disposable worktree. Opens a clean PR only when all checks are green. If `no-mistakes` is unavailable, fall back to small logical commits + manual PR — never batch work into one large commit.
+
+**The `/commit` command** already checks for `no-mistakes` and uses it when available.
+
+### 7-stage escalation (on-demand, not default)
+
+For high-risk changes, pull in additional stages before the gate:
+
+| Stage | Pull in when |
+|-------|--------------|
+| **Architect** | New module, cross-package interfaces, session/execution design |
+| **Code Critic** | Large or intricate diffs, broad refactors |
+| **Deep QA** | Runtime behavior the gate's test step can't observe |
+| **Security** | Auth, secrets, injection surfaces, provider/credential changes |
+
+Default path is PLAN → BUILD → GATE. These stages are not run by default on routine work.
