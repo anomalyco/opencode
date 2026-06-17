@@ -598,6 +598,21 @@ export function StatusPopover() {
                               copy(plugin.value)
                             }}
                           />
+                          <Show when={canOpenContainingFolder(plugin.value)}>
+                            <Tooltip value={language.t("ui.file.openFolder")} placement="bottom">
+                              <Button
+                                size="small"
+                                variant="ghost"
+                                icon="folder"
+                                class="shrink-0"
+                                aria-label={language.t("ui.file.openFolder")}
+                                onClick={(event: MouseEvent) => {
+                                  event.stopPropagation()
+                                  openContainingFolder(plugin.value)
+                                }}
+                              />
+                            </Tooltip>
+                          </Show>
                         </div>
                       )}
                     </For>
