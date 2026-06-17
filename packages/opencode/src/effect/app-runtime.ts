@@ -55,6 +55,9 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilderV1 } from "./app-node-builder-v1"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { Messaging } from "@/messaging"
+import { S2SPoller } from "@/s2s/poller"
+import { S2SStore } from "@/s2s/store"
 
 export const AppLayer = AppNodeBuilderV1.build(
   LayerNode.group([
@@ -90,6 +93,9 @@ export const AppLayer = AppNodeBuilderV1.build(
     SessionSummary.node,
     SessionPrompt.node,
     Interrupt.node,
+    Messaging.node,
+    S2SStore.node,
+    S2SPoller.node,
     Instruction.node,
     LLM.node,
     LSP.node,
