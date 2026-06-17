@@ -1,7 +1,15 @@
 import fs from "fs/promises"
 import path from "path"
 import { appendGoalEvidence } from "./evidence"
-import type { FileContainsVerificationRequirement, FileEvidence, FileExistsVerificationRequirement, VerificationRequirement } from "./types"
+import type {
+  CommandEvidence,
+  CommandVerificationRequirement,
+  FileContainsVerificationRequirement,
+  FileEvidence,
+  FileExistsVerificationRequirement,
+  VerificationEvidence,
+  VerificationRequirement,
+} from "./types"
 import type { InstanceContext } from "@/project/instance-context"
 
 export interface VerifyRequirementInput {
@@ -10,6 +18,28 @@ export interface VerifyRequirementInput {
   stepId?: string
   requirement: VerificationRequirement
   createdAt?: string
+}
+
+export interface CommandRunnerInput {
+  command: string
+  cwd: string
+}
+
+export interface CommandRunnerResult {
+  command: string
+  cwd: string
+  exitCode: number | null
+  output: string
+  outputPath?: string
+  truncated: boolean
+  timedOut: boolean
+  aborted: boolean
+  startedAt: string
+  completedAt: string
+}
+
+export interface VerificationDependencies {
+  command?: (input: CommandRunnerInput) => Promise<CommandRunnerResult>
 }
 
 async function fileExists(filepath: string): Promise<boolean> {
@@ -67,15 +97,48 @@ async function verifyFileContains(
   }
 }
 
+async function verifyCommand(
+  ctx: Pick<InstanceContext, "directory" | "worktree">,
+  input: VerifyRequirementInput & { requirement: CommandVerificationRequirement },
+  dependencies: VerificationDependencies,
+): Promise<CommandEvidence> {
+  if (!dependencies.command) throw new Error("COMMAND verification requires a command runner")
+
+  const cwd = ctx.worktree !== "/" ? ctx.worktree : ctx.directory
+  const result = await dependencies.command({ command: input.requirement.command, cwd })
+  return {
+    id: input.id,
+    goalId: input.goalId,
+    stepId: input.stepId,
+    type: "COMMAND",
+    command: input.requirement.command,
+    cwd: result.cwd,
+    expectedExitCode: input.requirement.expectedExitCode,
+    exitCode: result.exitCode,
+    output: result.output,
+    outputPath: result.outputPath,
+    truncated: result.truncated,
+    timedOut: result.timedOut,
+    aborted: result.aborted,
+    passed: result.exitCode === input.requirement.expectedExitCode,
+    startedAt: result.startedAt,
+    completedAt: result.completedAt,
+    createdAt: input.createdAt ?? result.completedAt,
+  }
+}
+
 export async function verifyRequirement(
   ctx: Pick<InstanceContext, "directory" | "worktree">,
   input: VerifyRequirementInput,
-): Promise<FileEvidence> {
-  let evidence: FileEvidence
+  dependencies: VerificationDependencies = {},
+): Promise<VerificationEvidence> {
+  let evidence: VerificationEvidence
   if (input.requirement.type === "FILE_EXISTS") {
     evidence = await verifyFileExists(ctx, { ...input, requirement: input.requirement })
   } else if (input.requirement.type === "FILE_CONTAINS") {
     evidence = await verifyFileContains(ctx, { ...input, requirement: input.requirement })
+  } else if (input.requirement.type === "COMMAND") {
+    evidence = await verifyCommand(ctx, { ...input, requirement: input.requirement }, dependencies)
   } else {
     throw new Error(`Unsupported verification requirement: ${input.requirement.type}`)
   }
