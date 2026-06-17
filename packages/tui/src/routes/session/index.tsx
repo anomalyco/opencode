@@ -260,15 +260,15 @@ export function Session() {
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
 
-  const wide = createMemo(() => dimensions().width > 120)
+  const wide = createMemo(() => dimensions().width > 80)
   const sidebarVisible = createMemo(() => {
     if (session()?.parentID) return false
     if (sidebarOpen()) return true
-    if (sidebar() === "auto" && wide()) return true
+    if (sidebar() === "auto") return true
     return false
   })
   const showTimestamps = createMemo(() => timestamps() === "show")
-  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() ? 42 : 0) - 4)
+  const contentWidth = createMemo(() => dimensions().width - (sidebarVisible() && wide() ? 42 : 0) - 4)
   const providers = createMemo(() => Model.index(sync.data.provider))
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
