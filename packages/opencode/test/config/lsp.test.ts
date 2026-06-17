@@ -29,6 +29,13 @@ describe("ConfigLSPV1.Info refinement", () => {
       expect(decodeEffect(input)).toEqual(input)
     })
 
+    test("custom server with languageId passes", () => {
+      const input = {
+        languageserver: { command: ["R", "--slave", "-e", "languageserver::run()"], extensions: [".r", ".R"], languageId: "r" },
+      }
+      expect(decodeEffect(input)).toEqual(input)
+    })
+
     test("disabled custom server passes (no extensions needed)", () => {
       const input = { "my-lsp": { disabled: true as const } }
       expect(decodeEffect(input)).toEqual(input)

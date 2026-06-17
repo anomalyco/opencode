@@ -25,6 +25,10 @@ const output = (cmd: string[], opts: Process.RunOptions = {}) => Process.text(cm
 export interface Handle {
   process: ChildProcessWithoutNullStreams
   initialization?: Record<string, any>
+  // Overrides the languageId inferred from the file extension when opening
+  // documents. Set by custom servers (via config `languageId`) that require a
+  // specific languageId to provide hover/completions/diagnostics.
+  languageId?: string
 }
 
 type RootFunction = (file: string, ctx: InstanceContext) => Promise<string | undefined>

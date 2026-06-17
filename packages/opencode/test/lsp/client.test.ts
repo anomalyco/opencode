@@ -187,6 +187,71 @@ describe("LSPClient interop", () => {
     })
   })
 
+  test("didOpen uses the server's configured languageId", async () => {
+    const handle = spawnFakeServer() as any
+    await using tmp = await tmpdir()
+    // The extension table would infer "typescript" for ".ts"; the configured
+    // languageId must take precedence, proving precedence rather than a
+    // coincidental match.
+    const file = path.join(tmp.path, "client.ts")
+    await Bun.write(file, "print(1)\n")
+
+    await withTestInstance({
+      directory: tmp.path,
+      fn: async (ctx) => {
+        const client = await LSPClient.create({
+          serverID: "fake",
+          server: {
+            ...(handle as unknown as LSPServer.Handle),
+            languageId: "r",
+          },
+          root: tmp.path,
+          directory: tmp.path,
+          instance: ctx,
+        })
+
+        await client.notify.open({ path: file })
+
+        const didOpen = await client.connection.sendRequest<{
+          textDocument: { languageId: string; uri: string }
+        }>("test/get-last-did-open", {})
+        expect(didOpen.textDocument.languageId).toBe("r")
+        expect(didOpen.textDocument.uri).toBe(pathToFileURL(file).href)
+
+        await client.shutdown()
+      },
+    })
+  })
+
+  test("didOpen falls back to the extension table when no languageId is configured", async () => {
+    const handle = spawnFakeServer() as any
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "client.ts")
+    await Bun.write(file, "const x = 1\n")
+
+    await withTestInstance({
+      directory: tmp.path,
+      fn: async (ctx) => {
+        const client = await LSPClient.create({
+          serverID: "fake",
+          server: handle as unknown as LSPServer.Handle,
+          root: tmp.path,
+          directory: tmp.path,
+          instance: ctx,
+        })
+
+        await client.notify.open({ path: file })
+
+        const didOpen = await client.connection.sendRequest<{
+          textDocument: { languageId: string }
+        }>("test/get-last-did-open", {})
+        expect(didOpen.textDocument.languageId).toBe("typescript")
+
+        await client.shutdown()
+      },
+    })
+  })
+
   test("document mode falls back to push diagnostics", async () => {
     const handle = spawnFakeServer() as any
     await using tmp = await tmpdir()

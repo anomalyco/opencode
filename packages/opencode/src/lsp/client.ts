@@ -557,7 +557,11 @@ export async function create(input: {
         )
         const text = await Filesystem.readText(request.path)
         const extension = path.extname(request.path)
-        const languageId = LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
+        // A languageId configured for the server takes precedence over the
+        // extension table, which falls back to "plaintext". Some custom servers
+        // (e.g. R's languageserver) only respond when sent their expected
+        // languageId rather than the default "plaintext".
+        const languageId = input.server.languageId ?? LANGUAGE_EXTENSIONS[extension] ?? "plaintext"
 
         const document = files[request.path]
         if (document !== undefined) {

@@ -14,6 +14,10 @@ export const Entry = Schema.Union([
     disabled: Schema.optional(Schema.Boolean),
     env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
     initialization: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+    languageId: Schema.optional(Schema.String).annotate({
+      description:
+        'The LSP languageId sent to the server for opened documents (e.g. "r", "toml"). When set, this takes precedence over the languageId inferred from the file extension. Required by some custom servers (e.g. R\'s languageserver) to provide hover, completions, and diagnostics.',
+    }),
   }),
 ]).pipe((schema) => schema)
 
