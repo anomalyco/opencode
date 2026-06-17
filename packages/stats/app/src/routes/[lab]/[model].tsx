@@ -123,8 +123,8 @@ export default function StatsModel() {
   const modelTitle = createMemo(() => `${modelName()} Data`)
   const modelDescription = createMemo(() =>
     stats()
-      ? `${modelName()} usage, rank, token mix, cost, geo breakdown, and peer data across OpenCode.`
-      : `${modelName()} model facts, limits, and OpenCode usage availability.`,
+      ? `${modelName()} usage, rank, token mix, cost, geo breakdown, and peer data across OpenCode Go.`
+      : `${modelName()} model facts, limits, and OpenCode Go usage availability.`,
   )
   const modelUrl = createMemo(() =>
     new URL(
@@ -257,13 +257,15 @@ function ModelHero(props: { data: StatsModelData | null; catalog: ModelCatalogEn
           <Show
             when={props.data}
             fallback={
-              <p>Model facts from the shared model index. OpenCode usage appears once this model has activity.</p>
+              <p>Model facts from the shared model index. OpenCode Go usage appears once this model has activity.</p>
             }
           >
             {(data) => (
               <p>
-                Ranked #{data().rank} across recent OpenCode token usage with {formatPercent(data().tokenShare)} of
-                observed volume.
+                {data().rank === null
+                  ? "Unranked across last week's OpenCode Go usage"
+                  : `Ranked #${data().rank} across last week's OpenCode Go usage`}{" "}
+                with {formatPercent(data().tokenShare)} of observed 2M volume.
               </p>
             )}
           </Show>
@@ -278,9 +280,9 @@ function ModelHero(props: { data: StatsModelData | null; catalog: ModelCatalogEn
         <Show when={props.data} fallback={<ModelCatalogCallout catalog={props.catalog} />}>
           {(data) => (
             <div data-component="model-rank-panel">
-              <span>Current Rank</span>
-              <strong>#{data().rank}</strong>
-              <p>{formatRankMoveLabel(data().previousRank, data().rank)}</p>
+              <span>7D Rank</span>
+              <strong>{data().rank === null ? "—" : `#${data().rank}`}</strong>
+              <p>{formatModelRankMoveLabel(data())}</p>
             </div>
           )}
         </Show>
@@ -296,7 +298,7 @@ function ModelCatalogCallout(props: { catalog: ModelCatalogEntry | null }) {
     <div data-component="model-rank-panel">
       <span>Model Profile</span>
       <strong>{props.catalog?.releaseDate ? formatCatalogDate(props.catalog.releaseDate) : "Listed"}</strong>
-      <p>No OpenCode usage in the current data window.</p>
+      <p>No OpenCode Go usage in the current data window.</p>
     </div>
   )
 }
@@ -327,10 +329,12 @@ function CatalogDatum(props: { label: string; value: string }) {
 function ModelOverview(props: { data: StatsModelData | null }) {
   return (
     <section data-section="model-panel">
-      <SectionTitle title="Overview" description="Recent tokens, sessions, and market position." />
+      <SectionTitle title="Overview" description="Recent OpenCode Go tokens, sessions, and market position." />
       <Show
         when={props.data}
-        fallback={<ModelEmptyState title="No usage summary" description="This model has no OpenCode usage rows yet." />}
+        fallback={
+          <ModelEmptyState title="No usage summary" description="This model has no OpenCode Go usage rows yet." />
+        }
       >
         {(data) => (
           <div data-component="model-metric-grid">
@@ -365,7 +369,7 @@ function ModelUsageSection(props: { data: ModelUsagePoint[] }) {
 
   return (
     <section id="usage" data-section="model-panel">
-      <SectionTitle title="Usage" description="Daily token volume over the recent two-month window." />
+      <SectionTitle title="Usage" description="Daily OpenCode Go token volume over the recent two-month window." />
       <Show
         when={props.data.some((item) => item.tokens > 0)}
         fallback={<ModelEmptyState title="No usage" description="No usage landed in the current window." />}
@@ -459,7 +463,7 @@ function ModelUsageSection(props: { data: ModelUsagePoint[] }) {
 function ModelEfficiencySection(props: { data: StatsModelData | null; catalog: ModelCatalogEntry | null }) {
   return (
     <section id="efficiency" data-section="model-panel">
-      <SectionTitle title="Efficiency" description="Cost, cache behavior, and average session shape." />
+      <SectionTitle title="Efficiency" description="Cost, cache behavior, and average OpenCode Go session shape." />
       <Show
         when={props.data}
         fallback={
@@ -519,10 +523,12 @@ function ModelGeoBreakdownSection(props: { data: Record<UsageRange, CountryEntry
         setActiveCountry(undefined)
       }}
     >
-      <SectionTitle title="Geo Breakdown" description="Model tokens used by country." />
+      <SectionTitle title="Geo Breakdown" description="OpenCode Go model tokens used by country." />
       <Show
         when={data().length > 0}
-        fallback={<ModelEmptyState title="No geo data" description="No geo_stat rows matched this model." />}
+        fallback={
+          <ModelEmptyState title="No geo data" description="No OpenCode Go geo_stat rows matched this model." />
+        }
       >
         <div data-component="geo-breakdown">
           <div data-slot="geo-map-panel">
@@ -682,7 +688,7 @@ function GeoCountryList(props: {
 function ModelPeersSection(props: { data: StatsModelData | null }) {
   return (
     <section id="peers" data-section="model-panel">
-      <SectionTitle title="Peers" description="Nearby models by recent token volume." />
+      <SectionTitle title="Peers" description="Nearby models by recent OpenCode Go token volume." />
       <Show
         when={props.data?.peers.length}
         fallback={<ModelEmptyState title="No peers" description="Peer rankings appear after usage lands." />}
@@ -810,8 +816,10 @@ function formatRankMove(previousRank: number, rank: number) {
   return "Even"
 }
 
-function formatRankMoveLabel(previousRank: number | null, rank: number) {
-  return previousRank === null ? "New in window" : `${formatRankMove(previousRank, rank)} vs previous window`
+function formatModelRankMoveLabel(data: StatsModelData) {
+  if (data.rank === null) return "No usage last week"
+  if (data.previousRank === null) return "New this week"
+  return `${formatRankMove(data.previousRank, data.rank)} vs previous week`
 }
 
 function formatTokens(value: number) {
