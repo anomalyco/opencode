@@ -12,6 +12,20 @@ export type Limits = {
   maxBytes: number
 }
 
+/**
+ * Which file-mutating tools are available to the current agent. The shell
+ * description points the model at these dedicated tools instead of shelling
+ * out (`sed`/`Set-Content`/`copy`, etc.). When a tool is absent (e.g. a
+ * read-only agent, or a model that gets `apply_patch` instead of edit/write),
+ * we must not tell the model to use a tool it cannot call.
+ */
+export type ToolAvailability = {
+  hasEdit: boolean
+  hasWrite: boolean
+}
+
+export const ALL_TOOLS: ToolAvailability = { hasEdit: true, hasWrite: true }
+
 export function parameterSchema() {
   return Schema.Struct({
     command: Schema.String.annotate({ description: "The command to execute" }),
@@ -75,7 +89,9 @@ function chainGuidance(name: string) {
   return "If the commands depend on each other and must run sequentially, use a single Bash call with '&&' to chain them together (e.g., `git add . && git commit -m \"message\" && git push`). For instance, if one operation must complete before another starts (like mkdir before cp, Write before Bash for git operations, or git add before git commit), run these operations sequentially instead."
 }
 
-function bashCommandSection(chain: string, limits: Limits, defaultTimeoutMs: number) {
+function bashCommandSection(chain: string, limits: Limits, defaultTimeoutMs: number, tools: ToolAvailability) {
+  const editLine = tools.hasEdit ? "\n    - Edit files: Use Edit (NOT sed/awk)" : ""
+  const writeLine = tools.hasWrite ? "\n    - Write files: Use Write (NOT echo >/cat <<EOF)" : ""
   return `Before executing the command, please follow these steps:
 
 1. Directory Verification:
@@ -100,9 +116,7 @@ Usage notes:
   - Avoid using Bash with the \`find\`, \`grep\`, \`cat\`, \`head\`, \`tail\`, \`sed\`, \`awk\`, or \`echo\` commands, unless explicitly instructed or when these commands are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
     - File search: Use Glob (NOT find or ls)
     - Content search: Use Grep (NOT grep or rg)
-    - Read files: Use Read (NOT cat/head/tail)
-    - Edit files: Use Edit (NOT sed/awk)
-    - Write files: Use Write (NOT echo >/cat <<EOF)
+    - Read files: Use Read (NOT cat/head/tail)${editLine}${writeLine}
     - Communication: Output text directly (NOT echo/printf)
   - When issuing multiple commands:
     - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two bash tool calls in parallel.
@@ -124,7 +138,10 @@ function powershellCommandSection(
   pathSep: string,
   limits: Limits,
   defaultTimeoutMs: number,
+  tools: ToolAvailability,
 ) {
+  const editLine = tools.hasEdit ? "\n    - Edit files: Use Edit (NOT Set-Content)" : ""
+  const writeLine = tools.hasWrite ? "\n    - Write files: Use Write (NOT Set-Content/Out-File or here-strings)" : ""
   return `${powershellNotes(name)}
 
 Before executing the command, please follow these steps:
@@ -151,9 +168,7 @@ Usage notes:
   - Avoid using Shell with PowerShell file/content cmdlets unless explicitly instructed or when these cmdlets are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
     - File search: Use Glob (NOT Get-ChildItem)
     - Content search: Use Grep (NOT Select-String)
-    - Read files: Use Read (NOT Get-Content)
-    - Edit files: Use Edit (NOT Set-Content)
-    - Write files: Use Write (NOT Set-Content/Out-File or here-strings)
+    - Read files: Use Read (NOT Get-Content)${editLine}${writeLine}
     - Communication: Output text directly (NOT Write-Output/Write-Host)
   - When issuing multiple commands:
     - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "git status" and "git diff", send a single message with two bash tool calls in parallel.
@@ -169,7 +184,9 @@ Usage notes:
     </bad-example>`
 }
 
-function cmdCommandSection(chain: string, limits: Limits, defaultTimeoutMs: number) {
+function cmdCommandSection(chain: string, limits: Limits, defaultTimeoutMs: number, tools: ToolAvailability) {
+  const editLine = tools.hasEdit ? "\n    - Edit files: Use Edit (NOT copy)" : ""
+  const writeLine = tools.hasWrite ? "\n    - Write files: Use Write (NOT echo > file)" : ""
   return `# cmd.exe shell notes
 - Use double quotes for paths with spaces.
 - Use %VAR% for environment variables.
@@ -200,9 +217,7 @@ Usage notes:
   - Avoid using Shell with cmd.exe file/content commands unless explicitly instructed or when these commands are truly necessary for the task. Instead, always prefer using the dedicated tools for these commands:
     - File search: Use Glob (NOT dir /s)
     - Content search: Use Grep (NOT findstr)
-    - Read files: Use Read (NOT type)
-    - Edit files: Use Edit (NOT copy)
-    - Write files: Use Write (NOT echo > file)
+    - Read files: Use Read (NOT type)${editLine}${writeLine}
     - Communication: Output text directly (NOT echo)
   - When issuing multiple commands:
     - If the commands are independent and can run in parallel, make multiple bash tool calls in a single message. For example, if you need to run "dir" and "where cmd", send a single message with two bash tool calls in parallel.
@@ -218,7 +233,13 @@ Usage notes:
     </bad-example>`
 }
 
-function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaultTimeoutMs: number) {
+function profile(
+  name: string,
+  platform: NodeJS.Platform,
+  limits: Limits,
+  defaultTimeoutMs: number,
+  tools: ToolAvailability,
+) {
   const isPowerShell = PS.has(name)
   const chain = chainGuidance(name)
   if (CMD.has(name)) {
@@ -226,7 +247,7 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
       intro: `Executes a given ${shellDisplayName(name)} command with optional timeout, ensuring proper handling and security measures.`,
       workdirSection:
         "All commands run in the current working directory by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID changing directories inside the command - use `workdir` instead.",
-      commandSection: cmdCommandSection(chain, limits, defaultTimeoutMs),
+      commandSection: cmdCommandSection(chain, limits, defaultTimeoutMs, tools),
       gitCommands: "git commands",
       gitCommandRestriction: "git commands",
       createPrInstruction: "Create PR using a temporary body file so cmd.exe quoting stays simple.",
@@ -244,6 +265,7 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
         platform === "win32" ? "\\" : "/",
         limits,
         defaultTimeoutMs,
+        tools,
       ),
       gitCommands: "git commands",
       gitCommandRestriction: "git commands",
@@ -259,7 +281,7 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
       "Executes a given bash command in a persistent shell session with optional timeout, ensuring proper handling and security measures.",
     workdirSection:
       "All commands run in the current working directory by default. Use the `workdir` parameter if you need to run a command in a different directory. AVOID using `cd <directory> && <command>` patterns - use `workdir` instead.",
-    commandSection: bashCommandSection(chain, limits, defaultTimeoutMs),
+    commandSection: bashCommandSection(chain, limits, defaultTimeoutMs, tools),
     gitCommands: "bash commands",
     gitCommandRestriction: "git bash commands",
     createPrInstruction:
@@ -270,8 +292,14 @@ function profile(name: string, platform: NodeJS.Platform, limits: Limits, defaul
   }
 }
 
-export function render(name: string, platform: NodeJS.Platform, limits: Limits, defaultTimeoutMs: number) {
-  const selected = profile(name, platform, limits, defaultTimeoutMs)
+export function render(
+  name: string,
+  platform: NodeJS.Platform,
+  limits: Limits,
+  defaultTimeoutMs: number,
+  tools: ToolAvailability = ALL_TOOLS,
+) {
+  const selected = profile(name, platform, limits, defaultTimeoutMs, tools)
   return {
     description: renderPrompt(DESCRIPTION, {
       intro: selected.intro,

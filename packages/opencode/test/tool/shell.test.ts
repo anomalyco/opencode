@@ -1,5 +1,5 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit, Layer } from "effect"
 import type * as Scope from "effect/Scope"
@@ -8,6 +8,7 @@ import path from "path"
 import { Config } from "@/config/config"
 import { Shell } from "@opencode-ai/core/shell"
 import { ShellTool } from "../../src/tool/shell"
+import { ShellPrompt } from "../../src/tool/shell/prompt"
 import { Filesystem } from "@/util/filesystem"
 import { provideInstance, testInstanceStoreLayer, tmpdirScoped } from "../fixture/fixture"
 import type { Permission } from "../../src/permission"
@@ -217,6 +218,36 @@ describe("tool.shell", () => {
       )
     }),
   )
+})
+
+describe("tool.shell description", () => {
+  const limits = { maxLines: 1000, maxBytes: 100_000 }
+
+  test("includes Edit/Write guidance when those tools are present", () => {
+    const { description } = ShellPrompt.render("bash", "linux", limits, 1000, { hasEdit: true, hasWrite: true })
+    expect(description).toContain("Edit files: Use Edit")
+    expect(description).toContain("Write files: Use Write")
+  })
+
+  test("omits Edit/Write guidance when those tools are absent", () => {
+    const { description } = ShellPrompt.render("bash", "linux", limits, 1000, { hasEdit: false, hasWrite: false })
+    expect(description).not.toContain("Edit files: Use Edit")
+    expect(description).not.toContain("Write files: Use Write")
+    // unrelated guidance must remain intact
+    expect(description).toContain("Read files: Use Read")
+  })
+
+  test("conditions Edit and Write independently", () => {
+    const onlyWrite = ShellPrompt.render("bash", "linux", limits, 1000, { hasEdit: false, hasWrite: true }).description
+    expect(onlyWrite).not.toContain("Edit files: Use Edit")
+    expect(onlyWrite).toContain("Write files: Use Write")
+  })
+
+  test("defaults to including both when no tool set is passed", () => {
+    const { description } = ShellPrompt.render("bash", "linux", limits, 1000)
+    expect(description).toContain("Edit files: Use Edit")
+    expect(description).toContain("Write files: Use Write")
+  })
 })
 
 describe("tool.shell permissions", () => {

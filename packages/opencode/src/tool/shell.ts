@@ -600,7 +600,13 @@ export const ShellTool = Tool.define(
         const shell = Shell.acceptable(cfg.shell)
         const name = Shell.name(shell)
         const limits = yield* trunc.limits()
-        const prompt = ShellPrompt.render(name, process.platform, limits, defaultTimeoutMs)
+        // Only point the model at Edit/Write when those tools are actually
+        // available. `tools` is opt-out (absent means enabled), so a tool is
+        // unavailable only when explicitly disabled in config (#32704).
+        const prompt = ShellPrompt.render(name, process.platform, limits, defaultTimeoutMs, {
+          hasEdit: cfg.tools?.edit !== false,
+          hasWrite: cfg.tools?.write !== false,
+        })
         yield* Effect.logInfo("shell tool using shell", { shell })
 
         return {

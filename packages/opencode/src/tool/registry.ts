@@ -59,6 +59,17 @@ export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false
   return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
 }
 
+function shellDescriptionForVisibleTools(
+  description: string,
+  tools: { hasEdit: boolean; hasWrite: boolean },
+) {
+  return description
+    .split("\n")
+    .filter((line) => tools.hasEdit || !line.includes("Edit files: Use Edit"))
+    .filter((line) => tools.hasWrite || !line.includes("Write files: Use Write"))
+    .join("\n")
+}
+
 type TaskDef = Tool.InferDef<typeof TaskTool>
 type ReadDef = Tool.InferDef<typeof ReadTool>
 
@@ -309,6 +320,12 @@ const layer = Layer.effect(
             description: tool.description,
             parameters: tool.parameters,
             jsonSchema: tool.jsonSchema,
+          }
+          if (tool.id === ShellTool.id) {
+            output.description = shellDescriptionForVisibleTools(output.description, {
+              hasEdit: visible.some((item) => item.id === EditTool.id),
+              hasWrite: visible.some((item) => item.id === WriteTool.id),
+            })
           }
           yield* plugin.trigger("tool.definition", { toolID: tool.id }, output)
           const jsonSchema =
