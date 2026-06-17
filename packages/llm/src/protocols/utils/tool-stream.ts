@@ -49,12 +49,14 @@ const withoutTool = <K extends StreamKey>(tools: State<K>, key: K): State<K> => 
   return next
 }
 
-const inputStart = (tool: PendingTool) =>
-  LLMEvent.toolInputStart({
-    id: tool.id,
-    name: tool.name,
-    providerMetadata: tool.providerMetadata,
-  })
+const inputStart = (tool: PendingTool): LLMEvent | null =>
+  tool.name.length > 0
+    ? LLMEvent.toolInputStart({
+        id: tool.id,
+        name: tool.name,
+        providerMetadata: tool.providerMetadata,
+      })
+    : null
 
 const inputDelta = (tool: PendingTool, text: string) =>
   LLMEvent.toolInputDelta({
@@ -85,7 +87,10 @@ const appendTool = <K extends StreamKey>(
   text: string,
 ): AppendOutcome<K> => {
   const events: LLMEvent[] = []
-  if (!tools[key]) events.push(inputStart(tool))
+  if (!tools[key]) {
+    const startEvent = inputStart(tool)
+    if (startEvent) events.push(startEvent)
+  }
   if (text.length > 0) events.push(inputDelta(tool, text))
   return {
     tools: withTool(tools, key, tool),
@@ -113,6 +118,10 @@ export const start = <K extends StreamKey>(
  * identity on the first delta instead of a separate start event. OpenAI Chat has
  * this shape: `tool_calls[].index` is the stream key, and `id` / `name` may only
  * appear on the first delta for that index.
+ *
+ * Per OpenAI streaming spec, function.name may be null in non-first chunks.
+ * Some providers (vLLM, LM Studio, llama.cpp server) send name: null even in
+ * the first chunk. We allow this and send tool-input-start only when name is available.
  */
 export const appendOrStart = <K extends StreamKey>(
   route: string,
@@ -123,8 +132,9 @@ export const appendOrStart = <K extends StreamKey>(
 ): AppendOutcome<K> | LLMError => {
   const current = tools[key]
   const id = delta.id ?? current?.id
-  const name = delta.name ?? current?.name
-  if (!id || !name) return eventError(route, missingToolMessage)
+  if (!id) return eventError(route, missingToolMessage)
+  
+  const name = delta.name ?? current?.name ?? ""
 
   const tool = {
     id,
@@ -133,6 +143,19 @@ export const appendOrStart = <K extends StreamKey>(
     providerExecuted: current?.providerExecuted,
     providerMetadata: current?.providerMetadata,
   }
+  
+  // If we get a name for the first time (even in a later chunk), send tool-input-start
+  if (name.length > 0 && (!current || current.name.length === 0)) {
+    const startEvent = inputStart(tool)
+    if (startEvent) {
+      return {
+        tools: withTool(tools, key, tool),
+        tool,
+        events: delta.text.length > 0 ? [startEvent, inputDelta(tool, delta.text)] : [startEvent],
+      }
+    }
+  }
+  
   if (current && delta.text.length === 0 && current.id === id && current.name === name)
     return { tools, tool: current, events: [] }
   return appendTool(tools, key, tool, delta.text)

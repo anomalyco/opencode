@@ -419,7 +419,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         tools,
         tool.index,
         { id: tool.id ?? undefined, name: tool.function?.name ?? undefined, text: tool.function?.arguments ?? "" },
-        "OpenAI Chat tool call delta is missing id or name",
+        "OpenAI Chat tool call delta is missing id",
       )
       if (ToolStream.isError(result)) return yield* result
       tools = result.tools
