@@ -1704,6 +1704,27 @@ unix(
 )
 
 unixNoLLMServer(
+  "native goal command bypasses llm template execution",
+  () =>
+    withSh(() =>
+      Effect.gen(function* () {
+        const { prompt, chat } = yield* boot()
+
+        const result = yield* prompt.command({
+          sessionID: chat.id,
+          command: "goal",
+          arguments: "Migrate repository to Bun",
+        })
+
+        expect(result.info.role).toBe("assistant")
+        expect(result.parts.some((part) => part.type === "text" && part.text.includes("Goal created"))).toBe(true)
+      }),
+    ),
+  { git: true, config: cfg },
+  30_000,
+)
+
+unixNoLLMServer(
   "cancel interrupts shell and resolves cleanly",
   () =>
     withSh(() =>

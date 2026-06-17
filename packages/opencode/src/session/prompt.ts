@@ -25,6 +25,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import * as Stream from "effect/Stream"
 import { Command } from "../command"
+import { createGoalManager, runGoalCommand } from "@/goal"
 import { pathToFileURL, fileURLToPath } from "url"
 import { Config } from "@/config/config"
 import { ConfigMarkdown } from "@/config/markdown"
@@ -1420,6 +1421,53 @@ export const layer = Layer.effect(
         command: input.command,
         agent: input.agent,
       })
+      if (input.command === Command.Default.GOAL) {
+        const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+        const ctx = yield* InstanceState.context
+        const manager = createGoalManager(ctx)
+        const output = yield* Effect.promise(() => runGoalCommand(manager, input.arguments))
+        const model = yield* currentModel(input.sessionID)
+        const agent = input.agent ? yield* agents.get(input.agent) : yield* agents.defaultInfo()
+        if (!agent) {
+          const available = (yield* agents.list()).filter((a) => !a.hidden).map((a) => a.name)
+          const hint = available.length ? ` Available agents: ${available.join(", ")}` : ""
+          const error = new NamedError.Unknown({ message: `Agent not found: "${input.agent}".${hint}` })
+          yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
+          throw error
+        }
+        const variant = "variant" in model && typeof model.variant === "string" ? model.variant : undefined
+        const assistant: SessionV1.Assistant = {
+          id: MessageID.ascending(),
+          parentID: input.messageID ?? MessageID.ascending(),
+          role: "assistant",
+          mode: agent.name,
+          agent: agent.name,
+          variant,
+          path: { cwd: ctx.directory, root: ctx.worktree },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          modelID: model.modelID,
+          providerID: model.providerID,
+          time: { created: Date.now(), completed: Date.now() },
+          sessionID: input.sessionID,
+        }
+        yield* sessions.updateMessage(assistant)
+        const part: SessionV1.TextPart = yield* sessions.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID: input.sessionID,
+          type: "text",
+          text: output,
+        })
+        yield* events.publish(Command.Event.Executed, {
+          name: input.command,
+          sessionID: input.sessionID,
+          arguments: input.arguments,
+          messageID: assistant.id,
+        })
+        return { info: assistant, parts: [part] }
+      }
+
       const cmd = yield* commands.get(input.command)
       if (!cmd) {
         const available = (yield* commands.list()).map((c) => c.name)
