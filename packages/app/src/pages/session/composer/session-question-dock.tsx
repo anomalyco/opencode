@@ -106,7 +106,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const serverSDK = useServerSDK()
   const sync = useSync()
   const language = useLanguage()
-  const cacheKey = ScopedKey.from(serverSDK.scope, props.request.id)
+  const cacheKey = ScopedKey.from(serverSDK().scope, props.request.id)
 
   const questions = createMemo(() => props.request.questions)
   const total = createMemo(() => questions().length)
@@ -265,7 +265,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const replyMutation = useMutation(() => ({
-    mutationFn: (answers: QuestionAnswer[]) => sdk.client.question.reply({ requestID: props.request.id, answers }),
+    mutationFn: (answers: QuestionAnswer[]) => sdk().client.question.reply({ requestID: props.request.id, answers }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -277,7 +277,7 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }))
 
   const rejectMutation = useMutation(() => ({
-    mutationFn: () => sdk.client.question.reject({ requestID: props.request.id }),
+    mutationFn: () => sdk().client.question.reject({ requestID: props.request.id }),
     onMutate: () => {
       props.onSubmit()
     },

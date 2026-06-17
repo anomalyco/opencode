@@ -5,7 +5,7 @@ import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Option } from "effect"
 import ignore from "ignore"
 import path from "path"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -101,11 +101,26 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       return yield* filesystem(
         FileSystem.Service.use((fs) => fs.read({ path: RelativePath.make(ctx.query.path) })),
       ).pipe(
-        Effect.map((item) => ({
-          type: item.encoding === "utf8" ? ("text" as const) : ("binary" as const),
-          content: item.encoding === "utf8" ? item.content.trim() : item.content,
-          ...(item.encoding === "base64" ? { encoding: item.encoding, mimeType: item.mime } : {}),
-        })),
+        Effect.flatMap((item) =>
+          Effect.gen(function* () {
+            const text = item.content.includes(0)
+              ? Option.none<string>()
+              : yield* Effect.sync(() => new TextDecoder("utf-8", { fatal: true }).decode(item.content)).pipe(
+                  Effect.option,
+                )
+            return { item, text }
+          }),
+        ),
+        Effect.map(({ item, text }) =>
+          Option.isSome(text)
+            ? { type: "text" as const, content: text.value.trim() }
+            : {
+                type: "binary" as const,
+                content: Buffer.from(item.content).toString("base64"),
+                encoding: "base64" as const,
+                mimeType: item.mime,
+              },
+        ),
       )
     })
 

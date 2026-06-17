@@ -306,6 +306,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "搜尋資料夾",
   "dialog.directory.empty": "找不到資料夾",
+  "dialog.directory.action.selectFile": "選擇檔案",
+  "dialog.directory.action.selectFolder": "選擇資料夾",
+  "dialog.directory.root": "根目錄",
+  "dialog.directory.parent": "上層目錄",
+  "dialog.directory.readError": "無法讀取此資料夾",
 
   "dialog.server.title": "伺服器",
   "dialog.server.description": "切換此應用程式連線的 OpenCode 伺服器。",
