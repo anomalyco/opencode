@@ -1757,6 +1757,17 @@ export const layer = Layer.effect(
       InstanceState.use(state, (s) => s.providers[providerID]),
     )
 
+    const OPENROUTER_VARIANTS = new Set(["free", "extended", "exacto", "thinking", "online", "nitro"])
+
+    const openRouterVariant = (modelID: ModelV2.ID): { base: ModelV2.ID; variant: string } | undefined => {
+      const id = String(modelID)
+      const separator = id.lastIndexOf(":")
+      if (separator === -1) return undefined
+      const variant = id.slice(separator + 1)
+      if (!OPENROUTER_VARIANTS.has(variant)) return undefined
+      return { base: ModelV2.ID.make(id.slice(0, separator)), variant }
+    }
+
     const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderV2.ID, modelID: ModelV2.ID) {
       const s = yield* InstanceState.get(state)
       const provider = s.providers[providerID]
@@ -1771,14 +1782,27 @@ export const layer = Layer.effect(
       }
 
       const info = provider.models[modelID]
-      if (!info) {
-        const current = modelSuggestions(provider, modelID, runtimeFlags.enableExperimentalModels)
-        const suggestions = current.length
-          ? current
-          : modelSuggestions(s.catalog[providerID], modelID, runtimeFlags.enableExperimentalModels)
-        return yield* new ModelNotFoundError({ providerID, modelID, suggestions })
+      if (info) return info
+
+      if (providerID === ProviderV2.ID.openrouter) {
+        const variant = openRouterVariant(modelID)
+        if (variant) {
+          const base = provider.models[variant.base]
+          if (base) {
+            return {
+              ...base,
+              id: modelID,
+              api: { ...base.api, id: `${base.api.id}:${variant.variant}` },
+            }
+          }
+        }
       }
-      return info
+
+      const current = modelSuggestions(provider, modelID, runtimeFlags.enableExperimentalModels)
+      const suggestions = current.length
+        ? current
+        : modelSuggestions(s.catalog[providerID], modelID, runtimeFlags.enableExperimentalModels)
+      return yield* new ModelNotFoundError({ providerID, modelID, suggestions })
     })
 
     const getLanguage = Effect.fn("Provider.getLanguage")(function* (model: Model) {

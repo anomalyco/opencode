@@ -322,6 +322,70 @@ it.instance("getModel throws ModelNotFoundError for invalid provider", () =>
   }),
 )
 
+it.instance(
+  "getModel resolves OpenRouter variant suffixes to the base model",
+  () =>
+    Effect.gen(function* () {
+      yield* set("OPENROUTER_API_KEY", "test-api-key")
+      const provider = yield* Provider.Service
+      const base = yield* provider.getModel(
+        ProviderV2.ID.openrouter,
+        ModelV2.ID.make("deepseek/deepseek-r1-0528"),
+      )
+      expect(String(base.id)).toBe("deepseek/deepseek-r1-0528")
+      expect(base.api.id).toBe("deepseek/deepseek-r1-0528")
+
+      const free = yield* provider.getModel(
+        ProviderV2.ID.openrouter,
+        ModelV2.ID.make("deepseek/deepseek-r1-0528:free"),
+      )
+      expect(String(free.id)).toBe("deepseek/deepseek-r1-0528:free")
+      expect(free.api.id).toBe("deepseek/deepseek-r1-0528:free")
+
+      const extended = yield* provider.getModel(
+        ProviderV2.ID.openrouter,
+        ModelV2.ID.make("deepseek/deepseek-r1-0528:extended"),
+      )
+      expect(String(extended.id)).toBe("deepseek/deepseek-r1-0528:extended")
+      expect(extended.api.id).toBe("deepseek/deepseek-r1-0528:extended")
+    }),
+  {
+    config: {
+      provider: {
+        openrouter: {
+          models: {
+            "deepseek/deepseek-r1-0528": { name: "DeepSeek R1" },
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
+  "getModel rejects unknown OpenRouter variant suffixes",
+  () =>
+    Effect.gen(function* () {
+      yield* set("OPENROUTER_API_KEY", "test-api-key")
+      const provider = yield* Provider.Service
+      const exit = yield* provider
+        .getModel(ProviderV2.ID.openrouter, ModelV2.ID.make("deepseek/deepseek-r1-0528:unknown"))
+        .pipe(Effect.exit)
+      expect(exit._tag).toBe("Failure")
+    }),
+  {
+    config: {
+      provider: {
+        openrouter: {
+          models: {
+            "deepseek/deepseek-r1-0528": { name: "DeepSeek R1" },
+          },
+        },
+      },
+    },
+  },
+)
+
 // Pure synchronous unit tests — no Effect runtime needed.
 
 test("parseModel correctly parses provider/model string", () => {
@@ -334,6 +398,12 @@ test("parseModel handles model IDs with slashes", () => {
   const result = Provider.parseModel("openrouter/anthropic/claude-3-opus")
   expect(String(result.providerID)).toBe("openrouter")
   expect(String(result.modelID)).toBe("anthropic/claude-3-opus")
+})
+
+test("parseModel preserves OpenRouter variant suffixes", () => {
+  const result = Provider.parseModel("openrouter/openai/gpt-4o-mini:free")
+  expect(String(result.providerID)).toBe("openrouter")
+  expect(String(result.modelID)).toBe("openai/gpt-4o-mini:free")
 })
 
 it.instance("defaultModel returns first available model when no config set", () =>
