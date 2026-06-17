@@ -26,15 +26,18 @@
   "scripts": {
     "typecheck": "tsgo --noEmit",
     "dev": "vite",
-    "generate:tailwind": "bun run script/tailwind.ts"
+    "generate:tailwind": "bun run script/tailwind.ts",
+    "test": "bun test"
   },
   "devDependencies": {
     "@tailwindcss/vite": "catalog:",
     "@tsconfig/node22": "catalog:",
     "@types/bun": "catalog:",
+    "@types/jsdom": "21.1.7",
     "@types/katex": "0.16.7",
     "@types/luxon": "catalog:",
     "@typescript/native-preview": "catalog:",
+    "jsdom": "26.1.0",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
