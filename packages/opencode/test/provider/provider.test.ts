@@ -2161,3 +2161,53 @@ discoveryTestEffect(() =>
     },
   },
 )
+
+discoveryTestEffect(() =>
+  jsonResponse({
+    data: [
+      { id: "overconfigured-model", object: "model", context_length: 32768, max_output_tokens: 2048 },
+    ],
+  }),
+).instance(
+  "config limits exceeding discovered limits are preserved and logged as warning",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      yield* provider.init()
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("overconfigured-provider")]
+          return p !== undefined ? (true as const) : undefined
+        }),
+        "provider disappeared",
+      )
+      const discoveredProvider = (yield* list)[ProviderV2.ID.make("overconfigured-provider")]
+
+      // Config limits that exceed discovered limits should still be preserved
+      // (a warning is logged but the user's config wins)
+      expect(discoveredProvider.models["overconfigured-model"].limit.context).toBe(131072)
+      expect(discoveredProvider.models["overconfigured-model"].limit.output).toBe(8192)
+    }),
+  {
+    config: {
+      provider: {
+        "overconfigured-provider": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "Overconfigured Provider",
+          options: {
+            baseURL: "http://localhost:8080/v1",
+          },
+          models: {
+            "overconfigured-model": {
+              name: "Overconfigured Model",
+              limit: {
+                context: 131072,
+                output: 8192,
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+)

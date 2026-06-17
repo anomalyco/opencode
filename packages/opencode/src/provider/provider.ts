@@ -1729,13 +1729,22 @@ export const layer = Layer.effect(
             Effect.timeout("10 seconds"),
             Effect.exit,
           )
-          if (Exit.isFailure(fetchExit)) return emptyOrSkip()
+          if (Exit.isFailure(fetchExit)) {
+             yield* Effect.logWarning("model discovery failed", { provider: providerID, reason: "fetch error or timeout" })
+             return emptyOrSkip()
+           }
 
           const res = fetchExit.value
-          if (res.status < 200 || res.status >= 300) return emptyOrSkip()
+          if (res.status < 200 || res.status >= 300) {
+             yield* Effect.logWarning("model discovery failed", { provider: providerID, reason: `non-2xx status ${res.status}` })
+             return emptyOrSkip()
+           }
 
           const jsonExit = yield* res.json.pipe(Effect.exit)
-          if (Exit.isFailure(jsonExit)) return emptyOrSkip()
+          if (Exit.isFailure(jsonExit)) {
+             yield* Effect.logWarning("model discovery failed", { provider: providerID, reason: "failed to parse JSON response" })
+             return emptyOrSkip()
+           }
 
          const json = jsonExit.value as unknown as OpenAIModelsResponse
            discovered = new Set<string>(
@@ -1755,7 +1764,10 @@ export const layer = Layer.effect(
            }
         } else if (discover) {
           const discoverExit = yield* Effect.promise(() => discover()).pipe(Effect.exit)
-          if (Exit.isFailure(discoverExit)) return emptyOrSkip()
+          if (Exit.isFailure(discoverExit)) {
+             yield* Effect.logWarning("model discovery failed", { provider: providerID, reason: "custom discover function failed" })
+             return emptyOrSkip()
+           }
 
           const result = discoverExit.value
           discovered = new Set<string>(
@@ -1793,12 +1805,27 @@ export const layer = Layer.effect(
           const context = limits?.context ?? 128000
           const output = limits?.output ?? 128000
 
-          // Update limits for non-config models (config models preserve their limits)
-          if (existing && !configModelIDs.includes(modelID)) {
-            newModels[modelID] = { ...existing, limit: { context, output } }
-            continue
-          }
-          if (existing) continue
+       // Update limits for non-config models (config models preserve their limits)
+           if (existing && !configModelIDs.includes(modelID)) {
+             newModels[modelID] = { ...existing, limit: { context, output } }
+             continue
+           }
+           if (existing) {
+             // Warn when config limits exceed discovered limits
+             if (configModelIDs.includes(modelID) && limits) {
+               if (existing.limit.context > limits.context || existing.limit.output > limits.output) {
+                 yield* Effect.logWarning("config limits exceed discovered limits", {
+                   provider: providerID,
+                   model: modelID,
+                   configContext: existing.limit.context,
+                   discoveredContext: limits.context,
+                   configOutput: existing.limit.output,
+                   discoveredOutput: limits.output,
+                 })
+               }
+             }
+             continue
+           }
 
           newModels[modelID] = {
             id: ModelV2.ID.make(modelID),
