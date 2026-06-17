@@ -4,6 +4,10 @@ import type { JSONSchema7 } from "@ai-sdk/provider"
 import type * as Provider from "./provider"
 import type * as ModelsDev from "@opencode-ai/core/models-dev"
 import { iife } from "@/util/iife"
+import fs from "node:fs"
+import path from "node:path"
+import os from "node:os"
+import crypto from "node:crypto"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -399,6 +403,18 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
       if (model.capabilities.input[modality]) return part
 
       const name = filename ? `"${filename}"` : modality
+
+      // For image modality: save to temp file and provide path hint for vision MCP tools
+      if (modality === "image" && part.type === "image") {
+        const savedPath = saveImageToTemp(part.image, mime, filename)
+        if (savedPath) {
+          return {
+            type: "text" as const,
+            text: `[Image: ${name} — saved to ${savedPath}. This model does not support image input, but you can analyze it using an image_analysis or similar vision tool with the file path above.]`,
+          }
+        }
+      }
+
       return {
         type: "text" as const,
         text: `ERROR: Cannot read ${name} (this model does not support ${modality} input). Inform the user.`,
@@ -407,6 +423,43 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
 
     return { ...msg, content: filtered }
   })
+}
+
+function saveImageToTemp(imageData: unknown, mime: string, filename?: string): string | null {
+  try {
+    const imageStr = String(imageData)
+    if (!imageStr.startsWith("data:")) return null
+
+    const match = imageStr.match(/^data:([^;]+);base64,(.*)$/)
+    if (!match || !match[2]) return null
+
+    const [, , base64Data] = match
+    const buffer = Buffer.from(base64Data, "base64")
+
+    const extMap: Record<string, string> = {
+      "image/png": ".png",
+      "image/jpeg": ".jpg",
+      "image/gif": ".gif",
+      "image/webp": ".webp",
+      "image/bmp": ".bmp",
+    }
+    const ext = extMap[mime] || ".png"
+    const hash = crypto.createHash("sha256").update(buffer).digest("hex").slice(0, 12)
+    const baseName = filename ? filename.replace(/\.[^.]+$/, "") : `image_${hash}`
+    const tempName = `${baseName}_${hash}${ext}`
+
+    const tempDir = path.join(os.tmpdir(), "opencode-vision")
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true })
+    }
+
+    const tempPath = path.join(tempDir, tempName)
+    fs.writeFileSync(tempPath, buffer)
+
+    return tempPath
+  } catch {
+    return null
+  }
 }
 
 function mapProviderOptions(
