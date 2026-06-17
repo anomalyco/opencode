@@ -204,11 +204,13 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const fork = Effect.fn("SessionHttpApi.fork")(function* (ctx: {
       params: { sessionID: SessionID }
       payload?: typeof ForkPayload.Type
+      directory?: string
     }) {
       return yield* SessionError.mapStorageNotFound(
         session.fork({
           sessionID: ctx.params.sessionID,
           messageID: ctx.payload?.messageID,
+          directory: ctx.directory,
         }),
       )
     })
@@ -217,14 +219,16 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       request: HttpServerRequest.HttpServerRequest
     }) {
+      const url = new URL(ctx.request.url, "http://localhost")
+      const directory = url.searchParams.get("directory") ?? undefined
       const body = yield* Effect.orDie(ctx.request.text)
-      if (body.trim().length === 0) return yield* fork({ params: ctx.params })
+      if (body.trim().length === 0) return yield* fork({ params: ctx.params, directory })
 
       const json = yield* tryParseJson(body)
       const payload = yield* Schema.decodeUnknownEffect(ForkPayload)(json).pipe(
         Effect.mapError(() => new HttpApiError.BadRequest({})),
       )
-      return yield* fork({ params: ctx.params, payload })
+      return yield* fork({ params: ctx.params, payload, directory })
     })
 
     const abort = Effect.fn("SessionHttpApi.abort")(function* (ctx: { params: { sessionID: SessionID } }) {
