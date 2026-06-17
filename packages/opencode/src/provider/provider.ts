@@ -1651,6 +1651,7 @@ export const layer = Layer.effect(
         if (npm !== "@ai-sdk/openai-compatible") continue
         const baseURL = configProvider?.options?.baseURL
         if (typeof baseURL !== "string" || baseURL === "") continue
+        if (configProvider?.discoverModels === false) continue
         providersToDiscover.push({ providerID, inlineFetch: true })
       }
 

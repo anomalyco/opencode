@@ -2018,3 +2018,52 @@ discoveryTestEffect(() =>
     },
   },
 )
+
+discoveryTestEffect(() =>
+  jsonResponse({
+    data: [
+      { id: "llama-3.1-8b", object: "model" },
+    ],
+  }),
+).instance(
+  "discoverModels: false skips discovery and preserves config-defined models",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      yield* provider.init()
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("no-discovery-provider")]
+          return p !== undefined ? (true as const) : undefined
+        }),
+        "provider disappeared",
+      )
+      const discoveredProvider = (yield* list)[ProviderV2.ID.make("no-discovery-provider")]
+
+      // Provider should exist (not deleted by failed discovery)
+      expect(discoveredProvider).toBeDefined()
+      // Config-defined model should be preserved
+      expect(discoveredProvider.models["config-model"]).toBeDefined()
+      // Discovered model should NOT be present (discovery was skipped)
+      expect(discoveredProvider.models["llama-3.1-8b"]).toBeUndefined()
+    }),
+  {
+    config: {
+      provider: {
+        "no-discovery-provider": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "No Discovery Provider",
+          discoverModels: false,
+          options: {
+            baseURL: "http://localhost:8080/v1",
+          },
+          models: {
+            "config-model": {
+              name: "Config Model",
+            },
+          },
+        },
+      },
+    },
+  },
+)
