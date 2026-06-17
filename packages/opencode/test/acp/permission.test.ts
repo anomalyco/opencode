@@ -165,6 +165,20 @@ describe("acp permissions", () => {
     expect(harness.replies).toEqual([{ requestID: "perm_1", reply: "once", directory: "/workspace" }])
   })
 
+  it("replies to permissions using the event origin directory", async () => {
+    const harness = createHarness()
+    await createSession(harness.session, "ses_a", "/loaded")
+
+    await harness.subscription.handle(
+      permissionAsked("ses_a", "perm_origin", { tool: { messageID: "msg_1", callID: "call_1" } }),
+      "/created",
+    )
+
+    await pollUntil(() => harness.replies.length === 1, "permission was never replied")
+
+    expect(harness.replies).toEqual([{ requestID: "perm_origin", reply: "once", directory: "/created" }])
+  })
+
   it("forwards external_directory metadata and locations to requestPermission", async () => {
     const harness = createHarness()
     await createSession(harness.session, "ses_a")

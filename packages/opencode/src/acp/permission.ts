@@ -27,11 +27,11 @@ export class Handler {
     },
   ) {}
 
-  handle(event: PermissionEvent) {
+  handle(event: PermissionEvent, directory?: string) {
     const permission = event.properties
     const previous = this.queues.get(permission.sessionID) ?? Promise.resolve()
     const next = previous
-      .then(() => this.process(event))
+      .then(() => this.process(event, directory))
       .catch(() => {})
       .finally(() => {
         if (this.queues.get(permission.sessionID) === next) {
@@ -41,13 +41,14 @@ export class Handler {
     this.queues.set(permission.sessionID, next)
   }
 
-  private async process(event: PermissionEvent) {
+  private async process(event: PermissionEvent, directory?: string) {
     const permission = event.properties
     const session = await Effect.runPromise(this.input.session.tryGet(permission.sessionID))
     if (!session) return
+    const replyDirectory = directory ?? session.cwd
 
     if (!this.input.connection.requestPermission) {
-      await this.reply(permission.id, "reject", session.cwd)
+      await this.reply(permission.id, "reject", replyDirectory)
       return
     }
 
@@ -65,7 +66,7 @@ export class Handler {
         options: permissionOptions,
       })
       .catch(async () => {
-        await this.reply(permission.id, "reject", session.cwd)
+        await this.reply(permission.id, "reject", replyDirectory)
         return undefined
       })
 
@@ -73,7 +74,7 @@ export class Handler {
 
     const reply = selectedReply(result)
     if (reply !== "once" && reply !== "always") {
-      await this.reply(permission.id, "reject", session.cwd)
+      await this.reply(permission.id, "reject", replyDirectory)
       return
     }
 
@@ -81,7 +82,7 @@ export class Handler {
       await this.writeProposedEdit(session.id, permission.metadata).catch(() => {})
     }
 
-    await this.reply(permission.id, reply, session.cwd)
+    await this.reply(permission.id, reply, replyDirectory)
   }
 
   private async reply(requestID: string, reply: Reply, directory: string) {
