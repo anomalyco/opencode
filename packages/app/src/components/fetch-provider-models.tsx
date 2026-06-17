@@ -110,7 +110,10 @@ export function FetchProviderModels(props: Props) {
             onChange={setSearchQuery}
             icon="search"
           />
-          <div class="flex flex-wrap gap-1.5">
+          <div
+            class="flex flex-wrap gap-1.5 rounded-lg border border-border-base p-2"
+            style="background: var(--yuzu-dark-alpha-3);"
+          >
             <For each={filteredModels()}>
               {(model) => {
                 const added = () => props.existingModelIDs.has(model.id)
