@@ -7,17 +7,24 @@ import { List } from "@opencode-ai/ui/list"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
 import { useNavigate } from "@solidjs/router"
-import { createMemo, createSignal, Match, onCleanup, Show, Switch } from "solid-js"
+import { createMemo, createSignal, lazy, Match, onCleanup, Show, Switch } from "solid-js"
 import { formatKeybind, useCommand, type CommandOption } from "@/context/command"
 import { useServerSDK, type ServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useLayout } from "@/context/layout"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
+import { usePlatform } from "@/context/platform"
+import { useServer } from "@/context/server"
+import { useSettings } from "@/context/settings"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { decode64 } from "@/utils/base64"
 import { getRelativeTime } from "@/utils/time"
+
+const DialogSelectFileV2 = lazy(() =>
+  import("./dialog-select-directory-v2").then((module) => ({ default: module.DialogSelectDirectoryV2 })),
+)
 
 type EntryType = "command" | "file" | "session"
 
@@ -264,6 +271,9 @@ function createSessionEntries(props: {
 export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFile?: (path: string) => void }) {
   const command = useCommand()
   const language = useLanguage()
+  const platform = usePlatform()
+  const server = useServer()
+  const settings = useSettings()
   const layout = useLayout()
   const file = useFile()
   const dialog = useDialog()
@@ -382,6 +392,21 @@ export function DialogSelectFile(props: { mode?: DialogSelectFileMode; onOpenFil
     if (state.committed) return
     state.cleanup?.()
   })
+
+  if (filesOnly() && platform.platform === "desktop" && settings.general.newLayoutDesigns() && server.current) {
+    return (
+      <DialogSelectFileV2
+        server={server.current}
+        mode="file"
+        start={projectDirectory()}
+        title={language.t("session.header.searchFiles")}
+        onSelect={(result) => {
+          if (typeof result !== "string") return
+          open(result)
+        }}
+      />
+    )
+  }
 
   return (
     <Dialog class="pt-3 pb-0 !max-h-[480px]" transition>
