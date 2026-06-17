@@ -3,6 +3,9 @@
   min-width: 0;
   max-width: 100%;
   overflow-wrap: break-word;
+  /* Auto-detect direction per paragraph (RTL for Hebrew/Arabic). Pairs with the
+     dir="auto" attribute on the container, which sets box direction for markers. */
+  unicode-bidi: plaintext;
   color: var(--text-strong);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base); /* 14px */
@@ -66,8 +69,8 @@
   ol {
     margin-top: 8px;
     margin-bottom: 12px;
-    margin-left: 0;
-    padding-left: 32px;
+    margin-inline-start: 0;
+    padding-inline-start: 32px;
     list-style-position: outside;
   }
 
@@ -77,7 +80,7 @@
 
   ol {
     list-style-type: decimal;
-    padding-left: 2.25rem;
+    padding-inline-start: 2.25rem;
   }
 
   li {
@@ -103,18 +106,18 @@
   li > ol {
     margin-top: 0.25rem;
     margin-bottom: 0.25rem;
-    padding-left: 1rem; /* Minimal indent for nesting only */
+    padding-inline-start: 1rem; /* Minimal indent for nesting only */
   }
 
   li > ol {
-    padding-left: 1.75rem;
+    padding-inline-start: 1.75rem;
   }
 
   /* Blockquotes */
   blockquote {
-    border-left: 2px solid var(--border-weak-base);
+    border-inline-start: 2px solid var(--border-weak-base);
     margin: 1.5rem 0;
-    padding-left: 0.5rem;
+    padding-inline-start: 0.5rem;
     color: var(--text-weak);
     font-style: normal;
   }
@@ -213,6 +216,11 @@
     margin-bottom: 32px;
     overflow: auto;
 
+    /* Code is always LTR, even inside an RTL message */
+    unicode-bidi: normal;
+    direction: ltr;
+    text-align: left;
+
     scrollbar-width: none;
     &::-webkit-scrollbar {
       display: none;
@@ -248,7 +256,7 @@
     /* Minimal borders for structure, matching TUI "lines" roughly but keeping it web-clean */
     border-bottom: 1px solid var(--border-weaker-base);
     padding: 12px;
-    text-align: left;
+    text-align: start;
     vertical-align: top;
   }
 

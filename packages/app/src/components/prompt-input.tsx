@@ -1561,6 +1561,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <div class="relative max-h-[180px] overflow-y-auto no-scrollbar" ref={(el) => (scrollRef = el)}>
                   <div
                     data-component="prompt-input"
+                    dir="auto"
                     ref={(el) => {
                       editorRef = el
                       props.ref?.(el)
@@ -1740,6 +1741,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               >
                 <div
                   data-component="prompt-input"
+                  dir="auto"
                   ref={(el) => {
                     editorRef = el
                     props.ref?.(el)
