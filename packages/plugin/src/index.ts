@@ -265,7 +265,16 @@ export interface Hooks {
   ) => Promise<void>
   "tool.execute.before"?: (
     input: { tool: string; sessionID: string; callID: string },
-    output: { args: any },
+    output: {
+      args: any
+      /**
+       * If set, the tool is NOT executed and this string is returned as its
+       * output instead. Lets a plugin answer a tool call itself (e.g. a cache
+       * or memory plugin that already holds the result). The "tool.execute.after"
+       * hook still runs on the substituted result.
+       */
+      result?: string
+    },
   ) => Promise<void>
   "shell.env"?: (
     input: { cwd: string; sessionID?: string; callID?: string },

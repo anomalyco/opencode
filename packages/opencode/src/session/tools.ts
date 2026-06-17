@@ -84,12 +84,18 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         return run.promise(
           Effect.gen(function* () {
             const ctx = context(args, options)
+            const before: { args: any; result?: string } = { args }
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
-              { args },
+              before,
             )
-            const result = yield* item.execute(args, ctx)
+            // A plugin may short-circuit the call by setting `result`: skip
+            // execution and return the supplied output instead.
+            const result =
+              before.result !== undefined
+                ? { title: "", output: before.result, metadata: {} }
+                : yield* item.execute(before.args, ctx)
             const output = {
               ...result,
               attachments: result.attachments?.map((attachment) => ({
@@ -125,24 +131,31 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       run.promise(
         Effect.gen(function* () {
           const ctx = context(args, opts)
+          const before: { args: any; result?: string } = { args }
           yield* plugin.trigger(
             "tool.execute.before",
             { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
-            { args },
+            before,
           )
-          const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
-            yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
-            return yield* Effect.promise(() => execute(args, opts))
-          }).pipe(
-            Effect.withSpan("Tool.execute", {
-              attributes: {
-                "tool.name": key,
-                "tool.call_id": opts.toolCallId,
-                "session.id": ctx.sessionID,
-                "message.id": input.processor.message.id,
-              },
-            }),
-          )
+          // A plugin may short-circuit the call by setting `result`: skip
+          // execution (and the permission prompt) and return the supplied
+          // output as a single text content item instead.
+          const result: Awaited<ReturnType<NonNullable<typeof execute>>> =
+            before.result !== undefined
+              ? { content: [{ type: "text", text: before.result }] }
+              : yield* Effect.gen(function* () {
+                  yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
+                  return yield* Effect.promise(() => execute(before.args, opts))
+                }).pipe(
+                  Effect.withSpan("Tool.execute", {
+                    attributes: {
+                      "tool.name": key,
+                      "tool.call_id": opts.toolCallId,
+                      "session.id": ctx.sessionID,
+                      "message.id": input.processor.message.id,
+                    },
+                  }),
+                )
           yield* plugin.trigger(
             "tool.execute.after",
             { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId, args },
