@@ -52,7 +52,6 @@ const VIRTUALIZE_BYTES = 500_000
 const codeMetrics = {
   ...DEFAULT_VIRTUAL_FILE_METRICS,
   lineHeight: 24,
-  spacing: 0,
 } satisfies Partial<VirtualFileMetrics>
 
 type SharedProps<T> = {
