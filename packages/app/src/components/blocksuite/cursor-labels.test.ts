@@ -139,10 +139,16 @@ describe("watchCursorLabels", () => {
     const stop = watchCursorLabels(editor, host)
     await wait()
 
-    expect(label.style.borderRadius).toBe("999px")
-    expect(label.style.lineHeight).toBe("1")
-    expect(label.style.paddingTop).toBe("3px")
-    expect(label.style.paddingBottom).toBe("3px")
+    expect(root.adoptedStyleSheets.length).toBeGreaterThan(0)
+
+    const computed = getComputedStyle(label)
+    expect(computed.borderRadius).toBe("999px")
+    expect(computed.paddingTop).toBe("3px")
+    expect(computed.paddingBottom).toBe("3px")
+
+    const fontSize = Number.parseFloat(computed.fontSize)
+    const lineHeight = Number.parseFloat(computed.lineHeight)
+    expect(lineHeight === 1 || lineHeight / fontSize === 1).toBe(true)
     stop()
     host.remove()
   })
