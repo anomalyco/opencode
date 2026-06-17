@@ -21,7 +21,7 @@ export const layer = Layer.effect(
     // Yield each bootstrap dep at layer init so `run` itself has R = never.
     // InstanceStore imports only the lightweight tag from bootstrap-service.ts,
     // so it can depend on bootstrap without importing this implementation graph.
- const config = yield* Config.Service
+    const config = yield* Config.Service
     const format = yield* Format.Service
     const lsp = yield* LSP.Service
     const plugin = yield* Plugin.Service
@@ -38,7 +38,7 @@ export const layer = Layer.effect(
       yield* config.get()
       // Plugin can mutate config so it has to be initialized before anything else.
       yield* plugin.init()
-     // Each service self-manages its own slow work via Effect.forkScoped against
+      // Each service self-manages its own slow work via Effect.forkScoped against
       // its per-instance state scope. We just await materialization here.
       yield* Effect.forEach(
         [lsp, shareNext, format, vcs, snapshot, project, provider],
