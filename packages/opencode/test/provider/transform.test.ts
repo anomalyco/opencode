@@ -1154,6 +1154,207 @@ describe("ProviderTransform.schema - gemini non-object properties removal", () =
   })
 })
 
+describe("ProviderTransform.schema - openai supported schema subset", () => {
+  const openaiModel = {
+    providerID: "openai",
+    api: {
+      id: "gpt-4.1",
+      npm: "@ai-sdk/openai",
+    },
+  } as any
+
+  test("removes unsupported JSON Schema keywords recursively", () => {
+    const result = ProviderTransform.schema(openaiModel, {
+      $schema: "https://json-schema.org/draft/2020-12/schema",
+      title: "Search",
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query",
+          format: "uri",
+          pattern: "^https://",
+          minLength: 1,
+          maxLength: 100,
+          default: "https://example.com",
+        },
+        count: {
+          type: "integer",
+          minimum: 1,
+          maximum: 10,
+          multipleOf: 1,
+        },
+        createdAt: {
+          format: "date-time",
+        },
+        mode: {
+          const: "fast",
+        },
+        tags: {
+          type: "array",
+          minItems: 1,
+          maxItems: 3,
+          uniqueItems: true,
+        },
+        tuple: {
+          type: "array",
+          items: [
+            { type: "number", minimum: 0 },
+            { type: "string", pattern: "^ok$" },
+          ],
+        },
+        metadata: {
+          type: "object",
+          patternProperties: {
+            "^x-": { type: "string" },
+          },
+          additionalProperties: {
+            type: "string",
+            pattern: "^safe$",
+          },
+        },
+      },
+      patternProperties: {
+        "^extra": { type: "string" },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    } as any) as any
+
+    expect(result).toEqual({
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+          description: "Search query",
+        },
+        count: {
+          type: "integer",
+        },
+        createdAt: {
+          type: "string",
+        },
+        mode: {
+          enum: ["fast"],
+          type: "string",
+        },
+        tags: {
+          type: "array",
+          items: { type: "string" },
+        },
+        tuple: {
+          type: "array",
+          items: [{ type: "number" }, { type: "string" }],
+        },
+        metadata: {
+          type: "object",
+          properties: {},
+          additionalProperties: {
+            type: "string",
+          },
+        },
+      },
+      required: ["query"],
+      additionalProperties: false,
+    })
+  })
+
+  test("keeps local references and sanitizes definitions", () => {
+    const result = ProviderTransform.schema(openaiModel, {
+      type: "object",
+      properties: {
+        value: {
+          $ref: "#/$defs/Value",
+          description: "Referenced value",
+          examples: ["ignored"],
+        },
+      },
+      $defs: {
+        Value: {
+          type: "string",
+          pattern: "^value$",
+          description: "Definition description",
+        },
+        Unused: {
+          type: "number",
+          minimum: 0,
+        },
+      },
+    } as any) as any
+
+    expect(result.properties.value).toEqual({
+      $ref: "#/$defs/Value",
+      description: "Referenced value",
+    })
+    expect(result.$defs).toEqual({
+      Value: {
+        type: "string",
+        description: "Definition description",
+      },
+      Unused: {
+        type: "number",
+      },
+    })
+  })
+
+  test("does not sanitize non-openai providers", () => {
+    const result = ProviderTransform.schema(
+      {
+        providerID: "anthropic",
+        api: {
+          id: "claude-sonnet-4",
+          npm: "@ai-sdk/anthropic",
+        },
+      } as any,
+      {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            pattern: "^https://",
+          },
+        },
+      } as any,
+    ) as any
+
+    expect(result.properties.query.pattern).toBe("^https://")
+  })
+
+  test.each([
+    ["opencode", "@ai-sdk/openai"],
+    ["custom-openai-compatible", "@ai-sdk/openai"],
+    ["azure", "@ai-sdk/azure"],
+  ])("sanitizes %s models using %s", (providerID, npm) => {
+    expect(
+      ProviderTransform.schema(
+        {
+          providerID,
+          api: {
+            id: "custom-model",
+            npm,
+          },
+        } as any,
+        {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              pattern: "^https://",
+            },
+          },
+        } as any,
+      ),
+    ).toEqual({
+      type: "object",
+      properties: {
+        query: {
+          type: "string",
+        },
+      },
+    })
+  })
+})
+
 describe("ProviderTransform.schema - moonshot $ref siblings", () => {
   const moonshotModel = {
     providerID: "moonshotai",

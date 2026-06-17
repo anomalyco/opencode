@@ -32,8 +32,6 @@ test.describe("regression: session timeline context group resize", () => {
     const samples = await sampleExpansion(page)
     const visibleOverlap = samples.filter((sample) => sample.frame >= 1 && sample.overlap > 0.5)
 
-    console.log("context resize samples", JSON.stringify(samples, null, 2))
-
     expect(samples[0]?.overlap).toBe(0)
     expect(visibleOverlap).toEqual([])
     expect(samples.at(-1)?.expanded).toBe("true")
@@ -115,13 +113,15 @@ async function sampleExpansion(page: Page) {
 
         let frame = 1
         const tick = () => {
-          capture(frame, "raf")
-          frame += 1
-          if (frame > 8) {
-            resolve(samples)
-            return
-          }
-          requestAnimationFrame(tick)
+          setTimeout(() => {
+            capture(frame, "painted")
+            frame += 1
+            if (frame > 8) {
+              resolve(samples)
+              return
+            }
+            requestAnimationFrame(tick)
+          }, 0)
         }
         requestAnimationFrame(tick)
       }),

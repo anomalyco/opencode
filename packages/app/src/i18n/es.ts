@@ -306,6 +306,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Buscar carpetas",
   "dialog.directory.empty": "No se encontraron carpetas",
+  "dialog.directory.action.selectFile": "Seleccionar archivo",
+  "dialog.directory.action.selectFolder": "Seleccionar carpeta",
+  "dialog.directory.root": "Raíz",
+  "dialog.directory.parent": "Superior",
+  "dialog.directory.readError": "No se puede leer esta carpeta",
 
   "dialog.server.title": "Servidores",
   "dialog.server.description": "Cambiar a qué servidor de OpenCode se conecta esta app.",
