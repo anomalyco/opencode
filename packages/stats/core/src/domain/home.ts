@@ -23,7 +23,6 @@ export type SessionCostEntry = { model: string; cost: number; tokens: number }
 export type CountryEntry = { country: string; continent: string; tokens: number; share: number; rank: number }
 export type ModelUsagePoint = { date: string; tokens: number; sessions: number; cost: number }
 export type ModelMixEntry = { label: string; tokens: number; share: number }
-export type ModelProductEntry = { product: string; tokens: number; sessions: number; share: number }
 export type ModelPeerEntry = {
   model: string
   provider: string
@@ -63,7 +62,6 @@ export type StatsModelData = {
   }
   usage: ModelUsagePoint[]
   tokenMix: ModelMixEntry[]
-  productMix: ModelProductEntry[]
   country: Record<UsageRange, CountryEntry[]>
   peers: ModelPeerEntry[]
 }
@@ -286,7 +284,6 @@ function buildStatsModelData(
     },
     usage: buildModelUsage(currentRows, window, "2M"),
     tokenMix: buildModelTokenMix(current),
-    productMix: buildModelProductMix(modelScopedRows, window, current),
     country: createRangeRecord((range) => buildCountryStats(geo, getWindow(range, earliest, latest))),
     peers: buildModelPeers(peers, peerRank, totalTokens),
   }
@@ -521,26 +518,6 @@ function buildModelTokenMix(aggregate: ModelAggregate): ModelMixEntry[] {
   const total = items.reduce((sum, item) => sum + item.tokens, 0)
   if (total === 0) return []
   return items.map((item) => ({ ...item, share: round((item.tokens / total) * 100, 1) }))
-}
-
-function buildModelProductMix(
-  rows: StatMetricRow[],
-  window: DateWindow,
-  fallback: ModelAggregate,
-): ModelProductEntry[] {
-  const products = ["Go", "Zen", "Enterprise"] as const
-  const items = products.flatMap((product) => {
-    const aggregate = combineRowsForModel(
-      fallback.model,
-      rows.filter((row) => row.tier === product && row.periodStart >= window.start && row.periodStart < window.end),
-    )
-    if (aggregate.totalTokens === 0) return []
-    return [{ product, tokens: aggregate.totalTokens, sessions: aggregate.sessions }]
-  })
-  const total = items.reduce((sum, item) => sum + item.tokens, 0)
-  if (total > 0) return items.map((item) => ({ ...item, share: round((item.tokens / total) * 100, 1) }))
-  if (fallback.totalTokens === 0) return []
-  return [{ product: "All Users", tokens: fallback.totalTokens, sessions: fallback.sessions, share: 100 }]
 }
 
 function buildModelPeers(peers: ModelAggregate[], rank: number, totalTokens: number): ModelPeerEntry[] {
