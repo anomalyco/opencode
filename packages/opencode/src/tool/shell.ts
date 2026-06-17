@@ -124,6 +124,51 @@ function commands(node: Node) {
   return node.descendantsOfType("command").filter((child): child is Node => Boolean(child))
 }
 
+// Pseudo-devices and fd targets that are never a real out-of-project file. Used to
+// avoid spurious external_directory prompts for redirects such as `2>/dev/null`.
+const REDIRECT_DEVICES = new Set(["/dev/null", "/dev/stdout", "/dev/stderr", "/dev/tty", "/dev/zero"])
+
+// Collect the file destinations of a command's redirects (e.g. the `out.txt` in
+// `cmd > out.txt`, the `~/.bashrc` in `cmd >> ~/.bashrc`, the `f` in `cmd 2> f`).
+// tree-sitter-bash models these as `file_redirect` siblings of the command inside a
+// `redirected_statement`, so the command-name scan in parts() never inspects them
+// (it skips `redirection` nodes). Without this, a write whose only out-of-project
+// path is the redirect target (e.g. `echo data > /var/www/html/x`, where `echo` is
+// not in FILES and the target is a redirection node skipped by parts()) bypasses the
+// external_directory permission. fd duplications (`>&2`, dest is a `number`),
+// here-docs/here-strings (not file_redirect), and the std-stream pseudo-devices are
+// not real files and are skipped. PowerShell redirects use a different grammar and
+// are left to argPath's existing handling; this scan is bash/posix only.
+function redirectFiles(node: Node, ps: boolean) {
+  if (ps) return [] as string[]
+  const parent = node.parent
+  if (!parent || parent.type !== "redirected_statement") return [] as string[]
+  const out: string[] = []
+  for (let i = 0; i < parent.childCount; i++) {
+    const redirect = parent.child(i)
+    if (!redirect || redirect.type !== "file_redirect") continue
+    let dest: Node | undefined
+    for (let j = 0; j < redirect.childCount; j++) {
+      const child = redirect.child(j)
+      if (!child) continue
+      if (
+        child.type === "word" ||
+        child.type === "string" ||
+        child.type === "raw_string" ||
+        child.type === "concatenation"
+      ) {
+        dest = child
+        break
+      }
+    }
+    if (!dest) continue
+    const text = dest.text
+    if (REDIRECT_DEVICES.has(text) || text.startsWith("/dev/fd/")) continue
+    out.push(text)
+  }
+  return out
+}
+
 function unquote(text: string) {
   if (text.length < 2) return text
   const first = text[0]
@@ -408,6 +453,18 @@ export const ShellTool = Tool.define(
             const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
             scan.dirs.add(dir)
           }
+        }
+
+        // Redirect destinations resolve through the same argPath/containsPath path as
+        // positional args of FILES commands. argPath bails on dynamic values ($VAR,
+        // $(...), backticks) via dynamic(), so those redirect targets are fail-open in
+        // the same way every other arg in this scan already is.
+        for (const arg of redirectFiles(node, ps)) {
+          const resolved = yield* argPath(arg, cwd, ps, shell)
+          yield* Effect.logInfo("resolved redirect path", { arg, resolved })
+          if (!resolved || containsPath(resolved, instance)) continue
+          const dir = (yield* fs.isDir(resolved)) ? resolved : path.dirname(resolved)
+          scan.dirs.add(dir)
         }
 
         if (tokens.length && (!cmd || !CWD.has(cmd))) {

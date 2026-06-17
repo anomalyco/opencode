@@ -1236,3 +1236,158 @@ describe("tool.shell truncation", () => {
     ),
   )
 })
+
+describe("tool.shell redirect external_directory", () => {
+  each("asks for external_directory permission for output redirect target", () =>
+    Effect.gen(function* () {
+      const outerTmp = yield* tmpdirScoped()
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const err = new Error("stop after permission")
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          const target = path.join(outerTmp, "dump.txt")
+          expect(
+            yield* fail(
+              {
+                command: `env > ${target}`,
+                description: "Redirect env outside project",
+              },
+              capture(requests, err),
+            ),
+          ).toMatchObject({ message: err.message })
+          const extDirReq = requests.find((r) => r.permission === "external_directory")
+          const expected = glob(path.join(outerTmp, "*"))
+          expect(extDirReq).toBeDefined()
+          expect(extDirReq!.patterns).toContain(expected)
+          expect(extDirReq!.metadata).toMatchObject({ directories: [outerTmp] })
+        }),
+      )
+    }),
+  )
+
+  each("asks for external_directory permission for append redirect target", () =>
+    Effect.gen(function* () {
+      const outerTmp = yield* tmpdirScoped()
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const err = new Error("stop after permission")
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          const target = path.join(outerTmp, "authorized_keys")
+          expect(
+            yield* fail(
+              {
+                command: `echo secret >> ${target}`,
+                description: "Append outside project",
+              },
+              capture(requests, err),
+            ),
+          ).toMatchObject({ message: err.message })
+          const extDirReq = requests.find((r) => r.permission === "external_directory")
+          expect(extDirReq).toBeDefined()
+          expect(extDirReq!.patterns).toContain(glob(path.join(outerTmp, "*")))
+        }),
+      )
+    }),
+  )
+
+  each("asks for external_directory permission for stderr redirect target", () =>
+    Effect.gen(function* () {
+      const outerTmp = yield* tmpdirScoped()
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const err = new Error("stop after permission")
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          const target = path.join(outerTmp, "err.log")
+          expect(
+            yield* fail(
+              {
+                command: `ls 2> ${target}`,
+                description: "Redirect stderr outside project",
+              },
+              capture(requests, err),
+            ),
+          ).toMatchObject({ message: err.message })
+          const extDirReq = requests.find((r) => r.permission === "external_directory")
+          expect(extDirReq).toBeDefined()
+          expect(extDirReq!.patterns).toContain(glob(path.join(outerTmp, "*")))
+        }),
+      )
+    }),
+  )
+
+  each("asks for external_directory permission for input redirect source", () =>
+    Effect.gen(function* () {
+      const outerTmp = yield* tmpdirScoped()
+      yield* Effect.promise(() => Bun.write(path.join(outerTmp, "in.txt"), "x"))
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const err = new Error("stop after permission")
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          const source = path.join(outerTmp, "in.txt")
+          expect(
+            yield* fail(
+              {
+                command: `wc -l < ${source}`,
+                description: "Read input redirect outside project",
+              },
+              capture(requests, err),
+            ),
+          ).toMatchObject({ message: err.message })
+          const extDirReq = requests.find((r) => r.permission === "external_directory")
+          expect(extDirReq).toBeDefined()
+          expect(extDirReq!.patterns).toContain(glob(path.join(outerTmp, "*")))
+        }),
+      )
+    }),
+  )
+
+  each("does not ask for external_directory permission for /dev/null and fd-dup redirects", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          yield* run(
+            {
+              command: "ls /etc > /dev/null 2>&1",
+              description: "Discard output",
+            },
+            capture(requests),
+          )
+          const extDirReq = requests.find((r) => r.permission === "external_directory")
+          expect(extDirReq).toBeUndefined()
+        }),
+      )
+    }),
+  )
+
+  each("does not ask for external_directory permission for in-project redirect target", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      yield* runIn(
+        tmp,
+        Effect.gen(function* () {
+          const requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" | "tool">> = []
+          yield* run(
+            {
+              command: `env > ${path.join(tmp, "local.txt")}`,
+              description: "Redirect inside project",
+            },
+            capture(requests),
+          )
+          const extDirReq = requests.find((r) => r.permission === "external_directory")
+          expect(extDirReq).toBeUndefined()
+        }),
+      )
+    }),
+  )
+})
