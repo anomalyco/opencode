@@ -172,6 +172,24 @@ describe("ProviderTransform.options - setCacheKey", () => {
     })
     expect(result.store).toBe(false)
   })
+
+  test("should NOT set store for perplexity-agent provider (perplexity rejects unknown field 'store')", () => {
+    const perplexityModel = {
+      ...mockModel,
+      providerID: "perplexity-agent",
+      api: {
+        id: "perplexity/sonar",
+        url: "https://api.perplexity.ai/v1",
+        npm: "@ai-sdk/openai",
+      },
+    }
+    const result = ProviderTransform.options({
+      model: perplexityModel,
+      sessionID,
+      providerOptions: {},
+    })
+    expect(result.store).toBeUndefined()
+  })
 })
 
 describe("ProviderTransform.options - zai/zhipuai thinking", () => {
@@ -4688,6 +4706,38 @@ describe("ProviderTransform.smallOptions - gpt-5 chat/search", () => {
       expect(ProviderTransform.smallOptions(createModel(testCase.id))).toEqual(testCase.options)
     })
   }
+})
+
+describe("ProviderTransform.smallOptions - perplexity-agent store exclusion", () => {
+  test("does not set store for perplexity-agent (perplexity rejects unknown field 'store')", () => {
+    const result = ProviderTransform.smallOptions({
+      id: "perplexity-agent/perplexity/sonar",
+      providerID: "perplexity-agent",
+      api: {
+        id: "perplexity/sonar",
+        url: "https://api.perplexity.ai/v1",
+        npm: "@ai-sdk/openai",
+      },
+      capabilities: { reasoning: false },
+      limit: { output: 8192 },
+    } as any)
+    expect(result.store).toBeUndefined()
+  })
+
+  test("still sets store=false for a normal @ai-sdk/openai provider", () => {
+    const result = ProviderTransform.smallOptions({
+      id: "openai/gpt-4",
+      providerID: "openai",
+      api: {
+        id: "gpt-4",
+        url: "https://api.openai.com",
+        npm: "@ai-sdk/openai",
+      },
+      capabilities: { reasoning: false },
+      limit: { output: 8192 },
+    } as any)
+    expect(result.store).toBe(false)
+  })
 })
 
 test("ProviderTransform.smallOptions preserves the weakest OpenRouter reasoning effort", () => {

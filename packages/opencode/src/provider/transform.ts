@@ -1098,11 +1098,14 @@ export function options(input: {
   }
 
   // openai and providers using openai package should set store to false by default.
+  // perplexity-agent reuses the @ai-sdk/openai package but its /v1/responses endpoint
+  // rejects OpenAI-Responses-only fields like `store`, so exclude it here.
   if (
-    input.model.providerID === "openai" ||
-    input.model.api.npm === "@ai-sdk/openai" ||
-    input.model.api.npm === "@ai-sdk/github-copilot" ||
-    input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle"
+    input.model.providerID !== "perplexity-agent" &&
+    (input.model.providerID === "openai" ||
+      input.model.api.npm === "@ai-sdk/openai" ||
+      input.model.api.npm === "@ai-sdk/github-copilot" ||
+      input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle")
   ) {
     result["store"] = false
   }
@@ -1255,9 +1258,8 @@ export function options(input: {
 export function smallOptions(model: Provider.Model) {
   const small = Object.values(model.variants ?? {})[0] ?? {}
   if (
-    model.providerID === "openai" ||
-    model.api.npm === "@ai-sdk/openai" ||
-    model.api.npm === "@ai-sdk/github-copilot"
+    model.providerID !== "perplexity-agent" &&
+    (model.providerID === "openai" || model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/github-copilot")
   ) {
     const base = { store: false }
     return mergeDeep(base, small)
