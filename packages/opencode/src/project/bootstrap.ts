@@ -9,6 +9,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { ShareNext } from "@/share/share-next"
 import { Effect, Layer } from "effect"
 import { Config } from "@/config/config"
+import { Goal } from "@/goal"
 import { Service } from "./bootstrap-service"
 
 export { Service } from "./bootstrap-service"
@@ -22,6 +23,7 @@ export const layer = Layer.effect(
     // so it can depend on bootstrap without importing this implementation graph.
     const config = yield* Config.Service
     const format = yield* Format.Service
+    const goal = yield* Goal.Service
     const lsp = yield* LSP.Service
     const plugin = yield* Plugin.Service
     const project = yield* Project.Service
@@ -36,6 +38,7 @@ export const layer = Layer.effect(
       yield* config.get()
       // Plugin can mutate config so it has to be initialized before anything else.
       yield* plugin.init()
+      yield* goal.init()
       // Each service self-manages its own slow work via Effect.forkScoped against
       // its per-instance state scope. We just await materialization here.
       yield* Effect.forEach(
@@ -58,6 +61,7 @@ export const defaultLayer: Layer.Layer<Service> = layer.pipe(
     Project.defaultLayer,
     ShareNext.defaultLayer,
     Snapshot.defaultLayer,
+    Goal.defaultLayer,
     Vcs.defaultLayer,
   ]),
 )
@@ -70,6 +74,7 @@ export const node = LayerNode.make(layer, [
   Project.node,
   ShareNext.node,
   Snapshot.node,
+  Goal.node,
   Vcs.node,
 ])
 
