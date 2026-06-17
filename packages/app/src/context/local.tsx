@@ -125,6 +125,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       return saved.session[session] ?? handoff.get(handoffKey(sdk.directory, session))
     })
 
+    // Track previous session to preserve model selection when switching
     createEffect(() => {
       const session = id()
       if (!session) return
@@ -140,6 +141,28 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       setSaved("session", session, clone(next))
       handoff.delete(key)
     })
+
+    // Preserve model selection when switching to a session without saved state
+    createEffect(
+      (prevSession: string | undefined) => {
+        const session = id()
+
+        // If switching from one session to another
+        if (prevSession && session && prevSession !== session) {
+          // If the new session doesn't have saved state, inherit from previous session
+          if (saved.session[session] === undefined && !handoff.has(handoffKey(sdk.directory, session))) {
+            const prevState = saved.session[prevSession]
+            if (prevState) {
+              console.log(`[local] Preserving model selection from session ${prevSession} to ${session}`)
+              setSaved("session", session, clone(prevState))
+            }
+          }
+        }
+
+        return session
+      },
+      undefined as string | undefined,
+    )
 
     const configuredModel = () => {
       if (!sync.data.config.model) return
