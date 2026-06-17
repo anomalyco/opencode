@@ -253,6 +253,7 @@ export function TerminalPanel() {
             <div class="flex flex-col h-full">
               <Tabs
                 variant="alt"
+                data-scope="terminal"
                 value={terminal.active()}
                 onChange={(id) => terminal.open(id)}
                 class="!h-auto !flex-none"
@@ -285,15 +286,17 @@ export function TerminalPanel() {
                     return (
                       <Show when={all().find((pty) => pty.id === id)}>
                         {(pty) => (
-                          <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
-                            <Terminal
-                              pty={pty()}
-                              autoFocus={opened()}
-                              onConnect={() => ops.trim(id)}
-                              onCleanup={ops.update}
-                              onConnectError={() => ops.clone(id)}
-                            />
-                          </div>
+                          <Show when={opened()}>
+                            <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
+                              <Terminal
+                                pty={pty()}
+                                autoFocus={opened()}
+                                onConnect={() => ops.trim(id)}
+                                onCleanup={ops.update}
+                                onConnectError={() => ops.clone(id)}
+                              />
+                            </div>
+                          </Show>
                         )}
                       </Show>
                     )

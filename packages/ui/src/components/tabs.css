@@ -354,6 +354,13 @@
     /* } */
   }
 
+  &[data-variant="alt"][data-scope="terminal"] {
+    [data-slot="tabs-trigger-wrapper"] {
+      font-family: var(--font-family-mono);
+      font-size: 12px;
+    }
+  }
+
   &[data-variant="pill"][data-orientation="horizontal"] {
     background-color: transparent;
 
