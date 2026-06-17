@@ -245,6 +245,31 @@ describe("acp permissions", () => {
     await pollUntil(() => harness.replies.length === 1, "blocked permission was never replied after release")
   })
 
+  it("routes the reply to the originating directory, not session.cwd", async () => {
+    // Regression for: permission replies silently dropped when session cwd
+    // differs from the directory the permission was asked from (e.g. after
+    // session/load changes cwd). The originDirectory from the event envelope
+    // must be used, not session.cwd.
+    const harness = createHarness()
+    // Session created with one cwd (simulates origin directory at ask time).
+    await createSession(harness.session, "ses_a", "/projects/origin")
+    // Simulate session/load changing the session's cwd to a different directory.
+    await Effect.runPromise(harness.session.load({ id: "ses_a", cwd: "/projects/loaded" }))
+
+    // Fire the event with the origin directory explicitly passed (as the run
+    // loop would supply from the GlobalEvent envelope).
+    harness.subscription.handle(permissionAsked("ses_a", "perm_routing"), "/projects/origin")
+
+    await pollUntil(() => harness.replies.length === 1, "permission with mismatched cwd was never replied")
+
+    // Reply must target the originating directory, not the loaded cwd.
+    expect(harness.replies[0]).toMatchObject({
+      requestID: "perm_routing",
+      reply: "once",
+      directory: "/projects/origin",
+    })
+  })
+
   it("serializes permission requests per session", async () => {
     let releaseFirst: (() => void) | undefined
     const first = new Promise<RequestPermissionResponse>((resolve) => {

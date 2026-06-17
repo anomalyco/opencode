@@ -24,6 +24,7 @@ import {
 type Connection = Pick<AgentSideConnection, "sessionUpdate"> &
   Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
 type GlobalEventEnvelope = {
+  directory?: string
   payload?: Event
 }
 type GlobalEventStream = {
@@ -65,10 +66,10 @@ export class Subscription {
     this.abort.abort()
   }
 
-  async handle(event: Event) {
+  async handle(event: Event, directory?: string) {
     switch (event.type) {
       case "permission.asked":
-        this.permission.handle(event)
+        this.permission.handle(event, directory)
         return
       case "message.part.updated":
         return this.handlePartUpdated(event)
@@ -122,7 +123,7 @@ export class Subscription {
       for await (const event of events.stream) {
         if (this.abort.signal.aborted) return
         if (!event.payload) continue
-        await this.handle(event.payload).catch(() => {})
+        await this.handle(event.payload, event.directory).catch(() => {})
       }
       if (!this.abort.signal.aborted) await new Promise((resolve) => setTimeout(resolve, 1000))
     }
