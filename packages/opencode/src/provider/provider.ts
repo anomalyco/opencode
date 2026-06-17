@@ -141,6 +141,9 @@ type CustomDiscoverModels = () => Promise<Record<string, Model>>
 interface OpenAIModelsResponse {
   data: Array<{
     id: string
+    context_length?: number
+    max_context_length?: number
+    max_output_tokens?: number
   }>
 }
 
@@ -1716,6 +1719,7 @@ export const layer = Layer.effect(
             : { action: "skip" }
 
         let discovered: Set<string>
+        let discoveredLimits: Map<string, { context: number; output: number }> | undefined
         if (inlineFetch) {
           const url = api.endsWith("/v1") ? `${api}/models` : `${api}/v1/models`
           const request = HttpClientRequest.get(url).pipe(
@@ -1733,12 +1737,22 @@ export const layer = Layer.effect(
           const jsonExit = yield* res.json.pipe(Effect.exit)
           if (Exit.isFailure(jsonExit)) return emptyOrSkip()
 
-          const json = jsonExit.value as unknown as OpenAIModelsResponse
-          discovered = new Set<string>(
-            (json.data ?? [])
-              .filter((m) => typeof m.id === "string")
-              .map((m) => m.id),
-          )
+         const json = jsonExit.value as unknown as OpenAIModelsResponse
+           discovered = new Set<string>(
+             (json.data ?? [])
+               .filter((m) => typeof m.id === "string")
+               .map((m) => m.id),
+           )
+           // Parse context/output limits from API response
+           discoveredLimits = new Map<string, { context: number; output: number }>()
+           for (const m of json.data ?? []) {
+             if (typeof m.id !== "string") continue
+             const context = m.context_length ?? m.max_context_length
+             const output = m.max_output_tokens
+             if (typeof context === "number" && typeof output === "number") {
+               discoveredLimits.set(m.id, { context, output })
+             }
+           }
         } else if (discover) {
           const discoverExit = yield* Effect.promise(() => discover()).pipe(Effect.exit)
           if (Exit.isFailure(discoverExit)) return emptyOrSkip()
@@ -1771,8 +1785,21 @@ export const layer = Layer.effect(
 
         // Merge discovered models into newModels
         const npm = cfg.provider?.[providerID]?.npm ?? "@ai-sdk/openai-compatible"
+        const configProvider = cfg.provider?.[providerID]
+        const configModelIDs = configProvider?.models ? Object.keys(configProvider.models) : []
         for (const modelID of discovered) {
-          if (newModels[modelID]) continue
+          const existing = newModels[modelID]
+          const limits = discoveredLimits?.get(modelID)
+          const context = limits?.context ?? 128000
+          const output = limits?.output ?? 128000
+
+          // Update limits for non-config models (config models preserve their limits)
+          if (existing && !configModelIDs.includes(modelID)) {
+            newModels[modelID] = { ...existing, limit: { context, output } }
+            continue
+          }
+          if (existing) continue
+
           newModels[modelID] = {
             id: ModelV2.ID.make(modelID),
             providerID: ProviderV2.ID.make(providerID),
@@ -1783,7 +1810,7 @@ export const layer = Layer.effect(
             headers: {},
             options: {},
             cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
-            limit: { context: 128000, output: 128000 },
+            limit: { context, output },
             capabilities: {
               temperature: false,
               reasoning: false,

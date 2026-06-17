@@ -2067,3 +2067,97 @@ discoveryTestEffect(() =>
     },
   },
 )
+
+discoveryTestEffect(() =>
+  jsonResponse({
+    data: [
+      { id: "llama-3.1-8b", object: "model", context_length: 131072, max_output_tokens: 8192 },
+      { id: "mistral-7b", object: "model", max_context_length: 32768, max_output_tokens: 4096 },
+    ],
+  }),
+).instance(
+  "discovered models use context_length and max_output_tokens from API response",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      yield* provider.init()
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("context-provider")]
+          return p?.models["llama-3.1-8b"] && p?.models["mistral-7b"] ? (true as const) : undefined
+        }),
+        "discovered models not found",
+      )
+      const discoveredProvider = (yield* list)[ProviderV2.ID.make("context-provider")]
+
+      // context_length field should be used for context limit
+      expect(discoveredProvider.models["llama-3.1-8b"].limit.context).toBe(131072)
+      expect(discoveredProvider.models["llama-3.1-8b"].limit.output).toBe(8192)
+
+      // max_context_length field should also work
+      expect(discoveredProvider.models["mistral-7b"].limit.context).toBe(32768)
+      expect(discoveredProvider.models["mistral-7b"].limit.output).toBe(4096)
+    }),
+  {
+    config: {
+      provider: {
+        "context-provider": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "Context Provider",
+          options: {
+            baseURL: "http://localhost:8080/v1",
+          },
+        },
+      },
+    },
+  },
+)
+
+discoveryTestEffect(() =>
+  jsonResponse({
+    data: [
+      { id: "config-model", object: "model", context_length: 131072, max_output_tokens: 8192 },
+    ],
+  }),
+).instance(
+  "config-defined model limits take precedence over discovered limits",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      yield* provider.init()
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const p = (yield* list)[ProviderV2.ID.make("config-limit-provider")]
+          return p !== undefined ? (true as const) : undefined
+        }),
+        "provider disappeared",
+      )
+      const discoveredProvider = (yield* list)[ProviderV2.ID.make("config-limit-provider")]
+
+      // Config-defined limits should be preserved, not overwritten by discovery
+      expect(discoveredProvider.models["config-model"].limit.context).toBe(65536)
+      expect(discoveredProvider.models["config-model"].limit.output).toBe(4096)
+    }),
+  {
+    config: {
+      provider: {
+        "config-limit-provider": {
+          npm: "@ai-sdk/openai-compatible",
+          name: "Config Limit Provider",
+          options: {
+            baseURL: "http://localhost:8080/v1",
+          },
+          models: {
+            "config-model": {
+              name: "Config Model",
+              limit: {
+                context: 65536,
+                output: 4096,
+              },
+            },
+          },
+        },
+      },
+    },
+  },
+)
