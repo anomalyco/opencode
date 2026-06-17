@@ -15,6 +15,7 @@ import path from "path"
 import { fileURLToPath } from "url"
 import { useLocal } from "../../context/local"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { parseGoalCommand } from "@opencode-ai/core/session/goal-command"
 import { tint, useTheme } from "../../context/theme"
 import { EmptyBorder, SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
@@ -37,7 +38,7 @@ import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
-import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
+import type { AssistantMessage, FilePart, UserMessage, Goal } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
@@ -275,6 +276,68 @@ export function Prompt(props: PromptProps) {
       cost: cost > 0 ? money.format(cost) : undefined,
     }
   })
+  const goal = createMemo(() => (props.sessionID ? sync.data.session_goal[props.sessionID] : undefined))
+  const goalDisplay = (status: Goal["status"]) =>
+    ({
+      active: { color: theme.success, icon: "◆", label: "pursuing goal" },
+      paused: { color: theme.warning, icon: "⏸", label: "goal paused" },
+      completed: { color: theme.textMuted, icon: "✓", label: "goal done" },
+    })[status]
+
+  // `goal` is not a registered server command; route its subcommands to the typed
+  // session goal client and reflect the result in the footer indicator immediately
+  // (live goal.updated events keep it in sync afterwards).
+  async function runGoalCommand(sessionID: string, args: string) {
+    const client = sdk.client.session.goal
+    const parsed = parseGoalCommand(args)
+    const seed = (next: Goal | null | undefined) => sync.set("session_goal", sessionID, next ?? undefined)
+    try {
+      switch (parsed.action) {
+        case "show": {
+          const res = await client.get({ sessionID }, { throwOnError: true })
+          seed(res.data)
+          toast.show({
+            message: res.data ? `Goal (${res.data.status}): ${res.data.text}` : "No goal set for this session",
+            variant: "info",
+          })
+          return
+        }
+        case "clear":
+          await client.clear({ sessionID }, { throwOnError: true })
+          seed(undefined)
+          toast.show({ message: "Goal cleared", variant: "info" })
+          return
+        case "pause":
+          seed((await client.update({ sessionID, status: "paused" }, { throwOnError: true })).data)
+          toast.show({ message: "Goal paused", variant: "info" })
+          return
+        case "resume":
+          seed((await client.update({ sessionID, status: "active" }, { throwOnError: true })).data)
+          toast.show({ message: "Goal resumed", variant: "info" })
+          return
+        case "complete":
+          seed(
+            (await client.update({ sessionID, status: "completed", verification: parsed.verification }, { throwOnError: true })).data,
+          )
+          toast.show({ message: "Goal completed", variant: "info" })
+          return
+        case "update":
+          seed((await client.update({ sessionID, text: parsed.text }, { throwOnError: true })).data)
+          toast.show({ message: "Goal updated", variant: "info" })
+          return
+        case "set":
+          if (!parsed.text) {
+            toast.show({ message: 'Usage: /goal set "your goal"', variant: "error" })
+            return
+          }
+          seed((await client.set({ sessionID, text: parsed.text }, { throwOnError: true })).data)
+          toast.show({ message: "Goal set", variant: "info" })
+          return
+      }
+    } catch (error) {
+      toast.show({ title: "Goal command failed", message: errorMessage(error), variant: "error" })
+    }
+  }
 
   const [store, setStore] = createStore<{
     prompt: PromptInfo
@@ -525,6 +588,22 @@ export function Prompt(props: PromptProps) {
               }}
             />
           ))
+        },
+      },
+      {
+        title: "Set session goal",
+        desc: "Set, pause, resume, complete, or clear the session goal",
+        name: "session.goal",
+        category: "Session",
+        slashName: "goal",
+        run: () => {
+          dialog.clear()
+          input.setText("/goal ")
+          setStore("prompt", {
+            input: "/goal ",
+            parts: [],
+          })
+          input.gotoBufferEnd()
         },
       },
       {
@@ -1062,6 +1141,9 @@ export function Prompt(props: PromptProps) {
         command: inputText,
       })
       setStore("mode", "normal")
+    } else if (inputText.split(/\s/)[0] === "/goal") {
+      move.startSubmit()
+      void runGoalCommand(sessionID, inputText.slice("/goal".length))
     } else if (
       inputText.startsWith("/") &&
       sync.data.command.some((x) => x.name === inputText.split("\n")[0].split(" ")[0].slice(1))
@@ -1635,6 +1717,16 @@ export function Prompt(props: PromptProps) {
           </Switch>
           <Show when={status().type !== "retry"}>
             <box gap={2} flexDirection="row">
+              <Show when={goal()}>
+                {(g) => {
+                  const display = createMemo(() => goalDisplay(g().status))
+                  return (
+                    <text fg={display().color} wrapMode="none">
+                      <span style={{ fg: display().color }}>{display().icon}</span> {display().label}
+                    </text>
+                  )
+                }}
+              </Show>
               <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
                 {(file) => (
                   <text fg={editorContextLabelState() === "pending" ? theme.secondary : theme.textMuted}>{file()}</text>

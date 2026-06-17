@@ -701,37 +701,41 @@ export function RunFooterView(props: RunFooterViewProps) {
                           />
                         </Match>
                         <Match when={commanding()}>
-                          <RunCommandMenuBody
-                            theme={theme}
-                            commands={props.commands}
-                            subagents={tabs}
-                            queued={queuedPrompts}
-                            variants={props.variants}
-                            variantCycle={variantCycle()}
-                            onClose={closePanel}
-                            onModel={openModel}
-                            onEditor={() => {
-                              closePanel()
-                              void composer.openEditor()
-                            }}
-                            onSkill={openSkillMenu}
-                            onSubagent={openSubagentMenu}
-                            onQueued={openQueuedMenu}
-                            onVariant={openVariant}
-                            onVariantCycle={() => {
-                              props.onCycle()
-                              closePanel()
-                            }}
-                            onCommand={(name) => {
-                              composer.submitText(`/${name}`)
-                              closePanel()
-                            }}
-                            onNew={() => {
-                              composer.submitText("/new")
-                              closePanel()
-                            }}
-                            onExit={props.onExit}
-                          />
+                           <RunCommandMenuBody
+                             theme={theme}
+                             commands={props.commands}
+                             subagents={tabs}
+                             queued={queuedPrompts}
+                             variants={props.variants}
+                             variantCycle={variantCycle()}
+                             onClose={closePanel}
+                             onModel={openModel}
+                             onEditor={() => {
+                               closePanel()
+                               void composer.openEditor()
+                             }}
+                             onSkill={openSkillMenu}
+                             onSubagent={openSubagentMenu}
+                             onQueued={openQueuedMenu}
+                             onVariant={openVariant}
+                             onVariantCycle={() => {
+                               props.onCycle()
+                               closePanel()
+                             }}
+                              onCommand={(name) => {
+                                if (name === "goal") {
+                                  composer.submitText("/goal ")
+                                } else {
+                                  composer.submitText(`/${name}`)
+                                }
+                                closePanel()
+                              }}
+                             onNew={() => {
+                               composer.submitText("/new")
+                               closePanel()
+                             }}
+                             onExit={props.onExit}
+                           />
                         </Match>
                         <Match when={skilling()}>
                           <RunSkillSelectBody

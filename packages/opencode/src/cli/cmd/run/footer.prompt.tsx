@@ -171,6 +171,10 @@ function parseSlashCommand(text: string, commands: RunCommand[] | undefined) {
     return { type: "none" as const }
   }
 
+  if (head.name === "goal") {
+    return { type: "command" as const, command: { name: "goal", arguments: head.arguments } }
+  }
+
   if (!commands) {
     return { type: "pending" as const }
   }
@@ -409,6 +413,8 @@ export function createPromptState(input: PromptInput): PromptState {
   )
   const slashOptions = createMemo<SlashOption[]>(() => {
     const builtins = [
+      { kind: "slash", name: "new", display: "/new", description: "start a new session" } satisfies SlashOption,
+      { kind: "slash", name: "goal", display: "/goal", description: "set or manage the session goal" } satisfies SlashOption,
       {
         kind: "slash",
         action: "editor" as const,
@@ -416,7 +422,6 @@ export function createPromptState(input: PromptInput): PromptState {
         display: "/editor",
         description: "compose in your external editor",
       } satisfies SlashOption,
-      { kind: "slash", name: "new", display: "/new", description: "start a new session" } satisfies SlashOption,
       { kind: "slash", name: "exit", display: "/exit", description: "close OpenCode" } satisfies SlashOption,
     ]
     const hidden = new Set(builtins.map((item) => item.name))
@@ -424,6 +429,18 @@ export function createPromptState(input: PromptInput): PromptState {
     if (showSkillMenu) {
       hidden.add("skills")
     }
+
+    const project = (input.commands() ?? [])
+      .filter((item) => item.source !== "skill" && !hidden.has(item.name))
+      .map(
+        (item) =>
+          ({
+            kind: "slash",
+            name: item.name,
+            display: `/${item.name}${item.source === "mcp" ? ":mcp" : ""}`,
+            description: item.description,
+          }) satisfies SlashOption,
+      )
 
     return [
       ...(showSkillMenu
@@ -437,19 +454,9 @@ export function createPromptState(input: PromptInput): PromptState {
             } satisfies SlashOption,
           ]
         : []),
-      ...(input.commands() ?? [])
-        .filter((item) => item.source !== "skill" && !hidden.has(item.name))
-        .map(
-          (item) =>
-            ({
-              kind: "slash",
-              name: item.name,
-              display: `/${item.name}${item.source === "mcp" ? ":mcp" : ""}`,
-              description: item.description,
-            }) satisfies SlashOption,
-        ),
       ...builtins,
-    ].sort((a, b) => a.display.localeCompare(b.display))
+      ...project,
+    ]
   })
   const options = createMemo<PromptOption[]>(() => {
     const mixed: PromptOption[] = mode() === "slash" ? slashOptions() : mentionOptions()

@@ -19,6 +19,7 @@ import type {
   VcsInfo,
   SnapshotFileDiff,
   ConsoleState,
+  Goal,
 } from "@opencode-ai/sdk/v2"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useProject } from "./project"
@@ -79,6 +80,9 @@ export const {
       session_status: {
         [sessionID: string]: SessionStatus
       }
+      session_goal: {
+        [sessionID: string]: Goal | undefined
+      }
       session_diff: {
         [sessionID: string]: SnapshotFileDiff[]
       }
@@ -118,6 +122,7 @@ export const {
       provider_default: {},
       session: [],
       session_status: {},
+      session_goal: {},
       session_diff: {},
       todo: {},
       message: {},
@@ -292,6 +297,11 @@ export const {
 
         case "session.status": {
           setStore("session_status", event.properties.sessionID, event.properties.status)
+          break
+        }
+
+        case "goal.updated": {
+          setStore("session_goal", event.properties.sessionID, event.properties.goal ?? undefined)
           break
         }
 
@@ -566,11 +576,12 @@ export const {
           const tracker = { messages: new Set<string>(), parts: new Set<string>() }
           hydratingSessions.set(sessionID, tracker)
           const task = (async () => {
-            const [session, messages, todo, diff] = await Promise.all([
+            const [session, messages, todo, diff, goal] = await Promise.all([
               sdk.client.session.get({ sessionID }, { throwOnError: true }),
               sdk.client.session.messages({ sessionID, limit: 100 }),
               sdk.client.session.todo({ sessionID }),
               sdk.client.session.diff({ sessionID }),
+              sdk.client.session.goal.get({ sessionID }),
             ])
             setStore(
               produce((draft) => {
@@ -622,6 +633,9 @@ export const {
                 for (const message of removed) delete draft.part[message.id]
                 draft.message[sessionID] = visible
                 draft.session_diff[sessionID] = diff.data ?? []
+                // Only seed a present goal; never clobber a value a live
+                // goal.updated event may have already set (seed/event can race).
+                if (goal.data) draft.session_goal[sessionID] = goal.data
               }),
             )
             fullSyncedSessions.add(sessionID)

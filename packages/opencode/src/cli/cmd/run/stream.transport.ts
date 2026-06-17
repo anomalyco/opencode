@@ -16,6 +16,7 @@
 // We also re-check live session status before resolving an idle event so a
 // delayed idle from an older turn cannot complete a newer busy turn.
 import type { Event, GlobalEvent, OpencodeClient } from "@opencode-ai/sdk/v2"
+import { parseGoalCommand } from "@opencode-ai/core/session/goal-command"
 import { Context, Deferred, Effect, Exit, Layer, Scope, Stream } from "effect"
 import { makeRuntime } from "@/effect/run-service"
 import {
@@ -1273,7 +1274,56 @@ function createLayer(input: StreamInput) {
                   ),
                 )
               : command
-                ? Effect.sync(() => {
+                ? command.name === "goal"
+                  ? Effect.sync(() => {
+                      input.trace?.write("send.goal", { sessionID: input.sessionID, arguments: command.arguments })
+                    }).pipe(
+                      Effect.andThen(
+                        Effect.promise(async () => {
+                          const sessionID = input.sessionID
+                          const goal = input.sdk.session.goal
+                          const parsed = parseGoalCommand(command.arguments)
+                          switch (parsed.action) {
+                            case "clear":
+                              await goal.clear({ sessionID }, { throwOnError: true })
+                              return
+                            case "pause":
+                              await goal.update({ sessionID, status: "paused" }, { throwOnError: true })
+                              return
+                            case "resume":
+                              await goal.update({ sessionID, status: "active" }, { throwOnError: true })
+                              return
+                            case "complete":
+                              await goal.update(
+                                { sessionID, status: "completed", verification: parsed.verification },
+                                { throwOnError: true },
+                              )
+                              return
+                            case "update":
+                              await goal.update({ sessionID, text: parsed.text }, { throwOnError: true })
+                              return
+                            case "set":
+                              await goal.set({ sessionID, text: parsed.text }, { throwOnError: true })
+                              return
+                            case "show":
+                              return
+                          }
+                        }).pipe(
+                          Effect.tap(() =>
+                            Effect.sync(() => {
+                              input.trace?.write("send.goal.ok", { sessionID: input.sessionID })
+                              item.armed = true
+                              item.live = true
+                            }),
+                          ),
+                          Effect.flatMap(() => Deferred.succeed(item.done, undefined).pipe(Effect.ignore)),
+                          Effect.catch((error) => Deferred.fail(item.done, error).pipe(Effect.ignore)),
+                          Effect.forkIn(scope, { startImmediately: true }),
+                          Effect.asVoid,
+                        ),
+                      ),
+                    )
+                : Effect.sync(() => {
                     input.trace?.write("send.command", { sessionID: input.sessionID, command: command.name })
                   }).pipe(
                     Effect.andThen(
