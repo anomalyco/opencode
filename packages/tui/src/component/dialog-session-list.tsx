@@ -18,6 +18,18 @@ import { errorMessage } from "../util/error"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 import { useCommandShortcut } from "../keymap"
 
+type SessionListFilter = { scope?: "project"; path?: string }
+
+export function createDialogSessionListQuery(input: { search?: string; filter: SessionListFilter }) {
+  const search = input.search?.trim()
+  return {
+    roots: true,
+    limit: search ? 30 : 100,
+    ...(search ? { search } : {}),
+    ...input.filter,
+  }
+}
+
 export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
@@ -33,17 +45,26 @@ export function DialogSessionList() {
   const quickSwitch1 = useCommandShortcut("session.quick_switch.1")
   const quickSwitch9 = useCommandShortcut("session.quick_switch.9")
 
+  const [browseResults, { refetch: refetchBrowse }] = createResource(
+    () => sync.session.query(),
+    async (filter) => {
+      const result = await sdk.client.session.list(createDialogSessionListQuery({ filter }))
+      return result.data ?? []
+    },
+  )
   const [searchResults, { refetch }] = createResource(
     () => ({ query: search(), filter: sync.session.query() }),
     async (input) => {
       if (!input.query) return undefined
-      const result = await sdk.client.session.list({ search: input.query, limit: 30, ...input.filter })
+      const result = await sdk.client.session.list(
+        createDialogSessionListQuery({ search: input.query, filter: input.filter }),
+      )
       return result.data ?? []
     },
   )
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
-  const sessions = createMemo(() => searchResults() ?? sync.data.session)
+  const sessions = createMemo(() => searchResults() ?? browseResults() ?? [])
 
   function recover(session: NonNullable<ReturnType<typeof sessions>[number]>) {
     const workspace = project.workspace.get(session.workspaceID!)
@@ -107,7 +128,7 @@ export function DialogSessionList() {
             return false
           }
           await project.workspace.sync()
-          await sync.session.refresh()
+          await refetchBrowse()
           if (search()) await refetch()
           if (info?.workspaceID === session.workspaceID) {
             route.navigate({ type: "home" })
@@ -138,7 +159,7 @@ export function DialogSessionList() {
       .map((x) => x.id)
   }
 
-  const [browseOrder] = createSignal<string[]>(orderByRecency(sync.data.session))
+  const browseOrder = createMemo(() => orderByRecency(browseResults() ?? []))
 
   const quickSwitchHint = createMemo(() => {
     const first = quickSwitch1()
@@ -276,9 +297,7 @@ export function DialogSessionList() {
                 setToDelete(undefined)
                 return
               }
-              if (status && status !== "connected") {
-                await sync.session.refresh()
-              }
+              await refetchBrowse()
               if (search()) await refetch()
               setToDelete(undefined)
               return
