@@ -27,9 +27,26 @@ export const RETRY_INITIAL_DELAY = 2000
 export const RETRY_BACKOFF_FACTOR = 2
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
+export const RETRY_MAX_AUTH_ATTEMPTS = 3
+export const RETRY_MAX_EMPTY_RESPONSE_ATTEMPTS = 3
+export const RETRY_MAX_INPUT_TOKEN_QUOTA_ATTEMPTS = 6
+// Stream errors (statusCode 901) are transient Mantle rejections — use more
+// retries with longer backoff to give the service time to recover.
+export const RETRY_MAX_STREAM_ERROR_ATTEMPTS = 6
+export const RETRY_STREAM_ERROR_INITIAL_DELAY = 5000
+export const RETRY_STREAM_ERROR_MAX_DELAY = 60_000
+
+// Synthetic status codes for non-HTTP errors (used to differentiate retry behavior)
+export const STATUS_STREAM_ERROR = 901 // finish reason: "error" with no tokens
+export const STATUS_EMPTY_RESPONSE = 902 // finish: "stop" with 0 output tokens
 
 function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
+}
+
+function jitter(ms: number) {
+  // Add ±20% random jitter to prevent retry storms
+  return Math.round(ms * (0.8 + Math.random() * 0.4))
 }
 
 export function delay(attempt: number, error?: SessionV1.APIError) {
@@ -60,6 +77,12 @@ export function delay(attempt: number, error?: SessionV1.APIError) {
 
       return cap(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1))
     }
+
+    // Stream errors: longer backoff with jitter, capped at 60s
+    if (error.data.statusCode === STATUS_STREAM_ERROR) {
+      const base = RETRY_STREAM_ERROR_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1)
+      return cap(jitter(Math.min(base, RETRY_STREAM_ERROR_MAX_DELAY)))
+    }
   }
 
   return cap(Math.min(RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1), RETRY_MAX_DELAY_NO_HEADERS))
@@ -73,6 +96,8 @@ export function retryable(error: Err, provider: string) {
     // 5xx errors are transient server failures and should always be retried,
     // even when the provider SDK doesn't explicitly mark them as retryable.
     if (!error.data.isRetryable && !(status !== undefined && status >= 500)) return undefined
+    // Auth errors get a specific message
+    if (status === 401) return { message: "Credential expired, retrying..." }
     if (error.data.responseBody?.includes("FreeUsageLimitError")) {
       return {
         message: GO_UPSELL_MESSAGE,
@@ -173,17 +198,39 @@ function parseJSON(value: unknown) {
   })
 }
 
-export function policy(opts: {
+export function policy<R = never>(opts: {
   provider: string
   parse: (error: unknown) => Err
   set: (input: { attempt: number; message: string; action?: Retryable["action"]; next: number }) => Effect.Effect<void>
+  refreshAuth?: () => Effect.Effect<void, never, R>
 }) {
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
       const error = opts.parse(meta.input)
       const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
+      // Cap retries for auth errors — credentials won't self-refresh without a hook
+      if (SessionV1.APIError.isInstance(error) && error.data.statusCode === 401 && meta.attempt >= RETRY_MAX_AUTH_ATTEMPTS) {
+        return Cause.done(meta.attempt)
+      }
+      if (SessionV1.APIError.isInstance(error) && error.data.metadata?.reason === "input_token_quota" && meta.attempt >= RETRY_MAX_INPUT_TOKEN_QUOTA_ATTEMPTS) {
+        return Cause.done(meta.attempt)
+      }
+      // Cap retries for stream errors (statusCode 901) — transient Mantle rejections,
+      // allow more attempts with longer backoff
+      if (SessionV1.APIError.isInstance(error) && error.data.statusCode === STATUS_STREAM_ERROR && meta.attempt >= RETRY_MAX_STREAM_ERROR_ATTEMPTS) {
+        return Cause.done(meta.attempt)
+      }
+      // Cap retries for empty responses (statusCode 902) — model processes but returns nothing
+      if (SessionV1.APIError.isInstance(error) && error.data.statusCode === STATUS_EMPTY_RESPONSE && meta.attempt >= RETRY_MAX_EMPTY_RESPONSE_ATTEMPTS) {
+        return Cause.done(meta.attempt)
+      }
       return Effect.gen(function* () {
+        // Only run auth refresh on actual auth errors (401) — stream errors and empty
+        // responses are not auth issues, running the refresh script wastes 30s per retry
+        if (opts.refreshAuth && SessionV1.APIError.isInstance(error) && error.data.statusCode === 401) {
+          yield* opts.refreshAuth()
+        }
         const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
         const now = yield* Clock.currentTimeMillis
         yield* opts.set({

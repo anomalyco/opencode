@@ -262,8 +262,20 @@ export function toLLMEvents(
       })
 
     case "error":
+      console.warn("AI SDK error event", { error: errorMessage(event.error), raw: event.error })
       return Effect.fail(event.error)
 
+    case "raw": {
+      // Log raw SSE events that might contain error details from the API
+      const rawData = event as any
+      if (rawData.rawValue && typeof rawData.rawValue === "object") {
+        const val = rawData.rawValue as Record<string, unknown>
+        if (val.type === "error" || val.status === "failed" || val.status === "incomplete") {
+          console.warn("raw SSE error event", { rawValue: JSON.stringify(val).slice(0, 500) })
+        }
+      }
+      return Effect.succeed([])
+    }
     case "abort":
     case "source":
     case "file":

@@ -112,6 +112,10 @@ export const Info = Schema.Struct({
           description:
             "Timeout in milliseconds between streamed SSE chunks for this provider. If no chunk arrives within this window, the request is aborted.",
         }),
+        authRefreshCommand: Schema.optional(Schema.String).annotate({
+          description:
+            "Shell command to run when a 401 auth error is encountered. Should refresh credentials (e.g. rotate an STS token). Executed before retrying the failed request.",
+        }),
       }),
       [Schema.Record(Schema.String, Schema.Any)],
     ),

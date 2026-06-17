@@ -641,6 +641,9 @@ export function fromError(
       ).toObject()
     case OutputLengthError.isInstance(e):
       return e
+    // Pass through SessionLegacy.APIError instances directly (e.g. empty response detection)
+    case APIError.isInstance(e):
+      return (e as InstanceType<typeof APIError>).toObject()
     case LoadAPIKeyError.isInstance(e):
       return new AuthError(
         {
@@ -697,6 +700,15 @@ export function fromError(
           metadata: {
             code: e.name,
           },
+        },
+        { cause: e },
+      ).toObject()
+    case e instanceof Error && ProviderError.isInputTokenQuota(e.message):
+      return new APIError(
+        {
+          message: e.message,
+          isRetryable: true,
+          metadata: { reason: "input_token_quota" },
         },
         { cause: e },
       ).toObject()

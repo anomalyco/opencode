@@ -2018,6 +2018,47 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
   })
 
+  test("reorders bedrock anthropic tool-call messages before sending", () => {
+    const bedrockModel = {
+      ...anthropicModel,
+      id: "amazon-bedrock/us.anthropic.claude-opus-4-6-v1",
+      providerID: "amazon-bedrock",
+      api: {
+        id: "us.anthropic.claude-opus-4-6-v1",
+        url: "https://bedrock-runtime.us-east-1.amazonaws.com",
+        npm: "@ai-sdk/amazon-bedrock",
+      },
+    }
+
+    const msgs = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "tool-call",
+            toolCallId: "tooluse_gR78zCIO3KtwSwXC44vE6q",
+            toolName: "bash",
+            input: {},
+          },
+          { type: "text", text: "MessageAbortedError: Aborted" },
+        ],
+      },
+    ] as any[]
+
+    const result = ProviderTransform.message(msgs, bedrockModel, {})
+
+    expect(result).toHaveLength(2)
+    expect(result[0].content).toEqual([{ type: "text", text: "MessageAbortedError: Aborted" }])
+    expect(result[1].content).toEqual([
+      {
+        type: "tool-call",
+        toolCallId: "tooluse_gR78zCIO3KtwSwXC44vE6q",
+        toolName: "bash",
+        input: {},
+      },
+    ])
+  })
+
   test("does not filter for non-anthropic providers", () => {
     const openaiModel = {
       ...anthropicModel,

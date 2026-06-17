@@ -20,15 +20,61 @@ export class ResponseStreamError extends Error {
   }
 }
 
+// Adapted from overflow detection patterns in:
+// https://github.com/badlogic/pi-mono/blob/main/packages/ai/src/utils/overflow.ts
+const OVERFLOW_PATTERNS = [
+  /prompt is too long/i, // Anthropic
+  /input is too long for requested model/i, // Amazon Bedrock
+  /exceeds the context window/i, // OpenAI (Completions + Responses API message text)
+  /input token count.*exceeds the maximum/i, // Google (Gemini)
+  /maximum prompt length is \d+/i, // xAI (Grok)
+  /reduce the length of the messages/i, // Groq
+  /maximum context length is \d+ tokens/i, // OpenRouter, DeepSeek, vLLM
+  /exceeds the limit of \d+/i, // GitHub Copilot
+  /exceeds the available context size/i, // llama.cpp server
+  /greater than the context length/i, // LM Studio
+  /context window exceeds limit/i, // MiniMax
+  /exceeded model token limit/i, // Kimi For Coding, Moonshot
+  /context[_ ]length[_ ]exceeded/i, // Generic fallback
+  /request entity too large/i, // HTTP 413
+  /context length is only \d+ tokens/i, // vLLM
+  /input length.*exceeds.*context length/i, // vLLM
+  /prompt too long; exceeded (?:max )?context length/i, // Ollama explicit overflow error
+  /too large for model with \d+ maximum context length/i, // Mistral
+  /model_context_window_exceeded/i, // z.ai non-standard finish_reason surfaced as error text
+]
+
+const INPUT_TOKEN_QUOTA_PATTERNS = [
+  /input[-_ ]?tpm.*\bInputTokens\b.*exceeded/i,
+  /\bInputTokens\b.*exceeded by/i,
+  /input tokens? per minute.*exceeded/i,
+]
+
 function isOpenAiErrorRetryable(e: APICallError) {
   const status = e.statusCode
   if (!status) return e.isRetryable
   // openai sometimes returns 404 for models that are actually available
-  return status === 404 || e.isRetryable
+  if (status === 404) return true
+  // 401 errors from STS/gateway credential expiry are transient — retry
+  if (status === 401) return true
+  return e.isRetryable
 }
 
 // Providers not reliably handled in this function:
 // - z.ai: can accept overflow silently (needs token-count/context-window checks)
+export function isInputTokenQuota(message: string) {
+  return INPUT_TOKEN_QUOTA_PATTERNS.some((p) => p.test(message))
+}
+
+function isOverflow(message: string) {
+  if (OVERFLOW_PATTERNS.some((p) => p.test(message))) return true
+
+  // Providers/status patterns handled outside of regex list:
+  // - Cerebras: often returns "400 (no body)" / "413 (no body)"
+  // - Mistral: often returns "400 (no body)" / "413 (no body)"
+  return /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message)
+}
+
 function message(providerID: ProviderV2.ID, e: APICallError) {
   return iife(() => {
     const msg = e.message
@@ -106,6 +152,15 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
 
   const responseBody = JSON.stringify(body)
   if (body.type !== "error") return
+  const errorMessage = typeof body?.error?.message === "string" ? body.error.message : undefined
+  if (errorMessage && isInputTokenQuota(errorMessage)) {
+    return {
+      type: "api_error",
+      message: errorMessage,
+      isRetryable: true,
+      responseBody,
+    }
+  }
 
   switch (body?.error?.code) {
     case "context_length_exceeded":
@@ -165,7 +220,18 @@ export type ParsedAPICallError =
 export function parseAPICallError(input: { providerID: ProviderV2.ID; error: APICallError }): ParsedAPICallError {
   const m = message(input.providerID, input.error)
   const body = json(input.error.responseBody)
-  if (isContextOverflow(m) || input.error.statusCode === 413 || body?.error?.code === "context_length_exceeded") {
+  if (isInputTokenQuota(m)) {
+    return {
+      type: "api_error",
+      message: m,
+      statusCode: input.error.statusCode,
+      isRetryable: true,
+      responseHeaders: input.error.responseHeaders,
+      responseBody: input.error.responseBody,
+      metadata: { reason: "input_token_quota" },
+    }
+  }
+  if (isOverflow(m) || input.error.statusCode === 413 || body?.error?.code === "context_length_exceeded") {
     return {
       type: "context_overflow",
       message: m,

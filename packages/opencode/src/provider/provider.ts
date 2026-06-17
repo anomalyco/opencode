@@ -205,7 +205,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         async getModel(sdk: any, modelID: string, _options?: Record<string, any>) {
           return sdk.responses(modelID)
         },
-        options: { headerTimeout: OPENAI_HEADER_TIMEOUT_DEFAULT },
+        options: { headerTimeout: OPENAI_HEADER_TIMEOUT_DEFAULT, chunkTimeout: 60_000 },
       }),
     xai: () =>
       Effect.succeed({
@@ -1120,6 +1120,7 @@ export interface Interface {
   ) => Effect.Effect<{ providerID: ProviderV2.ID; modelID: string } | undefined>
   readonly getSmallModel: (providerID: ProviderV2.ID) => Effect.Effect<Model | undefined>
   readonly defaultModel: () => Effect.Effect<{ providerID: ProviderV2.ID; modelID: ModelV2.ID }, DefaultModelError>
+  readonly invalidateAuth: (providerID: ProviderV2.ID) => Effect.Effect<void>
 }
 
 interface State {
@@ -1928,7 +1929,26 @@ export const layer = Layer.effect(
       }
     })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+    const invalidateAuth = Effect.fn("Provider.invalidateAuth")(function* (providerID: ProviderV2.ID) {
+      const s = yield* InstanceState.get(state)
+      // Re-read auth.json and update the provider key
+      const authInfo = yield* auth.get(providerID).pipe(Effect.orDie)
+      if (authInfo?.type === "api") {
+        const provider = s.providers[providerID]
+        if (provider) provider.key = authInfo.key
+      }
+      // Clear SDK cache entries for this provider so a fresh SDK is created with the new key
+      for (const [key] of s.sdk) {
+        if (key.includes(`"${providerID}"`)) s.sdk.delete(key)
+      }
+      // Clear cached language models for this provider
+      for (const [key] of s.models) {
+        if (key.startsWith(`${providerID}/`)) s.models.delete(key)
+      }
+      console.info("invalidateAuth", { providerID })
+    })
+
+    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel, invalidateAuth })
   }),
 )
 

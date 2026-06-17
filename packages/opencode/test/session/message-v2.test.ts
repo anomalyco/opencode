@@ -1467,6 +1467,43 @@ describe("session.message-v2.fromError", () => {
     })
   })
 
+  test("detects input token quota native errors as retryable API errors", () => {
+    const result = MessageV2.fromError(
+      new Error("quota input-tpm:589792083706:openai.gpt-5.5 (InputTokens) exceeded by 68182.6666"),
+      { providerID },
+    )
+
+    expect(result).toMatchObject({
+      name: "APIError",
+      data: {
+        isRetryable: true,
+        metadata: { reason: "input_token_quota" },
+      },
+    })
+  })
+
+  test("detects input token quota APICallError as retryable API errors", () => {
+    const result = MessageV2.fromError(
+      new APICallError({
+        message: "quota input-tpm:589792083706:openai.gpt-5.5 (InputTokens) exceeded by 68182.6666",
+        url: "https://example.com",
+        requestBodyValues: {},
+        statusCode: 400,
+        responseHeaders: { "content-type": "application/json" },
+        isRetryable: false,
+      }),
+      { providerID },
+    )
+
+    expect(result).toMatchObject({
+      name: "APIError",
+      data: {
+        isRetryable: true,
+        metadata: { reason: "input_token_quota" },
+      },
+    })
+  })
+
   test("detects context overflow from context_length_exceeded code in response body", () => {
     const error = new APICallError({
       message: "Request failed",

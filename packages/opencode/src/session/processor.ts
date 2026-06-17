@@ -18,7 +18,7 @@ import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
@@ -30,6 +30,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { text as runText } from "@/util/process"
 import { ToolOutput, Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
@@ -106,6 +107,7 @@ export const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const providers = yield* Provider.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -671,6 +673,7 @@ export const layer = Layer.effect(
           }
 
           case "provider-error":
+            console.warn("provider-error event", { message: value.message, metadata: value.providerMetadata })
             throw new Error(value.message)
 
           case "step-start":
@@ -691,6 +694,12 @@ export const layer = Layer.effect(
             return
 
           case "step-finish": {
+            if (value.reason === "error") {
+              console.warn("step-finish with error reason", {
+                usage: value.usage,
+                providerMetadata: value.providerMetadata,
+              })
+            }
             const completedSnapshot = yield* snapshot.track()
             yield* Effect.forEach(Object.keys(ctx.reasoningMap), finishReasoning)
             const usage = Session.getUsage({
@@ -935,6 +944,11 @@ export const layer = Layer.effect(
           yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return
         }
+        if (SessionV1.APIError.isInstance(error) && error.data.metadata?.reason === "input_token_quota") {
+          ctx.needsCompaction = true
+          yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
+          return
+        }
         if (!ctx.assistantMessage.summary) {
           // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
           if (mirrorAssistant) {
@@ -950,6 +964,18 @@ export const layer = Layer.effect(
           }
         }
         ctx.assistantMessage.error = error
+        // Surface the error as a visible text part so the user can see what failed
+        const msg = "name" in error && "data" in error
+          ? `⚠️ ${error.name}: ${(error.data as {message?: string}).message ?? JSON.stringify(error.data)}`
+          : `⚠️ Error: ${JSON.stringify(error)}`
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          messageID: ctx.assistantMessage.id,
+          sessionID: ctx.assistantMessage.sessionID,
+          type: "text",
+          text: msg,
+          time: { start: Date.now(), end: Date.now() },
+        })
         yield* events.publish(Session.Event.Error, {
           sessionID: ctx.assistantMessage.sessionID,
           error: ctx.assistantMessage.error,
@@ -973,12 +999,51 @@ export const layer = Layer.effect(
             yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
 
-            yield* stream.pipe(
-              Stream.tap((event) => handleEvent(event)),
-              Stream.takeUntil(() => ctx.needsCompaction),
-              Stream.runDrain,
+          yield* stream.pipe(
+            Stream.tap((event) => handleEvent(event)),
+            Stream.takeUntil(() => ctx.needsCompaction),
+            Stream.runDrain,
+          )
+          // Detect empty responses: model said "stop" but produced 0 output tokens.
+          // This is a known failure mode (especially with GPT 5.5 via Bedrock Mantle)
+          // where the model accepts a large context but returns nothing — e.g. when
+          // KV cache times out after switching models mid-session.
+          // Treat as a retryable API error so the retry policy can handle it.
+          if (
+            !ctx.needsCompaction &&
+            !aborted &&
+            ctx.assistantMessage.finish === "stop" &&
+            ctx.assistantMessage.tokens.output === 0 &&
+            !ctx.assistantMessage.error
+          ) {
+            yield* Effect.fail(
+              new SessionV1.APIError({
+                message: "Model returned empty response (0 output tokens)",
+                statusCode: 902,
+                isRetryable: true,
+              }),
             )
-          }).pipe(
+          }
+          // Detect stream-level errors: AI SDK reported finish reason "error" via
+          // step-finish without throwing an exception. This happens when the API
+          // returns an error condition through the streaming protocol (e.g. context
+          // overflow, server-side timeout) rather than as an HTTP error status.
+          // Treat as retryable so the retry policy (with auth refresh) can handle it.
+          if (
+            !ctx.needsCompaction &&
+            !aborted &&
+            ctx.assistantMessage.finish === "error" &&
+            !ctx.assistantMessage.error
+          ) {
+            yield* Effect.fail(
+              new SessionV1.APIError({
+                message: "Model stream ended with error (finish reason: error)",
+                statusCode: 901,
+                isRetryable: true,
+              }),
+            )
+          }
+        }).pipe(
             Effect.onInterrupt(() =>
               Effect.gen(function* () {
                 aborted = true
@@ -1021,6 +1086,20 @@ export const layer = Layer.effect(
                     ),
                   )
                 },
+                refreshAuth: Effect.fn("SessionProcessor.refreshAuth")(function* () {
+                  const cfg = yield* config.get()
+                  const cmd = (cfg.provider as Record<string, {options?: {authRefreshCommand?: string}}>)?.[input.model.providerID]?.options?.authRefreshCommand
+                  if (!cmd) return
+                  console.info("refreshAuth", { providerID: input.model.providerID, cmd })
+                  yield* Effect.promise(() =>
+                    runText(["sh", "-c", cmd], { timeout: 30_000 }).catch((e) => {
+                      console.error("refreshAuth failed", { error: errorMessage(e) })
+                      return { stdout: "", code: 1 }
+                    }),
+                  )
+                  // Invalidate cached SDK so the next retry uses the fresh key from auth.json
+                  yield* providers.invalidateAuth(ProviderV2.ID.make(input.model.providerID))
+                }),
               }),
             ),
             Effect.catch(halt),
@@ -1061,6 +1140,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Config.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
     Layer.provide(Database.defaultLayer),
+    Layer.provide(Provider.defaultLayer),
     Layer.provide(EventV2Bridge.defaultLayer),
   ),
 )
@@ -1079,6 +1159,7 @@ export const node = LayerNode.make(layer, [
   EventV2Bridge.node,
   RuntimeFlags.node,
   Database.node,
+  Provider.node,
 ])
 
 export * as SessionProcessor from "./processor"
