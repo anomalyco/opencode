@@ -63,17 +63,17 @@ export const getModelCatalog = query(async () => {
 }, "getModelCatalog")
 
 export function findModelCatalogEntry(catalog: ModelCatalog, model: string, lab?: string) {
-  const normalizedId = lab ? `${catalogSlug(lab)}/${catalogSlug(model)}` : model.trim().toLowerCase()
+  const normalizedId = lab ? `${catalogLabSlug(lab)}/${catalogSlug(model)}` : model.trim().toLowerCase()
   const leaf = catalogSlug(model)
   return (
     catalog.models.find((entry) => entry.id.toLowerCase() === normalizedId) ??
-    catalog.models.find((entry) => (lab ? entry.lab === catalogSlug(lab) : true) && entry.slug === leaf) ??
+    catalog.models.find((entry) => (lab ? entry.lab === catalogLabSlug(lab) : true) && entry.slug === leaf) ??
     catalog.models.find((entry) => entry.slug === leaf)
   )
 }
 
 export function findModelCatalogLab(catalog: ModelCatalog, lab: string) {
-  const id = catalogSlug(lab)
+  const id = catalogLabSlug(lab)
   return catalog.labs.find((entry) => entry.id === id)
 }
 
@@ -95,6 +95,8 @@ export function formatCatalogLabName(lab: string) {
     xai: "xAI",
     xiaomi: "Xiaomi",
     zai: "Z.ai",
+    qwen: "Qwen",
+    zhipu: "Zhipu",
     zhipuai: "Zhipu",
   }
   return known[catalogSlug(lab)] ?? lab.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
@@ -271,6 +273,17 @@ function displayDateTime(value: string | undefined) {
 
 function catalogIdKey(value: string) {
   return value.split("/").map(catalogSlug).join("/")
+}
+
+function catalogLabSlug(value: string) {
+  const slug = catalogSlug(value)
+  const aliases: Record<string, string> = {
+    moonshot: "moonshotai",
+    qwen: "alibaba",
+    zhipu: "zhipuai",
+    zai: "zhipuai",
+  }
+  return aliases[slug] ?? slug
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -823,15 +823,14 @@ function resolveModelProvider(model: string, rows: StatMetricRow[], providerPara
 }
 
 function providerMatches(provider: string, providerParam: string) {
-  return modelSlug(provider) === modelSlug(providerParam)
+  return providerSlug(provider) === providerSlug(providerParam)
 }
 
 function resolveProviderName(providerParam: string, rows: StatMetricRow[]) {
   const input = providerParam.trim()
   if (!input) return undefined
-  const inputSlug = modelSlug(input)
   return aggregateByModel(rows)
-    .filter((item) => modelSlug(item.provider) === inputSlug)
+    .filter((item) => providerMatches(item.provider, input))
     .toSorted((a, b) => b.totalTokens - a.totalTokens || a.provider.localeCompare(b.provider))[0]?.provider
 }
 
@@ -846,6 +845,17 @@ export function modelSlug(value: string) {
 
 function modelKey(provider: string, model: string) {
   return `${provider}\u0000${model}`
+}
+
+function providerSlug(value: string) {
+  const slug = modelSlug(value)
+  const aliases: Record<string, string> = {
+    alibaba: "qwen",
+    moonshotai: "moonshot",
+    qwen: "qwen",
+    zhipuai: "zhipu",
+  }
+  return aliases[slug] ?? slug
 }
 
 function costPerMillion(costMicrocents: number, tokens: number) {
