@@ -147,7 +147,8 @@ test.describe("regression: session timeline local row state", () => {
 
     const wrapper = page.locator(`[data-timeline-part-id="${editPartID}"]`).first()
     await expectAppVisible(wrapper)
-    await expectAppVisible(wrapper.locator('[data-component="file"][data-mode="diff"]').first())
+    const file = wrapper.locator('[data-component="file"][data-mode="diff"]').first()
+    await expectAppVisible(file)
     await markDiffProbe(page)
 
     events.push({
@@ -159,7 +160,15 @@ test.describe("regression: session timeline local row state", () => {
     })
 
     await expect(page.locator(`[data-timeline-part-id="${textPartID}"]`).first()).toBeVisible({ timeout: 10_000 })
-    expect(await readDiffProbe(page)).toEqual({ fileMarker: "before", shadowRoots: 0, toolMarker: "before" })
+    const siblingProbe = await readDiffProbe(page)
+    expect(siblingProbe).toEqual({
+      fileMarker: "before",
+      frameMarker: "before",
+      rowKey: `assistant-part:${userMessageID}:part:${assistantMessageID}:${editPartID}`,
+      rowMarker: "before",
+      shadowRoots: 0,
+      toolMarker: "before",
+    })
 
     await markDiffProbe(page)
     events.push({
@@ -173,7 +182,73 @@ test.describe("regression: session timeline local row state", () => {
     await expect(wrapper.locator('[data-slot="diff-changes-additions"]').filter({ hasText: "+2" }).first()).toBeVisible(
       { timeout: 10_000 },
     )
-    expect(await readDiffProbe(page)).toEqual({ fileMarker: "before", shadowRoots: 0, toolMarker: "before" })
+    expect(await readDiffProbe(page)).toEqual({
+      fileMarker: "before",
+      frameMarker: "before",
+      rowKey: `assistant-part:${userMessageID}:part:${assistantMessageID}:${editPartID}`,
+      rowMarker: "before",
+      shadowRoots: 0,
+      toolMarker: "before",
+    })
+  })
+
+  test("keeps a sticky edit header aligned with a multi-hunk diff", async ({ page }) => {
+    const events: EventPayload[] = []
+    const lines = Array.from({ length: 1_000 }, (_, index) => `export const value${index} = ${index}\n`).join("")
+    const after = [100, 300, 500, 700, 900].reduce(
+      (result, index) =>
+        result.replace(`export const value${index} = ${index}`, `export const value${index} = compute(${index})`),
+      lines,
+    )
+    const part = {
+      ...editPart,
+      state: {
+        ...editPart.state,
+        metadata: {
+          ...editPart.state.metadata,
+          filediff: {
+            file: "src/regression.ts",
+            additions: 1,
+            deletions: 1,
+            before: lines,
+            after,
+          },
+        },
+      },
+    }
+    await mockServer(page, events, [userMessage, { ...assistantMessage, parts: [part] }])
+    await configurePage(page)
+
+    await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+    await expectSessionTitle(page, title)
+
+    const wrapper = page.locator(`[data-timeline-part-id="${editPartID}"]`).first()
+    const trigger = wrapper.locator('[data-slot="collapsible-trigger"]').first()
+    const diff = wrapper.locator('[data-component="edit-content"]').first()
+    await expectAppVisible(diff)
+    await expect.poll(() => wrapper.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(500)
+    const samples = await wrapper.evaluate(async (element) => {
+      const root = element.closest<HTMLElement>(".scroll-view__viewport")!
+      element.scrollIntoView({ block: "start" })
+      const result = []
+      for (const offset of [0, 120, 240, 360, 480]) {
+        root.scrollBy(0, offset - (result.at(-1)?.offset ?? 0))
+        await new Promise(requestAnimationFrame)
+        const trigger = element.querySelector<HTMLElement>('[data-slot="collapsible-trigger"]')!
+        const diff = element.querySelector<HTMLElement>('[data-component="edit-content"]')!
+        result.push({
+          offset,
+          trigger: trigger.getBoundingClientRect().y,
+          diff: diff.getBoundingClientRect().y,
+          bottom: element.getBoundingClientRect().bottom,
+        })
+      }
+      return result
+    })
+
+    expect(samples[0]!.trigger).toBeLessThan(samples[0]!.diff)
+    expect(samples.every((sample) => Math.abs(sample.trigger - samples[0]!.trigger) <= 1)).toBe(true)
+    expect(samples.every((sample) => sample.trigger < sample.bottom)).toBe(true)
   })
 })
 
@@ -247,10 +322,16 @@ async function markDiffProbe(page: Page) {
     .evaluate((element) => {
       const tool = element as HTMLElement
       const file = tool.querySelector<HTMLElement>('[data-component="file"][data-mode="diff"]')
+      const row = tool.closest<HTMLElement>("[data-timeline-key]")
+      const frame = tool.closest<HTMLElement>("[data-timeline-row]")
       if (!file) throw new Error("missing edit diff file")
+      if (!row) throw new Error("missing virtual timeline row")
+      if (!frame) throw new Error("missing timeline row frame")
 
       tool.dataset.timelineProbe = "before"
       file.dataset.timelineProbe = "before"
+      row.dataset.timelineProbe = "before"
+      frame.dataset.timelineProbe = "before"
       window.__timelineDiffProbe.reset()
     })
 }
@@ -262,10 +343,15 @@ async function readDiffProbe(page: Page) {
     .evaluate((element) => {
       const tool = element as HTMLElement
       const file = tool.querySelector<HTMLElement>('[data-component="file"][data-mode="diff"]')
+      const row = tool.closest<HTMLElement>("[data-timeline-key]")
+      const frame = tool.closest<HTMLElement>("[data-timeline-row]")
       return {
         fileMarker: file?.dataset.timelineProbe,
         shadowRoots: window.__timelineDiffProbe.shadowRoots(),
         toolMarker: tool.dataset.timelineProbe,
+        rowMarker: row?.dataset.timelineProbe,
+        rowKey: row?.dataset.timelineKey,
+        frameMarker: frame?.dataset.timelineProbe,
       }
     })
 }
@@ -300,14 +386,15 @@ function readExpanded(element: Element) {
   return !!content && content.getBoundingClientRect().height > 0
 }
 
-async function mockServer(page: Page, events: EventPayload[]) {
+async function mockServer(page: Page, events: EventPayload[], messages = [userMessage, assistantMessage]) {
   await mockOpenCodeServer(page, {
     directory,
     project: project(),
     provider: provider(),
     sessions: [session()],
-    pageMessages: () => ({ items: [userMessage, assistantMessage] }),
-    events: () => events.splice(0),
+    pageMessages: () => ({ items: messages }),
+    events: () => events.splice(0, 1),
+    eventRetry: 16,
   })
 }
 

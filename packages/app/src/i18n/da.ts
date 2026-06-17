@@ -305,6 +305,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Søg mapper",
   "dialog.directory.empty": "Ingen mapper fundet",
+  "dialog.directory.action.selectFile": "Vælg fil",
+  "dialog.directory.action.selectFolder": "Vælg mappe",
+  "dialog.directory.root": "Rod",
+  "dialog.directory.parent": "Overordnet",
+  "dialog.directory.readError": "Denne mappe kan ikke læses",
 
   "dialog.server.title": "Servere",
   "dialog.server.description": "Skift hvilken OpenCode-server denne app forbinder til.",
