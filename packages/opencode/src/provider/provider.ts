@@ -14,7 +14,7 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { iife } from "@/util/iife"
-import { ThemeState } from "@/local/theme-state"
+import { ThemeState } from "@opencode-ai/core/local/theme-state"
 
 // Tracks baseURL::modelId combos that have already had a loading-theme header sent.
 // The header is only useful on the first request (model cold-start); skip it after.

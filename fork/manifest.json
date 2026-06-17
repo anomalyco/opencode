@@ -3,10 +3,10 @@
   "upstreamRemote": "anomalyco/opencode",
   "note": "Machine-readable inventory of everything this fork adds on top of upstream. Drives `bun run fork:verify` (run after every sync to prove nothing was silently dropped) and `bun run sync:check` (detect when upstream has moved past our baseline). Update `baseline` after each successful sync. Keep the human-readable rationale in FORK_WORKFLOW.md in step with this file.",
   "baseline": {
-    "upstreamRef": "914a643ab26053df463ef78a1deadcdb223e8783",
+    "upstreamRef": "8716c4309a209d50f0b17211e407e317a28cdce3",
     "upstreamBranch": "upstream/dev",
-    "syncedAt": "2026-06-17",
-    "forkTag": null,
+    "syncedAt": "2026-06-18",
+    "forkTag": "fork/2026-06-18.1",
     "comment": "Last upstream commit fully merged into dev. sync:check compares upstream/dev against this ref. Bump it (and forkTag) after every sync."
   },
   "owned": [
@@ -23,7 +23,9 @@
     "packages/opencode/src/local/mdns.ts",
     "packages/opencode/src/server/routes/instance/httpapi/handlers/local.ts",
     "packages/opencode/src/server/routes/instance/httpapi/groups/local.ts",
-    "packages/tui/src/component/dialog-model-ctx.tsx"
+    "packages/tui/src/component/dialog-model-ctx.tsx",
+    "packages/core/src/local/theme-state.ts",
+    "packages/core/src/util/log.ts"
   ],
   "patched": [
     {
@@ -59,8 +61,7 @@
     {
       "file": "packages/tui/src/context/theme.tsx",
       "marker": "ThemeState.set",
-      "note": "createEffect writing ThemeState.set(store.active) — the writer half of the local-backend themed-loading-screen feature (reader is provider.ts ThemeState.get). Lost when upstream relocated the TUI into packages/tui; re-apply with a tui-relative import to @opencode-ai/.../local/theme-state.",
-      "status": "REGRESSED — lost in a prior sync; recovery pending."
+      "note": "createEffect writing ThemeState.set(store.active) — the writer half of the local-backend themed-loading-screen feature (reader is provider.ts ThemeState.get). theme-state.ts now lives in packages/core/src/local so both the TUI (writer) and the opencode provider (reader) can share the singleton across the package boundary."
     }
   ]
 }
