@@ -383,7 +383,8 @@ export const Terminal = (props: TerminalProps) => {
         }
 
         // allow for toggle terminal keybinds in parent
-        const config = settings.keybinds.get(TOGGLE_TERMINAL_ID) ?? DEFAULT_TOGGLE_TERMINAL_KEYBIND
+        const fallback = settings.general.newLayoutDesigns() ? "mod+j" : DEFAULT_TOGGLE_TERMINAL_KEYBIND
+        const config = settings.keybinds.get(TOGGLE_TERMINAL_ID) ?? fallback
         const keybinds = parseKeybind(config)
 
         return matchKeybind(keybinds, event)

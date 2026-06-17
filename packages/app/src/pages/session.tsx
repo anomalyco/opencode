@@ -1933,23 +1933,46 @@ export default function Page() {
             />
           }
         >
-          <SessionSidePanelV2
-            canReview={canReview}
-            diffs={reviewDiffs}
-            diffsReady={reviewReady}
-            hasReview={hasReview}
-            reviewCount={reviewCount}
-            reviewPanel={reviewPanelV2}
-            reviewSidebar={reviewSidebarV2}
-            reviewV2State={reviewV2State}
-            fileTabReview={reviewPanelV2Props}
-            reviewSnap={ui.reviewSnap}
-            size={size}
-          />
+          <div
+            class="flex flex-col min-h-0 h-full flex-1 min-w-0"
+            classList={{ "gap-2": desktopReviewOpen() && view().terminal.opened() }}
+          >
+            <div class="flex-1 min-h-0 min-w-0 flex">
+              <SessionSidePanelV2
+                canReview={canReview}
+                diffs={reviewDiffs}
+                diffsReady={reviewReady}
+                hasReview={hasReview}
+                reviewCount={reviewCount}
+                reviewPanel={reviewPanelV2}
+                reviewSidebar={reviewSidebarV2}
+                reviewV2State={reviewV2State}
+                fileTabReview={reviewPanelV2Props}
+                reviewSnap={ui.reviewSnap}
+                size={size}
+              />
+            </div>
+            <Show when={desktopReviewOpen()}>
+              <div
+                class="shrink-0 overflow-hidden"
+                classList={{
+                  "rounded-[6px] shadow-[var(--v2-elevation-raised)] bg-background-stronger":
+                    view().terminal.opened(),
+                }}
+              >
+                <TerminalPanel
+                  variant="v2"
+                  maxHeight={() => (typeof window === "undefined" ? 400 : window.innerHeight * 0.4)}
+                />
+              </div>
+            </Show>
+          </div>
         </Show>
       </div>
 
-      <TerminalPanel />
+      <Show when={!newSessionDesign() || !params.id}>
+        <TerminalPanel />
+      </Show>
     </div>
   )
 }

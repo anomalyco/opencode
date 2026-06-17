@@ -77,6 +77,20 @@ export const createSessionTabs = (input: TabsInput) => {
   }
 }
 
+export const toggleSessionTerminal = (
+  view: {
+    terminal: { opened: () => boolean; toggle: () => void }
+    reviewPanel: { opened: () => boolean; open: () => void }
+  },
+  options?: { openReviewPanel?: boolean },
+) => {
+  const opening = !view.terminal.opened()
+  if (opening && options?.openReviewPanel && !view.reviewPanel.opened()) {
+    view.reviewPanel.open()
+  }
+  view.terminal.toggle()
+}
+
 export const focusTerminalById = (id: string) => {
   const wrapper = document.getElementById(`terminal-wrapper-${id}`)
   const terminal = wrapper?.querySelector('[data-component="terminal"]')

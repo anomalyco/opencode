@@ -15,7 +15,7 @@ import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
 import { findLast } from "@opencode-ai/core/util/array"
-import { createSessionTabs } from "@/pages/session/helpers"
+import { createSessionTabs, toggleSessionTerminal } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -455,9 +455,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     viewCommand({
       id: "terminal.toggle",
       title: language.t("command.terminal.toggle"),
-      keybind: "ctrl+`",
+      keybind: desktopV2() && !!params.id ? "mod+j" : "ctrl+`",
       slash: "terminal",
-      onSelect: () => view().terminal.toggle(),
+      onSelect: () =>
+        toggleSessionTerminal(view(), { openReviewPanel: desktopV2() && !!params.id }),
     }),
     viewCommand({
       id: "review.toggle",

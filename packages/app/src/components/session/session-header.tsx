@@ -16,7 +16,7 @@ import { usePlatform } from "@/context/platform"
 import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
-import { focusTerminalById } from "@/pages/session/helpers"
+import { focusTerminalById, toggleSessionTerminal } from "@/pages/session/helpers"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
@@ -56,7 +56,7 @@ export function SessionHeader() {
 
   const toggleTerminal = () => {
     const next = !view().terminal.opened()
-    view().terminal.toggle()
+    toggleSessionTerminal(view(), { openReviewPanel: isDesktopV2() && !!params.id })
     if (!next) return
 
     const id = terminal.active()
