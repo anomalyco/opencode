@@ -1,6 +1,7 @@
 import { Button } from "@opencode-ai/ui/button"
 import { Spinner } from "@opencode-ai/ui/spinner"
-import { createEffect, createSignal, For, Show } from "solid-js"
+import { TextField } from "@opencode-ai/ui/text-field"
+import { createEffect, createMemo, createSignal, For, Show } from "solid-js"
 import { usePlatform } from "@/context/platform"
 
 type FetchedModel = { id: string }
@@ -18,12 +19,21 @@ export function FetchProviderModels(props: Props) {
   const [fetching, setFetching] = createSignal(false)
   const [models, setModels] = createSignal<FetchedModel[]>([])
   const [error, setError] = createSignal<string>()
+  const [searchQuery, setSearchQuery] = createSignal("")
 
   // Reset state when provider (baseURL) changes
   createEffect(() => {
     props.baseURL
     setModels([])
     setError(undefined)
+    setSearchQuery("")
+  })
+
+  // Filter models based on search query
+  const filteredModels = createMemo(() => {
+    const query = searchQuery().toLowerCase().trim()
+    if (!query) return models()
+    return models().filter((model) => model.id.toLowerCase().includes(query))
   })
 
   const canFetch = () => !!props.baseURL.trim() && !!props.apiKey.trim()
@@ -93,30 +103,38 @@ export function FetchProviderModels(props: Props) {
         </Show>
       </div>
       <Show when={models().length > 0}>
-        <div class="flex flex-wrap gap-1.5">
-          <For each={models()}>
-            {(model) => {
-              const added = () => props.existingModelIDs.has(model.id)
-              return (
-                <div
-                  class="flex items-center gap-0.5 rounded-full bg-surface-secondary pl-2.5 pr-2.5 py-1 transition-colors"
-                  classList={{
-                    "opacity-40": added(),
-                    "cursor-pointer hover:bg-surface-base-hover": !added(),
-                  }}
-                  onClick={() => !added() && props.onAdd(model.id, model.id)}
-                >
-                  <span class="text-12-regular text-text-base">{model.id}</span>
-                  <Show when={!added()}>
-                    <span class="text-12-regular text-text-weak ml-0.5">+</span>
-                  </Show>
-                  <Show when={added()}>
-                    <span class="text-12-regular text-text-weak ml-0.5">✓</span>
-                  </Show>
-                </div>
-              )
-            }}
-          </For>
+        <div class="flex flex-col gap-2">
+          <TextField
+            placeholder="搜索模型..."
+            value={searchQuery()}
+            onChange={setSearchQuery}
+            icon="search"
+          />
+          <div class="flex flex-wrap gap-1.5">
+            <For each={filteredModels()}>
+              {(model) => {
+                const added = () => props.existingModelIDs.has(model.id)
+                return (
+                  <div
+                    class="flex items-center gap-0.5 rounded-full bg-surface-secondary pl-2.5 pr-2.5 py-1 transition-colors"
+                    classList={{
+                      "opacity-40": added(),
+                      "cursor-pointer hover:bg-surface-base-hover": !added(),
+                    }}
+                    onClick={() => !added() && props.onAdd(model.id, model.id)}
+                  >
+                    <span class="text-12-regular text-text-base">{model.id}</span>
+                    <Show when={!added()}>
+                      <span class="text-12-regular text-text-weak ml-0.5">+</span>
+                    </Show>
+                    <Show when={added()}>
+                      <span class="text-12-regular text-text-weak ml-0.5">✓</span>
+                    </Show>
+                  </div>
+                )
+              }}
+            </For>
+          </div>
         </div>
       </Show>
     </div>
