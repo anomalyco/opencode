@@ -11,12 +11,27 @@ export function CopyButton(props: CopyButtonProps) {
   const [copied, setCopied] = createSignal(false)
   const messages = useShareMessages()
 
-  function handleCopyClick() {
-    if (props.text) {
-      navigator.clipboard.writeText(props.text).catch((err) => console.error("Copy failed", err))
+  async function handleCopyClick() {
+    if (!props.text) return
 
+    try {
+      if (navigator.clipboard) {
+        await navigator.clipboard.writeText(props.text)
+      } else {
+        // Fallback for non-HTTPS contexts (e.g., localhost)
+        const textarea = document.createElement("textarea")
+        textarea.value = props.text
+        textarea.style.position = "fixed"
+        textarea.style.left = "-9999px"
+        document.body.appendChild(textarea)
+        textarea.select()
+        document.execCommand("copy")
+        document.body.removeChild(textarea)
+      }
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
+    } catch (err) {
+      console.error("Copy failed", err)
     }
   }
 
