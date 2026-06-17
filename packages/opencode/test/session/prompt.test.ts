@@ -588,6 +588,57 @@ it.instance("legacy prompt emits message events without session.next events", ()
   }),
 )
 
+it.instance(
+  "auto-title does not clobber a title set mid-turn",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+
+      // No explicit title => session keeps its default title, so the first-turn
+      // auto-title generation path runs (the guard sees a default title).
+      const chat = yield* sessions.create({})
+      expect(Session.isDefaultTitle((yield* sessions.get(chat.id)).title)).toBe(true)
+
+      // Hold the auto-title LLM response open so we get a deterministic window
+      // to rename the session while title generation is in flight.
+      const gate = yield* Deferred.make<void>()
+      yield* llm.holdTitle(deferredAsPromise(gate))
+      yield* llm.text("world")
+
+      yield* user(chat.id, "hello")
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+
+      // Wait for both the assistant turn and the (held) auto-title request to
+      // arrive. Once the title request is recorded the title fork is past its
+      // start-of-turn guard and blocked on the gate.
+      yield* llm.wait(2)
+
+      // Simulate a plugin / user renaming the session mid-turn.
+      yield* sessions.setTitle({ sessionID: chat.id, title: "Custom plugin title" })
+
+      // Release the auto-title response; the fork now re-reads the session, sees
+      // the non-default title, and must skip its setTitle.
+      yield* Deferred.succeed(gate, void 0)
+
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isSuccess(exit)).toBe(true)
+
+      // The custom title must survive: auto-title generation ("E2E Title") must
+      // not overwrite the mid-turn rename.
+      yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const title = (yield* sessions.get(chat.id)).title
+          expect(title).not.toBe("E2E Title")
+          return title === "Custom plugin title" ? (true as const) : undefined
+        }),
+        "session title was not preserved after mid-turn rename",
+      )
+    }),
+  30_000,
+)
+
 it.instance("loop surfaces content-filter finishes as session errors", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)

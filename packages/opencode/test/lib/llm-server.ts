@@ -624,6 +624,7 @@ namespace TestLLMServer {
     readonly error: (status: number, body: unknown) => Effect.Effect<void>
     readonly hang: Effect.Effect<void>
     readonly hold: (value: string, wait: PromiseLike<unknown>) => Effect.Effect<void>
+    readonly holdTitle: (wait: PromiseLike<unknown>) => Effect.Effect<void>
     readonly reset: Effect.Effect<void>
     readonly hits: Effect.Effect<Hit[]>
     readonly calls: Effect.Effect<number>
@@ -645,6 +646,10 @@ export class TestLLMServer extends Context.Service<TestLLMServer, TestLLMServer.
       let list: Queue[] = []
       let waits: Wait[] = []
       let misses: Hit[] = []
+      // Optional gate for the auto-title request: when set, the title response is
+      // held until this promise resolves. Lets tests open a window to mutate the
+      // session (e.g. a plugin rename) while title generation is in flight.
+      let titleHold: PromiseLike<unknown> | undefined
 
       const queue = (...input: (Item | Reply)[]) => {
         list = [...list, ...input.map((value) => ({ item: item(value) }))]
@@ -676,7 +681,12 @@ export class TestLLMServer extends Context.Service<TestLLMServer, TestLLMServer.
         if (isTitleRequest(body)) {
           hits = [...hits, current]
           yield* notify()
-          const auto: Sse = { type: "sse", head: [role()], tail: [textLine("E2E Title"), finishLine("stop")] }
+          const auto: Sse = {
+            type: "sse",
+            head: [role()],
+            tail: [textLine("E2E Title"), finishLine("stop")],
+            wait: titleHold,
+          }
           if (mode === "responses") return send(responses(auto, modelFrom(body)))
           return send(auto)
         }
@@ -756,11 +766,15 @@ export class TestLLMServer extends Context.Service<TestLLMServer, TestLLMServer.
         hold: Effect.fn("TestLLMServer.hold")(function* (value: string, wait: PromiseLike<unknown>) {
           queue(reply().wait(wait).text(value).stop().item())
         }),
+        holdTitle: Effect.fn("TestLLMServer.holdTitle")(function* (wait: PromiseLike<unknown>) {
+          titleHold = wait
+        }),
         reset: Effect.sync(() => {
           hits = []
           list = []
           waits = []
           misses = []
+          titleHold = undefined
         }),
         hits: Effect.sync(() => [...hits]),
         calls: Effect.sync(() => hits.length),

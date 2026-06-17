@@ -247,6 +247,12 @@ const layer = Layer.effect(
         .find((line) => line.length > 0)
       if (!cleaned) return
       const t = cleaned.length > 100 ? cleaned.substring(0, 97) + "..." : cleaned
+      // Re-read the session from storage: a plugin or user may have renamed it
+      // (e.g. via session.rename/setTitle) mid-turn while the title was being
+      // generated. The captured `input.session` is stale, so honour the latest
+      // title and skip the auto-title if it is no longer the default.
+      const current = yield* sessions.get(input.session.id).pipe(Effect.orDie)
+      if (!Session.isDefaultTitle(current.title)) return
       yield* sessions
         .setTitle({ sessionID: input.session.id, title: t })
         .pipe(Effect.catchCause((cause) => Effect.logError("failed to generate title", { error: Cause.squash(cause) })))
