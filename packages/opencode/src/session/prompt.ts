@@ -1326,7 +1326,7 @@ export const layer = Layer.effect(
 
             const [skills, env, instructions, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
-              sys.environment(model),
+              sys.environment(model, session.time.created),
               instruction.system().pipe(Effect.orDie),
               MessageV2.toModelMessagesEffect(msgs, model),
             ])

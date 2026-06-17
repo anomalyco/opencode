@@ -39,7 +39,7 @@ export function provider(model: Provider.Model) {
 }
 
 export interface Interface {
-  readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
+  readonly environment: (model: Provider.Model, sessionCreated?: number) => Effect.Effect<string[]>
   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
 }
 
@@ -52,7 +52,7 @@ export const layer = Layer.effect(
     const locations = yield* LocationServiceMap
 
     return Service.of({
-      environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
+      environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model, sessionCreated?: number) {
         const ctx = yield* InstanceState.context
         const references = yield* Effect.gen(function* () {
           yield* (yield* PluginBoot.Service).wait()
@@ -67,7 +67,7 @@ export const layer = Layer.effect(
             `  Workspace root folder: ${ctx.worktree}`,
             `  Is directory a git repo: ${ctx.project.vcs === "git" ? "yes" : "no"}`,
             `  Platform: ${process.platform}`,
-            `  Today's date: ${new Date().toDateString()}`,
+            `  Today's date: ${new Date(sessionCreated ?? Date.now()).toDateString()}`,
             `</env>`,
           ].join("\n"),
           references.length === 0
