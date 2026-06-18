@@ -13,14 +13,15 @@
 const aliasMap: Readonly<Record<string, string>> = {
   // session.new aliases (Claude Code / Codex)
   clear: "new",
+  reset: "new",
   // session.list aliases (Claude Code / Codex)
   resume: "sessions",
   continue: "sessions",
   // session.exit aliases
   quit: "exit",
   q: "exit",
-  // agent.list aliases
-  agents: "agents",
+  // agent.list aliases (Codex uses singular)
+  agent: "agents",
 }
 
 /**

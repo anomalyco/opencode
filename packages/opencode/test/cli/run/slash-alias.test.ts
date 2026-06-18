@@ -6,6 +6,10 @@ describe("resolveSlashAlias", () => {
     expect(resolveSlashAlias("clear")).toBe("new")
   })
 
+  it("resolves /reset to /new", () => {
+    expect(resolveSlashAlias("reset")).toBe("new")
+  })
+
   it("resolves /resume to /sessions", () => {
     expect(resolveSlashAlias("resume")).toBe("sessions")
   })
@@ -22,8 +26,8 @@ describe("resolveSlashAlias", () => {
     expect(resolveSlashAlias("q")).toBe("exit")
   })
 
-  it("resolves /agents to /agents", () => {
-    expect(resolveSlashAlias("agents")).toBe("agents")
+  it("resolves /agent to /agents", () => {
+    expect(resolveSlashAlias("agent")).toBe("agents")
   })
 
   it("returns undefined for non-alias", () => {

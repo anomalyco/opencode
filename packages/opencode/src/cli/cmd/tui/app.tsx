@@ -463,7 +463,7 @@ function App() {
         suggested: route.data.type === "session",
         category: "Session",
         slashName: "new",
-        slashAliases: ["clear"],
+        slashAliases: ["clear", "reset"],
         run: () => {
           route.navigate({
             type: "home",
@@ -499,6 +499,7 @@ function App() {
         title: "Switch agent",
         category: "Agent",
         slashName: "agents",
+        slashAliases: ["agent"],
         run: () => {
           dialog.replace(() => <DialogAgent />)
         },
