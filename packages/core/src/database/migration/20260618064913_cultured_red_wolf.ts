@@ -2,18 +2,17 @@ import { Effect } from "effect"
 import type { DatabaseMigration } from "../migration"
 
 export default {
-  id: "20260613180000_session_goals",
+  id: "20260618064913_cultured_red_wolf",
   up(tx) {
     return Effect.gen(function* () {
-      // Create goal table for native per-session persisted goals (issue #27167).
       yield* tx.run(`
         CREATE TABLE \`goal\` (
           \`session_id\` text PRIMARY KEY,
           \`text\` text NOT NULL,
           \`status\` text NOT NULL,
           \`budget_tokens\` integer,
-          \`tokens_used\` integer NOT NULL DEFAULT 0,
-          \`time_ms\` integer NOT NULL DEFAULT 0,
+          \`tokens_used\` integer DEFAULT 0 NOT NULL,
+          \`time_ms\` integer DEFAULT 0 NOT NULL,
           \`started_at\` integer NOT NULL,
           \`paused_at\` integer,
           \`completed_at\` integer,
