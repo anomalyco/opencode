@@ -1,5 +1,6 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { describe, expect } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { Cause, Effect, Exit, Layer } from "effect"
 import { GlobTool } from "../../src/tool/glob"
@@ -107,6 +108,26 @@ describe("tool.glob", () => {
       expect(result.metadata.count).toBe(1)
       expect(result.output).toContain(path.join(test.directory, "a.ts"))
       expect(result.output).not.toContain(path.join(test.directory, "b.txt"))
+    }),
+  )
+
+  it.instance("matches files under explicit dot directories", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const hiddenDir = path.join(test.directory, ".ai")
+      yield* Effect.promise(() => fs.mkdir(hiddenDir, { recursive: true }))
+      yield* Effect.promise(() => Bun.write(path.join(hiddenDir, "current-task.md"), "content\n"))
+      const info = yield* GlobTool
+      const glob = yield* info.init()
+      const result = yield* glob.execute(
+        {
+          pattern: ".ai/*.md",
+          path: test.directory,
+        },
+        ctx,
+      )
+      expect(result.metadata.count).toBe(1)
+      expect(result.output).toContain(path.join(hiddenDir, "current-task.md"))
     }),
   )
 
