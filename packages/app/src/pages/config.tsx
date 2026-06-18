@@ -814,26 +814,42 @@ function SectionButton(props: { current: boolean; title: string; icon: IconProps
   return (
     <button
       type="button"
-      class="group flex w-full items-center justify-between gap-3 px-2.5 py-4 text-left transition-colors"
+      aria-current={props.current ? "page" : undefined}
+      class="group relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-[16px] border px-3 py-3.5 text-left transition-all duration-150 focus:outline-none focus-visible:border-border-strong focus-visible:bg-surface-base-hover"
       classList={{
-        "bg-surface-base hover:bg-surface-base-hover": !props.current,
-        "border-border-base bg-surface-base-active": props.current,
+        "border-transparent bg-transparent hover:border-border-base hover:bg-surface-base-active": !props.current,
+        "border-border-base bg-[linear-gradient(135deg,color-mix(in_srgb,var(--surface-base-active)_92%,white_8%),color-mix(in_srgb,var(--surface-base-active)_72%,transparent))]":
+          props.current,
       }}
       onClick={props.onClick}
     >
+      <div
+        class="absolute top-3 bottom-3 left-1.5 w-0.5 rounded-full bg-border-strong transition-opacity duration-150"
+        classList={{
+          "opacity-0": !props.current,
+          "opacity-70": props.current,
+        }}
+      />
       <div class="flex min-w-0 items-center gap-3">
         <div
-          class="flex size-8 shrink-0 items-center justify-center transition-colors"
+          class="flex size-8 shrink-0 items-center justify-center rounded-[10px] border transition-all duration-150"
           classList={{
-            "text-text-weak": !props.current,
-            "text-text-strong": props.current,
+            "border-transparent text-text-weak group-hover:border-border-base group-hover:bg-background-base/65 group-hover:text-text-strong":
+              !props.current,
+            "border-border-weak-base bg-background-base/55 text-text-strong": props.current,
           }}
         >
           <Icon name={props.icon} size="medium" />
         </div>
         <div class="truncate text-16-medium text-text-strong transition-colors">{props.title}</div>
       </div>
-      <div class="size-2 rounded-full bg-border-strong transition-colors" />
+      <div
+        class="size-1.5 shrink-0 rounded-full bg-border-strong transition-all duration-150"
+        classList={{
+          "scale-75 opacity-0 group-hover:scale-100 group-hover:opacity-45": !props.current,
+          "opacity-55": props.current,
+        }}
+      />
     </button>
   )
 }
@@ -4690,7 +4706,7 @@ export default function ConfigPage() {
   return (
     <div class="size-full overflow-hidden bg-background-base">
       <div class="flex h-full min-h-0 flex-col bg-[radial-gradient(circle_at_top_left,rgba(255,255,255,0.03),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.015),transparent_22%)] xl:flex-row">
-        <aside class="shrink-0 border-b border-border-weak-base bg-surface-base/92 backdrop-blur xl:w-[200px] xl:border-r xl:border-b-0">
+        <aside class="shrink-0 border-b border-border-weak-base bg-[linear-gradient(180deg,color-mix(in_srgb,var(--surface-base)_88%,var(--background-base)_12%),color-mix(in_srgb,var(--surface-base)_72%,var(--background-base)_28%))] backdrop-blur xl:w-[200px] xl:border-r xl:border-b-0">
           <div class="flex h-full min-h-0 flex-col">
             <div class="border-b border-border-weak-base px-3 py-4">
               <div class="min-w-0">
@@ -4755,7 +4771,7 @@ export default function ConfigPage() {
         </aside>
 
         <div class="flex min-h-0 min-w-0 flex-1 flex-col xl:flex-row">
-          <section class="shrink-0 border-b border-border-weak-base bg-surface-base/80 backdrop-blur xl:w-[400px] xl:border-r xl:border-b-0">
+          <section class="shrink-0 border-b border-border-weak-base bg-[linear-gradient(180deg,color-mix(in_srgb,var(--surface-base-active)_72%,transparent),color-mix(in_srgb,var(--surface-base)_88%,transparent))] backdrop-blur xl:w-[400px] xl:border-r xl:border-b-0">
             <div class="flex h-full min-h-0 flex-col">
               <div class="px-4 py-4">
                 <Switch>
@@ -5321,7 +5337,7 @@ export default function ConfigPage() {
             </div>
           </section>
 
-          <main class="min-h-0 min-w-0 flex-1 overflow-hidden">
+          <main class="min-h-0 min-w-0 flex-1 overflow-hidden bg-[linear-gradient(180deg,color-mix(in_srgb,var(--background-base)_92%,var(--surface-base)_8%),var(--background-base))]">
             <Switch>
               <Match when={state.section === "providers"}>
                 <Show
