@@ -20,9 +20,9 @@ import { isRecord } from "@/util/record"
 
 const CLAUDE_EXTERNAL_DIR = ".claude"
 const AGENTS_EXTERNAL_DIR = ".agents"
-const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
-const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
-const SKILL_PATTERN = "**/SKILL.md"
+const EXTERNAL_SKILL_PATTERN = "skills/*/SKILL.md"
+const OPENCODE_SKILL_PATTERN = "{skill,skills}/*/SKILL.md"
+const SKILL_PATTERN = "*/SKILL.md"
 
 // Built-in skill that ships with opencode. The model's intuition for what an
 // opencode.json should look like is often wrong, and opencode hard-fails on
