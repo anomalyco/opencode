@@ -62,3 +62,5 @@ export function client<T extends Definition>(target: {
     },
   }
 }
+
+export * as Rpc from "./rpc"

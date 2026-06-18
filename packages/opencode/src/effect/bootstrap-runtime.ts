@@ -1,17 +1,14 @@
 import { Layer, ManagedRuntime } from "effect"
-import { memoMap } from "./run-service"
 
 import { Plugin } from "@/plugin"
-import { LSP } from "@/lsp"
-import { FileWatcher } from "@/file/watcher"
+import { LSP } from "@/lsp/lsp"
 import { Format } from "@/format"
-import { ShareNext } from "@/share"
-import { File } from "@/file"
-import { Vcs } from "@/project"
+import { ShareNext } from "@/share/share-next"
+import { Vcs } from "@/project/vcs"
 import { Snapshot } from "@/snapshot"
-import { Bus } from "@/bus"
-import { Config } from "@/config"
-import * as Observability from "./observability"
+import { Config } from "@/config/config"
+import * as Observability from "@opencode-ai/core/observability"
+import { memoMap } from "@opencode-ai/core/effect/memo-map"
 
 export const BootstrapLayer = Layer.mergeAll(
   Config.defaultLayer,
@@ -19,11 +16,8 @@ export const BootstrapLayer = Layer.mergeAll(
   ShareNext.defaultLayer,
   Format.defaultLayer,
   LSP.defaultLayer,
-  File.defaultLayer,
-  FileWatcher.defaultLayer,
   Vcs.defaultLayer,
   Snapshot.defaultLayer,
-  Bus.defaultLayer,
 ).pipe(Layer.provide(Observability.layer))
 
 export const BootstrapRuntime = ManagedRuntime.make(BootstrapLayer, { memoMap })

@@ -227,7 +227,7 @@ export const dict = {
   "common.default": "Predeterminado",
   "common.attachment": "adjunto",
 
-  "prompt.placeholder.shell": "Introduce comando de shell...",
+  "prompt.placeholder.shell": "Introduce comando de shell... {{example}}",
   "prompt.placeholder.normal": 'Pregunta cualquier cosa... "{{example}}"',
   "prompt.placeholder.simple": "Pregunta cualquier cosa...",
   "prompt.placeholder.summarizeComments": "Resumir comentarios…",
@@ -299,12 +299,18 @@ export const dict = {
   "mcp.status.connected": "conectado",
   "mcp.status.failed": "fallido",
   "mcp.status.needs_auth": "necesita auth",
+  "mcp.auth.clickToAuthenticate": "Haz clic para autenticar",
   "mcp.status.disabled": "deshabilitado",
 
   "dialog.fork.empty": "No hay mensajes desde donde bifurcar",
 
   "dialog.directory.search.placeholder": "Buscar carpetas",
   "dialog.directory.empty": "No se encontraron carpetas",
+  "dialog.directory.action.selectFile": "Seleccionar archivo",
+  "dialog.directory.action.selectFolder": "Seleccionar carpeta",
+  "dialog.directory.root": "Raíz",
+  "dialog.directory.parent": "Superior",
+  "dialog.directory.readError": "No se puede leer esta carpeta",
 
   "dialog.server.title": "Servidores",
   "dialog.server.description": "Cambiar a qué servidor de OpenCode se conecta esta app.",
@@ -449,6 +455,8 @@ export const dict = {
   "error.page.description": "Ocurrió un error al cargar la aplicación.",
   "error.page.details.label": "Detalles del error",
   "error.page.action.restart": "Reiniciar",
+  "error.page.action.report": "Informar error",
+  "error.page.action.reported": "Error informado",
   "error.page.action.checking": "Comprobando...",
   "error.page.action.checkUpdates": "Buscar actualizaciones",
   "error.page.action.updateTo": "Actualizar a {{version}}",
@@ -459,7 +467,7 @@ export const dict = {
   "error.dev.rootNotFound":
     "Elemento raíz no encontrado. ¿Olvidaste añadirlo a tu index.html? ¿O tal vez el atributo id está mal escrito?",
 
-  "error.globalSync.connectFailed": "No se pudo conectar al servidor. ¿Hay un servidor ejecutándose en `{{url}}`?",
+  "error.serverSync.connectFailed": "No se pudo conectar al servidor. ¿Hay un servidor ejecutándose en `{{url}}`?",
   "directory.error.invalidUrl": "URL de directorio inválida.",
 
   "error.chain.unknown": "Error desconocido",
@@ -642,7 +650,9 @@ export const dict = {
   "settings.general.row.theme.title": "Tema",
   "settings.general.row.theme.description": "Personaliza el tema de OpenCode.",
   "settings.general.row.font.title": "Fuente de código",
-  "settings.general.row.font.description": "Personaliza la fuente usada en bloques de código y terminales",
+  "settings.general.row.font.description": "Personaliza la fuente usada en bloques de código",
+  "settings.general.row.terminalFont.title": "Terminal Font",
+  "settings.general.row.terminalFont.description": "Customise the font used in the terminal",
   "settings.general.row.uiFont.title": "Fuente de la interfaz",
   "settings.general.row.uiFont.description": "Personaliza la fuente usada en toda la interfaz",
   "settings.general.row.followup.title": "Comportamiento de seguimiento",
@@ -659,6 +669,9 @@ export const dict = {
   "settings.general.row.editToolPartsExpanded.title": "Expandir partes de la herramienta de edición",
   "settings.general.row.editToolPartsExpanded.description":
     "Mostrar las partes de las herramientas de edición, escritura y parcheado expandidas por defecto en la línea de tiempo",
+  "settings.general.row.showSessionProgressBar.title": "Mostrar barra de progreso de la sesión",
+  "settings.general.row.showSessionProgressBar.description":
+    "Mostrar la barra de progreso animada en la parte superior de la sesión cuando el agente esté trabajando",
   "settings.general.row.wayland.title": "Usar Wayland nativo",
   "settings.general.row.wayland.description": "Deshabilitar fallback a X11 en Wayland. Requiere reinicio.",
   "settings.general.row.wayland.tooltip":
@@ -810,8 +823,6 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Obtener contenido de una URL",
   "settings.permissions.tool.websearch.title": "Búsqueda Web",
   "settings.permissions.tool.websearch.description": "Buscar en la web",
-  "settings.permissions.tool.codesearch.title": "Búsqueda de Código",
-  "settings.permissions.tool.codesearch.description": "Buscar código en la web",
   "settings.permissions.tool.external_directory.title": "Directorio Externo",
   "settings.permissions.tool.external_directory.description": "Acceder a archivos fuera del directorio del proyecto",
   "settings.permissions.tool.doom_loop.title": "Bucle Infinito",
@@ -929,8 +940,8 @@ export const dict = {
   "common.key.insert": "Insert",
   "common.unknown": "desconocido",
   "error.page.circular": "[Circular]",
-  "error.globalSDK.noServerAvailable": "Ningún servidor disponible",
-  "error.globalSDK.serverNotAvailable": "Servidor no disponible",
+  "error.serverSDK.noServerAvailable": "Ningún servidor disponible",
+  "error.serverSDK.serverNotAvailable": "Servidor no disponible",
   "error.childStore.persistedCacheCreateFailed": "Error al crear caché persistente",
   "error.childStore.persistedProjectMetadataCreateFailed": "Error al crear metadatos de proyecto persistentes",
   "error.childStore.persistedProjectIconCreateFailed": "Error al crear icono de proyecto persistente",

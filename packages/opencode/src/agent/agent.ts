@@ -1,12 +1,13 @@
-import { Config } from "../config"
-import z from "zod"
-import { Provider } from "../provider"
-import { ModelID, ProviderID } from "../provider/schema"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { Config } from "@/config/config"
+import { serviceUse } from "@opencode-ai/core/effect/service-use"
+import { Provider } from "@/provider/provider"
+
 import { generateObject, streamObject, type ModelMessage } from "ai"
-import { Instance } from "../project/instance"
-import { Truncate } from "../tool"
+import { Truncate } from "@/tool/truncate"
 import { Auth } from "../auth"
-import { ProviderTransform } from "../provider"
+import { ProviderTransform } from "@/provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
@@ -15,59 +16,74 @@ import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
-import { Global } from "@/global"
+import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
-import { Effect, Context, Layer } from "effect"
-import { InstanceState } from "@/effect"
+import { Effect, Context, Layer, Schema } from "effect"
+import { InstanceState } from "@/effect/instance-state"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
+import { AbsolutePath, type DeepMutable } from "@opencode-ai/core/schema"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { LocationServiceMap } from "@opencode-ai/core/location-layer"
+import { PluginBoot } from "@opencode-ai/core/plugin/boot"
+import { Reference } from "@opencode-ai/core/reference"
+import { Location } from "@opencode-ai/core/location"
 
-export const Info = z
-  .object({
-    name: z.string(),
-    description: z.string().optional(),
-    mode: z.enum(["subagent", "primary", "all"]),
-    native: z.boolean().optional(),
-    hidden: z.boolean().optional(),
-    topP: z.number().optional(),
-    temperature: z.number().optional(),
-    color: z.string().optional(),
-    permission: Permission.Ruleset.zod,
-    model: z
-      .object({
-        modelID: ModelID.zod,
-        providerID: ProviderID.zod,
-      })
-      .optional(),
-    variant: z.string().optional(),
-    prompt: z.string().optional(),
-    options: z.record(z.string(), z.any()),
-    steps: z.number().int().positive().optional(),
-  })
-  .meta({
-    ref: "Agent",
-  })
-export type Info = z.infer<typeof Info>
+export const Info = Schema.Struct({
+  name: Schema.String,
+  description: Schema.optional(Schema.String),
+  mode: Schema.Literals(["subagent", "primary", "all"]),
+  native: Schema.optional(Schema.Boolean),
+  hidden: Schema.optional(Schema.Boolean),
+  topP: Schema.optional(Schema.Finite),
+  temperature: Schema.optional(Schema.Finite),
+  color: Schema.optional(Schema.String),
+  permission: PermissionV1.Ruleset,
+  model: Schema.optional(
+    Schema.Struct({
+      modelID: ModelV2.ID,
+      providerID: ProviderV2.ID,
+    }),
+  ),
+  variant: Schema.optional(Schema.String),
+  prompt: Schema.optional(Schema.String),
+  options: Schema.Record(Schema.String, Schema.Unknown),
+  steps: Schema.optional(Schema.Finite),
+}).annotate({ identifier: "Agent" })
+export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>
+
+const GeneratedAgent = Schema.Struct({
+  identifier: Schema.String,
+  whenToUse: Schema.String,
+  systemPrompt: Schema.String,
+})
 
 export interface Interface {
   readonly get: (agent: string) => Effect.Effect<Info>
   readonly list: () => Effect.Effect<Info[]>
+  readonly defaultInfo: () => Effect.Effect<Info>
   readonly defaultAgent: () => Effect.Effect<string>
   readonly generate: (input: {
     description: string
-    model?: { providerID: ProviderID; modelID: ModelID }
-  }) => Effect.Effect<{
-    identifier: string
-    whenToUse: string
-    systemPrompt: string
-  }>
+    model?: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
+  }) => Effect.Effect<
+    {
+      identifier: string
+      whenToUse: string
+      systemPrompt: string
+    },
+    Provider.DefaultModelError
+  >
 }
 
 type State = Omit<Interface, "generate">
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Agent") {}
+
+export const use = serviceUse(Service)
 
 export const layer = Layer.effect(
   Service,
@@ -77,12 +93,26 @@ export const layer = Layer.effect(
     const plugin = yield* Plugin.Service
     const skill = yield* Skill.Service
     const provider = yield* Provider.Service
+    const locations = yield* LocationServiceMap
 
     const state = yield* InstanceState.make<State>(
-      Effect.fn("Agent.state")(function* (_ctx) {
+      Effect.fn("Agent.state")(function* (ctx) {
         const cfg = yield* config.get()
         const skillDirs = yield* skill.dirs()
-        const whitelistedDirs = [Truncate.GLOB, ...skillDirs.map((dir) => path.join(dir, "*"))]
+        const referenceDirs = yield* Effect.gen(function* () {
+          yield* (yield* PluginBoot.Service).wait()
+          return (yield* (yield* Reference.Service).list()).map((reference) => reference.path)
+        }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
+        const whitelistedDirs = [
+          Truncate.GLOB,
+          path.join(Global.Path.tmp, "*"),
+          ...skillDirs.map((dir) => path.join(dir, "*")),
+          ...referenceDirs.map((dir) => path.join(dir, "*")),
+        ]
+        const readonlyExternalDirectory = {
+          "*": "ask",
+          ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
+        } satisfies Record<string, "allow" | "ask" | "deny">
 
         const defaults = Permission.fromConfig({
           "*": "allow",
@@ -130,13 +160,16 @@ export const layer = Layer.effect(
               Permission.fromConfig({
                 question: "allow",
                 plan_exit: "allow",
+                task: {
+                  general: "deny",
+                },
                 external_directory: {
                   [path.join(Global.Path.data, "plans", "*")]: "allow",
                 },
                 edit: {
                   "*": "deny",
                   [path.join(".opencode", "plans", "*.md")]: "allow",
-                  [path.relative(Instance.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
+                  [path.relative(ctx.worktree, path.join(Global.Path.data, path.join("plans", "*.md")))]: "allow",
                 },
               }),
               user,
@@ -170,12 +203,8 @@ export const layer = Layer.effect(
                 bash: "allow",
                 webfetch: "allow",
                 websearch: "allow",
-                codesearch: "allow",
                 read: "allow",
-                external_directory: {
-                  "*": "ask",
-                  ...Object.fromEntries(whitelistedDirs.map((dir) => [dir, "allow"])),
-                },
+                external_directory: readonlyExternalDirectory,
               }),
               user,
             ),
@@ -294,23 +323,28 @@ export const layer = Layer.effect(
           )
         })
 
-        const defaultAgent = Effect.fnUntraced(function* () {
+        const defaultInfo = Effect.fnUntraced(function* () {
           const c = yield* config.get()
           if (c.default_agent) {
             const agent = agents[c.default_agent]
             if (!agent) throw new Error(`default agent "${c.default_agent}" not found`)
             if (agent.mode === "subagent") throw new Error(`default agent "${c.default_agent}" is a subagent`)
             if (agent.hidden === true) throw new Error(`default agent "${c.default_agent}" is hidden`)
-            return agent.name
+            return agent
           }
           const visible = Object.values(agents).find((a) => a.mode !== "subagent" && a.hidden !== true)
           if (!visible) throw new Error("no primary visible agent found")
-          return visible.name
+          return visible
+        })
+
+        const defaultAgent = Effect.fnUntraced(function* () {
+          return (yield* defaultInfo()).name
         })
 
         return {
           get,
           list,
+          defaultInfo,
           defaultAgent,
         } satisfies State
       }),
@@ -323,12 +357,15 @@ export const layer = Layer.effect(
       list: Effect.fn("Agent.list")(function* () {
         return yield* InstanceState.useEffect(state, (s) => s.list())
       }),
+      defaultInfo: Effect.fn("Agent.defaultInfo")(function* () {
+        return yield* InstanceState.useEffect(state, (s) => s.defaultInfo())
+      }),
       defaultAgent: Effect.fn("Agent.defaultAgent")(function* () {
         return yield* InstanceState.useEffect(state, (s) => s.defaultAgent())
       }),
       generate: Effect.fn("Agent.generate")(function* (input: {
         description: string
-        model?: { providerID: ProviderID; modelID: ModelID }
+        model?: { providerID: ProviderV2.ID; modelID: ModelV2.ID }
       }) {
         const cfg = yield* config.get()
         const model = input.model ?? (yield* provider.defaultModel())
@@ -370,11 +407,10 @@ export const layer = Layer.effect(
             },
           ],
           model: language,
-          schema: z.object({
-            identifier: z.string(),
-            whenToUse: z.string(),
-            systemPrompt: z.string(),
-          }),
+          schema: Object.assign(
+            Schema.toStandardSchemaV1(GeneratedAgent),
+            Schema.toStandardJSONSchemaV1(GeneratedAgent),
+          ),
         } satisfies Parameters<typeof generateObject>[0]
 
         if (isOpenaiOauth) {
@@ -406,6 +442,18 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Auth.defaultLayer),
   Layer.provide(Config.defaultLayer),
   Layer.provide(Skill.defaultLayer),
+  Layer.provide(LocationServiceMap.layer),
 )
+
+const locationServiceMapNode = LayerNode.make(LocationServiceMap.layer, [])
+
+export const node = LayerNode.make(layer, [
+  Config.node,
+  Auth.node,
+  Plugin.node,
+  Skill.node,
+  Provider.node,
+  locationServiceMapNode,
+])
 
 export * as Agent from "./agent"

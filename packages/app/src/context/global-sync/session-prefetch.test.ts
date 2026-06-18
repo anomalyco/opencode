@@ -7,14 +7,18 @@ import {
   setSessionPrefetch,
   shouldSkipSessionPrefetch,
 } from "./session-prefetch"
+import { ServerScope } from "@/utils/server-scope"
+
+const scope = ServerScope.local
 
 describe("session prefetch", () => {
   test("stores and clears message metadata by directory", () => {
-    clearSessionPrefetch("/tmp/a", ["ses_1"])
-    clearSessionPrefetch("/tmp/b", ["ses_1"])
+    clearSessionPrefetch(scope, "/tmp/a", ["ses_1"])
+    clearSessionPrefetch(scope, "/tmp/b", ["ses_1"])
 
     setSessionPrefetch({
       directory: "/tmp/a",
+      scope,
       sessionID: "ses_1",
       limit: 200,
       cursor: "abc",
@@ -22,21 +26,27 @@ describe("session prefetch", () => {
       at: 123,
     })
 
-    expect(getSessionPrefetch("/tmp/a", "ses_1")).toEqual({ limit: 200, cursor: "abc", complete: false, at: 123 })
-    expect(getSessionPrefetch("/tmp/b", "ses_1")).toBeUndefined()
+    expect(getSessionPrefetch(scope, "/tmp/a", "ses_1")).toEqual({
+      limit: 200,
+      cursor: "abc",
+      complete: false,
+      at: 123,
+    })
+    expect(getSessionPrefetch(scope, "/tmp/b", "ses_1")).toBeUndefined()
 
-    clearSessionPrefetch("/tmp/a", ["ses_1"])
+    clearSessionPrefetch(scope, "/tmp/a", ["ses_1"])
 
-    expect(getSessionPrefetch("/tmp/a", "ses_1")).toBeUndefined()
+    expect(getSessionPrefetch(scope, "/tmp/a", "ses_1")).toBeUndefined()
   })
 
   test("dedupes inflight work", async () => {
-    clearSessionPrefetch("/tmp/c", ["ses_2"])
+    clearSessionPrefetch(scope, "/tmp/c", ["ses_2"])
 
     let calls = 0
     const run = () =>
       runSessionPrefetch({
         directory: "/tmp/c",
+        scope,
         sessionID: "ses_2",
         task: async () => {
           calls += 1
@@ -52,15 +62,48 @@ describe("session prefetch", () => {
   })
 
   test("clears a whole directory", () => {
-    setSessionPrefetch({ directory: "/tmp/d", sessionID: "ses_1", limit: 10, cursor: "a", complete: true, at: 1 })
-    setSessionPrefetch({ directory: "/tmp/d", sessionID: "ses_2", limit: 20, cursor: "b", complete: false, at: 2 })
-    setSessionPrefetch({ directory: "/tmp/e", sessionID: "ses_1", limit: 30, cursor: "c", complete: true, at: 3 })
+    setSessionPrefetch({
+      scope,
+      directory: "/tmp/d",
+      sessionID: "ses_1",
+      limit: 10,
+      cursor: "a",
+      complete: true,
+      at: 1,
+    })
+    setSessionPrefetch({
+      scope,
+      directory: "/tmp/d",
+      sessionID: "ses_2",
+      limit: 20,
+      cursor: "b",
+      complete: false,
+      at: 2,
+    })
+    setSessionPrefetch({
+      scope,
+      directory: "/tmp/e",
+      sessionID: "ses_1",
+      limit: 30,
+      cursor: "c",
+      complete: true,
+      at: 3,
+    })
 
-    clearSessionPrefetchDirectory("/tmp/d")
+    clearSessionPrefetchDirectory(scope, "/tmp/d")
 
-    expect(getSessionPrefetch("/tmp/d", "ses_1")).toBeUndefined()
-    expect(getSessionPrefetch("/tmp/d", "ses_2")).toBeUndefined()
-    expect(getSessionPrefetch("/tmp/e", "ses_1")).toEqual({ limit: 30, cursor: "c", complete: true, at: 3 })
+    expect(getSessionPrefetch(scope, "/tmp/d", "ses_1")).toBeUndefined()
+    expect(getSessionPrefetch(scope, "/tmp/d", "ses_2")).toBeUndefined()
+    expect(getSessionPrefetch(scope, "/tmp/e", "ses_1")).toEqual({ limit: 30, cursor: "c", complete: true, at: 3 })
+  })
+
+  test("isolates identical directories and sessions by server scope", () => {
+    const remote = "https://debian.example" as ServerScope
+    setSessionPrefetch({ scope, directory: "/repo", sessionID: "ses_1", limit: 10, complete: true, at: 1 })
+    setSessionPrefetch({ scope: remote, directory: "/repo", sessionID: "ses_1", limit: 20, complete: true, at: 2 })
+
+    expect(getSessionPrefetch(scope, "/repo", "ses_1")?.limit).toBe(10)
+    expect(getSessionPrefetch(remote, "/repo", "ses_1")?.limit).toBe(20)
   })
 
   test("refreshes stale first-page prefetched history", () => {

@@ -11,7 +11,7 @@ The current exported tools in `src/tool` all use `Tool.define(...)` with Effect-
 So the remaining work is no longer "convert tools to Effect at all". The remaining work is mostly:
 
 1. remove Promise and raw platform bridges inside individual tool bodies
-2. swap tool internals to Effect-native services like `AppFileSystem`, `HttpClient`, and `ChildProcessSpawner`
+2. swap tool internals to Effect-native services like `FSUtil`, `HttpClient`, and `ChildProcessSpawner`
 3. keep tests and callers aligned with `yield* info.init()` and real service graphs
 
 ## Current shape
@@ -36,18 +36,15 @@ This keeps tool tests aligned with the production service graph and makes follow
 
 ## Exported tools
 
-These exported tool definitions already exist in `src/tool` and are on the current Effect-native `Tool.define(...)` path:
+These exported tool definitions currently use `Tool.define(...)` in `src/tool`:
 
 - [x] `apply_patch.ts`
 - [x] `bash.ts`
-- [x] `codesearch.ts`
 - [x] `edit.ts`
 - [x] `glob.ts`
 - [x] `grep.ts`
 - [x] `invalid.ts`
-- [x] `ls.ts`
 - [x] `lsp.ts`
-- [x] `multiedit.ts`
 - [x] `plan.ts`
 - [x] `question.ts`
 - [x] `read.ts`
@@ -60,7 +57,7 @@ These exported tool definitions already exist in `src/tool` and are on the curre
 
 Notes:
 
-- `batch.ts` is no longer a current tool file and should not be tracked here.
+- There is no current `ls.ts` tool file on this branch.
 - `truncate.ts` is an Effect service used by tools, not a tool definition itself.
 - `mcp-exa.ts`, `external-directory.ts`, and `schema.ts` are support modules, not standalone tool definitions.
 
@@ -70,27 +67,22 @@ Most exported tools are already on the intended Effect-native shape. The remaini
 
 Current spot cleanups worth tracking:
 
-- [ ] `read.ts` — still bridges to Node stream / `readline` helpers and Promise-based binary detection
+- [x] `read.ts` — streams through `FSUtil.Service.stream` with `Stream.splitLines`; the legacy Node stream / `readline` helper is gone
 - [ ] `bash.ts` — already uses Effect child-process primitives; only keep tracking shell-specific platform bridges and parser/loading details as they come up
 - [ ] `webfetch.ts` — already uses `HttpClient`; remaining work is limited to smaller boundary helpers like HTML text extraction
-- [ ] `file/ripgrep.ts` — adjacent to tool migration; still has raw fs/process usage that affects `grep.ts` and `ls.ts`
-- [ ] `patch/index.ts` — adjacent to tool migration; still has raw fs usage behind patch application
+- [ ] `file/ripgrep.ts` — adjacent to tool migration; still has raw fs/process usage that affects `grep.ts` and file-search routes
+- [x] `patch/index.ts` — apply path now returns `Effect` over `FSUtil.Service`; the parser and chunk replacer stay pure
 
 Notable items that are already effectively on the target path and do not need separate migration bullets right now:
 
 - `apply_patch.ts`
 - `grep.ts`
 - `write.ts`
-- `codesearch.ts`
 - `websearch.ts`
-- `ls.ts`
-- `multiedit.ts`
 - `edit.ts`
 
 ## Filesystem notes
 
 Current raw fs users that still appear relevant here:
 
-- `tool/read.ts` — `fs.createReadStream`, `readline`
 - `file/ripgrep.ts` — `fs/promises`
-- `patch/index.ts` — `fs`, `fs/promises`

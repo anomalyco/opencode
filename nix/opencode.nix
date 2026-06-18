@@ -7,6 +7,7 @@
   sysctl,
   makeBinaryWrapper,
   models-dev,
+  ripgrep,
   installShellFiles,
   versionCheckHook,
   writableTmpDirAsHomeHook,
@@ -39,7 +40,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   env.MODELS_DEV_API_JSON = "${models-dev}/dist/_api.json";
   env.OPENCODE_DISABLE_MODELS_FETCH = true;
   env.OPENCODE_VERSION = finalAttrs.version;
-  env.OPENCODE_CHANNEL = "local";
+  env.OPENCODE_CHANNEL = "prod";
 
   buildPhase = ''
     runHook preBuild
@@ -51,25 +52,25 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     runHook postBuild
   '';
 
-  installPhase =
-    ''
-      runHook preInstall
+  installPhase = ''
+    runHook preInstall
 
-      install -Dm755 dist/opencode-*/bin/opencode $out/bin/opencode
-      install -Dm644 schema.json $out/share/opencode/schema.json
-    ''
-    # bun runs sysctl to detect if dunning on rosetta2
-    + lib.optionalString stdenvNoCC.hostPlatform.isDarwin ''
-      wrapProgram $out/bin/opencode \
-        --prefix PATH : ${
-          lib.makeBinPath [
-            sysctl
+    install -Dm755 dist/opencode-*/bin/opencode $out/bin/opencode
+    install -Dm644 schema.json $out/share/opencode/schema.json
+
+    wrapProgram $out/bin/opencode \
+      --prefix PATH : ${
+        lib.makeBinPath (
+          [
+            ripgrep
           ]
-        }
-    ''
-    + ''
-      runHook postInstall
-    '';
+          # bun runs sysctl to detect if running on rosetta2
+          ++ lib.optional stdenvNoCC.hostPlatform.isDarwin sysctl
+        )
+      }
+
+    runHook postInstall
+  '';
 
   postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
     # trick yargs into also generating zsh completions
@@ -88,11 +89,12 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   passthru = {
     jsonschema = "${placeholder "out"}/share/opencode/schema.json";
+    env = finalAttrs.env;
   };
 
   meta = {
     description = "The open source coding agent";
-    homepage = "https://opencode.ai/";
+    homepage = "https://opencode.ai";
     license = lib.licenses.mit;
     mainProgram = "opencode";
     inherit (node_modules.meta) platforms;

@@ -1,4 +1,4 @@
-import { getFilename } from "@opencode-ai/shared/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { type AgentPartInput, type FilePartInput, type Part, type TextPartInput } from "@opencode-ai/sdk/v2/client"
 import type { FileSelection } from "@/context/file"
 import { encodeFilePath } from "@/context/file/path"
@@ -188,7 +188,7 @@ export function buildRequestParts(input: BuildRequestPartsInput) {
       type: "file",
       mime: attachment.mime,
       url: attachment.dataUrl,
-      filename: attachment.filename,
+      filename: attachment.sourcePath ?? attachment.filename,
     } satisfies PromptRequestPart
   })
 

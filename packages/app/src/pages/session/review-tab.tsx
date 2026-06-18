@@ -32,7 +32,7 @@ export interface SessionReviewTabProps {
   focusedComment?: { file: string; id: string } | null
   onFocusedCommentChange?: (focus: { file: string; id: string } | null) => void
   focusedFile?: string
-  onScrollRef?: (el: HTMLDivElement) => void
+  onScrollRef?: (el: HTMLDivElement | undefined) => void
   commentMentions?: {
     items: (query: string) => string[] | Promise<string[]>
   }
@@ -53,8 +53,8 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
   const layout = useLayout()
 
   const readFile = async (path: string) => {
-    return sdk.client.file
-      .read({ path })
+    return sdk()
+      .client.file.read({ path })
       .then((x) => x.data)
       .catch((error) => {
         console.debug("[session-review] failed to read file", { path, error })
@@ -126,6 +126,7 @@ export function SessionReviewTab(props: SessionReviewTabProps) {
 
   onCleanup(() => {
     if (restoreFrame !== undefined) cancelAnimationFrame(restoreFrame)
+    props.onScrollRef?.(undefined)
   })
 
   return (

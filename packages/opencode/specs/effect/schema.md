@@ -1,45 +1,34 @@
-# Schema migration
+# Schema Migration
 
-Practical reference for migrating data types in `packages/opencode` from Zod-first definitions to Effect Schema with Zod compatibility shims.
+Use Effect Schema as the source of truth for domain models, DTOs, IDs,
+inputs, outputs, and typed errors.
 
-## Goal
+This is guidance, not an inventory. Do not use this file to track which
+schema modules are complete; verify current state with `git grep` before
+starting a migration.
 
-Use Effect Schema as the source of truth for domain models, IDs, inputs, outputs, and typed errors.
+## Preferred Shapes
 
-Keep Zod available at existing HTTP, tool, and compatibility boundaries by exposing a `.zod` field derived from the Effect schema.
-
-## Preferred shapes
-
-### Data objects
-
-Use `Schema.Class` for structured data.
+Use `Schema.Class` for exported data objects with a clear domain identity:
 
 ```ts
 export class Info extends Schema.Class<Info>("Foo.Info")({
   id: FooID,
   name: Schema.String,
   enabled: Schema.Boolean,
-}) {
-  static readonly zod = zod(Info)
-}
+}) {}
 ```
 
-If the class cannot reference itself cleanly during initialization, use the existing two-step pattern:
+Use `Schema.Struct` for local shapes and simple nested objects:
 
 ```ts
-const _Info = Schema.Struct({
+const Payload = Schema.Struct({
   id: FooID,
-  name: Schema.String,
-})
-
-export const Info = Object.assign(_Info, {
-  zod: zod(_Info),
+  value: Schema.String,
 })
 ```
 
-### Errors
-
-Use `Schema.TaggedErrorClass` for domain errors.
+Use `Schema.TaggedErrorClass` for expected domain errors:
 
 ```ts
 export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("FooNotFoundError", {
@@ -47,53 +36,53 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Foo
 }) {}
 ```
 
-### IDs and branded leaf types
+Use branded schema-backed IDs for single-value domain identifiers.
 
-Keep branded/schema-backed IDs as Effect schemas and expose `static readonly zod` for compatibility when callers still expect Zod.
+## Boundary Rule
 
-## Compatibility rule
+Effect Schema should own the type. Boundaries should consume Effect Schema
+directly or use narrow boundary-specific helpers. Avoid reintroducing a
+generic Effect Schema -> Zod bridge.
 
-During migration, route validators, tool parameters, and any existing Zod-based boundary should consume the derived `.zod` schema instead of maintaining a second hand-written Zod schema.
+Current intentional boundaries:
 
-The default should be:
+- Public plugin tools still expose Zod through `tool.schema = z`.
+- Tool parameters use tool-specific JSON Schema helpers.
+- Public config and TUI schema generation goes through the schema script.
+- AI SDK object generation uses Standard Schema / JSON Schema helpers.
 
-- Effect Schema owns the type
-- `.zod` exists only as a compatibility surface
-- new domain models should not start Zod-first unless there is a concrete boundary-specific need
+When Zod must stay temporarily, leave a short note explaining the boundary
+or compatibility reason.
 
-## When Zod can stay
+## Refinements
 
-It is fine to keep a Zod-native schema temporarily when:
+Reuse named refinements instead of re-spelling constraints:
 
-- the type is only used at an HTTP or tool boundary
-- the validator depends on Zod-only transforms or behavior not yet covered by `zod()`
-- the migration would force unrelated churn across a large call graph
+```ts
+const PositiveInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThan(0))
+const NonNegativeInt = Schema.Number.check(Schema.isInt()).check(Schema.isGreaterThanOrEqualTo(0))
+```
 
-When this happens, prefer leaving a short note or TODO rather than silently creating a parallel schema source of truth.
+Prefer domain-named leaf schemas when the name improves callers or error
+messages. Avoid adding brands purely for novelty.
 
-## Ordering
+## Migration Order
 
-Migrate in this order:
+For a domain that still has mixed schemas:
 
-1. Shared leaf models and `schema.ts` files
-2. Exported `Info`, `Input`, `Output`, and DTO types
-3. Tagged domain errors
-4. Service-local internal models
-5. Route and tool boundary validators that can switch to `.zod`
+1. Shared leaf models and branded IDs.
+2. Exported `Info`, `Input`, `Output`, and event payload types.
+3. Expected domain errors.
+4. Service-local internal models.
+5. HTTP/tool/AI boundary validators.
 
-This keeps shared types canonical first and makes boundary updates mostly mechanical.
+Keep public wire shapes stable unless the PR is explicitly a breaking API
+change.
 
-## Checklist
+## Checklist For A PR
 
-- [ ] Shared `schema.ts` leaf models are Effect Schema-first
-- [ ] Exported `Info` / `Input` / `Output` types use `Schema.Class` where appropriate
-- [ ] Domain errors use `Schema.TaggedErrorClass`
-- [ ] Migrated types expose `.zod` for back compatibility
-- [ ] Route and tool validators consume derived `.zod` instead of duplicate Zod definitions
-- [ ] New domain models default to Effect Schema first
-
-## Notes
-
-- Use `@/util/effect-zod` for all Schema -> Zod conversion.
-- Prefer one canonical schema definition. Avoid maintaining parallel Zod and Effect definitions for the same domain type.
-- Keep the migration incremental. Converting the domain model first is more valuable than converting every boundary in the same change.
+- [ ] There is one schema source of truth for each migrated type.
+- [ ] Remaining Zod is an intentional boundary choice.
+- [ ] Public JSON/OpenAPI output is unchanged or intentionally updated.
+- [ ] Derived helpers are narrow and boundary-specific.
+- [ ] Tests assert behavior, not duplicated schema implementation details.

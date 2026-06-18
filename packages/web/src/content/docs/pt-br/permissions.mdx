@@ -130,7 +130,7 @@ Mantenha a lista focada em caminhos confiáveis e adicione regras adicionais de 
 As permissões do opencode são indexadas pelo nome da ferramenta, além de alguns guardas de segurança:
 
 - `read` — leitura de um arquivo (corresponde ao caminho do arquivo)
-- `edit` — todas as modificações de arquivo (cobre `edit`, `write`, `patch`, `multiedit`)
+- `edit` — todas as modificações de arquivo (cobre `edit`, `write`, `patch`)
 - `glob` — globbing de arquivos (corresponde ao padrão glob)
 - `grep` — busca de conteúdo (corresponde ao padrão regex)
 - `bash` — execução de comandos de shell (corresponde a comandos analisados como `git status --porcelain`)
@@ -138,7 +138,7 @@ As permissões do opencode são indexadas pelo nome da ferramenta, além de algu
 - `skill` — carregamento de uma habilidade (corresponde ao nome da habilidade)
 - `lsp` — execução de consultas LSP (atualmente não granular)
 - `webfetch` — busca de uma URL (corresponde à URL)
-- `websearch`, `codesearch` — busca na web/código (corresponde à consulta)
+- `websearch` — busca na web (corresponde à consulta)
 - `external_directory` — acionado quando uma ferramenta toca em caminhos fora do diretório de trabalho do projeto
 - `doom_loop` — acionado quando a mesma chamada de ferramenta se repete 3 vezes com entrada idêntica
 

@@ -1,16 +1,8 @@
-import { Glob } from "@opencode-ai/shared/util/glob"
-import z from "zod"
+import { Glob } from "@opencode-ai/core/util/glob"
+import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { pathToFileURL } from "url"
 import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
 import path from "path"
-
-const Options = z.record(z.string(), z.unknown())
-export type Options = z.infer<typeof Options>
-
-// Spec is the user-config value: either just a plugin identifier, or the identifier plus inline options.
-// It answers "what should we load?" but says nothing about where that value came from.
-export const Spec = z.union([z.string(), z.tuple([z.string(), Options])])
-export type Spec = z.infer<typeof Spec>
 
 export type Scope = "global" | "local"
 
@@ -18,13 +10,13 @@ export type Scope = "global" | "local"
 // After multiple config files are merged, callers still need to know which file declared the plugin
 // and whether it should behave like a global or project-local plugin.
 export type Origin = {
-  spec: Spec
+  spec: ConfigPluginV1.Spec
   source: string
   scope: Scope
 }
 
 export async function load(dir: string) {
-  const plugins: Spec[] = []
+  const plugins: ConfigPluginV1.Spec[] = []
 
   for (const item of await Glob.scan("{plugin,plugins}/*.{ts,js}", {
     cwd: dir,
@@ -37,17 +29,20 @@ export async function load(dir: string) {
   return plugins
 }
 
-export function pluginSpecifier(plugin: Spec): string {
+export function pluginSpecifier(plugin: ConfigPluginV1.Spec): string {
   return Array.isArray(plugin) ? plugin[0] : plugin
 }
 
-export function pluginOptions(plugin: Spec): Options | undefined {
+export function pluginOptions(plugin: ConfigPluginV1.Spec): ConfigPluginV1.Options | undefined {
   return Array.isArray(plugin) ? plugin[1] : undefined
 }
 
 // Path-like specs are resolved relative to the config file that declared them so merges later on do not
 // accidentally reinterpret `./plugin.ts` relative to some other directory.
-export async function resolvePluginSpec(plugin: Spec, configFilepath: string): Promise<Spec> {
+export async function resolvePluginSpec(
+  plugin: ConfigPluginV1.Spec,
+  configFilepath: string,
+): Promise<ConfigPluginV1.Spec> {
   const spec = pluginSpecifier(plugin)
   if (!isPathPluginSpec(spec)) return plugin
 

@@ -36,13 +36,13 @@ Nous les verrons ci-dessous.
 
 Les sous-agents sont des assistants spécialisés que les agents primaires peuvent appeler pour des tâches spécifiques. Vous pouvez également les invoquer manuellement en **@ les mentionnant** dans vos messages.
 
-OpenCode est livré avec deux sous-agents intégrés, **General** et **Explore**. Nous verrons cela ci-dessous.
+OpenCode est livré avec trois sous-agents intégrés, **General**, **Explore** et **Scout**. Nous les verrons ci-dessous.
 
 ---
 
 ## Agents intégrés
 
-OpenCode est livré avec deux agents primaires intégrés et deux sous-agents intégrés.
+OpenCode est livré avec deux agents primaires intégrés et trois sous-agents intégrés.
 
 ---
 
@@ -81,6 +81,14 @@ Un agent polyvalent pour traiter des questions complexes et exécuter des tâche
 _Mode_ : `subagent`
 
 Un agent rapide en lecture seule pour explorer les bases de code. Impossible de modifier les fichiers. Utilisez-le lorsque vous avez besoin de rechercher rapidement des fichiers par modèles, de rechercher du code par mots-clés ou de répondre à des questions sur la base de code.
+
+---
+
+### Agent Scout
+
+_Mode_ : `subagent`
+
+Un agent en lecture seule pour la recherche sur la documentation externe et les dépendances. Utilisez-le lorsque vous devez cloner le dépôt d'une dépendance dans le cache géré d'OpenCode, inspecter le code source d'une bibliothèque ou recouper le code local avec les implémentations upstream sans modifier votre espace de travail.
 
 ---
 

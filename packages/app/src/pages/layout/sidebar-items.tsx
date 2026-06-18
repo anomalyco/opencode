@@ -4,10 +4,10 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { getFilename } from "@opencode-ai/shared/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { A, useParams } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, Show, Switch } from "solid-js"
-import { useGlobalSync } from "@/context/global-sync"
+import { useServerSync } from "@/context/server-sync"
 import { useLanguage } from "@/context/language"
 import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
@@ -15,12 +15,15 @@ import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
 import { sessionTitle } from "@/utils/session-title"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
-import { childSessionOnPath, hasProjectPermissions } from "./helpers"
+import { childSessionOnPath, getProjectAvatarSource, hasProjectPermissions } from "./helpers"
 
-const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
-
-export const ProjectIcon = (props: { project: LocalProject; class?: string; notify?: boolean }): JSX.Element => {
-  const globalSync = useGlobalSync()
+export const ProjectIcon = (props: {
+  project: LocalProject
+  class?: string
+  notify?: boolean
+  working?: boolean
+}): JSX.Element => {
+  const serverSync = useServerSync()
   const notification = useNotification()
   const permission = usePermission()
   const dirs = createMemo(() => [props.project.worktree, ...(props.project.sandboxes ?? [])])
@@ -30,7 +33,7 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
   const hasError = createMemo(() => dirs().some((directory) => notification.project.unseenHasError(directory)))
   const hasPermissions = createMemo(() =>
     dirs().some((directory) => {
-      const [store] = globalSync.child(directory, { bootstrap: false })
+      const [store] = serverSync().child(directory, { bootstrap: false })
       return hasProjectPermissions(store.permission, (item) => !permission.autoResponds(item, directory))
     }),
   )
@@ -42,9 +45,7 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
       <div class="size-full rounded overflow-clip">
         <Avatar
           fallback={name()}
-          src={
-            props.project.id === OPENCODE_PROJECT_ID ? "https://opencode.ai/favicon.svg" : props.project.icon?.override
-          }
+          src={getProjectAvatarSource(props.project.id, props.project.icon)}
           {...getAvatarColors(props.project.icon?.color)}
           class="size-full rounded"
           classList={{ "badge-mask": notify() }}
@@ -59,6 +60,11 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
             "bg-text-interactive-base": !hasPermissions() && !hasError(),
           }}
         />
+      </Show>
+      <Show when={props.working}>
+        <div class="absolute bottom-px right-px size-3 rounded-full bg-background-base z-10 flex items-center justify-center">
+          <Spinner class="size-[9px]" />
+        </div>
       </Show>
     </div>
   )
@@ -140,10 +146,10 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const language = useLanguage()
   const notification = useNotification()
   const permission = usePermission()
-  const globalSync = useGlobalSync()
+  const serverSync = useServerSync()
   const unseenCount = createMemo(() => notification.session.unseenCount(props.session.id))
   const hasError = createMemo(() => notification.session.unseenHasError(props.session.id))
-  const [sessionStore] = globalSync.child(props.session.directory)
+  const [sessionStore] = serverSync().child(props.session.directory)
   const hasPermissions = createMemo(() => {
     return !!sessionPermissionRequest(sessionStore.session, sessionStore.permission, props.session.id, (item) => {
       return !permission.autoResponds(item, props.session.directory)
@@ -151,18 +157,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   })
   const isWorking = createMemo(() => {
     if (hasPermissions()) return false
-    const pending = (sessionStore.message[props.session.id] ?? []).findLast(
-      (message) =>
-        message.role === "assistant" &&
-        typeof (message as { time?: { completed?: unknown } }).time?.completed !== "number",
-    )
-    const status = sessionStore.session_status[props.session.id]
-    return (
-      pending !== undefined ||
-      status?.type === "busy" ||
-      status?.type === "retry" ||
-      (status !== undefined && status.type !== "idle")
-    )
+    return sessionStore.session_working(props.session.id)
   })
 
   const tint = createMemo(() => messageAgentColor(sessionStore.message[props.session.id], sessionStore.agent))
@@ -263,10 +258,10 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
           </Show>
         </div>
       </div>
-      <Show when={currentChild()}>
+      <Show when={currentChild()} keyed>
         {(child) => (
           <div class="w-full">
-            <SessionItem {...props} session={child()} level={(props.level ?? 0) + 1} />
+            <SessionItem {...props} session={child} level={(props.level ?? 0) + 1} />
           </div>
         )}
       </Show>
