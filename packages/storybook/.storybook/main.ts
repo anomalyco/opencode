@@ -21,7 +21,7 @@ export default defineMain({
     "@storybook/addon-a11y",
     "@storybook/addon-vitest",
   ],
-  stories: ["../../ui/src/**/*.stories.@(js|jsx|mjs|ts|tsx)"],
+  stories: ["../../ui/src/**/*.stories.@(js|jsx|mjs|ts|tsx)", "../../app/src/**/*.stories.@(js|jsx|mjs|ts|tsx)"],
   async viteFinal(config) {
     const { mergeConfig, searchForWorkspaceRoot } = await import("vite")
     return mergeConfig(config, {

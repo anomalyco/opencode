@@ -1,11 +1,11 @@
 import type { Config, OpencodeClient, Path, Project, ProviderAuthResponse, Todo } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@/utils/toast"
 import { getFilename } from "@opencode-ai/core/util/path"
-import { batch, getOwner, onCleanup, onMount, untrack } from "solid-js"
+import { type Accessor, batch, createMemo, getOwner, onCleanup, onMount, untrack } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 import type { InitError } from "../pages/error"
-import { ServerSDK, useServerSDK } from "./server-sdk"
+import { ServerSDK } from "./server-sdk"
 import {
   bootstrapDirectory,
   bootstrapGlobal,
@@ -84,8 +84,7 @@ function makeQueryOptionsApi(
 }
 export type QueryOptionsApi = ReturnType<typeof makeQueryOptionsApi>
 
-export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
-  const serverSDK: ServerSDK = _serverSDK ?? useServerSDK()
+export function createServerSyncContextInner(serverSDK: ServerSDK) {
   const language = useLanguage()
   const owner = getOwner()
   if (!owner) throw new Error("ServerSync must be created within owner")
@@ -507,33 +506,37 @@ export function createServerSyncContextInner(_serverSDK?: ServerSDK) {
   }
 }
 
-export function createServerSyncContext(_serverSDK?: ServerSDK) {
-  const inner = createServerSyncContextInner(_serverSDK)
+export function createServerSyncContext(serverSDK: ServerSDK) {
+  const inner = createServerSyncContextInner(serverSDK)
   return Object.assign(inner, {
     createDirSyncContext: createRefCountMap(
-      (dir) => createDirSyncContext(dir, inner, _serverSDK),
+      (dir) => createDirSyncContext(dir, inner, serverSDK),
       (dir) => inner.disableMcp(dir),
       directoryKey,
     ),
   })
 }
 
+export type ServerSync = ReturnType<typeof createServerSyncContext>
+
 export const { use: useServerSync, provider: ServerSyncProvider } = createSimpleContext({
   name: "ServerSync",
-  gate: false,
-  init: (props: { server?: ServerConnection.Any }) => {
+  // Returns an accessor so the resolved server can change reactively without
+  // re-instantiating the subtree (mirrors useServerSDK).
+  init: (props: { server?: Accessor<ServerConnection.Any | undefined> }) => {
     const global = useGlobal()
     const language = useLanguage()
     const server = useServer()
 
-    const conn = props.server ?? server.current
-    if (!conn) throw new Error(language.t("error.serverSDK.noServerAvailable"))
-    const ctx = global.createServerCtx(conn)
-
-    return ctx.sync
+    return createMemo<ServerSync>(() => {
+      const conn = props.server?.() ?? server.current
+      if (!conn) throw new Error(language.t("error.serverSDK.noServerAvailable"))
+      return global.createServerCtx(conn).sync
+    })
   },
 })
 
 export function useQueryOptions() {
-  return useServerSync().queryOptions
+  const sync = useServerSync()
+  return createMemo(() => sync().queryOptions)
 }

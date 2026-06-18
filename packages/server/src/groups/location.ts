@@ -5,7 +5,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
-import { HttpApiMiddleware, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, OpenApi } from "effect/unstable/httpapi"
 
 export const LocationQuery = Schema.Struct({
   location: Schema.optional(
@@ -54,14 +54,40 @@ export class LocationMiddleware extends HttpApiMiddleware.Service<
   }
 >()("@opencode/HttpApiLocation") {}
 
+export const LocationGroup = HttpApiGroup.make("server.location")
+  .add(
+    HttpApiEndpoint.get("location.get", "/api/location", {
+      query: LocationQuery,
+      success: Location.Info,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.location.get",
+          summary: "Get location",
+          description: "Resolve the requested location or the server default location.",
+        }),
+      ),
+  )
+  .middleware(LocationMiddleware)
+
 function ref(request: HttpServerRequest.HttpServerRequest): Location.Ref {
   const query = new URL(request.url, "http://localhost").searchParams
   const workspaceID = query.get("location[workspace]") || request.headers["x-opencode-workspace"]
-  return {
-    directory: AbsolutePath.make(
-      query.get("location[directory]") || request.headers["x-opencode-directory"] || process.cwd(),
-    ),
+  const directory =
+    query.get("location[directory]") ||
+    (request.headers["x-opencode-directory"] ? decode(request.headers["x-opencode-directory"]) : process.cwd())
+  return Location.Ref.make({
+    directory: AbsolutePath.make(directory),
     workspaceID: workspaceID ? WorkspaceV2.ID.make(workspaceID) : undefined,
+  })
+}
+
+function decode(input: string) {
+  try {
+    return decodeURIComponent(input)
+  } catch {
+    return input
   }
 }
 

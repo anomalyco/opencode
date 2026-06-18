@@ -179,6 +179,7 @@ export interface MessagePartProps {
   onToolOpenChange?: (open: boolean) => void
   deferToolContent?: boolean
   virtualizeDiff?: boolean
+  onContentRendered?: () => void
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
 }
@@ -188,13 +189,14 @@ export type PartComponent = Component<MessagePartProps>
 export const PART_MAPPING: Record<string, PartComponent | undefined> = {}
 
 const TEXT_RENDER_PACE_MS = 24
+const TEXT_RENDER_IMMEDIATE = 512
 const TEXT_RENDER_SNAP = /[\s.,!?;:)\]]/
 
 function step(size: number) {
   if (size <= 12) return 2
   if (size <= 48) return 4
   if (size <= 96) return 8
-  return Math.min(24, Math.ceil(size / 8))
+  return Math.min(256, Math.ceil(size / 4))
 }
 
 function next(text: string, start: number) {
@@ -233,6 +235,10 @@ function createPacedValue(getValue: () => string, live?: () => boolean) {
       sync(text)
       return
     }
+    if (text.length - shown.length <= TEXT_RENDER_IMMEDIATE) {
+      sync(text)
+      return
+    }
     const end = next(text, shown.length)
     sync(text.slice(0, end))
     if (end < text.length) timeout = setTimeout(run, TEXT_RENDER_PACE_MS)
@@ -246,6 +252,11 @@ function createPacedValue(getValue: () => string, live?: () => boolean) {
       return
     }
     if (!text.startsWith(shown) || text.length < shown.length) {
+      clear()
+      sync(text)
+      return
+    }
+    if (text.length - shown.length <= TEXT_RENDER_IMMEDIATE) {
       clear()
       sync(text)
       return
@@ -1272,6 +1283,7 @@ export function Part(props: MessagePartProps) {
         onToolOpenChange={props.onToolOpenChange}
         deferToolContent={props.deferToolContent}
         virtualizeDiff={props.virtualizeDiff}
+        onContentRendered={props.onContentRendered}
         showAssistantCopyPartID={props.showAssistantCopyPartID}
         turnDurationMs={props.turnDurationMs}
       />
@@ -1292,6 +1304,7 @@ export interface ToolProps {
   onOpenChange?: (open: boolean) => void
   deferContent?: boolean
   virtualizeDiff?: boolean
+  onContentRendered?: () => void
   forceOpen?: boolean
   locked?: boolean
 }
@@ -1438,6 +1451,7 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               onOpenChange={props.onToolOpenChange ? handleToolOpenChange : undefined}
               deferContent={props.deferToolContent}
               virtualizeDiff={props.virtualizeDiff}
+              onContentRendered={props.onContentRendered}
             />
           </Match>
         </Switch>
@@ -2021,7 +2035,13 @@ ToolRegistry.register({
               }
             >
               <div data-component="edit-content">
-                <Dynamic component={fileComponent} mode="diff" virtualize={props.virtualizeDiff} {...fileCompProps()} />
+                <Dynamic
+                  component={fileComponent}
+                  mode="diff"
+                  virtualize={props.virtualizeDiff}
+                  onRendered={props.onContentRendered}
+                  {...fileCompProps()}
+                />
               </div>
             </ToolFileAccordion>
           </Show>
@@ -2080,6 +2100,7 @@ ToolRegistry.register({
                     cacheKey: checksum(props.input.content),
                   }}
                   overflow="scroll"
+                  onRendered={props.onContentRendered}
                 />
               </div>
             </ToolFileAccordion>
@@ -2208,6 +2229,7 @@ ToolRegistry.register({
                                   virtualize={props.virtualizeDiff}
                                   fileDiff={file.view.fileDiff}
                                   hunkSeparators={file.view.fileDiff.isPartial ? "simple" : "line-info-basic"}
+                                  onRendered={props.onContentRendered}
                                 />
                               </div>
                             </Show>
@@ -2283,6 +2305,7 @@ ToolRegistry.register({
                   mode="diff"
                   virtualize={props.virtualizeDiff}
                   fileDiff={single()!.view.fileDiff}
+                  onRendered={props.onContentRendered}
                 />
               </div>
             </ToolFileAccordion>

@@ -65,7 +65,7 @@ jobs:
 
       - name: Run unit tests
         timeout-minutes: 20
-        run: bun turbo test:ci --log-order=stream --log-prefix=task
+        run: bun turbo test --output-logs=errors-only --log-order=grouped --log-prefix=task
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
@@ -73,26 +73,6 @@ jobs:
         if: runner.os == 'Linux'
         working-directory: packages/opencode
         run: bun run test:httpapi
-
-      - name: Publish unit reports
-        if: always()
-        uses: mikepenz/action-junit-report@bccf2e31636835cf0874589931c4116687171386 # v6.4.0
-        with:
-          report_paths: packages/*/.artifacts/unit/junit.xml
-          check_name: "unit results (${{ matrix.settings.name }})"
-          detailed_summary: true
-          include_time_in_summary: true
-          fail_on_failure: false
-
-      - name: Upload unit artifacts
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: unit-${{ matrix.settings.name }}-${{ github.run_attempt }}
-          include-hidden-files: true
-          if-no-files-found: ignore
-          retention-days: 7
-          path: packages/*/.artifacts/unit/junit.xml
 
   e2e:
     name: e2e (${{ matrix.settings.name }})
@@ -151,7 +131,6 @@ jobs:
         run: bun --cwd packages/app test:e2e:local
         env:
           CI: true
-          PLAYWRIGHT_JUNIT_OUTPUT: e2e/junit-${{ matrix.settings.name }}.xml
         timeout-minutes: 30
 
       - name: Upload Playwright artifacts
@@ -162,6 +141,5 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
           path: |
-            packages/app/e2e/junit-*.xml
             packages/app/e2e/test-results
             packages/app/e2e/playwright-report

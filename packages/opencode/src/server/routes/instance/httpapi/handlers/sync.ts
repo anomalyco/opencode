@@ -15,9 +15,6 @@ import { Effect, Scope } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { HistoryPayload, ReplayPayload, SessionPayload } from "../groups/sync"
-import * as Log from "@opencode-ai/core/util/log"
-
-const log = Log.create({ service: "server.sync" })
 
 export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handlers) =>
   Effect.gen(function* () {
@@ -43,7 +40,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
         data: { ...event.data },
       }))
       const source = payload[0].aggregateID
-      log.info("sync replay requested", {
+      yield* Effect.logInfo("sync replay requested", {
         sessionID: source,
         events: payload.length,
         first: payload[0]?.seq,
@@ -52,7 +49,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
       })
       const ownerID = yield* InstanceState.workspaceID
       yield* events.replayAll(payload, { ownerID, strictOwner: true })
-      log.info("sync replay complete", {
+      yield* Effect.logInfo("sync replay complete", {
         sessionID: source,
         events: payload.length,
         first: payload[0]?.seq,
@@ -67,10 +64,7 @@ export const syncHandlers = HttpApiBuilder.group(InstanceHttpApi, "sync", (handl
 
       yield* session.setWorkspace({ sessionID: ctx.payload.sessionID, workspaceID })
 
-      log.info("sync session stolen", {
-        sessionID: ctx.payload.sessionID,
-        workspaceID,
-      })
+      yield* Effect.logInfo("sync session stolen", { sessionID: ctx.payload.sessionID, workspaceID })
 
       return { sessionID: ctx.payload.sessionID }
     })

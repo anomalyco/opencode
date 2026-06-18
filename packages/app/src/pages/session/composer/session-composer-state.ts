@@ -32,12 +32,12 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
   const permission = usePermission()
 
   const questionRequest = createMemo((): QuestionRequest | undefined => {
-    return sessionQuestionRequest(sync.data.session, sync.data.question, params.id)
+    return sessionQuestionRequest(sync().data.session, sync().data.question, params.id)
   })
 
   const permissionRequest = createMemo((): PermissionRequest | undefined => {
-    return sessionPermissionRequest(sync.data.session, sync.data.permission, params.id, (item) => {
-      return !permission.autoResponds(item, sdk.directory)
+    return sessionPermissionRequest(sync().data.session, sync().data.permission, params.id, (item) => {
+      return !permission.autoResponds(item, sdk().directory)
     })
   })
 
@@ -50,14 +50,14 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
   const todos = createMemo((): Todo[] => {
     const id = params.id
     if (!id) return []
-    return serverSync.data.session_todo[id] ?? []
+    return serverSync().data.session_todo[id] ?? []
   })
 
   const done = createMemo(
     () => todos().length > 0 && todos().every((todo) => todo.status === "completed" || todo.status === "cancelled"),
   )
 
-  const live = createMemo(() => sync.data.session_working(params.id ?? "") || blocked())
+  const live = createMemo(() => sync().data.session_working(params.id ?? "") || blocked())
 
   const [store, setStore] = createStore({
     responding: undefined as string | undefined,
@@ -78,8 +78,8 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     if (store.responding === perm.id) return
 
     setStore("responding", perm.id)
-    sdk.client.permission
-      .respond({ sessionID: perm.sessionID, permissionID: perm.id, response })
+    sdk()
+      .client.permission.respond({ sessionID: perm.sessionID, permissionID: perm.id, response })
       .catch((err: unknown) => {
         const description = err instanceof Error ? err.message : String(err)
         showToast({ title: language.t("common.requestFailed"), description })
@@ -111,8 +111,8 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
   const clear = () => {
     const id = params.id
     if (!id) return
-    serverSync.todo.set(id, [])
-    sync.set("todo", id, [])
+    serverSync().todo.set(id, [])
+    sync().set("todo", id, [])
   }
 
   createEffect(
