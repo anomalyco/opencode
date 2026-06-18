@@ -6,8 +6,8 @@ import {
   CONFIG_PATH,
   DEFAULT_ALLOWED_DOMAINS,
   buildSandboxConfig,
-  loadAndMergeUserConfigs,
   loadUserConfig,
+  mergeUserConfigs,
   resolveInnerCommand,
   shellQuote,
   type UserConfig,
@@ -145,62 +145,42 @@ describe("resolveInnerCommand", () => {
   })
 })
 
-describe("loadAndMergeUserConfigs", () => {
-  test("両方不在なら全フィールド空配列、configPaths は global / project の 2 つ", () => {
-    const result = loadAndMergeUserConfigs({
-      globalPath: "/nonexistent/global/sandbox.json",
-      projectPath: "/nonexistent/project/sandbox.json",
-    })
-    expect(result.config.network?.allowedDomains).toEqual([])
-    expect(result.config.filesystem?.denyRead).toEqual([])
-    expect(result.configPaths).toEqual([
-      "/nonexistent/global/sandbox.json",
-      "/nonexistent/project/sandbox.json",
-    ])
+describe("mergeUserConfigs", () => {
+  test("空入力なら全フィールド空配列", () => {
+    const merged = mergeUserConfigs()
+    expect(merged.network?.allowedDomains).toEqual([])
+    expect(merged.network?.deniedDomains).toEqual([])
+    expect(merged.filesystem?.allowRead).toEqual([])
+    expect(merged.filesystem?.allowWrite).toEqual([])
+    expect(merged.filesystem?.denyRead).toEqual([])
+    expect(merged.filesystem?.denyWrite).toEqual([])
   })
 
-  test("global + project の allow / deny を concat する (global → project の順)", () => {
-    const dir = mkdtempSync(join(tmpdir(), "securecode-merged-"))
-    const globalPath = join(dir, "global.json")
-    const projectPath = join(dir, "project.json")
-    writeFileSync(
-      globalPath,
-      JSON.stringify({
-        network: { allowedDomains: ["g.com"], deniedDomains: ["evil.com"] },
-        filesystem: { denyRead: ["/gsecret"] },
-      }),
-    )
-    writeFileSync(
-      projectPath,
-      JSON.stringify({
-        network: { allowedDomains: ["p.com"], deniedDomains: ["bad.org"] },
-        filesystem: { denyRead: ["/psecret"] },
-      }),
-    )
-    try {
-      const { config, configPaths } = loadAndMergeUserConfigs({ globalPath, projectPath })
-      expect(config.network?.allowedDomains).toEqual(["g.com", "p.com"])
-      expect(config.network?.deniedDomains).toEqual(["evil.com", "bad.org"])
-      expect(config.filesystem?.denyRead).toEqual(["/gsecret", "/psecret"])
-      expect(configPaths).toEqual([globalPath, projectPath])
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
+  test("複数 config の allow / deny を concat する (入力順を維持)", () => {
+    const a: UserConfig = {
+      network: { allowedDomains: ["a.com"], deniedDomains: ["evil.com"] },
+      filesystem: { denyRead: ["/asecret"] },
     }
+    const b: UserConfig = {
+      network: { allowedDomains: ["b.com"], deniedDomains: ["bad.org"] },
+      filesystem: { denyRead: ["/bsecret"] },
+    }
+    const merged = mergeUserConfigs(a, b)
+    expect(merged.network?.allowedDomains).toEqual(["a.com", "b.com"])
+    expect(merged.network?.deniedDomains).toEqual(["evil.com", "bad.org"])
+    expect(merged.filesystem?.denyRead).toEqual(["/asecret", "/bsecret"])
   })
 
-  test("project のみ存在 (per-directory で許可を追加できる)", () => {
-    const dir = mkdtempSync(join(tmpdir(), "securecode-merged-"))
-    const projectPath = join(dir, "project.json")
-    writeFileSync(projectPath, JSON.stringify({ network: { allowedDomains: ["p.com"] } }))
-    try {
-      const { config } = loadAndMergeUserConfigs({
-        globalPath: join(dir, "missing-global.json"),
-        projectPath,
-      })
-      expect(config.network?.allowedDomains).toEqual(["p.com"])
-    } finally {
-      rmSync(dir, { recursive: true, force: true })
-    }
+  test("重複は除去しない (sandbox-runtime に重複は無害)", () => {
+    const a: UserConfig = { network: { allowedDomains: ["dup.com"] } }
+    const b: UserConfig = { network: { allowedDomains: ["dup.com"] } }
+    expect(mergeUserConfigs(a, b).network?.allowedDomains).toEqual(["dup.com", "dup.com"])
+  })
+
+  test("片方だけ値があれば反映される (per-directory で許可を追加できる)", () => {
+    const a: UserConfig = {}
+    const b: UserConfig = { network: { allowedDomains: ["only.com"] } }
+    expect(mergeUserConfigs(a, b).network?.allowedDomains).toEqual(["only.com"])
   })
 })
 

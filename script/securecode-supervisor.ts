@@ -67,44 +67,26 @@ export function loadUserConfig(path: string = CONFIG_PATH): UserConfig {
 }
 
 /**
- * global と project の sandbox.json を両方読み、合成済み `UserConfig` と
- * 「sandbox.json として固定 deny に積むべきパス」を一括で返す。
+ * 複数の UserConfig を 1 つに合成する。allow / deny いずれも単純な配列 concat
+ * (重複除去はしない — sandbox-runtime に重複を渡しても Seatbelt の regex も
+ * bwrap の bind も冪等なので無害)。
  *
- * - global: `~/.config/securecode/sandbox.json`
- * - project: cwd 直下の `./.securecode/sandbox.json` (cwd を引数で差し替え可能、テスト用)
- *
- * 親ディレクトリへの walk は意図的にしない (cwd 直下のみ) — 攻撃面を狭くするのと、
- * 暗黙的に上位の設定が効く挙動を避けるため。
- *
- * 合成は単純な配列 concat。重複除去はしない (sandbox-runtime 側で重複は無害)。
- * 「deny を優先する」ニュアンスは「片方でも deny に入っていれば deny される」という形で
- * 満たされる (allow にも入っていても sandbox-runtime 側で deny が勝つ前提)。
- *
- * @param opts.globalPath - global 設定ファイルの絶対パス (テスト注入用)。
- * @param opts.projectPath - project 設定ファイルの絶対パス (テスト注入用)。
+ * 「deny を優先する」ニュアンスは「片方でも deny に入っていれば deny される」
+ * という形で満たされる (allow と deny に同じ値が入っていても sandbox-runtime
+ * 側で deny が勝つ前提)。
  */
-export function loadAndMergeUserConfigs(opts: { globalPath?: string; projectPath?: string } = {}): {
-  config: UserConfig
-  configPaths: string[]
-} {
-  const globalPath = opts.globalPath ?? CONFIG_PATH
-  const projectPath = opts.projectPath ?? join(process.cwd(), ".securecode", "sandbox.json")
-  const g = loadUserConfig(globalPath)
-  const p = loadUserConfig(projectPath)
+export function mergeUserConfigs(...configs: UserConfig[]): UserConfig {
   return {
-    config: {
-      network: {
-        allowedDomains: [...(g.network?.allowedDomains ?? []), ...(p.network?.allowedDomains ?? [])],
-        deniedDomains: [...(g.network?.deniedDomains ?? []), ...(p.network?.deniedDomains ?? [])],
-      },
-      filesystem: {
-        allowRead: [...(g.filesystem?.allowRead ?? []), ...(p.filesystem?.allowRead ?? [])],
-        allowWrite: [...(g.filesystem?.allowWrite ?? []), ...(p.filesystem?.allowWrite ?? [])],
-        denyRead: [...(g.filesystem?.denyRead ?? []), ...(p.filesystem?.denyRead ?? [])],
-        denyWrite: [...(g.filesystem?.denyWrite ?? []), ...(p.filesystem?.denyWrite ?? [])],
-      },
+    network: {
+      allowedDomains: configs.flatMap((c) => c.network?.allowedDomains ?? []),
+      deniedDomains: configs.flatMap((c) => c.network?.deniedDomains ?? []),
     },
-    configPaths: [globalPath, projectPath],
+    filesystem: {
+      allowRead: configs.flatMap((c) => c.filesystem?.allowRead ?? []),
+      allowWrite: configs.flatMap((c) => c.filesystem?.allowWrite ?? []),
+      denyRead: configs.flatMap((c) => c.filesystem?.denyRead ?? []),
+      denyWrite: configs.flatMap((c) => c.filesystem?.denyWrite ?? []),
+    },
   }
 }
 
@@ -264,8 +246,13 @@ export function resolveInnerCommand(args: string[], opts: { distBinPath?: string
 async function main(): Promise<void> {
   await assertSandboxAvailable()
 
-  const { config, configPaths } = loadAndMergeUserConfigs()
-  const sandboxConfig = buildSandboxConfig(config, { configPaths })
+  // sandbox.json は global (~/.config/securecode/) と project (cwd/.securecode/) の 2 階層。
+  // 親ディレクトリへの walk は意図的にしない (攻撃面 / 暗黙の上位設定を避ける)。
+  const projectConfigPath = join(process.cwd(), ".securecode", "sandbox.json")
+  const userConfig = mergeUserConfigs(loadUserConfig(CONFIG_PATH), loadUserConfig(projectConfigPath))
+  const sandboxConfig = buildSandboxConfig(userConfig, {
+    configPaths: [CONFIG_PATH, projectConfigPath],
+  })
 
   log(`allowedDomains = ${sandboxConfig.network.allowedDomains.join(", ")}`)
 
