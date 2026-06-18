@@ -123,7 +123,7 @@ Here are all the options for configuring a local MCP server.
 | `cwd`         | String  |          | Working directory for the MCP server process. Relative paths resolve from the workspace. |
 | `environment` | Object  |          | Environment variables to set when running the server.                                    |
 | `enabled`     | Boolean |          | Enable or disable the MCP server on startup.                                             |
-| `timeout`     | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds).      |
+| `timeout`     | Number  |          | Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds).                    |
 
 ---
 
@@ -160,7 +160,7 @@ The `url` is the URL of the remote MCP server and with the `headers` option you 
 | `enabled` | Boolean |          | Enable or disable the MCP server on startup.                                        |
 | `headers` | Object  |          | Headers to send with the request.                                                   |
 | `oauth`   | Object  |          | OAuth authentication configuration. See [OAuth](#oauth) section below.              |
-| `timeout` | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds). |
+| `timeout` | Number  |          | Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds).               |
 
 ---
 
