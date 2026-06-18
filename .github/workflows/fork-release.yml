@@ -89,16 +89,22 @@ jobs:
             [[ -d "$dir/bin" ]] || continue
             package_dir "$dir"
           done
+          mkdir -p fork-release-assets
+          shopt -s nullglob
+          cp "$OC_DIST"/*.{zip,tar.gz} fork-release-assets/
+          cp "$CLI_DIST"/*.{zip,tar.gz} fork-release-assets/
+          shopt -u nullglob
+          if ! find fork-release-assets -maxdepth 1 -type f | grep -q .; then
+            echo "No archives staged for upload"
+            exit 1
+          fi
+          ls -lh fork-release-assets/
 
       - name: Upload CLI dist
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: opencode-cli-dist
-          path: |
-            packages/opencode/dist/*.zip
-            packages/opencode/dist/*.tar.gz
-            packages/cli/dist/*.zip
-            packages/cli/dist/*.tar.gz
+          path: fork-release-assets/
           if-no-files-found: error
 
   publish:
@@ -273,6 +279,15 @@ jobs:
         with:
           name: opencode-cli-dist
           path: .
+
+      - name: Stage CLI archives for desktop
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p packages/opencode/dist
+          while IFS= read -r -d '' file; do
+            cp -f "$file" packages/opencode/dist/
+          done < <(find . -type f \( -name 'opencode-*.zip' -o -name 'opencode-*.tar.gz' \) -print0)
 
       - name: Install Linux packaging deps
         if: runner.os == 'Linux'
