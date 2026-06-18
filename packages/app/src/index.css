@@ -92,6 +92,14 @@
         0 18px 28px -14px rgba(0, 0, 0, 0.44);
     }
   }
+
+  /* While a ResizeHandle drag is active (set on <body> in resize-handle.tsx),
+     make iframes pointer-transparent so they can't steal hit-testing and break
+     the handle's pointer capture — otherwise rushing the cursor over the preview
+     iframe drops pointerup and leaves a sticky drag. */
+  body[data-resizing] iframe {
+    pointer-events: none;
+  }
 }
 
 @layer components {

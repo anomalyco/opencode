@@ -38,6 +38,12 @@ export function ResizeHandle(props: ResizeHandleProps) {
 
     document.body.style.userSelect = "none"
     document.body.style.overflow = "hidden"
+    // Disable pointer-events on iframes (e.g. the preview panel) for the drag's
+    // duration. setPointerCapture only guarantees delivery within the same
+    // document tree, so a sandboxed iframe sitting next to the handle would
+    // otherwise steal hit-testing the moment the cursor rushes over it, dropping
+    // pointermove/pointerup and re-introducing sticky drag. See index.css.
+    document.body.dataset.resizing = "true"
 
     // Capture the pointer on the handle itself so that all subsequent pointer
     // events are delivered here regardless of any iframe/canvas/overlay the
@@ -64,6 +70,7 @@ export function ResizeHandle(props: ResizeHandleProps) {
     const finish = (upEvent: PointerEvent) => {
       document.body.style.userSelect = ""
       document.body.style.overflow = ""
+      delete document.body.dataset.resizing
       handleRef.releasePointerCapture(upEvent.pointerId)
       handleRef.removeEventListener("pointermove", onPointerMove)
       handleRef.removeEventListener("pointerup", finish)
