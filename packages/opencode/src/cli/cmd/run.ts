@@ -852,7 +852,14 @@ export const RunCommand = effectCmd({
             fetch: fetchFn,
             resolveAgent: localAgent,
             session,
-            share,
+            share: async (sdk, sessionID) => {
+              // Auto-share eagerly to pre-warm the share-next service, but
+              // don't print the URL to stderr — in TUI mode stderr bypasses
+              // the scrollback and leaves orphaned terminal output that
+              // persists after /unshare.  The user can share explicitly via
+              // the LLM if they want the URL in the conversation.
+              await sdk.session.share({ sessionID }).catch(() => {})
+            },
             createSession: createFreshSession,
             agent: args.agent,
             model,

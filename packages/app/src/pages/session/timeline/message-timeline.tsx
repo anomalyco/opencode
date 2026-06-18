@@ -654,6 +654,16 @@ export function MessageTimeline(props: {
 
   const shareMutation = useMutation(() => ({
     mutationFn: (id: string) => serverSDK().client.session.share({ sessionID: id, directory: sdk().directory }),
+    onSuccess: (result, id) => {
+      const url = (result as { data?: { share?: { url?: string } } })?.data?.share?.url
+      if (!url) return
+      sync().set(
+        produce((draft) => {
+          const index = draft.session.findIndex((s) => s.id === id)
+          if (index !== -1) draft.session[index].share = { url }
+        }),
+      )
+    },
     onError: (err) => {
       console.error("Failed to share session", err)
     },
@@ -661,6 +671,14 @@ export function MessageTimeline(props: {
 
   const unshareMutation = useMutation(() => ({
     mutationFn: (id: string) => serverSDK().client.session.unshare({ sessionID: id, directory: sdk().directory }),
+    onSuccess: (_, id) => {
+      sync().set(
+        produce((draft) => {
+          const index = draft.session.findIndex((s) => s.id === id)
+          if (index !== -1) draft.session[index].share = undefined
+        }),
+      )
+    },
     onError: (err) => {
       console.error("Failed to unshare session", err)
     },
