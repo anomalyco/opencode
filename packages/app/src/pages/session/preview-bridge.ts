@@ -26,7 +26,13 @@ export function createPreviewBridge(opts: { origin: () => string | undefined }) 
   const [errors, setErrors] = createSignal<ErrorEntry[]>([])
   const [picked, setPicked] = createSignal<PickedElement | undefined>()
 
+  // penpal 핸드셰이크 timeout(미지정 시 실패해도 reject 안 됨) + 끊긴 동안 재연결 간격.
+  const HANDSHAKE_TIMEOUT_MS = 5000
+  const RECONNECT_INTERVAL_MS = 3000
+
   let connection: Connection<ChildMethods> | undefined
+  let retryTimer: ReturnType<typeof setTimeout> | undefined
+  let currentIframe: HTMLIFrameElement | undefined
 
   // 부모가 자식에 노출하는 메서드 — 자식이 이벤트 발생 시 호출.
   const methods: ParentMethods = {
@@ -35,38 +41,59 @@ export function createPreviewBridge(opts: { origin: () => string | undefined }) 
     onElementPicked: (element) => setPicked(element),
   }
 
+  const clearRetry = () => {
+    if (retryTimer) clearTimeout(retryTimer)
+    retryTimer = undefined
+  }
+
   const teardown = () => {
+    clearRetry()
     connection?.destroy()
     connection = undefined
     setConnected(false)
     setChild(undefined)
   }
 
+  // 끊긴(또는 아직 안 붙은) 동안 주기적으로 재연결 — 네트워크 suspend·자식 리로드 후 자동 복구.
+  const scheduleRetry = () => {
+    clearRetry()
+    retryTimer = setTimeout(() => {
+      if (!connected() && currentIframe) linkConnection(currentIframe)
+    }, RECONNECT_INTERVAL_MS)
+  }
+
   const linkConnection = (iframe: HTMLIFrameElement) => {
-    teardown()
+    currentIframe = iframe
+    clearRetry()
+    connection?.destroy()
+    connection = undefined
+    setConnected(false)
+    setChild(undefined)
     const remoteWindow = iframe.contentWindow
     const origin = opts.origin()
-    if (!remoteWindow || !origin) return
+    if (!remoteWindow || !origin) return scheduleRetry()
 
-    const messenger = new WindowMessenger({
-      remoteWindow,
-      allowedOrigins: [origin],
-    })
-    connection = connect<ChildMethods>({ messenger, methods })
-    connection.promise
+    const conn = connect<ChildMethods>({ messenger: new WindowMessenger({ remoteWindow, allowedOrigins: [origin] }), methods, timeout: HANDSHAKE_TIMEOUT_MS })
+    connection = conn
+    conn.promise
       .then((remote) => {
         setChild(() => remote)
         setConnected(true)
       })
       .catch(() => {
-        // 자식에 브릿지가 없거나(주입 전) 핸드셰이크 실패 — 다음 load 에서 재시도.
+        // 자식에 브릿지가 없거나(주입 전) 핸드셰이크 실패/끊김 — 재시도.
         setConnected(false)
+        setChild(undefined)
+        scheduleRetry()
       })
   }
 
   /** iframe ref 콜백. el 이 null 이면 정리. */
   const attach = (iframe: HTMLIFrameElement | null) => {
-    if (!iframe) return teardown()
+    if (!iframe) {
+      currentIframe = undefined
+      return teardown()
+    }
     const onLoad = () => linkConnection(iframe)
     iframe.addEventListener("load", onLoad)
     // 이미 로드된 경우(캐시) 즉시 시도.
