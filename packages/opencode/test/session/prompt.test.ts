@@ -628,6 +628,43 @@ noLLMServer.instance.skip(
   { config: cfg },
 )
 
+noLLMServer.instance(
+  "missing binary file attachment resolves to an error instead of crashing the session",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Attach" })
+
+      const missing = path.join(process.cwd(), "opencode-missing-attachment-fixture.html")
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          {
+            type: "file",
+            mime: "text/html",
+            filename: "opencode-missing-attachment-fixture.html",
+            url: pathToFileURL(missing).href,
+          },
+        ],
+      })
+
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+      const parts = messages.flatMap((message) => message.parts)
+      expect(
+        parts.some(
+          (part) =>
+            part.type === "text" &&
+            part.text.includes("failed to read") &&
+            part.text.includes("opencode-missing-attachment-fixture.html"),
+        ),
+      ).toBe(true)
+    }),
+  { config: cfg },
+)
+
 it.instance("static loop returns assistant text through local provider", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(providerCfg)
