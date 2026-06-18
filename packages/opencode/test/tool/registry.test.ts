@@ -4,7 +4,7 @@ import fs from "fs/promises"
 import { fileURLToPath, pathToFileURL } from "url"
 import { Effect, Layer, Result, Schema } from "effect"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { ToolRegistry } from "@/tool/registry"
+import { describeAvailableTools, ToolRegistry } from "@/tool/registry"
 import { Tool } from "@/tool/tool"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -100,6 +100,43 @@ afterEach(async () => {
 })
 
 describe("tool.registry", () => {
+  it.instance("removes unavailable shell tool hints from model-facing descriptions", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agent = yield* Agent.Service
+      const build = yield* agent.get("build")
+      if (!build) throw new Error("build agent not found")
+
+      const shell = (yield* registry.tools({
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("gpt-5"),
+        agent: build,
+      })).find((tool) => tool.id === "bash")
+
+      expect(shell?.description).toContain("Use Glob")
+      expect(shell?.description).toContain("Use Grep")
+      expect(shell?.description).toContain("Use Read")
+      expect(shell?.description).not.toContain("Use Edit")
+      expect(shell?.description).not.toContain("Use Write")
+    }),
+  )
+
+  it.instance("removes unavailable task tool hints from model-facing descriptions", () =>
+    Effect.gen(function* () {
+      const description = [
+        "- If you want to read a specific file path, use the Read or Glob tool instead of the Task tool",
+        '- If you are searching for a specific class definition like "class Foo", use the Grep tool instead',
+        "- If you are searching for code within a specific file or set of 2-3 files, use the Read tool instead",
+      ].join("\n")
+
+      expect(describeAvailableTools("task", description, new Set(["task", "glob"]))).toContain("Read or Glob")
+      const filtered = describeAvailableTools("task", description, new Set(["task"]))
+      expect(filtered).not.toContain("Read or Glob")
+      expect(filtered).not.toContain("Grep tool")
+      expect(filtered).not.toContain("Read tool")
+    }),
+  )
+
   it.instance("does not expose task_status", () =>
     Effect.gen(function* () {
       const registry = yield* ToolRegistry.Service

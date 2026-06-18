@@ -42,6 +42,7 @@ import { Question } from "../question"
 import { Todo } from "../session/todo"
 import { LSP } from "@/lsp/lsp"
 import { Instruction } from "../session/instruction"
+import { ShellID } from "./shell/id"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Agent } from "../agent/agent"
@@ -296,11 +297,11 @@ const layer = Layer.effect(
 
         return true
       })
-
       const codeModeDescription = filtered.some((tool) => tool.id === "execute")
         ? yield* describeCodeMode(input)
         : undefined
       const visible = filtered.filter((tool) => tool.id !== "execute" || codeModeDescription)
+      const available = new Set(visible.map((tool) => tool.id))
 
       return yield* Effect.forEach(
         visible,
@@ -318,7 +319,7 @@ const layer = Layer.effect(
           return {
             id: tool.id,
             description: [
-              output.description,
+              describeAvailableTools(tool.id, output.description, available),
               tool.id === TaskTool.id ? yield* describeTask(input.agent) : undefined,
               tool.id === "execute" ? codeModeDescription : undefined,
             ]
@@ -417,6 +418,52 @@ function normalizeZodJsonSchema(value: unknown): unknown {
 
 function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+export function describeAvailableTools(toolID: string, description: string, available: ReadonlySet<string>) {
+  if (toolID === ShellID.ToolID) return filterShellToolHints(description, available)
+  if (toolID === TaskTool.id) return filterTaskToolHints(description, available)
+  return description
+}
+
+function filterShellToolHints(description: string, available: ReadonlySet<string>) {
+  return description
+    .split("\n")
+    .filter((line) => {
+      const match = line.match(/^\s*-\s+(?:File search|Content search|Read files|Edit files|Write files): Use (\w+)/)
+      if (!match) return true
+      return available.has(toolName(match[1]))
+    })
+    .join("\n")
+}
+
+function filterTaskToolHints(description: string, available: ReadonlySet<string>) {
+  return description
+    .split("\n")
+    .filter((line) => {
+      if (/use the Read or Glob tool instead/i.test(line)) return available.has("read") || available.has("glob")
+      if (/use the Grep tool instead/i.test(line)) return available.has("grep")
+      if (/use the Read tool instead/i.test(line)) return available.has("read")
+      return true
+    })
+    .join("\n")
+}
+
+function toolName(name: string) {
+  switch (name.toLowerCase()) {
+    case "glob":
+      return "glob"
+    case "grep":
+      return "grep"
+    case "read":
+      return "read"
+    case "edit":
+      return "edit"
+    case "write":
+      return "write"
+    default:
+      return name.toLowerCase()
+  }
 }
 
 export const node = LayerNode.make({
