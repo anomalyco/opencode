@@ -163,7 +163,7 @@ index a29a7d3a0f14d9cd800ef5b296485237350c666f..c362ae5fe6c62c8c8eae7e2e61de1eed
              headers.set('content-type', 'application/json');
              headers.set('accept', 'application/json, text/event-stream');
              const init = {
-@@ -310,11 +342,20 @@ class StreamableHTTPClientTransport {
+@@ -310,11 +342,23 @@ class StreamableHTTPClientTransport {
              const response = await (this._fetch ?? fetch)(this._url, init);
              // Handle session ID received during initialization
              const sessionId = response.headers.get('mcp-session-id');
@@ -173,7 +173,10 @@ index a29a7d3a0f14d9cd800ef5b296485237350c666f..c362ae5fe6c62c8c8eae7e2e61de1eed
              }
              if (!response.ok) {
                  const text = await response.text().catch(() => null);
-+                if (response.status === 404 && requestSessionId && !isSessionRetry && !(0, types_js_1.isInitializedNotification)(message)) {
++                const recoverableSessionError = response.status === 404 ||
++                    (response.status === 400 && text?.toLowerCase().includes('session') &&
++                        (text.toLowerCase().includes('missing') || text.toLowerCase().includes('no valid') || text.toLowerCase().includes('invalid')));
++                if (recoverableSessionError && requestSessionId && !isSessionRetry && !(0, types_js_1.isInitializedNotification)(message)) {
 +                    const recovered = await this._recoverSession(requestSessionId);
 +                    if (options?.isRequestActive?.() === false) {
 +                        throw new Error('Request is no longer active');
@@ -185,7 +188,7 @@ index a29a7d3a0f14d9cd800ef5b296485237350c666f..c362ae5fe6c62c8c8eae7e2e61de1eed
                  if (response.status === 401 && this._authProvider) {
                      // Prevent infinite recursion when server returns 401 after successful auth
                      if (this._hasCompletedAuthFlow) {
-@@ -335,7 +376,7 @@ class StreamableHTTPClientTransport {
+@@ -335,7 +379,7 @@ class StreamableHTTPClientTransport {
                      // Mark that we completed auth flow
                      this._hasCompletedAuthFlow = true;
                      // Purposely _not_ awaited, so we don't call onerror twice
@@ -194,7 +197,7 @@ index a29a7d3a0f14d9cd800ef5b296485237350c666f..c362ae5fe6c62c8c8eae7e2e61de1eed
                  }
                  if (response.status === 403 && this._authProvider) {
                      const { resourceMetadataUrl, scope, error } = (0, auth_js_1.extractWWWAuthenticateParams)(response);
-@@ -362,7 +403,7 @@ class StreamableHTTPClientTransport {
+@@ -362,7 +406,7 @@ class StreamableHTTPClientTransport {
                          if (result !== 'AUTHORIZED') {
                              throw new auth_js_1.UnauthorizedError();
                          }
@@ -367,7 +370,7 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..ac75b14545fda44aff7ff4d97cc5da88
              headers.set('content-type', 'application/json');
              headers.set('accept', 'application/json, text/event-stream');
              const init = {
-@@ -306,11 +338,20 @@ export class StreamableHTTPClientTransport {
+@@ -306,11 +338,23 @@ export class StreamableHTTPClientTransport {
              const response = await (this._fetch ?? fetch)(this._url, init);
              // Handle session ID received during initialization
              const sessionId = response.headers.get('mcp-session-id');
@@ -377,7 +380,10 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..ac75b14545fda44aff7ff4d97cc5da88
              }
              if (!response.ok) {
                  const text = await response.text().catch(() => null);
-+                if (response.status === 404 && requestSessionId && !isSessionRetry && !isInitializedNotification(message)) {
++                const recoverableSessionError = response.status === 404 ||
++                    (response.status === 400 && text?.toLowerCase().includes('session') &&
++                        (text.toLowerCase().includes('missing') || text.toLowerCase().includes('no valid') || text.toLowerCase().includes('invalid')));
++                if (recoverableSessionError && requestSessionId && !isSessionRetry && !isInitializedNotification(message)) {
 +                    const recovered = await this._recoverSession(requestSessionId);
 +                    if (options?.isRequestActive?.() === false) {
 +                        throw new Error('Request is no longer active');
@@ -389,7 +395,7 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..ac75b14545fda44aff7ff4d97cc5da88
                  if (response.status === 401 && this._authProvider) {
                      // Prevent infinite recursion when server returns 401 after successful auth
                      if (this._hasCompletedAuthFlow) {
-@@ -331,7 +372,7 @@ export class StreamableHTTPClientTransport {
+@@ -331,7 +375,7 @@ export class StreamableHTTPClientTransport {
                      // Mark that we completed auth flow
                      this._hasCompletedAuthFlow = true;
                      // Purposely _not_ awaited, so we don't call onerror twice
@@ -398,7 +404,7 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..ac75b14545fda44aff7ff4d97cc5da88
                  }
                  if (response.status === 403 && this._authProvider) {
                      const { resourceMetadataUrl, scope, error } = extractWWWAuthenticateParams(response);
-@@ -358,7 +399,7 @@ export class StreamableHTTPClientTransport {
+@@ -358,7 +402,7 @@ export class StreamableHTTPClientTransport {
                          if (result !== 'AUTHORIZED') {
                              throw new UnauthorizedError();
                          }

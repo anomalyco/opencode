@@ -3,6 +3,8 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { LATEST_PROTOCOL_VERSION } from "@modelcontextprotocol/sdk/types.js"
 
 const posts: Array<{ method: string; session: string | null }> = []
+const recoveryStatus = Number(process.env.MCP_RECOVERY_STATUS ?? "404")
+const recoveryBody = process.env.MCP_RECOVERY_BODY ?? "Session not found"
 let initializeCount = 0
 let pingCount = 0
 const server = Bun.serve({
@@ -34,7 +36,7 @@ const server = Bun.serve({
     if (message.method === "notifications/initialized") return new Response(null, { status: 202 })
 
     pingCount++
-    if (pingCount === 1) return new Response("Session not found", { status: 404 })
+    if (pingCount === 1) return new Response(recoveryBody, { status: recoveryStatus })
     return Response.json({ jsonrpc: "2.0", id: message.id, result: {} })
   },
 })
