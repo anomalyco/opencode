@@ -21,7 +21,13 @@ export const CONFIG_PATH = join(CONFIG_DIR, "sandbox.json")
 
 export const DEFAULT_ALLOWED_DOMAINS = ["conf-ai.acompany-az.com"]
 
-export type UserConfig = {
+/**
+ * sandbox.json (JSON) から直接 parse される生の入力型。フィールドはすべて optional で、
+ * 「ユーザが書かなかったキーは undefined」がそのまま反映される。`mergeUserConfigs` を
+ * 通すと欠落キーが `[]` に正規化された `UserConfig` になり、それ以降のコードでは
+ * `?? []` のような undefined ガードが要らなくなる。
+ */
+export type UserConfigInput = {
   network?: {
     allowedDomains?: string[]
     deniedDomains?: string[]
@@ -31,6 +37,20 @@ export type UserConfig = {
     allowRead?: string[]
     allowWrite?: string[]
     denyWrite?: string[]
+  }
+}
+
+/** 正規化済み (= 欠落キーが `[]` 埋めされた) 内部用 type。 */
+export type UserConfig = {
+  network: {
+    allowedDomains: string[]
+    deniedDomains: string[]
+  }
+  filesystem: {
+    allowRead: string[]
+    allowWrite: string[]
+    denyRead: string[]
+    denyWrite: string[]
   }
 }
 
@@ -47,35 +67,36 @@ function die(msg: string, code = 1): never {
  * 1 個のユーザ設定ファイルを読み込む (global / project どちらでも同じ実装で良い)。
  *
  * ファイル不在は正常系として扱い、空オブジェクトを返す (= 全フィールドが
- * デフォルト値で起動する)。JSON parse 失敗のみ fatal error。
+ * デフォルト値で起動する)。JSON parse 失敗のみ fatal error。正規化は呼び出し側
+ * (`mergeUserConfigs`) に任せ、この関数は raw な `UserConfigInput` をそのまま返す。
  *
  * @param path - 設定ファイルの絶対パス。テストから注入する用途で引数化している。
- * @returns parse 済み UserConfig。ファイル不在時は `{}`。
  * @throws `die()` 経由で `process.exit(1)`。読み込み or JSON parse 失敗時のみ。
  */
-export function loadUserConfig(path: string = CONFIG_PATH): UserConfig {
+export function loadUserConfig(path: string = CONFIG_PATH): UserConfigInput {
   if (!existsSync(path)) {
     log(`no user config at ${path}, using defaults`)
     return {}
   }
   try {
     const raw = readFileSync(path, "utf8")
-    return JSON.parse(raw) as UserConfig
+    return JSON.parse(raw) as UserConfigInput
   } catch (err) {
     die(`failed to read/parse ${path}: ${(err as Error).message}`)
   }
 }
 
 /**
- * 複数の UserConfig を 1 つに合成する。allow / deny いずれも単純な配列 concat
- * (重複除去はしない — sandbox-runtime に重複を渡しても Seatbelt の regex も
- * bwrap の bind も冪等なので無害)。
+ * 複数の入力 config を 1 つに合成する。allow / deny いずれも単純な配列 concat。
+ * 欠落キーはここで `[]` に正規化されるため、戻り値の `UserConfig` 以降では
+ * undefined ガードが不要 (= `?? []` を書かずに済む)。
  *
- * 「deny を優先する」ニュアンスは「片方でも deny に入っていれば deny される」
- * という形で満たされる (allow と deny に同じ値が入っていても sandbox-runtime
- * 側で deny が勝つ前提)。
+ * 重複除去はしない — sandbox-runtime に重複を渡しても Seatbelt の regex も
+ * bwrap の bind も冪等なので無害。「deny を優先する」ニュアンスは「片方でも
+ * deny に入っていれば deny される」という形で満たされる (allow と deny に
+ * 同じ値が入っていても sandbox-runtime 側で deny が勝つ前提)。
  */
-export function mergeUserConfigs(...configs: UserConfig[]): UserConfig {
+export function mergeUserConfigs(...configs: UserConfigInput[]): UserConfig {
   return {
     network: {
       allowedDomains: configs.flatMap((c) => c.network?.allowedDomains ?? []),
@@ -109,8 +130,7 @@ export function mergeUserConfigs(...configs: UserConfig[]): UserConfig {
  * @returns `SandboxManager.initialize()` にそのまま渡せる完全な config。
  */
 export function buildSandboxConfig(user: UserConfig, opts: { configPaths?: string[] } = {}): SandboxRuntimeConfig {
-  const allowedDomains = [...DEFAULT_ALLOWED_DOMAINS, ...(user.network?.allowedDomains ?? [])]
-  const deniedDomains = user.network?.deniedDomains ?? []
+  const allowedDomains = [...DEFAULT_ALLOWED_DOMAINS, ...user.network.allowedDomains]
 
   // SecureCode 本体が sandbox 設定ファイル (global + project) に読み書き一切できないよう
   // 物理的に封鎖する。
@@ -119,16 +139,20 @@ export function buildSandboxConfig(user: UserConfig, opts: { configPaths?: strin
   // ファイル単位 denyWrite なら unlink+再作成も Seatbelt/bwrap が阻止するので、
   // 改竄不可の保証は維持される。
   const configPaths = opts.configPaths ?? [CONFIG_PATH]
-  const denyRead = [...configPaths, ...(user.filesystem?.denyRead ?? [])]
-  const denyWrite = [...configPaths, ...(user.filesystem?.denyWrite ?? [])]
+  const denyRead = [...configPaths, ...user.filesystem.denyRead]
+  const denyWrite = [...configPaths, ...user.filesystem.denyWrite]
 
-  const allowWrite =
-    user.filesystem?.allowWrite && user.filesystem.allowWrite.length > 0 ? user.filesystem.allowWrite : ["/"]
+  // sandbox-runtime は allow-only: 空配列を渡すと「全 deny」と解釈されるため、
+  // ユーザが allowWrite を書かなかったケースは "/" にフォールバックして read 同様に
+  // "deny で絞る" 運用にする。allowRead は undefined を渡すと sandbox-runtime の
+  // デフォルト read 挙動に委ねられるので、未指定時は undefined のまま渡す。
+  const allowWrite = user.filesystem.allowWrite.length > 0 ? user.filesystem.allowWrite : ["/"]
+  const allowRead = user.filesystem.allowRead.length > 0 ? user.filesystem.allowRead : undefined
 
   return {
     network: {
       allowedDomains,
-      deniedDomains,
+      deniedDomains: user.network.deniedDomains,
       // localhost への bind / listen は egress 制御とは直交（最終的な outbound は
       // 別途 proxy + allowedDomains でチェックされるため抜け道にならない）。
       // dev server 起動や子プロセス間 IPC を許可するため true にする。
@@ -136,7 +160,7 @@ export function buildSandboxConfig(user: UserConfig, opts: { configPaths?: strin
     },
     filesystem: {
       denyRead,
-      allowRead: user.filesystem?.allowRead,
+      allowRead,
       allowWrite,
       denyWrite,
     },
