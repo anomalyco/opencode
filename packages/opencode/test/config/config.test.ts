@@ -515,6 +515,28 @@ it.instance("handles environment variable substitution", () =>
   ),
 )
 
+it.instance("escapes environment variable substitution inside JSON keys", () =>
+  withProcessEnv(
+    "TEST_WIN_PATH",
+    "C:\\Users\\me\\AppData\\Roaming\\MyApp\\config",
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* writeConfigEffect(test.directory, {
+        $schema: "https://opencode.ai/config.json",
+        permission: {
+          external_directory: {
+            "{env:TEST_WIN_PATH}/**": "allow",
+          },
+        },
+      })
+      const config = yield* Config.use.get()
+      expect(config.permission?.external_directory).toEqual({
+        "C:\\Users\\me\\AppData\\Roaming\\MyApp\\config/**": "allow",
+      })
+    }),
+  ),
+)
+
 it.instance("preserves env variables when adding $schema to config", () =>
   withProcessEnv(
     "PRESERVE_VAR",
