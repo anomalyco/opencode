@@ -346,6 +346,11 @@ export async function createPage(input: DocMountInput) {
     try {
       await settled(editor.updateComplete)
       await settled(editor.host?.updateComplete)
+      // BlockSuite's RemoteColorManager sets the awareness `color` field to a persisted/random color
+      // when affine-page-root mounts, clobbering the color we set in applyIdentity() before mount. Now
+      // that the root (and its color manager) has initialized, re-apply our server/identity color so it
+      // is the one broadcast to peers — matching the avatar colors.
+      applyIdentity()
       const ready = input.readonly ? undefined : await inlineReady(editor)
       applyTheme()
       fit(el)
