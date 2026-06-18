@@ -3,7 +3,7 @@
  * SecureCode Sandbox Supervisor (Phase 0)
  *
  * sandbox 外で動作する launcher。
- * - 設定ファイルを読み込み (~/.config/securecode/sandbox.json)
+ * - 設定ファイルを読み込み (global: ~/.config/securecode/sandbox.json, project: ./.securecode/sandbox.json)
  * - @anthropic-ai/sandbox-runtime を初期化
  * - opencode 本体を sandbox 内で spawn
  *
@@ -18,6 +18,17 @@ import { dirname, join, resolve } from "node:path"
 
 export const CONFIG_DIR = join(homedir(), ".config", "securecode")
 export const CONFIG_PATH = join(CONFIG_DIR, "sandbox.json")
+export const PROJECT_CONFIG_RELATIVE_PATH = join(".securecode", "sandbox.json")
+
+/**
+ * 起動 cwd 直下の project 用設定ファイルパス。global の `~/.config/securecode/sandbox.json`
+ * に対し、`./.securecode/sandbox.json` を per-directory 拡張として読み込む。親ディレクトリ
+ * への walk は意図的にしない (cwd 直下のみ) — 攻撃面を狭くするのと、暗黙的に上位の設定が
+ * 効く挙動を避けるため。
+ */
+export function resolveProjectConfigPath(cwd: string = process.cwd()): string {
+  return join(cwd, PROJECT_CONFIG_RELATIVE_PATH)
+}
 
 export const DEFAULT_ALLOWED_DOMAINS = ["conf-ai.acompany-az.com"]
 
@@ -44,7 +55,7 @@ function die(msg: string, code = 1): never {
 }
 
 /**
- * ユーザ設定ファイル (`~/.config/securecode/sandbox.json`) を読み込む。
+ * 1 個のユーザ設定ファイルを読み込む (global / project どちらでも同じ実装で良い)。
  *
  * ファイル不在は正常系として扱い、空オブジェクトを返す (= 全フィールドが
  * デフォルト値で起動する)。JSON parse 失敗のみ fatal error。
@@ -66,32 +77,96 @@ export function loadUserConfig(path: string = CONFIG_PATH): UserConfig {
   }
 }
 
+function unionList(...lists: Array<string[] | undefined>): string[] | undefined {
+  const nonEmpty = lists.filter((l): l is string[] => Array.isArray(l) && l.length > 0)
+  if (nonEmpty.length === 0) return undefined
+  return Array.from(new Set(nonEmpty.flat()))
+}
+
+/**
+ * 複数の UserConfig を合成する。global → project の順で渡す想定。
+ *
+ * 合成ルール:
+ * - `allowedDomains` / `deniedDomains` / `allowRead` / `allowWrite` / `denyRead` / `denyWrite`
+ *   いずれも **union (重複除去)** で合成する。
+ * - 「deny を優先する」ニュアンスは「片方でも deny に入っていれば deny される」という形で
+ *   満たされる (allow にも入っていても sandbox-runtime 側で deny が勝つ前提)。
+ * - 全部が undefined なら結果も undefined (= sandbox-runtime のデフォルト挙動に委ねる)。
+ *
+ * @param configs - 合成対象。空配列なら `{}` を返す。
+ */
+export function mergeUserConfigs(...configs: UserConfig[]): UserConfig {
+  const allowedDomains = unionList(...configs.map((c) => c.network?.allowedDomains))
+  const deniedDomains = unionList(...configs.map((c) => c.network?.deniedDomains))
+  const allowRead = unionList(...configs.map((c) => c.filesystem?.allowRead))
+  const allowWrite = unionList(...configs.map((c) => c.filesystem?.allowWrite))
+  const denyRead = unionList(...configs.map((c) => c.filesystem?.denyRead))
+  const denyWrite = unionList(...configs.map((c) => c.filesystem?.denyWrite))
+
+  const merged: UserConfig = {}
+  if (allowedDomains || deniedDomains) {
+    merged.network = {}
+    if (allowedDomains) merged.network.allowedDomains = allowedDomains
+    if (deniedDomains) merged.network.deniedDomains = deniedDomains
+  }
+  if (allowRead || allowWrite || denyRead || denyWrite) {
+    merged.filesystem = {}
+    if (allowRead) merged.filesystem.allowRead = allowRead
+    if (allowWrite) merged.filesystem.allowWrite = allowWrite
+    if (denyRead) merged.filesystem.denyRead = denyRead
+    if (denyWrite) merged.filesystem.denyWrite = denyWrite
+  }
+  return merged
+}
+
+/**
+ * global + project の sandbox.json を両方読み、合成済み UserConfig を返す。
+ *
+ * - global: `~/.config/securecode/sandbox.json` (XDG)
+ * - project: cwd 直下の `./.securecode/sandbox.json`
+ *
+ * project は cwd 直下のみで親ディレクトリへの walk はしない (攻撃面 / 挙動の単純さのため)。
+ *
+ * @param opts.globalPath - global 設定ファイルの絶対パス (テスト注入用)。
+ * @param opts.projectPath - project 設定ファイルの絶対パス (テスト注入用)。
+ */
+export function loadMergedUserConfig(opts: { globalPath?: string; projectPath?: string } = {}): UserConfig {
+  const globalPath = opts.globalPath ?? CONFIG_PATH
+  const projectPath = opts.projectPath ?? resolveProjectConfigPath()
+  return mergeUserConfigs(loadUserConfig(globalPath), loadUserConfig(projectPath))
+}
+
 /**
  * `UserConfig` を sandbox-runtime に渡す `SandboxRuntimeConfig` に変換する。
  *
  * 合成ルール:
  * - `allowedDomains` — `DEFAULT_ALLOWED_DOMAINS` (CIA endpoint) を常に先頭に固定し、
  *   user 値を後ろに append する。user 設定で CIA を削除することはできない。
- * - `denyRead` / `denyWrite` — `CONFIG_PATH` (sandbox.json 自身) を常に先頭に追加し、
- *   sandbox 内のプロセスから設定ファイルの読み書きを物理的に封鎖する。
+ * - `denyRead` / `denyWrite` — `opts.configPaths` (デフォルトは global の `CONFIG_PATH` のみ) を
+ *   常に先頭に追加し、sandbox 内のプロセスから設定ファイルの読み書きを物理的に封鎖する。
+ *   per-directory の `./.securecode/sandbox.json` を有効化する呼び出し側は、ここに project
+ *   側のパスも含めて渡すこと。
  * - `allowWrite` — 未指定なら `["/"]` にフォールバック (= 書き込みは `denyWrite`
  *   側だけで制御する運用)。
  * - `allowPty` / `network.allowLocalBinding` — 常に `true` (TUI と dev server のため)。
  *
  * @param user - ユーザ設定。空オブジェクト `{}` も有効入力。
+ * @param opts.configPaths - 常時 deny に追加する設定ファイルパス。未指定なら `[CONFIG_PATH]`。
  * @returns `SandboxManager.initialize()` にそのまま渡せる完全な config。
  */
-export function buildSandboxConfig(user: UserConfig): SandboxRuntimeConfig {
+export function buildSandboxConfig(user: UserConfig, opts: { configPaths?: string[] } = {}): SandboxRuntimeConfig {
   const allowedDomains = [...DEFAULT_ALLOWED_DOMAINS, ...(user.network?.allowedDomains ?? [])]
   const deniedDomains = user.network?.deniedDomains ?? []
 
-  // SecureCode 本体が sandbox 設定ファイルに読み書き一切できないよう物理的に封鎖する。
+  // SecureCode 本体が sandbox 設定ファイル (global + project) に読み書き一切できないよう
+  // 物理的に封鎖する。
   // ※ ディレクトリ全体は deny にしない。opencode 本体も同じ ~/.config/securecode/
   // 配下に config.json を持つため、ディレクトリごと封鎖すると opencode が起動できない。
   // ファイル単位 denyWrite なら unlink+再作成も Seatbelt/bwrap が阻止するので、
   // 改竄不可の保証は維持される。
-  const denyRead = [CONFIG_PATH, ...(user.filesystem?.denyRead ?? [])]
-  const denyWrite = [CONFIG_PATH, ...(user.filesystem?.denyWrite ?? [])]
+  const configPaths = opts.configPaths ?? [CONFIG_PATH]
+  const denyRead = [...configPaths, ...(user.filesystem?.denyRead ?? [])]
+  const denyWrite = [...configPaths, ...(user.filesystem?.denyWrite ?? [])]
 
   const allowWrite =
     user.filesystem?.allowWrite && user.filesystem.allowWrite.length > 0 ? user.filesystem.allowWrite : ["/"]
@@ -217,8 +292,11 @@ export function resolveInnerCommand(args: string[], opts: { distBinPath?: string
 async function main(): Promise<void> {
   await assertSandboxAvailable()
 
-  const userConfig = loadUserConfig()
-  const sandboxConfig = buildSandboxConfig(userConfig)
+  const projectConfigPath = resolveProjectConfigPath()
+  const userConfig = loadMergedUserConfig({ projectPath: projectConfigPath })
+  const sandboxConfig = buildSandboxConfig(userConfig, {
+    configPaths: [CONFIG_PATH, projectConfigPath],
+  })
 
   log(`allowedDomains = ${sandboxConfig.network.allowedDomains.join(", ")}`)
 

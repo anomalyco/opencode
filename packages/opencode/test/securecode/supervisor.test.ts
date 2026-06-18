@@ -1,13 +1,17 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import {
   CONFIG_PATH,
   DEFAULT_ALLOWED_DOMAINS,
+  PROJECT_CONFIG_RELATIVE_PATH,
   buildSandboxConfig,
+  loadMergedUserConfig,
   loadUserConfig,
+  mergeUserConfigs,
   resolveInnerCommand,
+  resolveProjectConfigPath,
   shellQuote,
   type UserConfig,
 } from "../../../../script/securecode-supervisor"
@@ -141,6 +145,178 @@ describe("resolveInnerCommand", () => {
     const cmd = resolveInnerCommand(["it's a path"], { distBinPath: "/nonexistent/securecode-bin" })
     // POSIX shell 標準の close-escape-reopen 形式 ('\'') で囲まれる。
     expect(cmd).toContain("'it'\\''s a path'")
+  })
+})
+
+describe("resolveProjectConfigPath", () => {
+  test("cwd 直下の .securecode/sandbox.json を返す", () => {
+    expect(resolveProjectConfigPath("/work/foo")).toBe(join("/work/foo", PROJECT_CONFIG_RELATIVE_PATH))
+  })
+
+  test("PROJECT_CONFIG_RELATIVE_PATH は `.securecode/sandbox.json`", () => {
+    expect(PROJECT_CONFIG_RELATIVE_PATH).toBe(join(".securecode", "sandbox.json"))
+  })
+})
+
+describe("mergeUserConfigs", () => {
+  test("空入力なら空オブジェクトを返す", () => {
+    expect(mergeUserConfigs()).toEqual({})
+    expect(mergeUserConfigs({}, {})).toEqual({})
+  })
+
+  test("network.allowedDomains を union (重複除去) する", () => {
+    const a: UserConfig = { network: { allowedDomains: ["a.com", "b.com"] } }
+    const b: UserConfig = { network: { allowedDomains: ["b.com", "c.com"] } }
+    expect(mergeUserConfigs(a, b).network?.allowedDomains).toEqual(["a.com", "b.com", "c.com"])
+  })
+
+  test("network.deniedDomains を union する", () => {
+    const a: UserConfig = { network: { deniedDomains: ["evil.com"] } }
+    const b: UserConfig = { network: { deniedDomains: ["evil.com", "bad.org"] } }
+    expect(mergeUserConfigs(a, b).network?.deniedDomains).toEqual(["evil.com", "bad.org"])
+  })
+
+  test("filesystem.allow* / deny* を union する", () => {
+    const a: UserConfig = {
+      filesystem: { allowRead: ["/a"], allowWrite: ["/wa"], denyRead: ["/da"], denyWrite: ["/dwa"] },
+    }
+    const b: UserConfig = {
+      filesystem: { allowRead: ["/b"], allowWrite: ["/wb"], denyRead: ["/db"], denyWrite: ["/dwb"] },
+    }
+    const merged = mergeUserConfigs(a, b)
+    expect(merged.filesystem?.allowRead).toEqual(["/a", "/b"])
+    expect(merged.filesystem?.allowWrite).toEqual(["/wa", "/wb"])
+    expect(merged.filesystem?.denyRead).toEqual(["/da", "/db"])
+    expect(merged.filesystem?.denyWrite).toEqual(["/dwa", "/dwb"])
+  })
+
+  test("片方だけ値があれば反映される", () => {
+    const a: UserConfig = {}
+    const b: UserConfig = { network: { allowedDomains: ["only.com"] } }
+    expect(mergeUserConfigs(a, b).network?.allowedDomains).toEqual(["only.com"])
+  })
+
+  test("全フィールドが空 / undefined なら network / filesystem キー自体が生えない", () => {
+    expect(mergeUserConfigs({ network: { allowedDomains: [] } }, {})).toEqual({})
+  })
+
+  test("global と project の両方で deny されたドメインは 1 度だけ残る (union)", () => {
+    const global: UserConfig = { network: { deniedDomains: ["evil.com"] } }
+    const project: UserConfig = { network: { deniedDomains: ["evil.com"] } }
+    expect(mergeUserConfigs(global, project).network?.deniedDomains).toEqual(["evil.com"])
+  })
+
+  test("project 側だけで allow を増やせる (= per-directory で許可を拡張)", () => {
+    const global: UserConfig = { network: { allowedDomains: ["common.com"] } }
+    const project: UserConfig = { network: { allowedDomains: ["extra.com"] } }
+    expect(mergeUserConfigs(global, project).network?.allowedDomains).toEqual(["common.com", "extra.com"])
+  })
+})
+
+describe("loadMergedUserConfig", () => {
+  test("両方不在なら空オブジェクト", () => {
+    const cfg = loadMergedUserConfig({
+      globalPath: "/nonexistent/global/sandbox.json",
+      projectPath: "/nonexistent/project/sandbox.json",
+    })
+    expect(cfg).toEqual({})
+  })
+
+  test("global のみ存在", () => {
+    const dir = mkdtempSync(join(tmpdir(), "securecode-merged-"))
+    const globalPath = join(dir, "global.json")
+    writeFileSync(globalPath, JSON.stringify({ network: { allowedDomains: ["g.com"] } }))
+    try {
+      const cfg = loadMergedUserConfig({
+        globalPath,
+        projectPath: join(dir, "missing-project.json"),
+      })
+      expect(cfg.network?.allowedDomains).toEqual(["g.com"])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("project のみ存在", () => {
+    const dir = mkdtempSync(join(tmpdir(), "securecode-merged-"))
+    const projectPath = join(dir, "project.json")
+    writeFileSync(projectPath, JSON.stringify({ network: { allowedDomains: ["p.com"] } }))
+    try {
+      const cfg = loadMergedUserConfig({
+        globalPath: join(dir, "missing-global.json"),
+        projectPath,
+      })
+      expect(cfg.network?.allowedDomains).toEqual(["p.com"])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("両方存在: allow を union 、deny を union", () => {
+    const dir = mkdtempSync(join(tmpdir(), "securecode-merged-"))
+    const globalPath = join(dir, "global.json")
+    const projectPath = join(dir, "project.json")
+    writeFileSync(
+      globalPath,
+      JSON.stringify({
+        network: { allowedDomains: ["g.com"], deniedDomains: ["evil.com"] },
+        filesystem: { denyRead: ["/gsecret"] },
+      }),
+    )
+    writeFileSync(
+      projectPath,
+      JSON.stringify({
+        network: { allowedDomains: ["p.com"], deniedDomains: ["bad.org"] },
+        filesystem: { denyRead: ["/psecret"] },
+      }),
+    )
+    try {
+      const cfg = loadMergedUserConfig({ globalPath, projectPath })
+      expect(cfg.network?.allowedDomains).toEqual(["g.com", "p.com"])
+      expect(cfg.network?.deniedDomains).toEqual(["evil.com", "bad.org"])
+      expect(cfg.filesystem?.denyRead).toEqual(["/gsecret", "/psecret"])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("project sandbox.json のデフォルト位置 (cwd/.securecode/sandbox.json) を解決できる", () => {
+    const dir = mkdtempSync(join(tmpdir(), "securecode-cwd-"))
+    mkdirSync(join(dir, ".securecode"), { recursive: true })
+    writeFileSync(
+      join(dir, PROJECT_CONFIG_RELATIVE_PATH),
+      JSON.stringify({ network: { allowedDomains: ["from-cwd.com"] } }),
+    )
+    try {
+      const cfg = loadMergedUserConfig({
+        globalPath: join(dir, "no-such-global.json"),
+        projectPath: resolveProjectConfigPath(dir),
+      })
+      expect(cfg.network?.allowedDomains).toEqual(["from-cwd.com"])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe("buildSandboxConfig with project config", () => {
+  test("configPaths を渡すと全パスが denyRead / denyWrite の先頭に入る", () => {
+    const globalPath = "/home/user/.config/securecode/sandbox.json"
+    const projectPath = "/work/repo/.securecode/sandbox.json"
+    const cfg = buildSandboxConfig(
+      { filesystem: { denyRead: ["/extra"], denyWrite: ["/extra"] } },
+      { configPaths: [globalPath, projectPath] },
+    )
+    expect(cfg.filesystem.denyRead?.slice(0, 2)).toEqual([globalPath, projectPath])
+    expect(cfg.filesystem.denyRead).toEqual([globalPath, projectPath, "/extra"])
+    expect(cfg.filesystem.denyWrite?.slice(0, 2)).toEqual([globalPath, projectPath])
+    expect(cfg.filesystem.denyWrite).toEqual([globalPath, projectPath, "/extra"])
+  })
+
+  test("configPaths 未指定なら従来通り CONFIG_PATH のみ deny に入る (後方互換)", () => {
+    const cfg = buildSandboxConfig({})
+    expect(cfg.filesystem.denyRead).toEqual([CONFIG_PATH])
+    expect(cfg.filesystem.denyWrite).toEqual([CONFIG_PATH])
   })
 })
 

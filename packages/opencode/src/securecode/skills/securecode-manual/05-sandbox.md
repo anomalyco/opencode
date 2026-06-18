@@ -37,7 +37,7 @@ Windows ネイティブは配布対象外です。WSL2 上で Linux 版を使っ
 
 - **HTTPS / SOCKS5 outbound** は許可ドメイン (`conf-ai.acompany-az.com` 既定) 以外をすべて遮断
 - **ファイルアクセス** はワーキングディレクトリ配下と最小限の OS パスのみ
-- **`sandbox.json` 自体** は AI から **読みも書きも一切できない** (`denyRead` + `denyWrite` を常に sandbox.json 自身に固定。unlink + 再作成も Seatbelt / bubblewrap が阻止するので、AI が「自分の檻を広げるよう設定を書き換える」改ざんは構造上不可能)
+- **`sandbox.json` 自体** は AI から **読みも書きも一切できない** (`denyRead` + `denyWrite` を global / project の sandbox.json 両方に常時固定。unlink + 再作成も Seatbelt / bubblewrap が阻止するので、AI が「自分の檻を広げるよう設定を書き換える」改ざんは構造上不可能)
 - サンドボックスが起動できない環境では **fail-closed** = セキュアコード は起動を拒否
 
 ## 許可ドメインを増やす
@@ -58,6 +58,25 @@ Windows ネイティブは配布対象外です。WSL2 上で Linux 版を使っ
 
 > 追加するドメインは **必要最小限**。社内 proxy 経由でしか出られない環境では proxy のホスト名を追加。「全部許可」する書き方は意図的に提供していません。
 
+## per-directory 設定
+
+プロジェクトごとに追加で許可したいドメイン / パスがある場合は、起動 cwd 直下に `./.securecode/sandbox.json` を置けます。global (`~/.config/securecode/sandbox.json`) と project の両方を読み、**allow / deny を union (重複除去) で合成** します。
+
+```
+<project root>/
+  .securecode/
+    sandbox.json   # ← このプロジェクトでだけ使う追加許可
+```
+
+合成ルール:
+
+- `network.allow` / `network.deny` / `filesystem.allowRead` / `filesystem.allowWrite` / `filesystem.denyRead` / `filesystem.denyWrite` はすべて global ∪ project の union
+- 同じドメインが global の deny にも project の allow にも入っている場合、sandbox-runtime 側で **deny が勝ち**ます (`deny` 優先)
+- 親ディレクトリへの walk は **しません**。起動 cwd 直下の `./.securecode/sandbox.json` だけ見ます
+- project の `sandbox.json` も AI からは読み書き不可 (sandbox 起動時に `denyRead` + `denyWrite` に追加される)
+
+「このプロジェクトでだけ npm レジストリと社内 API を許可したい」のような用途に。global を汚さずに済みます。
+
 ## ありがちな引っかかり
 
 | 症状 | 原因 | 対処 |
@@ -70,7 +89,7 @@ Windows ネイティブは配布対象外です。WSL2 上で Linux 版を使っ
 
 ## サンドボックス境界の確認
 
-「なぜブロックされた？」のときは、`~/.config/securecode/sandbox.json` の `allow` / `deny` ルールと、起動時に supervisor が stderr に出す `allowedDomains = ...` のログを直接確認してください。`--print-logs --log-level DEBUG` で詳しく見られます。
+「なぜブロックされた？」のときは、`~/.config/securecode/sandbox.json` および `./.securecode/sandbox.json` の `allow` / `deny` ルールと、起動時に supervisor が stderr に出す `allowedDomains = ...` のログを直接確認してください。`--print-logs --log-level DEBUG` で詳しく見られます。
 
 ## 関連
 
