@@ -219,8 +219,8 @@ export const layer = Layer.effect(
       const expanded = yield* Effect.promise(() =>
         ConfigVariable.substitute(
           "path" in options
-            ? { text, type: "path", path: options.path, env }
-            : { text, type: "virtual", ...options, env },
+            ? { text, type: "path", path: options.path, env, jsonEscape: true }
+            : { text, type: "virtual", ...options, env, jsonEscape: true },
         ),
       )
       const parsed = ConfigParse.jsonc(expanded, source)

@@ -20,6 +20,14 @@ type SubstituteInput = ParseSource & {
   text: string
   missing?: "error" | "empty"
   env?: Record<string, string>
+  /**
+   * Escape substituted values so they remain valid inside a JSON string when
+   * the result is fed to a JSON parser. Without this, a value containing
+   * backslashes (e.g. a native Windows path `C:\Users\me`) or quotes breaks
+   * the surrounding document. Leave off when substituting into an already
+   * parsed string (e.g. a remote-config url or header value).
+   */
+  jsonEscape?: boolean
 }
 
 function source(input: ParseSource) {
@@ -33,8 +41,9 @@ function dir(input: ParseSource) {
 /** Apply {env:VAR} and {file:path} substitutions to config text. */
 export async function substitute(input: SubstituteInput) {
   const missing = input.missing ?? "error"
+  const escape = input.jsonEscape ? (value: string) => JSON.stringify(value).slice(1, -1) : (value: string) => value
   let text = input.text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
-    return (input.env?.[varName] ?? process.env[varName]) || ""
+    return escape((input.env?.[varName] ?? process.env[varName]) || "")
   })
 
   const fileMatches = Array.from(text.matchAll(/\{file:[^}]+\}/g))
@@ -82,7 +91,7 @@ export async function substitute(input: SubstituteInput) {
       })
     ).trim()
 
-    out += JSON.stringify(fileContent).slice(1, -1)
+    out += escape(fileContent)
     cursor = index + token.length
   }
 
