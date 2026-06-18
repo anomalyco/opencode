@@ -1,7 +1,8 @@
-import { ActiveGoalExistsError, NoActiveGoalError } from "./errors"
+import { ActiveGoalExistsError, GoalVerificationFailedError, NoActiveGoalError } from "./errors"
 import { checkGoalBudget } from "./budget"
 import { createGoalCheckpoint } from "./checkpoints"
 import { appendGoalEvent, readGoalEvents } from "./events"
+import { readGoalEvidence } from "./evidence"
 import { createDeterministicGoalPlan } from "./planner"
 import { renderGoalHistory, renderGoalLogs, renderGoalStatus, renderNoActiveGoal } from "./renderer"
 import { archiveActiveGoal, listArchivedGoals, loadActiveGoal, saveActiveGoal, type ActiveGoalState, type ArchivedGoalSummary } from "./store"
@@ -33,6 +34,7 @@ export interface GoalManager {
   pause(): Promise<Goal>
   resume(): Promise<Goal>
   enforceBudget(): Promise<Goal>
+  complete(): Promise<Goal>
   clear(): Promise<Goal>
 }
 
@@ -180,6 +182,39 @@ export function createGoalManager(ctx: Pick<InstanceContext, "directory" | "work
         createdAt: now(),
       })
       return budgetExceeded
+    },
+
+    async complete() {
+      const active = await loadActiveGoal(ctx)
+      if (!active) throw new NoActiveGoalError({ operation: "complete" })
+
+      const evidence = (await readGoalEvidence(ctx)).filter((item) => item.goalId === active.goal.id)
+      const required = active.plan?.steps.reduce((count, step) => count + step.verification.length, 0) ?? 0
+      const passed = evidence.filter((item) => item.passed).length
+      const failed = evidence.filter((item) => !item.passed).length
+      const lastEvidenceId = evidence.at(-1)?.id
+
+      if (required === 0 || passed < required || failed > 0) {
+        throw new GoalVerificationFailedError({ goalId: active.goal.id, evidenceId: lastEvidenceId })
+      }
+
+      const completed = transitionGoal(
+        {
+          ...active.goal,
+          verification: { required, passed, failed, lastEvidenceId },
+        },
+        "COMPLETED",
+        { now: now() },
+      )
+      await saveActiveGoal(ctx, { goal: completed, plan: active.plan })
+      await event(completed, "GOAL_COMPLETED", "Goal completed", { required, passed, failed, lastEvidenceId })
+      await createGoalCheckpoint(ctx, {
+        id: checkpointId(),
+        goal: completed,
+        plan: active.plan,
+        createdAt: now(),
+      })
+      return completed
     },
 
     async clear() {

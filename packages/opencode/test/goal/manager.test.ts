@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { ActiveGoalExistsError, InvalidGoalTransitionError, NoActiveGoalError } from "@/goal/errors"
+import { ActiveGoalExistsError, GoalVerificationFailedError, InvalidGoalTransitionError, NoActiveGoalError } from "@/goal/errors"
 import { createGoalManager } from "@/goal/manager"
+import { appendGoalEvidence } from "@/goal/evidence"
 import { loadActiveGoal, saveActiveGoal } from "@/goal/store"
 import type { InstanceContext } from "@/project/instance-context"
 import { tmpdir } from "../fixture/fixture"
@@ -196,6 +197,97 @@ describe("goal manager", () => {
 
     expect(pauseError).toBeInstanceOf(NoActiveGoalError)
     expect(resumeError).toBeInstanceOf(NoActiveGoalError)
+  })
+
+  test("complete rejects missing required evidence", async () => {
+    await using tmp = await tmpdir()
+    const ctx = context(tmp.path)
+    const mgr = manager(ctx)
+
+    await mgr.create("Migrate repository to Bun")
+
+    let error: unknown
+    try {
+      await mgr.complete()
+    } catch (cause) {
+      error = cause
+    }
+
+    expect(error).toBeInstanceOf(GoalVerificationFailedError)
+  })
+
+  test("complete rejects failed evidence", async () => {
+    await using tmp = await tmpdir()
+    const ctx = context(tmp.path)
+    const mgr = manager(ctx)
+    const created = await mgr.create("Migrate repository to Bun")
+
+    await appendGoalEvidence(ctx, {
+      id: "evidence_1",
+      goalId: created.id,
+      type: "COMMAND",
+      command: "bun run --cwd packages/opencode typecheck",
+      cwd: tmp.path,
+      expectedExitCode: 0,
+      exitCode: 1,
+      output: "failed",
+      truncated: false,
+      timedOut: false,
+      aborted: false,
+      startedAt: "2026-06-17T00:00:00.000Z",
+      completedAt: "2026-06-17T00:00:01.000Z",
+      passed: false,
+      createdAt: "2026-06-17T00:00:01.000Z",
+    })
+
+    let error: unknown
+    try {
+      await mgr.complete()
+    } catch (cause) {
+      error = cause
+    }
+
+    expect(error).toBeInstanceOf(GoalVerificationFailedError)
+  })
+
+  test("complete transitions goal when required evidence passes", async () => {
+    await using tmp = await tmpdir()
+    const ctx = context(tmp.path)
+    const mgr = manager(ctx)
+    const created = await mgr.create("Migrate repository to Bun")
+    const active = await loadActiveGoal(ctx)
+    await saveActiveGoal(ctx, { goal: { ...created, state: "VERIFYING" }, plan: active?.plan })
+
+    await appendGoalEvidence(ctx, {
+      id: "evidence_1",
+      goalId: created.id,
+      type: "COMMAND",
+      command: "bun run --cwd packages/opencode typecheck",
+      cwd: tmp.path,
+      expectedExitCode: 0,
+      exitCode: 0,
+      output: "ok",
+      truncated: false,
+      timedOut: false,
+      aborted: false,
+      startedAt: "2026-06-17T00:00:00.000Z",
+      completedAt: "2026-06-17T00:00:01.000Z",
+      passed: true,
+      createdAt: "2026-06-17T00:00:01.000Z",
+    })
+
+    const completed = await mgr.complete()
+
+    expect(completed.state).toBe("COMPLETED")
+    expect(completed.verification).toEqual({ required: 1, passed: 1, failed: 0, lastEvidenceId: "evidence_1" })
+    expect((await loadActiveGoal(ctx))?.goal.state).toBe("COMPLETED")
+
+    const activePath = path.join(tmp.path, ".opencode", "goals", "active")
+    const events = await fs.readFile(path.join(activePath, "events.jsonl"), "utf8")
+    const checkpointExists = await Bun.file(path.join(activePath, "checkpoints", "checkpoint_001.json")).exists()
+
+    expect(events).toContain("GOAL_COMPLETED")
+    expect(checkpointExists).toBe(true)
   })
 
   test("marks active goal as budget exceeded when budget is over limit", async () => {

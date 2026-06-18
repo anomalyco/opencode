@@ -40,6 +40,7 @@ function manager(overrides: Partial<GoalManager> = {}): GoalManager {
     pause: async () => goal({ state: "PAUSED" }),
     resume: async () => goal({ state: "ACTIVE" }),
     enforceBudget: async () => goal({ state: "BUDGET_EXCEEDED" }),
+    complete: async () => goal({ state: "COMPLETED" }),
     clear: async () => goal({ state: "CANCELLED" }),
     ...overrides,
   }
