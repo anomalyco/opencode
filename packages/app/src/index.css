@@ -1396,10 +1396,7 @@
 }
 
 :root[data-theme="jitda"] [data-component="codle-session-frame"] {
-  border-width: 0 1px 0 0;
-  /* 디자인(.oc-split-handle::before)의 hairline 과 동일한 색으로 정적 구분선을 맞춘다.
-     핸들이 렌더되지 않는 상태(컴포저 확장·모바일)에서도 이 테두리가 구분선으로 남는다. */
-  border-right-color: var(--border-base);
+  border-width: 0;
   border-radius: 0;
   box-shadow: none;
   /* 디자인(oc-canvas-grid)처럼 채팅 타임라인이 격자 배경을 갖도록 — 흰 프레임 배경을 투명으로 만들어
