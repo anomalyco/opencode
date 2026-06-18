@@ -24,10 +24,12 @@ package_dir() {
   local dir="$1"
   local name
   name="$(basename "$dir")"
+  local out_dir
+  out_dir="$(cd "${dir%/*}" && pwd)"
   if [[ "$name" == *linux* ]]; then
-    tar -czf "${dir%/*}/${name}.tar.gz" -C "$dir/bin" .
+    tar -czf "${out_dir}/${name}.tar.gz" -C "$dir/bin" .
   else
-    (cd "$dir/bin" && zip -qr "${dir%/*}/${name}.zip" .)
+    (cd "$dir/bin" && zip -qr "${out_dir}/${name}.zip" .)
   fi
 }
 
