@@ -28,8 +28,6 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { InstanceRef } from "@/effect/instance-ref"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
-import { IntegrationManager } from "@/integration/manager"
-import { bootstrapIntegrations } from "@/integration/bootstrap"
 
 const runtimeTask = import("./run/runtime")
 type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
@@ -842,16 +840,6 @@ export const RunCommand = effectCmd({
           return Server.Default().app.fetch(request)
         }) as typeof globalThis.fetch
 
-        // Bootstrap integrations (interactive TUI mode — same in-process client)
-        const client = createOpencodeClient({
-          baseUrl: "http://opencode.internal",
-          fetch: fetchFn,
-          directory: directory ?? root,
-        })
-        const manager = new IntegrationManager(client)
-        await bootstrapIntegrations(manager, config.integrations)
-        await manager.startAll()
-
         try {
           return await runInteractiveLocalMode({
             directory: directory ?? root,
@@ -890,11 +878,6 @@ export const RunCommand = effectCmd({
         fetch: fetchFn,
         directory,
       })
-
-      // Bootstrap integrations (non-interactive mode)
-      const manager = new IntegrationManager(sdk)
-      await bootstrapIntegrations(manager, config.integrations)
-      await manager.startAll()
 
       await execute(sdk)
     })
