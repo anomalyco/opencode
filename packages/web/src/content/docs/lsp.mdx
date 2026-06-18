@@ -3,13 +3,13 @@ title: LSP Servers
 description: OpenCode integrates with your LSP servers.
 ---
 
-OpenCode can integrate with Language Server Protocol (LSP) servers to use diagnostics as feedback for the agent.
+OpenCode can integrate with Language Server Protocol (LSP) servers to use diagnostics as feedback for the agent. LSP is disabled by default; enable it in your config before these servers start.
 
 ---
 
 ## Built-in
 
-OpenCode comes with several built-in LSP servers for popular languages:
+OpenCode comes with several built-in LSP servers for popular languages. These built-ins are available after LSP is enabled:
 
 | LSP Server         | Extensions                                                          | Requirements                                                 |
 | ------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------ |
@@ -48,7 +48,7 @@ OpenCode comes with several built-in LSP servers for popular languages:
 | yaml-ls            | .yaml, .yml                                                         | Auto-installs Red Hat yaml-language-server                   |
 | zls                | .zig, .zon                                                          | `zig` command available                                      |
 
-LSP is disabled by default. When enabled, servers start when one of the above file extensions is detected and the requirements are met.
+When enabled, servers start when one of the above file extensions is detected and the requirements are met.
 
 :::note
 You can disable automatic LSP server downloads by setting the `OPENCODE_DISABLE_LSP_DOWNLOAD` environment variable to `true`.
@@ -77,7 +77,7 @@ Language servers can get out of sync, use significant memory, vary by version or
 
 You can enable and customize LSP servers through the `lsp` section in your opencode config.
 
-To enable all built-in LSP servers, set `lsp` to `true`.
+To enable all built-in LSP servers, set `lsp` to `true`. Without an `lsp` config value, all LSP servers stay disabled.
 
 ```json title="opencode.json"
 {
@@ -94,6 +94,8 @@ Use an object to keep built-ins enabled while configuring overrides or custom se
   "lsp": {}
 }
 ```
+
+The `OPENCODE_EXPERIMENTAL_LSP_TOOL` environment variable is separate from LSP server enablement. It exposes the experimental `lsp` tool when enabled, but it does not turn on LSP servers by itself.
 
 Each configured LSP server entry supports the following:
 
