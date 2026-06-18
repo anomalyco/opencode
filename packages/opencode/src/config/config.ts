@@ -247,7 +247,12 @@ export const layer = Layer.effect(
       let result: Info = {}
       // Seed the default global config with the schema for editor completion, but avoid writing when the user
       // explicitly routes config through env-provided paths or content.
-      if (!Flag.OPENCODE_CONFIG && !Flag.OPENCODE_CONFIG_DIR && !Flag.OPENCODE_CONFIG_CONTENT) {
+      if (
+        !Flag.OPENCODE_CONFIG &&
+        !Flag.OPENCODE_CONFIG_DIR &&
+        !Flag.OPENCODE_CONFIG_DIRS.length &&
+        !Flag.OPENCODE_CONFIG_CONTENT
+      ) {
         const file = globalConfigFile()
         if (!existsSync(file)) {
           yield* fs
@@ -414,14 +419,19 @@ export const layer = Layer.effect(
 
         const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree)
 
-        if (Flag.OPENCODE_CONFIG_DIR) {
-          yield* Effect.logDebug("loading config from OPENCODE_CONFIG_DIR", { path: Flag.OPENCODE_CONFIG_DIR })
+        const extraConfigDirs = new Set([
+          ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),
+          ...Flag.OPENCODE_CONFIG_DIRS,
+        ])
+
+        if (extraConfigDirs.size) {
+          yield* Effect.logDebug("loading config from extra config dirs", { paths: [...extraConfigDirs] })
         }
 
         const deps: Fiber.Fiber<void>[] = []
 
         for (const dir of directories) {
-          if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
+          if (dir.endsWith(".opencode") || extraConfigDirs.has(dir)) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
               yield* Effect.logDebug(`loading config from ${source}`)

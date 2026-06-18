@@ -1,3 +1,4 @@
+import path from "path"
 import { Config } from "effect"
 
 export function truthy(key: string) {
@@ -10,6 +11,10 @@ const fff = process.env["OPENCODE_DISABLE_FFF"]
 
 function enabledByExperimental(key: string) {
   return process.env[key] === undefined ? truthy("OPENCODE_EXPERIMENTAL") : truthy(key)
+}
+
+function splitPathList(value: string | undefined) {
+  return value?.split(path.delimiter).filter(Boolean) ?? []
 }
 
 export const Flag = {
@@ -62,6 +67,9 @@ export const Flag = {
   },
   get OPENCODE_CONFIG_DIR() {
     return process.env["OPENCODE_CONFIG_DIR"]
+  },
+  get OPENCODE_CONFIG_DIRS() {
+    return splitPathList(process.env["OPENCODE_CONFIG_DIRS"])
   },
   get OPENCODE_PURE() {
     return truthy("OPENCODE_PURE")

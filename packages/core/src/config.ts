@@ -169,7 +169,9 @@ export const layer = Layer.effect(
       ]
     })
 
-    const globalDirectory = AbsolutePath.make(global.config)
+    const globalDirectories = Array.from(new Set([global.config, ...global.extraConfigDirs])).map((directory) =>
+      AbsolutePath.make(directory),
+    )
     const locationIsGlobal = path.resolve(location.directory) === path.resolve(global.config)
     // Read configuration once when this location opens. Later calls reuse these
     // values until the location is reopened.
@@ -182,13 +184,10 @@ export const layer = Layer.effect(
             stop: location.project.directory,
           })
           .pipe(Effect.orDie)
-    const directories = [
-      globalDirectory,
-      ...discovered
-        .filter((item) => path.basename(item) === ".opencode")
-        .toReversed()
-        .map((directory) => AbsolutePath.make(directory)),
-    ]
+    const projectDirectories = discovered
+      .filter((item) => path.basename(item) === ".opencode")
+      .toReversed()
+      .map((directory) => AbsolutePath.make(directory))
     // A config closer to the opened directory should win over one higher up.
     // Search starts nearby, so reverse the results before applying them.
     const directPaths = discovered.filter((item) => path.basename(item) !== ".opencode").toReversed()
@@ -196,10 +195,11 @@ export const layer = Layer.effect(
       Effect.orDie,
       Effect.map((configs) => configs.filter((config): config is Document => config !== undefined)),
     )
-    const supplementary = yield* Effect.forEach(directories, loadDirectory).pipe(Effect.orDie)
+    const globalSupplementary = yield* Effect.forEach(globalDirectories, loadDirectory).pipe(Effect.orDie)
+    const projectSupplementary = yield* Effect.forEach(projectDirectories, loadDirectory).pipe(Effect.orDie)
     // Apply general settings first and more specific settings last:
-    // global config, project files, then `.opencode` files.
-    const configs = [...(supplementary[0] ?? []), ...direct, ...supplementary.slice(1).flat()]
+    // global config, extra config dirs, project files, then `.opencode` files.
+    const configs = [...globalSupplementary.flat(), ...direct, ...projectSupplementary.flat()]
     // Rules use the opposite order so a user-global rule can override a
     // repository rule. Statement order inside each file stays unchanged.
     yield* policy.load(

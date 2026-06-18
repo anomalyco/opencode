@@ -49,6 +49,8 @@ export interface Interface {
   readonly data: string
   readonly cache: string
   readonly config: string
+  /** Additional config directory layers loaded after the XDG config directory. */
+  readonly extraConfigDirs: readonly string[]
   readonly state: string
   readonly tmp: string
   readonly bin: string
@@ -61,7 +63,8 @@ export function make(input: Partial<Interface> = {}): Interface {
     home: Path.home,
     data: Path.data,
     cache: Path.cache,
-    config: Flag.OPENCODE_CONFIG_DIR ?? Path.config,
+    config: Path.config,
+    extraConfigDirs: [...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []), ...Flag.OPENCODE_CONFIG_DIRS],
     state: Path.state,
     tmp: Path.tmp,
     bin: Path.bin,

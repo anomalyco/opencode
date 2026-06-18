@@ -21,6 +21,8 @@ const globalConfigFiles = ["opencode.json", "opencode.jsonc", "tui.json", "tui.j
 const cleanState = Effect.gen(function* () {
   const fs = yield* FSUtil.Service
   delete process.env.OPENCODE_CONFIG
+  delete process.env.OPENCODE_CONFIG_DIR
+  delete process.env.OPENCODE_CONFIG_DIRS
   delete process.env.OPENCODE_TUI_CONFIG
   yield* Effect.forEach(globalConfigFiles, (file) => fs.remove(file, { force: true }).pipe(Effect.ignore), {
     discard: true,
@@ -130,6 +132,35 @@ it.instance("loads tui config with the same precedence order as server config pa
 
       const config = yield* getTuiConfig(test.directory)
       expect(config.theme).toBe("local")
+      expect(config.diff_style).toBe("stacked")
+    }),
+  ),
+)
+
+it.instance("loads tui config from OPENCODE_CONFIG_DIRS in order", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const test = yield* TestInstance
+      const firstConfigDir = path.join(test.directory, "config-a")
+      const secondConfigDir = path.join(test.directory, "config-b")
+
+      yield* fs.writeWithDirs(path.join(firstConfigDir, "tui.json"), JSON.stringify({ theme: "first" }, null, 2))
+      yield* fs.writeWithDirs(
+        path.join(secondConfigDir, "tui.json"),
+        JSON.stringify({ theme: "second", diff_style: "stacked" }, null, 2),
+      )
+
+      const config = yield* withEnv(
+        "OPENCODE_CONFIG_DIR",
+        undefined,
+        withEnv(
+          "OPENCODE_CONFIG_DIRS",
+          [firstConfigDir, secondConfigDir].join(path.delimiter),
+          getTuiConfig(test.directory),
+        ),
+      )
+      expect(config.theme).toBe("second")
       expect(config.diff_style).toBe("stacked")
     }),
   ),

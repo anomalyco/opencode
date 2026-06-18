@@ -1874,6 +1874,27 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
       }),
     { config: { model: "project/model" } },
   )
+
+  it.instance(
+    "OPENCODE_CONFIG_DIRS works when flag is set",
+    () =>
+      Effect.gen(function* () {
+        const firstConfigDir = yield* tmpdirScoped({ config: { model: "first/model" } })
+        const secondConfigDir = yield* tmpdirScoped({ config: { model: "second/model" } })
+        yield* withProcessEnvs(
+          {
+            OPENCODE_DISABLE_PROJECT_CONFIG: "true",
+            OPENCODE_CONFIG_DIR: undefined,
+            OPENCODE_CONFIG_DIRS: [firstConfigDir, secondConfigDir].join(path.delimiter),
+          },
+          Effect.gen(function* () {
+            const config = yield* Config.use.get()
+            expect(config.model).toBe("second/model")
+          }),
+        )
+      }),
+    { config: { model: "project/model" } },
+  )
 })
 
 // Regression for #28206: malformed OPENCODE_PERMISSION JSON used to crash

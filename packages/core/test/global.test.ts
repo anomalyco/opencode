@@ -13,4 +13,26 @@ describe("global paths", () => {
   test("tmp path is created on module load", async () => {
     expect((await fs.stat(Global.Path.tmp)).isDirectory()).toBe(true)
   })
+
+  test("config directory env vars add extra config directories", () => {
+    const previousDir = process.env.OPENCODE_CONFIG_DIR
+    const previousDirs = process.env.OPENCODE_CONFIG_DIRS
+    process.env.OPENCODE_CONFIG_DIR = "/tmp/opencode-extra-config"
+    process.env.OPENCODE_CONFIG_DIRS = ["/tmp/opencode-extra-a", "/tmp/opencode-extra-b"].join(path.delimiter)
+    try {
+      const global = Global.make()
+
+      expect(global.config).toBe(Global.Path.config)
+      expect(global.extraConfigDirs).toEqual([
+        "/tmp/opencode-extra-config",
+        "/tmp/opencode-extra-a",
+        "/tmp/opencode-extra-b",
+      ])
+    } finally {
+      if (previousDir === undefined) delete process.env.OPENCODE_CONFIG_DIR
+      else process.env.OPENCODE_CONFIG_DIR = previousDir
+      if (previousDirs === undefined) delete process.env.OPENCODE_CONFIG_DIRS
+      else process.env.OPENCODE_CONFIG_DIRS = previousDirs
+    }
+  })
 })

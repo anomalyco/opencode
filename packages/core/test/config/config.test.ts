@@ -24,10 +24,11 @@ function testLayer(
   globalDirectory = path.join(directory, "global"),
   projectDirectory = directory,
   vcs?: Project.Vcs,
+  extraConfigDirs: readonly string[] = [],
 ) {
   return Config.locationLayer.pipe(
     Layer.provide(FSUtil.defaultLayer),
-    Layer.provide(Global.layerWith({ config: globalDirectory })),
+    Layer.provide(Global.layerWith({ config: globalDirectory, extraConfigDirs })),
     Layer.provide(
       Layer.succeed(
         Location.Service,
@@ -766,6 +767,71 @@ describe("Config", () => {
               }),
             ),
           )
+        })
+      }),
+    ),
+  )
+
+  it.live("loads extra config directories after global config and before project config", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const firstExtra = path.join(tmp.path, "extra-a")
+        const secondExtra = path.join(tmp.path, "extra-b")
+        const root = path.join(tmp.path, "repo")
+        return Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(firstExtra, { recursive: true })
+            await fs.mkdir(secondExtra, { recursive: true })
+            await fs.mkdir(path.join(root, ".opencode"), { recursive: true })
+            await Promise.all([
+              fs.writeFile(
+                path.join(global, "opencode.json"),
+                JSON.stringify({ $schema: "global", model: "global/model" }),
+              ),
+              fs.writeFile(
+                path.join(firstExtra, "opencode.json"),
+                JSON.stringify({ $schema: "extra-a", model: "extra-a/model" }),
+              ),
+              fs.writeFile(
+                path.join(secondExtra, "opencode.json"),
+                JSON.stringify({ $schema: "extra-b", model: "extra-b/model" }),
+              ),
+              fs.writeFile(
+                path.join(root, "opencode.json"),
+                JSON.stringify({ $schema: "project", model: "project/model" }),
+              ),
+              fs.writeFile(
+                path.join(root, ".opencode", "opencode.json"),
+                JSON.stringify({ $schema: "project-dot", model: "project-dot/model" }),
+              ),
+            ])
+          })
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const entries = yield* config.entries()
+            const documents = entries.filter((entry) => entry.type === "document")
+
+            expect(entries.filter((entry) => entry.type === "directory").map((entry) => entry.path)).toEqual([
+              AbsolutePath.make(global),
+              AbsolutePath.make(firstExtra),
+              AbsolutePath.make(secondExtra),
+              AbsolutePath.make(path.join(root, ".opencode")),
+            ])
+            expect(documents.map((document) => document.info.$schema)).toEqual([
+              "global",
+              "extra-a",
+              "extra-b",
+              "project",
+              "project-dot",
+            ])
+            expect(Config.latest(entries, "model")).toBe("project-dot/model")
+          }).pipe(Effect.provide(testLayer(root, global, root, undefined, [firstExtra, secondExtra])))
         })
       }),
     ),
