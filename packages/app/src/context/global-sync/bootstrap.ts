@@ -158,6 +158,12 @@ function mergeSession(setStore: SetStoreFunction<State>, session: Session) {
   })
 }
 
+const isNotFound = (error: unknown) =>
+  error instanceof Error &&
+  typeof error.cause === "object" &&
+  error.cause !== null &&
+  (error.cause as { status?: unknown }).status === 404
+
 function warmSessions(input: {
   ids: string[]
   store: Store<State>
@@ -169,11 +175,16 @@ function warmSessions(input: {
   if (ids.length === 0) return Promise.resolve()
   return Promise.all(
     ids.map((sessionID) =>
-      retry(() => input.sdk.session.get({ sessionID })).then((x) => {
-        const session = x.data
-        if (!session?.id) return
-        mergeSession(input.setStore, session)
-      }),
+      retry(() => input.sdk.session.get({ sessionID }))
+        .then((x) => {
+          const session = x.data
+          if (!session?.id) return
+          mergeSession(input.setStore, session)
+        })
+        .catch((error) => {
+          if (isNotFound(error)) return
+          throw error
+        }),
     ),
   ).then(() => undefined)
 }

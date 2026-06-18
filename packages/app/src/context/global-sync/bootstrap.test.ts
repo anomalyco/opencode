@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import { QueryClient } from "@tanstack/solid-query"
-import type { Config, OpencodeClient, Project, Session } from "@opencode-ai/sdk/v2/client"
+import type { Config, OpencodeClient, PermissionRequest, Project, Session } from "@opencode-ai/sdk/v2/client"
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import { bootstrapDirectory, loadPathQuery, loadProvidersQuery } from "./bootstrap"
 import type { State, VcsCache } from "./types"
@@ -157,6 +157,52 @@ describe("bootstrapDirectory", () => {
 
     expect(session.data.session_status["ses_busy"]?.type).toBe("busy")
     expect(session.data.session_status[stale.id]).toBeUndefined()
+  })
+
+  test("ignores stale session references while warming permission sessions", async () => {
+    const missing = new Error("Session not found: ses_missing", { cause: { status: 404 } })
+    const permission = { id: "perm_1", sessionID: "ses_missing" } as PermissionRequest
+    const [store, setStore] = directoryState()
+
+    await bootstrapDirectory({
+      directory: "/project",
+      scope: ServerScope.local,
+      mcp: false,
+      global: {
+        config: {} satisfies Config,
+        path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },
+        project: [{ id: "project", worktree: "/project" } as Project],
+        provider,
+      },
+      sdk: {
+        app: { agents: async () => ({ data: [] }) },
+        config: { get: async () => ({ data: {} }) },
+        session: {
+          get: async () => {
+            throw missing
+          },
+          status: async () => ({ data: {} }),
+        },
+        vcs: { get: async () => ({ data: undefined }) },
+        command: { list: async () => ({ data: [] }) },
+        permission: { list: async () => ({ data: [permission] }) },
+        question: { list: async () => ({ data: [] }) },
+        v2: { reference: { list: async () => ({ data: { data: [] } }) } },
+        mcp: { status: async () => ({ data: {} }) },
+        provider: { list: async () => ({ data: { all: [], connected: [], default: {} } }) },
+      } as unknown as OpencodeClient,
+      store,
+      setStore,
+      vcsCache: { setStore() {} } as unknown as VcsCache,
+      loadSessions() {},
+      translate: (key) => key,
+      queryClient: new QueryClient(),
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 80))
+
+    expect(store.status).toBe("complete")
+    expect(store.permission.ses_missing).toEqual([permission])
   })
 })
 
