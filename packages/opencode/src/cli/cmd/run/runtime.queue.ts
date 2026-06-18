@@ -229,11 +229,13 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
             }
 
             if (sent.mode !== "shell") {
-              const duration = Locale.duration(Math.max(0, Date.now() - start))
+              const end = Date.now()
+              const duration = Locale.duration(Math.max(0, end - start))
               emit(
                 {
                   type: "turn.duration",
                   duration,
+                  time: Locale.time(end),
                 },
                 {
                   duration,
