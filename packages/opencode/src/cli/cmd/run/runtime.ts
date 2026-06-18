@@ -427,31 +427,33 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     void Promise.resolve(input.afterPaint(ctx)).catch(() => {})
   }
 
-  void modelTask.then((info) => {
-    state.providers = info.providers
-    state.variants = variantsFor(state.providers, state.model)
-    state.limits = info.limits
+  void modelTask
+    .then((info) => {
+      state.providers = info.providers
+      state.variants = variantsFor(state.providers, state.model)
+      state.limits = info.limits
 
-    const next = resolveVariant(ctx.variant, session.variant, savedVariant, state.variants)
-    if (next !== state.activeVariant) {
-      state.activeVariant = next
-    }
+      const next = resolveVariant(ctx.variant, session.variant, savedVariant, state.variants)
+      if (next !== state.activeVariant) {
+        state.activeVariant = next
+      }
 
-    if (footer.isClosed) {
-      return
-    }
+      if (footer.isClosed) {
+        return
+      }
 
-    footer.event({ type: "models", providers: info.providers })
-    footer.event({ type: "variants", variants: state.variants, current: state.activeVariant })
-    if (!state.model) {
-      return
-    }
+      footer.event({ type: "models", providers: info.providers })
+      footer.event({ type: "variants", variants: state.variants, current: state.activeVariant })
+      if (!state.model) {
+        return
+      }
 
-    footer.event({
-      type: "model",
-      model: formatModelLabel(state.model, state.activeVariant, state.providers),
+      footer.event({
+        type: "model",
+        model: formatModelLabel(state.model, state.activeVariant, state.providers),
+      })
     })
-  })
+    .catch(() => {})
 
   const streamTask = deps.streamTransport ?? import("./stream.transport")
   const ensureStream = () => {
