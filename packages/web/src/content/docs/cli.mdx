@@ -240,6 +240,20 @@ opencode mcp add
 
 This command will guide you through adding either a local or remote MCP server.
 
+You can also add a server non-interactively by passing a name and either `--url` for a remote server or a local command after `--`.
+
+```bash
+opencode mcp add github --url https://api.githubcopilot.com/mcp --header "Authorization=Bearer {env:GITHUB_TOKEN}"
+```
+
+##### Flags
+
+| Flag                                  | Description                                  |
+| ------------------------------------- | -------------------------------------------- |
+| <nobr><code>{"--url"}</code></nobr>   | URL for a remote MCP server                  |
+| <nobr><code>{"--header"}</code></nobr> | HTTP header for a remote MCP server          |
+| <nobr><code>{"--env"}</code></nobr>   | Environment variable for a local MCP server |
+
 ---
 
 #### list
