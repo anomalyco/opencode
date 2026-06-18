@@ -15,12 +15,11 @@ export default Runtime.handler(
   Effect.fn("cli.serve")(function* (input) {
     const providerURL = Option.isSome(input["provider-url"]) ? input["provider-url"].value : undefined
     const model = Option.isSome(input.model) ? input.model.value : undefined
-    const timeout = Option.isSome(input.timeout) ? input.timeout.value : undefined
     return yield* Effect.scoped(
       Effect.gen(function* () {
         const daemon = yield* Daemon.Service
         // Передаём пустую строку вместо daemon.password(), чтобы отключить аутентификацию
-        const address = yield* listen(input.hostname, input.port, "", providerURL, model, timeout)
+        const address = yield* listen(input.hostname, input.port, "", providerURL, model)
         if (input.register) yield* daemon.register(address)
         console.log(`server listening on ${HttpServer.formatAddress(address)}`)
         return yield* Effect.never
@@ -29,17 +28,17 @@ export default Runtime.handler(
   }),
 )
 
-function listen(hostname: string, port: Option.Option<number>, password: string, providerURL?: string, model?: string, timeout?: number) {
-  if (Option.isSome(port)) return bind(hostname, port.value, password, providerURL, model, timeout)
-  return bind(hostname, 4096, password, providerURL, model, timeout).pipe(Effect.catch(() => bind(hostname, 0, password, providerURL, model, timeout)))
+function listen(hostname: string, port: Option.Option<number>, password: string, providerURL?: string, model?: string) {
+  if (Option.isSome(port)) return bind(hostname, port.value, password, providerURL, model)
+  return bind(hostname, 4096, password, providerURL, model).pipe(Effect.catch(() => bind(hostname, 0, password, providerURL, model)))
 }
 
-function bind(hostname: string, port: number, password: string, providerURL?: string, model?: string, timeout?: number) {
+function bind(hostname: string, port: number, password: string, providerURL?: string, model?: string) {
   return Layer.build(
-    HttpRouter.serve(createRoutes(password, providerURL, model, timeout), { disableListenLog: true, disableLogger: true }).pipe(
+    HttpRouter.serve(createRoutes(password, providerURL, model), { disableListenLog: true, disableLogger: true }).pipe(
       Layer.provideMerge(NodeHttpServer.layer(() => {
         const server = createServer()
-        server.timeout = 1_800_000
+        server.timeout = 360_000
         return server
       }, { port, host: hostname })),
       Layer.provide(Credential.defaultLayer),

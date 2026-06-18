@@ -16,7 +16,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import type { Catalog } from "@opencode-ai/core/catalog"
 
-function cliProviderPlugin(providerURL: string, model: string, timeout?: number) {
+function cliProviderPlugin(providerURL: string, model: string) {
   return {
     id: PluginV2.ID.make("cli-provider"),
     effect: Effect.succeed({
@@ -24,12 +24,7 @@ function cliProviderPlugin(providerURL: string, model: string, timeout?: number)
         const providerID = ProviderV2.ID.make("cli")
         evt.provider.update(providerID, (provider) => {
           provider.name = "CLI Provider"
-          provider.api = {
-            type: "aisdk",
-            package: "@ai-sdk/openai-compatible",
-            url: providerURL,
-            settings: timeout !== undefined ? { timeout } : {},
-          }
+          provider.api = { type: "aisdk", package: "@ai-sdk/openai-compatible", url: providerURL, settings: {} }
           provider.request = { headers: {}, body: {} }
           provider.enabled = { via: "custom", data: {} }
         })
@@ -46,9 +41,9 @@ function cliProviderPlugin(providerURL: string, model: string, timeout?: number)
   }
 }
 
-export function createRoutes(password?: string, providerURL?: string, model?: string, timeout?: number) {
+export function createRoutes(password?: string, providerURL?: string, model?: string) {
   if (providerURL && model) {
-    setExtraPlugins([cliProviderPlugin(providerURL, model, timeout)])
+    setExtraPlugins([cliProviderPlugin(providerURL, model)])
   }
   return HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
     Layer.provide(handlers),

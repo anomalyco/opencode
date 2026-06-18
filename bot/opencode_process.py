@@ -2,33 +2,90 @@
 Управление процессом OpenCode (lildax)
 """
 import asyncio
+import json
 import os
 import subprocess
 import socket
 from pathlib import Path
 
-from config import OPENCODE_BIN, PROVIDER_URL, CLI_MODEL, REQUEST_TIMEOUT
+from config import OPENCODE_BIN, OPENCODE_CONFIG_PATH, PROVIDER_URL, CLI_MODEL, MCP_SERVERS
 from logging_config import logger
+
+
+def sync_mcp_to_lildax_config() -> bool:
+    """Синхронизирует MCP сервера из bot/config.json в lildax config.
+
+    Читает mcp_servers из bot/config.json и обновляет секцию 'mcp'
+    в ~/.config/lildax/config.json.
+
+    Returns:
+        True если успешно, иначе False
+    """
+    try:
+        # Путь к lildax config (OPENCODE_CONFIG_PATH)
+        lildax_config_path = Path(OPENCODE_CONFIG_PATH).expanduser()
+
+        if not MCP_SERVERS:
+            logger.debug("No mcp_servers in bot config, skipping sync")
+            return True
+
+        # Читаем текущий lildax config
+        try:
+            with open(lildax_config_path, "r", encoding="utf-8") as f:
+                lildax_config = json.load(f)
+        except FileNotFoundError:
+            logger.warning(f"Lildax config not found at {lildax_config_path}, creating new")
+            lildax_config = {}
+        except json.JSONDecodeError as e:
+            logger.error(f"Invalid JSON in lildax config: {e}")
+            return False
+
+        # Обновляем или создаём секцию mcp
+        if "mcp" not in lildax_config:
+            lildax_config["mcp"] = {}
+
+        # Формат: { "server-name": { "type": "local", "command": [...], "enabled": true } }
+        for server_name, server_config in MCP_SERVERS.items():
+            if isinstance(server_config, dict) and server_config.get("enabled", True):
+                lildax_config["mcp"][server_name] = {
+                    "type": server_config.get("type", "local"),
+                    "command": server_config.get("command", []),
+                }
+                if "cwd" in server_config:
+                    lildax_config["mcp"][server_name]["cwd"] = server_config["cwd"]
+                if "environment" in server_config:
+                    lildax_config["mcp"][server_name]["environment"] = server_config["environment"]
+
+        # Сохраняем обновлённый config
+        lildax_config_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(lildax_config_path, "w", encoding="utf-8") as f:
+            json.dump(lildax_config, f, indent=2, ensure_ascii=False)
+
+        logger.info(f"Synced {len(MCP_SERVERS)} MCP servers to {lildax_config_path}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to sync MCP to lildax config: {e}")
+        return False
 
 
 class OpenCodeProcess:
     """Управление процессом lildax serve."""
 
-    def __init__(self, model: str = None, provider_url: str = None, workdir: Path = None, timeout: int = None):
+    def __init__(self, model: str = None, provider_url: str = None, workdir: Path = None):
         self.logger = logger
         self.process = None
         self.opencode_port = 4098
         self.model = model or CLI_MODEL
         self.provider_url = provider_url or PROVIDER_URL
-        self.timeout = timeout or REQUEST_TIMEOUT
         self.workdir = workdir or Path.cwd()
         self.logger.debug(
-            f"OpenCodeProcess initialized: workdir={self.workdir}, model={self.model}, provider_url={self.provider_url}, timeout={self.timeout}"
+            f"OpenCodeProcess initialized: workdir={self.workdir}, model={self.model}, provider_url={self.provider_url}"
         )
 
     def _remove_password_file(self):
         """Удаляет файл password, чтобы lildax не требовал аутентификацию."""
-        password_file = Path.home() / ".local" / "state" / "opencode" / "password"
+        password_file = Path.home() / ".local" / "state" / "lildax" / "password"
         if password_file.exists():
             try:
                 os.remove(password_file)
@@ -42,8 +99,6 @@ class OpenCodeProcess:
             args.extend(["--provider-url", self.provider_url])
         if self.model:
             args.extend(["--model", self.model])
-        if self.timeout:
-            args.extend(["--timeout", str(self.timeout)])
         return args
 
     async def start(self):
@@ -65,6 +120,9 @@ class OpenCodeProcess:
             if result.returncode != 0:
                 break
             await asyncio.sleep(0.5)
+
+        # Синхронизируем MCP сервера в lildax config (после убийства, до старта)
+        sync_mcp_to_lildax_config()
 
         # Логирование в файл для отладки
         log_file_path = f"/tmp/lildax_{self.opencode_port}.log"
@@ -103,13 +161,11 @@ class OpenCodeProcess:
             if log_file:
                 log_file.close()
 
-    async def restart(self, model: str = None, provider_url: str = None, workdir: Path = None, timeout: int = None):
+    async def restart(self, model: str = None, provider_url: str = None, workdir: Path = None):
         if model:
             self.model = model
         if provider_url:
             self.provider_url = provider_url
-        if timeout:
-            self.timeout = timeout
         if workdir:
             self.logger.info(
                 f"restart: updating workdir from {self.workdir} to {workdir}"

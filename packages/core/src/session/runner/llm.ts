@@ -85,7 +85,7 @@ import { toLLMMessages } from "./to-llm-message"
  */
 
 // QUESTION: Did this exist previously, or did we add this limit? Does it make sense?
-const MAX_STEPS = 25
+const DEFAULT_MAX_STEPS = 100
 
 export const layer = Layer.effect(
   Service,
@@ -331,6 +331,7 @@ export const layer = Layer.effect(
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
           if (stream._tag === "Success" && !publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
+          if (publisher.hasTextBasedToolCall()) needsContinuation = true
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure") return yield* Effect.failCause(settled.cause)
           return !publisher.hasProviderError() && needsContinuation
@@ -380,16 +381,17 @@ export const layer = Layer.effect(
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let openActivity = input.force === true || hasSteer || hasQueue
+      const maxSteps = Config.latest(yield* config.entries(), "max_steps") ?? DEFAULT_MAX_STEPS
       while (openActivity) {
         let needsContinuation = true
-        for (let step = 0; step < MAX_STEPS; step++) {
+        for (let step = 0; step < maxSteps; step++) {
           needsContinuation = yield* runTurn(input.sessionID, promotion)
           promotion = "steer"
           if (!needsContinuation) needsContinuation = yield* SessionInput.hasPending(db, input.sessionID, "steer")
           if (!needsContinuation) break
         }
         if (needsContinuation)
-          return yield* new StepLimitExceededError({ sessionID: input.sessionID, limit: MAX_STEPS })
+          return yield* new StepLimitExceededError({ sessionID: input.sessionID, limit: maxSteps })
         openActivity = yield* SessionInput.hasPending(db, input.sessionID, "queue")
         promotion = openActivity ? "queue" : undefined
       }

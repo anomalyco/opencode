@@ -66,6 +66,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   const timestamp = DateTime.now
   let assistantMessageID: SessionMessage.ID | undefined
   let providerFailed = false
+  let textBasedToolCall = false
 
   const startAssistant = Effect.fnUntraced(function* () {
     if (assistantMessageID !== undefined) return assistantMessageID
@@ -114,6 +115,20 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
 
   const text = fragments("text", (textID, value) =>
     Effect.gen(function* () {
+      const toolCallMatch = value.match(
+        /\[Assistant tool call\]\s*:\s*(\w+)\s*\(/i,
+      )
+      if (toolCallMatch) {
+        textBasedToolCall = true
+        yield* events.publish(SessionEvent.Text.Ended, {
+          sessionID: input.sessionID,
+          assistantMessageID: yield* currentAssistantMessageID(),
+          timestamp: yield* timestamp,
+          textID,
+          text: `[ERROR] You outputted a tool call as text ("${toolCallMatch[1]}") instead of using the structured tool_calls field in the API response. The tool was NOT executed. You MUST retry using the proper tool_calls mechanism.`,
+        })
+        return
+      }
       yield* events.publish(SessionEvent.Text.Ended, {
         sessionID: input.sessionID,
         assistantMessageID: yield* currentAssistantMessageID(),
@@ -405,6 +420,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     failUnsettledTools,
     hasAssistantStarted: () => assistantMessageID !== undefined,
     hasProviderError: () => providerFailed,
+    hasTextBasedToolCall: () => textBasedToolCall,
     startAssistant,
     assistantMessageID: assistantMessageIDForTool,
   }

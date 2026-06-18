@@ -18,7 +18,6 @@ class SessionManager:
     def __init__(self, file_path: Path):
         self.file_path = file_path
         self.sessions: Dict[int, str] = {}
-        self.seen_messages: Dict[str, set] = {}
         self.grant_mode: Dict[str, bool] = {}
         self.session_workdir: Dict[str, str] = {}  # session_id -> workdir path
         self.child_sessions: Dict[str, str] = {}  # child_session_id -> parent_session_id
@@ -29,9 +28,6 @@ class SessionManager:
             with open(self.file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
                 self.sessions = {int(k): v for k, v in data.get("sessions", {}).items()}
-                self.seen_messages = {
-                    sid: set(ids) for sid, ids in data.get("seen_messages", {}).items()
-                }
                 self.grant_mode = {
                     sid: bool(val) for sid, val in data.get("grant_mode", {}).items()
                 }
@@ -43,7 +39,6 @@ class SessionManager:
                 }
         except (FileNotFoundError, json.JSONDecodeError):
             self.sessions = {}
-            self.seen_messages = {}
             self.grant_mode = {}
             self.session_workdir = {}
             self.child_sessions = {}
@@ -51,9 +46,6 @@ class SessionManager:
     def _save(self) -> None:
         data = {
             "sessions": {str(k): v for k, v in self.sessions.items()},
-            "seen_messages": {
-                sid: list(ids) for sid, ids in self.seen_messages.items()
-            },
             "grant_mode": dict(self.grant_mode),
             "session_workdir": dict(self.session_workdir),
             "child_sessions": dict(self.child_sessions),
@@ -73,8 +65,6 @@ class SessionManager:
                 # API возвращает {data: {id: ...}}
                 session_id = resp_data.get("data", resp_data).get("id")
                 self.sessions[user_id] = session_id
-                if session_id not in self.seen_messages:
-                    self.seen_messages[session_id] = set()
                 if session_id not in self.grant_mode:
                     self.grant_mode[session_id] = False
                 self._save()
@@ -83,22 +73,10 @@ class SessionManager:
                 )
                 return session_id
 
-    def get_seen_messages(self, session_id: str) -> set:
-        return self.seen_messages.get(session_id, set())
-
-    def add_seen_message(self, session_id: str, message_id: str):
-        if session_id not in self.seen_messages:
-            self.seen_messages[session_id] = set()
-        self.seen_messages[session_id].add(message_id)
-        logger.debug(f"Saved seen message {message_id} to file for session {session_id}")
-        self._save()
-
     def remove(self, user_id: int):
         if user_id in self.sessions:
             session_id = self.sessions[user_id]
             del self.sessions[user_id]
-            if session_id in self.seen_messages:
-                del self.seen_messages[session_id]
             if session_id in self.grant_mode:
                 del self.grant_mode[session_id]
             if session_id in self.session_workdir:
@@ -141,8 +119,6 @@ class SessionManager:
         if user_id in self.sessions:
             session_id = self.sessions[user_id]
             del self.sessions[user_id]
-            if session_id in self.seen_messages:
-                del self.seen_messages[session_id]
             if session_id in self.grant_mode:
                 del self.grant_mode[session_id]
             if session_id in self.session_workdir:

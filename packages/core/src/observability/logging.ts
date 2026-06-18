@@ -46,7 +46,7 @@ function format(input: unknown) {
   return /^[^\s="\\]+$/.test(value) ? value : JSON.stringify(value)
 }
 
-export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), id: string = runID) {
+export function fileLogger(file = path.join(Global.Path.log, "lildax.log"), id: string = runID) {
   // Do not set batchWindow to 0; it causes high idle CPU usage.
   return Logger.toFile(formatter(id), file, { flag: "a" })
 }

@@ -2,6 +2,7 @@
 Клавиатуры для VK бота.
 """
 from typing import List
+import config
 
 
 def get_main_keyboard() -> dict:
@@ -9,6 +10,9 @@ def get_main_keyboard() -> dict:
     Основная клавиатура с часто используемыми командами.
     Отображается по умолчанию.
     """
+    # Если sysmon настроен - показываем /sysmon вместо /status
+    status_button_label = "/sysmon" if config.CONFIG.get("sysmon", "").strip() else "/status"
+
     return {
         "inline": False,
         "buttons": [
@@ -22,7 +26,7 @@ def get_main_keyboard() -> dict:
                     "color": "primary",
                 },
                 {
-                    "action": {"type": "text", "label": "/status"},
+                    "action": {"type": "text", "label": status_button_label},
                     "color": "primary",
                 },
             ],

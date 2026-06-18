@@ -15,10 +15,9 @@ DEFAULT_CONFIG = {
     "thinking_peer_id": 2000000506,
     "llama_server_path": "llama-server",
     "llama_server_host": "http://localhost:8081",  # URL удалённого llama-server
-    "opencode_config_path": "~/.config/opencode/opencode.json",
+    "opencode_config_path": "~/.config/lildax/config.json",
     "models": [],
     "default_model": "qwen3.5-122b",
-    "request_timeout": 1800000,
 }
 
 
@@ -92,9 +91,6 @@ OPENCODE_CONFIG_PATH = Path(CONFIG.get("opencode_config_path", "~/.config/openco
 # Provider URL for CLI --provider-url flag (LLAMA_SERVER_HOST + /v1)
 PROVIDER_URL = (args.llama_host or LLAMA_SERVER_HOST).rstrip("/") + "/v1"
 
-# Request timeout for CLI --timeout flag (milliseconds, default 30 minutes)
-REQUEST_TIMEOUT = CONFIG.get("request_timeout", 1800000)
-
 # Model для --model флага, через CLI аргумент или из конфига.
 # Разрешаем алиас в реальное имя модели (через MODELS[alias].model)
 _default_alias = args.model or DEFAULT_MODEL
@@ -160,7 +156,6 @@ def switch_config(config_name: str) -> bool:
         current_module.OPENCODE_BIN = (SCRIPT_DIR / current_module.OPENCODE_BIN).resolve()
     current_module.OPENCODE_CONFIG_PATH = Path(new_config.get("opencode_config_path", "~/.config/opencode/opencode.json")).expanduser()
     current_module.PROVIDER_URL = (args.llama_host or new_config.get("llama_server_host", "http://localhost:8081")).rstrip("/") + "/v1"
-    current_module.REQUEST_TIMEOUT = new_config.get("request_timeout", 1800000)
     # CLI_MODEL: разрешаем алиас в реальное имя модели
     _alias = args.model or new_config.get("default_model")
     _models_dict = new_config.get("models", {})
@@ -170,5 +165,5 @@ def switch_config(config_name: str) -> bool:
     # Обновляем args.config чтобы importlib.reload(config) тоже подхватил
     if hasattr(current_module.args, 'config'):
         current_module.args.config = config_str
-    
+
     return True

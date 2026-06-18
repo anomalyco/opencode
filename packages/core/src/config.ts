@@ -103,6 +103,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   experimental: ConfigExperimental.Experimental.pipe(Schema.optional),
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(Schema.optional),
+  max_steps: Schema.Number.pipe(Schema.optional).annotate({
+    description: "Maximum number of agentic iterations per session before forcing text-only response (default: 100)",
+  }),
 }) {}
 
 export class Document extends Schema.Class<Document>("Config.Document")({

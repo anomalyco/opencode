@@ -305,15 +305,6 @@ const statusError =
     })
 
 const toHttpError = (redactedNames: ReadonlyArray<string | RegExp>) => (error: unknown) => {
-  console.error("[RequestExecutor] toHttpError:", {
-    type: typeof error,
-    name: error instanceof Error ? error.name : undefined,
-    message: error instanceof Error ? error.message : String(error),
-    stack: error instanceof Error ? error.stack?.slice(0, 500) : undefined,
-    isTimeout: Cause.isTimeoutError(error),
-    isHttpClient: HttpClientError.isHttpClientError(error),
-    tag: error instanceof Object && "reason" in error ? (error as any).reason?._tag : undefined,
-  })
   const transportError = (input: {
     readonly message: string
     readonly kind?: string | undefined
@@ -379,14 +370,9 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
     const executeOnce = (request: HttpClientRequest.HttpClientRequest) =>
       Effect.gen(function* () {
         const redactedNames = yield* Headers.CurrentRedactedNames
-        const start = Date.now()
-        const url = request.url
-        console.error(`[RequestExecutor] >>> ${request.method} ${url}`)
-        const result = yield* http
+        return yield* http
           .execute(request)
           .pipe(Effect.mapError(toHttpError(redactedNames)), Effect.flatMap(statusError(request, redactedNames)))
-        console.error(`[RequestExecutor] <<< ${request.method} ${url} in ${Date.now() - start}ms`)
-        return result
       })
     return Service.of({
       execute: (request) => retryStatusFailures(executeOnce(request)),

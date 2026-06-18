@@ -283,7 +283,6 @@ async def do_restart(
     ready = await wait_for_llama_server(model_alias=alias)
 
     if ready:
-        await vk_client.send_message(user_id, f"✅ Модель {alias} загружена и готова!")
         logger.info(f"Model {alias} loaded successfully")
     else:
         await vk_client.send_message(

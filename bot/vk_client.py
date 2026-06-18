@@ -13,7 +13,7 @@ from typing import List, Optional, Tuple
 from urllib.parse import urlencode
 
 import asyncio
-from aiohttp import ClientSession, ClientTimeout, FormData
+from aiohttp import ClientError, ClientSession, ClientTimeout, FormData
 
 logger = logging.getLogger("vk-opencode")
 
@@ -49,7 +49,7 @@ class VKClient:
                 if "error" in data:
                     raise Exception(f"VK API error: {data['error']}")
                 return data["response"]
-        except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+        except (ClientError, asyncio.TimeoutError) as e:
             logger.error(f"VK API request failed ({method}): {e}")
             raise
 

@@ -32,7 +32,6 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
         register: Flag.boolean("register").pipe(Flag.withDefault(false)),
         "provider-url": Flag.string("provider-url").pipe(Flag.optional),
         model: Flag.string("model").pipe(Flag.optional),
-        timeout: Flag.integer("timeout").pipe(Flag.optional),
       },
     }),
   ],
