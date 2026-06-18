@@ -530,4 +530,28 @@ EOF`
       expect(yield* readText(target)).toBe(`He said "hi"\nsome${emDash}dash\nend\n`)
     }),
   )
+
+  it.instance("matches with canonically equivalent Unicode text", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const { ctx } = makeCtx()
+      const target = path.join(test.directory, "canonical.txt")
+      const nfdLine = "Район: Астана".normalize("NFD")
+      const nfcLine = "Район: Астана".normalize("NFC")
+
+      expect(nfdLine).not.toBe(nfcLine)
+      expect(nfdLine.normalize("NFC")).toBe(nfcLine)
+      yield* writeText(target, `# Сводка\n${nfdLine}\n`)
+
+      const patchText = `*** Begin Patch
+*** Update File: canonical.txt
+@@
+-${nfcLine}
++Район: Алматы
+*** End Patch`
+
+      yield* execute({ patchText }, ctx)
+      expect(yield* readText(target)).toBe("# Сводка\nРайон: Алматы\n")
+    }),
+  )
 })
