@@ -173,7 +173,9 @@ index a29a7d3a0f14d9cd800ef5b296485237350c666f..c362ae5fe6c62c8c8eae7e2e61de1eed
              }
              if (!response.ok) {
                  const text = await response.text().catch(() => null);
-+                if (response.status === 404 && requestSessionId && !isSessionRetry && !(0, types_js_1.isInitializedNotification)(message)) {
++                const sessionExpired = response.status === 404 ||
++                    (response.status === 400 && typeof text === 'string' && /(?:no valid|missing|invalid)[\s-]+session id|session id[\s-]+(?:missing|invalid)/i.test(text));
++                if (sessionExpired && requestSessionId && !isSessionRetry && !(0, types_js_1.isInitializedNotification)(message)) {
 +                    const recovered = await this._recoverSession(requestSessionId);
 +                    if (options?.isRequestActive?.() === false) {
 +                        throw new Error('Request is no longer active');
@@ -377,7 +379,9 @@ index 624172aa24ae255a67c083f9c19053343e4a0581..ac75b14545fda44aff7ff4d97cc5da88
              }
              if (!response.ok) {
                  const text = await response.text().catch(() => null);
-+                if (response.status === 404 && requestSessionId && !isSessionRetry && !isInitializedNotification(message)) {
++                const sessionExpired = response.status === 404 ||
++                    (response.status === 400 && typeof text === 'string' && /(?:no valid|missing|invalid)[\s-]+session id|session id[\s-]+(?:missing|invalid)/i.test(text));
++                if (sessionExpired && requestSessionId && !isSessionRetry && !isInitializedNotification(message)) {
 +                    const recovered = await this._recoverSession(requestSessionId);
 +                    if (options?.isRequestActive?.() === false) {
 +                        throw new Error('Request is no longer active');
