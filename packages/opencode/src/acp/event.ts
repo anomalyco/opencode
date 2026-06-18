@@ -1,5 +1,4 @@
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
-import * as Log from "@opencode-ai/core/util/log"
 import type {
   Event,
   EventMessagePartDelta,
@@ -24,8 +23,6 @@ import {
   type ShellReplay,
 } from "./tool"
 import { ACPTerminal } from "./terminal"
-
-const log = Log.create({ service: "acp-event" })
 
 type Connection = Pick<AgentSideConnection, "sessionUpdate"> &
   Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
@@ -71,9 +68,8 @@ export class Subscription {
   start() {
     if (this.started) return
     this.started = true
-    this.run().catch((error: unknown) => {
+    this.run().catch(() => {
       if (this.abort.signal.aborted) return
-      log.error("event subscription failed", { error })
     })
   }
 
@@ -100,10 +96,12 @@ export class Subscription {
   async replayMessage(message: SessionMessageResponse) {
     if (message.info.role !== "assistant" && message.info.role !== "user") return
 
+    const cwd = message.info.role === "assistant" ? message.info.path?.cwd : undefined
     for (const part of message.parts) {
       await this.recordFetchedPart(message.info.sessionID, message, part)
       if (part.type === "tool") {
         await this.handleToolPart(message.info.sessionID, part, {
+          cwd: cwd ?? process.cwd(),
           replay:
             part.state.status === "completed"
               ? shellReplay({
@@ -154,9 +152,7 @@ export class Subscription {
       for await (const event of events.stream) {
         if (this.abort.signal.aborted) return
         if (!event.payload) continue
-        await this.handle(event.payload).catch((error: unknown) => {
-          log.error("failed to handle event", { error, type: event.payload?.type })
-        })
+        await this.handle(event.payload).catch(() => {})
       }
       if (!this.abort.signal.aborted) await new Promise((resolve) => setTimeout(resolve, 1000))
     }
@@ -181,7 +177,7 @@ export class Subscription {
       }),
     )
     if (part.type === "tool") {
-      await this.handleToolPart(session.id, part)
+      await this.handleToolPart(session.id, part, { cwd: session.cwd })
     }
   }
 
@@ -243,10 +239,7 @@ export class Subscription {
         { throwOnError: true },
       )
       .then((response) => response.data)
-      .catch((error: unknown) => {
-        log.error("unexpected error when fetching message for delta metadata", { error, messageId, partId })
-        return undefined
-      })
+      .catch(() => undefined)
     if (!message) return
 
     const part = message.parts.find((item) => item.id === partId)
@@ -269,8 +262,12 @@ export class Subscription {
     )
   }
 
-  private async handleToolPart(sessionId: string, part: ToolPart, options: { readonly replay?: ShellReplay } = {}) {
-    await this.toolStart(sessionId, part, options.replay)
+  private async handleToolPart(
+    sessionId: string,
+    part: ToolPart,
+    options: { readonly cwd: string; readonly replay?: ShellReplay },
+  ) {
+    await this.toolStart(sessionId, part, options.cwd, options.replay)
 
     switch (part.state.status) {
       case "pending":
@@ -278,7 +275,7 @@ export class Subscription {
         return
 
       case "running":
-        await this.runningTool(sessionId, part)
+        await this.runningTool(sessionId, part, options.cwd)
         return
 
       case "completed":
@@ -293,6 +290,7 @@ export class Subscription {
                 toolName: part.tool,
                 state: part.state,
                 replay: options.replay,
+                cwd: options.cwd,
               }),
             },
           })
@@ -312,6 +310,7 @@ export class Subscription {
                 toolCallId: part.callID,
                 toolName: part.tool,
                 state: part.state,
+                cwd: options.cwd,
               }),
             },
           })
@@ -340,20 +339,21 @@ export class Subscription {
         title: event.properties.command,
         time: { start: event.properties.timestamp },
       },
-    })
+    }, session.cwd)
     await this.input.connection.sessionUpdate({
       sessionId: session.id,
       update: {
         sessionUpdate: "tool_call_update",
-        ...runningToolUpdate({
-          toolCallId: event.properties.callID,
-          toolName: "bash",
+          ...runningToolUpdate({
+            toolCallId: event.properties.callID,
+            toolName: "bash",
           state: {
             status: "running",
             input: { command: event.properties.command },
-            title: event.properties.command,
-          },
-        }),
+              title: event.properties.command,
+            },
+            cwd: session.cwd,
+          }),
       },
     })
   }
@@ -377,28 +377,29 @@ export class Subscription {
           title: command || "bash",
           time: { start: event.properties.timestamp },
         },
-      })
+      }, session.cwd)
     }
     this.clearTool(event.properties.callID)
     await this.input.connection.sessionUpdate({
       sessionId: session.id,
       update: {
         sessionUpdate: "tool_call_update",
-        ...completedToolUpdate({
-          toolCallId: event.properties.callID,
-          toolName: "bash",
+          ...completedToolUpdate({
+            toolCallId: event.properties.callID,
+            toolName: "bash",
           state: {
             status: "completed",
             input: command ? { command } : {},
-            output: event.properties.output,
-            title: command || "bash",
-          },
-        }),
+              output: event.properties.output,
+              title: command || "bash",
+            },
+            cwd: session.cwd,
+          }),
       },
     })
   }
 
-  private async runningTool(sessionId: string, part: ToolPart) {
+  private async runningTool(sessionId: string, part: ToolPart, cwd: string) {
     if (part.state.status !== "running") return
 
     const output = part.tool === "bash" ? shellOutputSnapshot(part.state) : undefined
@@ -412,6 +413,7 @@ export class Subscription {
               toolCallId: part.callID,
               toolName: part.tool,
               state: part.state,
+              cwd,
             }),
           },
         })
@@ -429,16 +431,15 @@ export class Subscription {
           toolName: part.tool,
           state: part.state,
           output,
+          cwd,
         }),
       },
     })
   }
 
-  private async toolStart(sessionId: string, part: ToolPart, replay?: ShellReplay) {
+  private async toolStart(sessionId: string, part: ToolPart, cwd: string, replay?: ShellReplay) {
     if (this.toolStarts.has(part.callID)) return
     this.toolStarts.add(part.callID)
-    const rawInput = part.state.status === "pending" ? undefined : part.state.input
-    const title = "title" in part.state ? part.state.title : undefined
     await this.input.connection.sessionUpdate({
       sessionId,
       update: {
@@ -446,8 +447,11 @@ export class Subscription {
         ...pendingToolCall({
           toolCallId: part.callID,
           toolName: part.tool,
-          rawInput,
-          title,
+          state:
+            part.state.status === "pending"
+              ? { input: {}, title: undefined }
+              : { input: part.state.input, title: "title" in part.state ? part.state.title : undefined },
+          cwd,
           replay,
         }),
       },

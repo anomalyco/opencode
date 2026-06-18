@@ -14,9 +14,9 @@ import {
   type ScrollbackSurface,
 } from "@opentui/core"
 import { entryBody, entryCanStream, entryDone, entryFlags } from "./entry.body"
-import { withRunSpan } from "./otel"
 import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
-import { entryWriter, sameEntryGroup, separatorRows, spacerWriter } from "./scrollback.writer"
+import { turnSummaryCommit } from "./turn-summary"
+import { entryWriter, sameEntryGroup, separatorRows, spacerWriter, turnSummaryWriter } from "./scrollback.writer"
 import { type RunTheme } from "./theme"
 import type { RunDiffStyle, RunEntryBody, StreamCommit } from "./types"
 
@@ -33,8 +33,6 @@ type ActiveEntry = {
   pendingSpacerRows: number
   rendered: boolean
 }
-
-let nextId = 0
 
 function commitMarkdownBlocks(input: {
   surface: ScrollbackSurface
@@ -152,12 +150,10 @@ export class RunScrollbackStream {
     const surface = this.renderer.createScrollbackSurface({
       startOnNewLine: entryFlags(commit).startOnNewLine,
     })
-    const id = `run-scrollback-entry-${nextId++}`
     const style = entryLook(commit, this.theme.entry)
     const renderable =
       body.type === "text"
         ? new TextRenderable(surface.renderContext, {
-            id,
             content: "",
             width: "100%",
             wrapMode: "word",
@@ -166,7 +162,6 @@ export class RunScrollbackStream {
           })
         : body.type === "code"
           ? new CodeRenderable(surface.renderContext, {
-              id,
               content: "",
               filetype: body.filetype,
               syntaxStyle: entrySyntax(commit, this.theme),
@@ -178,7 +173,6 @@ export class RunScrollbackStream {
               treeSitterClient: this.treeSitterClient,
             })
           : new MarkdownRenderable(surface.renderContext, {
-              id,
               content: "",
               syntaxStyle: entrySyntax(commit, this.theme),
               width: "100%",
@@ -357,6 +351,14 @@ export class RunScrollbackStream {
       this.markRendered(await this.finishActive(false))
     }
 
+    if (commit.summary) {
+      this.writeSpacer(1)
+      this.renderer.writeToScrollback(turnSummaryWriter({ ...commit.summary, theme: this.theme }))
+      this.markRendered(commit)
+      this.tail = commit
+      return
+    }
+
     const body = entryBody(commit)
     if (body.type === "none") {
       if (entryDone(commit)) {
@@ -415,17 +417,11 @@ export class RunScrollbackStream {
   }
 
   public async complete(trailingNewline = false): Promise<void> {
-    return withRunSpan(
-      "RunScrollbackStream.complete",
-      {
-        "opencode.entry.active": !!this.active,
-        "opencode.trailing_newline": trailingNewline,
-        "session.id": this.sessionID?.() || undefined,
-      },
-      async () => {
-        this.markRendered(await this.finishActive(trailingNewline))
-      },
-    )
+    this.markRendered(await this.finishActive(trailingNewline))
+  }
+
+  public async writeTurnSummary(input: { agent: string; model: string; duration: string }): Promise<void> {
+    await this.append(turnSummaryCommit(input))
   }
 
   public destroy(): void {

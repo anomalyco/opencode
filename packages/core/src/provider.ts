@@ -47,22 +47,7 @@ export type Request = typeof Request.Type
 export class Info extends Schema.Class<Info>("ProviderV2.Info")({
   id: ID,
   name: Schema.String,
-  enabled: Schema.Union([
-    Schema.Literal(false),
-    Schema.Struct({
-      via: Schema.Literal("env"),
-      name: Schema.String,
-    }),
-    Schema.Struct({
-      via: Schema.Literal("account"),
-      service: Schema.String,
-    }),
-    Schema.Struct({
-      via: Schema.Literal("custom"),
-      data: Schema.Record(Schema.String, Schema.Any),
-    }),
-  ]),
-  env: Schema.String.pipe(Schema.Array),
+  disabled: Schema.Boolean.pipe(Schema.optional),
   api: Api,
   request: Request,
 }) {
@@ -70,8 +55,6 @@ export class Info extends Schema.Class<Info>("ProviderV2.Info")({
     return new Info({
       id: providerID,
       name: providerID,
-      enabled: false,
-      env: [],
       api: {
         type: "native",
         settings: {},

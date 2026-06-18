@@ -12,6 +12,10 @@ import {
   type SearchResult,
 } from "@ff-labs/fff-bun"
 
+declare global {
+  const FFF_LIBC: "gnu" | "musl"
+}
+
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string }
 
 export type Init = InitOptions

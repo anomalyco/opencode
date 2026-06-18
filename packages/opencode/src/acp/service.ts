@@ -30,7 +30,6 @@ import {
   type SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import * as Log from "@opencode-ai/core/util/log"
 import type { Message, OpencodeClient, SessionMessageResponse } from "@opencode-ai/sdk/v2"
 import { Context, Effect, Layer, ManagedRuntime } from "effect"
 import * as ACPError from "./error"
@@ -48,7 +47,6 @@ import { Provider } from "@/provider/provider"
 import type { Command } from "@/command"
 
 export const AuthMethodID = "opencode-login"
-const log = Log.create({ service: "acp-service" })
 
 export type Error = ACPError.Error
 type ServiceConnection = Pick<AgentSideConnection, "sessionUpdate"> &
@@ -343,9 +341,7 @@ export function make(input: {
       "session",
     ).pipe(
       Effect.catch((error) =>
-        Effect.sync(() => {
-          log.error("failed to abort ACP backing session", { error, sessionID: current.id })
-        }),
+        Effect.logError("failed to abort ACP backing session", { error: error, sessionID: current.id }),
       ),
     )
   })
@@ -622,10 +618,7 @@ function makeUsageService(sdk: OpencodeClient) {
           ) as Record<ProviderV2.ID, Provider.Info>
           return UsageService.findContextLimit(providers, params.providerID, params.modelID)
         })
-        .catch((error: unknown) => {
-          log.error("failed to get providers for usage context limit", { error })
-          return undefined
-        })
+        .catch(() => undefined)
       limits.set(key, next)
       return yield* Effect.promise(() => next)
     },
@@ -645,10 +638,7 @@ function makeUsageService(sdk: OpencodeClient) {
     ).pipe(
       Effect.map((messages) => messages as readonly UsageService.SessionMessage[]),
       Effect.catch((error) =>
-        Effect.sync(() => {
-          log.error("failed to fetch messages for usage update", { error })
-          return undefined
-        }),
+        Effect.logError("failed to fetch messages for usage update", { error: error }).pipe(Effect.as(undefined)),
       ),
     )
     if (!messages) return
@@ -674,9 +664,7 @@ function makeUsageService(sdk: OpencodeClient) {
             cost: { amount: UsageService.totalSessionCost(messages), currency: "USD" },
           },
         })
-        .catch((error) => {
-          log.error("failed to send usage update", { error })
-        }),
+        .catch(() => {}),
     )
   })
 
@@ -693,9 +681,7 @@ function replayMessages(subscription: ACPEvent.Subscription | undefined, message
   if (!subscription) return Effect.void
   return Effect.promise(async () => {
     for (const message of messages) {
-      await subscription.replayMessage(message).catch((error: unknown) => {
-        log.error("failed to replay ACP message", { error, messageID: message.info.id })
-      })
+      await subscription.replayMessage(message).catch(() => {})
     }
   })
 }
