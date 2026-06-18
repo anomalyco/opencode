@@ -1,0 +1,98 @@
+{
+  "$schema": "./skein.schema.json",
+  "id": "opencode-skein",
+  "name": "opencode-skein",
+  "tagline": "opencode, tuned for people who run their own models.",
+  "description": "A maintained fork of opencode that makes local LLM backends first-class: it finds them on your network, shows you exactly what fits in VRAM, and keeps long agent sessions running unattended.",
+  "kind": "cli-fork",
+  "partOf": "skein",
+  "repo": "https://github.com/androidand/opencode",
+  "homepage": "https://tantonet.se/skein",
+  "install": {
+    "curl": "curl -fsSL https://raw.githubusercontent.com/androidand/opencode/dev/install | bash"
+  },
+  "features": [
+    {
+      "id": "local-provider-autodiscovery",
+      "title": "Local provider auto-discovery",
+      "summary": "Finds Ollama, LM Studio and llama-swap (llama-skein) backends on your LAN via mDNS + port probing and offers them straight in /connect — no manual baseURL juggling.",
+      "status": "stable",
+      "upstreamable": "partial",
+      "depends": ["llama-skein"],
+      "tags": ["local", "providers", "discovery", "mdns"]
+    },
+    {
+      "id": "context-window-display",
+      "title": "Context window usage in the sidebar",
+      "summary": "Live context-window bar: tokens used vs. the model's limit, a percentage, a token breakdown, throughput (tokens/sec), and cost for cloud providers.",
+      "status": "stable",
+      "upstreamable": "yes",
+      "tags": ["tui", "context", "observability"]
+    },
+    {
+      "id": "vram-ram-bars",
+      "title": "Live VRAM/RAM usage bars",
+      "summary": "For local models, a stacked memory bar showing model weights vs. KV cache against free VRAM/RAM — so you can see headroom before you blow past it.",
+      "status": "stable",
+      "upstreamable": "no",
+      "depends": ["llama-skein"],
+      "tags": ["tui", "local", "hardware", "vram"]
+    },
+    {
+      "id": "ctx-size-dialog",
+      "title": "Hardware-aware context-size picker",
+      "summary": "An interactive dialog that recommends a context size from real KV-cache rate + free VRAM, with presets flagged when they'd exceed memory, and applies it to the local model.",
+      "status": "stable",
+      "upstreamable": "no",
+      "depends": ["llama-skein"],
+      "tags": ["tui", "local", "context"]
+    },
+    {
+      "id": "loop",
+      "title": "/loop scheduling",
+      "summary": "Run a prompt or command on a schedule or until done — ralph-style iterate-until-complete, or interval/cron based, with list/cancel/pause/resume.",
+      "status": "stable",
+      "upstreamable": "yes",
+      "tags": ["automation", "cli"]
+    },
+    {
+      "id": "auto-reply",
+      "title": "Intelligent auto-reply",
+      "summary": "Keeps long sessions moving by auto-answering input prompts — static phrases, AI-to-AI continuation, or an external webhook/CLI hook.",
+      "status": "beta",
+      "upstreamable": "yes",
+      "tags": ["automation"]
+    },
+    {
+      "id": "pattern-detection",
+      "title": "Loop / repetition detection",
+      "summary": "Detects when the agent is stuck repeating itself (string-similarity over a time window) and intervenes to break the loop.",
+      "status": "beta",
+      "upstreamable": "yes",
+      "tags": ["automation", "safety"]
+    },
+    {
+      "id": "themed-loading",
+      "title": "Themed local-backend loading screens",
+      "summary": "Bridges your active TUI theme to the local backend via an X-Loading-Theme header (e.g. pip-boy → vault-boy) for matching loading visuals.",
+      "status": "stable",
+      "upstreamable": "no",
+      "depends": ["llama-skein"],
+      "tags": ["tui", "local", "cosmetic"]
+    },
+    {
+      "id": "fork-maintenance",
+      "title": "Self-maintaining fork tooling",
+      "summary": "A manifest-driven workflow (fork:verify, sync:check) that proves no fork feature is lost on upstream syncs, plus a fork-owned updater + release pipeline so the official updater can never overwrite the skein binary.",
+      "status": "stable",
+      "upstreamable": "na",
+      "tags": ["meta", "maintenance"]
+    }
+  ],
+  "links": {
+    "changelog": "CHANGELOG.md",
+    "manifest": "fork/manifest.json",
+    "docs": "FORK_WORKFLOW.md"
+  },
+  "updated": "2026-06-18"
+}

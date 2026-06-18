@@ -1,0 +1,103 @@
+name: skein-release
+
+# Cut and distribute an opencode-skein release: build per-platform CLI binaries
+# and publish them as a GitHub Release on the fork. The fork's install script
+# (and the in-app updater's curl path) download these assets.
+#
+# This is the fork's own pipeline — upstream's publish.yml is gated to
+# anomalyco/opencode and never runs here. Channels: GitHub Releases + curl.
+# (npm / Homebrew / Docker / AUR are intentionally omitted; a disabled Homebrew
+# step is sketched at the bottom for when androidand/homebrew-tap exists.)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version, e.g. 1.17.8-skein.1 (no leading v)"
+        required: true
+        type: string
+  push:
+    tags:
+      - "skein-v*" # e.g. skein-v1.17.8-skein.1 — push a tag to release
+
+concurrency:
+  group: skein-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    # Only ever run on the fork, never if this workflow lands upstream via sync.
+    if: github.repository == 'androidand/opencode'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create releases + upload assets
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Resolve version
+        id: v
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            # tag like skein-v1.17.8-skein.1 → strip "skein-v"
+            VERSION="${GITHUB_REF_NAME#skein-v}"
+          fi
+          VERSION="${VERSION#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing opencode-skein v$VERSION"
+
+      - name: Create draft GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="v${{ steps.v.outputs.version }}"
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; reusing it."
+          else
+            gh release create "$TAG" \
+              --repo "${{ github.repository }}" \
+              --draft \
+              --title "opencode-skein $TAG" \
+              --notes "opencode-skein release $TAG. See CHANGELOG.md and fork/manifest.json for fork-specific features."
+          fi
+
+      - name: Build CLI binaries and upload to release
+        env:
+          OPENCODE_VERSION: ${{ steps.v.outputs.version }}
+          OPENCODE_CHANNEL: latest # real release versioning, not a preview build
+          OPENCODE_RELEASE: "1" # build.ts tars/zips + uploads assets when set
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./packages/opencode/script/build.ts
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release edit "v${{ steps.v.outputs.version }}" \
+            --repo "${{ github.repository }}" \
+            --draft=false
+
+      # --- Homebrew (disabled until androidand/homebrew-tap exists) ----------
+      # Uncomment, create the tap repo, and add a HOMEBREW_TAP_TOKEN secret
+      # (a PAT with push access to androidand/homebrew-tap). The formula
+      # generation already lives in packages/opencode/script/publish.ts and reads
+      # OPENCODE_HOMEBREW_TAP_REPO + OPENCODE_RELEASE_REPO.
+      #
+      # - name: Update Homebrew tap
+      #   env:
+      #     OPENCODE_RELEASE_REPO: ${{ github.repository }}
+      #     OPENCODE_HOMEBREW_TAP_REPO: androidand/homebrew-tap
+      #     GITHUB_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+      #     OPENCODE_VERSION: ${{ steps.v.outputs.version }}
+      #     OPENCODE_CHANNEL: latest
+      #   run: |
+      #     # generate + push the formula (brew-only subset of publish.ts)
+      #     echo "enable once the tap repo + token are in place"
