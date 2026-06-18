@@ -24,16 +24,30 @@ Place JavaScript or TypeScript files in the plugin directory.
 
 Files in these directories are automatically loaded at startup.
 
----
-
-### From npm
-
-Specify npm packages in your config file.
+You can also reference a specific local plugin file from your config with a `file://` URL.
 
 ```json title="opencode.json"
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["opencode-helicone-session", "opencode-wakatime", "@my-org/custom-plugin"]
+  "plugin": ["file:///absolute/path/to/my-plugin.ts"]
+}
+```
+
+---
+
+### From npm
+
+Specify npm packages in your config file. Bun package specifiers are supported, including scoped packages and git-backed packages.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    "opencode-helicone-session",
+    "opencode-wakatime",
+    "@my-org/custom-plugin",
+    "opencode-scheduler@git+https://github.com/different-ai/opencode-scheduler.git"
+  ]
 }
 ```
 
