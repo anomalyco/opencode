@@ -275,6 +275,7 @@ export const dict = {
   "prompt.capture.zoomOut": "축소",
   "prompt.capture.zoomFit": "맞춤",
   "prompt.capture.toolCropReset": "자르기 초기화",
+  "prompt.capture.toolCropHint": "드래그해서 자를 영역을 선택하세요",
   "prompt.capture.toolColor": "색상",
   "prompt.capture.toolWidth": "선 굵기",
   "prompt.action.doc": "문서",

@@ -294,6 +294,7 @@ export const dict = {
   "prompt.capture.zoomOut": "Zoom out",
   "prompt.capture.zoomFit": "Fit",
   "prompt.capture.toolCropReset": "Reset crop",
+  "prompt.capture.toolCropHint": "Drag to select the area to crop",
   "prompt.capture.toolColor": "Color",
   "prompt.capture.toolWidth": "Stroke width",
   "prompt.action.doc": "Doc",
