@@ -97,6 +97,7 @@ export const WriteTool = Tool.define(
               diagnostics,
               filepath,
               exists: exists,
+              diff,
               patch,
             },
             output,

@@ -188,6 +188,8 @@ describe("tool.write", () => {
           },
         )
 
+        expect(result.metadata.diff).toContain("-old")
+        expect(result.metadata.diff).not.toContain("-  old")
         expect(result.metadata.patch).toContain("-  old")
         expect(result.metadata.patch).toContain("+  new")
         expect(asks[0]?.metadata.diff).toContain("-old")
