@@ -18,6 +18,15 @@ import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
+
+// Set an auth key on the real process.env so downstream SDKs that read
+// process.env directly (AWS Bedrock, SAP AI Core) can discover it.
+// Effect's Env.set updates only a shallow copy and does not propagate
+// to the real process.env that native SDKs rely on.
+const setEnvToken = (key: string, value: string) => {
+  process.env[key] = value
+  return value
+}
 import { Effect, Layer, Context, Schema, Types } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
@@ -296,15 +305,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const awsAccessKeyId = env["AWS_ACCESS_KEY_ID"]
       const configApiKey = providerConfig?.options?.apiKey
 
-      // TODO: Using process.env directly because Env.set only updates a process.env shallow copy,
-      // until the scope of the Env API is clarified (test only or runtime?)
       const awsBearerToken = iife(() => {
         const envToken = process.env.AWS_BEARER_TOKEN_BEDROCK
         if (envToken) return envToken
-        if (auth?.type === "api") {
-          process.env.AWS_BEARER_TOKEN_BEDROCK = auth.key
-          return auth.key
-        }
+        if (auth?.type === "api") return setEnvToken("AWS_BEARER_TOKEN_BEDROCK", auth.key)
         return undefined
       })
 
@@ -556,15 +560,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
     }),
     "sap-ai-core": Effect.fnUntraced(function* () {
       const auth = yield* dep.auth("sap-ai-core")
-      // TODO: Using process.env directly because Env.set only updates a shallow copy (not process.env),
-      // until the scope of the Env API is clarified (test only or runtime?)
       const envServiceKey = iife(() => {
         const envAICoreServiceKey = process.env.AICORE_SERVICE_KEY
         if (envAICoreServiceKey) return envAICoreServiceKey
-        if (auth?.type === "api") {
-          process.env.AICORE_SERVICE_KEY = auth.key
-          return auth.key
-        }
+        if (auth?.type === "api") return setEnvToken("AICORE_SERVICE_KEY", auth.key)
         return undefined
       })
       const deploymentId = process.env.AICORE_DEPLOYMENT_ID
