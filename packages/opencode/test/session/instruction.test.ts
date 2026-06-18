@@ -8,7 +8,6 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 
 import { Instruction } from "../../src/session/instruction"
-import type { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { Global } from "@opencode-ai/core/global"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
@@ -17,14 +16,17 @@ import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import type { Config } from "../../src/config/config"
 
 const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer, testInstanceStoreLayer))
 
-const configLayer = TestConfig.layer()
-
-const instructionLayer = (global: Partial<Global.Interface>, flags: Partial<RuntimeFlags.Info> = {}) =>
+const instructionLayer = (
+  global: Partial<Global.Interface>,
+  flags: Partial<RuntimeFlags.Info> = {},
+  config: Partial<Config.Interface> = {},
+) =>
   Instruction.layer.pipe(
-    Layer.provide(configLayer),
+    Layer.provide(TestConfig.layer(config)),
     Layer.provide(FSUtil.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(Global.layerWith(global)),
@@ -32,9 +34,9 @@ const instructionLayer = (global: Partial<Global.Interface>, flags: Partial<Runt
   )
 
 const provideInstruction =
-  (global: Partial<Global.Interface>, flags?: Partial<RuntimeFlags.Info>) =>
+  (global: Partial<Global.Interface>, flags?: Partial<RuntimeFlags.Info>, config?: Partial<Config.Interface>) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
-    self.pipe(Effect.provide(instructionLayer(global, flags)))
+    self.pipe(Effect.provide(instructionLayer(global, flags, config)))
 
 const write = (filepath: string, content: string) =>
   Effect.gen(function* () {
@@ -251,6 +253,46 @@ describe("Instruction.systemPaths global config", () => {
         const paths = yield* svc.systemPaths()
         expect(paths.has(path.join(globalTmp, "AGENTS.md"))).toBe(true)
       }).pipe(provideInstance(projectTmp), provideInstruction({ home: globalTmp, config: globalTmp }))
+    }),
+  )
+
+  it.live("uses highest-priority extra config directory AGENTS.md", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpWithFiles({ "AGENTS.md": "# Global Instructions" })
+      const baseTmp = yield* tmpWithFiles({ "AGENTS.md": "# Base Instructions" })
+      const teamTmp = yield* tmpWithFiles({ "AGENTS.md": "# Team Instructions" })
+      const projectTmp = yield* tmpdirScoped()
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        expect(yield* svc.system()).toEqual([
+          `Instructions from: ${path.join(teamTmp, "AGENTS.md")}\n# Team Instructions`,
+        ])
+      }).pipe(
+        provideInstance(projectTmp),
+        provideInstruction({ home: globalTmp, config: globalTmp, extraConfigDirs: [baseTmp, teamTmp] }),
+      )
+    }),
+  )
+
+  it.live("finds relative configured instructions in extra config directories", () =>
+    Effect.gen(function* () {
+      const globalTmp = yield* tmpWithFiles({})
+      const baseTmp = yield* tmpWithFiles({ "CUSTOM.md": "# Base Custom" })
+      const teamTmp = yield* tmpWithFiles({ "CUSTOM.md": "# Team Custom" })
+      const projectTmp = yield* tmpdirScoped()
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Instruction.Service
+        const rules = yield* svc.system()
+        expect(rules).toContain(`Instructions from: ${path.join(baseTmp, "CUSTOM.md")}\n# Base Custom`)
+        expect(rules).toContain(`Instructions from: ${path.join(teamTmp, "CUSTOM.md")}\n# Team Custom`)
+      }).pipe(
+        provideInstance(projectTmp),
+        provideInstruction({ home: globalTmp, config: globalTmp, extraConfigDirs: [baseTmp, teamTmp] }, undefined, {
+          get: () => Effect.succeed({ instructions: ["CUSTOM.md"] }),
+        }),
+      )
     }),
   )
 })

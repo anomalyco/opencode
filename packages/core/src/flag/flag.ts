@@ -14,7 +14,17 @@ function enabledByExperimental(key: string) {
 }
 
 function splitPathList(value: string | undefined) {
-  return value?.split(path.delimiter).filter(Boolean) ?? []
+  return (
+    value
+      ?.split(path.delimiter)
+      .map((item) => item.trim())
+      .filter((item) => item.length > 0) ?? []
+  )
+}
+
+export function configDirectories() {
+  const directory = process.env["OPENCODE_CONFIG_DIR"]?.trim()
+  return [...splitPathList(process.env["OPENCODE_CONFIG_DIRS"]), ...(directory ? [directory] : [])]
 }
 
 export const Flag = {
@@ -66,7 +76,8 @@ export const Flag = {
     return process.env["OPENCODE_TUI_CONFIG"]
   },
   get OPENCODE_CONFIG_DIR() {
-    return process.env["OPENCODE_CONFIG_DIR"]
+    const directory = process.env["OPENCODE_CONFIG_DIR"]?.trim()
+    return directory || undefined
   },
   get OPENCODE_CONFIG_DIRS() {
     return splitPathList(process.env["OPENCODE_CONFIG_DIRS"])

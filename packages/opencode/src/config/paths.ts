@@ -1,7 +1,7 @@
 export * as ConfigPaths from "./paths"
 
 import path from "path"
-import { Flag } from "@opencode-ai/core/flag/flag"
+import { Flag, configDirectories } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { unique } from "remeda"
 import * as Effect from "effect/Effect"
@@ -22,11 +22,9 @@ export const files = Effect.fn("ConfigPaths.projectFiles")(function* (
 
 export const directories = Effect.fn("ConfigPaths.directories")(function* (directory: string, worktree?: string) {
   const afs = yield* FSUtil.Service
-  const extraConfigDirs = [
-    ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),
-    ...Flag.OPENCODE_CONFIG_DIRS,
-  ]
-  return unique([
+  const custom = customDirectories()
+  const customSet = new Set(custom.map((dir) => path.resolve(dir)))
+  const base = [
     Global.Path.config,
     ...(!Flag.OPENCODE_DISABLE_PROJECT_CONFIG
       ? yield* afs.up({
@@ -40,10 +38,18 @@ export const directories = Effect.fn("ConfigPaths.directories")(function* (direc
       start: Global.Path.home,
       stop: Global.Path.home,
     })),
-    ...extraConfigDirs,
-  ])
+  ].filter((dir) => !customSet.has(path.resolve(dir)))
+  return unique([...base, ...custom])
 })
 
 export function fileInDirectory(dir: string, name: string) {
   return [path.join(dir, `${name}.json`), path.join(dir, `${name}.jsonc`)]
+}
+
+export function customDirectories() {
+  return unique(configDirectories())
+}
+
+export function isConfigDirectory(dir: string) {
+  return dir.endsWith(".opencode") || customDirectories().some((custom) => path.resolve(custom) === path.resolve(dir))
 }

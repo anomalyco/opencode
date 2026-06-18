@@ -772,7 +772,7 @@ describe("Config", () => {
     ),
   )
 
-  it.live("loads extra config directories after global config and before project config", () =>
+  it.live("loads custom config directories after project config with singular last", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
@@ -781,12 +781,14 @@ describe("Config", () => {
         const global = path.join(tmp.path, "global")
         const firstExtra = path.join(tmp.path, "extra-a")
         const secondExtra = path.join(tmp.path, "extra-b")
+        const singularExtra = path.join(tmp.path, "extra-singular")
         const root = path.join(tmp.path, "repo")
         return Effect.gen(function* () {
           yield* Effect.promise(async () => {
             await fs.mkdir(global, { recursive: true })
             await fs.mkdir(firstExtra, { recursive: true })
             await fs.mkdir(secondExtra, { recursive: true })
+            await fs.mkdir(singularExtra, { recursive: true })
             await fs.mkdir(path.join(root, ".opencode"), { recursive: true })
             await Promise.all([
               fs.writeFile(
@@ -800,6 +802,10 @@ describe("Config", () => {
               fs.writeFile(
                 path.join(secondExtra, "opencode.json"),
                 JSON.stringify({ $schema: "extra-b", model: "extra-b/model" }),
+              ),
+              fs.writeFile(
+                path.join(singularExtra, "opencode.json"),
+                JSON.stringify({ $schema: "extra-singular", model: "extra-singular/model" }),
               ),
               fs.writeFile(
                 path.join(root, "opencode.json"),
@@ -819,19 +825,21 @@ describe("Config", () => {
 
             expect(entries.filter((entry) => entry.type === "directory").map((entry) => entry.path)).toEqual([
               AbsolutePath.make(global),
+              AbsolutePath.make(path.join(root, ".opencode")),
               AbsolutePath.make(firstExtra),
               AbsolutePath.make(secondExtra),
-              AbsolutePath.make(path.join(root, ".opencode")),
+              AbsolutePath.make(singularExtra),
             ])
             expect(documents.map((document) => document.info.$schema)).toEqual([
               "global",
-              "extra-a",
-              "extra-b",
               "project",
               "project-dot",
+              "extra-a",
+              "extra-b",
+              "extra-singular",
             ])
-            expect(Config.latest(entries, "model")).toBe("project-dot/model")
-          }).pipe(Effect.provide(testLayer(root, global, root, undefined, [firstExtra, secondExtra])))
+            expect(Config.latest(entries, "model")).toBe("extra-singular/model")
+          }).pipe(Effect.provide(testLayer(root, global, root, undefined, [firstExtra, secondExtra, singularExtra])))
         })
       }),
     ),

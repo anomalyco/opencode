@@ -166,6 +166,37 @@ it.instance("loads tui config from OPENCODE_CONFIG_DIRS in order", () =>
   ),
 )
 
+it.instance("loads tui config from OPENCODE_CONFIG_DIR after OPENCODE_CONFIG_DIRS", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const test = yield* TestInstance
+      const firstConfigDir = path.join(test.directory, "config-a")
+      const secondConfigDir = path.join(test.directory, "config-b")
+      const singularConfigDir = path.join(test.directory, "config-singular")
+
+      yield* fs.writeWithDirs(path.join(firstConfigDir, "tui.json"), JSON.stringify({ theme: "first" }, null, 2))
+      yield* fs.writeWithDirs(path.join(secondConfigDir, "tui.json"), JSON.stringify({ theme: "second" }, null, 2))
+      yield* fs.writeWithDirs(
+        path.join(singularConfigDir, "tui.json"),
+        JSON.stringify({ theme: "singular", diff_style: "stacked" }, null, 2),
+      )
+
+      const config = yield* withEnv(
+        "OPENCODE_CONFIG_DIR",
+        singularConfigDir,
+        withEnv(
+          "OPENCODE_CONFIG_DIRS",
+          [firstConfigDir, secondConfigDir].join(path.delimiter),
+          getTuiConfig(test.directory),
+        ),
+      )
+      expect(config.theme).toBe("singular")
+      expect(config.diff_style).toBe("stacked")
+    }),
+  ),
+)
+
 it.instance("resolves attention config defaults and overrides", () =>
   withCleanState(
     Effect.gen(function* () {

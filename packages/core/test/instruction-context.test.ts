@@ -96,6 +96,46 @@ describe("InstructionContext", () => {
     ),
   )
 
+  it.live("uses highest-priority extra config directory AGENTS.md", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const base = path.join(tmp.path, "base")
+          const team = path.join(tmp.path, "team")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(base, { recursive: true })
+            await fs.mkdir(team, { recursive: true })
+            await fs.writeFile(path.join(global, "AGENTS.md"), "global")
+            await fs.writeFile(path.join(base, "AGENTS.md"), "base")
+            await fs.writeFile(path.join(team, "AGENTS.md"), "team")
+          })
+
+          const context = yield* SystemContextRegistry.Service.pipe(
+            Effect.flatMap((service) => service.load()),
+            Effect.provide(InstructionContext.layer.pipe(Layer.provideMerge(SystemContextRegistry.layer))),
+            Effect.provide(FSUtil.defaultLayer),
+            Effect.provide(Global.layerWith({ config: global, extraConfigDirs: [base, team] })),
+            Effect.provide(
+              Layer.succeed(
+                Location.Service,
+                Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+              ),
+            ),
+          )
+
+          expect((yield* SystemContext.initialize(context)).baseline).toBe(
+            `Instructions from: ${path.join(team, "AGENTS.md")}\nteam`,
+          )
+        }),
+      ),
+    ),
+  )
+
   it.live("keeps an empty AGENTS.md as available context", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),

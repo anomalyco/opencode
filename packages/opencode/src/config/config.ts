@@ -419,19 +419,17 @@ export const layer = Layer.effect(
 
         const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree)
 
-        const extraConfigDirs = new Set([
-          ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),
-          ...Flag.OPENCODE_CONFIG_DIRS,
-        ])
+        const extraConfigDirs = ConfigPaths.customDirectories()
+        const extraConfigDirSet = new Set(extraConfigDirs)
 
-        if (extraConfigDirs.size) {
-          yield* Effect.logDebug("loading config from extra config dirs", { paths: [...extraConfigDirs] })
+        if (extraConfigDirs.length) {
+          yield* Effect.logDebug("loading config from extra config dirs", { paths: extraConfigDirs })
         }
 
         const deps: Fiber.Fiber<void>[] = []
 
         for (const dir of directories) {
-          if (dir.endsWith(".opencode") || extraConfigDirs.has(dir)) {
+          if (dir.endsWith(".opencode") || extraConfigDirSet.has(dir)) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
               yield* Effect.logDebug(`loading config from ${source}`)

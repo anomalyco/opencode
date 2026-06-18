@@ -57,8 +57,9 @@ export const layer: Layer.Layer<
     const global = yield* Global.Service
     const flags = yield* RuntimeFlags.Service
     const http = HttpClient.filterStatusOk(withTransientReadRetry(yield* HttpClient.HttpClient))
-    const globalFiles = [
-      path.join(global.config, "AGENTS.md"),
+    const globalConfigDirectories = [global.config, ...global.extraConfigDirs]
+    const globalInstructionFiles = [
+      ...globalConfigDirectories.toReversed().map((directory) => path.join(directory, "AGENTS.md")),
       ...(!flags.disableClaudeCodePrompt ? [path.join(global.home, ".claude", "CLAUDE.md")] : []),
     ]
     const instructionFiles = [
@@ -78,14 +79,17 @@ export const layer: Layer.Layer<
 
     const relative = Effect.fnUntraced(function* (instruction: string) {
       const ctx = yield* InstanceState.context
-      if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-        return yield* fs
-          .globUp(instruction, ctx.directory, ctx.worktree)
-          .pipe(Effect.catch(() => Effect.succeed([] as string[])))
-      }
-      return yield* fs
-        .globUp(instruction, global.config, global.config)
+      const globalMatches = yield* Effect.forEach(
+        globalConfigDirectories,
+        (directory) => fs.globUp(instruction, directory, directory).pipe(Effect.catch(() => Effect.succeed([]))),
+        { concurrency: "unbounded" },
+      ).pipe(Effect.map((matches) => matches.flat()))
+      if (Flag.OPENCODE_DISABLE_PROJECT_CONFIG) return globalMatches
+
+      const projectMatches = yield* fs
+        .globUp(instruction, ctx.directory, ctx.worktree)
         .pipe(Effect.catch(() => Effect.succeed([] as string[])))
+      return [...projectMatches, ...globalMatches]
     })
 
     const read = Effect.fnUntraced(function* (filepath: string) {
@@ -112,7 +116,7 @@ export const layer: Layer.Layer<
       const ctx = yield* InstanceState.context
       const paths = new Set<string>()
 
-      for (const file of globalFiles) {
+      for (const file of globalInstructionFiles) {
         if (yield* fs.existsSafe(file)) {
           paths.add(path.resolve(file))
           break

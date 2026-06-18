@@ -52,7 +52,19 @@ export const layer = Layer.effectDiscard(
             })
         ).map(FSUtil.resolve),
       )
-      const paths = Array.dedupe([FSUtil.resolve(join(global.config, "AGENTS.md")), ...discovered])
+      const globalInstructionPaths = yield* Effect.forEach(
+        [global.config, ...global.extraConfigDirs].toReversed(),
+        (directory) =>
+          Effect.gen(function* () {
+            const filepath = FSUtil.resolve(join(directory, "AGENTS.md"))
+            return (yield* fs.existsSafe(filepath)) ? filepath : undefined
+          }),
+        { concurrency: "unbounded" },
+      )
+      const paths = Array.dedupe([
+        ...globalInstructionPaths.filter((path): path is string => path !== undefined).slice(0, 1),
+        ...discovered,
+      ])
       const files = yield* Effect.forEach(
         paths,
         (path) =>

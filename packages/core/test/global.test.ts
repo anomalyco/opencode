@@ -17,16 +17,16 @@ describe("global paths", () => {
   test("config directory env vars add extra config directories", () => {
     const previousDir = process.env.OPENCODE_CONFIG_DIR
     const previousDirs = process.env.OPENCODE_CONFIG_DIRS
-    process.env.OPENCODE_CONFIG_DIR = "/tmp/opencode-extra-config"
-    process.env.OPENCODE_CONFIG_DIRS = ["/tmp/opencode-extra-a", "/tmp/opencode-extra-b"].join(path.delimiter)
+    process.env.OPENCODE_CONFIG_DIR = " /tmp/opencode-extra-config "
+    process.env.OPENCODE_CONFIG_DIRS = [" /tmp/opencode-extra-a ", "", "/tmp/opencode-extra-b"].join(path.delimiter)
     try {
       const global = Global.make()
 
       expect(global.config).toBe(Global.Path.config)
       expect(global.extraConfigDirs).toEqual([
-        "/tmp/opencode-extra-config",
         "/tmp/opencode-extra-a",
         "/tmp/opencode-extra-b",
+        "/tmp/opencode-extra-config",
       ])
     } finally {
       if (previousDir === undefined) delete process.env.OPENCODE_CONFIG_DIR
