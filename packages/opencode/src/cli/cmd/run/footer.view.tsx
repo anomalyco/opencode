@@ -10,8 +10,6 @@
 /** @jsxImportSource @opentui/solid */
 import { useTerminalDimensions } from "@opentui/solid"
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
-import "opentui-spinner/solid"
-import { createColors, createFrames } from "@opencode-ai/tui/ui/spinner"
 import {
   RUN_SUBAGENT_PANEL_ROWS,
   RunCommandMenuBody,
@@ -252,22 +250,6 @@ export function RunFooterView(props: RunFooterViewProps) {
   const runTheme = createMemo(() => props.theme())
   const theme = createMemo(() => runTheme().footer)
   const block = createMemo(() => runTheme().block)
-  const spin = createMemo(() => {
-    return {
-      frames: createFrames({
-        color: theme().highlight,
-        style: "blocks",
-        inactiveFactor: 0.6,
-        minAlpha: 0.3,
-      }),
-      color: createColors({
-        color: theme().highlight,
-        style: "blocks",
-        inactiveFactor: 0.6,
-        minAlpha: 0.3,
-      }),
-    }
-  })
   const permission = createMemo<Extract<FooterView, { type: "permission" }> | undefined>(() => {
     const view = active()
     return view.type === "permission" ? view : undefined
@@ -843,7 +825,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                 >
                   <Show when={busy() && !exiting()}>
                     <box flexShrink={0}>
-                      <spinner color={spin().color} frames={spin().frames} interval={40} />
+                      <text fg={theme().highlight}>...</text>
                     </box>
                   </Show>
 
