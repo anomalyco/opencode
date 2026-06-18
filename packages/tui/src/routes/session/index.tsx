@@ -68,7 +68,7 @@ import { PermissionPrompt } from "./permission"
 import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import * as Model from "../../util/model"
-import { formatTranscript } from "../../util/transcript"
+import { formatTranscript, type MessageWithParts } from "../../util/transcript"
 import { sessionEpilogue } from "../../util/presentation"
 import { setPreLayoutSiblingMargin } from "../../util/layout"
 import { useTuiConfig } from "../../config"
@@ -205,6 +205,22 @@ export function Session() {
       .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
+  const fetchTranscriptMessages = async (sessionID: string): Promise<MessageWithParts[]> => {
+    const result: MessageWithParts[] = []
+    let before: string | undefined
+
+    while (true) {
+      const page = await sdk.client.session.messages(
+        { sessionID, limit: 100, before },
+        { throwOnError: true, responseStyle: "fields" },
+      )
+      result.push(...page.data.map((message) => ({ info: message.info, parts: message.parts })))
+      before = page.response.headers.get("X-Next-Cursor") ?? undefined
+      if (!before) break
+    }
+
+    return result
+  }
   const foregroundTasks = createMemo(() =>
     sync.data.capabilities.experimentalBackgroundSubagents
       ? messages().flatMap((message) =>
@@ -923,10 +939,10 @@ export function Session() {
         try {
           const sessionData = session()
           if (!sessionData) return
-          const sessionMessages = messages()
+          const sessionMessages = await fetchTranscriptMessages(sessionData.id)
           const transcript = formatTranscript(
             sessionData,
-            sessionMessages.map((msg) => ({ info: msg, parts: sync.data.part[msg.id] ?? [] })),
+            sessionMessages,
             {
               thinking: showThinking(),
               toolDetails: showDetails(),
@@ -953,7 +969,7 @@ export function Session() {
         try {
           const sessionData = session()
           if (!sessionData) return
-          const sessionMessages = messages()
+          const sessionMessages = await fetchTranscriptMessages(sessionData.id)
 
           const defaultFilename = `session-${sessionData.id.slice(0, 8)}.md`
 
@@ -970,7 +986,7 @@ export function Session() {
 
           const transcript = formatTranscript(
             sessionData,
-            sessionMessages.map((msg) => ({ info: msg, parts: sync.data.part[msg.id] ?? [] })),
+            sessionMessages,
             {
               thinking: options.thinking,
               toolDetails: options.toolDetails,
