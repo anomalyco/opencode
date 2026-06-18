@@ -110,6 +110,22 @@ And to use it I can add `use the mcp_everything tool` to my prompts.
 use the mcp_everything tool to add the number 3 and 4
 ```
 
+For a local memory server, you can add [Vestige](https://github.com/samvallad33/vestige) with an extended startup timeout:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "vestige": {
+      "type": "local",
+      "command": ["npx", "-y", "-p", "vestige-mcp-server@latest", "vestige-mcp"],
+      "enabled": true,
+      "timeout": 60000,
+    },
+  },
+}
+```
+
 ---
 
 #### Options
