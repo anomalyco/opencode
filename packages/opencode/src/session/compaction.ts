@@ -360,6 +360,7 @@ export const layer = Layer.effect(
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const modelMessages = yield* MessageV2.toModelMessagesEffect(msgs, model, {
         stripMedia: true,
+        stripReasoning: true,
         toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
       })
       const tailIndex = selected.tail_start_id
@@ -414,7 +415,7 @@ export const layer = Layer.effect(
         tools: {},
         system: [],
         messages: [
-          ...modelMessages,
+          ...(modelMessages ?? []),
           {
             role: "user",
             content: [{ type: "text", text: nextPrompt }],

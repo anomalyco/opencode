@@ -684,6 +684,49 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
+  test("converts reasoning to text when assistant model differs", async () => {
+    const userID = "m-user"
+    const assistantID = "m-assistant"
+
+   const input: SessionV1.WithParts[] = [
+       {
+         info: userInfo(userID),
+         parts: [
+           {
+             ...basePart(userID, "u1"),
+             type: "text",
+             text: "think about this",
+           },
+         ] as SessionV1.Part[],
+       },
+       {
+         info: assistantInfo(assistantID, userID, undefined, { providerID: "other", modelID: "other" }),
+         parts: [
+           {
+             ...basePart(assistantID, "a1"),
+             type: "reasoning",
+             text: "reasoning trace",
+             time: { start: 0 },
+             metadata: { anthropic: { signature: "sig-abc" } },
+           },
+         ] as SessionV1.Part[],
+       } as SessionV1.WithParts,
+     ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "user",
+        content: [{ type: "text", text: "think about this" }],
+      },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: "reasoning trace" },
+        ],
+      },
+    ])
+  })
+
   test("replaces compacted tool output with placeholder", async () => {
     const userID = "m-user"
     const assistantID = "m-assistant"

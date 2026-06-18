@@ -216,7 +216,7 @@ export const layer = Layer.effect(
           model: mdl,
           sessionID: input.session.id,
           retries: 2,
-          messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...msgs],
+          messages: [{ role: "user", content: "Generate a title for this conversation:\n" }, ...(msgs ?? [])],
         })
         .pipe(
           Stream.filter(LLMEvent.is.textDelta),
@@ -1340,7 +1340,7 @@ export const layer = Layer.effect(
               sessionID,
               parentSessionID: session.parentID,
               system,
-              messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
+               messages: [...(modelMsgs ?? []), ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS }] : [])],
               tools,
               model,
               toolChoice: format.type === "json_schema" ? "required" : undefined,

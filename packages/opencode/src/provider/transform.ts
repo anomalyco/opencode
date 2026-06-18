@@ -168,9 +168,7 @@ function normalizeMessages(
         }
         if (!Array.isArray(msg.content)) return msg
         const filtered = msg.content.filter((part) => {
-          if (part.type === "text") {
-            return part.text !== ""
-          }
+          if (part.type === "text") return part.text !== ""
           if (part.type === "reasoning") {
             return (
               part.text.trim().length > 0 ||
@@ -353,13 +351,17 @@ function applyCaching(msgs: ModelMessage[], model: Provider.Model): ModelMessage
     const shouldUseContentOptions = !useMessageLevelOptions && Array.isArray(msg.content) && msg.content.length > 0
 
     if (shouldUseContentOptions) {
-      const lastContent = msg.content[msg.content.length - 1]
-      if (
-        lastContent &&
-        typeof lastContent === "object" &&
-        lastContent.type !== "tool-approval-request" &&
-        lastContent.type !== "tool-approval-response"
-      ) {
+      const lastContent = [...msg.content]
+        .reverse()
+        .find(
+          (part) =>
+            part &&
+            typeof part === "object" &&
+            part.type !== "tool-approval-request" &&
+            part.type !== "tool-approval-response" &&
+            part.type !== "reasoning",
+        ) as any
+      if (lastContent) {
         lastContent.providerOptions = mergeDeep(lastContent.providerOptions ?? {}, providerOptions)
         continue
       }
