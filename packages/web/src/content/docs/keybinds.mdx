@@ -196,6 +196,8 @@ You don't need to use a leader key for your keybinds but we recommend doing so.
 
 Some navigation keybinds intentionally do not use the leader key by default. For subagent sessions, the defaults are `session_child_first` = `<leader>down`, `session_child_cycle` = `right`, `session_child_cycle_reverse` = `left`, and `session_parent` = `up`.
 
+`app_exit` closes the TUI. `input_clear` clears the prompt text. Both include `ctrl+c` by default, so `ctrl+c` clears input when the prompt has text and exits when the prompt is empty. Use `session_interrupt` (`escape` by default) to interrupt in-progress work without closing OpenCode.
+
 `leader_timeout` controls how long OpenCode waits for the next key after the leader key. It defaults to `2000` milliseconds.
 
 ---
