@@ -454,11 +454,10 @@ describe("session.compaction.isOverflow", () => {
     ),
   )
 
-  // ─── Bug reproduction tests ───────────────────────────────────────────
-  // These tests demonstrate that when limit.input is set, isOverflow()
-  // does not subtract any headroom for the next model response. This means
-  // compaction only triggers AFTER we've already consumed the full input
-  // budget, leaving zero room for the next API call's output tokens.
+  // ─── Output headroom regression tests ─────────────────────────────────
+  // When limit.input is set, isOverflow() still reserves headroom for the next
+  // model response. This keeps compaction from waiting until the full input
+  // budget is consumed, which would leave no room for the next API call's output.
   //
   // Compare: without limit.input, usable = context - output (reserves space).
   // With limit.input, usable = limit.input (reserves nothing).
@@ -467,7 +466,7 @@ describe("session.compaction.isOverflow", () => {
   // Open PRs: #6875, #12924
 
   it.live(
-    "BUG: no headroom when limit.input is set — compaction should trigger near boundary but does not",
+    "reserves output headroom when limit.input is set",
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const compact = yield* SessionCompaction.Service
@@ -493,7 +492,7 @@ describe("session.compaction.isOverflow", () => {
   )
 
   it.live(
-    "BUG: without limit.input, same token count correctly triggers compaction",
+    "without limit.input, same token count correctly triggers compaction",
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const compact = yield* SessionCompaction.Service
@@ -513,7 +512,7 @@ describe("session.compaction.isOverflow", () => {
   )
 
   it.live(
-    "BUG: asymmetry — limit.input model allows 30K more usage before compaction than equivalent model without it",
+    "limit.input model agrees with equivalent context-limited model",
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
         const compact = yield* SessionCompaction.Service
