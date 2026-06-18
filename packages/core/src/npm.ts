@@ -122,7 +122,8 @@ export const layer = Layer.effect(
         }
       })()
 
-      if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
+      const forceUpdate = process.env.OPENCODE_UPDATE_PLUGINS === "1"
+      if (!forceUpdate && (yield* afs.existsSafe(path.join(dir, "node_modules", name)))) {
         return resolveEntryPoint(name, path.join(dir, "node_modules", name))
       }
 

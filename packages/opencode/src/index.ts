@@ -63,11 +63,18 @@ const cli = yargs(args)
     describe: "run without external plugins",
     type: "boolean",
   })
+  .option("update-plugins", {
+    describe: "force update external plugins",
+    type: "boolean",
+  })
   .middleware(async (opts) => {
     if (opts.printLogs) process.env.OPENCODE_PRINT_LOGS = "1"
     if (opts.logLevel) process.env.OPENCODE_LOG_LEVEL = opts.logLevel
     if (opts.pure) {
       process.env.OPENCODE_PURE = "1"
+    }
+    if (opts.updatePlugins || opts["update-plugins"]) {
+      process.env.OPENCODE_UPDATE_PLUGINS = "1"
     }
 
     Heap.start()
