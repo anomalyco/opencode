@@ -77,4 +77,44 @@ describe("McpCatalog.convertTool", () => {
 
     expect(calls).toEqual([{ args: "not json" }])
   })
+
+  test("parses JSON strings for array-shaped arguments", async () => {
+    const calls: Record<string, unknown>[] = []
+    const tool = McpCatalog.convertTool(
+      {
+        name: "nextjs_call",
+        inputSchema: {
+          type: "object",
+          properties: {
+            args: { type: "array", items: { type: "string" } },
+          },
+        },
+      },
+      toolClient(calls),
+    )
+
+    await tool.execute?.({ args: '["pages","app"]' }, { toolCallId: "call", messages: [], abortSignal: undefined })
+
+    expect(calls).toEqual([{ args: ["pages", "app"] }])
+  })
+
+  test("converts empty strings to empty arrays for array-shaped arguments", async () => {
+    const calls: Record<string, unknown>[] = []
+    const tool = McpCatalog.convertTool(
+      {
+        name: "nextjs_call",
+        inputSchema: {
+          type: "object",
+          properties: {
+            args: { type: "array", items: { type: "string" } },
+          },
+        },
+      },
+      toolClient(calls),
+    )
+
+    await tool.execute?.({ args: "" }, { toolCallId: "call", messages: [], abortSignal: undefined })
+
+    expect(calls).toEqual([{ args: [] }])
+  })
 })
