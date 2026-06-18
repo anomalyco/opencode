@@ -549,13 +549,14 @@ export const layer: Layer.Layer<
       path?: string
       metadata?: typeof Metadata.Type
       permission?: PermissionV1.Ruleset
+      projectID?: ProjectV2.ID
     }) {
       const ctx = yield* InstanceState.context
       const result: Info = {
         id: SessionID.descending(input.id),
         slug: Slug.create(),
         version: InstallationVersion,
-        projectID: ctx.project.id,
+        projectID: input.projectID ?? ctx.project.id,
         directory: input.directory,
         path: input.path,
         workspaceID: input.workspaceID,
@@ -728,6 +729,7 @@ export const layer: Layer.Layer<
       // degrades gracefully back to ctx.directory.
       let directory = ctx.directory
       let resolvedWorkspaceID = input?.workspaceID ?? workspace
+      let parentProjectID: ProjectV2.ID | undefined = undefined
       if (input?.parentID) {
         const parent = yield* get(input.parentID).pipe(
           Effect.catchCause(() => Effect.succeed(undefined)),
@@ -737,6 +739,7 @@ export const layer: Layer.Layer<
           if (input?.workspaceID === undefined) {
             resolvedWorkspaceID = parent.workspaceID ?? resolvedWorkspaceID
           }
+          parentProjectID = parent.projectID
         }
       }
 
@@ -750,6 +753,8 @@ export const layer: Layer.Layer<
         metadata: input?.metadata,
         permission: input?.permission,
         workspaceID: resolvedWorkspaceID,
+        // projectID must travel with directory to keep session identity consistent
+        projectID: parentProjectID,
       })
     })
 
@@ -764,6 +769,7 @@ export const layer: Layer.Layer<
         workspaceID: original.workspaceID,
         title,
         metadata: structuredClone(original.metadata),
+        projectID: original.projectID,
       })
       const msgs = yield* messages({ sessionID: input.sessionID })
       const idMap = new Map<string, MessageID>()
