@@ -528,7 +528,7 @@ export const layer = Layer.effect(
             if (
               recentParts.length !== DOOM_LOOP_THRESHOLD ||
               !recentParts.every(
-                (part: SessionLegacy.Part) =>
+                (part: SessionV1.Part) =>
                   part.type === "tool" &&
                   part.tool === value.name &&
                   part.state.status !== "pending" &&

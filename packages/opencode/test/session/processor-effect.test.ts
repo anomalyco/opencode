@@ -844,7 +844,7 @@ it.live("session.processor effect tests marks schema-invalid pending tool calls 
               time: parent.time,
               agent: parent.agent,
               model: { providerID: ref.providerID, modelID: ref.modelID },
-            } satisfies SessionLegacy.User,
+            } satisfies SessionV1.User,
             sessionID: chat.id,
             model: mdl,
             agent: agent(),
@@ -867,7 +867,7 @@ it.live("session.processor effect tests marks schema-invalid pending tool calls 
         yield* llm.wait(1)
         const call = yield* waitFor(
           MessageV2.parts(msg.id).pipe(
-            Effect.map((parts) => parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")),
+            Effect.map((parts) => parts.find((part): part is SessionV1.ToolPart => part.type === "tool")),
             Effect.provideService(Database.Service, database),
           ),
           "timed out waiting for tool part",
@@ -915,7 +915,7 @@ it.live("session.processor effect tests allow empty input for tools with no requ
             time: parent.time,
             agent: parent.agent,
             model: { providerID: ref.providerID, modelID: ref.modelID },
-          } satisfies SessionLegacy.User,
+          } satisfies SessionV1.User,
           sessionID: chat.id,
           model: mdl,
           agent: agent(),
@@ -935,7 +935,7 @@ it.live("session.processor effect tests allow empty input for tools with no requ
         })
 
         const parts = yield* MessageV2.parts(msg.id)
-        const call = parts.find((part): part is SessionLegacy.ToolPart => part.type === "tool")
+        const call = parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
 
         expect(value).toBe("continue")
         expect(call?.tool).toBe("ping")
