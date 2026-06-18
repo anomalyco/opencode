@@ -110,6 +110,25 @@ describe("tool.glob", () => {
     }),
   )
 
+  it.instance("matches files under explicitly requested dot directories", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const target = path.join(test.directory, ".ai", "current-task.md")
+      yield* Effect.promise(() => Bun.write(target, "ship it\n"))
+      const info = yield* GlobTool
+      const glob = yield* info.init()
+      const result = yield* glob.execute(
+        {
+          pattern: ".ai/**/*.md",
+          path: test.directory,
+        },
+        ctx,
+      )
+      expect(result.metadata.count).toBe(1)
+      expect(result.output).toContain(target)
+    }),
+  )
+
   it.instance("rejects exact file paths", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance

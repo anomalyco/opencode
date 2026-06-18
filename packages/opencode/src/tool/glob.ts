@@ -47,7 +47,13 @@ export const GlobTool = Tool.define(
           })
 
           const limit = 100
-          const files = yield* ripgrep.glob({ cwd: search, pattern: params.pattern, limit })
+          const files = yield* ripgrep.glob({
+            cwd: search,
+            pattern: params.pattern,
+            limit,
+            hidden:
+              includesDotPathSegment(params.pattern) || includesDotPathSegment(path.relative(ins.directory, search)),
+          })
           const truncated = files.length === limit
 
           const output = []
@@ -74,3 +80,10 @@ export const GlobTool = Tool.define(
     }
   }),
 )
+
+function includesDotPathSegment(value: string) {
+  return value
+    .replaceAll("\\", "/")
+    .split("/")
+    .some((segment) => segment.startsWith(".") && segment !== "." && segment !== "..")
+}
