@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, mock, test } from "bun:test"
 import fs from "fs/promises"
 import { spawn } from "child_process"
 import path from "path"
@@ -357,6 +357,35 @@ describe("util.flock", () => {
     }
 
     expect(await exists(lockDir)).toBe(false)
+  })
+
+  test("logs heartbeat update failures", async () => {
+    await using tmp = await tmpdir()
+    const dir = path.join(tmp.path, "locks")
+    const key = "flock:heartbeat-failure"
+    const heartbeat = path.join(lock(dir, key), "heartbeat")
+    const warn = mock(() => {})
+    const originalWarn = console.warn
+    console.warn = warn
+
+    try {
+      await using _ = await Flock.acquire(key, {
+        dir,
+        staleMs: 300,
+        timeoutMs: 3_000,
+      })
+
+      await fs.rm(heartbeat)
+      const stop = Date.now() + 2_000
+      while (warn.mock.calls.length === 0 && Date.now() < stop) {
+        await sleep(20)
+      }
+
+      expect(warn).toHaveBeenCalled()
+      expect(warn.mock.calls[0]?.[0]).toBe("lock heartbeat failed:")
+    } finally {
+      console.warn = originalWarn
+    }
   })
 
   test("refuses token mismatch release and recovers from stale", async () => {

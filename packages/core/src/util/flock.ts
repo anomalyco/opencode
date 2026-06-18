@@ -227,7 +227,9 @@ export namespace Flock {
       // Heartbeat prevents long critical sections from being evicted as stale.
       timer = setInterval(() => {
         const t = new Date()
-        void utimes(heartbeatPath, t, t).catch(() => undefined)
+        void utimes(heartbeatPath, t, t).catch((err) => {
+          console.warn("lock heartbeat failed:", err)
+        })
       }, intervalMs)
       timer.unref?.()
     }
