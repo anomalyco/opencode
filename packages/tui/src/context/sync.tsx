@@ -37,6 +37,22 @@ const emptyConsoleState: ConsoleState = {
   switchableOrgCount: 0,
 }
 
+// How the session list is scoped to the working directory:
+//   hierarchical - current directory and its descendants (default)
+//   directory    - exactly the current directory (isolates sibling worktrees)
+//   project      - every session in the project, regardless of directory
+export const SESSION_FILTER_MODES = ["hierarchical", "directory", "project"] as const
+export type SessionFilterMode = (typeof SESSION_FILTER_MODES)[number]
+
+export function isSessionFilterMode(value: unknown): value is SessionFilterMode {
+  return typeof value === "string" && (SESSION_FILTER_MODES as readonly string[]).includes(value)
+}
+
+export function nextSessionFilterMode(current: SessionFilterMode): SessionFilterMode {
+  const idx = SESSION_FILTER_MODES.indexOf(current)
+  return SESSION_FILTER_MODES[(idx + 1) % SESSION_FILTER_MODES.length] ?? "hierarchical"
+}
+
 function search<T>(items: T[], target: string, key: (item: T) => string) {
   let left = 0
   let right = items.length - 1
@@ -149,13 +165,26 @@ export const {
       hydratingSessions.get(sessionID)?.parts.add(partID)
     }
 
-    function sessionListQuery(): { scope?: "project"; path?: string } {
-      if (!kv.get("session_directory_filter_enabled", true)) return { scope: "project" }
-      if (!project.data.instance.path.worktree || !project.data.instance.path.directory) return { scope: "project" }
-      return {
-        path: path
-          .relative(path.resolve(project.data.instance.path.worktree), project.data.instance.path.directory)
-          .replaceAll("\\", "/"),
+    function sessionFilterMode(): SessionFilterMode {
+      const stored = kv.get("session_filter_mode")
+      if (isSessionFilterMode(stored)) return stored
+      // Back-compat: honor the previous boolean flag until the user picks a mode.
+      return kv.get("session_directory_filter_enabled", true) ? "hierarchical" : "project"
+    }
+
+    function sessionListQuery(): { scope?: "project"; path?: string; directory?: string } {
+      const { worktree, directory } = project.data.instance.path
+      switch (sessionFilterMode()) {
+        // Whole project: every session across all of the project's directories/worktrees.
+        case "project":
+          return { scope: "project" }
+        // Exact: only sessions whose directory equals the current one (isolates worktrees).
+        case "directory":
+          return directory ? { directory } : { scope: "project" }
+        // Hierarchical (default): current directory plus its descendants.
+        default:
+          if (!worktree || !directory) return { scope: "project" }
+          return { path: path.relative(path.resolve(worktree), directory).replaceAll("\\", "/") }
       }
     }
 
@@ -559,6 +588,17 @@ export const {
         },
         query() {
           return sessionListQuery()
+        },
+        filter: {
+          get(): SessionFilterMode {
+            return sessionFilterMode()
+          },
+          async cycle(): Promise<SessionFilterMode> {
+            const next = nextSessionFilterMode(sessionFilterMode())
+            kv.set("session_filter_mode", next)
+            await result.session.refresh()
+            return next
+          },
         },
         async refresh() {
           const list = await listSessions()

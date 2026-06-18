@@ -910,13 +910,10 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
       },
       {
         name: "app.toggle.session_directory_filter",
-        title: kv.get("session_directory_filter_enabled", true)
-          ? "Disable session directory filtering"
-          : "Enable session directory filtering",
+        title: `Session filter: ${sync.session.filter.get()} (cycle: hierarchical → directory → project)`,
         category: "System",
         run: async () => {
-          kv.set("session_directory_filter_enabled", !kv.get("session_directory_filter_enabled", true))
-          await sync.session.refresh()
+          await sync.session.filter.cycle()
           dialog.clear()
         },
       },
