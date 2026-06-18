@@ -4,7 +4,7 @@
   --ds-disc: rgba(13, 13, 17, 0.94);
   --ds-mint: #22b487;
   --ds-safety: #ff6b1f;
-  --ds-safety-soft: #ffb088;
+  --ds-safety-soft: #ffe0cf;
   --ds-ring-size: min(480px, calc(100vw - 48px));
 
   position: fixed;
@@ -443,6 +443,15 @@
   background: var(--ds-safety);
   color: #fff;
   border-color: var(--ds-safety);
+}
+
+/* Icon 컴포넌트 래퍼는 [data-component="icon"]에서 color: var(--icon-base)(중립 회색)로
+   상속 color를 덮어쓴다. 이 버튼/원형 아이콘들은 자기 color(거절=safety-soft, 수락=mint,
+   무산 X=흰색)를 그대로 써야 하므로 inherit로 되돌린다. */
+.ds-btn-reject [data-component="icon"],
+.ds-btn-success-static [data-component="icon"],
+.ds-failure__icon [data-component="icon"] {
+  color: inherit;
 }
 
 .ds-btn-success-static {
