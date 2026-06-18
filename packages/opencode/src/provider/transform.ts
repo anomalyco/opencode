@@ -61,7 +61,12 @@ function sdkKey(npm: string): string | undefined {
   return undefined
 }
 
+function usesAnthropicMessagesApi(model: Provider.Model): boolean {
+  return ["@ai-sdk/anthropic", "@ai-sdk/google-vertex/anthropic"].includes(model.api.npm)
+}
+
 export function supportsAssistantPrefill(model: Provider.Model): boolean {
+  if (!usesAnthropicMessagesApi(model)) return true
   const id = `${model.id} ${model.api.id}`.toLowerCase()
   if (!id.includes("claude")) return true
   return ![
@@ -82,7 +87,8 @@ export function supportsAssistantPrefill(model: Provider.Model): boolean {
 
 function stripTrailingAssistant(msgs: ModelMessage[], model: Provider.Model, options: Record<string, unknown>): ModelMessage[] {
   const stripAllAssistantPrefill = !supportsAssistantPrefill(model)
-  const stripThinkingTextPrefill = options.thinking != null && `${model.id} ${model.api.id}`.toLowerCase().includes("claude")
+  const stripThinkingTextPrefill =
+    usesAnthropicMessagesApi(model) && options.thinking != null && `${model.id} ${model.api.id}`.toLowerCase().includes("claude")
   if (!stripAllAssistantPrefill && !stripThinkingTextPrefill) return msgs
 
   while (msgs.length > 0) {
