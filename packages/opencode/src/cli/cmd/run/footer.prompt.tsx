@@ -12,6 +12,7 @@ import fuzzysort from "fuzzysort"
 import path from "path"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, type Accessor } from "solid-js"
 import * as Locale from "@/util/locale"
+import { resolveSlashAlias, getAllSlashAliases } from "./slash-alias"
 import {
   createPromptHistory,
   displayCharAt,
@@ -180,11 +181,12 @@ function parseSlashCommand(text: string, commands: RunCommand[] | undefined) {
     return { type: "pending" as const }
   }
 
-  if (!commands.some((item) => item.name === head.name)) {
+  const resolved = resolveSlashAlias(head.name) ?? head.name
+  if (!commands.some((item) => item.name === resolved)) {
     return { type: "none" as const }
   }
 
-  return { type: "command" as const, command: { name: head.name, arguments: head.arguments } }
+  return { type: "command" as const, command: { name: resolved, arguments: head.arguments } }
 }
 
 export function hintFlags(width: number) {
@@ -429,6 +431,14 @@ export function createPromptState(input: PromptInput): PromptState {
       { kind: "slash", name: "exit", display: "/exit", description: "close direct mode" } satisfies SlashOption,
     ]
     const hidden = new Set(builtins.map((item) => item.name))
+    const aliasBuiltins = getAllSlashAliases()
+      .filter(([alias, target]) => !hidden.has(target) && alias !== target)
+      .map(([alias]) => ({
+        kind: "slash",
+        name: alias,
+        display: `/${alias}`,
+        description: "",
+      }) satisfies SlashOption)
     return [
       ...(input.commands() ?? [])
         .filter((item) => item.source !== "skill" && !hidden.has(item.name))
@@ -442,6 +452,7 @@ export function createPromptState(input: PromptInput): PromptState {
             }) satisfies SlashOption,
         ),
       ...builtins,
+      ...aliasBuiltins,
     ].sort((a, b) => a.display.localeCompare(b.display))
   })
   const options = createMemo<PromptOption[]>(() => {

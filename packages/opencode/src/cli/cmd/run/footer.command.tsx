@@ -5,6 +5,7 @@ import fuzzysort from "fuzzysort"
 import { createEffect, createMemo, createSignal, type Accessor } from "solid-js"
 import { RunFooterMenu, createFooterMenuState, type RunFooterMenuItem } from "./footer.menu"
 import { formatBindings } from "./keymap.shared"
+import { getSlashAliases } from "./slash-alias"
 import type { RunFooterTheme } from "./theme"
 import type { FooterKeybinds, FooterSubagentTab, RunCommand, RunInput, RunProvider } from "./types"
 
@@ -365,10 +366,14 @@ export function RunCommandMenuBody(props: {
               name: item.name,
               display: item.name,
               footer: `/${item.name}`,
-              keywords:
-                item.source === "mcp"
-                  ? `/${item.name} ${item.name} mcp ${item.description ?? ""}`
-                  : `/${item.name} ${item.name} ${item.description ?? ""}`,
+              keywords: (() => {
+                const base =
+                  item.source === "mcp"
+                    ? `/${item.name} ${item.name} mcp ${item.description ?? ""}`
+                    : `/${item.name} ${item.name} ${item.description ?? ""}`
+                const aliases = getSlashAliases(item.name)
+                return aliases.length > 0 ? `${base} ${aliases.map((a) => `/${a}`).join(" ")}` : base
+              })(),
             }) satisfies CommandEntry,
         )
         .sort((a, b) => categoryRank(a.category) - categoryRank(b.category) || a.display.localeCompare(b.display)),
