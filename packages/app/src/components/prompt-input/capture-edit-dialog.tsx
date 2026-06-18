@@ -50,12 +50,14 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
   let zoomMax = 4
 
   onMount(async () => {
-    // ui Dialog 의 size 프리셋(고정 px width/height/max-height)을 덮어, 모달 자체를 80vw×80vh 로.
+    // ui Dialog 의 size 프리셋(고정 px width/height/max-height)을 덮는다.
+    // 세로는 90vh 고정(이미지 스케일 기준). 가로는 우선 90vw 로 펼쳐 가용 영역을 측정한 뒤,
+    // 아래에서 콘텐츠(이미지/툴바) 폭에 맞게 줄인다(최대 90vw 캡 유지).
     // 바깥 오버레이 flex(align/justify center)가 컨테이너를 화면 정중앙에 둔다.
     const dialogContainer = containerRef?.closest<HTMLElement>('[data-slot="dialog-container"]')
     if (dialogContainer) {
-      dialogContainer.style.width = "80vw"
-      dialogContainer.style.height = "80vh"
+      dialogContainer.style.width = "90vw"
+      dialogContainer.style.height = "90vh"
     }
 
     objectUrl = URL.createObjectURL(props.file)
@@ -69,8 +71,8 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
 
     const nativeW = img.naturalWidth || img.width
     const nativeH = img.naturalHeight || img.height
-    // 고정 모달(80vw×80vh) 안의 실제 가용 영역(스테이지 컨테이너 client 크기)을 측정해 그 안에 맞춘다.
-    // 양방향 모두 측정값 기준이라 초기엔 스크롤이 없고, 이미지는 공간을 채우는 적절한 크기로 보인다.
+    // 펼친 모달(90vw×90vh) 안의 실제 가용 영역(스테이지 컨테이너 client 크기)을 측정해 그 안에 맞춘다.
+    // 보통 세로(90vh)가 binding 되어 이미지 스케일을 결정하고, 가로는 아래에서 콘텐츠에 맞게 줄인다.
     const availImgW = Math.max(64, containerRef.clientWidth - PAD * 2)
     const availImgH = Math.max(64, containerRef.clientHeight - PAD * 2)
     scale = Math.min(1, availImgW / nativeW, availImgH / nativeH)
@@ -83,6 +85,25 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
     setZoomPct(Math.round(scale * 100))
 
     stage = new Konva.Stage({ container: containerRef, width: baseW, height: baseH })
+
+    // 가로 콘텐츠 핏: 모달 폭을 이미지(baseW)와 툴바 폭 중 큰 쪽 + 좌우 chrome 에 맞춰 줄인다.
+    // 90vw 로 펼친 상태에서 측정하므로 줄이기만 하고, min(90vw, …px) 로 두어 캡을 반응형으로 유지.
+    if (dialogContainer) {
+      // 툴바 intrinsic 폭: 닫기·추가의 ml-auto 때문에 평소 scrollWidth 는 가용폭 전체로 잡힌다.
+      // max-content 로 잠깐 바꿔 한 줄 실제 필요 폭만 잰 뒤 되돌린다.
+      const toolbarEl = containerRef.parentElement?.querySelector<HTMLElement>('[data-slot="toolbar"]')
+      let toolbarW = 0
+      if (toolbarEl) {
+        const prevWidth = toolbarEl.style.width
+        toolbarEl.style.width = "max-content"
+        toolbarW = toolbarEl.scrollWidth
+        toolbarEl.style.width = prevWidth
+      }
+      const desiredStageW = Math.max(baseW, toolbarW)
+      const chromeW = dialogContainer.clientWidth - containerRef.clientWidth // 좌우 패딩 합
+      const targetW = Math.round(desiredStageW + chromeW)
+      dialogContainer.style.width = `min(90vw, ${targetW}px)`
+    }
 
     const imageLayer = new Konva.Layer({ listening: false })
     imageLayer.add(new Konva.Image({ image: img, x: PAD, y: PAD, width: dispW, height: dispH }))
@@ -329,7 +350,7 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
   }
 
   return (
-    <Dialog title={language.t("prompt.capture.editTitle")} size="x-large" class="![height:100%]">
+    <Dialog size="x-large" class="![height:100%]">
       <div data-component="capture-edit" class="flex h-full min-h-0 flex-col gap-3 p-4">
         <div data-slot="toolbar" class="flex shrink-0 flex-wrap items-center gap-2">
           {/* 색상 */}
@@ -387,11 +408,11 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
               aria-label={language.t("prompt.capture.toolPen")}
             />
           </Tooltip>
-          {/* 지우개 전용 아이콘이 없어 trash 로 대체(툴팁으로 의미 보강) */}
+          {/* 지우개 */}
           <Tooltip placement="top" value={language.t("prompt.capture.toolEraser")}>
             <IconButton
               type="button"
-              icon="trash"
+              icon="eraser"
               variant="ghost"
               class="size-7.5"
               data-selected={tool() === "eraser" ? "true" : undefined}
@@ -463,6 +484,15 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
               aria-label={language.t("prompt.capture.zoomIn")}
             />
           </Tooltip>
+          {/* 닫기 / 추가 */}
+          <div class="ml-auto flex items-center gap-2">
+            <Button type="button" variant="ghost" class="h-7.5" onClick={() => dialog.close()}>
+              {language.t("prompt.capture.close")}
+            </Button>
+            <Button type="button" variant="primary" class="h-7.5" disabled={adding()} onClick={onAddClick}>
+              {language.t("prompt.capture.add")}
+            </Button>
+          </div>
         </div>
 
         <div
@@ -473,15 +503,6 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
           class="flex min-h-0 w-full flex-1 overflow-auto rounded-md bg-surface-base [align-items:safe_center] [justify-content:safe_center]"
           onWheel={onWheel}
         />
-
-        <div data-slot="footer" class="flex shrink-0 justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={() => dialog.close()}>
-            {language.t("prompt.capture.close")}
-          </Button>
-          <Button type="button" variant="primary" disabled={adding()} onClick={onAddClick}>
-            {language.t("prompt.capture.add")}
-          </Button>
-        </div>
       </div>
     </Dialog>
   )
