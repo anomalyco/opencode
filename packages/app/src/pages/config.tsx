@@ -19,6 +19,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon, type IconProps } from "@opencode-ai/ui/icon"
+import { Markdown } from "@opencode-ai/ui/markdown"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Select } from "@opencode-ai/ui/select"
 import { Spinner } from "@opencode-ai/ui/spinner"
@@ -169,6 +170,13 @@ type SkillMarketLoadResult = {
   skills: SkillMarketItem[]
   error?: string
 }
+
+type ParsedSkillMarketRepo = {
+  repo: string
+  branch?: string
+}
+
+const CUSTOM_SKILL_MARKET_PREFIX = "custom-skill-market:"
 
 const SKILL_MARKET_REPOS: SkillMarketRepo[] = [
   {
@@ -376,6 +384,10 @@ function frontmatterData(text: string) {
   return data
 }
 
+function markdownBody(text: string) {
+  return text.replace(/^---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/, "").trim()
+}
+
 function skillMeta(text: string, path: string) {
   const data = frontmatterData(text)
   if (!data) {
@@ -402,6 +414,78 @@ function skillFolder(value: string, fallback: string) {
     .replace(/^-+|-+$/g, "")
   if (!next || next === "." || next === "..") return "skill"
   return next
+}
+
+function cleanRepoParts(repo: string, branch?: string): ParsedSkillMarketRepo | undefined {
+  const parts = repo
+    .trim()
+    .replace(/^\/+|\/+$/g, "")
+    .split("/")
+    .filter(Boolean)
+  if (parts.length !== 2) return
+
+  const owner = parts[0]
+  const repoName = parts[1].replace(/\.git$/i, "")
+  const normalized = `${owner}/${repoName}`
+  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(normalized)) return
+
+  const nextBranch = branch?.trim().replace(/^\/+|\/+$/g, "")
+  return { repo: normalized, branch: nextBranch || undefined }
+}
+
+function decodePathPart(value: string) {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function parseSkillMarketRepoInput(value: string): ParsedSkillMarketRepo | undefined {
+  const input = value.trim()
+  if (!input) return
+
+  let raw = input
+  let branch: string | undefined
+  const hash = raw.indexOf("#")
+  if (hash >= 0) {
+    branch = raw.slice(hash + 1).trim()
+    raw = raw.slice(0, hash).trim()
+  }
+
+  raw = raw.replace(/^git@github\.com:/i, "https://github.com/")
+  if (/^github\.com\//i.test(raw)) raw = `https://${raw}`
+
+  if (/^https?:\/\//i.test(raw)) {
+    let url: URL
+    try {
+      url = new URL(raw)
+    } catch {
+      return
+    }
+
+    const host = url.hostname.toLowerCase().replace(/^www\./, "")
+    if (host !== "github.com") return
+
+    const parts = url.pathname.split("/").filter(Boolean)
+    if (parts.length < 2) return
+    if (!branch && parts[2] === "tree" && parts[3]) {
+      branch = parts.slice(3).map(decodePathPart).join("/")
+    }
+    return cleanRepoParts(`${parts[0]}/${parts[1]}`, branch)
+  }
+
+  return cleanRepoParts(raw, branch)
+}
+
+function skillMarketRepoID(repo: ParsedSkillMarketRepo) {
+  return `${CUSTOM_SKILL_MARKET_PREFIX}${repo.repo}${repo.branch ? `#${repo.branch}` : ""}`
+}
+
+function skillMarketRepoURL(repo: ParsedSkillMarketRepo) {
+  if (!repo.branch) return `https://github.com/${repo.repo}`
+  const branch = repo.branch.split("/").map(encodeURIComponent).join("/")
+  return `https://github.com/${repo.repo}/tree/${branch}`
 }
 
 function cdnPath(path: string) {
@@ -2583,6 +2667,9 @@ export default function ConfigPage() {
     skillSaving: false,
     skillPanel: "editor" as "editor" | "market",
     skillMarketRepo: SKILL_MARKET_REPOS[0]?.id ?? "",
+    skillMarketCustomInput: "",
+    skillMarketCustomError: "",
+    skillMarketCustomRepo: undefined as ParsedSkillMarketRepo | undefined,
     skillMarketInstalling: "",
     treeClosed: {} as Record<string, boolean>,
     busy: false,
@@ -2681,9 +2768,29 @@ export default function ConfigPage() {
   const [marketSkills, setMarketSkills] = createSignal<SkillMarketLoadResult>({ skills: [] })
   const [marketSkillsLoading, setMarketSkillsLoading] = createSignal(false)
   let marketLoadRun = 0
+  const customSkillMarketRepo = createMemo<SkillMarketRepo | undefined>(() => {
+    const repo = state.skillMarketCustomRepo
+    if (!repo) return
+
+    return {
+      id: skillMarketRepoID(repo),
+      label: repo.repo,
+      repo: repo.repo,
+      branch: repo.branch,
+      description: repo.branch
+        ? t("config.skills.market.custom.repoDescriptionWithBranch", { branch: repo.branch })
+        : t("config.skills.market.custom.repoDescription"),
+      url: skillMarketRepoURL(repo),
+    }
+  })
+  const skillMarketRepos = createMemo<SkillMarketRepo[]>(() => {
+    const custom = customSkillMarketRepo()
+    return custom ? [custom, ...SKILL_MARKET_REPOS] : SKILL_MARKET_REPOS
+  })
+  const selectedMarketRepo = createMemo(() => skillMarketRepos().find((item) => item.id === state.skillMarketRepo))
 
   function loadSelectedMarketRepo() {
-    const repo = SKILL_MARKET_REPOS.find((item) => item.id === state.skillMarketRepo)
+    const repo = selectedMarketRepo()
     if (!repo) {
       setMarketSkills({ skills: [] })
       setMarketSkillsLoading(false)
@@ -2708,11 +2815,35 @@ export default function ConfigPage() {
       })
   }
 
+  function setCustomSkillMarketInput(value: string) {
+    setState("skillMarketCustomInput", value)
+    if (state.skillMarketCustomError) setState("skillMarketCustomError", "")
+  }
+
+  function loadCustomSkillMarketRepo() {
+    const repo = parseSkillMarketRepoInput(state.skillMarketCustomInput)
+    if (!repo) {
+      setState("skillMarketCustomError", t("config.skills.market.custom.error"))
+      return
+    }
+
+    batch(() => {
+      setState("skillMarketCustomError", "")
+      setState("skillMarketCustomRepo", repo)
+      setState("skillMarketRepo", skillMarketRepoID(repo))
+    })
+  }
+
   createEffect(
     on(
-      () => (state.section === "skills" && state.skillPanel === "market" ? state.skillMarketRepo : undefined),
-      (repoID) => {
-        if (!repoID) return
+      () => {
+        if (state.section !== "skills" || state.skillPanel !== "market") return undefined
+        const repo = selectedMarketRepo()
+        if (!repo) return undefined
+        return `${repo.id}\n${repo.repo}\n${repo.branch ?? ""}`
+      },
+      (repoKey) => {
+        if (!repoKey) return
         loadSelectedMarketRepo()
       },
     ),
@@ -5480,7 +5611,7 @@ export default function ConfigPage() {
                     <Switch>
                       <Match when={state.skillPanel === "market"}>
                         <SkillMarket
-                          repos={SKILL_MARKET_REPOS}
+                          repos={skillMarketRepos()}
                           selected={state.skillMarketRepo}
                           skills={marketSkills().skills}
                           loading={marketSkillsLoading()}
@@ -5488,9 +5619,13 @@ export default function ConfigPage() {
                           installing={state.skillMarketInstalling}
                           installed={installedSkillFolders()}
                           root={space()?.skillsRoot}
+                          customValue={state.skillMarketCustomInput}
+                          customError={state.skillMarketCustomError}
                           onSelect={selectSkillMarketRepo}
                           onInstall={(item) => void installMarketSkill(item)}
                           onReload={loadSelectedMarketRepo}
+                          onCustomInput={setCustomSkillMarketInput}
+                          onCustomSubmit={loadCustomSkillMarketRepo}
                         />
                       </Match>
                       <Match when={state.pick === SKILL_NEW}>
@@ -5676,9 +5811,13 @@ function SkillMarket(props: {
   installing: string
   installed: Set<string>
   root?: string
+  customValue: string
+  customError: string
   onSelect: (id: string) => void
   onInstall: (item: SkillMarketItem) => void
   onReload: () => void
+  onCustomInput: (value: string) => void
+  onCustomSubmit: () => void
 }) {
   const language = useLanguage()
   const dialog = useDialog()
@@ -5697,18 +5836,34 @@ function SkillMarket(props: {
   }
   const openDetail = (item: SkillMarketItem) => {
     const repo = props.repos.find((entry) => entry.repo === item.repo)
+    const body = markdownBody(item.content)
     dialog.show(
       () => (
-        <Dialog title={item.name} description={item.repoLabel} class="w-full max-w-[720px] mx-auto" fit transition>
-          <div class="flex flex-col gap-4">
+        <Dialog
+          title={<span class="text-20-medium font-semibold text-text-strong">{item.name}</span>}
+          description={item.repoLabel}
+          class="w-full mx-auto"
+          containerStyle={{
+            width: "min(calc(100vw - 32px), 1080px)",
+            transition: "width 180ms cubic-bezier(0.16, 1, 0.3, 1)",
+          }}
+          fit
+          transition
+        >
+          <div class="flex flex-col gap-4 p-4 sm:p-5">
             <div class="rounded-xl border border-border-weak-base bg-background-base p-4">
-              <div class="mt-2 whitespace-pre-wrap break-words text-13-regular leading-6 text-text-base">
+              <div class="whitespace-pre-wrap break-words text-13-regular leading-6 text-text-base">
                 {item.description}
               </div>
             </div>
-            <div class="grid gap-2 rounded-xl border border-border-weak-base bg-background-base p-4 text-12-regular text-text-weak">
-              <div class="break-all font-mono">{item.path}</div>
-              <div class="break-all">{item.repo}</div>
+            <div class="config-scrollbar max-h-[56vh] overflow-auto rounded-xl border border-border-weak-base bg-background-base p-4">
+              <Markdown
+                text={body || item.content.trim()}
+                cacheKey={`skill-market-preview:${item.id}`}
+                math="full"
+                highlight="defer"
+                class="text-13-regular"
+              />
             </div>
             <div class="flex flex-wrap items-center justify-end gap-2">
               <Button
@@ -5770,6 +5925,38 @@ function SkillMarket(props: {
           <div class="flex min-h-0 flex-col gap-3">
             <div class="text-11-medium uppercase tracking-[0.08em] text-text-weak">
               {language.t("config.skills.market.repositories")}
+            </div>
+            <div class="rounded-xl border border-border-weak-base bg-background-base p-3">
+              <div class="text-13-medium text-text-strong">{language.t("config.skills.market.custom.title")}</div>
+              <div class="mt-2">
+                <TextField
+                  type="text"
+                  hideLabel
+                  label={language.t("config.skills.market.custom.field")}
+                  description={language.t("config.skills.market.custom.inputDescription")}
+                  placeholder={language.t("config.skills.market.custom.placeholder")}
+                  value={props.customValue}
+                  validationState={props.customError ? "invalid" : undefined}
+                  error={props.customError}
+                  disabled={props.loading}
+                  onChange={props.onCustomInput}
+                  onKeyDown={(event: KeyboardEvent) => {
+                    if (event.key !== "Enter") return
+                    event.preventDefault()
+                    props.onCustomSubmit()
+                  }}
+                />
+              </div>
+              <div class="mt-3">
+                <Button
+                  size="small"
+                  variant="secondary"
+                  disabled={props.loading || !props.customValue.trim()}
+                  onClick={props.onCustomSubmit}
+                >
+                  {language.t("config.skills.market.custom.load")}
+                </Button>
+              </div>
             </div>
             <div class="flex flex-col gap-2">
               <For each={props.repos}>
