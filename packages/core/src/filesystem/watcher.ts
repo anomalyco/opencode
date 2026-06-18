@@ -86,10 +86,16 @@ export const layer = Layer.effect(
     const runFork = Effect.runForkWith(context)
     const subscriptions: ParcelWatcher.AsyncSubscription[] = []
     yield* Effect.addFinalizer(() =>
-      Effect.promise(() => Promise.allSettled(subscriptions.map((subscription) => subscription.unsubscribe()))),
+      Effect.promise(() =>
+        Promise.allSettled(subscriptions.map((subscription) => subscription.unsubscribe().catch(() => {}))),
+      ),
     )
 
-    const callback: ParcelWatcher.SubscribeCallback = (_error, updates) => {
+    const callback: ParcelWatcher.SubscribeCallback = (error, updates) => {
+      if (error) {
+        runFork(Effect.logError("watcher subscription error", { error: String(error) }))
+        return
+      }
       for (const update of updates) {
         if (update.type === "create") runFork(events.publish(Event.Updated, { file: update.path, event: "add" }))
         if (update.type === "update") runFork(events.publish(Event.Updated, { file: update.path, event: "change" }))
@@ -99,7 +105,7 @@ export const layer = Layer.effect(
 
     const subscribe = (directory: string, ignore: string[]) => {
       const pending = w.subscribe(directory, callback, { ignore, backend })
-      return Effect.promise(() => pending).pipe(
+      return Effect.tryPromise(() => pending).pipe(
         Effect.tap((subscription) => Effect.sync(() => subscriptions.push(subscription))),
         Effect.timeout(SUBSCRIBE_TIMEOUT_MS),
         Effect.catchCause((cause) => {
@@ -119,22 +125,35 @@ export const layer = Layer.effect(
     }
 
     if (location.vcs?.type === "git") {
-      const resolved = yield* git.dir(location.directory)
-      const vcs = resolved ? yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved))) : undefined
-      if (vcs && !config.includes(".git") && !config.includes(vcs) && (!resolved || !config.includes(resolved))) {
-        const ignore = (yield* fs.readDirectoryEntries(vcs).pipe(Effect.catch(() => Effect.succeed([])))).flatMap(
-          (entry) => (entry.name === "HEAD" ? [] : [entry.name]),
-        )
-        yield* Effect.forkScoped(subscribe(vcs, ignore))
-      }
+      yield* Effect.forkScoped(
+        Effect.gen(function* () {
+          const resolved = yield* git.dir(location.directory)
+          const vcs = resolved
+            ? yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved)))
+            : undefined
+          if (vcs && !config.includes(".git") && !config.includes(vcs) && (!resolved || !config.includes(resolved))) {
+            const ignore = (yield* fs.readDirectoryEntries(vcs).pipe(Effect.catch(() => Effect.succeed([])))).flatMap(
+              (entry) => (entry.name === "HEAD" ? [] : [entry.name]),
+            )
+            yield* subscribe(vcs, ignore)
+          }
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("watcher: git directory subscription failed, continuing without git HEAD tracking", {
+              directory: location.directory,
+              cause: Cause.pretty(cause),
+            }),
+          ),
+        ),
+      )
     }
 
     return Service.of({})
   }).pipe(
     Effect.catchCause((cause) => {
-      return Effect.logError("failed to init watcher service", { cause: Cause.pretty(cause) }).pipe(
-        Effect.as(Service.of({})),
-      )
+      return Effect.logError("watcher disabled: initialization failed, continuing without file watching", {
+        cause: Cause.pretty(cause),
+      }).pipe(Effect.as(Service.of({})))
     }),
   ),
 )
