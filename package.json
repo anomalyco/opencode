@@ -99,6 +99,7 @@
     "@typescript/native-preview": "catalog:",
     "glob": "13.0.5",
     "husky": "9.1.7",
+    "lint-staged": "17.0.7",
     "oxlint": "1.60.0",
     "oxlint-tsgolint": "0.21.0",
     "prettier": "3.6.2",
@@ -119,6 +120,12 @@
     "url": "https://github.com/anomalyco/opencode"
   },
   "license": "MIT",
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "oxlint",
+      "prettier --write"
+    ]
+  },
   "prettier": {
     "semi": false,
     "printWidth": 120
