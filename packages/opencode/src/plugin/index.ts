@@ -34,6 +34,7 @@ import { InstallationChannel } from "@opencode-ai/core/installation/version"
 
 type State = {
   hooks: Hooks[]
+  hooksByName: Map<string, Hooks[]>
 }
 
 // Hook names that follow the (input, output) => Promise<void> trigger pattern
@@ -118,6 +119,19 @@ async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks:
   for (const server of getLegacyPlugins(load.mod)) {
     hooks.push(await server(input, load.options))
   }
+}
+
+function buildHooksByName(hooks: Hooks[]) {
+  const result = new Map<string, Hooks[]>()
+  for (const hook of hooks) {
+    for (const [name, fn] of Object.entries(hook)) {
+      if (typeof fn !== "function") continue
+      const list = result.get(name)
+      if (list) list.push(hook)
+      else result.set(name, [hook])
+    }
+  }
+  return result
 }
 
 export const layer = Layer.effect(
@@ -248,15 +262,19 @@ export const layer = Layer.effect(
           )
         }
 
-        const unsubscribe = yield* events.listen((event) => {
-          if (event.location?.directory !== ctx.directory) return Effect.void
-          return Effect.sync(() => {
-            for (const hook of hooks) {
-              void hook["event"]?.({ event: { id: event.id, type: event.type, properties: event.data } as any })
-            }
+        const hooksByName = buildHooksByName(hooks)
+        const eventHooks = hooksByName.get("event")
+        if (eventHooks?.length) {
+          const unsubscribe = yield* events.listen((event) => {
+            if (event.location?.directory !== ctx.directory) return Effect.void
+            return Effect.sync(() => {
+              for (const hook of eventHooks) {
+                void hook.event?.({ event: { id: event.id, type: event.type, properties: event.data } as any })
+              }
+            })
           })
-        })
-        yield* Effect.addFinalizer(() => unsubscribe)
+          yield* Effect.addFinalizer(() => unsubscribe)
+        }
 
         yield* Effect.addFinalizer(() =>
           Effect.forEach(
@@ -273,7 +291,7 @@ export const layer = Layer.effect(
           ),
         )
 
-        return { hooks }
+        return { hooks, hooksByName }
       }),
     )
 
@@ -284,9 +302,10 @@ export const layer = Layer.effect(
     >(name: Name, input: Input, output: Output) {
       if (!name) return output
       const s = yield* InstanceState.get(state)
-      for (const hook of s.hooks) {
+      const hooks = s.hooksByName.get(name as string)
+      if (!hooks) return output
+      for (const hook of hooks) {
         const fn = hook[name] as any
-        if (!fn) continue
         yield* Effect.promise(async () => fn(input, output))
       }
       return output

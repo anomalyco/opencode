@@ -41,20 +41,21 @@ const it = testEffect(
 )
 const systemHook = "experimental.chat.system.transform"
 
-function withProject<A, E, R>(source: string, self: Effect.Effect<A, E, R>) {
+function withProject<A, E, R>(source: string | string[], self: Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {
     const test = yield* TestInstance
-    const file = path.join(test.directory, "plugin.ts")
+    const sources = Array.isArray(source) ? source : [source]
+    const files = sources.map((_, index) => path.join(test.directory, `plugin-${index}.ts`))
     yield* Effect.all(
       [
-        Effect.promise(() => Bun.write(file, source)),
+        ...sources.map((item, index) => Effect.promise(() => Bun.write(files[index]!, item))),
         Effect.promise(() =>
           Bun.write(
             path.join(test.directory, "opencode.json"),
             JSON.stringify(
               {
                 $schema: "https://opencode.ai/config.json",
-                plugin: [pathToFileURL(file).href],
+                plugin: files.map((file) => pathToFileURL(file).href),
               },
               null,
               2,
@@ -114,6 +115,33 @@ describe("plugin.trigger", () => {
       ].join("\n"),
       Effect.gen(function* () {
         expect(yield* triggerSystemTransform()).toEqual(["async"])
+      }),
+    ),
+  )
+
+  it.instance("runs matching hooks in plugin order", () =>
+    withProject(
+      [
+        [
+          "export default async () => ({",
+          `  ${JSON.stringify(systemHook)}: (_input, output) => {`,
+          '    output.system.push("first")',
+          "  },",
+          "})",
+          "",
+        ].join("\n"),
+        [
+          "export default async () => ({",
+          '  event: () => { throw new Error("should not run during trigger") },',
+          `  ${JSON.stringify(systemHook)}: (_input, output) => {`,
+          '    output.system.push("second")',
+          "  },",
+          "})",
+          "",
+        ].join("\n"),
+      ],
+      Effect.gen(function* () {
+        expect(yield* triggerSystemTransform()).toEqual(["first", "second"])
       }),
     ),
   )
