@@ -2120,8 +2120,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         setTimeout(() => {
           if (!rootRef) return
           if (rootRef.contains(document.activeElement)) return
+          // iframe(미리보기 등)로 포커스가 넘어간 경우는 명백한 이탈 — pointerDownInside 는 부모 window 로
+          // pointerdown 이 안 와 stale 일 수 있으니 무시하고 축소한다.
+          const toIframe = document.activeElement instanceof HTMLIFrameElement
           // 컴포저 안의 포커스 못 받는 버튼/컨트롤을 눌러 포커스가 body 로 빠진 경우는 이탈이 아니다.
-          if (pointerDownInside) return
+          if (pointerDownInside && !toIframe) return
           setFocusWithin(false)
         }, 0)
       }}
