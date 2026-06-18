@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
-import { Effect, Exit, Layer } from "effect"
+import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Git } from "../../src/git"
@@ -44,6 +44,7 @@ function remappedFs(root: string) {
         isDir: (file) => fs.isDir(remap(root, file)),
         readJson: (file) => fs.readJson(remap(root, file)),
         writeWithDirs: (file, content, mode) => fs.writeWithDirs(remap(root, file), content, mode),
+        rename: (from, to) => fs.rename(remap(root, from), remap(root, to)),
         readFileString: (file) => fs.readFileString(remap(root, file)),
         remove: (file) => fs.remove(remap(root, file)),
         glob: (pattern, options) =>
@@ -103,6 +104,69 @@ describe("Storage", () => {
       yield* svc.write<{ v: number }>(key, { v: 2 })
 
       expect(yield* svc.read<{ v: number }>(key)).toEqual({ v: 2 })
+    }),
+  )
+
+  it.live("keeps existing JSON readable while replacing a value", () =>
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const tmp = yield* tmpdirScoped()
+      const storage = path.join(tmp, "storage")
+      const key = ["atomic", "shared"]
+      const finalFile = path.join(storage, ...key) + ".json"
+      const partialWritten = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      let armed = false
+      let intercepted = false
+
+      const blockingFs = Layer.effect(
+        FSUtil.Service,
+        Effect.gen(function* () {
+          const base = yield* FSUtil.Service
+          const finalDir = path.dirname(finalFile)
+
+          return FSUtil.Service.of({
+            ...base,
+            isDir: (file) => base.isDir(remap(tmp, file)),
+            readJson: (file) => base.readJson(remap(tmp, file)),
+            writeWithDirs: (file, content, mode) => {
+              const target = remap(tmp, file)
+              const isReplacement = path.dirname(target) === finalDir && path.basename(target).includes("shared.json")
+              if (!armed || intercepted || !isReplacement) return base.writeWithDirs(target, content, mode)
+
+              intercepted = true
+              return Effect.gen(function* () {
+                yield* base.writeWithDirs(target, "{", mode)
+                yield* Deferred.succeed(partialWritten, undefined)
+                yield* Deferred.await(release)
+                yield* base.writeWithDirs(target, content, mode)
+              })
+            },
+            rename: (from, to) => base.rename(remap(tmp, from), remap(tmp, to)),
+            readFileString: (file) => base.readFileString(remap(tmp, file)),
+            remove: (file) => base.remove(remap(tmp, file)),
+            glob: (pattern, options) =>
+              base.glob(pattern, options?.cwd ? { ...options, cwd: remap(tmp, options.cwd) } : options),
+          })
+        }),
+      ).pipe(Layer.provide(FSUtil.defaultLayer))
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Storage.Service
+        yield* svc.write(key, { value: "old" })
+        armed = true
+
+        const fiber = yield* svc.write(key, { value: "new" }).pipe(Effect.forkScoped)
+        yield* Deferred.await(partialWritten)
+
+        expect(JSON.parse(yield* fs.readFileString(finalFile))).toEqual({ value: "old" })
+
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.join(fiber)
+        expect(yield* svc.read<{ value: string }>(key)).toEqual({ value: "new" })
+      }).pipe(
+        Effect.provide(Layer.fresh(Storage.layer.pipe(Layer.provide(blockingFs), Layer.provide(Git.defaultLayer)))),
+      )
     }),
   )
 
@@ -186,6 +250,22 @@ describe("Storage", () => {
       expect(yield* svc.list(prefix)).toEqual([b])
       const exit = yield* svc.read(a).pipe(Effect.exit)
       expect(Exit.isFailure(exit)).toBe(true)
+    }),
+  )
+
+  it.live("ignores temporary write files when listing entries", () =>
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const tmp = yield* tmpdirScoped()
+      const storage = path.join(tmp, "storage")
+      const key = ["list", "atomic"]
+
+      yield* Effect.gen(function* () {
+        const svc = yield* Storage.Service
+        yield* svc.write(key, { ok: true })
+        yield* fs.writeWithDirs(path.join(storage, "list", ".atomic.json.123.tmp"), "{}")
+        expect(yield* svc.list(["list"])).toEqual([key])
+      }).pipe(Effect.provide(remappedStorage(tmp)))
     }),
   )
 

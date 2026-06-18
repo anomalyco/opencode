@@ -249,7 +249,14 @@ export const layer = Layer.effect(
       body.pipe(Effect.catchIf(missing, () => fail(target)))
 
     const writeJson = Effect.fnUntraced(function* (target: string, content: unknown) {
-      yield* fs.writeWithDirs(target, JSON.stringify(content, null, 2))
+      const temp = path.join(
+        path.dirname(target),
+        `.${path.basename(target)}.${process.pid}.${crypto.randomUUID()}.tmp`,
+      )
+      yield* Effect.gen(function* () {
+        yield* fs.writeWithDirs(temp, JSON.stringify(content, null, 2))
+        yield* fs.rename(temp, target)
+      }).pipe(Effect.ensuring(fs.remove(temp, { force: true }).pipe(Effect.ignore)))
     })
 
     const withResolved = <A, E>(
