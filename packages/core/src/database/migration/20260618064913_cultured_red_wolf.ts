@@ -6,7 +6,7 @@ export default {
   up(tx) {
     return Effect.gen(function* () {
       yield* tx.run(`
-        CREATE TABLE \`goal\` (
+        CREATE TABLE IF NOT EXISTS \`goal\` (
           \`session_id\` text PRIMARY KEY,
           \`text\` text NOT NULL,
           \`status\` text NOT NULL,
@@ -22,7 +22,7 @@ export default {
           CONSTRAINT \`fk_goal_session_id_session_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session\`(\`id\`) ON DELETE CASCADE
         );
       `)
-      yield* tx.run(`CREATE INDEX \`goal_session_idx\` ON \`goal\` (\`session_id\`);`)
+      yield* tx.run(`CREATE INDEX IF NOT EXISTS \`goal_session_idx\` ON \`goal\` (\`session_id\`);`)
     })
   },
 } satisfies DatabaseMigration.Migration

@@ -144,14 +144,24 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
 
         const stage = Effect.fnUntraced(function* (files: string[]) {
           if (!files.length) return
+          const stdin = feed(files)
           const result = yield* git(
             [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
-            {
-              cwd: state.directory,
-              stdin: feed(files),
-            },
+            { cwd: state.directory, stdin },
           )
           if (result.code === 0) return
+          if (result.stderr.includes("unknown option `sparse'") || result.stderr.includes("unknown option 'sparse'")) {
+            const fallback = yield* git(
+              [...cfg, ...args(["add", "--all", "--pathspec-from-file=-", "--pathspec-file-nul"])],
+              { cwd: state.directory, stdin },
+            )
+            if (fallback.code === 0) return
+            yield* Effect.logWarning("failed to add snapshot files after retrying without sparse support", {
+              exitCode: fallback.code,
+              stderr: fallback.stderr,
+            })
+            return
+          }
           yield* Effect.logWarning("failed to add snapshot files", {
             exitCode: result.code,
             stderr: result.stderr,

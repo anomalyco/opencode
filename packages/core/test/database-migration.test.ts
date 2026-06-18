@@ -14,6 +14,7 @@ import sessionMessageProjectionOrderMigration from "@opencode-ai/core/database/m
 import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migration/20260604172448_event_sourced_session_input"
 import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
+import goalMigration from "@opencode-ai/core/database/migration/20260618064913_cultured_red_wolf"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -146,6 +147,38 @@ describe("DatabaseMigration", () => {
         expect(yield* db.get(sql`SELECT connector_id, method_id, active FROM credential WHERE id = 'current'`)).toEqual(
           { connector_id: null, method_id: null, active: null },
         )
+      }),
+    )
+  })
+
+  test("accepts an existing goal table when migration state is missing", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY)`)
+        yield* db.run(sql`
+          CREATE TABLE goal (
+            session_id text PRIMARY KEY,
+            text text NOT NULL,
+            status text NOT NULL,
+            budget_tokens integer,
+            tokens_used integer DEFAULT 0 NOT NULL,
+            time_ms integer DEFAULT 0 NOT NULL,
+            started_at integer NOT NULL,
+            paused_at integer,
+            completed_at integer,
+            verification text,
+            time_created integer NOT NULL,
+            time_updated integer NOT NULL
+          )
+        `)
+        yield* db.run(sql`CREATE INDEX goal_session_idx ON goal (session_id)`)
+
+        yield* DatabaseMigration.applyOnly(db, [goalMigration])
+
+        expect(yield* db.get(sql`SELECT id FROM migration WHERE id = ${goalMigration.id}`)).toEqual({
+          id: goalMigration.id,
+        })
       }),
     )
   })
