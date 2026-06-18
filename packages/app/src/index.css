@@ -978,6 +978,86 @@
     }
   }
 
+  /* ── 곡괭이 포인터 이스터에그 — 마스코트 3연속 클릭으로 활성화 ──
+     활성화되면 전체 화면에서 실제 커서를 숨기고(곡괭이가 대신 마우스를 따라다님),
+     클릭 시 머리가 바닥을 내려찍는 스윙 + 그 지점에 흙 튐/파임 자국 이펙트. */
+  html.jt-pickaxe-global,
+  html.jt-pickaxe-global * {
+    cursor: none !important;
+  }
+
+  /* 클릭 1회성 곡괭이질 — 머리를 들어올렸다(windup) 뾰족한 끝으로 바닥을 내려찍고 복귀.
+     transform-origin 은 손잡이(grip), 회전축 기준으로 머리가 호를 그리며 내려온다. */
+  @keyframes jt-pickaxe-strike {
+    0% {
+      transform: rotate(0deg);
+    }
+    22% {
+      transform: rotate(-50deg);
+    }
+    48% {
+      transform: rotate(12deg);
+    }
+    70% {
+      transform: rotate(-4deg);
+    }
+    100% {
+      transform: rotate(0deg);
+    }
+  }
+
+  .jt-pickaxe-strike {
+    animation: jt-pickaxe-strike 360ms cubic-bezier(0.34, 0.02, 0.32, 1);
+  }
+
+  /* 클릭 지점 파임 자국 — 어두운 타원이 커지며 페이드아웃 */
+  @keyframes jt-dig-mark {
+    0% {
+      transform: translate(-50%, -50%) scale(0.4);
+      opacity: 0.38;
+    }
+    100% {
+      transform: translate(-50%, -50%) scale(1.1);
+      opacity: 0;
+    }
+  }
+
+  .jt-dig-mark {
+    animation: jt-dig-mark 450ms ease-out forwards;
+  }
+
+  /* 흙 버스트 — 클릭 지점에서 위·바깥으로 한 번 튀고 페이드. --pop 거리 변수 */
+  @keyframes jt-dirt-burst {
+    0% {
+      transform: translateY(0) scale(0.4);
+      opacity: 0;
+    }
+    25% {
+      opacity: 0.9;
+      transform: translateY(calc(var(--pop) * -0.85)) scale(1);
+    }
+    60% {
+      opacity: 0.8;
+      transform: translateY(calc(var(--pop) * -1)) scale(0.9);
+    }
+    100% {
+      opacity: 0;
+      transform: translateY(calc(var(--pop) * -0.35)) scale(0.5);
+    }
+  }
+
+  .jt-dirt-burst {
+    animation: jt-dirt-burst 500ms ease-out forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .jt-pickaxe-strike,
+    .jt-dig-mark,
+    .jt-dirt-burst {
+      animation-duration: 1ms;
+    }
+  }
+
   @media (prefers-color-scheme: dark) {
     [data-component="codle-session-frame"] {
       box-shadow: 0 18px 56px rgba(0, 0, 0, 0.26);
