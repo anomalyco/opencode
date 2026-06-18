@@ -1196,6 +1196,35 @@ body {
         border-left: 1px solid var(--color-border-weak);
       }
     }
+
+    @media (min-width: 26.5625rem) and (max-width: 40rem) {
+      gap: clamp(0rem, 3vw, 2.5rem);
+
+      [data-slot="cell"] {
+        flex: 0 0 auto;
+
+        a {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 2rem clamp(0.5rem, 2vw, 1.5rem);
+          min-width: clamp(2.75rem, 11vw, 7.5rem);
+          min-height: 5.5rem;
+          text-align: center;
+        }
+      }
+
+      [data-slot="cell"] + [data-slot="cell"] {
+        a {
+          border-left: none;
+        }
+      }
+
+      [data-slot="cell"] a:hover {
+        background: var(--color-background-weak);
+      }
+    }
+
   }
 
   [data-component="legal"] {
