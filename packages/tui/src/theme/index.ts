@@ -872,6 +872,7 @@ function getSyntaxRules(theme: Theme) {
       scope: ["markup.raw", "markup.raw.block"],
       style: {
         foreground: theme.markdownCode,
+        background: theme.backgroundElement,
       },
     },
     {
