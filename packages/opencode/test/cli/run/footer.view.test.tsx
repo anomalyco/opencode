@@ -1,5 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
+import os from "os"
 import { BoxRenderable, RGBA, type RootRenderable } from "@opentui/core"
 import { testRender, useRenderer } from "@opentui/solid"
 import { createSignal } from "solid-js"
@@ -36,6 +37,7 @@ import { RejectField } from "@/cli/cmd/run/footer.permission"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 const tuiConfig = createTuiResolvedConfig()
+const hostname = os.hostname().split(".")[0]
 
 function command(input: { name: string; description: string; source?: "command" | "mcp" | "skill" }) {
   return {
@@ -166,6 +168,7 @@ async function renderFooter(
     state?: Partial<FooterState>
     onCycle?: () => void
     onSubmit?: (prompt: RunPrompt) => boolean
+    directory?: string
   } = {},
 ) {
   const [view] = createSignal<FooterView>({ type: "prompt" })
@@ -184,7 +187,7 @@ async function renderFooter(
     return (
       <OpencodeKeymapProvider keymap={keymap}>
         <RunFooterView
-          directory="/tmp"
+          directory={input.directory ?? "/tmp"}
           findFiles={async () => []}
           agents={() => []}
           resources={() => []}
@@ -975,12 +978,12 @@ test("direct footer shows editable prompts and additional queued work while runn
 
   const app = await testRender(
     () => (
-      <box width={160} height={8}>
+      <box width={200} height={8}>
         <Harness />
       </box>
     ),
     {
-      width: 160,
+      width: 200,
       height: 8,
     },
   )
@@ -996,11 +999,14 @@ test("direct footer shows editable prompts and additional queued work while runn
     const mode = statusItems[0]
     const main = statusItems[1]
     const spinner = main.getChildren()[0]
-    const model = statusItems[2]
-    const queued = statusItems[3]
+    const environment = statusItems[2]
+    const model = statusItems[3]
+    const queued = statusItems[4]
     const hint = statusItems.at(-1)!
 
     expect(spinner).toBeDefined()
+    expect(frame).toContain(hostname)
+    expect(frame).toContain("/tmp")
     expect(frame).toContain("a-model-name-long-enough-to-force-responsive-truncation")
     expect(frame).toContain("3 queued")
     expect(frame).toContain("ctrl+b background")
@@ -1013,6 +1019,7 @@ test("direct footer shows editable prompts and additional queued work while runn
     expect(statusline.backgroundColor.toInts()).toEqual(tinted)
     expect(mode.backgroundColor.toInts()).toEqual(accent)
     expect(main.backgroundColor.toInts()).toEqual(transparent)
+    expect(environment.backgroundColor.toInts()).toEqual(transparent)
     expect(model.backgroundColor.toInts()).toEqual(transparent)
     expect(queued.backgroundColor.toInts()).toEqual(transparent)
     expect(hint.backgroundColor.toInts()).toEqual(transparent)
@@ -1024,11 +1031,12 @@ test("direct footer shows editable prompts and additional queued work while runn
   }
 })
 
-test("direct footer separates a lone context hint from model and command hint", async () => {
+test("direct footer separates environment, a lone context hint, model, and command hint", async () => {
   const app = await renderFooter({
     providers: [provider()],
     currentModel: { providerID: "opencode", modelID: "gpt-5" },
     currentVariant: "xhigh",
+    directory: os.homedir(),
     subagents: {
       tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" })],
       details: {},
@@ -1036,14 +1044,17 @@ test("direct footer separates a lone context hint from model and command hint", 
       questions: [],
     },
     backgroundSubagents: false,
-    width: 160,
+    width: 180,
   })
 
   try {
     await app.renderOnce()
     const frame = app.captureCharFrame()
+    const statusline = frame.split("\n").find((line) => line.includes(hostname) && line.includes("GPT-5"))
 
-    expect(frame).toContain("GPT-5")
+    expect(statusline).toBeDefined()
+    expect(statusline).toContain(`${hostname} ~`)
+    expect(statusline!.indexOf(hostname)).toBeLessThan(statusline!.indexOf("GPT-5"))
     expect(frame).toContain("xhigh · ctrl+x down subagents · ctrl+p cmd")
     expect(frame).not.toContain("ctrl+b background")
     expect(frame).not.toContain("queued")

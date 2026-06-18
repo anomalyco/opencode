@@ -8,10 +8,12 @@
 // All state comes from the parent RunFooter through SolidJS signals.
 // The view itself is stateless except for derived memos.
 /** @jsxImportSource @opentui/solid */
+import os from "os"
 import { useTerminalDimensions } from "@opentui/solid"
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import "opentui-spinner/solid"
 import { createColors, createFrames } from "@opencode-ai/tui/ui/spinner"
+import { abbreviateHome } from "@opencode-ai/tui/runtime"
 import {
   RUN_SUBAGENT_PANEL_ROWS,
   RunCommandMenuBody,
@@ -421,6 +423,16 @@ export function RunFooterView(props: RunFooterViewProps) {
 
     return usage()
   })
+  const environmentStatus = createMemo(() => {
+    if (!prompt() || shell() || !responsive().statusline.showContextHints) {
+      return
+    }
+
+    return {
+      host: os.hostname().split(".")[0],
+      directory: abbreviateHome(props.directory, os.homedir()),
+    }
+  })
   const modelStatus = createMemo(() => {
     const current = props.currentModel()
     if (!prompt() || shell() || !current) {
@@ -451,6 +463,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   })
   const statuslineBackground = createMemo(() => theme().status)
   const hasActivityMeta = createMemo(() => activityMeta().length > 0)
+  const hasEnvironmentStatus = createMemo(() => Boolean(environmentStatus()))
   const hasModelStatus = createMemo(() => responsive().statusline.showModel && Boolean(modelStatus()))
   const contextHints = createMemo(() => {
     if (!prompt() || shell() || !responsive().statusline.showContextHints) {
@@ -861,6 +874,17 @@ export function RunFooterView(props: RunFooterViewProps) {
                   </box>
                 </Show>
 
+                <Show when={environmentStatus()}>
+                  {(info) => (
+                    <box paddingRight={1} backgroundColor="transparent" flexShrink={1} maxWidth={36}>
+                      <text fg={theme().muted} wrapMode="none" truncate>
+                        <span style={{ fg: theme().text }}>{info().host}</span>{" "}
+                        <span style={{ fg: theme().muted }}>{info().directory}</span>
+                      </text>
+                    </box>
+                  )}
+                </Show>
+
                 <Show when={responsive().statusline.showModel && modelStatus()}>
                   {(info) => (
                     <box paddingRight={1} backgroundColor="transparent" flexShrink={0}>
@@ -885,7 +909,12 @@ export function RunFooterView(props: RunFooterViewProps) {
                   {(hint, index) => (
                     <box paddingRight={1} backgroundColor="transparent" flexShrink={0} maxWidth={24}>
                       <text fg={theme().text} wrapMode="none" truncate>
-                        <Show when={index() > 0 || ((hasActivityMeta() || hasModelStatus()) && index() === 0)}>
+                        <Show
+                          when={
+                            index() > 0 ||
+                            ((hasActivityMeta() || hasEnvironmentStatus() || hasModelStatus()) && index() === 0)
+                          }
+                        >
                           {sectionSeparator()}
                         </Show>
                         <span style={{ fg: theme().text }}>{hint.key}</span>{" "}
@@ -899,7 +928,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                   {(hint) => (
                     <box paddingRight={1} backgroundColor="transparent" flexShrink={0} maxWidth={18}>
                       <text fg={theme().text} wrapMode="none" truncate>
-                        <Show when={hasActivityMeta() || hasModelStatus() || hasContextHints()}>
+                        <Show when={hasActivityMeta() || hasEnvironmentStatus() || hasModelStatus() || hasContextHints()}>
                           {sectionSeparator()}
                         </Show>
                         <span style={{ fg: theme().text }}>{hint().key}</span>{" "}
