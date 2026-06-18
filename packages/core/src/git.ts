@@ -165,12 +165,15 @@ export const layer = Layer.effect(
     const fetch = Effect.fn("Git.fetch")((directory: string) => execute(directory, proc)(["fetch", "--all", "--prune"]))
 
     const fetchBranch = Effect.fn("Git.fetchBranch")((directory: string, branch: string) =>
-      execute(directory, proc)(["fetch", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`]),
+      execute(directory, proc)(["fetch", "origin", branch]),
     )
 
-    const checkout = Effect.fn("Git.checkout")((directory: string, branch: string) =>
-      execute(directory, proc)(["checkout", "-B", branch, `origin/${branch}`]),
-    )
+    const checkout = Effect.fn("Git.checkout")((directory: string, branch: string) => {
+      const local = localBranchName(branch)
+      return local
+        ? execute(directory, proc)(["checkout", "-B", local, "--force", "FETCH_HEAD"])
+        : execute(directory, proc)(["checkout", "--detach", "--force", "FETCH_HEAD"])
+    })
 
     const reset = Effect.fn("Git.reset")((directory: string, target: string) =>
       execute(directory, proc)(["reset", "--hard", target]),
@@ -434,6 +437,12 @@ function execute(cwd: string, proc: AppProcess.Interface) {
             }) satisfies Result,
         ),
       )
+}
+
+function localBranchName(ref: string) {
+  if (ref.startsWith("refs/heads/")) return ref.slice("refs/heads/".length)
+  if (!ref.startsWith("refs/")) return ref
+  return undefined
 }
 
 function resolvePath(cwd: string, value: string) {

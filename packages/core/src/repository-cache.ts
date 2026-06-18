@@ -159,7 +159,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | E
 
                 if (status === "cloned") {
                   const result = yield* git
-                    .clone({ remote: input.reference.remote, target: localPath, branch: input.branch })
+                    .clone({ remote: input.reference.remote, target: localPath })
                     .pipe(
                       Effect.mapError((error) => new CloneFailedError({ repository, message: errorMessage(error) })),
                     )
@@ -181,42 +181,44 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | E
                     return yield* new FetchFailedError({
                       repository,
                       message: resultMessage(fetch, `Failed to refresh ${repository}`),
+                      })
+                    }
+                }
+
+                if (input.branch && status !== "cached") {
+                  const requestedBranch = input.branch
+                  const fetchBranch = yield* git
+                    .fetchBranch(localPath, requestedBranch)
+                    .pipe(
+                      Effect.mapError((error) => new FetchFailedError({ repository, message: errorMessage(error) })),
+                    )
+                  if (fetchBranch.exitCode !== 0) {
+                    return yield* new FetchFailedError({
+                      repository,
+                      message: resultMessage(fetchBranch, `Failed to fetch ${requestedBranch}`),
                     })
                   }
 
-                  if (input.branch) {
-                    const requestedBranch = input.branch
-                    const fetchBranch = yield* git
-                      .fetchBranch(localPath, requestedBranch)
-                      .pipe(
-                        Effect.mapError((error) => new FetchFailedError({ repository, message: errorMessage(error) })),
-                      )
-                    if (fetchBranch.exitCode !== 0) {
-                      return yield* new FetchFailedError({
-                        repository,
-                        message: resultMessage(fetchBranch, `Failed to fetch ${requestedBranch}`),
-                      })
-                    }
-
-                    const checkout = yield* git.checkout(localPath, requestedBranch).pipe(
-                      Effect.mapError(
-                        (error) =>
-                          new CheckoutFailedError({
-                            repository,
-                            branch: requestedBranch,
-                            message: errorMessage(error),
-                          }),
-                      ),
-                    )
-                    if (checkout.exitCode !== 0) {
-                      return yield* new CheckoutFailedError({
-                        repository,
-                        branch: requestedBranch,
-                        message: resultMessage(checkout, `Failed to checkout ${requestedBranch}`),
-                      })
-                    }
+                  const checkout = yield* git.checkout(localPath, requestedBranch).pipe(
+                    Effect.mapError(
+                      (error) =>
+                        new CheckoutFailedError({
+                          repository,
+                          branch: requestedBranch,
+                          message: errorMessage(error),
+                        }),
+                    ),
+                  )
+                  if (checkout.exitCode !== 0) {
+                    return yield* new CheckoutFailedError({
+                      repository,
+                      branch: requestedBranch,
+                      message: resultMessage(checkout, `Failed to checkout ${requestedBranch}`),
+                    })
                   }
+                }
 
+                if (status !== "cached") {
                   const reset = yield* git
                     .reset(localPath, yield* resetTarget(git, localPath, input.branch))
                     .pipe(
@@ -276,7 +278,7 @@ function cacheOperation<A, E, R>(effect: Effect.Effect<A, E, R>, operation: stri
 }
 
 const resetTarget = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, requestedBranch?: string) {
-  if (requestedBranch) return `origin/${requestedBranch}`
+  if (requestedBranch) return "HEAD"
   const remoteHead = yield* git.remoteHead(cwd)
   if (remoteHead) return remoteHead
   const currentBranch = yield* git.branch(cwd)

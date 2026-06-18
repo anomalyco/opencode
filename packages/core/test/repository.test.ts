@@ -51,6 +51,7 @@ describe("Repository", () => {
     expect(() => Repository.parseRemote("not-a-repo")).toThrow(Repository.InvalidReferenceError)
     expect(() => Repository.parseRemote("git@github.com:../../../etc/passwd")).toThrow(Repository.InvalidReferenceError)
     expect(() => Repository.validateBranch("feature/docs.v1")).not.toThrow()
+    expect(() => Repository.validateBranch("refs/tags/effect@4.0.0-beta.65")).not.toThrow()
     expect(() => Repository.validateBranch("-bad")).toThrow(Repository.InvalidBranchError)
     expect(() => Repository.validateBranch("bad..branch")).toThrow(Repository.InvalidBranchError)
     expect(() => Repository.validateBranch("bad branch")).toThrow(Repository.InvalidBranchError)

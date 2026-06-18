@@ -44,8 +44,17 @@ describe("Git", () => {
         yield* Effect.promise(() => branch(fixture.source, "feature/docs", "feature\n"))
         expect((yield* git.fetchBranch(target, "feature/docs")).exitCode).toBe(0)
         expect((yield* git.checkout(target, "feature/docs")).exitCode).toBe(0)
-        expect((yield* git.reset(target, "origin/feature/docs")).exitCode).toBe(0)
+        expect((yield* git.reset(target, "HEAD")).exitCode).toBe(0)
         expect(yield* git.branch(target)).toBe("feature/docs")
+        expect(yield* read(path.join(target, "README.md"))).toBe("feature\n")
+
+        yield* Effect.promise(async () => {
+          await $`git tag release@1`.cwd(fixture.source).quiet()
+          await $`git push origin refs/tags/release@1`.cwd(fixture.source).quiet()
+        })
+        expect((yield* git.fetchBranch(target, "refs/tags/release@1")).exitCode).toBe(0)
+        expect((yield* git.checkout(target, "refs/tags/release@1")).exitCode).toBe(0)
+        expect(yield* git.branch(target)).toBeUndefined()
         expect(yield* read(path.join(target, "README.md"))).toBe("feature\n")
       }),
     ),

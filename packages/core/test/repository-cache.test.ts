@@ -49,6 +49,26 @@ describe("RepositoryCache", () => {
     ),
   )
 
+  it.live("materializes a full git tag ref", () =>
+    withRemote((fixture) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await git(fixture.source, "tag", "release@1")
+          await git(fixture.source, "push", "origin", "refs/tags/release@1")
+        })
+
+        const result = yield* (yield* RepositoryCache.Service).ensure({
+          reference: fixture.reference,
+          branch: "refs/tags/release@1",
+        })
+
+        expect(result.status).toBe("cloned")
+        expect(result.branch).toBeUndefined()
+        expect(yield* read(path.join(result.localPath, "README.md"))).toBe("one\n")
+      }).pipe(Effect.provide(cacheLayer(fixture.root))),
+    ),
+  )
+
   it.live("replaces an existing checkout whose origin does not match", () =>
     withRemote((fixture) =>
       Effect.gen(function* () {
