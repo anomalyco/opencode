@@ -768,6 +768,90 @@ it.live("session.processor effect tests complete AI SDK tool calls when native f
   ),
 )
 
+it.live("session.processor effect tests preserve execution metadata when result omits it", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.toolHang("lookup", { query: "weather" })
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "tool")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const run = yield* handle
+          .process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies SessionV1.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "tool" }],
+            tools: {},
+          })
+          .pipe(Effect.forkChild)
+
+        yield* llm.wait(1)
+        const running = yield* waitFor(
+          MessageV2.parts(msg.id).pipe(
+            Effect.map((parts) => parts.find((part): part is SessionV1.ToolPart => part.type === "tool")),
+            Effect.provideService(Database.Service, database),
+          ),
+          "timed out waiting for tool part",
+        )
+
+        // Simulate metadata accumulated during execution via ctx.metadata
+        // (e.g. the subagent `sessionId` the task tool records while running).
+        yield* handle.updateToolCall(running.callID, (part) => ({
+          ...part,
+          state: {
+            status: "running",
+            input: part.state.status === "pending" ? {} : part.state.input,
+            metadata: { sessionId: "ses_child" },
+            time: { start: Date.now() },
+          },
+        }))
+
+        // Complete with a result whose metadata DROPS sessionId, mirroring a
+        // plugin tool.execute.after hook (or final result) that returns {}.
+        yield* handle.completeToolCall(running.callID, {
+          title: "Lookup",
+          output: "result",
+          metadata: {},
+        })
+
+        // Interrupt the hanging stream before asserting so a failed assertion
+        // surfaces cleanly instead of timing out the still-running fiber.
+        yield* Fiber.interrupt(run)
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const call = parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
+
+        expect(call?.state.status).toBe("completed")
+        if (call?.state.status !== "completed") return
+        // sessionId set during execution must survive completion so the TUI can
+        // still navigate into the subagent session.
+        expect(call.state.metadata.sessionId).toBe("ses_child")
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
 it.live("session.processor effect tests mark pending tools as aborted on cleanup", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>

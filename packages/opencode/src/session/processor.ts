@@ -217,7 +217,12 @@ export const layer = Layer.effect(
             status: "completed",
             input: match.part.state.input,
             output: output.output,
-            metadata: output.metadata,
+            // Preserve metadata accumulated during execution (via ctx.metadata,
+            // e.g. the subagent `sessionId` set by the task tool) so it is not
+            // dropped when the final result — or a plugin's tool.execute.after
+            // hook — returns metadata without those keys. Result metadata wins
+            // on conflict.
+            metadata: { ...match.part.state.metadata, ...output.metadata },
             title: output.title,
             time: { start: match.part.state.time.start, end: Date.now() },
             attachments: output.attachments,
