@@ -1,0 +1,326 @@
+name: fork-release
+
+# Unofficial multi-platform builds for WaterRRabbit/opencode.
+# Ships the ACP subagent visibility fix from fix/acp-subagent-visibility-32388.
+
+on:
+  push:
+    branches:
+      - fix/acp-subagent-visibility-32388
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version override (default: <pkg-version>-acp32388.<short-sha>)"
+        required: false
+        type: string
+      build_desktop:
+        description: "Also build desktop installers (unsigned)"
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: fork-release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+env:
+  FORK_RELEASE_BRANCH: fix/acp-subagent-visibility-32388
+
+jobs:
+  build-cli:
+    name: Build CLI (all platforms)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: ./.github/actions/setup-bun
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            BASE="$(node -p "require('./packages/opencode/package.json').version")"
+            SHA="$(git rev-parse --short HEAD)"
+            VERSION="${BASE}-acp32388.${SHA}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Build CLI binaries
+        shell: bash
+        env:
+          OPENCODE_VERSION: ${{ steps.version.outputs.version }}
+          OPENCODE_CHANNEL: fix-acp-subagent
+        run: |
+          set -euo pipefail
+          bun ./packages/opencode/script/build.ts
+          bun ./packages/cli/script/build.ts
+
+      - name: Package release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          OC_DIST="packages/opencode/dist"
+          CLI_DIST="packages/cli/dist"
+          package_dir() {
+            local dir="$1"
+            local name
+            name="$(basename "$dir")"
+            if [[ "$name" == *linux* ]]; then
+              tar -czf "${dir%/*}/${name}.tar.gz" -C "$dir/bin" .
+            else
+              (cd "$dir/bin" && zip -qr "${dir%/*}/${name}.zip" .)
+            fi
+          }
+          for dir in "$OC_DIST"/opencode-*/; do
+            [[ -d "$dir/bin" ]] || continue
+            package_dir "$dir"
+          done
+          for dir in "$CLI_DIST"/cli-*/; do
+            [[ -d "$dir/bin" ]] || continue
+            package_dir "$dir"
+          done
+
+      - name: Upload CLI dist
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-cli-dist
+          path: |
+            packages/opencode/dist/opencode-*
+            packages/opencode/dist/*.zip
+            packages/opencode/dist/*.tar.gz
+            packages/cli/dist/cli-*
+            packages/cli/dist/*.zip
+            packages/cli/dist/*.tar.gz
+          if-no-files-found: error
+
+  publish:
+    name: Publish GitHub Release
+    needs: build-cli
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            BASE="$(node -p "require('./packages/opencode/package.json').version")"
+            SHA="$(git rev-parse --short HEAD)"
+            VERSION="${BASE}-acp32388.${SHA}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: opencode-cli-dist
+          path: dist-upload
+
+      - name: Collect release assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          shopt -s nullglob
+          cp dist-upload/packages/opencode/dist/*.{zip,tar.gz} release-assets/ 2>/dev/null || true
+          cp dist-upload/packages/cli/dist/*.{zip,tar.gz} release-assets/ 2>/dev/null || true
+          # upload-artifact may flatten paths depending on matched files
+          cp dist-upload/*.{zip,tar.gz} release-assets/ 2>/dev/null || true
+          if ! ls release-assets/* >/dev/null 2>&1; then
+            echo "Artifact tree:"
+            find dist-upload -maxdepth 4 -type f | head -200
+            echo "No release archives found"
+            exit 1
+          fi
+          ls -lh release-assets/
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          NOTES_FILE="${RUNNER_TEMP}/release-notes.md"
+          cat > "$NOTES_FILE" <<EOF
+          ## OpenCode fork build — ACP subagent fix
+
+          **Version:** \`${VERSION}\`
+          **Branch:** \`${FORK_RELEASE_BRANCH}\`
+          **Commit:** \`${{ github.sha }}\`
+
+          ### What is this?
+
+          Unofficial build from [WaterRRabbit/opencode](https://github.com/WaterRRabbit/opencode) containing the fix for [anomalyco/opencode#32388](https://github.com/anomalyco/opencode/issues/32388) (ACP subagent sessions invisible; child permissions can hang parent tasks).
+
+          Upstream PR: [anomalyco/opencode#32445](https://github.com/anomalyco/opencode/pull/32445)
+
+          ### CLI downloads
+
+          | Platform | Asset |
+          |----------|-------|
+          | macOS Apple Silicon | \`opencode-darwin-arm64.zip\` |
+          | macOS Intel | \`opencode-darwin-x64.zip\` / \`opencode-darwin-x64-baseline.zip\` |
+          | Linux x64 (glibc) | \`opencode-linux-x64.tar.gz\` |
+          | Linux x64 (baseline) | \`opencode-linux-x64-baseline.tar.gz\` |
+          | Linux arm64 | \`opencode-linux-arm64.tar.gz\` |
+          | Linux musl | \`opencode-linux-*-musl*.tar.gz\` |
+          | Windows arm64 | \`opencode-windows-arm64.zip\` |
+          | Windows x64 | \`opencode-windows-x64.zip\` / baseline variant |
+
+          Extract the archive and place \`opencode\` (or \`opencode.exe\`) on your PATH.
+
+          > These binaries are **unsigned** community builds, not published by the OpenCode team.
+          EOF
+
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release upload "$TAG" release-assets/* --clobber --repo "${{ github.repository }}"
+            gh release edit "$TAG" --notes-file "$NOTES_FILE" --repo "${{ github.repository }}"
+          else
+            gh release create "$TAG" release-assets/* \
+              --repo "${{ github.repository }}" \
+              --title "OpenCode ${VERSION} (ACP subagent fix)" \
+              --notes-file "$NOTES_FILE" \
+              --target "${{ github.sha }}"
+          fi
+
+  build-desktop:
+    name: Desktop (${{ matrix.name }})
+    needs: publish
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.build_desktop || github.event_name == 'push' }}
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macos-arm64
+            runner: macos-14
+            platform_flag: --mac --arm64
+            rust_target: aarch64-apple-darwin
+            bun_install_flags: --os=darwin --cpu=arm64
+          - name: macos-x64
+            runner: macos-14
+            platform_flag: --mac --x64
+            rust_target: x86_64-apple-darwin
+            bun_install_flags: --os=darwin --cpu=x64
+          - name: windows-x64
+            runner: windows-2022
+            platform_flag: --win
+            rust_target: x86_64-pc-windows-msvc
+            bun_install_flags: --os=win32 --cpu=x64
+          - name: windows-arm64
+            runner: windows-11-arm
+            platform_flag: --win --arm64
+            rust_target: aarch64-pc-windows-msvc
+            bun_install_flags: --os=win32 --cpu=arm64
+          - name: linux-x64
+            runner: ubuntu-24.04
+            platform_flag: --linux
+            rust_target: x86_64-unknown-linux-gnu
+            bun_install_flags: ""
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+            platform_flag: --linux --arm64
+            rust_target: aarch64-unknown-linux-gnu
+            bun_install_flags: --os=linux --cpu=arm64
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+
+      - uses: ./.github/actions/setup-bun
+        with:
+          install-flags: ${{ matrix.bun_install_flags }}
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${{ inputs.version }}" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            BASE="$(node -p "require('./packages/opencode/package.json').version")"
+            SHA="$(git rev-parse --short HEAD)"
+            VERSION="${BASE}-acp32388.${SHA}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: opencode-cli-dist
+          path: .
+
+      - name: Install Linux packaging deps
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rpm
+
+      - name: Prepare desktop CLI sidecar
+        working-directory: packages/desktop
+        env:
+          OPENCODE_VERSION: ${{ steps.version.outputs.version }}
+          OPENCODE_CHANNEL: dev
+          RUST_TARGET: ${{ matrix.rust_target }}
+        run: bun ./scripts/fork-prepare-cli.ts
+
+      - name: Prepare desktop package
+        working-directory: packages/desktop
+        env:
+          OPENCODE_VERSION: ${{ steps.version.outputs.version }}
+          OPENCODE_CHANNEL: dev
+        run: bun ./scripts/prepare.ts
+
+      - name: Build desktop app
+        working-directory: packages/desktop
+        env:
+          OPENCODE_CHANNEL: dev
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: bun run build
+
+      - name: Package desktop installer (unsigned)
+        working-directory: packages/desktop
+        timeout-minutes: 60
+        env:
+          OPENCODE_CHANNEL: dev
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          OPENCODE_FORK_UNSIGNED: "true"
+        run: >
+          npx electron-builder ${{ matrix.platform_flag }}
+          --publish never
+          --config electron-builder.config.ts
+          -c.mac.notarize=false
+          -c.dmg.sign=false
+
+      - name: Upload desktop artifacts to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.version.outputs.tag }}"
+          shopt -s nullglob
+          files=(packages/desktop/dist/*.{exe,blockmap,dmg,zip,AppImage,deb,rpm})
+          if (( ${#files[@]} == 0 )); then
+            echo "No desktop artifacts produced on this runner"
+            exit 0
+          fi
+          gh release upload "$TAG" "${files[@]}" --clobber --repo "${{ github.repository }}"

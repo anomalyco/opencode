@@ -16,6 +16,7 @@ const legacyDesktopEntry = path.join(packageDir, "resources", "linux", "opencode
 const legacyDesktopEntryFpm = `${legacyDesktopEntry}=/usr/share/applications/opencode-desktop.desktop`
 
 async function signWindows(configuration: { path: string }) {
+  if (process.env.OPENCODE_FORK_UNSIGNED === "true") return
   if (process.platform !== "win32") return
   if (process.env.GITHUB_ACTIONS !== "true") return
 
