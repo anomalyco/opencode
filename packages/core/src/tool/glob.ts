@@ -76,6 +76,7 @@ export const layer = Layer.effectDiscard(
                   cwd,
                   pattern: input.pattern,
                   limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+                  hidden: true,
                 })
                 .pipe(
                   Effect.map((result) =>

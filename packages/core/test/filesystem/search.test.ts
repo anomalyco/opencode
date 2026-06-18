@@ -27,6 +27,17 @@ describe("Ripgrep", () => {
     ),
   )
 
+  it.live("globs files under explicit dot directories", () =>
+    withTmp((cwd) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => fs.mkdir(path.join(cwd, ".ai")))
+        yield* Effect.promise(() => fs.writeFile(path.join(cwd, ".ai", "current-task.md"), "needle\n"))
+        const result = yield* (yield* Ripgrep.Service).glob({ cwd, pattern: ".ai/**/*.md", hidden: true, limit: 10 })
+        expect(result.map((item) => item.path)).toEqual([RelativePath.make(".ai/current-task.md")])
+      }),
+    ),
+  )
+
   it.live("greps files with include filtering", () =>
     withTmp((cwd) =>
       Effect.gen(function* () {
