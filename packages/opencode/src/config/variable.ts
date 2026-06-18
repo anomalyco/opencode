@@ -34,7 +34,7 @@ function dir(input: ParseSource) {
 export async function substitute(input: SubstituteInput) {
   const missing = input.missing ?? "error"
   let text = input.text.replace(/\{env:([^}]+)\}/g, (_, varName) => {
-    return (input.env?.[varName] ?? process.env[varName]) || ""
+    return normalizePathEnvValue((input.env?.[varName] ?? process.env[varName]) || "")
   })
 
   const fileMatches = Array.from(text.matchAll(/\{file:[^}]+\}/g))
@@ -88,4 +88,9 @@ export async function substitute(input: SubstituteInput) {
 
   out += text.slice(cursor)
   return out
+}
+
+function normalizePathEnvValue(value: string) {
+  if (/^[A-Za-z]:\\/.test(value) || value.startsWith("\\\\")) return value.replaceAll("\\", "/")
+  return value
 }

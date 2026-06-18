@@ -515,6 +515,32 @@ it.instance("handles environment variable substitution", () =>
   ),
 )
 
+it.instance("normalizes Windows path env variables before parsing permission keys", () =>
+  withProcessEnv(
+    "TEST_PERMISSION_DIR",
+    String.raw`C:\Users\me\AppData\Roaming\MyApp\config`,
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* FSUtil.use.writeWithDirs(
+        path.join(test.directory, "opencode.json"),
+        `{
+          "$schema": "https://opencode.ai/config.json",
+          "permission": {
+            "external_directory": {
+              "{env:TEST_PERMISSION_DIR}/**": "allow"
+            }
+          }
+        }`,
+      )
+
+      const config = yield* Config.use.get()
+      expect(config.permission?.external_directory).toEqual({
+        "C:/Users/me/AppData/Roaming/MyApp/config/**": "allow",
+      })
+    }),
+  ),
+)
+
 it.instance("preserves env variables when adding $schema to config", () =>
   withProcessEnv(
     "PRESERVE_VAR",
