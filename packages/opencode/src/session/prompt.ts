@@ -929,22 +929,41 @@ export const layer = Layer.effect(
                 ]
               }
 
-              return [
-                {
-                  messageID: info.id,
+              const readExit = yield* fsys.readFile(filepath).pipe(Effect.exit)
+              const readCall = {
+                messageID: info.id,
+                sessionID: input.sessionID,
+                type: "text" as const,
+                synthetic: true,
+                text: `Called the Read tool with the following input: {"filePath":"${filepath}"}`,
+              }
+              if (Exit.isFailure(readExit)) {
+                const error = Cause.squash(readExit.cause)
+                yield* Effect.logError("failed to read binary file", { error, filepath })
+                const message = error instanceof Error ? error.message : String(error)
+                yield* events.publish(Session.Event.Error, {
                   sessionID: input.sessionID,
-                  type: "text",
-                  synthetic: true,
-                  text: `Called the Read tool with the following input: {"filePath":"${filepath}"}`,
-                },
+                  error: new NamedError.Unknown({ message }).toObject(),
+                })
+                return [
+                  readCall,
+                  {
+                    messageID: info.id,
+                    sessionID: input.sessionID,
+                    type: "text",
+                    synthetic: true,
+                    text: `Read tool failed to read ${filepath} with the following error: ${message}`,
+                  },
+                ]
+              }
+              return [
+                readCall,
                 {
                   id: part.id,
                   messageID: info.id,
                   sessionID: input.sessionID,
                   type: "file",
-                  url:
-                    `data:${mime};base64,` +
-                    Buffer.from(yield* fsys.readFile(filepath).pipe(Effect.catch(Effect.die))).toString("base64"),
+                  url: `data:${mime};base64,` + Buffer.from(readExit.value).toString("base64"),
                   mime,
                   filename: part.filename!,
                   source: part.source,
