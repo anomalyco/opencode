@@ -6,10 +6,11 @@ import {
   type Tool as MCPToolDef,
 } from "@modelcontextprotocol/sdk/types.js"
 import { dynamicTool, jsonSchema, type JSONSchema7, type Tool } from "ai"
-import { Effect } from "effect"
+import { Effect, Option, Schema } from "effect"
 
 const DEFAULT_TIMEOUT = 30_000
 const MAX_LIST_PAGES = 1_000
+const decodeJsonString = Schema.decodeUnknownOption(Schema.UnknownFromJsonString)
 
 const TolerantListToolsResultSchema = ListToolsResultSchema.extend({
   tools: ToolSchema.omit({ outputSchema: true }).array(),
@@ -54,7 +55,7 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
       const result = await client.callTool(
         {
           name: mcpTool.name,
-          arguments: (args || {}) as Record<string, unknown>,
+          arguments: normalizeArguments(args, inputSchema),
         },
         CallToolResultSchema,
         {
@@ -79,6 +80,53 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
       }
     },
   })
+}
+
+function normalizeArguments(args: unknown, schema: JSONSchema7): Record<string, unknown> {
+  const value = normalizeValue(args || {}, schema)
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>
+  return {}
+}
+
+function normalizeValue(value: unknown, schema: JSONSchema7 | undefined): unknown {
+  const decoded = typeof value === "string" && expectsStructuredValue(schema) ? decodeString(value, schema) : value
+  if (Array.isArray(decoded)) return decoded.map((item) => normalizeValue(item, itemSchema(schema)))
+  if (!decoded || typeof decoded !== "object" || !schema?.properties) return decoded
+  return Object.fromEntries(
+    Object.entries(decoded).map(([key, item]) => [key, normalizeValue(item, propertySchema(schema, key))]),
+  )
+}
+
+function decodeString(value: string, schema: JSONSchema7 | undefined) {
+  if (value === "" && expectsObject(schema)) return {}
+  if (value === "" && expectsArray(schema)) return []
+  return Option.getOrUndefined(decodeJsonString(value)) ?? value
+}
+
+function propertySchema(schema: JSONSchema7, key: string) {
+  const value = schema.properties?.[key]
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JSONSchema7) : undefined
+}
+
+function itemSchema(schema: JSONSchema7 | undefined) {
+  const value = schema?.items
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as JSONSchema7) : undefined
+}
+
+function expectsStructuredValue(schema: JSONSchema7 | undefined) {
+  return expectsObject(schema) || expectsArray(schema)
+}
+
+function expectsObject(schema: JSONSchema7 | undefined) {
+  if (!schema || typeof schema !== "object") return false
+  if (schema.type === "object") return true
+  return Array.isArray(schema.type) ? schema.type.includes("object") : "properties" in schema
+}
+
+function expectsArray(schema: JSONSchema7 | undefined) {
+  if (!schema || typeof schema !== "object") return false
+  if (schema.type === "array") return true
+  return Array.isArray(schema.type) ? schema.type.includes("array") : "items" in schema
 }
 
 export function fetch<T extends { name: string }>(
