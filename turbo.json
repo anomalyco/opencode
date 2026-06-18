@@ -16,6 +16,9 @@
     "@opencode-ai/app#test": {
       "dependsOn": ["^build"],
       "outputs": []
+    },
+    "@opencode-ai/ui#test": {
+      "outputs": []
     }
   }
 }
