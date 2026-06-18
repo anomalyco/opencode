@@ -3,9 +3,9 @@ import { Schema } from "effect"
 import { ConfigLSPV1 } from "@opencode-ai/core/v1/config/lsp"
 
 // The LSP config refinement enforces: any custom (non-builtin) LSP server
-// entry must declare an `extensions` array so the client knows which files
-// the server should attach to. Builtin server IDs and explicitly disabled
-// entries are exempt.
+// entry must declare a command and an `extensions` array so the client knows
+// how to start it and which files it should attach to. Builtin server IDs and
+// explicitly disabled entries are exempt.
 //
 // `typescript` is a builtin server id (see src/lsp/server.ts).
 describe("ConfigLSPV1.Info refinement", () => {
@@ -19,6 +19,11 @@ describe("ConfigLSPV1.Info refinement", () => {
 
     test("builtin server with no extensions passes", () => {
       const input = { typescript: { command: ["typescript-language-server", "--stdio"] } }
+      expect(decodeEffect(input)).toEqual(input)
+    })
+
+    test("builtin server override without command passes", () => {
+      const input = { jdtls: { env: { PATH: "/usr/bin" } } }
       expect(decodeEffect(input)).toEqual(input)
     })
 
@@ -44,10 +49,14 @@ describe("ConfigLSPV1.Info refinement", () => {
   })
 
   describe("rejected inputs", () => {
-    const expectedMessage = "For custom LSP servers, 'extensions' array is required."
+    const expectedMessage = "For custom LSP servers, 'command' and 'extensions' are required."
 
     test("custom server WITHOUT extensions fails via Effect decode", () => {
       expect(() => decodeEffect({ "my-lsp": { command: ["my-lsp-bin"] } })).toThrow(expectedMessage)
+    })
+
+    test("custom server WITHOUT command fails via Effect decode", () => {
+      expect(() => decodeEffect({ "my-lsp": { extensions: [".ml"] } })).toThrow(expectedMessage)
     })
 
     test("custom server with empty extensions array fails (extensions must be non-empty-truthy)", () => {

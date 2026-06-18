@@ -107,6 +107,8 @@ Server entries need `command` unless they only disable a server.
 | `env`            | object   | Environment variables to set when starting server |
 | `initialization` | object   | Initialization options to send to the LSP server  |
 
+Built-in server entries can omit `command` when you only want to override options like `env`, `extensions`, or `initialization`. Custom servers must include both `command` and `extensions`.
+
 Let's look at some examples.
 
 ---
@@ -119,10 +121,9 @@ Use the `env` property to set environment variables when starting the LSP server
 {
   "$schema": "https://opencode.ai/config.json",
   "lsp": {
-    "rust": {
-      "command": ["rust-analyzer"],
+    "jdtls": {
       "env": {
-        "RUST_LOG": "debug"
+        "PATH": "/usr/lib/jvm/java-21/bin:{env:PATH}"
       }
     }
   }

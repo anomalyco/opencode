@@ -8,7 +8,7 @@ import { pathToFileURL, fileURLToPath } from "url"
 import * as LSPServer from "./server"
 import { Config } from "@/config/config"
 import { Process } from "@/util/process"
-import { spawn as lspspawn } from "./launch"
+import { spawn as lspspawn, withEnv as withLspEnv } from "./launch"
 import { Effect, Layer, Context, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { containsPath } from "@/project/instance-context"
@@ -167,18 +167,33 @@ export const layer = Layer.effect(
                 delete servers[name]
                 continue
               }
+              const command = item.command
               servers[name] = {
                 ...existing,
                 id: name,
                 root: existing?.root ?? (async (_file, ctx) => ctx.directory),
                 extensions: item.extensions ?? existing?.extensions ?? [],
-                spawn: async (root) => ({
-                  process: lspspawn(item.command[0], item.command.slice(1), {
-                    cwd: root,
-                    env: { ...process.env, ...item.env },
-                  }),
-                  initialization: item.initialization,
-                }),
+                spawn: command
+                  ? async (root) => ({
+                      process: lspspawn(command[0], command.slice(1), {
+                        cwd: root,
+                        env: { ...process.env, ...item.env },
+                      }),
+                      initialization: item.initialization,
+                    })
+                  : existing
+                    ? async (root, ctx, flags) => {
+                        const handle = await withLspEnv(item.env, () => existing.spawn(root, ctx, flags))
+                        if (!handle) return handle
+                        return {
+                          ...handle,
+                          initialization: {
+                            ...handle.initialization,
+                            ...item.initialization,
+                          },
+                        }
+                      }
+                    : async () => undefined,
               }
             }
           }

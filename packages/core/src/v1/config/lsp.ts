@@ -9,7 +9,7 @@ export const Disabled = Schema.Struct({
 export const Entry = Schema.Union([
   Disabled,
   Schema.Struct({
-    command: Schema.mutable(Schema.Array(Schema.String)),
+    command: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
     extensions: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
     disabled: Schema.optional(Schema.Boolean),
     env: Schema.optional(Schema.Record(Schema.String, Schema.String)),
@@ -60,7 +60,7 @@ export const builtinServerIds = [
   "julials",
 ]
 
-export const requiresExtensionsForCustomServers = Schema.makeFilter<
+export const requiresCustomServerDetails = Schema.makeFilter<
   boolean | Record<string, Schema.Schema.Type<typeof Entry>>
 >((data) => {
   if (typeof data === "boolean") return undefined
@@ -68,13 +68,13 @@ export const requiresExtensionsForCustomServers = Schema.makeFilter<
   const ok = Object.entries(data).every(([id, config]) => {
     if ("disabled" in config && config.disabled) return true
     if (ids.has(id)) return true
-    return "extensions" in config && Boolean(config.extensions)
+    return "command" in config && Boolean(config.command) && "extensions" in config && Boolean(config.extensions)
   })
-  return ok ? undefined : "For custom LSP servers, 'extensions' array is required."
+  return ok ? undefined : "For custom LSP servers, 'command' and 'extensions' are required."
 })
 
 export const Info = Schema.Union([Schema.Boolean, Schema.Record(Schema.String, Entry)])
-  .check(requiresExtensionsForCustomServers)
+  .check(requiresCustomServerDetails)
   .pipe((schema) => schema)
 
 export type Info = Schema.Schema.Type<typeof Info>

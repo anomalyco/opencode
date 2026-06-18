@@ -1,4 +1,4 @@
-import { describe, expect, spyOn } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import path from "path"
 import { Deferred, Effect, Layer } from "effect"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -6,9 +6,11 @@ import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LSP } from "@/lsp/lsp"
 import * as LSPServer from "@/lsp/server"
+import { Process } from "@/util/process"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { TestInstance } from "../fixture/fixture"
 import { awaitWithTimeout, testEffect } from "../lib/effect"
+import { spawn as lspSpawn, withEnv as withLspEnv } from "../../src/lsp/launch"
 
 const lspLayer = (flags: Parameters<typeof RuntimeFlags.layer>[0] = {}) =>
   LSP.layer.pipe(
@@ -155,6 +157,39 @@ describe("lsp.spawn", () => {
   )
 
   it.instance(
+    "applies env overrides to builtin LSP spawns without requiring command",
+    () =>
+      LSP.Service.use((lsp) =>
+        Effect.gen(function* () {
+          const dir = (yield* TestInstance).directory
+          const serverSpawn = spyOn(LSPServer.Typescript, "spawn").mockImplementation(async (root) => {
+            const child = lspSpawn(process.execPath, ["-e", ""], { cwd: root })
+            return (child.kill(), undefined)
+          })
+
+          try {
+            yield* lsp.hover({
+              file: path.join(dir, "src", "inside.ts"),
+              line: 0,
+              character: 0,
+            })
+
+            expect(serverSpawn).toHaveBeenCalledTimes(1)
+          } finally {
+            serverSpawn.mockRestore()
+          }
+        }),
+      ),
+    {
+      config: {
+        lsp: {
+          typescript: { env: { OPENCODE_TEST_LSP_ENV: "enabled" } },
+        },
+      },
+    },
+  )
+
+  it.instance(
     "uses pyright instead of ty by default",
     () =>
       LSP.Service.use((lsp) =>
@@ -229,4 +264,21 @@ describe("lsp.spawn", () => {
       ),
     { config: { lsp: true } },
   )
+})
+
+describe("lsp.launch", () => {
+  test("passes env overrides to spawned LSP processes", async () => {
+    const processSpawn = spyOn(Process, "spawn")
+    try {
+      const child = await withLspEnv({ OPENCODE_TEST_LSP_ENV: "enabled" }, async () =>
+        lspSpawn(process.execPath, ["-e", ""]),
+      )
+      child.kill()
+
+      const spawnCalls = processSpawn.mock.calls.filter(([cmd]) => cmd[0] === process.execPath)
+      expect(spawnCalls.some(([, options]) => options?.env?.OPENCODE_TEST_LSP_ENV === "enabled")).toBe(true)
+    } finally {
+      processSpawn.mockRestore()
+    }
+  })
 })
