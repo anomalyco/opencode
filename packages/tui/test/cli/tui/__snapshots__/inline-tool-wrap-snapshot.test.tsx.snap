@@ -72,7 +72,7 @@ exports[`TUI inline tool wrapping separates a subagent group after an expanded r
 `;
 
 exports[`TUI inline tool wrapping separates a subagent from the previous assistant summary 1`] = `
-"   ▣ Build · Little Frank · 53.1s
+"   ▣ Build · Little Frank · 53.1s · 3:41 PM
 
    ✓ Build Task — Review changes
      ↳ 48 toolcalls · 1m 40s"

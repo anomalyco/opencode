@@ -138,7 +138,7 @@ function AssistantSummaryBeforeSubagentFixture() {
   return (
     <box flexDirection="column" width={72}>
       <box id="assistant-summary-message-one" paddingLeft={3}>
-        <text>▣ Build · Little Frank · 53.1s</text>
+        <text>▣ Build · Little Frank · 53.1s · 3:41 PM</text>
       </box>
       <InlineToolRow id="tool-inline-subagent-one" icon="✓" complete={true} pending="" subagent={true}>
         {"Build Task — Review changes\n↳ 48 toolcalls · 1m 40s"}

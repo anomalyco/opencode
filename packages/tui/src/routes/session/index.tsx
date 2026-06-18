@@ -1483,6 +1483,11 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     if (!user || !user.time) return 0
     return props.message.time.completed - user.time.created
   })
+  const completedTime = createMemo(() => {
+    if (!duration()) return ""
+    if (!props.message.time.completed) return ""
+    return Locale.time(props.message.time.completed)
+  })
 
   const childShortcut = useCommandShortcut("session.child.first")
   const backgroundShortcut = useCommandShortcut("session.background")
@@ -1558,6 +1563,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               <span style={{ fg: theme.textMuted }}> · {model()}</span>
               <Show when={duration()}>
                 <span style={{ fg: theme.textMuted }}> · {Locale.duration(duration())}</span>
+                <span style={{ fg: theme.textMuted }}> · {completedTime()}</span>
               </Show>
               <Show when={props.message.error?.name === "MessageAbortedError"}>
                 <span style={{ fg: theme.textMuted }}> · interrupted</span>
