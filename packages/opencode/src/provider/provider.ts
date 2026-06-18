@@ -33,6 +33,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
+const NOUMENA_BASE_URL_DEFAULT = "https://api.noumena.com/v1"
+const NOUMENA_KIMI_MODEL_ID = "/data/models/hf/moonshotai__Kimi-K2.7-Code"
 
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
@@ -176,6 +178,32 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           },
         },
       }),
+    noumena: Effect.fnUntraced(function* (input: Info) {
+      const auth = yield* dep.auth(input.id)
+      const env = yield* dep.env()
+      const apiKey = env["NOUMENA_API_KEY"] ?? (auth?.type === "api" ? auth.key : undefined)
+      const baseURL = noumenaBaseURL((yield* dep.get("NOUMENA_BASE_URL")) ?? "https://api.noumena.com")
+      return {
+        autoload: auth?.type === "oauth",
+        options: {
+          baseURL,
+          ...(auth?.type === "oauth" ? { headers: { "anthropic-beta": "oauth-2025-04-20" } } : {}),
+          ...(apiKey
+            ? {
+                fetch: async (input: RequestInfo | URL, init?: RequestInit) => {
+                  const headers = new Headers(init?.headers)
+                  headers.delete("authorization")
+                  headers.delete("Authorization")
+                  headers.delete("x-api-key")
+                  headers.delete("X-Api-Key")
+                  headers.set("x-api-key", apiKey)
+                  return fetch(input, { ...init, headers })
+                },
+              }
+            : {}),
+        },
+      }
+    }),
     opencode: Effect.fnUntraced(function* (input: Info) {
       const env = yield* dep.env()
       const hasKey = iife(() => {
@@ -1253,6 +1281,54 @@ export function fromModelsDevProvider(provider: ModelsDev.Provider): Info {
   }
 }
 
+function withNoumenaModels(modelsDev: Record<string, ModelsDev.Provider>): Record<string, ModelsDev.Provider> {
+  if (modelsDev.noumena) return modelsDev
+  const noumena: ModelsDev.Provider = {
+    id: "noumena",
+    name: "Noumena",
+    api: NOUMENA_BASE_URL_DEFAULT,
+    npm: "@ai-sdk/openai-compatible",
+    env: ["NOUMENA_API_KEY"],
+    models: {
+      "kimi-2.7-coder": {
+        id: NOUMENA_KIMI_MODEL_ID,
+        name: "Kimi 2.7 Coder",
+        release_date: "",
+        attachment: false,
+        reasoning: true,
+        temperature: true,
+        tool_call: true,
+        cost: {
+          input: 0,
+          output: 0,
+        },
+        limit: {
+          context: 200000,
+          output: 256000,
+        },
+        modalities: {
+          input: ["text"],
+          output: ["text"],
+        },
+        provider: {
+          api: NOUMENA_BASE_URL_DEFAULT,
+          npm: "@ai-sdk/openai-compatible",
+        },
+      },
+    },
+  }
+  return {
+    ...modelsDev,
+    noumena,
+  }
+}
+
+function noumenaBaseURL(value: string) {
+  const url = value.replace(/\/+$/, "")
+  if (url.endsWith("/v1")) return url
+  return `${url}/v1`
+}
+
 function modelSuggestions(provider: Info | undefined, modelID: ModelV2.ID, enableExperimentalModels: boolean) {
   const available = provider
     ? Object.keys(provider.models).filter((id) => {
@@ -1297,7 +1373,7 @@ export const layer = Layer.effect(
       Effect.gen(function* () {
         const bridge = yield* EffectBridge.make()
         const cfg = yield* config.get()
-        const modelsDev = yield* modelsDevSvc.get()
+        const modelsDev = withNoumenaModels(yield* modelsDevSvc.get())
         const catalog = mapValues(modelsDev, fromModelsDevProvider)
         const database = mapValues(catalog, toPublicInfo)
 

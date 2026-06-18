@@ -300,7 +300,7 @@ export const ProvidersLoginCommand = effectCmd({
   command: "login [url]",
   describe: "log in to a provider",
   // URL login skips instance bootstrap, which would load remote config with the stale token and crash before re-auth.
-  instance: (args) => !args.url,
+  instance: (args) => !isProviderMetadataURL(args.url),
   builder: (yargs: Argv) =>
     yargs
       .positional("url", {
@@ -322,7 +322,7 @@ export const ProvidersLoginCommand = effectCmd({
 
     UI.empty()
     yield* Prompt.intro("Add credential")
-    if (args.url) {
+    if (isProviderMetadataURL(args.url)) {
       const url = args.url.replace(/\/+$/, "")
       const wellknown = (yield* cliTry(`Failed to load auth provider metadata from ${url}: `, () =>
         fetch(`${url}/.well-known/opencode`).then((x) => x.json()),
@@ -409,8 +409,9 @@ export const ProvidersLoginCommand = effectCmd({
     ]
 
     let provider: string
-    if (args.provider) {
-      const input = args.provider
+    const providerInput = args.provider ?? args.url
+    if (providerInput) {
+      const input = providerInput
       const byID = options.find((x) => x.value === input)
       const byName = options.find((x) => x.label.toLowerCase() === input.toLowerCase())
       const match = byID ?? byName
@@ -487,6 +488,10 @@ export const ProvidersLoginCommand = effectCmd({
     yield* Prompt.outro("Done")
   }),
 })
+
+function isProviderMetadataURL(value: string | undefined): value is string {
+  return Boolean(value?.match(/^[a-z][a-z0-9+.-]*:\/\//i))
+}
 
 export const ProvidersLogoutCommand = effectCmd({
   command: "logout [provider]",

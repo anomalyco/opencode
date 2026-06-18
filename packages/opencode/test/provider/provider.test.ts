@@ -47,6 +47,23 @@ const remove = (k: string) =>
     yield* Env.use.remove(k)
   })
 
+const withGlobalFetch = <A, E, R>(
+  fetch: (input: Parameters<typeof globalThis.fetch>[0], init?: Parameters<typeof globalThis.fetch>[1]) => Promise<Response>,
+  fx: () => Effect.Effect<A, E, R>,
+) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = globalThis.fetch
+      globalThis.fetch = Object.assign(fetch, { preconnect: previous.preconnect }) as typeof globalThis.fetch
+      return previous
+    }),
+    () => fx(),
+    (previous) =>
+      Effect.sync(() => {
+        globalThis.fetch = previous
+      }),
+  )
+
 afterEach(async () => {
   for (const [key, value] of originalEnv) {
     if (value === undefined) delete process.env[key]
@@ -112,6 +129,94 @@ it.instance("provider loaded from env variable", () =>
     expect(providers[ProviderV2.ID.anthropic].source).toBe("env")
     expect(providers[ProviderV2.ID.anthropic].options.headers["anthropic-beta"]).toBeDefined()
   }),
+)
+
+it.instance("noumena provider is loaded from env variable with known kimi model", () =>
+  Effect.gen(function* () {
+    yield* setProcessEnv("NOUMENA_API_KEY", "test-api-key")
+    const providers = yield* list
+    expect(providers[ProviderV2.ID.noumena]).toBeDefined()
+    expect(providers[ProviderV2.ID.noumena].source).toBe("env")
+    expect(providers[ProviderV2.ID.noumena].env).toEqual(["NOUMENA_API_KEY"])
+    expect(providers[ProviderV2.ID.noumena].options.baseURL).toBe("https://api.noumena.com/v1")
+    expect(providers[ProviderV2.ID.noumena].models["kimi-2.7-coder"]).toBeDefined()
+    expect(providers[ProviderV2.ID.noumena].models["kimi-2.7-coder"].api.id).toBe(
+      "/data/models/hf/moonshotai__Kimi-K2.7-Code",
+    )
+    expect(providers[ProviderV2.ID.noumena].models["kimi-2.7-coder"].api.npm).toBe("@ai-sdk/openai-compatible")
+    expect(providers[ProviderV2.ID.noumena].models["claude-sonnet-4-20250514"]).toBeUndefined()
+  }),
+)
+
+it.instance("noumena provider respects NOUMENA_BASE_URL", () =>
+  Effect.gen(function* () {
+    yield* setProcessEnv("NOUMENA_API_KEY", "test-api-key")
+    yield* set("NOUMENA_BASE_URL", "https://api.noumena.test")
+    const providers = yield* list
+    expect(providers[ProviderV2.ID.noumena].options.baseURL).toBe("https://api.noumena.test/v1")
+  }),
+)
+
+it.instance("noumena direct API key fetch sends x-api-key header", () =>
+  withGlobalFetch(
+    async (_input, init) => {
+      const headers = new Headers(init?.headers)
+      expect(headers.get("authorization")).toBeNull()
+      expect(headers.get("x-api-key")).toBe("direct-key")
+      return new Response("{}")
+    },
+    () =>
+      Effect.gen(function* () {
+        yield* setProcessEnv("NOUMENA_API_KEY", "direct-key")
+        const providers = yield* list
+        const fetch = providers[ProviderV2.ID.noumena].options.fetch
+        expect(fetch).toBeFunction()
+        yield* Effect.promise(() =>
+          fetch("https://api.noumena.com/v1/chat/completions", {
+            headers: {
+              Authorization: "Bearer sdk-token",
+            },
+          }),
+        )
+      }),
+  ),
+)
+
+it.instance("noumena OAuth fetch strips SDK auth headers and sends bearer beta headers", () =>
+  withGlobalFetch(
+    async (_input, init) => {
+      const headers = new Headers(init?.headers)
+      expect(headers.get("authorization")).toBe("Bearer oauth-access")
+      expect(headers.get("x-api-key")).toBeNull()
+      expect(headers.get("anthropic-beta")).toBe("oauth-2025-04-20")
+      return new Response("{}")
+    },
+    () =>
+      Effect.gen(function* () {
+        yield* setProcessEnv(
+          "OPENCODE_AUTH_CONTENT",
+          JSON.stringify({
+            noumena: {
+              type: "oauth",
+              access: "oauth-access",
+              refresh: "oauth-refresh",
+              expires: Date.now() + 60_000,
+            },
+          }),
+        )
+        const providers = yield* list
+        const fetch = providers[ProviderV2.ID.noumena].options.fetch
+        expect(fetch).toBeFunction()
+        yield* Effect.promise(() =>
+          fetch("https://api.noumena.com/v1/chat/completions", {
+            headers: {
+              Authorization: "Bearer sdk-token",
+              "x-api-key": "sdk-key",
+            },
+          }),
+        )
+      }),
+  ),
 )
 
 it.instance(
