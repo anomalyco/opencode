@@ -535,6 +535,19 @@ describe("session.compaction.isOverflow", () => {
   )
 
   it.live(
+    "reserves the full output budget for models with input caps",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const model = createModel({ context: 200_000, input: 200_000, output: 32_000 })
+        const tokens = { input: 170_000, output: 4_000, reasoning: 0, cache: { read: 1_000, write: 0 } }
+
+        expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
+      }),
+    ),
+  )
+
+  it.live(
     "returns false when model context limit is 0",
     provideTmpdirInstance(() =>
       Effect.gen(function* () {
