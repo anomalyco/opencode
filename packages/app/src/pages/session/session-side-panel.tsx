@@ -280,10 +280,10 @@ export function SessionSidePanel(props: {
             onBack={preview.goBack}
             onForward={preview.goForward}
             url={preview.previewUrl()}
-            onReload={preview.reload}
+            onReload={preview.hardReload}
             onHome={() => {
               tabs().setActive("preview")
-              preview.reload()
+              preview.goHome()
             }}
             onCapture={previewBridge.requestCapture}
             capturing={previewBridge.capturing()}

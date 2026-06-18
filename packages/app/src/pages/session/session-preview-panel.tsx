@@ -144,6 +144,18 @@ export function createSessionPreview() {
 
   const goBack = () => void bridge.child()?.back()
   const goForward = () => void bridge.child()?.forward()
+  // 홈 — 리로드 없이 "/" 로 소프트 라우팅. 미연결이면 src 재로드(루트)로 폴백.
+  const goHome = () => {
+    const child = bridge.child()
+    if (child) void child.routeTo("/")
+    else reload()
+  }
+  // 새로고침 — iframe 컨텐츠에 진짜 리로드 명령. 미연결이면 src 재탐색으로 폴백.
+  const hardReload = () => {
+    const child = bridge.child()
+    if (child) void child.reload()
+    else reload()
+  }
   // 베이스 호스트는 고정 — 입력된 경로를 previewUrl 기준으로 해석해 자식을 이동시킨다.
   const navigatePath = (p: string) => {
     const base = previewUrl()
@@ -159,6 +171,8 @@ export function createSessionPreview() {
     previewUrl,
     previewSrc,
     reload,
+    goHome,
+    hardReload,
     bridge,
     host,
     path,

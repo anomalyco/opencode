@@ -100,6 +100,8 @@ export interface LocationInfo {
 export type ChildMethods = {
   navigate(url: string): void
   reload(): void
+  /** 소프트 라우팅 — 리로드 없이 pushState + popstate 로 SPA 라우터를 path 로 전환(홈 버튼용). */
+  routeTo(path: string): void
   /** 자식 자신의 window.history 를 뒤로 이동(popstate → onLocationChange "pop"). */
   back(): void
   /** 자식 자신의 window.history 를 앞으로 이동. */

@@ -39,6 +39,9 @@ let remoteParent: ParentMethods | undefined
 let connection: { destroy: () => void } | undefined
 let connected = false
 let connecting = false
+// routeTo 가 라우터를 깨우려고 직접 쏘는 popstate 1회는 위치 보고에서 제외한다(이미 pushState 가 "push" 로
+// 보고했고, 합성 popstate 까지 "pop" 으로 보고하면 동일 href 가 스택에 중복돼 부모 커서가 어긋난다).
+let suppressPopReport = false
 
 const childMethods: ChildMethods = {
   ping: () => "pong",
@@ -47,6 +50,14 @@ const childMethods: ChildMethods = {
   },
   reload: () => {
     window.location.reload()
+  },
+  routeTo: (path: string) => {
+    // 소프트 라우팅 — 리로드 없이 history 만 바꾸고 popstate 를 쏴 SPA 라우터가 path 로 전환하게 한다.
+    // pushState 래퍼가 onLocationChange("push") 로 부모 미러를 갱신하고, 라우터를 깨우는 합성 popstate 의
+    // 중복 "pop" 보고는 suppressPopReport 로 1회 건너뛴다.
+    window.history.pushState(null, "", path)
+    suppressPopReport = true
+    window.dispatchEvent(new PopStateEvent("popstate"))
   },
   back: () => {
     window.history.back()
@@ -229,6 +240,11 @@ function installLocationForwarding() {
   wrap("replaceState", "replace")
 
   window.addEventListener("popstate", () => {
+    // routeTo 가 라우터를 깨우려 쏜 합성 popstate 는 보고 생략(pushState 가 이미 보고함).
+    if (suppressPopReport) {
+      suppressPopReport = false
+      return
+    }
     justPopped = true
     report("pop")
   })
