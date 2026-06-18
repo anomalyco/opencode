@@ -477,25 +477,6 @@ export const ProvidersLoginCommand = effectCmd({
       )
     }
 
-    if (provider === "snowflake-cortex") {
-      const account = yield* promptValue(
-        yield* Prompt.text({
-          message: "Snowflake Account Identifier",
-          placeholder: "xy12345.us-east-1",
-          validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-        }),
-      )
-      const pat = yield* promptValue(
-        yield* Prompt.password({
-          message: "Programmatic Access Token (PAT)",
-          validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-        }),
-      )
-      yield* Effect.orDie(authSvc.set(provider, { type: "api", key: pat, metadata: { account } }))
-      yield* Prompt.outro("Done")
-      return
-    }
-
     const key = yield* Prompt.password({
       message: "Enter your API key",
       validate: (x) => (x && x.length > 0 ? undefined : "Required"),

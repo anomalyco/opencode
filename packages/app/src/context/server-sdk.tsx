@@ -2,7 +2,7 @@ import type { Event } from "@opencode-ai/sdk/v2/client"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
 import { makeEventListener } from "@solid-primitives/event-listener"
-import { batch, onCleanup, onMount } from "solid-js"
+import { type Accessor, batch, createMemo, onCleanup, onMount } from "solid-js"
 import { createSdkForServer } from "@/utils/server"
 import { useLanguage } from "./language"
 import { usePlatform } from "./platform"
@@ -15,13 +15,46 @@ const isAbortError = (error: unknown) =>
   error !== null && typeof error === "object" && "name" in error && error.name === "AbortError"
 
 const isStreamClosed = (error: unknown, signal?: AbortSignal) => isAbortError(error) || signal?.aborted === true
+type QueuedServerEvent = { directory: string; payload: Event }
+
+const deltaKey = (directory: string, messageID: string, partID: string) => `${directory}:${messageID}:${partID}`
+
+export function coalesceServerEvents(events: QueuedServerEvent[], stale?: Set<string>) {
+  const output: QueuedServerEvent[] = []
+  const deltas = new Map<string, number>()
+  events.forEach((event) => {
+    if (stale && event.payload.type === "message.part.delta") {
+      const props = event.payload.properties
+      if (stale.has(deltaKey(event.directory, props.messageID, props.partID))) return
+    }
+    if (event.payload.type !== "message.part.delta") {
+      deltas.clear()
+      output.push(event)
+      return
+    }
+    const props = event.payload.properties
+    const id = `${deltaKey(event.directory, props.messageID, props.partID)}:${props.field}`
+    const index = deltas.get(id)
+    const existing = index === undefined ? undefined : output[index]
+    if (!existing || existing.payload.type !== "message.part.delta") {
+      deltas.set(id, output.length)
+      output.push({
+        directory: event.directory,
+        payload: { ...event.payload, properties: { ...props } },
+      })
+      return
+    }
+    existing.payload.properties.delta += props.delta
+  })
+  return output
+}
 
 export function resumeStreamAfterPageShow(event: PageTransitionEvent, start: () => unknown) {
   if (!event.persisted) return
   start()
 }
 
-export function createServerSdkContext(server: ServerConnection.Any, scope: ServerScope) {
+function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerScope) {
   const platform = usePlatform()
   const abort = new AbortController()
 
@@ -45,7 +78,7 @@ export function createServerSdkContext(server: ServerConnection.Any, scope: Serv
     [key: string]: Event
   }>()
 
-  type Queued = { directory: string; payload: Event }
+  type Queued = QueuedServerEvent
   const FLUSH_FRAME_MS = 16
   const STREAM_YIELD_MS = 8
   const RECONNECT_DELAY_MS = 250
@@ -56,8 +89,6 @@ export function createServerSdkContext(server: ServerConnection.Any, scope: Serv
   const staleDeltas = new Set<string>()
   let timer: ReturnType<typeof setTimeout> | undefined
   let last = 0
-
-  const deltaKey = (directory: string, messageID: string, partID: string) => `${directory}:${messageID}:${partID}`
 
   const key = (directory: string, payload: Event) => {
     if (payload.type === "session.status") return `session.status:${directory}:${payload.properties.sessionID}`
@@ -83,14 +114,9 @@ export function createServerSdkContext(server: ServerConnection.Any, scope: Serv
     staleDeltas.clear()
 
     last = Date.now()
+    const output = coalesceServerEvents(events, skip)
     batch(() => {
-      for (const event of events) {
-        if (skip && event.payload.type === "message.part.delta") {
-          const props = event.payload.properties
-          if (skip.has(deltaKey(event.directory, props.messageID, props.partID))) continue
-        }
-        emitter.emit(event.directory, event.payload)
-      }
+      output.forEach((event) => emitter.emit(event.directory, event.payload))
     })
 
     buffer.length = 0
@@ -261,21 +287,31 @@ export function createServerSdkContext(server: ServerConnection.Any, scope: Serv
   }
 }
 
-export type ServerSDK = ReturnType<typeof createServerSdkContext>
+type ServerSDKBase = ReturnType<typeof createServerSdkContextBase>
+export type ServerSDK = ServerSDKBase & {
+  createDirSdkContext: (directory: string) => ReturnType<typeof createDirSdkContext>
+}
+
+export function createServerSdkContext(server: ServerConnection.Any, scope: ServerScope): ServerSDK {
+  const sdk = createServerSdkContextBase(server, scope)
+  return Object.assign(sdk, {
+    createDirSdkContext: createRefCountMap((dir) => createDirSdkContext(dir, sdk)),
+  })
+}
 
 export const { use: useServerSDK, provider: ServerSDKProvider } = createSimpleContext({
   name: "ServerSDK",
-  init: (props: { server?: ServerConnection.Any }) => {
+  // Returns an accessor so the resolved server can change reactively (e.g. a
+  // /new-session draft retargeting its server) without re-instantiating the subtree.
+  init: (props: { server?: Accessor<ServerConnection.Any | undefined> }) => {
     const global = useGlobal()
     const language = useLanguage()
     const server = useServer()
 
-    const conn = props.server ?? server.current
-    if (!conn) throw new Error(language.t("error.serverSDK.noServerAvailable"))
-
-    const ctx = global.createServerCtx(conn)
-    return Object.assign(ctx.sdk, {
-      createDirSdkContext: createRefCountMap((dir) => createDirSdkContext(dir, ctx.sdk)),
+    return createMemo<ServerSDK>(() => {
+      const conn = props.server?.() ?? server.current
+      if (!conn) throw new Error(language.t("error.serverSDK.noServerAvailable"))
+      return global.createServerCtx(conn).sdk
     })
   },
 })
@@ -284,7 +320,7 @@ type SDKEventMap = {
   [key in Event["type"]]: Extract<Event, { type: key }>
 }
 
-function createDirSdkContext(directory: string, serverSDK: ServerSDK) {
+function createDirSdkContext(directory: string, serverSDK: ServerSDKBase) {
   const client = serverSDK.createClient({
     directory,
     throwOnError: true,

@@ -2,14 +2,14 @@ import { Effect } from "effect"
 import { ModelV2 } from "../../model"
 import { PluginV2 } from "../../plugin"
 import { ProviderV2 } from "../../provider"
-import { Connector } from "../../connector"
+import { Integration } from "../../integration"
 import { browser, headless } from "./openai-auth"
 
 export const OpenAIPlugin = PluginV2.define({
   id: PluginV2.ID.make("openai"),
   effect: Effect.gen(function* () {
-    const connectors = yield* Connector.Service
-    yield* connectors.update((editor) => {
+    const integrations = yield* Integration.Service
+    yield* integrations.update((editor) => {
       editor.method.update(browser)
       editor.method.update(headless)
     })
