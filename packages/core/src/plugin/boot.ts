@@ -22,7 +22,6 @@ import { AgentPlugin } from "./agent"
 import { CommandPlugin } from "./command"
 import { SkillPlugin } from "./skill"
 import { ConfigProviderPlugin } from "../config/plugin/provider"
-import { EnvPlugin } from "./env"
 import { ModelsDevPlugin } from "./models-dev"
 import { ProviderPlugins } from "./provider"
 import { SkillV2 } from "../skill"
@@ -99,7 +98,6 @@ export const layer = Layer.effect(
     })
 
     const boot = Effect.gen(function* () {
-      yield* add(EnvPlugin)
       yield* add(AgentPlugin.Plugin)
       yield* add(CommandPlugin.Plugin)
       yield* add(SkillPlugin.Plugin)

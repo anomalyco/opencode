@@ -89,6 +89,8 @@ void mock.module("@modelcontextprotocol/sdk/client/sse.js", () => ({
 // Mock the MCP SDK Client to trigger OAuth flow
 void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
   Client: class MockClient {
+    setRequestHandler() {}
+
     async connect(transport: { start: () => Promise<void> }) {
       await transport.start()
     }

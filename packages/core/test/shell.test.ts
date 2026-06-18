@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Shell } from "../../src/shell/shell"
-import { Filesystem } from "@/util/filesystem"
+import { Shell } from "@opencode-ai/core/shell"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { which } from "@opencode-ai/core/util/which"
 
 const withShell = async (shell: string | undefined, fn: () => void | Promise<void>) => {
@@ -54,6 +54,15 @@ describe("shell", () => {
     expect(Shell.name(Shell.acceptable("nu"))).not.toBe("nu")
   })
 
+  test("builds command args per shell family", () => {
+    expect(Shell.args("/bin/sh", "echo hi", "/tmp")).toEqual(["-c", "echo hi"])
+    expect(Shell.args("/usr/bin/fish", "echo hi", "/tmp")).toEqual(["-c", "echo hi"])
+    const zsh = Shell.args("/bin/zsh", "echo hi", "/tmp")
+    expect(zsh[0]).toBe("-l")
+    expect(zsh[1]).toBe("-c")
+    expect(zsh.at(-1)).toBe("/tmp")
+  })
+
   if (process.platform === "win32") {
     test("rejects blacklisted shells case-insensitively", async () => {
       await withShell("NU.EXE", async () => {
@@ -64,7 +73,7 @@ describe("shell", () => {
     test("normalizes Git Bash shell paths from env", async () => {
       const shell = "/cygdrive/c/Program Files/Git/bin/bash.exe"
       await withShell(shell, async () => {
-        expect(Shell.preferred()).toBe(Filesystem.windowsPath(shell))
+        expect(Shell.preferred()).toBe(FSUtil.windowsPath(shell))
       })
     })
 
