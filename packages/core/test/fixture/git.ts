@@ -44,6 +44,14 @@ export async function branch(source: string, name: string, content: string) {
   await git(source, "push", "-u", "origin", name)
 }
 
+export async function tag(source: string, name: string, content: string) {
+  await fs.writeFile(path.join(source, "README.md"), content)
+  await git(source, "add", "README.md")
+  await git(source, "commit", "-m", name)
+  await git(source, "tag", name)
+  await git(source, "push", "origin", name)
+}
+
 export async function git(cwd: string, ...args: string[]) {
   await exec("git", args, { cwd })
 }

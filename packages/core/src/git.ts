@@ -165,11 +165,13 @@ export const layer = Layer.effect(
     const fetch = Effect.fn("Git.fetch")((directory: string) => execute(directory, proc)(["fetch", "--all", "--prune"]))
 
     const fetchBranch = Effect.fn("Git.fetchBranch")((directory: string, branch: string) =>
-      execute(directory, proc)(["fetch", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`]),
+      execute(directory, proc)(["fetch", "origin", fetchRefSpec(branch)]),
     )
 
     const checkout = Effect.fn("Git.checkout")((directory: string, branch: string) =>
-      execute(directory, proc)(["checkout", "-B", branch, `origin/${branch}`]),
+      branch.startsWith("refs/")
+        ? execute(directory, proc)(["checkout", "--detach", trackingRef(branch)])
+        : execute(directory, proc)(["checkout", "-B", branch, trackingRef(branch)]),
     )
 
     const reset = Effect.fn("Git.reset")((directory: string, target: string) =>
@@ -442,4 +444,16 @@ function resolvePath(cwd: string, value: string) {
   const normalized = FSUtil.windowsPath(trimmed)
   if (path.isAbsolute(normalized)) return path.normalize(normalized)
   return path.resolve(cwd, normalized)
+}
+
+function fetchRefSpec(ref: string) {
+  if (ref.startsWith("refs/")) return `+${ref}:${trackingRef(ref)}`
+  return `+refs/heads/${ref}:${trackingRef(ref)}`
+}
+
+function trackingRef(ref: string) {
+  if (ref.startsWith("refs/heads/")) return `refs/remotes/origin/${ref.slice("refs/heads/".length)}`
+  if (ref.startsWith("refs/tags/")) return `refs/remotes/origin/tags/${ref.slice("refs/tags/".length)}`
+  if (ref.startsWith("refs/")) return `refs/remotes/origin/${ref.slice("refs/".length)}`
+  return `refs/remotes/origin/${ref}`
 }

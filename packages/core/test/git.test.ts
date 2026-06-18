@@ -5,7 +5,7 @@ import path from "path"
 import { Effect } from "effect"
 import { Git } from "@opencode-ai/core/git"
 import { AbsolutePath } from "@opencode-ai/core/schema"
-import { branch, commit, gitRemote } from "./fixture/git"
+import { branch, commit, gitRemote, tag } from "./fixture/git"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -47,6 +47,22 @@ describe("Git", () => {
         expect((yield* git.reset(target, "origin/feature/docs")).exitCode).toBe(0)
         expect(yield* git.branch(target)).toBe("feature/docs")
         expect(yield* read(path.join(target, "README.md"))).toBe("feature\n")
+      }),
+    ),
+  )
+
+  it.live("fetches and checks out full tag refs", () =>
+    withRemote((fixture) =>
+      Effect.gen(function* () {
+        const git = yield* Git.Service
+        const target = path.join(fixture.root, "checkout")
+        yield* git.clone({ remote: fixture.remote, target })
+
+        yield* Effect.promise(() => tag(fixture.source, "effect@4.0.0-beta.65", "tagged\n"))
+        expect((yield* git.fetchBranch(target, "refs/tags/effect@4.0.0-beta.65")).exitCode).toBe(0)
+        expect((yield* git.checkout(target, "refs/tags/effect@4.0.0-beta.65")).exitCode).toBe(0)
+        expect(yield* git.branch(target)).toBeUndefined()
+        expect(yield* read(path.join(target, "README.md"))).toBe("tagged\n")
       }),
     ),
   )

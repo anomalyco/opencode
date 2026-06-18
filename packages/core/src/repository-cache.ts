@@ -159,7 +159,11 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | E
 
                 if (status === "cloned") {
                   const result = yield* git
-                    .clone({ remote: input.reference.remote, target: localPath, branch: input.branch })
+                    .clone({
+                      remote: input.reference.remote,
+                      target: localPath,
+                      branch: input.branch?.startsWith("refs/") ? undefined : input.branch,
+                    })
                     .pipe(
                       Effect.mapError((error) => new CloneFailedError({ repository, message: errorMessage(error) })),
                     )
@@ -168,6 +172,39 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | E
                       repository,
                       message: resultMessage(result, `Failed to clone ${repository}`),
                     })
+                  }
+
+                  if (input.branch?.startsWith("refs/")) {
+                    const requestedBranch = input.branch
+                    const fetchBranch = yield* git
+                      .fetchBranch(localPath, requestedBranch)
+                      .pipe(
+                        Effect.mapError((error) => new FetchFailedError({ repository, message: errorMessage(error) })),
+                      )
+                    if (fetchBranch.exitCode !== 0) {
+                      return yield* new FetchFailedError({
+                        repository,
+                        message: resultMessage(fetchBranch, `Failed to fetch ${requestedBranch}`),
+                      })
+                    }
+
+                    const checkout = yield* git.checkout(localPath, requestedBranch).pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new CheckoutFailedError({
+                            repository,
+                            branch: requestedBranch,
+                            message: errorMessage(error),
+                          }),
+                      ),
+                    )
+                    if (checkout.exitCode !== 0) {
+                      return yield* new CheckoutFailedError({
+                        repository,
+                        branch: requestedBranch,
+                        message: resultMessage(checkout, `Failed to checkout ${requestedBranch}`),
+                      })
+                    }
                   }
                 }
 
@@ -276,13 +313,20 @@ function cacheOperation<A, E, R>(effect: Effect.Effect<A, E, R>, operation: stri
 }
 
 const resetTarget = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, requestedBranch?: string) {
-  if (requestedBranch) return `origin/${requestedBranch}`
+  if (requestedBranch) return trackingRef(requestedBranch)
   const remoteHead = yield* git.remoteHead(cwd)
   if (remoteHead) return remoteHead
   const currentBranch = yield* git.branch(cwd)
   if (currentBranch) return `origin/${currentBranch}`
   return "HEAD"
 })
+
+function trackingRef(ref: string) {
+  if (ref.startsWith("refs/heads/")) return `refs/remotes/origin/${ref.slice("refs/heads/".length)}`
+  if (ref.startsWith("refs/tags/")) return `refs/remotes/origin/tags/${ref.slice("refs/tags/".length)}`
+  if (ref.startsWith("refs/")) return `refs/remotes/origin/${ref.slice("refs/".length)}`
+  return `refs/remotes/origin/${ref}`
+}
 
 function resultMessage(result: Git.Result, fallback: string) {
   return result.stderr.trim() || result.text.trim() || fallback

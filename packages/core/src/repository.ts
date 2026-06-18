@@ -103,10 +103,19 @@ export function parseRemote(input: string): RemoteReference {
 }
 
 export function validateBranch(branch: string): void {
-  if (/^[A-Za-z0-9/_.-]+$/.test(branch) && !branch.startsWith("-") && !branch.includes("..")) return
+  if (
+    branch &&
+    !branch.startsWith("-") &&
+    !branch.includes("..") &&
+    !branch.includes("@{") &&
+    !branch.endsWith(".") &&
+    !branch.endsWith(".lock") &&
+    !/[\s~^:?*[\\\x00-\x1f\x7f]/.test(branch)
+  )
+    return
   throw new InvalidBranchError({
     branch,
-    message: "Branch must contain only alphanumeric characters, /, _, ., and -, and cannot start with - or contain ..",
+    message: "Branch must be a valid git ref name and cannot start with -, contain .., or contain @{",
   })
 }
 
