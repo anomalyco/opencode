@@ -42,6 +42,7 @@ import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Select } from "@opencode-ai/ui/select"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { createMediaQuery } from "@solid-primitives/media"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
@@ -1184,6 +1185,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return permission.isAutoAccepting(id, sdk().directory)
   })
 
+  const touch = createMediaQuery("(hover: none)")
+
   const { abort, handleSubmit } =
     props.submission ??
     createPromptSubmit({
@@ -1350,6 +1353,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (navigateHistory(direction)) {
         event.preventDefault()
       }
+      return
+    }
+
+    // Mobile virtual keyboards have no Shift key, so Enter inserts a newline; send button submits. Fixes #20965.
+    if (touch() && event.key === "Enter" && !event.shiftKey) {
+      addPart({ type: "text", content: "\n", start: 0, end: 0 })
+      event.preventDefault()
       return
     }
 
