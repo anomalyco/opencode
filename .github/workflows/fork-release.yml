@@ -95,10 +95,8 @@ jobs:
         with:
           name: opencode-cli-dist
           path: |
-            packages/opencode/dist/opencode-*
             packages/opencode/dist/*.zip
             packages/opencode/dist/*.tar.gz
-            packages/cli/dist/cli-*
             packages/cli/dist/*.zip
             packages/cli/dist/*.tar.gz
           if-no-files-found: error
@@ -131,18 +129,19 @@ jobs:
           path: dist-upload
 
       - name: Collect release assets
+        id: assets
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p release-assets
-          shopt -s nullglob
-          cp dist-upload/packages/opencode/dist/*.{zip,tar.gz} release-assets/ 2>/dev/null || true
-          cp dist-upload/packages/cli/dist/*.{zip,tar.gz} release-assets/ 2>/dev/null || true
-          # upload-artifact may flatten paths depending on matched files
-          cp dist-upload/*.{zip,tar.gz} release-assets/ 2>/dev/null || true
-          if ! ls release-assets/* >/dev/null 2>&1; then
+          while IFS= read -r -d '' file; do
+            cp -f "$file" release-assets/
+          done < <(find dist-upload -type f \( -name '*.zip' -o -name '*.tar.gz' \) -print0)
+
+          mapfile -d '' -t files < <(find release-assets -maxdepth 1 -type f \( -name '*.zip' -o -name '*.tar.gz' \) -print0)
+          if (( ${#files[@]} == 0 )); then
             echo "Artifact tree:"
-            find dist-upload -maxdepth 4 -type f | head -200
+            find dist-upload -type f | head -200
             echo "No release archives found"
             exit 1
           fi
@@ -157,6 +156,11 @@ jobs:
           TAG="${{ steps.version.outputs.tag }}"
           VERSION="${{ steps.version.outputs.version }}"
           NOTES_FILE="${RUNNER_TEMP}/release-notes.md"
+          mapfile -d '' -t files < <(find release-assets -maxdepth 1 -type f \( -name '*.zip' -o -name '*.tar.gz' \) -print0)
+          if (( ${#files[@]} == 0 )); then
+            echo "No files to upload from release-assets/"
+            exit 1
+          fi
           cat > "$NOTES_FILE" <<EOF
           ## OpenCode fork build — ACP subagent fix
 
@@ -189,10 +193,10 @@ jobs:
           EOF
 
           if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
-            gh release upload "$TAG" release-assets/* --clobber --repo "${{ github.repository }}"
+            gh release upload "$TAG" "${files[@]}" --clobber --repo "${{ github.repository }}"
             gh release edit "$TAG" --notes-file "$NOTES_FILE" --repo "${{ github.repository }}"
           else
-            gh release create "$TAG" release-assets/* \
+            gh release create "$TAG" "${files[@]}" \
               --repo "${{ github.repository }}" \
               --title "OpenCode ${VERSION} (ACP subagent fix)" \
               --notes-file "$NOTES_FILE" \
