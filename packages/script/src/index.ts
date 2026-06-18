@@ -10,8 +10,8 @@ if (!expectedBunVersion) {
   throw new Error("packageManager field not found in root package.json")
 }
 
-// relax version requirement
-const expectedBunVersionRange = `^${expectedBunVersion}`
+// relax to allow any patch of the same major.minor
+const expectedBunVersionRange = `~${semver.major(expectedBunVersion)}.${semver.minor(expectedBunVersion)}.0`
 
 if (!semver.satisfies(process.versions.bun, expectedBunVersionRange)) {
   throw new Error(`This script requires bun@${expectedBunVersionRange}, but you are using bun@${process.versions.bun}`)
