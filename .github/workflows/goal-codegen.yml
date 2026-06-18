@@ -1,0 +1,43 @@
+name: goal-codegen (temporary)
+
+# One-off: regenerate the Drizzle snapshot + schema baseline for the goal
+# migration on a Linux runner (drizzle-kit can't run on the author's Windows
+# box: node:sqlite). Self-deletes in its own commit so it runs exactly once and
+# the resulting commit re-triggers the normal CI (incl. the migration --check).
+on:
+  push:
+    branches: [session-goals]
+
+permissions:
+  contents: write
+
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: session-goals
+          fetch-depth: 0
+      - uses: oven-sh/setup-bun@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - name: Install dependencies
+        run: bun install
+      - name: Regenerate goal migration snapshot + schema
+        run: |
+          rm -f packages/core/src/database/migration/20260613180000_session_goals.ts
+          cd packages/core
+          bun run migration
+          bun run migration --check
+      - name: Commit regenerated files (and remove this workflow)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -f .github/workflows/goal-codegen.yml
+          git add packages/core
+          echo "--- staged changes ---"
+          git status --short
+          git commit -m "chore(core): regenerate goal migration snapshot + schema baseline"
+          git push origin HEAD:session-goals
