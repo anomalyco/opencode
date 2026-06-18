@@ -686,6 +686,7 @@ export const dict = {
   "common.forward": "Forward",
   "common.refresh": "Refresh",
   "common.openInNewTab": "Open in new tab",
+  "common.address": "Address",
   "common.copy": "Copy",
   "common.edit": "Edit",
   "common.loadMore": "Load more",

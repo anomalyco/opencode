@@ -17,6 +17,7 @@ import {
   type DomQuery,
   type DomSnapshot,
   type ErrorEntry,
+  type LocationInfo,
   type ParentMethods,
   type PickedElement,
   type ScrollTarget,
@@ -46,6 +47,12 @@ const childMethods: ChildMethods = {
   },
   reload: () => {
     window.location.reload()
+  },
+  back: () => {
+    window.history.back()
+  },
+  forward: () => {
+    window.history.forward()
   },
   scrollTo: (target: ScrollTarget) => {
     const behavior = target.behavior ?? "auto"
@@ -78,6 +85,10 @@ function setupConnection() {
       remoteParent = parent
       connected = true
       connecting = false
+      // 연결 직후 현재 위치 1회 보고. 전체 페이지 이동(MPA·location.assign·뒤로/앞으로)은 문서가 새로 로드돼
+      // popstate 가 아닌 재연결로만 감지되므로, 이 로드가 어떤 종류였는지 Navigation Timing 으로 판별해
+      // 부모 미러가 push/replace/pop 을 구분하게 한다(재연결마다 와도 부모가 href 로 멱등 처리).
+      emit(() => remoteParent?.onLocationChange(readLocation(navigationType())))
     })
     .catch(() => {
       // 핸드셰이크 실패/타임아웃 — 재연결 타이머가 다시 시도한다.
@@ -88,9 +99,10 @@ function setupConnection() {
 }
 
 function boot() {
-  // console/error 후킹은 1회만 설치하고, 내부에서 항상 최신 remoteParent 를 참조한다.
+  // console/error/location 후킹은 1회만 설치하고, 내부에서 항상 최신 remoteParent 를 참조한다.
   installConsoleForwarding()
   installErrorForwarding()
+  installLocationForwarding()
   setupConnection()
   // 끊긴 동안 주기적으로 재연결 시도(부모도 재시도하므로 결국 다시 핸드셰이크된다).
   setInterval(() => {
@@ -165,6 +177,68 @@ function installErrorForwarding() {
         timestamp: Date.now(),
       }),
     )
+  })
+}
+
+// ── 라우팅(위치) 변화 중계 ──────────────────────────────────────────────────
+//
+// 자식의 URL 변화를 부모로 보고해 주소창·뒤로/앞으로를 동기화한다. SPA 는 보통 history.pushState/
+// replaceState 로 이동하므로 두 메서드를 래핑하고, 사용자 뒤로/앞으로는 popstate, 해시 이동은
+// hashchange 로 잡는다. 단 해시 뒤로/앞으로는 popstate + hashchange 가 함께 발생하므로(중복),
+// popstate 직후의 hashchange 1회는 억제한다.
+
+// 직전 문서 로드의 성격을 history 미러 타입으로 매핑.
+//  - back_forward(뒤로/앞으로) → pop : 부모가 스택에서 href 를 찾아 커서 이동
+//  - reload(새로고침)         → replace : 현재 항목 유지
+//  - navigate/그 외           → push : 새 항목
+function navigationType(): LocationInfo["type"] {
+  try {
+    const nav = performance.getEntriesByType("navigation")[0] as PerformanceNavigationTiming | undefined
+    if (nav?.type === "back_forward") return "pop"
+    if (nav?.type === "reload") return "replace"
+  } catch {
+    /* Navigation Timing 미지원 — push 로 폴백 */
+  }
+  return "push"
+}
+
+function readLocation(type: LocationInfo["type"]): LocationInfo {
+  return {
+    href: location.href,
+    origin: location.origin,
+    pathname: location.pathname,
+    search: location.search,
+    hash: location.hash,
+    title: document.title,
+    type,
+  }
+}
+
+function installLocationForwarding() {
+  let justPopped = false
+  const report = (type: LocationInfo["type"]) => emit(() => remoteParent?.onLocationChange(readLocation(type)))
+
+  const wrap = (key: "pushState" | "replaceState", type: "push" | "replace") => {
+    const original = history[key].bind(history)
+    history[key] = (...args: Parameters<History["pushState"]>) => {
+      original(...args)
+      report(type)
+    }
+  }
+  wrap("pushState", "push")
+  wrap("replaceState", "replace")
+
+  window.addEventListener("popstate", () => {
+    justPopped = true
+    report("pop")
+  })
+  window.addEventListener("hashchange", () => {
+    // popstate 와 함께 온 hashchange 는 같은 이동의 중복 — 1회 억제.
+    if (justPopped) {
+      justPopped = false
+      return
+    }
+    report("push")
   })
 }
 

@@ -70,6 +70,27 @@ export interface ErrorEntry {
   timestamp: number
 }
 
+/**
+ * 자식 결과물의 현재 위치(라우팅) 정보. 자식 → 부모 onLocationChange 로 전달.
+ * `type` 은 부모가 논리적 history 미러 스택을 갱신하는 방식을 구분한다.
+ *  - push    : pushState / 새 해시 진입 / 새 전체페이지 이동 등 새 항목 추가
+ *  - replace : replaceState / 새로고침
+ *  - pop     : 뒤로/앞으로(SPA popstate 또는 전체페이지 back_forward 로드) — 부모는 스택에서 href 를 찾아 커서 이동
+ *
+ * SPA(pushState/popstate)는 연결을 유지한 채 정확한 타입을 보내고, 전체페이지 이동은 문서가 새로 로드되므로
+ * 자식이 재연결 직후 Navigation Timing 으로 로드 성격을 판별해 위 타입으로 매핑한다.
+ * (init 은 더 이상 보내지 않지만 하위호환을 위해 타입에 남겨둔다 — 부모는 push 와 동일 처리.)
+ */
+export interface LocationInfo {
+  href: string
+  origin: string
+  pathname: string
+  search: string
+  hash: string
+  title: string
+  type: "init" | "push" | "replace" | "pop"
+}
+
 // ── 메서드 인터페이스 ───────────────────────────────────────────────────────
 
 // penpal 의 Methods 제약({ [index: string]: ... })을 만족시키려면 interface 가 아닌
@@ -79,6 +100,10 @@ export interface ErrorEntry {
 export type ChildMethods = {
   navigate(url: string): void
   reload(): void
+  /** 자식 자신의 window.history 를 뒤로 이동(popstate → onLocationChange "pop"). */
+  back(): void
+  /** 자식 자신의 window.history 를 앞으로 이동. */
+  forward(): void
   scrollTo(target: ScrollTarget): void
   /** 요소 선택(인스펙트) 모드 토글. 선택 시 부모 onElementPicked 호출. */
   setPickMode(on: boolean): void
@@ -94,4 +119,6 @@ export type ParentMethods = {
   onConsole(entry: ConsoleEntry): void
   onError(entry: ErrorEntry): void
   onElementPicked(element: PickedElement): void
+  /** 자식의 라우팅(URL) 변화 보고 → 부모 주소창·history 미러 갱신. */
+  onLocationChange(location: LocationInfo): void
 }

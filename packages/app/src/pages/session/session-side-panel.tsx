@@ -174,19 +174,14 @@ export function SessionSidePanel(props: {
   // 미리보기 헤더의 스크린샷 버튼 ↔ 컴포저(PromptInput)의 캡처 플로우를 공유.
   const previewBridge = useSessionPreviewBridge()
   previewBridge.setBridge(preview.bridge)
+  // 주소창 입력: 파일 탭이 활성이면 파일 경로를 읽기 전용 표시, 아니면(미리보기) host 고정 + 경로 편집 가능.
   const browserAddress = createMemo(() => {
     const active = activeFileTab()
     if (active) {
       const path = pathFromContentTab(active)
-      if (path) return path
+      if (path) return { host: undefined as string | undefined, path, editablePath: false }
     }
-    const url = preview.previewUrl()
-    if (!url) return undefined
-    try {
-      return new URL(url).host
-    } catch {
-      return url
-    }
+    return { host: preview.host(), path: preview.path(), editablePath: true }
   })
 
   const fileTreeTab = () => (env.disableChangeFiles() ? "all" : layout.fileTree.tab())
@@ -276,7 +271,14 @@ export function SessionSidePanel(props: {
         <div class="size-full flex flex-col border-l border-border-weaker-base">
           {/* 브라우저 chrome 바 — 시안처럼 상단 전체 폭을 차지(탐색기·미리보기 위). */}
           <SessionBrowserChrome
-            address={browserAddress()}
+            host={browserAddress().host}
+            path={browserAddress().path}
+            editablePath={browserAddress().editablePath}
+            onNavigatePath={preview.navigatePath}
+            canGoBack={preview.canGoBack()}
+            canGoForward={preview.canGoForward()}
+            onBack={preview.goBack}
+            onForward={preview.goForward}
             url={preview.previewUrl()}
             onReload={preview.reload}
             onHome={() => {

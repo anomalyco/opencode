@@ -337,13 +337,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     applyingHistory: false,
   })
   const [height, setHeight] = createSignal(DOC_HEIGHT)
-  // 자동 확대: 입력창 포커스 시 전체 너비 expanded 로 자동 진입(기본 ON, localStorage 영속).
+  // 자동 확대: 입력창 포커스 시 전체 너비 expanded 로 자동 진입(기본 OFF, localStorage 영속).
   const [autoExpand, setAutoExpand] = createSignal(
     (() => {
       try {
-        return localStorage.getItem(AUTO_EXPAND_KEY) !== "0"
+        return localStorage.getItem(AUTO_EXPAND_KEY) === "1"
       } catch {
-        return true
+        return false
       }
     })(),
   )

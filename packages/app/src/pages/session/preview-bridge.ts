@@ -4,6 +4,7 @@ import type {
   ChildMethods,
   ConsoleEntry,
   ErrorEntry,
+  LocationInfo,
   ParentMethods,
   PickedElement,
 } from "@/lib/preview-bridge-protocol"
@@ -25,6 +26,7 @@ export function createPreviewBridge(opts: { origin: () => string | undefined }) 
   const [consoles, setConsoles] = createSignal<ConsoleEntry[]>([])
   const [errors, setErrors] = createSignal<ErrorEntry[]>([])
   const [picked, setPicked] = createSignal<PickedElement | undefined>()
+  const [location, setLocation] = createSignal<LocationInfo | undefined>()
 
   // penpal 핸드셰이크 timeout(미지정 시 실패해도 reject 안 됨) + 끊긴 동안 재연결 간격.
   const HANDSHAKE_TIMEOUT_MS = 5000
@@ -39,6 +41,7 @@ export function createPreviewBridge(opts: { origin: () => string | undefined }) 
     onConsole: (entry) => setConsoles((prev) => [...prev, entry].slice(-MAX_LOG)),
     onError: (entry) => setErrors((prev) => [...prev, entry].slice(-MAX_LOG)),
     onElementPicked: (element) => setPicked(element),
+    onLocationChange: (loc) => setLocation(loc),
   }
 
   const clearRetry = () => {
@@ -111,7 +114,7 @@ export function createPreviewBridge(opts: { origin: () => string | undefined }) 
     setErrors([])
   }
 
-  return { attach, connected, child, consoles, errors, picked, clearLogs }
+  return { attach, connected, child, consoles, errors, picked, location, clearLogs }
 }
 
 export type PreviewBridge = ReturnType<typeof createPreviewBridge>

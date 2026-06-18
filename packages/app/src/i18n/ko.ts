@@ -577,6 +577,7 @@ export const dict = {
   "common.forward": "앞으로",
   "common.refresh": "새로고침",
   "common.openInNewTab": "새 탭에서 열기",
+  "common.address": "주소",
   "common.copy": "복사",
   "common.edit": "편집",
   "common.loadMore": "더 불러오기",
