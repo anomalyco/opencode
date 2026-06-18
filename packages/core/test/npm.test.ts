@@ -62,6 +62,40 @@ describe("Npm.add", () => {
 
     expect(Option.isSome(entry.entrypoint)).toBe(true)
   })
+
+  test("bypasses cache when OPENCODE_UPDATE_PLUGINS=1", async () => {
+    await using tmp = await tmpdir()
+    const spec = "this-package-does-not-exist-in-npm-12345@1.0.0"
+    const cacheDir = path.join(tmp.path, "cache")
+    const dir = path.join(cacheDir, "packages", Npm.sanitize(spec))
+    
+    // Manually create the cache folder to simulate a cached package
+    await fs.mkdir(path.join(dir, "node_modules", "this-package-does-not-exist-in-npm-12345"), { recursive: true })
+    await Bun.write(path.join(dir, "node_modules", "this-package-does-not-exist-in-npm-12345", "index.js"), "")
+
+    // 1. Without env variable, it uses the cache and succeeds
+    const entry1 = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add(spec)
+    }).pipe(Effect.scoped, Effect.provide(npmLayer(cacheDir)), Effect.runPromise)
+    
+    expect(Option.isSome(entry1.entrypoint)).toBe(true)
+    expect(entry1.directory).toContain("this-package-does-not-exist-in-npm-12345")
+
+    // 2. With env variable, it bypasses cache, calls reify, and fails (because package doesn't exist)
+    process.env.OPENCODE_UPDATE_PLUGINS = "1"
+    try {
+      await Effect.gen(function* () {
+        const npm = yield* Npm.Service
+        return yield* npm.add(spec)
+      }).pipe(Effect.scoped, Effect.provide(npmLayer(cacheDir)), Effect.runPromise)
+      expect().fail("Should have thrown")
+    } catch (e: any) {
+      expect(e._tag).toBe("NpmInstallFailedError")
+    } finally {
+      delete process.env.OPENCODE_UPDATE_PLUGINS
+    }
+  })
 })
 
 describe("Npm.install", () => {
