@@ -34,7 +34,9 @@ export const Cursor = Schema.Struct({
   style: Schema.optional(Schema.Literals(["block", "underline", "line", "default"])).annotate({
     description: "Cursor shape. Use 'default' to preserve the terminal setting",
   }),
-  blinking: Schema.optional(Schema.Boolean).annotate({ description: "Whether the cursor blinks" }),
+  blinking: Schema.optional(Schema.Boolean).annotate({
+    description: "Whether the cursor blinks. Has no effect when style is 'default'",
+  }),
 }).annotate({ description: "Terminal cursor settings" })
 
 export const AttentionSounds = Schema.Record(AttentionSoundName, Schema.optionalKey(Schema.String))
