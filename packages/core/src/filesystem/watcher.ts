@@ -4,6 +4,8 @@ export * as Watcher from "./watcher"
 import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
 import { Cause, Context, Effect, Layer, Schema } from "effect"
+import fs from "fs"
+import os from "os"
 import path from "path"
 import { Config } from "../config"
 import { EventV2 } from "../event"
@@ -47,6 +49,35 @@ function getBackend() {
   if (process.platform === "linux") return "inotify"
 }
 
+function canWatch(): Promise<boolean> {
+  return new Promise((resolve) => {
+    let dir: string | undefined
+    let w: fs.FSWatcher | undefined
+    let settled = false
+
+    const cleanup = () => {
+      try { w?.close() } catch {}
+      if (dir) fs.rmSync(dir, { recursive: true, force: true })
+    }
+
+    const done = (ok: boolean) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      resolve(ok)
+    }
+
+    try {
+      dir = fs.mkdtempSync(path.join(os.tmpdir(), "watcher-check-"))
+      w = fs.watch(dir, { persistent: false })
+      w.on("error", () => done(false))
+      setTimeout(() => done(true), 100)
+    } catch {
+      done(false)
+    }
+  })
+}
+
 function protecteds(dir: string) {
   return Protected.paths().filter((item) => {
     const relative = path.relative(dir, item)
@@ -78,15 +109,25 @@ export const layer = Layer.effect(
     const w = watcher()
     if (!w) return Service.of({})
 
+    if (!(yield* Effect.promise(() => canWatch()))) {
+      yield* Effect.logWarning("watcher: file watching unavailable on this system, file watching disabled", {
+        directory: location.directory,
+        backend,
+      })
+      return Service.of({})
+    }
+
     yield* Effect.logInfo("watcher backend", { directory: location.directory, platform: process.platform, backend })
     const events = yield* EventV2.Service
-    const fs = yield* FSUtil.Service
+    const fsService = yield* FSUtil.Service
     const git = yield* Git.Service
     const context = yield* Effect.context()
     const runFork = Effect.runForkWith(context)
     const subscriptions: ParcelWatcher.AsyncSubscription[] = []
     yield* Effect.addFinalizer(() =>
-      Effect.promise(() => Promise.allSettled(subscriptions.map((subscription) => subscription.unsubscribe()))),
+      Effect.promise(() =>
+        Promise.allSettled(subscriptions.map((subscription) => subscription.unsubscribe().catch(() => {}))),
+      ),
     )
 
     const callback: ParcelWatcher.SubscribeCallback = (_error, updates) => {
@@ -119,14 +160,29 @@ export const layer = Layer.effect(
     }
 
     if (location.vcs?.type === "git") {
-      const resolved = yield* git.dir(location.directory)
-      const vcs = resolved ? yield* fs.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved))) : undefined
-      if (vcs && !config.includes(".git") && !config.includes(vcs) && (!resolved || !config.includes(resolved))) {
-        const ignore = (yield* fs.readDirectoryEntries(vcs).pipe(Effect.catch(() => Effect.succeed([])))).flatMap(
-          (entry) => (entry.name === "HEAD" ? [] : [entry.name]),
-        )
-        yield* Effect.forkScoped(subscribe(vcs, ignore))
-      }
+      yield* Effect.forkScoped(
+        Effect.gen(function* () {
+          const resolved = yield* git.dir(location.directory)
+          const vcs = resolved
+            ? yield* fsService.realPath(resolved).pipe(Effect.catch(() => Effect.succeed(resolved)))
+            : undefined
+          if (!vcs || config.includes(".git") || config.includes(vcs) || (resolved && config.includes(resolved)))
+            return
+          const head = path.join(vcs, "HEAD")
+          if (!fs.existsSync(head)) return
+          const w = fs.watch(head, { persistent: false })
+          yield* Effect.addFinalizer(() => Effect.sync(() => w.close()))
+          w.on("change", () => runFork(events.publish(Event.Updated, { file: head, event: "change" })))
+          w.on("error", () => {})
+        }).pipe(
+          Effect.catchCause((cause) =>
+            Effect.logWarning("watcher: git HEAD tracking failed, continuing without git HEAD tracking", {
+              directory: location.directory,
+              cause: Cause.pretty(cause),
+            }),
+          ),
+        ),
+      )
     }
 
     return Service.of({})
