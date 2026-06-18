@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   renderGoalBudget,
   renderGoalCleared,
+  renderGoalHistory,
   renderGoalLogs,
   renderGoalPaused,
   renderGoalResumed,
@@ -76,6 +77,21 @@ describe("goal renderer", () => {
     expect(output).toContain("Current Step: Run typecheck")
     expect(output).toContain("Steps: 1 / 10")
     expect(output).toContain("Tokens: 100 / 1000")
+  })
+
+  test("renders archived goal history newest first", () => {
+    const output = renderGoalHistory([
+      goal({ id: "goal_new", title: "New goal", state: "COMPLETED", updatedAt: "2026-06-17T00:00:02.000Z" }),
+      goal({ id: "goal_old", title: "Old goal", state: "CANCELLED", updatedAt: "2026-06-17T00:00:00.000Z" }),
+    ])
+
+    expect(output).toContain("GOAL HISTORY")
+    expect(output).toContain("2026-06-17T00:00:02.000Z COMPLETED goal_new New goal")
+    expect(output).toContain("2026-06-17T00:00:00.000Z CANCELLED goal_old Old goal")
+  })
+
+  test("renders empty goal history", () => {
+    expect(renderGoalHistory([])).toContain("No archived goals")
   })
 
   test("renders goal logs chronologically", () => {

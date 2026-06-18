@@ -77,6 +77,29 @@ describe("goal manager", () => {
     expect(status.output).toContain("No active goal")
   })
 
+  test("returns archived goal history output", async () => {
+    await using tmp = await tmpdir()
+    const ctx = context(tmp.path)
+    const mgr = manager(ctx)
+
+    await mgr.create("Migrate repository to Bun")
+    await mgr.clear()
+
+    const history = await mgr.history()
+
+    expect(history.goals.map((item) => item.title)).toEqual(["Migrate repository to Bun"])
+    expect(history.output).toContain("GOAL HISTORY")
+    expect(history.output).toContain("Migrate repository to Bun")
+  })
+
+  test("returns empty archived goal history output", async () => {
+    await using tmp = await tmpdir()
+    const history = await manager(context(tmp.path)).history()
+
+    expect(history.goals).toEqual([])
+    expect(history.output).toContain("No archived goals")
+  })
+
   test("returns active goal logs output", async () => {
     await using tmp = await tmpdir()
     const mgr = manager(context(tmp.path))

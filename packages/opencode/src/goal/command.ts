@@ -12,7 +12,7 @@ export async function runGoalCommand(manager: GoalManager, argumentsText: string
   if (trimmed === "clear") return renderGoalCleared(await manager.clear())
   if (trimmed === "budget") return renderGoalBudget(await manager.enforceBudget())
   if (trimmed === "logs") return (await manager.logs()).output
-  if (trimmed === "history") return "Native /goal history is not implemented yet."
+  if (trimmed === "history") return (await manager.history()).output
 
   const [first] = trimmed.split(/\s+/, 1)
   if (first && subcommands.has(first)) return `Unknown /goal subcommand: ${trimmed}`

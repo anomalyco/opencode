@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { MalformedGoalStateError } from "@/goal/errors"
-import { archiveActiveGoal, loadActiveGoal, saveActiveGoal } from "@/goal/store"
+import { archiveActiveGoal, listArchivedGoals, loadActiveGoal, saveActiveGoal } from "@/goal/store"
 import type { Goal, GoalPlan } from "@/goal/types"
 import type { InstanceContext } from "@/project/instance-context"
 import { tmpdir } from "../fixture/fixture"
@@ -86,6 +86,37 @@ describe("goal store", () => {
     }
 
     expect(error).toBeInstanceOf(MalformedGoalStateError)
+  })
+
+  test("lists archived goals newest first and skips malformed archives", async () => {
+    await using tmp = await tmpdir()
+    const ctx = context(tmp.path)
+
+    await saveActiveGoal(ctx, {
+      goal: goal({ id: "goal_old", title: "Old goal", updatedAt: "2026-06-17T00:00:00.000Z" }),
+      plan: plan("goal_old"),
+    })
+    await archiveActiveGoal(ctx)
+
+    await saveActiveGoal(ctx, {
+      goal: goal({ id: "goal_new", title: "New goal", updatedAt: "2026-06-17T00:00:02.000Z" }),
+      plan: plan("goal_new"),
+    })
+    await archiveActiveGoal(ctx)
+
+    const malformed = path.join(tmp.path, ".opencode", "goals", "history", "goal_bad")
+    await fs.mkdir(malformed, { recursive: true })
+    await fs.writeFile(path.join(malformed, "goal.json"), "{ invalid json", "utf8")
+
+    const archived = await listArchivedGoals(ctx)
+
+    expect(archived.map((item) => item.id)).toEqual(["goal_new", "goal_old"])
+  })
+
+  test("returns empty archived goal list when history directory does not exist", async () => {
+    await using tmp = await tmpdir()
+
+    expect(await listArchivedGoals(context(tmp.path))).toEqual([])
   })
 
   test("archives active goal assets into history and clears active state", async () => {

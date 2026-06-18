@@ -1,4 +1,4 @@
-import type { ActiveGoalState } from "./store"
+import type { ActiveGoalState, ArchivedGoalSummary } from "./store"
 import { renderBudgetSummary } from "./budget"
 import type { Goal, GoalEvent } from "./types"
 
@@ -29,6 +29,14 @@ export function renderGoalStatus(active: ActiveGoalState): string {
   ]
 
   return lines.join("\n")
+}
+
+export function renderGoalHistory(goals: ArchivedGoalSummary[]): string {
+  if (goals.length === 0) return "GOAL HISTORY\nNo archived goals."
+  return [
+    "GOAL HISTORY",
+    ...goals.map((goal) => `${goal.updatedAt} ${goal.state} ${goal.id} ${goal.title}`),
+  ].join("\n")
 }
 
 export function renderGoalLogs(events: GoalEvent[]): string {

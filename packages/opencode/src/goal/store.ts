@@ -10,6 +10,15 @@ export interface ActiveGoalState {
   plan?: GoalPlan
 }
 
+export interface ArchivedGoalSummary {
+  id: string
+  title: string
+  objective: string
+  state: Goal["state"]
+  updatedAt: string
+  createdAt: string
+}
+
 async function exists(filepath: string): Promise<boolean> {
   try {
     await fs.access(filepath)
@@ -61,6 +70,36 @@ async function moveIfExists(from: string, to: string): Promise<void> {
   if (!(await exists(from))) return
   await fs.mkdir(path.dirname(to), { recursive: true })
   await fs.rename(from, to)
+}
+
+export async function listArchivedGoals(ctx: Pick<InstanceContext, "directory" | "worktree">): Promise<ArchivedGoalSummary[]> {
+  const paths = goalPaths(ctx)
+  let entries: string[]
+  try {
+    entries = await fs.readdir(paths.history)
+  } catch (error) {
+    if (hasErrorCode(error, "ENOENT")) return []
+    throw error
+  }
+
+  const archived: ArchivedGoalSummary[] = []
+  for (const entry of entries) {
+    try {
+      const goal = await readJsonFile<Goal>(path.join(paths.history, entry, "goal.json"))
+      archived.push({
+        id: goal.id,
+        title: goal.title,
+        objective: goal.objective,
+        state: goal.state,
+        createdAt: goal.createdAt,
+        updatedAt: goal.updatedAt,
+      })
+    } catch {
+      continue
+    }
+  }
+
+  return archived.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 }
 
 export async function archiveActiveGoal(ctx: Pick<InstanceContext, "directory" | "worktree">): Promise<ActiveGoalState> {
