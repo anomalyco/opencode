@@ -510,3 +510,38 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### Olostep
+
+Add the [Olostep MCP server](https://github.com/olostep/olostep-mcp-server) to give OpenCode web data tools — search the web, scrape any URL into clean Markdown, crawl entire sites, and get cited answers.
+
+```json title="opencode.json" {4-10}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "olostep": {
+      "type": "local",
+      "command": ["npx", "-y", "olostep-mcp"],
+      "environment": {
+        "OLOSTEP_API_KEY": "{env:OLOSTEP_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+You'll need an Olostep API key — get a free one at [olostep.com](https://www.olostep.com/auth). Here we are assuming you have the `OLOSTEP_API_KEY` environment variable set.
+
+Add `use olostep` to your prompts to use the Olostep MCP server.
+
+```txt "use olostep"
+Find the latest pricing from these three competitor pages and summarize it. use olostep
+```
+
+Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/).
+
+```md title="AGENTS.md"
+When you need to search the web or read a page's content, use `olostep` tools.
+```
