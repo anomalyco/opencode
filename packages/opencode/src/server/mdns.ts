@@ -3,6 +3,10 @@ import { Bonjour } from "bonjour-service"
 let bonjour: Bonjour | undefined
 let currentPort: number | undefined
 
+function logError(message: string, error: unknown) {
+  console.warn(`[mdns] ${message}`, error)
+}
+
 export function publish(port: number, domain?: string) {
   if (currentPort === port) return
   if (bonjour) unpublish()
@@ -19,14 +23,17 @@ export function publish(port: number, domain?: string) {
       txt: { path: "/" },
     })
 
-    service.on("error", () => {})
+    service.on("error", (error) => logError("service error", error))
 
     currentPort = port
-  } catch {
+  } catch (error) {
+    logError("failed to publish service", error)
     if (bonjour) {
       try {
         bonjour.destroy()
-      } catch {}
+      } catch (destroyError) {
+        logError("failed to destroy service after publish failure", destroyError)
+      }
     }
     bonjour = undefined
     currentPort = undefined
@@ -38,7 +45,9 @@ export function unpublish() {
     try {
       bonjour.unpublishAll()
       bonjour.destroy()
-    } catch {}
+    } catch (error) {
+      logError("failed to unpublish service", error)
+    }
     bonjour = undefined
     currentPort = undefined
   }
