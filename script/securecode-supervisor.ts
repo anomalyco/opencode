@@ -23,9 +23,9 @@ export const DEFAULT_ALLOWED_DOMAINS = ["conf-ai.acompany-az.com"]
 
 /**
  * sandbox.json (JSON) から直接 parse される生の入力型。フィールドはすべて optional で、
- * 「ユーザが書かなかったキーは undefined」がそのまま反映される。`mergeUserConfigs` を
- * 通すと欠落キーが `[]` に正規化された `UserConfig` になり、それ以降のコードでは
- * `?? []` のような undefined ガードが要らなくなる。
+ * 「ユーザが書かなかったキーは undefined」がそのまま反映される。`normalizeUserConfig` を
+ * 通すと欠落キーが `[]` 埋めされた `UserConfig` (= 内部用) に変換され、それ以降の
+ * コードでは `?? []` のような undefined ガードが要らなくなる。
  */
 export type UserConfigInput = {
   network?: {
@@ -54,6 +54,22 @@ export type UserConfig = {
   }
 }
 
+/** 生の `UserConfigInput` を欠落キー `[]` 埋めの `UserConfig` に変換する境界 helper。 */
+export function normalizeUserConfig(raw: UserConfigInput): UserConfig {
+  return {
+    network: {
+      allowedDomains: raw.network?.allowedDomains ?? [],
+      deniedDomains: raw.network?.deniedDomains ?? [],
+    },
+    filesystem: {
+      allowRead: raw.filesystem?.allowRead ?? [],
+      allowWrite: raw.filesystem?.allowWrite ?? [],
+      denyRead: raw.filesystem?.denyRead ?? [],
+      denyWrite: raw.filesystem?.denyWrite ?? [],
+    },
+  }
+}
+
 function log(msg: string): void {
   process.stderr.write(`[securecode-supervisor] ${msg}\n`)
 }
@@ -64,49 +80,48 @@ function die(msg: string, code = 1): never {
 }
 
 /**
- * 1 個のユーザ設定ファイルを読み込む (global / project どちらでも同じ実装で良い)。
+ * 1 個のユーザ設定ファイルを読み込み、正規化済みの `UserConfig` で返す
+ * (global / project どちらでも同じ実装で良い)。
  *
- * ファイル不在は正常系として扱い、空オブジェクトを返す (= 全フィールドが
- * デフォルト値で起動する)。JSON parse 失敗のみ fatal error。正規化は呼び出し側
- * (`mergeUserConfigs`) に任せ、この関数は raw な `UserConfigInput` をそのまま返す。
+ * ファイル不在は正常系として扱い、全フィールド `[]` の空 config を返す。
+ * JSON parse 失敗のみ fatal error。
  *
  * @param path - 設定ファイルの絶対パス。テストから注入する用途で引数化している。
  * @throws `die()` 経由で `process.exit(1)`。読み込み or JSON parse 失敗時のみ。
  */
-export function loadUserConfig(path: string = CONFIG_PATH): UserConfigInput {
+export function loadUserConfig(path: string = CONFIG_PATH): UserConfig {
   if (!existsSync(path)) {
     log(`no user config at ${path}, using defaults`)
-    return {}
+    return normalizeUserConfig({})
   }
   try {
     const raw = readFileSync(path, "utf8")
-    return JSON.parse(raw) as UserConfigInput
+    return normalizeUserConfig(JSON.parse(raw) as UserConfigInput)
   } catch (err) {
     die(`failed to read/parse ${path}: ${(err as Error).message}`)
   }
 }
 
 /**
- * 複数の入力 config を 1 つに合成する。allow / deny いずれも単純な配列 concat。
- * 欠落キーはここで `[]` に正規化されるため、戻り値の `UserConfig` 以降では
- * undefined ガードが不要 (= `?? []` を書かずに済む)。
+ * 複数の `UserConfig` を 1 つに合成する。allow / deny いずれも単純な配列 concat
+ * (重複除去はしない — sandbox-runtime に重複を渡しても Seatbelt の regex も
+ * bwrap の bind も冪等なので無害)。
  *
- * 重複除去はしない — sandbox-runtime に重複を渡しても Seatbelt の regex も
- * bwrap の bind も冪等なので無害。「deny を優先する」ニュアンスは「片方でも
- * deny に入っていれば deny される」という形で満たされる (allow と deny に
- * 同じ値が入っていても sandbox-runtime 側で deny が勝つ前提)。
+ * 「deny を優先する」ニュアンスは「片方でも deny に入っていれば deny される」
+ * という形で満たされる (allow と deny に同じ値が入っていても sandbox-runtime
+ * 側で deny が勝つ前提)。
  */
-export function mergeUserConfigs(...configs: UserConfigInput[]): UserConfig {
+export function mergeUserConfigs(...configs: UserConfig[]): UserConfig {
   return {
     network: {
-      allowedDomains: configs.flatMap((c) => c.network?.allowedDomains ?? []),
-      deniedDomains: configs.flatMap((c) => c.network?.deniedDomains ?? []),
+      allowedDomains: configs.flatMap((c) => c.network.allowedDomains),
+      deniedDomains: configs.flatMap((c) => c.network.deniedDomains),
     },
     filesystem: {
-      allowRead: configs.flatMap((c) => c.filesystem?.allowRead ?? []),
-      allowWrite: configs.flatMap((c) => c.filesystem?.allowWrite ?? []),
-      denyRead: configs.flatMap((c) => c.filesystem?.denyRead ?? []),
-      denyWrite: configs.flatMap((c) => c.filesystem?.denyWrite ?? []),
+      allowRead: configs.flatMap((c) => c.filesystem.allowRead),
+      allowWrite: configs.flatMap((c) => c.filesystem.allowWrite),
+      denyRead: configs.flatMap((c) => c.filesystem.denyRead),
+      denyWrite: configs.flatMap((c) => c.filesystem.denyWrite),
     },
   }
 }

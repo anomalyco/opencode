@@ -8,14 +8,15 @@ import {
   buildSandboxConfig,
   loadUserConfig,
   mergeUserConfigs,
+  normalizeUserConfig,
   resolveInnerCommand,
   shellQuote,
   type UserConfigInput,
 } from "../../../../script/securecode-supervisor"
 
-// テストでは UserConfigInput (部分指定 OK) を書き、mergeUserConfigs で正規化済みの
-// UserConfig に変換してから buildSandboxConfig に渡す。本番フローと同じ経路を通る。
-const cfgFor = (input: UserConfigInput = {}) => buildSandboxConfig(mergeUserConfigs(input))
+// テストでは UserConfigInput (部分指定 OK) を書き、normalizeUserConfig で正規化済みの
+// UserConfig に変換してから buildSandboxConfig に渡す。本番 loadUserConfig と同じ経路。
+const cfgFor = (input: UserConfigInput = {}) => buildSandboxConfig(normalizeUserConfig(input))
 
 describe("buildSandboxConfig", () => {
   test("デフォルト allowlist に CIA endpoint だけ入る", () => {
@@ -66,18 +67,21 @@ describe("buildSandboxConfig", () => {
 })
 
 describe("loadUserConfig", () => {
-  test("config 不在時は空オブジェクトを返す", () => {
+  test("config 不在時は全フィールド空配列の正規化済み config を返す", () => {
     const cfg = loadUserConfig("/nonexistent/securecode-sandbox-phase0/sandbox.json")
-    expect(cfg).toEqual({})
+    expect(cfg.network.allowedDomains).toEqual([])
+    expect(cfg.filesystem.denyRead).toEqual([])
   })
 
-  test("正常な JSON を parse して返す", () => {
+  test("正常な JSON を parse して正規化済み config を返す (欠落キーは [] 埋め)", () => {
     const dir = mkdtempSync(join(tmpdir(), "securecode-test-"))
     const tmpPath = join(dir, "sandbox.json")
     writeFileSync(tmpPath, JSON.stringify({ network: { allowedDomains: ["foo.com"] } }))
     try {
       const cfg = loadUserConfig(tmpPath)
-      expect(cfg.network?.allowedDomains).toEqual(["foo.com"])
+      expect(cfg.network.allowedDomains).toEqual(["foo.com"])
+      expect(cfg.network.deniedDomains).toEqual([])
+      expect(cfg.filesystem.denyRead).toEqual([])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -139,39 +143,39 @@ describe("resolveInnerCommand", () => {
 describe("mergeUserConfigs", () => {
   test("空入力なら全フィールド空配列", () => {
     const merged = mergeUserConfigs()
-    expect(merged.network?.allowedDomains).toEqual([])
-    expect(merged.network?.deniedDomains).toEqual([])
-    expect(merged.filesystem?.allowRead).toEqual([])
-    expect(merged.filesystem?.allowWrite).toEqual([])
-    expect(merged.filesystem?.denyRead).toEqual([])
-    expect(merged.filesystem?.denyWrite).toEqual([])
+    expect(merged.network.allowedDomains).toEqual([])
+    expect(merged.network.deniedDomains).toEqual([])
+    expect(merged.filesystem.allowRead).toEqual([])
+    expect(merged.filesystem.allowWrite).toEqual([])
+    expect(merged.filesystem.denyRead).toEqual([])
+    expect(merged.filesystem.denyWrite).toEqual([])
   })
 
   test("複数 config の allow / deny を concat する (入力順を維持)", () => {
-    const a: UserConfigInput = {
+    const a = normalizeUserConfig({
       network: { allowedDomains: ["a.com"], deniedDomains: ["evil.com"] },
       filesystem: { denyRead: ["/asecret"] },
-    }
-    const b: UserConfigInput = {
+    })
+    const b = normalizeUserConfig({
       network: { allowedDomains: ["b.com"], deniedDomains: ["bad.org"] },
       filesystem: { denyRead: ["/bsecret"] },
-    }
+    })
     const merged = mergeUserConfigs(a, b)
-    expect(merged.network?.allowedDomains).toEqual(["a.com", "b.com"])
-    expect(merged.network?.deniedDomains).toEqual(["evil.com", "bad.org"])
-    expect(merged.filesystem?.denyRead).toEqual(["/asecret", "/bsecret"])
+    expect(merged.network.allowedDomains).toEqual(["a.com", "b.com"])
+    expect(merged.network.deniedDomains).toEqual(["evil.com", "bad.org"])
+    expect(merged.filesystem.denyRead).toEqual(["/asecret", "/bsecret"])
   })
 
   test("重複は除去しない (sandbox-runtime に重複は無害)", () => {
-    const a: UserConfigInput = { network: { allowedDomains: ["dup.com"] } }
-    const b: UserConfigInput = { network: { allowedDomains: ["dup.com"] } }
-    expect(mergeUserConfigs(a, b).network?.allowedDomains).toEqual(["dup.com", "dup.com"])
+    const a = normalizeUserConfig({ network: { allowedDomains: ["dup.com"] } })
+    const b = normalizeUserConfig({ network: { allowedDomains: ["dup.com"] } })
+    expect(mergeUserConfigs(a, b).network.allowedDomains).toEqual(["dup.com", "dup.com"])
   })
 
   test("片方だけ値があれば反映される (per-directory で許可を追加できる)", () => {
-    const a: UserConfigInput = {}
-    const b: UserConfigInput = { network: { allowedDomains: ["only.com"] } }
-    expect(mergeUserConfigs(a, b).network?.allowedDomains).toEqual(["only.com"])
+    const a = normalizeUserConfig({})
+    const b = normalizeUserConfig({ network: { allowedDomains: ["only.com"] } })
+    expect(mergeUserConfigs(a, b).network.allowedDomains).toEqual(["only.com"])
   })
 })
 
@@ -179,15 +183,16 @@ describe("buildSandboxConfig with project config", () => {
   test("configPaths を渡すと全パスが denyRead / denyWrite の先頭に入る", () => {
     const globalPath = "/home/user/.config/securecode/sandbox.json"
     const projectPath = "/work/repo/.securecode/sandbox.json"
-    const cfg = buildSandboxConfig(mergeUserConfigs({ filesystem: { denyRead: ["/extra"], denyWrite: ["/extra"] } }), {
-      configPaths: [globalPath, projectPath],
-    })
+    const cfg = buildSandboxConfig(
+      normalizeUserConfig({ filesystem: { denyRead: ["/extra"], denyWrite: ["/extra"] } }),
+      { configPaths: [globalPath, projectPath] },
+    )
     expect(cfg.filesystem.denyRead).toEqual([globalPath, projectPath, "/extra"])
     expect(cfg.filesystem.denyWrite).toEqual([globalPath, projectPath, "/extra"])
   })
 
   test("configPaths 未指定なら CONFIG_PATH のみが deny に入る", () => {
-    const cfg = buildSandboxConfig(mergeUserConfigs())
+    const cfg = buildSandboxConfig(normalizeUserConfig({}))
     expect(cfg.filesystem.denyRead).toEqual([CONFIG_PATH])
     expect(cfg.filesystem.denyWrite).toEqual([CONFIG_PATH])
   })
