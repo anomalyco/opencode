@@ -19,6 +19,7 @@ import {
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
+import { ReasoningTags } from "./utils/reasoning-tags"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "openai-chat"
@@ -164,6 +165,11 @@ interface ParserState {
   readonly usage?: Usage
   readonly finishReason?: FinishReason
   readonly lifecycle: Lifecycle.State
+  // Inline reasoning-tag extraction for servers that stream chain-of-thought as
+  // plain `content` (e.g. mlx-vlm serving Cohere models). Undefined `tags`
+  // means the stream is passed through untouched.
+  readonly thinkingTags?: ReasoningTags.Tags
+  readonly thinking: ReasoningTags.State
 }
 
 const invalid = ProviderShared.invalidRequest
@@ -407,11 +413,31 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     let tools = state.tools
 
     let lifecycle = state.lifecycle
+    let thinking = state.thinking
 
     if (delta?.reasoning_content)
       lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", delta.reasoning_content)
 
-    if (delta?.content) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+    if (delta?.content) {
+      if (state.thinkingTags) {
+        // Split inline `<think>`-style markers out of the content stream so the
+        // chain-of-thought lands in a reasoning block instead of leaking as text.
+        const split = ReasoningTags.step(thinking, delta.content, state.thinkingTags)
+        thinking = split.state
+        for (const segment of split.segments) {
+          if (segment.kind === "reasoning") {
+            lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", segment.text)
+          } else {
+            // Idempotent once closed: ends the reasoning block on the first text
+            // segment after the thinking marker, then streams the answer as text.
+            lifecycle = Lifecycle.reasoningEnd(lifecycle, events, "reasoning-0")
+            lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", segment.text)
+          }
+        }
+      } else {
+        lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+      }
+    }
 
     for (const tool of toolDeltas) {
       const result = ToolStream.appendOrStart(
@@ -441,6 +467,8 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         usage,
         finishReason,
         lifecycle,
+        thinkingTags: state.thinkingTags,
+        thinking,
       },
       events,
     ] as const
@@ -448,9 +476,13 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
 const finishEvents = (state: ParserState): ReadonlyArray<LLMEvent> => {
   const events: LLMEvent[] = []
+  // Drain any trailing text withheld by the reasoning-tag splitter before the
+  // stream closes its blocks.
+  const tail = state.thinkingTags ? ReasoningTags.flush(state.thinking) : undefined
+  let lifecycle = tail ? Lifecycle.textDelta(state.lifecycle, events, "text-0", tail.text) : state.lifecycle
   const hasToolCalls = state.toolCallEvents.length > 0
   const reason = state.finishReason === "stop" && hasToolCalls ? "tool-calls" : state.finishReason
-  const lifecycle = state.toolCallEvents.length ? Lifecycle.stepStart(state.lifecycle, events) : state.lifecycle
+  if (state.toolCallEvents.length) lifecycle = Lifecycle.stepStart(lifecycle, events)
   events.push(...state.toolCallEvents)
   if (reason) Lifecycle.finish(lifecycle, events, { reason, usage: state.usage })
   return events
@@ -473,7 +505,16 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(OpenAIChatEvent),
-    initial: () => ({ tools: ToolStream.empty<number>(), toolCallEvents: [], lifecycle: Lifecycle.initial() }),
+    initial: (request) => {
+      const thinkingTags = ReasoningTags.detect(request)
+      return {
+        tools: ToolStream.empty<number>(),
+        toolCallEvents: [],
+        lifecycle: Lifecycle.initial(),
+        thinkingTags,
+        thinking: ReasoningTags.initial(thinkingTags),
+      }
+    },
     step,
     onHalt: finishEvents,
   },
