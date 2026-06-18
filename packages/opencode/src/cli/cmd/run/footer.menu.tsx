@@ -115,7 +115,6 @@ export function createFooterMenuState(input: { count: Accessor<number>; limit?: 
 }
 
 export function RunFooterMenu(props: {
-  id?: string
   theme: Accessor<RunFooterTheme>
   items: Accessor<RunFooterMenuItem[]>
   selected: Accessor<number>
@@ -226,7 +225,6 @@ export function RunFooterMenu(props: {
   }
   return (
     <box
-      id={props.id ?? "run-direct-footer-menu"}
       width="100%"
       height={props.rows()}
       backgroundColor={props.background ? props.theme().shade : transparent}

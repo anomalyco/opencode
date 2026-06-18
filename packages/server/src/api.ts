@@ -11,12 +11,14 @@ import { SkillGroup } from "./groups/skill"
 import { EventGroup } from "./groups/event"
 import { AgentGroup } from "./groups/agent"
 import { HealthGroup } from "./groups/health"
+import { PtyGroup } from "./groups/pty"
 import { QuestionGroup } from "./groups/question"
 import { ReferenceGroup } from "./groups/reference"
 import { Authorization } from "./middleware/authorization"
 import { LocationGroup } from "./groups/location"
 import { IntegrationGroup } from "./groups/integration"
 import { CredentialGroup } from "./groups/credential"
+import { ProjectCopyGroup } from "./groups/project-copy"
 
 export const Api = HttpApi.make("server")
   .add(HealthGroup)
@@ -33,8 +35,10 @@ export const Api = HttpApi.make("server")
   .add(CommandGroup)
   .add(SkillGroup)
   .add(EventGroup)
+  .add(PtyGroup)
   .add(QuestionGroup)
   .add(ReferenceGroup)
+  .add(ProjectCopyGroup)
   .annotateMerge(
     OpenApi.annotations({
       title: "opencode HttpApi",

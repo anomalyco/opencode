@@ -2,6 +2,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { and, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
+import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { Flag } from "@opencode-ai/core/flag/flag"
@@ -14,7 +15,6 @@ import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { AppProcess } from "@opencode-ai/core/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
-import { ProjectCopy } from "@opencode-ai/core/project/copy"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { AbsolutePath, NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
@@ -138,7 +138,7 @@ export const layer = Layer.effect(
     const proc = yield* AppProcess.Service
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const projectV2 = yield* ProjectV2.Service
-    const projectCopy = yield* ProjectCopy.Service
+    const projectDirectories = yield* ProjectDirectories.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const { db } = yield* Database.Service
@@ -197,6 +197,12 @@ export const layer = Layer.effect(
                   .run()
               }
 
+              // Project directories may be shared across distinct
+              // checkouts which have diverged. Clear the directory
+              // list and rely on it being re-populated to ensure
+              // accuracy
+              yield* d.delete(ProjectDirectoryTable).where(eq(ProjectDirectoryTable.project_id, oldID)).run()
+
               yield* d
                 .update(SessionTable)
                 .set({ project_id: newID, time_updated: sql`${SessionTable.time_updated}` })
@@ -221,27 +227,11 @@ export const layer = Layer.effect(
     }) {
       if (input.projectID === ProjectV2.ID.global) return
       const opened = AbsolutePath.make(FSUtil.resolve(input.directory))
-      const type = yield* projectCopy.detect({ directory: opened })
-
-      yield* db
-        .transaction(
-          (d) =>
-            Effect.gen(function* () {
-              const hasMain = yield* d
-                .select({ directory: ProjectDirectoryTable.directory })
-                .from(ProjectDirectoryTable)
-                .where(
-                  and(eq(ProjectDirectoryTable.project_id, input.projectID), eq(ProjectDirectoryTable.type, "main")),
-                )
-                .get()
-              yield* d
-                .insert(ProjectDirectoryTable)
-                .values({ directory: opened, project_id: input.projectID, type: type ?? (hasMain ? "root" : "main") })
-                .onConflictDoNothing()
-                .run()
-            }),
-          { behavior: "immediate" },
-        )
+      yield* projectDirectories
+        .create({
+          directory: opened,
+          projectID: input.projectID,
+        })
         .pipe(
           Effect.catchCause((cause) =>
             Effect.logWarning("project directory persistence failed", { projectID: input.projectID, cause }),
@@ -505,7 +495,7 @@ export const layer = Layer.effect(
 export const defaultLayer = layer.pipe(
   Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(ProjectV2.defaultLayer),
-  Layer.provide(ProjectCopy.defaultLayer),
+  Layer.provide(ProjectDirectories.defaultLayer),
   Layer.provide(AppProcess.defaultLayer),
   Layer.provide(CrossSpawnSpawner.defaultLayer),
   Layer.provide(FSUtil.defaultLayer),
@@ -520,7 +510,7 @@ export const node = LayerNode.make(layer, [
   AppProcess.node,
   CrossSpawnSpawner.node,
   ProjectV2.node,
-  ProjectCopy.node,
+  ProjectDirectories.node,
   EventV2Bridge.node,
   RuntimeFlags.node,
   Database.node,

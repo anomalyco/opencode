@@ -72,7 +72,7 @@ export function Header(props: { githubStars: string; links?: readonly HeaderLink
 
   createEffect(() => {
     if (typeof window === "undefined") return
-    const media = window.matchMedia("(max-width: 74.999rem)")
+    const media = window.matchMedia("(max-width: 89.999rem)")
     const update = () => setMenuViewport(media.matches)
     update()
     media.addEventListener("change", update)
