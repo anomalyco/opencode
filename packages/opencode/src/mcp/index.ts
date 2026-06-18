@@ -522,7 +522,9 @@ export const layer = Layer.effect(
                     for (const dpid of pids) {
                       try {
                         process.kill(dpid, "SIGTERM")
-                      } catch {}
+                      } catch (cause) {
+                        yield* Effect.logWarning("failed to terminate MCP child process", { pid: dpid, cause })
+                      }
                     }
                   }
                   yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
