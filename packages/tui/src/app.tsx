@@ -920,6 +920,18 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           dialog.clear()
         },
       },
+      {
+        name: "session.list.toggle_scope",
+        title: "Cycle session list scope (local → project → global)",
+        category: "System",
+        run: async () => {
+          const current = (kv.get("session_list_scope", "local") as string) || "local"
+          const next = current === "local" ? "project" : current === "project" ? "global" : "local"
+          kv.set("session_list_scope", next)
+          await sync.session.refresh()
+          dialog.clear()
+        },
+      },
     ].map((command) => ({
       namespace: "palette",
       ...command,

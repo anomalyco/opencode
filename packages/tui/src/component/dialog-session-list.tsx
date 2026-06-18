@@ -16,7 +16,9 @@ import { openWorkspaceSelect, type WorkspaceSelection, warpWorkspaceSession } fr
 import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
-import { useCommandShortcut } from "../keymap"
+import { useBindings, useCommandShortcut } from "../keymap"
+import { useKV } from "../context/kv"
+import { useTuiConfig } from "../config"
 
 export function DialogSessionList() {
   const dialog = useDialog()
@@ -32,12 +34,45 @@ export function DialogSessionList() {
   const deleteHint = useCommandShortcut("session.delete")
   const quickSwitch1 = useCommandShortcut("session.quick_switch.1")
   const quickSwitch9 = useCommandShortcut("session.quick_switch.9")
+  const toggleScopeShortcut = useCommandShortcut("session.list.toggle_scope")
+  const kv = useKV()
+  const tuiConfig = useTuiConfig()
+
+  const scopeLabels: Record<string, string> = { local: "local", project: "project", global: "global" }
+  const [sessionScope, setSessionScope] = kv.signal<"local" | "project" | "global">("session_list_scope", "local")
+
+  function cycleScope() {
+    const current = sessionScope()
+    const next = current === "local" ? "project" : current === "project" ? "global" : "local"
+    setSessionScope(next)
+    void refetch()
+  }
+
+  useBindings(() => ({
+    commands: [
+      {
+        name: "session.list.toggle_scope",
+        title: `Session scope: ${scopeLabels[sessionScope()]}`,
+        category: "Dialog",
+        run: cycleScope,
+      },
+    ],
+    bindings: tuiConfig.keybinds.get("session.list.toggle_scope"),
+  }))
+
+  const currentScope = createMemo(() => sessionScope())
 
   const [searchResults, { refetch }] = createResource(
-    () => ({ query: search(), filter: sync.session.query() }),
+    () => ({ query: search(), filter: currentScope() === "global" ? undefined : sync.session.query(), scope: currentScope() }),
     async (input) => {
-      if (!input.query) return undefined
-      const result = await sdk.client.session.list({ search: input.query, limit: 30, ...input.filter })
+      const isGlobal = input.scope === "global"
+      if (!input.query && !isGlobal) return undefined
+      const result = await sdk.client.session.list({
+        search: input.query || undefined,
+        limit: isGlobal ? 200 : 30,
+        roots: isGlobal ? true : undefined,
+        ...(input.filter ?? {}),
+      } as Parameters<typeof sdk.client.session.list>[0])
       return result.data ?? []
     },
   )
@@ -148,7 +183,15 @@ export function DialogSessionList() {
   })
   const quickSwitchFooterHints = createMemo(() => {
     const hint = quickSwitchHint()
-    return hint && local.session.slots().length > 0 ? [{ title: "switch", label: hint }] : []
+    const scopeHint = toggleScopeShortcut()
+    const hints = []
+    if (scopeHint) {
+      hints.push({ title: "scope", label: `${scopeHint} ${scopeLabels[sessionScope()]}` })
+    }
+    if (hint && local.session.slots().length > 0) {
+      hints.push({ title: "switch", label: hint })
+    }
+    return hints
   })
 
   const options = createMemo(() => {
@@ -169,13 +212,16 @@ export function DialogSessionList() {
     function buildOption(id: string, category: string) {
       const x = sessionMap.get(id)
       if (!x) return undefined
-      const directory = x.path
-        ? x.directory.endsWith(x.path)
-          ? x.directory.slice(0, -x.path.length).replace(/\/$/, "")
-          : undefined
-        : x.directory
+      const isGlobalScope = currentScope() === "global"
+      const directory = isGlobalScope
+        ? ((x as any).project?.worktree || (x as any).project?.name || (x as any).directory) as string | undefined
+        : x.path
+          ? x.directory.endsWith(x.path)
+            ? x.directory.slice(0, -x.path.length).replace(/\/$/, "")
+            : undefined
+          : x.directory
       const footer =
-        directory && directory !== project.data.project.mainDir ? Locale.truncate(path.basename(directory), 20) : ""
+        directory && (isGlobalScope || directory !== project.data.project.mainDir) ? Locale.truncate(path.basename(directory), 20) : ""
 
       const isDeleting = toDelete() === x.id
       const status = sync.data.session_status?.[x.id]
@@ -279,7 +325,7 @@ export function DialogSessionList() {
               if (status && status !== "connected") {
                 await sync.session.refresh()
               }
-              if (search()) await refetch()
+              if (search() || currentScope() === "global") await refetch()
               setToDelete(undefined)
               return
             }
