@@ -1,4 +1,5 @@
 import { createMemo, createSignal } from "solid-js"
+import { Decimal } from "decimal.js"
 import { useLocal } from "../context/local"
 import { map, pipe, flatMap, entries, filter, sortBy, take } from "remeda"
 import { DialogSelect } from "../ui/dialog-select"
@@ -38,7 +39,7 @@ export function DialogModel(props: { providerID?: string }) {
             key: item,
             value: { providerID: provider.id, modelID: model.id },
             title: model.name ?? item.modelID,
-            description: provider.name,
+            description: formatModelDescription(provider.name, model),
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
             footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
@@ -74,9 +75,10 @@ export function DialogModel(props: { providerID?: string }) {
             value: { providerID: provider.id, modelID: model },
             title: info.name ?? model,
             releaseDate: info.release_date,
-            description: favorites.some((item) => item.providerID === provider.id && item.modelID === model)
-              ? "(Favorite)"
-              : undefined,
+            description: formatModelDescription(
+              favorites.some((item) => item.providerID === provider.id && item.modelID === model) ? "(Favorite)" : undefined,
+              info,
+            ),
             category: connected() ? provider.name : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
             footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
@@ -181,6 +183,24 @@ export function DialogModel(props: { providerID?: string }) {
       current={local.model.current()}
     />
   )
+}
+
+function formatModelDescription(prefix: string | undefined, model: { cost?: { input?: number; output?: number } }) {
+  const cost = formatModelCost(model.cost)
+  if (!prefix) return cost
+  return cost ? `${prefix} · ${cost}` : prefix
+}
+
+function formatModelCost(cost?: { input?: number; output?: number }) {
+  const input = formatCostRate(cost?.input)
+  const output = formatCostRate(cost?.output)
+  if (!input && !output) return undefined
+  return `$${input ?? "?"}/$${output ?? "?"}/1M`
+}
+
+function formatCostRate(value?: number) {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined
+  return new Decimal(value).toSignificantDigits(4).toString()
 }
 
 export function sortModelOptions<T extends { footer?: string; releaseDate: string | number; title: string }>(
