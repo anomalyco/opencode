@@ -131,6 +131,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | E
       return Service.of({
         ensure: Effect.fn("RepositoryCache.ensure")(function* (input) {
           if (input.branch) yield* validateBranch(input.branch)
+          const requestedRef = input.branch ? parseRequestedRef(input.branch) : undefined
 
           const repository = input.reference.label
           const localPath = Repository.cachePath(global.repos, input.reference)
@@ -154,12 +155,12 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | E
                 const status = statusForRepository({
                   reuse,
                   refresh: input.refresh,
-                  branchMatches: input.branch ? currentBranch === input.branch : undefined,
+                  branchMatches: requestedRef ? refMatchesCurrentBranch(requestedRef, currentBranch) : undefined,
                 })
 
                 if (status === "cloned") {
                   const result = yield* git
-                    .clone({ remote: input.reference.remote, target: localPath, branch: input.branch })
+                    .clone({ remote: input.reference.remote, target: localPath, branch: cloneBranchFor(requestedRef) })
                     .pipe(
                       Effect.mapError((error) => new CloneFailedError({ repository, message: errorMessage(error) })),
                     )
@@ -183,42 +184,19 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | Git.Service | E
                       message: resultMessage(fetch, `Failed to refresh ${repository}`),
                     })
                   }
+                }
 
-                  if (input.branch) {
-                    const requestedBranch = input.branch
-                    const fetchBranch = yield* git
-                      .fetchBranch(localPath, requestedBranch)
-                      .pipe(
-                        Effect.mapError((error) => new FetchFailedError({ repository, message: errorMessage(error) })),
-                      )
-                    if (fetchBranch.exitCode !== 0) {
-                      return yield* new FetchFailedError({
-                        repository,
-                        message: resultMessage(fetchBranch, `Failed to fetch ${requestedBranch}`),
-                      })
-                    }
+                if (
+                  requestedRef &&
+                  (status === "refreshed" ||
+                    (status === "cloned" && (requestedRef.type === "tag" || requestedRef.type === "full")))
+                ) {
+                  yield* syncRequestedRef(git, localPath, repository, requestedRef)
+                }
 
-                    const checkout = yield* git.checkout(localPath, requestedBranch).pipe(
-                      Effect.mapError(
-                        (error) =>
-                          new CheckoutFailedError({
-                            repository,
-                            branch: requestedBranch,
-                            message: errorMessage(error),
-                          }),
-                      ),
-                    )
-                    if (checkout.exitCode !== 0) {
-                      return yield* new CheckoutFailedError({
-                        repository,
-                        branch: requestedBranch,
-                        message: resultMessage(checkout, `Failed to checkout ${requestedBranch}`),
-                      })
-                    }
-                  }
-
+                if (status === "refreshed" && !requestedRef) {
                   const reset = yield* git
-                    .reset(localPath, yield* resetTarget(git, localPath, input.branch))
+                    .reset(localPath, yield* resetTarget(git, localPath))
                     .pipe(
                       Effect.mapError((error) => new ResetFailedError({ repository, message: errorMessage(error) })),
                     )
@@ -275,8 +253,166 @@ function cacheOperation<A, E, R>(effect: Effect.Effect<A, E, R>, operation: stri
   )
 }
 
-const resetTarget = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, requestedBranch?: string) {
-  if (requestedBranch) return `origin/${requestedBranch}`
+type RequestedRef =
+  | { readonly type: "branch"; readonly input: string; readonly name: string }
+  | { readonly type: "tag"; readonly input: string; readonly name: string }
+  | { readonly type: "full"; readonly input: string; readonly source: string; readonly destination: string }
+  | { readonly type: "named"; readonly input: string; readonly name: string }
+
+function parseRequestedRef(input: string): RequestedRef {
+  const branch = removePrefix(input, "refs/heads/")
+  if (branch) return { type: "branch", input, name: branch }
+
+  const tag = removePrefix(input, "refs/tags/")
+  if (tag) return { type: "tag", input, name: tag }
+
+  if (input.startsWith("refs/")) {
+    return { type: "full", input, source: input, destination: `refs/opencode/${input.slice("refs/".length)}` }
+  }
+
+  return { type: "named", input, name: input }
+}
+
+function removePrefix(input: string, prefix: string) {
+  if (!input.startsWith(prefix)) return
+  const value = input.slice(prefix.length)
+  return value || undefined
+}
+
+function refMatchesCurrentBranch(ref: RequestedRef, currentBranch: string | undefined) {
+  if (ref.type === "branch" || ref.type === "named") return currentBranch === ref.name
+  return false
+}
+
+function cloneBranchFor(ref: RequestedRef | undefined) {
+  if (!ref || ref.type === "tag" || ref.type === "full") return
+  return ref.name
+}
+
+const syncRequestedRef = Effect.fnUntraced(function* (
+  git: Git.Interface,
+  cwd: string,
+  repository: string,
+  requested: RequestedRef,
+) {
+  if (requested.type === "branch") {
+    const fetch = yield* git
+      .fetchBranch(cwd, requested.name)
+      .pipe(Effect.mapError((error) => new FetchFailedError({ repository, message: errorMessage(error) })))
+    if (fetch.exitCode !== 0) {
+      return yield* new FetchFailedError({
+        repository,
+        message: resultMessage(fetch, `Failed to fetch ${requested.input}`),
+      })
+    }
+    return yield* checkoutBranchRef(git, cwd, repository, requested.input, requested.name)
+  }
+
+  if (requested.type === "tag") {
+    const target = tagRef(requested.name)
+    const fetch = yield* git
+      .fetchRef(cwd, target, target)
+      .pipe(Effect.mapError((error) => new FetchFailedError({ repository, message: errorMessage(error) })))
+    if (fetch.exitCode !== 0) {
+      return yield* new FetchFailedError({
+        repository,
+        message: resultMessage(fetch, `Failed to fetch ${requested.input}`),
+      })
+    }
+    return yield* checkoutDetachedRef(git, cwd, repository, requested.input, target)
+  }
+
+  if (requested.type === "full") {
+    const fetch = yield* git
+      .fetchRef(cwd, requested.source, requested.destination)
+      .pipe(Effect.mapError((error) => new FetchFailedError({ repository, message: errorMessage(error) })))
+    if (fetch.exitCode !== 0) {
+      return yield* new FetchFailedError({
+        repository,
+        message: resultMessage(fetch, `Failed to fetch ${requested.input}`),
+      })
+    }
+    return yield* checkoutDetachedRef(git, cwd, repository, requested.input, requested.destination)
+  }
+
+  const branchFetch = yield* git
+    .fetchBranch(cwd, requested.name)
+    .pipe(Effect.mapError((error) => new FetchFailedError({ repository, message: errorMessage(error) })))
+  if (branchFetch.exitCode === 0) {
+    return yield* checkoutBranchRef(git, cwd, repository, requested.input, requested.name)
+  }
+
+  const target = tagRef(requested.name)
+  const tagFetch = yield* git
+    .fetchRef(cwd, target, target)
+    .pipe(Effect.mapError((error) => new FetchFailedError({ repository, message: errorMessage(error) })))
+  if (tagFetch.exitCode === 0) return yield* checkoutDetachedRef(git, cwd, repository, requested.input, target)
+
+  return yield* new FetchFailedError({
+    repository,
+    message: resultMessage(tagFetch, resultMessage(branchFetch, `Failed to fetch ${requested.input}`)),
+  })
+})
+
+const checkoutBranchRef = Effect.fnUntraced(function* (
+  git: Git.Interface,
+  cwd: string,
+  repository: string,
+  input: string,
+  branch: string,
+) {
+  const checkout = yield* git.checkout(cwd, branch).pipe(
+    Effect.mapError((error) => new CheckoutFailedError({ repository, branch: input, message: errorMessage(error) })),
+  )
+  if (checkout.exitCode !== 0) {
+    return yield* new CheckoutFailedError({
+      repository,
+      branch: input,
+      message: resultMessage(checkout, `Failed to checkout ${input}`),
+    })
+  }
+
+  return yield* resetToTarget(git, cwd, repository, `origin/${branch}`)
+})
+
+const checkoutDetachedRef = Effect.fnUntraced(function* (
+  git: Git.Interface,
+  cwd: string,
+  repository: string,
+  input: string,
+  target: string,
+) {
+  const checkout = yield* git.checkoutRef(cwd, target).pipe(
+    Effect.mapError((error) => new CheckoutFailedError({ repository, branch: input, message: errorMessage(error) })),
+  )
+  if (checkout.exitCode !== 0) {
+    return yield* new CheckoutFailedError({
+      repository,
+      branch: input,
+      message: resultMessage(checkout, `Failed to checkout ${input}`),
+    })
+  }
+
+  return yield* resetToTarget(git, cwd, repository, target)
+})
+
+const resetToTarget = Effect.fnUntraced(function* (git: Git.Interface, cwd: string, repository: string, target: string) {
+  const reset = yield* git
+    .reset(cwd, target)
+    .pipe(Effect.mapError((error) => new ResetFailedError({ repository, message: errorMessage(error) })))
+  if (reset.exitCode !== 0) {
+    return yield* new ResetFailedError({
+      repository,
+      message: resultMessage(reset, `Failed to reset ${repository}`),
+    })
+  }
+})
+
+function tagRef(tag: string) {
+  return `refs/tags/${tag}`
+}
+
+const resetTarget = Effect.fnUntraced(function* (git: Git.Interface, cwd: string) {
   const remoteHead = yield* git.remoteHead(cwd)
   if (remoteHead) return remoteHead
   const currentBranch = yield* git.branch(cwd)

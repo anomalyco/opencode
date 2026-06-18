@@ -9,7 +9,7 @@ import { Global } from "@opencode-ai/core/global"
 import { Repository } from "@opencode-ai/core/repository"
 import { RepositoryCache } from "@opencode-ai/core/repository-cache"
 import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
-import { git, gitRemote } from "./fixture/git"
+import { branch, git, gitRemote, tag } from "./fixture/git"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
@@ -63,6 +63,47 @@ describe("RepositoryCache", () => {
 
         expect(replaced.status).toBe("cloned")
         expect(yield* exists(path.join(replaced.localPath, "stale.txt"))).toBe(false)
+      }).pipe(Effect.provide(cacheLayer(fixture.root))),
+    ),
+  )
+
+  it.live("checks out configured branches on first materialization", () =>
+    withRemote((fixture) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => branch(fixture.source, "feature/docs", "feature\n"))
+
+        const result = yield* (yield* RepositoryCache.Service).ensure({
+          reference: fixture.reference,
+          branch: "feature/docs",
+        })
+
+        expect(result.status).toBe("cloned")
+        expect(result.branch).toBe("feature/docs")
+        expect(yield* read(path.join(result.localPath, "README.md"))).toBe("feature\n")
+      }).pipe(Effect.provide(cacheLayer(fixture.root))),
+    ),
+  )
+
+  it.live("checks out configured tags and full tag refs", () =>
+    withRemote((fixture) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(() => tag(fixture.source, "effect@4.0.0-beta.65", "tagged\n"))
+        const cache = yield* RepositoryCache.Service
+
+        const tagResult = yield* cache.ensure({
+          reference: fixture.reference,
+          branch: "effect@4.0.0-beta.65",
+        })
+        const fullRefResult = yield* cache.ensure({
+          reference: fixture.reference,
+          branch: "refs/tags/effect@4.0.0-beta.65",
+        })
+
+        expect(tagResult.status).toBe("cloned")
+        expect(tagResult.branch).toBeUndefined()
+        expect(fullRefResult.status).toBe("refreshed")
+        expect(fullRefResult.branch).toBeUndefined()
+        expect(yield* read(path.join(fullRefResult.localPath, "README.md"))).toBe("tagged\n")
       }).pipe(Effect.provide(cacheLayer(fixture.root))),
     ),
   )
