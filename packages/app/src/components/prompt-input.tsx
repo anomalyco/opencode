@@ -597,12 +597,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       })
     })
     bridge.setOpenLineReference((input) => {
-      if (store.mode !== "doc") return false
       openSessionFile({ path: input.path, selection: lineRefToSelection(input) })
       return true
     })
     bridge.setOpenFileReference((path, nodeType) => {
-      if (store.mode !== "doc") return false
       openSessionFile({ path: relPath(path), nodeType: nodeType === "directory" ? "directory" : "file" })
       return true
     })
