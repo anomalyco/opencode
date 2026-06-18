@@ -91,7 +91,11 @@ function timeoutController(ms: number) {
   }
 }
 
-function googleVertexAnthropicBaseURL(project: string | undefined, location: string | undefined) {
+function googleVertexAnthropicBaseURL(project: string | undefined, location: string | undefined, baseURL?: string) {
+  if (baseURL) {
+    if (!project || baseURL.includes("/projects/")) return baseURL
+    return `${baseURL.replace(/\/+$/, "")}/projects/${project}/locations/${location}/publishers/anthropic/models`
+  }
   if (!project) return
   if (location !== "eu" && location !== "us") return
   // Continental multi-regions require Regional Endpoint Platform domains.
@@ -535,10 +539,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       }
     }),
     "google-vertex-anthropic": Effect.fnUntraced(function* () {
+      const auth = yield* dep.auth("google-vertex-anthropic")
       const env = yield* dep.env()
-      const project = env["GOOGLE_CLOUD_PROJECT"] ?? env["GCP_PROJECT"] ?? env["GCLOUD_PROJECT"]
-      const location = env["GOOGLE_CLOUD_LOCATION"] ?? env["VERTEX_LOCATION"] ?? "global"
-      const autoload = Boolean(project)
+      const project = env["GOOGLE_CLOUD_PROJECT"] || env["GCP_PROJECT"] || env["GCLOUD_PROJECT"]
+      const location = env["GOOGLE_CLOUD_LOCATION"] || env["VERTEX_LOCATION"] || "global"
+      const token = env["VERTEX_ANTHROPIC_TOKEN"] || (auth?.type === "api" ? auth.key : undefined)
+      const autoload = Boolean(project) || Boolean(token)
       if (!autoload) return { autoload: false }
       const baseURL = googleVertexAnthropicBaseURL(project, location)
       return {
@@ -547,9 +553,12 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           project,
           location,
           ...(baseURL && { baseURL }),
+          ...(token && {
+            generateAuthToken: async () => token,
+          }),
         },
         async getModel(sdk: any, modelID) {
-          const id = String(modelID).trim()
+          const id = String(modelID).trim().replace(/@default$/, "")
           return sdk.languageModel(id)
         },
       }
@@ -1565,6 +1574,18 @@ export const layer = Layer.effect(
           }
 
           const configProvider = cfg.provider?.[providerID]
+
+          if (providerID === "google-vertex-anthropic") {
+            // Config options are re-applied after custom loaders run. Normalize
+            // proxy roots here so a configured /v1 baseURL is not restored over
+            // the Vertex Anthropic models collection URL built by the loader.
+            const baseURL = googleVertexAnthropicBaseURL(
+              typeof provider.options.project === "string" ? provider.options.project : undefined,
+              typeof provider.options.location === "string" ? provider.options.location : "global",
+              typeof provider.options.baseURL === "string" ? provider.options.baseURL : undefined,
+            )
+            if (baseURL) provider.options.baseURL = baseURL
+          }
 
           for (const [modelID, model] of Object.entries(provider.models)) {
             model.api.id = model.api.id ?? model.id ?? modelID
