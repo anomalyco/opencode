@@ -82,14 +82,12 @@ function normalizeMessages(
     return content
   }
 
-  msgs = msgs.map((msg) => {
+  const sanitizeMessage = (msg: ModelMessage): ModelMessage => {
     switch (msg.role) {
       case "tool":
         if (!Array.isArray(msg.content)) return msg
         msg.content = msg.content.map((content) => {
-          if (content.type === "tool-result") {
-            return sanitizeToolResultOutput(content)
-          }
+          if (content.type === "tool-result") return sanitizeToolResultOutput(content)
           return content
         })
         return msg
@@ -103,9 +101,7 @@ function normalizeMessages(
           msg.content = sanitizeSurrogates(msg.content)
         } else {
           msg.content = msg.content.map((content) => {
-            if (content.type === "text") {
-              content.text = sanitizeSurrogates(content.text)
-            }
+            if (content.type === "text") content.text = sanitizeSurrogates(content.text)
             return content
           })
         }
@@ -119,71 +115,70 @@ function normalizeMessages(
             if (content.type === "text" || content.type === "reasoning") {
               content.text = sanitizeSurrogates(content.text)
             }
-            if (content.type === "tool-result") {
-              return sanitizeToolResultOutput(content)
-            }
+            if (content.type === "tool-result") return sanitizeToolResultOutput(content)
             return content
           })
         }
         return msg
     }
-  })
-
-  // Anthropic rejects messages with empty content - filter out empty string messages
-  // and remove empty text/reasoning parts from array content
-  if (model.api.npm === "@ai-sdk/anthropic") {
-    msgs = msgs
-      .map((msg) => {
-        if (typeof msg.content === "string") {
-          if (msg.content === "") return undefined
-          return msg
-        }
-        if (!Array.isArray(msg.content)) return msg
-        const filtered = msg.content.filter((part) => {
-          if (part.type === "text") {
-            return part.text !== ""
-          }
-          if (part.type === "reasoning") {
-            return (
-              part.text.trim().length > 0 ||
-              part.providerOptions?.anthropic?.signature != null ||
-              part.providerOptions?.anthropic?.redactedData != null
-            )
-          }
-          return true
-        })
-        if (filtered.length === 0) return undefined
-        return { ...msg, content: filtered }
-      })
-      .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
   }
 
-  // Bedrock specific transforms
-  if (model.api.npm === "@ai-sdk/amazon-bedrock") {
-    msgs = msgs
-      .map((msg) => {
-        if (typeof msg.content === "string") {
-          if (msg.content === "") return undefined
-          return msg
-        }
-        if (!Array.isArray(msg.content)) return msg
-        const filtered = msg.content.filter((part) => {
-          if (part.type === "text") {
-            return part.text !== ""
-          }
-          if (part.type === "reasoning") {
-            return (
-              part.text.trim().length > 0 ||
-              part.providerOptions?.bedrock?.signature != null ||
-              part.providerOptions?.bedrock?.redactedData != null
-            )
-          }
-          return true
-        })
-        if (filtered.length === 0) return undefined
-        return { ...msg, content: filtered }
-      })
-      .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
+  const filterEmptyParts = (
+    msg: ModelMessage,
+    filterPart: (part: any) => boolean,
+  ): ModelMessage | undefined => {
+    if (typeof msg.content === "string") {
+      return msg.content === "" ? undefined : msg
+    }
+    if (!Array.isArray(msg.content)) return msg
+    const filtered = msg.content.filter(filterPart)
+    if (filtered.length === 0) return undefined
+    return { ...msg, content: filtered } as ModelMessage
+  }
+
+  const anthropicPartFilter = (part: any) => {
+    if (part.type === "text") return part.text !== ""
+    if (part.type === "reasoning") {
+      return (
+        part.text.trim().length > 0 ||
+        part.providerOptions?.anthropic?.signature != null ||
+        part.providerOptions?.anthropic?.redactedData != null
+      )
+    }
+    return true
+  }
+
+  const bedrockPartFilter = (part: any) => {
+    if (part.type === "text") return part.text !== ""
+    if (part.type === "reasoning") {
+      return (
+        part.text.trim().length > 0 ||
+        part.providerOptions?.bedrock?.signature != null ||
+        part.providerOptions?.bedrock?.redactedData != null
+      )
+    }
+    return true
+  }
+
+  // Fuse sanitize + provider-specific empty-filter into a single pass
+  if (model.api.npm === "@ai-sdk/anthropic") {
+    const result: ModelMessage[] = []
+    for (let i = 0; i < msgs.length; i++) {
+      const sanitized = sanitizeMessage(msgs[i])
+      const filtered = filterEmptyParts(sanitized, anthropicPartFilter)
+      if (filtered) result.push(filtered)
+    }
+    msgs = result
+  } else if (model.api.npm === "@ai-sdk/amazon-bedrock") {
+    const result: ModelMessage[] = []
+    for (let i = 0; i < msgs.length; i++) {
+      const sanitized = sanitizeMessage(msgs[i])
+      const filtered = filterEmptyParts(sanitized, bedrockPartFilter)
+      if (filtered) result.push(filtered)
+    }
+    msgs = result
+  } else {
+    msgs = msgs.map(sanitizeMessage)
   }
 
   if (model.api.id.includes("claude")) {

@@ -190,30 +190,37 @@ export const ruff: Info = {
   name: "ruff",
   extensions: [".py", ".pyi"],
   async enabled(context) {
-    if (!which("ruff")) return false
-    const configs = ["pyproject.toml", "ruff.toml", ".ruff.toml"]
-    for (const config of configs) {
-      const found = await Filesystem.findUp(config, context.directory, context.worktree)
-      if (found.length > 0) {
-        if (config === "pyproject.toml") {
+    if (which("ruff")) {
+      const configs = ["pyproject.toml", "ruff.toml", ".ruff.toml"]
+      for (const config of configs) {
+        const found = await Filesystem.findUp(config, context.directory, context.worktree)
+        if (found.length > 0) {
+          if (config === "pyproject.toml") {
+            const content = await Filesystem.readText(found[0])
+            if (content.includes("[tool.ruff]")) return ["ruff", "format", "$FILE"]
+          } else {
+            return ["ruff", "format", "$FILE"]
+          }
+        }
+      }
+      const deps = ["requirements.txt", "pyproject.toml", "Pipfile"]
+      for (const dep of deps) {
+        const found = await Filesystem.findUp(dep, context.directory, context.worktree)
+        if (found.length > 0) {
           const content = await Filesystem.readText(found[0])
-          if (content.includes("[tool.ruff]")) return ["ruff", "format", "$FILE"]
-        } else {
-          return ["ruff", "format", "$FILE"]
+          if (content.includes("ruff")) return ["ruff", "format", "$FILE"]
         }
       }
     }
-    const deps = ["requirements.txt", "pyproject.toml", "Pipfile"]
-    for (const dep of deps) {
-      const found = await Filesystem.findUp(dep, context.directory, context.worktree)
-      if (found.length > 0) {
-        const content = await Filesystem.readText(found[0])
-        if (content.includes("ruff")) return ["ruff", "format", "$FILE"]
-      }
-    }
+    const uv = which("uv")
+    if (uv == null) return false
+    const output = await Process.run([uv, "format", "--help"], { nothrow: true })
+    if (output.code === 0) return [uv, "format", "--", "$FILE"]
     return false
   },
 }
+
+export const uv: Info = { ...ruff, name: "uv" }
 
 export const rlang: Info = {
   name: "air",
@@ -229,19 +236,6 @@ export const rlang: Info = {
     const hasR = firstLine.includes("R language")
     const hasFormatter = firstLine.includes("formatter")
     if (output.code === 0 && hasR && hasFormatter) return [air, "format", "$FILE"]
-    return false
-  },
-}
-
-export const uvformat: Info = {
-  name: "uv",
-  extensions: [".py", ".pyi"],
-  async enabled(context) {
-    if (await ruff.enabled(context)) return false
-    const uv = which("uv")
-    if (uv == null) return false
-    const output = await Process.run([uv, "format", "--help"], { nothrow: true })
-    if (output.code === 0) return [uv, "format", "--", "$FILE"]
     return false
   },
 }
