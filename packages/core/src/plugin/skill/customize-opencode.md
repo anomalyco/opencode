@@ -210,8 +210,8 @@ keyed by the alias used in `@` autocomplete:
 
 Local `path` values may be relative to the declaring config, absolute, or use
 `~/`. Git `repository` values accept Git URLs, host/path references, and GitHub
-`owner/repo` shorthand; `branch` is optional. Both forms support optional
-`description` and `hidden` fields.
+`owner/repo` shorthand; `branch` accepts a branch, tag, or full ref and is
+optional. Both forms support optional `description` and `hidden` fields.
 
 - Only references with a `description` are advertised to agents in system context.
 - `hidden: true` removes a reference from TUI `@` autocomplete only. It remains available to agents and by direct path.

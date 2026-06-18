@@ -103,10 +103,10 @@ export function parseRemote(input: string): RemoteReference {
 }
 
 export function validateBranch(branch: string): void {
-  if (/^[A-Za-z0-9/_.-]+$/.test(branch) && !branch.startsWith("-") && !branch.includes("..")) return
+  if (isSafeRef(branch)) return
   throw new InvalidBranchError({
     branch,
-    message: "Branch must contain only alphanumeric characters, /, _, ., and -, and cannot start with - or contain ..",
+    message: "Branch must be a valid Git branch, tag, or full ref name",
   })
 }
 
@@ -159,6 +159,28 @@ function safeSegment(input: string) {
 
 function hostLike(input: string) {
   return input.includes(".") || input.includes(":") || input === "localhost"
+}
+
+function isSafeRef(input: string) {
+  const parts = input.split("/")
+  return (
+    input.length > 0 &&
+    !input.startsWith("-") &&
+    !input.endsWith("/") &&
+    !input.includes("//") &&
+    !input.includes("..") &&
+    !input.includes("@{") &&
+    input !== "@" &&
+    !/[\x00-\x20~^:?*[\\]/.test(input) &&
+    parts.every(
+      (part) =>
+        part !== "" &&
+        part !== "." &&
+        !part.startsWith(".") &&
+        !part.endsWith(".") &&
+        !part.endsWith(".lock"),
+    )
+  )
 }
 
 function withSlash(input: string) {

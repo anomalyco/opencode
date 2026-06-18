@@ -58,8 +58,14 @@ export interface Interface {
     depth?: number
   }) => Effect.Effect<Result, AppProcess.AppProcessError>
   readonly fetch: (directory: string) => Effect.Effect<Result, AppProcess.AppProcessError>
+  readonly fetchRef: (
+    directory: string,
+    source: string,
+    destination: string,
+  ) => Effect.Effect<Result, AppProcess.AppProcessError>
   readonly fetchBranch: (directory: string, branch: string) => Effect.Effect<Result, AppProcess.AppProcessError>
   readonly checkout: (directory: string, branch: string) => Effect.Effect<Result, AppProcess.AppProcessError>
+  readonly checkoutRef: (directory: string, ref: string) => Effect.Effect<Result, AppProcess.AppProcessError>
   readonly reset: (directory: string, target: string) => Effect.Effect<Result, AppProcess.AppProcessError>
   readonly patch: (directory: AbsolutePath) => Effect.Effect<string, PatchError>
   readonly applyPatch: (input: { directory: AbsolutePath; patch: string }) => Effect.Effect<void, PatchError>
@@ -164,12 +170,20 @@ export const layer = Layer.effect(
 
     const fetch = Effect.fn("Git.fetch")((directory: string) => execute(directory, proc)(["fetch", "--all", "--prune"]))
 
+    const fetchRef = Effect.fn("Git.fetchRef")((directory: string, source: string, destination: string) =>
+      execute(directory, proc)(["fetch", "origin", `+${source}:${destination}`]),
+    )
+
     const fetchBranch = Effect.fn("Git.fetchBranch")((directory: string, branch: string) =>
-      execute(directory, proc)(["fetch", "origin", `+refs/heads/${branch}:refs/remotes/origin/${branch}`]),
+      fetchRef(directory, `refs/heads/${branch}`, `refs/remotes/origin/${branch}`),
     )
 
     const checkout = Effect.fn("Git.checkout")((directory: string, branch: string) =>
       execute(directory, proc)(["checkout", "-B", branch, `origin/${branch}`]),
+    )
+
+    const checkoutRef = Effect.fn("Git.checkoutRef")((directory: string, ref: string) =>
+      execute(directory, proc)(["checkout", "--detach", ref]),
     )
 
     const reset = Effect.fn("Git.reset")((directory: string, target: string) =>
@@ -386,8 +400,10 @@ export const layer = Layer.effect(
       remoteHead,
       clone,
       fetch,
+      fetchRef,
       fetchBranch,
       checkout,
+      checkoutRef,
       reset,
       patch,
       applyPatch,
