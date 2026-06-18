@@ -1,5 +1,5 @@
 import type { Argv } from "yargs"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { cmd } from "./cmd"
 import { effectCmd, fail } from "../effect-cmd"
 import { Session } from "@/session/session"
@@ -13,6 +13,7 @@ import { NotFoundError } from "@/storage/storage"
 import { EOL } from "os"
 import path from "path"
 import { which } from "@opencode-ai/core/util/which"
+import { autocomplete, intro, outro } from "@/cli/effect/prompt"
 
 function pagerCmd(): string[] {
   const lessOptions = ["-R", "-S"]
@@ -44,7 +45,8 @@ function pagerCmd(): string[] {
 export const SessionCommand = cmd({
   command: "session",
   describe: "manage sessions",
-  builder: (yargs: Argv) => yargs.command(SessionListCommand).command(SessionDeleteCommand).demandCommand(),
+  builder: (yargs: Argv) =>
+    yargs.command(SessionListCommand).command(SessionDeleteCommand).command(SessionSelectCommand).demandCommand(),
   async handler() {},
 })
 
@@ -64,6 +66,41 @@ export const SessionDeleteCommand = effectCmd({
       .remove(sessionID)
       .pipe(Effect.catchIf(NotFoundError.isInstance, () => fail(`Session not found: ${args.sessionID}`)))
     UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
+  }),
+})
+
+export const SessionSelectCommand = effectCmd({
+  command: "select",
+  describe: "interactively select and start a session",
+  handler: Effect.fn("Cli.session.select")(function* () {
+    const sessions = yield* Session.Service.use((svc) => svc.list({ roots: true }))
+
+    if (sessions.length === 0) {
+      yield* fail("No sessions found")
+      return
+    }
+
+    yield* intro("Select a session")
+
+    const result = yield* autocomplete({
+      message: "Pick a session:",
+      options: sessions.map((s) => ({
+        value: s.id,
+        label: formatSessionOption(s),
+      })),
+      maxItems: 15,
+    })
+
+    if (Option.isNone(result)) {
+      yield* outro("Cancelled")
+      return
+    }
+
+    const sessionID = result.value
+    yield* outro("")
+
+    // Replace current process with opencode -s <session-id>
+    ;(process as any).execve(process.execPath, [process.execPath, "-s", sessionID], process.env)
   }),
 })
 
@@ -114,6 +151,13 @@ export const SessionListCommand = effectCmd({
     }
   }),
 })
+
+function formatSessionOption(session: Session.GlobalInfo | Session.Info): string {
+  const title = Locale.truncate(session.title || "Untitled", 40)
+  const id = session.id.slice(0, 8) + "..."
+  const time = Locale.todayTimeOrDateTime(session.time.updated)
+  return `${title.padEnd(40)} ${id.padEnd(14)} ${time}`
+}
 
 function formatSessionTable(sessions: Session.Info[]): string {
   const lines: string[] = []
