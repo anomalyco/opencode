@@ -19,14 +19,19 @@ export function publish(port: number, domain?: string) {
       txt: { path: "/" },
     })
 
-    service.on("error", () => {})
+    service.on("error", (err) => {
+      console.warn("mDNS service error:", err)
+    })
 
     currentPort = port
-  } catch {
+  } catch (err) {
+    console.warn("mDNS publish failed:", err)
     if (bonjour) {
       try {
         bonjour.destroy()
-      } catch {}
+      } catch (destroyErr) {
+        console.warn("mDNS destroy failed:", destroyErr)
+      }
     }
     bonjour = undefined
     currentPort = undefined
@@ -38,7 +43,9 @@ export function unpublish() {
     try {
       bonjour.unpublishAll()
       bonjour.destroy()
-    } catch {}
+    } catch (err) {
+      console.warn("mDNS unpublish failed:", err)
+    }
     bonjour = undefined
     currentPort = undefined
   }

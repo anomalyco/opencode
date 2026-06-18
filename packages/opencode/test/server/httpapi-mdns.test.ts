@@ -6,12 +6,17 @@ import { disposeAllInstances } from "../fixture/fixture"
 
 type Event = { kind: "publish"; port: number; name: string } | { kind: "unpublishAll" } | { kind: "destroy" }
 const events: Event[] = []
+const serviceErrorHandlers: Array<(err: unknown) => void> = []
 
 void mock.module("bonjour-service", () => ({
   Bonjour: class {
     publish(opts: { port: number; name: string }) {
       events.push({ kind: "publish", port: opts.port, name: opts.name })
-      return { on: () => {} }
+      return {
+        on(event: string, handler: (err: unknown) => void) {
+          if (event === "error") serviceErrorHandlers.push(handler)
+        },
+      }
     }
     unpublishAll() {
       events.push({ kind: "unpublishAll" })
@@ -24,6 +29,7 @@ void mock.module("bonjour-service", () => ({
 
 // Import Server AFTER the mock so the MDNS module picks up the stub.
 const { Server } = await import("../../src/server/server")
+const { MDNS } = await import("../../src/server/mdns")
 
 const original = {
   OPENCODE_SERVER_PASSWORD: Flag.OPENCODE_SERVER_PASSWORD,
@@ -31,7 +37,9 @@ const original = {
 }
 
 afterEach(async () => {
+  MDNS.unpublish()
   events.length = 0
+  serviceErrorHandlers.length = 0
   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
   Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
   await disposeAllInstances()
@@ -75,5 +83,20 @@ describe("HttpApi Server.listen mDNS", () => {
     // Plain (graceful) stop without close=true should still unpublish.
     await withTimeout(listener.stop(), 10_000, "timed out stopping graceful mdns listener")
     expect(events.some((e) => e.kind === "unpublishAll")).toBe(true)
+  })
+
+  test("logs service-level mDNS errors", () => {
+    const warn = mock(() => {})
+    const originalWarn = console.warn
+    console.warn = warn
+
+    try {
+      MDNS.publish(4321)
+      const error = new Error("probe failed")
+      serviceErrorHandlers[0]?.(error)
+      expect(warn).toHaveBeenCalledWith("mDNS service error:", error)
+    } finally {
+      console.warn = originalWarn
+    }
   })
 })
