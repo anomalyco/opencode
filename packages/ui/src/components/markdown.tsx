@@ -1,7 +1,7 @@
 import { useMarked } from "../context/marked"
 import { useI18n } from "../context/i18n"
-import DOMPurify from "dompurify"
 import morphdom from "morphdom"
+import { sanitize } from "./markdown-sanitize"
 import { checksum } from "@opencode-ai/util/encode"
 import { ComponentProps, createEffect, createResource, createSignal, onCleanup, splitProps } from "solid-js"
 import { isServer } from "solid-js/web"
@@ -15,22 +15,9 @@ type Entry = {
 const max = 200
 const cache = new Map<string, Entry>()
 
-const config = {
-  USE_PROFILES: { html: true, mathMl: true },
-  SANITIZE_NAMED_PROPS: true,
-  ADD_ATTR: ["target", "rel"],
-  FORBID_TAGS: ["style"],
-  FORBID_CONTENTS: ["style", "script"],
-}
-
 const iconPaths = {
   copy: '<path d="M6.2513 6.24935V2.91602H17.0846V13.7493H13.7513M13.7513 6.24935V17.0827H2.91797V6.24935H13.7513Z" stroke="currentColor" stroke-linecap="round"/>',
   check: '<path d="M5 11.9657L8.37838 14.7529L15 5.83398" stroke="currentColor" stroke-linecap="square"/>',
-}
-
-function sanitize(html: string) {
-  if (!DOMPurify.isSupported) return ""
-  return DOMPurify.sanitize(html, config)
 }
 
 function escape(text: string) {
