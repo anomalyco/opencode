@@ -149,10 +149,11 @@ export const {
       hydratingSessions.get(sessionID)?.parts.add(partID)
     }
 
-    function sessionListQuery(): { scope?: "project"; path?: string } {
+    function sessionListQuery(): { directory?: string; scope?: "project"; path?: string } {
       if (!kv.get("session_directory_filter_enabled", true)) return { scope: "project" }
       if (!project.data.instance.path.worktree || !project.data.instance.path.directory) return { scope: "project" }
       return {
+        directory: project.data.instance.path.directory,
         path: path
           .relative(path.resolve(project.data.instance.path.worktree), project.data.instance.path.directory)
           .replaceAll("\\", "/"),

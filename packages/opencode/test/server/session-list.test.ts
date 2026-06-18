@@ -1,4 +1,5 @@
 import { afterEach, describe, expect } from "bun:test"
+import { $ } from "bun"
 import { Effect, Layer } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
@@ -233,6 +234,39 @@ describe("session.list", () => {
         )).map((session) => session.id)
         expect(pathIDs).toContain(current.id)
         expect(pathIDs).not.toContain(sibling.id)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "filters root worktree sessions by directory when path is empty",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        // Two root-level git worktrees of the same repo. Each worktree root maps to an
+        // empty project-relative path (""), so both root sessions share a project_id and
+        // path === "" — directory is the only thing that distinguishes them. Regression
+        // for #25963, where `--continue` could resume another worktree's root session.
+        const featureDir = path.join(test.directory, "..", path.basename(test.directory) + "-feature")
+        yield* Effect.addFinalizer(() =>
+          Effect.promise(() => $`git worktree remove --force ${featureDir}`.cwd(test.directory).quiet().nothrow()).pipe(
+            Effect.ignore,
+          ),
+        )
+        yield* Effect.promise(() => $`git worktree add ${featureDir} -b feature`.cwd(test.directory).quiet())
+
+        const mainSession = yield* withSession({ title: "main-root" })
+        const featureSession = yield* withSession({ title: "feature-root" }).pipe(provideInstance(featureDir))
+
+        expect(mainSession.projectID).toBe(featureSession.projectID)
+        expect(mainSession.path).toBe("")
+        expect(featureSession.path).toBe("")
+
+        const ids = (yield* SessionNs.Service.use((session) =>
+          session.list({ directory: featureDir, path: "" }),
+        )).map((session) => session.id)
+        expect(ids).toContain(featureSession.id)
+        expect(ids).not.toContain(mainSession.id)
       }),
     { git: true },
   )

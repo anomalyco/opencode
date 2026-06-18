@@ -1014,6 +1014,9 @@ function listByProject(
           : or(...conds)!,
       )
     }
+    if (input.path === "" && input.directory) {
+      conditions.push(eq(SessionTable.directory, input.directory))
+    }
   } else if (input.scope !== "project") {
     if (input.directory) {
       conditions.push(eq(SessionTable.directory, input.directory))
