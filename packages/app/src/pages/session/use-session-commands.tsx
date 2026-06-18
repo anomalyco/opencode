@@ -1,5 +1,6 @@
 import { useNavigate } from "@solidjs/router"
 import { useCommand, type CommandOption } from "@/context/command"
+import { useClientEnv } from "@/context/client-env"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { previewSelectedLines } from "@opencode-ai/ui/pierre/selection-bridge"
 import { useFile, selectionFromLines, type FileSelection, type SelectedLineRange } from "@/context/file"
@@ -36,6 +37,7 @@ const withCategory = (category: string) => {
 
 export const useSessionCommands = (actions: SessionCommandContext) => {
   const command = useCommand()
+  const env = useClientEnv()
   const dialog = useDialog()
   const file = useFile()
   const language = useLanguage()
@@ -235,8 +237,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const openFile = () => {
+    // 운영(viewer) 레이아웃에서는 세션 이동 없이 파일만 여는 모달이어야 한다.
+    const mode = env.productionLayout() ? "files" : undefined
     void import("@/components/dialog-select-file").then((x) => {
-      dialog.show(() => <x.DialogSelectFile onOpenFile={showAllFiles} />)
+      dialog.show(() => <x.DialogSelectFile mode={mode} onOpenFile={showAllFiles} />)
     })
   }
 
@@ -476,7 +480,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     viewCommand({
       id: "review.toggle",
       title: language.t("command.review.toggle"),
-      keybind: "mod+shift+r",
+      // 운영(viewer) 레이아웃에서는 Cmd+Shift+R 로 미리보기/검토 패널이 실수로 꺼지지 않도록 단축키를 제거한다.
+      keybind: env.productionLayout() ? undefined : "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
     }),
     viewCommand({

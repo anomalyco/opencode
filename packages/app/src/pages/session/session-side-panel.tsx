@@ -14,6 +14,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import FileTree from "@/components/file-tree"
 import { SessionContextUsage } from "@/components/session-context-usage"
 import { SessionContextTab, SortableTab, FileVisual } from "@/components/session"
+import { FileSearchButton } from "@/components/session/file-search-button"
 import { useClientEnv } from "@/context/client-env"
 import { useCommand } from "@/context/command"
 import { useFile, type SelectedLineRange } from "@/context/file"
@@ -205,6 +206,12 @@ export function SessionSidePanel(props: {
     layout.fileTree.setTab("all")
   }
 
+  const openFileSearch = () => {
+    void import("@/components/dialog-select-file").then((x) => {
+      dialog.show(() => <x.DialogSelectFile mode="files" onOpenFile={showAllFiles} />)
+    })
+  }
+
   const [store, setStore] = createStore({
     activeDraggable: undefined as string | undefined,
   })
@@ -365,11 +372,7 @@ export function SessionSidePanel(props: {
                             variant="ghost"
                             iconSize="large"
                             class="!rounded-md"
-                            onClick={() => {
-                              void import("@/components/dialog-select-file").then((x) => {
-                                dialog.show(() => <x.DialogSelectFile mode="files" onOpenFile={showAllFiles} />)
-                              })
-                            }}
+                            onClick={openFileSearch}
                             aria-label={language.t("command.file.open")}
                           />
                         </TooltipKeybind>
@@ -460,6 +463,13 @@ export function SessionSidePanel(props: {
               class="h-full flex flex-col overflow-hidden group/filetree"
               classList={{ "border-r border-border-weaker-base": reviewOpen() }}
             >
+              {/* 운영 레이아웃은 타이틀바/헤더가 없어 "파일 검색" 버튼이 사라진다.
+                  탐색기 상단에 직접 노출해 동일한 DialogSelectFile 모달을 연다. */}
+              <Show when={env.productionLayout()}>
+                <div class="shrink-0 px-3 pt-3">
+                  <FileSearchButton onClick={openFileSearch} />
+                </div>
+              </Show>
               <Tabs
                 variant="pill"
                 value={fileTreeTab()}

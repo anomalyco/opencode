@@ -145,7 +145,7 @@ export function SessionBrowserChrome(props: {
       class="flex items-center gap-2.5 px-3 h-9 shrink-0 border-b border-border-weaker-base bg-background-stronger"
     >
       {/* 좌 그룹 — 트래픽 라이트 + 파일 탐색기 토글 + 뒤로/앞으로 */}
-      <div class="flex flex-1 min-w-0 items-center gap-2.5">
+      <div class="flex shrink-0 items-center gap-2.5">
         <div class="flex items-center gap-1.5 shrink-0">
           <span class="size-2.5 rounded-full" style={{ background: "#ff5f57" }} />
           <span class="size-2.5 rounded-full" style={{ background: "#febc2e" }} />
@@ -177,7 +177,7 @@ export function SessionBrowserChrome(props: {
       </div>
 
       {/* 중앙 — 주소 pill (홈 · 주소 · 새로고침) */}
-      <div class="flex flex-[0_1_420px] min-w-0 justify-center">
+      <div class="flex flex-1 min-w-0">
         <div class="flex w-full h-6 items-center gap-1 px-1 rounded-md border border-border-weak-base bg-background-base">
           <button
             type="button"
@@ -202,7 +202,7 @@ export function SessionBrowserChrome(props: {
       </div>
 
       {/* 우 그룹 — 스크린샷 + 새 탭에서 열기 + 주소 복사 */}
-      <div class="flex flex-1 min-w-0 items-center justify-end gap-1">
+      <div class="flex shrink-0 items-center justify-end gap-1">
         <Show when={props.onCapture}>
           <button
             type="button"
