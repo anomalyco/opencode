@@ -214,10 +214,39 @@ function snapshotDom(query?: DomQuery): DomSnapshot {
 async function capture(options?: CaptureOptions): Promise<string> {
   const type = options?.type ?? "image/png"
   const node = document.documentElement
-  if (type === "image/jpeg") {
-    return htmlToImage.toJpeg(node, { quality: options?.quality ?? 0.92 })
+
+  // html-to-image 는 노드를 클론해 항상 스크롤 최상단부터 렌더한다. 그래서 전체 페이지를 한 번 그린 뒤
+  // 현재 스크롤 위치(window.scrollX/Y)의 뷰포트 영역만 잘라내야 "지금 보이는 화면"이 캡처된다.
+  // 크롭하지 않으면 어디로 스크롤했든 무조건 맨 위가 찍힌다.
+  const fullW = node.scrollWidth
+  const fullH = node.scrollHeight
+  try {
+    // 명시적 전체 스크롤 크기 지정 → 캔버스 배율이 결정적(canvas.width / fullW = pixelRatio).
+    const canvas = await htmlToImage.toCanvas(node, { width: fullW, height: fullH, cacheBust: true })
+    const rx = canvas.width / fullW
+    const ry = canvas.height / fullH
+    const out = document.createElement("canvas")
+    out.width = Math.max(1, Math.round(window.innerWidth * rx))
+    out.height = Math.max(1, Math.round(window.innerHeight * ry))
+    const ctx = out.getContext("2d")
+    if (!ctx) throw new Error("no 2d context")
+    ctx.drawImage(
+      canvas,
+      window.scrollX * rx,
+      window.scrollY * ry,
+      window.innerWidth * rx,
+      window.innerHeight * ry,
+      0,
+      0,
+      out.width,
+      out.height,
+    )
+    return type === "image/jpeg" ? out.toDataURL("image/jpeg", options?.quality ?? 0.92) : out.toDataURL("image/png")
+  } catch {
+    // 크롭 경로 실패 시 전체 페이지라도 반환(기존 동작 폴백).
+    if (type === "image/jpeg") return htmlToImage.toJpeg(node, { quality: options?.quality ?? 0.92 })
+    return htmlToImage.toPng(node)
   }
-  return htmlToImage.toPng(node)
 }
 
 // ── 요소 선택(인스펙트) 모드 ────────────────────────────────────────────────
