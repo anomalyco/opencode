@@ -128,6 +128,23 @@ test("turn summary starts at the left edge", async () => {
   }
 })
 
+test("turn summary appends completion time after duration", async () => {
+  const out = await setup()
+
+  try {
+    await out.scrollback.writeTurnSummary({ agent: "Build", model: "Little Frank", duration: "2.2s", time: "3:41 PM" })
+
+    const commits = claim(out.renderer)
+    try {
+      expect(renderRows(commits.at(-1)!)[0]).toBe("▣ Build · Little Frank · 2.2s · 3:41 PM")
+    } finally {
+      destroy(commits)
+    }
+  } finally {
+    out.scrollback.destroy()
+  }
+})
+
 test("theme swaps restyle active reasoning without resetting the stream", async () => {
   const previousSyntax = SyntaxStyle.fromStyles({ default: { fg: "#123456" } })
   const nextSyntax = SyntaxStyle.fromStyles({ default: { fg: "#abcdef" } })
