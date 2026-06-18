@@ -42,19 +42,23 @@ const it = testEffect(
 const systemHook = "experimental.chat.system.transform"
 
 function withProject<A, E, R>(source: string, self: Effect.Effect<A, E, R>) {
+  return withPlugins([source], self)
+}
+
+function withPlugins<A, E, R>(sources: string[], self: Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {
     const test = yield* TestInstance
-    const file = path.join(test.directory, "plugin.ts")
+    const files = sources.map((_, index) => path.join(test.directory, `plugin-${index}.ts`))
     yield* Effect.all(
       [
-        Effect.promise(() => Bun.write(file, source)),
+        ...sources.map((source, index) => Effect.promise(() => Bun.write(files[index]!, source))),
         Effect.promise(() =>
           Bun.write(
             path.join(test.directory, "opencode.json"),
             JSON.stringify(
               {
                 $schema: "https://opencode.ai/config.json",
-                plugin: [pathToFileURL(file).href],
+                plugin: files.map((file) => pathToFileURL(file).href),
               },
               null,
               2,
@@ -114,6 +118,40 @@ describe("plugin.trigger", () => {
       ].join("\n"),
       Effect.gen(function* () {
         expect(yield* triggerSystemTransform()).toEqual(["async"])
+      }),
+    ),
+  )
+
+  it.instance("dispatches only matching hooks while preserving plugin order", () =>
+    withPlugins(
+      [
+        [
+          "export default async () => ({",
+          `  ${JSON.stringify(systemHook)}: (_input, output) => {`,
+          '    output.system.push("first")',
+          "  },",
+          "})",
+          "",
+        ].join("\n"),
+        [
+          "export default async () => ({",
+          '  "chat.message": (_input, output) => {',
+          '    output.parts.push({ type: "text", text: "ignored" })',
+          "  },",
+          "})",
+          "",
+        ].join("\n"),
+        [
+          "export default async () => ({",
+          `  ${JSON.stringify(systemHook)}: (_input, output) => {`,
+          '    output.system.push("second")',
+          "  },",
+          "})",
+          "",
+        ].join("\n"),
+      ],
+      Effect.gen(function* () {
+        expect(yield* triggerSystemTransform()).toEqual(["first", "second"])
       }),
     ),
   )
