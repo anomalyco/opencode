@@ -975,11 +975,11 @@ export const layer = Layer.effect(
         return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
       })
 
-      const resolvedParts = yield* Effect.forEach(input.parts, resolvePart, { concurrency: "unbounded" }).pipe(
+      let resolvedParts = yield* Effect.forEach(input.parts, resolvePart, { concurrency: "unbounded" }).pipe(
         Effect.map((x) => x.flat().map(assign)),
       )
 
-      yield* plugin.trigger(
+      const chatResult = yield* plugin.trigger(
         "chat.message",
         {
           sessionID: input.sessionID,
@@ -990,6 +990,7 @@ export const layer = Layer.effect(
         },
         { message: info, parts: resolvedParts },
       )
+      resolvedParts = chatResult.parts
 
       const parts = yield* Effect.forEach(resolvedParts, (part) =>
         part.type === "file" && part.mime.startsWith("image/")
@@ -1322,7 +1323,7 @@ export const layer = Layer.effect(
               }
             }
 
-            yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
+            msgs = (yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })).messages
 
             const [skills, env, instructions, modelMsgs] = yield* Effect.all([
               sys.skills(agent),
