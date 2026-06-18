@@ -39,6 +39,7 @@ import { JsonMigration } from "./storage/json-migration"
 import { Database } from "./storage/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
+import { Flag } from "./flag/flag"
 
 process.on("unhandledRejection", (e) => {
   Log.Default.error("rejection", {
@@ -79,10 +80,12 @@ const cli = yargs(hideBin(process.argv))
     }
 
     await Log.init({
-      print: process.argv.includes("--print-logs"),
+      print: process.argv.includes("--print-logs") || Boolean(Flag.ENVIRONMENT),
       dev: Installation.isLocal(),
       level: (() => {
         if (opts.logLevel) return opts.logLevel as Log.Level
+        if (Flag.ENVIRONMENT === "development") return "DEBUG"
+        if (Flag.ENVIRONMENT === "production") return "INFO"
         if (Installation.isLocal()) return "DEBUG"
         return "INFO"
       })(),
