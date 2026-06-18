@@ -1,4 +1,5 @@
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -208,6 +209,31 @@ const providerErrorEnv = LayerNode.buildLayer(root, {
   replacements: [...replacements, LayerNode.replace(LLM.node, providerErrorLLM)],
 })
 const itProviderError = testEffect(providerErrorEnv)
+
+const correctedPermissionLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    stream: () =>
+      Stream.make(
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolInputStart({ id: "call-1", name: "bash" }),
+        LLMEvent.toolInputEnd({ id: "call-1", name: "bash" }),
+        LLMEvent.toolCall({ id: "call-1", name: "bash", input: { cmd: "rm -rf /tmp/demo" } }),
+        LLMEvent.toolError({
+          id: "call-1",
+          name: "bash",
+          message: "The user rejected permission to use this specific tool call with the following feedback: use ls",
+          error: new PermissionV1.CorrectedError({ feedback: "use ls" }),
+        }),
+        LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+        LLMEvent.finish({ reason: "stop" }),
+      ),
+  }),
+)
+const correctedPermissionEnv = LayerNode.buildLayer(root, {
+  replacements: [...replacements, LayerNode.replace(LLM.node, correctedPermissionLLM)],
+})
+const itCorrectedPermission = testEffect(correctedPermissionEnv)
 
 const fragmentFailureLLM = Layer.succeed(
   LLM.Service,
@@ -1015,6 +1041,46 @@ itProviderError.live("session.processor effect tests fail provider-executed erro
           result: { type: "error", value: "provider boom" },
           provider: { executed: true },
         })
+      }),
+    { config: cfg },
+  ),
+)
+
+itCorrectedPermission.live("session.processor effect tests stop after permission rejection with feedback", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "permission feedback")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+        const result = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "permission feedback" }],
+          tools: {},
+        })
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const call = parts.find((part): part is SessionV1.ToolPart => part.type === "tool")
+
+        expect(result).toBe("stop")
+        expect(call?.state.status).toBe("error")
+        if (call?.state.status === "error") expect(call.state.error).toContain("use ls")
       }),
     { config: cfg },
   ),
