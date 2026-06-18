@@ -1678,7 +1678,11 @@ export const layer = Layer.effect(
           delete s.providers[key]
         } else {
           const p = s.providers[key]
-          if (p) s.providers[key] = { ...p, models: result.models }
+          if (!p) {
+            yield* Effect.logWarning("Provider disappeared between discovery and apply", { provider: result.providerID })
+            continue
+          }
+          s.providers[key] = { ...p, models: result.models }
         }
       }
       s.discoveryDone = true

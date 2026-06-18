@@ -1324,6 +1324,7 @@ describe("ProviderTransform.schema - openai supported schema subset", () => {
     ["opencode", "@ai-sdk/openai"],
     ["custom-openai-compatible", "@ai-sdk/openai"],
     ["azure", "@ai-sdk/azure"],
+    ["custom-openai-compatible", "@ai-sdk/openai-compatible"],
   ])("sanitizes %s models using %s", (providerID, npm) => {
     expect(
       ProviderTransform.schema(
