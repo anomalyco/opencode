@@ -138,7 +138,7 @@ export const layer = Layer.effect(
       yield* state.cancel(sessionID)
     })
 
-    const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string) {
+    const resolvePromptParts = Effect.fn("SessionPrompt.resolvePromptParts")(function* (template: string, baseDir?: string) {
       const ctx = yield* InstanceState.context
       const parts: Types.DeepMutable<PromptInput["parts"]> = [{ type: "text", text: template }]
       const files = ConfigMarkdown.files(template)
@@ -153,7 +153,11 @@ export const layer = Layer.effect(
 
           const filepath = name.startsWith("~/")
             ? path.join(os.homedir(), name.slice(2))
-            : path.resolve(ctx.worktree, name)
+            : path.isAbsolute(name)
+              ? name
+              : baseDir
+                ? path.resolve(baseDir, name)
+                : path.resolve(ctx.worktree, name)
 
           const info = yield* fsys.stat(filepath).pipe(Effect.option)
           if (Option.isNone(info)) {
@@ -1490,7 +1494,7 @@ export const layer = Layer.effect(
         throw error
       }
 
-      const templateParts = yield* resolvePromptParts(template)
+      const templateParts = yield* resolvePromptParts(template, cmd.baseDir)
       const inputFiles = new Set(
         input.parts?.filter((part) => new URL(part.url).protocol === "file:").map((part) => fileURLToPath(part.url)),
       )
