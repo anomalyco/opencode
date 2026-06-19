@@ -429,14 +429,12 @@ export function Session() {
 
   // Pagination + asymmetric windowing
   const WINDOW_CAP = 200
-  const NEAR_TOP_THRESHOLD = 5
-  const NEAR_BOTTOM_THRESHOLD = 5
 
   async function maybeLoadOlderMessages() {
     if (!scroll || scroll.isDestroyed) return
     if (!sync.data.messageOlderCursor[route.sessionID]) return
     if (sync.data.messageOlderLoading[route.sessionID]) return
-    if (scroll.scrollTop > NEAR_TOP_THRESHOLD) return
+    if (scroll.scrollTop > 5) return
     // Anchor-based scroll restoration: identify the first visible child
     // so we can restore its position after content changes at either end.
     // Note: child.y includes the scroll offset, so child.y - scroll.y
@@ -452,18 +450,7 @@ export function Session() {
     if (messages.length > WINDOW_CAP && scroll.scrollHeight - scroll.scrollTop > scroll.height * 4) {
       sync.session.trimNewerMessages(route.sessionID, WINDOW_CAP)
     }
-    setTimeout(() => {
-      if (!scroll || scroll.isDestroyed) return
-      if (anchorId === undefined || anchorOffset === undefined) return
-      const anchorChild = scroll.getChildren().find((c) => c.id === anchorId)
-      if (anchorChild) {
-        // Use scrollBy with the delta (anchorChild.y - scroll.y - anchorOffset)
-        // rather than scrollTo with an absolute position. The child.y values
-        // include the scroll offset, so child.y - scroll.y cancels it out,
-        // giving a correct delta regardless of scroll.y vs scrollTop.
-        scroll.scrollBy(anchorChild.y - scroll.y - anchorOffset)
-      }
-    }, 0)
+    restoreScrollAnchor(anchorId, anchorOffset)
   }
 
   async function maybeLoadNewerMessages() {
@@ -471,7 +458,7 @@ export function Session() {
     if (!sync.data.messageNewerCursor[route.sessionID]) return
     if (sync.data.messageNewerLoading[route.sessionID]) return
     const distanceFromBottom = scroll.scrollHeight - scroll.height - scroll.scrollTop
-    if (distanceFromBottom > NEAR_BOTTOM_THRESHOLD) return
+    if (distanceFromBottom > 5) return
     // Anchor-based scroll restoration: identify the first visible child
     // so we can restore its position after content changes at either end.
     // Note: child.y includes the scroll offset, so child.y - scroll.y
@@ -486,17 +473,19 @@ export function Session() {
     if (messages.length > WINDOW_CAP && scroll.scrollTop > scroll.height * 4) {
       sync.session.trimOlderMessages(route.sessionID, WINDOW_CAP)
     }
+    restoreScrollAnchor(anchorId, anchorOffset)
+  }
+
+  // Anchor-based scroll restoration: after content changes at either end,
+  // reposition the viewport so the previously-visible anchor child stays
+  // in place. child.y includes the scroll offset, so child.y - scroll.y
+  // gives the offset from the viewport top regardless of scroll position.
+  function restoreScrollAnchor(anchorId?: string, anchorOffset?: number) {
     setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
       if (anchorId === undefined || anchorOffset === undefined) return
-      const anchorChild = scroll.getChildren().find((c) => c.id === anchorId)
-      if (anchorChild) {
-        // Use scrollBy with the delta (anchorChild.y - scroll.y - anchorOffset)
-        // rather than scrollTo with an absolute position. The child.y values
-        // include the scroll offset, so child.y - scroll.y cancels it out,
-        // giving a correct delta regardless of scroll.y vs scrollTop.
-        scroll.scrollBy(anchorChild.y - scroll.y - anchorOffset)
-      }
+      const child = scroll.getChildren().find((c) => c.id === anchorId)
+      if (child) scroll.scrollBy(child.y - scroll.y - anchorOffset)
     }, 0)
   }
 

@@ -390,11 +390,8 @@ export const {
           // If the parent message isn't in our window AND the window's
           // bottom has been evicted, drop the part - it would otherwise
           // be orphaned in store.part with no message to attach to.
-          const inWindow = (() => {
-            const messages = store.message[sessionID]
-            if (!messages) return true
-            return search(messages, messageID, (m) => m.id).found
-          })()
+          const messages = store.message[sessionID]
+          const inWindow = !messages || search(messages, messageID, (m) => m.id).found
           if (!parts) {
             if (!inWindow && store.messageNewerCursor[sessionID]) break
             setStore("part", messageID, [event.properties.part])
