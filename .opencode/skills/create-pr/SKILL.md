@@ -30,7 +30,11 @@ Branch naming conventions:
 
 Always branch from the target base, never from a feature or work branch.
 
-### 3. Stage and commit
+### 3. Edit files in-place
+
+Work with files at their real paths inside the cloned repo. Do not fetch file contents from the GitHub API for editing; check them out from git and edit directly.
+
+### 4. Stage and commit
 
 One logical commit per change. Use conventional commits:
 
@@ -50,13 +54,17 @@ git rebase -i HEAD~N
 
 Only commit what was asked. Exclude unrelated local files (config, editor temp files, etc.).
 
-### 4. Push
+### 5. Review the diff before pushing
+
+Run `git diff --stat` to confirm only the intended files changed with the expected size. If you see `create mode 100644` on a file that already exists in the repo, the path is wrong.
+
+### 6. Push
 
 ```bash
 git push -u origin HEAD
 ```
 
-### 5. Create the pull request
+### 7. Create the pull request
 
 Use the GitHub CLI:
 
@@ -87,7 +95,7 @@ If no template exists, use this fallback:
 - [ ] Tests pass
 ```
 
-### 6. Verify
+### 8. Verify
 
 - Confirm the PR URL is returned to the user.
 - The PR should contain exactly the commits needed — no extra history from the base branch.
