@@ -158,6 +158,18 @@ function stateApi(sync: ReturnType<typeof useSync>): TuiPluginApi["state"] {
           error: item.status === "failed" ? item.error : undefined,
         }))
     },
+    mcp_resource() {
+      const data = sync.data.mcp_resource
+      if (!data) return []
+      return Object.entries(data)
+        .filter(([, resource]) => resource.client === "axi")
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([, resource]) => ({
+          name: resource.name,
+          uri: resource.uri,
+          description: resource.description,
+        }))
+    },
   }
 }
 

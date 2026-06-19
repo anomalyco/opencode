@@ -396,6 +396,7 @@ export type TuiState = {
   part: (messageID: string) => ReadonlyArray<Part>
   lsp: () => ReadonlyArray<TuiSidebarLspItem>
   mcp: () => ReadonlyArray<TuiSidebarMcpItem>
+  mcp_resource: () => ReadonlyArray<{ name: string; uri: string; description?: string }>
 }
 
 type TuiBindingLookupView = {

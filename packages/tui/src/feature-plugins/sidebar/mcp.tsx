@@ -8,6 +8,7 @@ function View(props: { api: TuiPluginApi }) {
   const [open, setOpen] = createSignal(true)
   const theme = () => props.api.theme.current
   const list = createMemo(() => props.api.state.mcp())
+  const axiList = createMemo(() => props.api.state.mcp_resource())
   const on = createMemo(() => list().filter((item) => item.status === "connected").length)
   const bad = createMemo(
     () =>
@@ -26,15 +27,17 @@ function View(props: { api: TuiPluginApi }) {
     return theme().textMuted
   }
 
+  const total = () => list().length + axiList().length
+
   return (
-    <Show when={list().length > 0}>
+    <Show when={total() > 0}>
       <box>
-        <box flexDirection="row" gap={1} onMouseDown={() => list().length > 2 && setOpen((x) => !x)}>
-          <Show when={list().length > 2}>
+        <box flexDirection="row" gap={1} onMouseDown={() => total() > 2 && setOpen((x) => !x)}>
+          <Show when={total() > 2}>
             <text fg={theme().text}>{open() ? "▼" : "▶"}</text>
           </Show>
           <text fg={theme().text}>
-            <b>MCP</b>
+            <b>MCP/AXI</b>
             <Show when={!open()}>
               <span style={{ fg: theme().textMuted }}>
                 {" "}
@@ -43,7 +46,7 @@ function View(props: { api: TuiPluginApi }) {
             </Show>
           </text>
         </box>
-        <Show when={list().length <= 2 || open()}>
+        <Show when={total() <= 2 || open()}>
           <For each={list()}>
             {(item) => (
               <box flexDirection="row" gap={1}>
@@ -72,6 +75,20 @@ function View(props: { api: TuiPluginApi }) {
               </box>
             )}
           </For>
+          <Show when={axiList().length > 0}>
+            <For each={axiList()}>
+              {(item) => (
+                <box flexDirection="row" gap={1}>
+                  <text flexShrink={0} style={{ fg: theme().info }}>
+                    •
+                  </text>
+                  <text fg={theme().text} wrapMode="word">
+                    {item.name}
+                  </text>
+                </box>
+              )}
+            </For>
+          </Show>
         </Show>
       </box>
     </Show>
