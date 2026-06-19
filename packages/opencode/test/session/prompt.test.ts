@@ -1346,7 +1346,7 @@ it.instance(
 
       const inputs = yield* llm.inputs
       expect(inputs).toHaveLength(2)
-      expect(JSON.stringify(inputs.at(-1)?.messages)).toContain("second")
+      expect(inputs.at(-1)?.messages.at(-1)).toEqual({ role: "user", content: "second" })
     }),
   3_000,
 )
