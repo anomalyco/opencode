@@ -185,7 +185,7 @@ function transformApiResponse(data: any): Model[] {
       if (info.supports_audio_output) outputModalities.push("audio")
 
       return {
-        id: info.key || item.model_name,
+        id: item.model_name,
         name: humanizeModelName(item.model_name || ""),
         family: info.litellm_provider ?? undefined,
         release_date: "",
