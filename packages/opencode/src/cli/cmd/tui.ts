@@ -135,12 +135,9 @@ export const TuiThreadCommand = cmd({
       const worker = new Worker(file)
       let workerError: string | undefined
       worker.addEventListener("error", (event) => {
-        workerError =
-          event instanceof ErrorEvent && event.error instanceof Error
-            ? event.error.message
-            : event instanceof ErrorEvent
-              ? event.message
-              : "worker error"
+        const error = "error" in event ? event.error : undefined
+        const message = "message" in event && typeof event.message === "string" ? event.message : undefined
+        workerError = error instanceof Error ? error.message : (message ?? "worker error")
       })
       const client = Rpc.client<typeof rpc>(worker)
       const reload = () => {
