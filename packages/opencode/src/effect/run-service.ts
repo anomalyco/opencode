@@ -1,25 +1,38 @@
-import { Effect, Layer, ManagedRuntime } from "effect"
-import * as ServiceMap from "effect/ServiceMap"
-import { Instance } from "@/project/instance"
-import { Context } from "@/util/context"
-import { InstanceRef } from "./instance-ref"
-import { Observability } from "./oltp"
+import { Effect, Fiber, Layer, ManagedRuntime } from "effect"
+import * as Context from "effect/Context"
+import { InstanceRef, WorkspaceRef } from "./instance-ref"
+import * as Observability from "@opencode-ai/core/observability"
+import { WorkspaceContext } from "@/control-plane/workspace-context"
+import type { InstanceContext } from "@/project/instance-context"
+import { memoMap } from "@opencode-ai/core/effect/memo-map"
 
-export const memoMap = Layer.makeMemoMapUnsafe()
-
-function attach<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
-  try {
-    const ctx = Instance.current
-    return Effect.provideService(effect, InstanceRef, ctx)
-  } catch (err) {
-    if (!(err instanceof Context.NotFound)) throw err
-  }
-  return effect
+type Refs = {
+  instance?: InstanceContext
+  workspace?: string
 }
 
-export function makeRuntime<I, S, E>(service: ServiceMap.Service<I, S>, layer: Layer.Layer<I, E>) {
+export function attachWith<A, E, R>(effect: Effect.Effect<A, E, R>, refs: Refs): Effect.Effect<A, E, R> {
+  if (!refs.instance && !refs.workspace) return effect
+  if (!refs.instance) return effect.pipe(Effect.provideService(WorkspaceRef, refs.workspace))
+  if (!refs.workspace) return effect.pipe(Effect.provideService(InstanceRef, refs.instance))
+  return effect.pipe(
+    Effect.provideService(InstanceRef, refs.instance),
+    Effect.provideService(WorkspaceRef, refs.workspace),
+  )
+}
+
+export function attach<A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+  const workspace = WorkspaceContext.workspaceID
+  const fiber = Fiber.getCurrent()
+  return attachWith(effect, {
+    instance: fiber ? Context.getReferenceUnsafe(fiber.context, InstanceRef) : undefined,
+    workspace: workspace ?? (fiber ? Context.getReferenceUnsafe(fiber.context, WorkspaceRef) : undefined),
+  })
+}
+
+export function makeRuntime<I, S, E>(service: Context.Service<I, S>, layer: Layer.Layer<I, E>) {
   let rt: ManagedRuntime.ManagedRuntime<I, E> | undefined
-  const getRuntime = () => (rt ??= ManagedRuntime.make(Layer.merge(layer, Observability.layer), { memoMap }))
+  const getRuntime = () => (rt ??= ManagedRuntime.make(Layer.provideMerge(layer, Observability.layer), { memoMap }))
 
   return {
     runSync: <A, Err>(fn: (svc: S) => Effect.Effect<A, Err, I>) => getRuntime().runSync(attach(service.use(fn))),

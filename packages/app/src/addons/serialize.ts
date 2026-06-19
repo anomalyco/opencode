@@ -258,8 +258,8 @@ class StringSerializeHandler extends BaseSerializeHandler {
   }
 
   protected _beforeSerialize(rows: number, start: number, _end: number): void {
-    this._allRows = new Array<string>(rows)
-    this._allRowSeparators = new Array<string>(rows)
+    this._allRows = Array.from<string>({ length: rows })
+    this._allRowSeparators = Array.from<string>({ length: rows })
     this._rowIndex = 0
 
     this._currentRow = ""

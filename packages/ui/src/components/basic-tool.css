@@ -11,17 +11,6 @@
     cursor: pointer;
   }
 
-  &[data-hide-details="true"] {
-    [data-slot="basic-tool-tool-trigger-content"] {
-      flex: 1 1 auto;
-      max-width: 100%;
-    }
-
-    [data-slot="basic-tool-tool-info"] {
-      flex: 1 1 auto;
-    }
-  }
-
   [data-slot="basic-tool-tool-trigger-content"] {
     flex: 0 1 auto;
     width: auto;

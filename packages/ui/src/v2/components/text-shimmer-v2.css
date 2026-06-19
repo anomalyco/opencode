@@ -1,0 +1,125 @@
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+}
+
+[data-component="text-shimmer-v2"] {
+  --_step: 45ms;
+  --_duration: 1200ms;
+  --_swap: 220ms;
+  --_index: 0;
+  --_angle: 90deg;
+  --_spread: 5.2ch;
+  --_size: 360%;
+  --_base-color: var(--text-text-muted);
+  --_peak-color: var(--text-text-base);
+  --_sweep: linear-gradient(
+    var(--_angle),
+    transparent calc(50% - var(--_spread)),
+    var(--_peak-color) 50%,
+    transparent calc(50% + var(--_spread))
+  );
+  --_base: linear-gradient(var(--_base-color), var(--_base-color));
+
+  display: inline-flex;
+  align-items: baseline;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  user-select: none;
+}
+
+[data-component="text-shimmer-v2"] [data-slot="text-shimmer-v2-char"] {
+  display: inline-grid;
+  white-space: pre;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+}
+
+[data-component="text-shimmer-v2"] [data-slot="text-shimmer-v2-base"],
+[data-component="text-shimmer-v2"] [data-slot="text-shimmer-v2-shimmer"] {
+  grid-area: 1 / 1;
+  white-space: pre;
+  transition: opacity var(--_swap) ease-out;
+  font: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+}
+
+[data-component="text-shimmer-v2"] [data-slot="text-shimmer-v2-base"] {
+  color: inherit;
+  opacity: 1;
+}
+
+[data-component="text-shimmer-v2"] [data-slot="text-shimmer-v2-shimmer"] {
+  color: var(--_base-color);
+  opacity: 0;
+}
+
+[data-component="text-shimmer-v2"][data-active="true"] [data-slot="text-shimmer-v2-shimmer"] {
+  opacity: 1;
+}
+
+[data-component="text-shimmer-v2"] [data-slot="text-shimmer-v2-shimmer"][data-run="true"] {
+  animation-name: text-shimmer-v2-sweep;
+  animation-duration: var(--_duration);
+  animation-iteration-count: infinite;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+  animation-delay: calc(var(--_step) * var(--_index) * -1);
+  will-change: background-position;
+}
+
+@keyframes text-shimmer-v2-sweep {
+  0% {
+    background-position:
+      100% 0,
+      0 0;
+  }
+  100% {
+    background-position:
+      0% 0,
+      0 0;
+  }
+}
+
+@supports ((-webkit-background-clip: text) or (background-clip: text)) {
+  [data-component="text-shimmer-v2"] [data-slot="text-shimmer-v2-shimmer"] {
+    color: transparent;
+    -webkit-text-fill-color: transparent;
+    background-image: var(--_sweep), var(--_base);
+    background-size:
+      var(--_size) 100%,
+      100% 100%;
+    background-position:
+      100% 0,
+      0 0;
+    background-repeat: no-repeat;
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
+
+  [data-component="text-shimmer-v2"][data-active="true"] [data-slot="text-shimmer-v2-base"] {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-component="text-shimmer-v2"] [data-slot="text-shimmer-v2-base"],
+  [data-component="text-shimmer-v2"] [data-slot="text-shimmer-v2-shimmer"] {
+    transition-duration: 0ms;
+  }
+
+  [data-component="text-shimmer-v2"] [data-slot="text-shimmer-v2-shimmer"] {
+    animation: none !important;
+    color: inherit;
+    -webkit-text-fill-color: currentColor;
+    background-image: none;
+  }
+
+  [data-component="text-shimmer-v2"] [data-slot="text-shimmer-v2-base"] {
+    opacity: 1 !important;
+  }
+}

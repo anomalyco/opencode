@@ -1,45 +1,70 @@
+import type { Argv } from "yargs"
 import { Auth } from "../../auth"
 import { cmd } from "./cmd"
-import * as prompts from "@clack/prompts"
+import { CliError, effectCmd, fail } from "../effect-cmd"
 import { UI } from "../ui"
-import { ModelsDev } from "../../provider/models"
+import * as Prompt from "../effect/prompt"
+import { ModelsDev } from "@opencode-ai/core/models-dev"
+
+import { map, pipe, sortBy, values } from "remeda"
 import path from "path"
 import os from "os"
-import { Global } from "../../global"
-import { Instance } from "../../project/instance"
+import { Config } from "@/config/config"
+import { Global } from "@opencode-ai/core/global"
+import { Plugin } from "../../plugin"
 import type { Hooks } from "@opencode-ai/plugin"
-import { Process } from "../../util/process"
+import { Process } from "@/util/process"
+import { errorMessage } from "@/util/error"
 import { text } from "node:stream/consumers"
+import { Effect, Option } from "effect"
 
 type PluginAuth = NonNullable<Hooks["auth"]>
 
-async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, methodName?: string): Promise<boolean> {
-  let index = 0
-  if (methodName) {
+const promptValue = <Value>(value: Option.Option<Value>) => {
+  if (Option.isNone(value)) return Effect.die(new UI.CancelledError())
+  return Effect.succeed(value.value)
+}
+
+const put = Effect.fn("Cli.providers.put")(function* (key: string, info: Auth.Info) {
+  const auth = yield* Auth.Service
+  yield* Effect.orDie(auth.set(key, info))
+})
+
+const cliTry = <Value>(message: string, fn: () => PromiseLike<Value>) =>
+  Effect.tryPromise({
+    try: fn,
+    catch: (error) => new CliError({ message: message + errorMessage(error) }),
+  })
+
+const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
+  plugin: { auth: PluginAuth },
+  provider: string,
+  methodName?: string,
+) {
+  const index = yield* Effect.gen(function* () {
+    if (!methodName) {
+      if (plugin.auth.methods.length <= 1) return 0
+      return yield* promptValue(
+        yield* Prompt.select({
+          message: "Login method",
+          options: plugin.auth.methods.map((x, index) => ({
+            label: x.label,
+            value: index,
+          })),
+        }),
+      )
+    }
     const match = plugin.auth.methods.findIndex((x) => x.label.toLowerCase() === methodName.toLowerCase())
     if (match === -1) {
-      prompts.log.error(
+      return yield* fail(
         `Unknown method "${methodName}" for ${provider}. Available: ${plugin.auth.methods.map((x) => x.label).join(", ")}`,
       )
-      process.exit(1)
     }
-    index = match
-  } else if (plugin.auth.methods.length > 1) {
-    const method = await prompts.select({
-      message: "Login method",
-      options: [
-        ...plugin.auth.methods.map((x, index) => ({
-          label: x.label,
-          value: index.toString(),
-        })),
-      ],
-    })
-    if (prompts.isCancel(method)) throw new UI.CancelledError()
-    index = parseInt(method)
-  }
+    return match
+  })
   const method = plugin.auth.methods[index]
 
-  await new Promise((r) => setTimeout(r, 10))
+  yield* Effect.sleep("10 millis")
   const inputs: Record<string, string> = {}
   if (method.prompts) {
     for (const prompt of method.prompts) {
@@ -51,46 +76,44 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
       }
       if (prompt.condition && !prompt.condition(inputs)) continue
       if (prompt.type === "select") {
-        const value = await prompts.select({
+        const value = yield* Prompt.select({
           message: prompt.message,
           options: prompt.options,
         })
-        if (prompts.isCancel(value)) throw new UI.CancelledError()
-        inputs[prompt.key] = value
-      } else {
-        const value = await prompts.text({
-          message: prompt.message,
-          placeholder: prompt.placeholder,
-          validate: prompt.validate ? (v) => prompt.validate!(v ?? "") : undefined,
-        })
-        if (prompts.isCancel(value)) throw new UI.CancelledError()
-        inputs[prompt.key] = value
+        inputs[prompt.key] = yield* promptValue(value)
+        continue
       }
+      const value = yield* Prompt.text({
+        message: prompt.message,
+        placeholder: prompt.placeholder,
+        validate: prompt.validate ? (v) => prompt.validate!(v ?? "") : undefined,
+      })
+      inputs[prompt.key] = yield* promptValue(value)
     }
   }
 
   if (method.type === "oauth") {
-    const authorize = await method.authorize(inputs)
+    const authorize = yield* cliTry("Failed to authorize: ", () => method.authorize(inputs))
 
     if (authorize.url) {
-      prompts.log.info("Go to: " + authorize.url)
+      yield* Prompt.log.info("Go to: " + authorize.url)
     }
 
     if (authorize.method === "auto") {
       if (authorize.instructions) {
-        prompts.log.info(authorize.instructions)
+        yield* Prompt.log.info(authorize.instructions)
       }
-      const spinner = prompts.spinner()
-      spinner.start("Waiting for authorization...")
-      const result = await authorize.callback()
+      const spinner = Prompt.spinner()
+      yield* spinner.start("Waiting for authorization...")
+      const result = yield* cliTry("Failed to authorize: ", () => authorize.callback())
       if (result.type === "failed") {
-        spinner.stop("Failed to authorize", 1)
+        yield* spinner.stop("Failed to authorize", 1)
       }
       if (result.type === "success") {
         const saveProvider = result.provider ?? provider
         if ("refresh" in result) {
           const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
+          yield* put(saveProvider, {
             type: "oauth",
             refresh,
             access,
@@ -99,30 +122,31 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
           })
         }
         if ("key" in result) {
-          await Auth.set(saveProvider, {
+          yield* put(saveProvider, {
             type: "api",
             key: result.key,
+            ...(result.metadata ? { metadata: result.metadata } : {}),
           })
         }
-        spinner.stop("Login successful")
+        yield* spinner.stop("Login successful")
       }
     }
 
     if (authorize.method === "code") {
-      const code = await prompts.text({
+      const code = yield* Prompt.text({
         message: "Paste the authorization code here: ",
         validate: (x) => (x && x.length > 0 ? undefined : "Required"),
       })
-      if (prompts.isCancel(code)) throw new UI.CancelledError()
-      const result = await authorize.callback(code)
+      const authorizationCode = yield* promptValue(code)
+      const result = yield* cliTry("Failed to authorize: ", () => authorize.callback(authorizationCode))
       if (result.type === "failed") {
-        prompts.log.error("Failed to authorize")
+        yield* Prompt.log.error("Failed to authorize")
       }
       if (result.type === "success") {
         const saveProvider = result.provider ?? provider
         if ("refresh" in result) {
           const { type: _, provider: __, refresh, access, expires, ...extraFields } = result
-          await Auth.set(saveProvider, {
+          yield* put(saveProvider, {
             type: "oauth",
             refresh,
             access,
@@ -131,40 +155,59 @@ async function handlePluginAuth(plugin: { auth: PluginAuth }, provider: string, 
           })
         }
         if ("key" in result) {
-          await Auth.set(saveProvider, {
+          yield* put(saveProvider, {
             type: "api",
             key: result.key,
+            ...(result.metadata ? { metadata: result.metadata } : {}),
           })
         }
-        prompts.log.success("Login successful")
+        yield* Prompt.log.success("Login successful")
       }
     }
 
-    prompts.outro("Done")
+    yield* Prompt.outro("Done")
     return true
   }
 
   if (method.type === "api") {
-    if (method.authorize) {
-      const result = await method.authorize(inputs)
-      if (result.type === "failed") {
-        prompts.log.error("Failed to authorize")
-      }
-      if (result.type === "success") {
-        const saveProvider = result.provider ?? provider
-        await Auth.set(saveProvider, {
-          type: "api",
-          key: result.key,
-        })
-        prompts.log.success("Login successful")
-      }
-      prompts.outro("Done")
+    const key = yield* Prompt.password({
+      message: "Enter your API key",
+      validate: (x) => (x && x.length > 0 ? undefined : "Required"),
+    })
+    const apiKey = yield* promptValue(key)
+
+    const metadata = Object.keys(inputs).length ? { metadata: inputs } : {}
+    const authorizeApi = method.authorize
+    if (!authorizeApi) {
+      yield* put(provider, {
+        type: "api",
+        key: apiKey,
+        ...metadata,
+      })
+      yield* Prompt.outro("Done")
       return true
     }
+
+    const result = yield* cliTry("Failed to authorize: ", () => authorizeApi(inputs))
+    if (result.type === "failed") {
+      yield* Prompt.log.error("Failed to authorize")
+    }
+    if (result.type === "success") {
+      const saveProvider = result.provider ?? provider
+      const merged = { ...(metadata.metadata ?? {}), ...(result.metadata ?? {}) }
+      yield* put(saveProvider, {
+        type: "api",
+        key: result.key ?? apiKey,
+        ...(Object.keys(merged).length ? { metadata: merged } : {}),
+      })
+      yield* Prompt.log.success("Login successful")
+    }
+    yield* Prompt.outro("Done")
+    return true
   }
 
   return false
-}
+})
 
 export function resolvePluginProviders(input: {
   hooks: Hooks[]
@@ -202,25 +245,30 @@ export const ProvidersCommand = cmd({
   async handler() {},
 })
 
-export const ProvidersListCommand = cmd({
+export const ProvidersListCommand = effectCmd({
   command: "list",
   aliases: ["ls"],
   describe: "list providers and credentials",
-  async handler(_args) {
+  // Lists global credentials + provider env vars; no project instance needed.
+  instance: false,
+  handler: Effect.fn("Cli.providers.list")(function* (_args) {
+    const authSvc = yield* Auth.Service
+    const modelsDev = yield* ModelsDev.Service
+
     UI.empty()
     const authPath = path.join(Global.Path.data, "auth.json")
     const homedir = os.homedir()
     const displayPath = authPath.startsWith(homedir) ? authPath.replace(homedir, "~") : authPath
-    prompts.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
-    const results = Object.entries(await Auth.all())
-    const database = await ModelsDev.get()
+    yield* Prompt.intro(`Credentials ${UI.Style.TEXT_DIM}${displayPath}`)
+    const results = Object.entries(yield* Effect.orDie(authSvc.all()))
+    const database = yield* modelsDev.get()
 
     for (const [providerID, result] of results) {
       const name = database[providerID]?.name || providerID
-      prompts.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
+      yield* Prompt.log.info(`${name} ${UI.Style.TEXT_DIM}${result.type}`)
     }
 
-    prompts.outro(`${results.length} credentials`)
+    yield* Prompt.outro(`${results.length} credentials`)
 
     const activeEnvVars: Array<{ provider: string; envVar: string }> = []
 
@@ -237,100 +285,114 @@ export const ProvidersListCommand = cmd({
 
     if (activeEnvVars.length > 0) {
       UI.empty()
-      prompts.intro("Environment")
+      yield* Prompt.intro("Environment")
 
       for (const { provider, envVar } of activeEnvVars) {
-        prompts.log.info(`${provider} ${UI.Style.TEXT_DIM}${envVar}`)
+        yield* Prompt.log.info(`${provider} ${UI.Style.TEXT_DIM}${envVar}`)
       }
 
-      prompts.outro(`${activeEnvVars.length} environment variable` + (activeEnvVars.length === 1 ? "" : "s"))
+      yield* Prompt.outro(`${activeEnvVars.length} environment variable` + (activeEnvVars.length === 1 ? "" : "s"))
     }
-  },
+  }),
 })
 
-export const ProvidersLoginCommand = cmd({
+export const ProvidersLoginCommand = effectCmd({
   command: "login [url]",
   describe: "log in to Mammouth AI",
-  builder: (yargs) =>
+  // URL login skips instance bootstrap, which would load remote config with the stale token and crash before re-auth.
+  instance: (args) => !args.url,
+  builder: (yargs: Argv) =>
     yargs.positional("url", {
       describe: "opencode auth provider",
       type: "string",
     }),
-  async handler(args) {
-    await Instance.provide({
-      directory: process.cwd(),
-      async fn() {
-        UI.empty()
-        prompts.intro("Connect to Mammouth AI")
+  handler: Effect.fn("Cli.providers.login")(function* (args) {
+    const authSvc = yield* Auth.Service
 
-        if (args.url) {
-          const url = args.url.replace(/\/+$/, "")
-          const wellknown = await fetch(`${url}/.well-known/opencode`).then((x) => x.json() as any)
-          prompts.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
-          const proc = Process.spawn(wellknown.auth.command, {
-            stdout: "pipe",
-          })
-          if (!proc.stdout) {
-            prompts.log.error("Failed")
-            prompts.outro("Done")
-            return
-          }
-          const [exit, token] = await Promise.all([proc.exited, text(proc.stdout)])
-          if (exit !== 0) {
-            prompts.log.error("Failed")
-            prompts.outro("Done")
-            return
-          }
-          await Auth.set(url, {
-            type: "wellknown",
-            key: wellknown.auth.env,
-            token: token.trim(),
-          })
-          prompts.log.success("Logged into " + url)
-          prompts.outro("Done")
-          return
-        }
-
-        prompts.log.info("Get your API key at https://mammouth.ai/account/api-keys")
-
-        const key = await prompts.password({
-          message: "Enter your Mammouth API key",
-          validate: (x) => (x && x.length > 0 ? undefined : "Required"),
-        })
-        if (prompts.isCancel(key)) throw new UI.CancelledError()
-
-        await Auth.set("mammouth-ai", {
-          type: "api",
-          key,
-        })
-
-        prompts.outro("Done — you're connected to Mammouth AI")
-      },
-    })
-  },
-})
-
-export const ProvidersLogoutCommand = cmd({
-  command: "logout",
-  describe: "log out from a configured provider",
-  async handler(_args) {
     UI.empty()
-    const credentials = await Auth.all().then((x) => Object.entries(x))
-    prompts.intro("Remove credential")
-    if (credentials.length === 0) {
-      prompts.log.error("No credentials found")
+    yield* Prompt.intro("Connect to Mammouth AI")
+    if (args.url) {
+      const url = args.url.replace(/\/+$/, "")
+      const wellknown = (yield* cliTry(`Failed to load auth provider metadata from ${url}: `, () =>
+        fetch(`${url}/.well-known/opencode`).then((x) => x.json()),
+      )) as {
+        auth: { command: string[]; env: string }
+      }
+      yield* Prompt.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
+      const abort = new AbortController()
+      const proc = Process.spawn(wellknown.auth.command, { stdout: "pipe", stderr: "inherit", abort: abort.signal })
+      if (!proc.stdout) {
+        yield* Prompt.log.error("Failed")
+        yield* Prompt.outro("Done")
+        return
+      }
+      const [exit, token] = yield* cliTry("Failed to run auth provider command: ", () =>
+        Promise.all([proc.exited, text(proc.stdout!)]),
+      ).pipe(Effect.ensuring(Effect.sync(() => abort.abort())))
+      if (exit !== 0) {
+        yield* Prompt.log.error("Failed")
+        yield* Prompt.outro("Done")
+        return
+      }
+      yield* Effect.orDie(authSvc.set(url, { type: "wellknown", key: wellknown.auth.env, token: token.trim() }))
+      yield* Prompt.log.success("Logged into " + url)
+      yield* Prompt.outro("Done")
       return
     }
-    const database = await ModelsDev.get()
-    const providerID = await prompts.select({
-      message: "Select provider",
-      options: credentials.map(([key, value]) => ({
-        label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
-        value: key,
-      })),
+
+    yield* Prompt.log.info("Get your API key at https://mammouth.ai/account/api-keys")
+    const key = yield* Prompt.password({
+      message: "Enter your Mammouth API key",
+      validate: (x) => (x && x.length > 0 ? undefined : "Required"),
     })
-    if (prompts.isCancel(providerID)) throw new UI.CancelledError()
-    await Auth.remove(providerID)
-    prompts.outro("Logout successful")
-  },
+    const apiKey = yield* promptValue(key)
+    yield* Effect.orDie(authSvc.set("mammouth-ai", { type: "api", key: apiKey }))
+
+    yield* Prompt.outro("Done — you're connected to Mammouth AI")
+  }),
+})
+
+export const ProvidersLogoutCommand = effectCmd({
+  command: "logout [provider]",
+  describe: "log out from a configured provider",
+  builder: (yargs) =>
+    yargs.positional("provider", {
+      describe: "provider id or name to log out from",
+      type: "string",
+    }),
+  // Removes a global auth credential; no project instance needed.
+  instance: false,
+  handler: Effect.fn("Cli.providers.logout")(function* (args) {
+    const authSvc = yield* Auth.Service
+    const modelsDev = yield* ModelsDev.Service
+
+    UI.empty()
+    const credentials: Array<[string, Auth.Info]> = Object.entries(yield* Effect.orDie(authSvc.all()))
+    yield* Prompt.intro("Remove credential")
+    if (credentials.length === 0) {
+      yield* Prompt.log.error("No credentials found")
+      return
+    }
+    const database = yield* modelsDev.get()
+    const options = credentials.map(([key, value]) => ({
+      label: (database[key]?.name || key) + UI.Style.TEXT_DIM + " (" + value.type + ")",
+      value: key,
+    }))
+    const provider = args.provider
+      ? options.find(
+          (option) =>
+            option.value === args.provider ||
+            database[option.value]?.name?.toLowerCase() === args.provider?.toLowerCase(),
+        )?.value
+      : yield* promptValue(
+          yield* Prompt.autocomplete({
+            message: "Select provider",
+            maxItems: 8,
+            options,
+          }),
+        )
+    if (!provider) return yield* fail(`Unknown configured provider "${args.provider}"`)
+    yield* Effect.orDie(authSvc.remove(provider))
+    yield* Prompt.outro("Logout successful")
+  }),
 })

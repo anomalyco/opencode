@@ -9,10 +9,11 @@ import { useLocal } from "@/context/local"
 import { usePermission } from "@/context/permission"
 import { usePrompt } from "@/context/prompt"
 import { useSDK } from "@/context/sdk"
+import { useSettings } from "@/context/settings"
 import { useSync } from "@/context/sync"
 import { useTerminal } from "@/context/terminal"
-import { showToast } from "@opencode-ai/ui/toast"
-import { findLast } from "@opencode-ai/util/array"
+import { showToast } from "@/utils/toast"
+import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
@@ -41,6 +42,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const permission = usePermission()
   const prompt = usePrompt()
   const sdk = useSDK()
+  const settings = useSettings()
   const sync = useSync()
   const terminal = useTerminal()
   const layout = useLayout()
@@ -50,7 +52,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const info = () => {
     const id = params.id
     if (!id) return
-    return sync.session.get(id)
+    return sync().session.get(id)
   }
   const hasReview = () => !!params.id
   const normalizeTab = (tab: string) => {
@@ -66,13 +68,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   })
   const activeFileTab = tabState.activeFileTab
   const closableTab = tabState.closableTab
+  const shown = settings.visibility.fileTree
 
-  const idle = { type: "idle" as const }
-  const status = () => sync.data.session_status[params.id ?? ""] ?? idle
   const messages = () => {
     const id = params.id
     if (!id) return []
-    return sync.data.message[id] ?? []
+    return sync().data.message[id] ?? []
   }
   const userMessages = () => messages().filter((m) => m.role === "user") as UserMessage[]
   const visibleUserMessages = () => {
@@ -121,8 +122,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const isAutoAcceptActive = () => {
     const sessionID = params.id
-    if (sessionID) return permission.isAutoAccepting(sessionID, sdk.directory)
-    return permission.isAutoAcceptingDirectory(sdk.directory)
+    if (sessionID) return permission.isAutoAccepting(sessionID, sdk().directory)
+    return permission.isAutoAcceptingDirectory(sdk().directory)
   }
   const write = async (value: string) => {
     const body = typeof document === "undefined" ? undefined : document.body
@@ -174,8 +175,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       return
     }
 
-    const url = await sdk.client.session
-      .share({ sessionID })
+    const url = await sdk()
+      .client.session.share({ sessionID })
       .then((res) => res.data?.share?.url)
       .catch(() => undefined)
     if (!url) {
@@ -194,8 +195,8 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
 
-    await sdk.client.session
-      .unshare({ sessionID })
+    await sdk()
+      .client.session.unshare({ sessionID })
       .then(() =>
         showToast({
           title: language.t("toast.session.unshare.success.title"),
@@ -262,12 +263,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const toggleAutoAccept = () => {
     const sessionID = params.id
-    if (sessionID) permission.toggleAutoAccept(sessionID, sdk.directory)
-    else permission.toggleAutoAcceptDirectory(sdk.directory)
+    if (sessionID) permission.toggleAutoAccept(sessionID, sdk().directory)
+    else permission.toggleAutoAcceptDirectory(sdk().directory)
 
     const active = sessionID
-      ? permission.isAutoAccepting(sessionID, sdk.directory)
-      : permission.isAutoAcceptingDirectory(sdk.directory)
+      ? permission.isAutoAccepting(sessionID, sdk().directory)
+      : permission.isAutoAcceptingDirectory(sdk().directory)
     showToast({
       title: active
         ? language.t("toast.permissions.autoaccept.on.title")
@@ -282,18 +283,20 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     const sessionID = params.id
     if (!sessionID) return
 
-    if (status().type !== "idle") {
-      await sdk.client.session.abort({ sessionID }).catch(() => {})
+    if (sync().data.session_working(params.id ?? "")) {
+      await sdk()
+        .client.session.abort({ sessionID })
+        .catch(() => {})
     }
 
     const revert = info()?.revert?.messageID
     const message = findLast(userMessages(), (x) => !revert || x.id < revert)
     if (!message) return
 
-    await sdk.client.session.revert({ sessionID, messageID: message.id })
-    const parts = sync.data.part[message.id]
+    await sdk().client.session.revert({ sessionID, messageID: message.id })
+    const parts = sync().data.part[message.id]
     if (parts) {
-      const restored = extractPromptFromParts(parts, { directory: sdk.directory })
+      const restored = extractPromptFromParts(parts, { directory: sdk().directory })
       prompt.set(restored)
     }
 
@@ -310,14 +313,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
     const next = userMessages().find((x) => x.id > revertMessageID)
     if (!next) {
-      await sdk.client.session.unrevert({ sessionID })
+      await sdk().client.session.unrevert({ sessionID })
       prompt.reset()
       const last = findLast(userMessages(), (x) => x.id >= revertMessageID)
       setActiveMessage(last)
       return
     }
 
-    await sdk.client.session.revert({ sessionID, messageID: next.id })
+    await sdk().client.session.revert({ sessionID, messageID: next.id })
     const prev = findLast(userMessages(), (x) => x.id < next.id)
     setActiveMessage(prev)
   }
@@ -335,7 +338,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       return
     }
 
-    await sdk.client.session.summarize({
+    await sdk().client.session.summarize({
       sessionID,
       modelID: model.id,
       providerID: model.provider.id,
@@ -349,7 +352,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   }
 
   const shareCmds = () => {
-    if (sync.data.config.share === "disabled") return []
+    if (sync().data.config.share === "disabled") return []
     return [
       sessionCommand({
         id: "session.share",
@@ -414,23 +417,26 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }),
   ]
 
-  const fileCmds = () => [
-    fileCommand({
-      id: "file.open",
-      title: language.t("command.file.open"),
-      description: language.t("palette.search.placeholder"),
-      keybind: "mod+k,mod+p",
-      slash: "open",
-      onSelect: openFile,
-    }),
-    fileCommand({
-      id: "tab.close",
-      title: language.t("command.tab.close"),
-      keybind: "mod+w",
-      disabled: !closableTab(),
-      onSelect: closeTab,
-    }),
-  ]
+  const fileCmds = () => {
+    const tab = closableTab()
+    return [
+      fileCommand({
+        id: "file.open",
+        title: language.t("command.file.open"),
+        description: language.t("palette.search.placeholder"),
+        keybind: "mod+k,mod+p",
+        slash: "open",
+        onSelect: openFile,
+      }),
+      tab &&
+        fileCommand({
+          id: "tab.close",
+          title: language.t("command.tab.close"),
+          keybind: "mod+w",
+          onSelect: closeTab,
+        }),
+    ].filter((v) => !!v)
+  }
 
   const contextCmds = () => [
     contextCommand({
@@ -457,12 +463,16 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       keybind: "mod+shift+r",
       onSelect: () => view().reviewPanel.toggle(),
     }),
-    viewCommand({
-      id: "fileTree.toggle",
-      title: language.t("command.fileTree.toggle"),
-      keybind: "mod+\\",
-      onSelect: () => layout.fileTree.toggle(),
-    }),
+    ...(shown()
+      ? [
+          viewCommand({
+            id: "fileTree.toggle",
+            title: language.t("command.fileTree.toggle"),
+            keybind: "mod+\\",
+            onSelect: () => layout.fileTree.toggle(),
+          }),
+        ]
+      : []),
     viewCommand({
       id: "input.focus",
       title: language.t("command.input.focus"),
@@ -536,6 +546,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       description: language.t("command.agent.cycle.description"),
       keybind: "mod+.",
       slash: "agent",
+      disabled: !settings.visibility.customAgents(),
       onSelect: () => local.agent.move(1),
     }),
     agentCommand({
@@ -543,6 +554,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.agent.cycle.reverse"),
       description: language.t("command.agent.cycle.reverse.description"),
       keybind: "shift+mod+.",
+      disabled: !settings.visibility.customAgents(),
       onSelect: () => local.agent.move(-1),
     }),
   ]

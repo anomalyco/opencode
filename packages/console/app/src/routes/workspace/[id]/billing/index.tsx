@@ -3,6 +3,7 @@ import { BillingSection } from "./billing-section"
 import { ReloadSection } from "./reload-section"
 import { PaymentSection } from "./payment-section"
 import { BlackSection } from "./black-section"
+import { RedeemSection } from "./redeem-section"
 import { createMemo, Show } from "solid-js"
 import { createAsync, useParams } from "@solidjs/router"
 import { queryBillingInfo, querySessionInfo } from "../../common"
@@ -21,6 +22,7 @@ export default function () {
             <BlackSection />
           </Show>
           <BillingSection />
+          <RedeemSection />
           <Show when={billingInfo()?.customerID}>
             <ReloadSection />
             <MonthlyLimitSection />

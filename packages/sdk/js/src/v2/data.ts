@@ -5,7 +5,7 @@ export const message = {
     info: UserMessage
     parts: Part[]
   } {
-    const { parts, ...rest } = input
+    const { parts: _parts, ...rest } = input
 
     const info: UserMessage = {
       ...rest,

@@ -1,4 +1,4 @@
-import { Binary } from "@opencode-ai/util/binary"
+import { Binary } from "@opencode-ai/core/util/binary"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type {
   Message,
@@ -14,13 +14,14 @@ import type {
 import type { State, VcsCache } from "./types"
 import { trimSessions } from "./session-trim"
 import { dropSessionCaches } from "./session-cache"
+import { diffs as list, message as clean } from "@/utils/diffs"
 
 const SKIP_PARTS = new Set(["patch", "step-start", "step-finish"])
 
 export function applyGlobalEvent(input: {
   event: { type: string; properties?: unknown }
   project: Project[]
-  setGlobalProject: (next: Project[] | ((draft: Project[]) => void)) => void
+  setGlobalProject: (next: Project[] | ((draft: Project[]) => Project[])) => void
   refresh: () => void
 }) {
   if (input.event.type === "global.disposed" || input.event.type === "server.connected") {
@@ -32,14 +33,18 @@ export function applyGlobalEvent(input: {
   const properties = input.event.properties as Project
   const result = Binary.search(input.project, properties.id, (s) => s.id)
   if (result.found) {
-    input.setGlobalProject((draft) => {
-      draft[result.index] = { ...draft[result.index], ...properties }
-    })
+    input.setGlobalProject(
+      produce((draft) => {
+        draft[result.index] = { ...draft[result.index], ...properties }
+      }),
+    )
     return
   }
-  input.setGlobalProject((draft) => {
-    draft.splice(result.index, 0, properties)
-  })
+  input.setGlobalProject(
+    produce((draft) => {
+      draft.splice(result.index, 0, properties)
+    }),
+  )
 }
 
 function cleanupSessionCaches(
@@ -94,8 +99,10 @@ export function applyDirectoryEvent(input: {
   loadLsp: () => void
   vcsCache?: VcsCache
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
+  retainedLimit?: number
 }) {
   const event = input.event
+  const limit = Math.max(input.store.limit, input.retainedLimit ?? 0)
   switch (event.type) {
     case "server.instance.disposed": {
       input.push(input.directory)
@@ -110,7 +117,7 @@ export function applyDirectoryEvent(input: {
       }
       const next = input.store.session.slice()
       next.splice(result.index, 0, info)
-      const trimmed = trimSessions(next, { limit: input.store.limit, permission: input.store.permission })
+      const trimmed = trimSessions(next, { limit, permission: input.store.permission })
       input.setStore("session", reconcile(trimmed, { key: "id" }))
       cleanupDroppedSessionCaches(input.store, input.setStore, trimmed, input.setSessionTodo)
       if (!info.parentID) input.setStore("sessionTotal", (value) => value + 1)
@@ -120,6 +127,7 @@ export function applyDirectoryEvent(input: {
       const info = (event.properties as { info: Session }).info
       const result = Binary.search(input.store.session, info.id, (s) => s.id)
       if (info.time.archived) {
+        if (input.store.session[result.index]!.time.archived === info.time.archived) break
         if (result.found) {
           input.setStore(
             "session",
@@ -139,7 +147,7 @@ export function applyDirectoryEvent(input: {
       }
       const next = input.store.session.slice()
       next.splice(result.index, 0, info)
-      const trimmed = trimSessions(next, { limit: input.store.limit, permission: input.store.permission })
+      const trimmed = trimSessions(next, { limit, permission: input.store.permission })
       input.setStore("session", reconcile(trimmed, { key: "id" }))
       cleanupDroppedSessionCaches(input.store, input.setStore, trimmed, input.setSessionTodo)
       break
@@ -162,7 +170,7 @@ export function applyDirectoryEvent(input: {
     }
     case "session.diff": {
       const props = event.properties as { sessionID: string; diff: SnapshotFileDiff[] }
-      input.setStore("session_diff", props.sessionID, reconcile(props.diff, { key: "file" }))
+      input.setStore("session_diff", props.sessionID, reconcile(list(props.diff), { key: "file" }))
       break
     }
     case "todo.updated": {
@@ -177,7 +185,7 @@ export function applyDirectoryEvent(input: {
       break
     }
     case "message.updated": {
-      const info = (event.properties as { info: Message }).info
+      const info = clean((event.properties as { info: Message }).info)
       const messages = input.store.message[info.sessionID]
       if (!messages) {
         input.setStore("message", info.sessionID, [info])
@@ -206,6 +214,12 @@ export function applyDirectoryEvent(input: {
             const result = Binary.search(messages, props.messageID, (m) => m.id)
             if (result.found) messages.splice(result.index, 1)
           }
+          const parts = draft.part[props.messageID]
+          if (parts) {
+            for (const part of parts) {
+              delete draft.part_text_accum_delta[part.id]
+            }
+          }
           delete draft.part[props.messageID]
         }),
       )
@@ -214,6 +228,11 @@ export function applyDirectoryEvent(input: {
     case "message.part.updated": {
       const part = (event.properties as { part: Part }).part
       if (SKIP_PARTS.has(part.type)) break
+      input.setStore(
+        produce((draft) => {
+          delete draft.part_text_accum_delta[part.id]
+        }),
+      )
       const parts = input.store.part[part.messageID]
       if (!parts) {
         input.setStore("part", part.messageID, [part])
@@ -235,6 +254,11 @@ export function applyDirectoryEvent(input: {
     }
     case "message.part.removed": {
       const props = event.properties as { messageID: string; partID: string }
+      input.setStore(
+        produce((draft) => {
+          delete draft.part_text_accum_delta[props.partID]
+        }),
+      )
       const parts = input.store.part[props.messageID]
       if (!parts) break
       const result = Binary.search(parts, props.partID, (p) => p.id)
@@ -258,6 +282,13 @@ export function applyDirectoryEvent(input: {
       if (!parts) break
       const result = Binary.search(parts, props.partID, (p) => p.id)
       if (!result.found) break
+      const field = props.field as keyof (typeof parts)[number]
+      const current = parts[result.index]?.[field]
+      input.setStore(
+        "part_text_accum_delta",
+        props.partID,
+        (existing) => (existing ?? (typeof current === "string" ? current : "")) + props.delta,
+      )
       input.setStore(
         "part",
         props.messageID,

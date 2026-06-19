@@ -12,46 +12,25 @@
  * tools internally during multi-step processing before emitting events.
  */
 import { expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import fs from "fs/promises"
 import path from "path"
-import { Session } from "../../src/session"
-import { LLM } from "../../src/session/llm"
+import { Session } from "@/session/session"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionSummary } from "../../src/session/summary"
 import { MessageV2 } from "../../src/session/message-v2"
-import { Log } from "../../src/util/log"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { Database } from "@opencode-ai/core/database/database"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { provideTmpdirServer } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { TestLLMServer } from "../lib/llm-server"
 
-// Same layer setup as prompt-effect.test.ts
-import { NodeFileSystem } from "@effect/platform-node"
-import { Layer } from "effect"
-import { Agent as AgentSvc } from "../../src/agent/agent"
-import { Bus } from "../../src/bus"
-import { Command } from "../../src/command"
-import { Config } from "../../src/config/config"
-import { FileTime } from "../../src/file/time"
-import { LSP } from "../../src/lsp"
+import { LSP } from "@/lsp/lsp"
 import { MCP } from "../../src/mcp"
-import { Permission } from "../../src/permission"
-import { Plugin } from "../../src/plugin"
-import { Provider as ProviderSvc } from "../../src/provider/provider"
-import { Question } from "../../src/question"
-import { Todo } from "../../src/session/todo"
-import { SessionCompaction } from "../../src/session/compaction"
-import { Instruction } from "../../src/session/instruction"
-import { SessionProcessor } from "../../src/session/processor"
-import { SessionStatus } from "../../src/session/status"
-import { Shell } from "../../src/shell/shell"
-import { Snapshot } from "../../src/snapshot"
-import { ToolRegistry } from "../../src/tool/registry"
-import { Truncate } from "../../src/tool/truncate"
-import { AppFileSystem } from "../../src/filesystem"
-import * as CrossSpawnSpawner from "../../src/effect/cross-spawn-spawner"
-
-Log.init({ print: false })
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 
 const mcp = Layer.succeed(
   MCP.Service,
@@ -96,60 +75,24 @@ const lsp = Layer.succeed(
   }),
 )
 
-const filetime = Layer.succeed(
-  FileTime.Service,
-  FileTime.Service.of({
-    read: () => Effect.void,
-    get: () => Effect.succeed(undefined),
-    assert: () => Effect.void,
-    withLock: (_filepath, fn) => Effect.promise(fn),
+const root = LayerNode.group([
+  SessionPrompt.node,
+  Session.node,
+  SessionProjector.node,
+  SessionSummary.node,
+  Database.node,
+  CrossSpawnSpawner.node,
+  LayerNode.make(TestLLMServer.layer, []),
+])
+const it = testEffect(
+  LayerNode.buildLayer(root, {
+    replacements: [
+      LayerNode.replace(MCP.node, mcp),
+      LayerNode.replace(LSP.node, lsp),
+      LayerNode.replace(RuntimeFlags.node, RuntimeFlags.layer({ experimentalEventSystem: true })),
+    ],
   }),
 )
-
-const status = SessionStatus.layer.pipe(Layer.provideMerge(Bus.layer))
-const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
-
-function makeHttp() {
-  const deps = Layer.mergeAll(
-    Session.defaultLayer,
-    Snapshot.defaultLayer,
-    LLM.defaultLayer,
-    AgentSvc.defaultLayer,
-    Command.defaultLayer,
-    Permission.defaultLayer,
-    Plugin.defaultLayer,
-    Config.defaultLayer,
-    ProviderSvc.defaultLayer,
-    filetime,
-    lsp,
-    mcp,
-    AppFileSystem.defaultLayer,
-    status,
-  ).pipe(Layer.provideMerge(infra))
-  const question = Question.layer.pipe(Layer.provideMerge(deps))
-  const todo = Todo.layer.pipe(Layer.provideMerge(deps))
-  const registry = ToolRegistry.layer.pipe(
-    Layer.provideMerge(todo),
-    Layer.provideMerge(question),
-    Layer.provideMerge(deps),
-  )
-  const trunc = Truncate.layer.pipe(Layer.provideMerge(deps))
-  const proc = SessionProcessor.layer.pipe(Layer.provideMerge(deps))
-  const compact = SessionCompaction.layer.pipe(Layer.provideMerge(proc), Layer.provideMerge(deps))
-  return Layer.mergeAll(
-    TestLLMServer.layer,
-    SessionPrompt.layer.pipe(
-      Layer.provideMerge(compact),
-      Layer.provideMerge(proc),
-      Layer.provideMerge(registry),
-      Layer.provideMerge(trunc),
-      Layer.provide(Instruction.defaultLayer),
-      Layer.provideMerge(deps),
-    ),
-  )
-}
-
-const it = testEffect(makeHttp())
 
 const providerCfg = (url: string) => ({
   provider: {
@@ -185,6 +128,7 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
     Effect.fnUntraced(function* ({ dir, llm }) {
       const prompt = yield* SessionPrompt.Service
       const sessions = yield* Session.Service
+      const summary = yield* SessionSummary.Service
 
       const session = yield* sessions.create({
         title: "snapshot race test",
@@ -223,15 +167,19 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
 
       // Verify the tool call completed (in the first assistant message)
       const allMsgs = yield* MessageV2.filterCompactedEffect(session.id)
+      const user = allMsgs.find(
+        (msg): msg is SessionV1.WithParts & { info: SessionV1.User } => msg.info.role === "user",
+      )
       const tool = allMsgs
         .flatMap((m) => m.parts)
-        .find((p): p is MessageV2.ToolPart => p.type === "tool" && p.tool === "bash")
+        .find((p): p is SessionV1.ToolPart => p.type === "tool" && p.tool === "bash")
       expect(tool?.state.status).toBe("completed")
+      if (!user) throw new Error("Expected user message")
 
-      // Poll for diff — summarize() is fire-and-forget
-      let diff: Awaited<ReturnType<typeof SessionSummary.diff>> = []
+      // Poll for the turn diff — summarize() is fire-and-forget.
+      let diff: Array<{ file?: string }> = []
       for (let i = 0; i < 50; i++) {
-        diff = yield* Effect.promise(() => SessionSummary.diff({ sessionID: session.id }))
+        diff = yield* summary.diff({ sessionID: session.id, messageID: user.info.id })
         if (diff.length > 0) break
         yield* Effect.sleep("100 millis")
       }

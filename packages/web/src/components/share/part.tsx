@@ -730,7 +730,13 @@ export function FallbackTool(props: ToolProps) {
             <>
               <div></div>
               <div>{arg[0]}</div>
-              <div>{String(arg[1] ?? "")}</div>
+              <div>
+                {typeof arg[1] === "string" || typeof arg[1] === "number" || typeof arg[1] === "boolean"
+                  ? String(arg[1])
+                  : arg[1] == null
+                    ? ""
+                    : JSON.stringify(arg[1])}
+              </div>
             </>
           )}
         </For>
