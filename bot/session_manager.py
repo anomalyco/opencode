@@ -59,11 +59,11 @@ class SessionManager:
 
         async with ClientSession() as session:
             data = model_to_api_format(CLI_MODEL)
-            async with session.post(f"{OPENCODE_URL}/api/session", json=data) as resp:
+            # opencode API: POST /session
+            async with session.post(f"{OPENCODE_URL}/session", json=data) as resp:
                 resp.raise_for_status()
                 resp_data = await resp.json()
-                # API возвращает {data: {id: ...}}
-                session_id = resp_data.get("data", resp_data).get("id")
+                session_id = resp_data.get("id", resp_data.get("data", {}).get("id"))
                 self.sessions[user_id] = session_id
                 if session_id not in self.grant_mode:
                     self.grant_mode[session_id] = False

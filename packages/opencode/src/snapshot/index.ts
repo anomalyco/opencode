@@ -120,7 +120,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               "-z",
             ],
             {
-              cwd: state.directory,
+              // stdin paths are relative to the worktree root, so resolve from there
+              cwd: state.worktree,
               stdin: feed(files),
             },
           )
@@ -136,7 +137,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               ...args(["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"]),
             ],
             {
-              cwd: state.directory,
+              // pathspecs are worktree-root-relative; run git from the worktree
+              cwd: state.worktree,
               stdin: feed(files),
             },
           )
@@ -147,7 +149,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           const result = yield* git(
             [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
             {
-              cwd: state.directory,
+              // pathspecs are worktree-root-relative; run git from the worktree
+              cwd: state.worktree,
               stdin: feed(files),
             },
           )
@@ -277,7 +280,8 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
             (yield* Effect.all(
               allow.map((item) =>
                 fs
-                  .stat(path.join(state.directory, item))
+                  // item is worktree-root-relative, not relative to the session directory
+                  .stat(path.join(state.worktree, item))
                   .pipe(Effect.catch(() => Effect.void))
                   .pipe(
                     Effect.map((stat) => {

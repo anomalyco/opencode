@@ -26,7 +26,6 @@ function cliProviderPlugin(providerURL: string, model: string) {
           provider.name = "CLI Provider"
           provider.api = { type: "aisdk", package: "@ai-sdk/openai-compatible", url: providerURL, settings: {} }
           provider.request = { headers: {}, body: {} }
-          provider.enabled = { via: "custom", data: {} }
         })
         const modelID = ModelV2.ID.make(model)
         evt.model.update(providerID, modelID, (m) => {

@@ -19,7 +19,7 @@ import { HealthHandler } from "./handlers/health"
 import { PtyHandler } from "./handlers/pty"
 import { QuestionHandler } from "./handlers/question"
 import { ReferenceHandler } from "./handlers/reference"
-import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { LocationHandler } from "./handlers/location"
 import { IntegrationHandler } from "./handlers/integration"
 import { CredentialHandler } from "./handlers/credential"
@@ -49,7 +49,6 @@ export const handlers = Layer.mergeAll(
   Layer.provide(sessionLocationLayer),
   Layer.provide(locationLayer),
   Layer.provide(SessionV2.defaultLayer),
-  Layer.provide(SessionExecutionLocal.defaultLayer),
   Layer.provide(PermissionSaved.defaultLayer),
   Layer.provide(PtyTicket.defaultLayer),
   Layer.provide(LocationServiceMap.layer),

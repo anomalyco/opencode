@@ -30,6 +30,18 @@ const options = {
     describe: "additional domains to allow for CORS",
     default: [] as string[],
   },
+  "provider-url": {
+    type: "string" as const,
+    describe: "URL of an OpenAI-compatible provider (e.g. http://127.0.0.1:8081)",
+  },
+  model: {
+    type: "string" as const,
+    describe: "model name to use with the provider",
+  },
+  "app-name": {
+    type: "string" as const,
+    describe: "app name used for config and data directories (default: opencode)",
+  },
 }
 
 export type NetworkOptions = InferredOptionTypes<typeof options>
@@ -59,6 +71,9 @@ export function resolveNetworkOptionsNoConfig(args: NetworkOptions, config?: Con
   const configCors = config?.server?.cors ?? []
   const argsCors = Array.isArray(args.cors) ? args.cors : args.cors ? [args.cors] : []
   const cors = [...configCors, ...argsCors]
+  const providerUrl = args["provider-url"]
+  const model = args.model
+  const appName = args["app-name"]
 
-  return { hostname, port, mdns, mdnsDomain, cors }
+  return { hostname, port, mdns, mdnsDomain, cors, providerUrl, model, appName }
 }

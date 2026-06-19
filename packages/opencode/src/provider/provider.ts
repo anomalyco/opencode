@@ -34,6 +34,15 @@ import { ProviderError } from "./error"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 
+// CLI provider config for when --provider-url and --model are passed
+let _cliProviderConfig: { providerURL: string; model: string } | undefined
+
+export const setCLIProvider = (config: { providerURL: string; model: string } | undefined) => {
+  _cliProviderConfig = config
+}
+
+const getCLIProviderConfig = () => _cliProviderConfig
+
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
   if (!res.body) return res
@@ -1603,6 +1612,51 @@ export const layer = Layer.effect(
           if (Object.keys(provider.models).length === 0) {
             delete providers[providerID]
             continue
+          }
+        }
+
+        // Add CLI provider if configured via --provider-url and --model flags
+        const cliConfig = getCLIProviderConfig()
+        if (cliConfig) {
+          const cliProviderID = ProviderV2.ID.make("cli")
+          const cliModelID = ModelV2.ID.make(cliConfig.model)
+          providers[cliProviderID] = {
+            id: cliProviderID,
+            name: "CLI Provider",
+            env: [],
+            options: {
+              baseURL: cliConfig.providerURL,
+            },
+            source: "config",
+            models: {
+              [cliModelID]: {
+                id: cliModelID,
+                providerID: cliProviderID,
+                name: cliConfig.model,
+                api: {
+                  id: cliModelID,
+                  npm: "@ai-sdk/openai-compatible",
+                  url: cliConfig.providerURL,
+                },
+                status: "active",
+                capabilities: {
+                  temperature: false,
+                  reasoning: false,
+                  attachment: false,
+                  toolcall: true,
+                  input: { text: true, audio: false, image: false, video: false, pdf: false },
+                  output: { text: true, audio: false, image: false, video: false, pdf: false },
+                  interleaved: false,
+                },
+                cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+                options: {},
+                limit: { context: 32768, output: 4096 },
+                headers: {},
+                family: "",
+                release_date: "",
+                variants: {},
+              },
+            },
           }
         }
 

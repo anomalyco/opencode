@@ -1,6 +1,6 @@
 """
 SSE клиент для OpenCode Event API.
-Подключается к /api/event, разбирает поток и диспатчит события по типам.
+Подключается к /event, разбирает поток и диспатчит события по типам.
 """
 import asyncio
 import json
@@ -46,7 +46,7 @@ class SSEEventListener:
                 pass
 
     async def _run(self):
-        url = f"{self.base_url}/api/event"
+        url = f"{self.base_url}/event"
         while self.running:
             try:
                 async with aiohttp.ClientSession(timeout=SSE_TIMEOUT) as session:
@@ -84,7 +84,8 @@ class SSEEventListener:
 
         event_id = event.get("id")
         event_type = event.get("type")
-        event_data = event.get("data", {})
+        # opencode отправляет properties вместо data
+        event_data = event.get("properties", event.get("data", {}))
 
         if not event_id or not event_type:
             return
