@@ -1053,6 +1053,10 @@ export namespace Config {
             .describe("Token buffer for compaction. Leaves enough window to avoid overflow during compaction."),
         })
         .optional(),
+      ensureSession: z
+        .boolean()
+        .optional()
+        .describe("Create a root session on first instance bootstrap when none exist"),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),
