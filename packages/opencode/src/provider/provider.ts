@@ -15,6 +15,9 @@ import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { iife } from "@/util/iife"
 import { ThemeState } from "@opencode-ai/core/local/theme-state"
+// fork: control-plane client used to auto-lower ctx on a local "context too large" 413.
+import { createClient as createLocalClient, createConfig as createLocalConfig } from "@/local/llama-skein/gen/client"
+import { LlamaSkeinClient } from "@/local/llama-skein/gen/sdk.gen"
 
 // Tracks baseURL::modelId combos that have already had a loading-theme header sent.
 // The header is only useful on the first request (model cold-start); skip it after.
@@ -1261,6 +1264,35 @@ function openAICompatibleDiscoveryEnabled(provider: NonNullable<Config.Info["pro
   return provider.discoverModels ?? provider.models === undefined
 }
 
+/**
+ * fork: recover from a local backend rejecting a request because the model's
+ * configured context is too large to load (llama-skein returns HTTP 413 with
+ * `{ error: { type: "context_too_large", max_ctx } }`). Lowers the model's ctx
+ * to the reported safe maximum via the control plane. Returns true if the
+ * caller should retry the request. Never throws.
+ */
+async function adjustLocalContextOnOverflow(baseURL: string, requestBody: string, res: Response): Promise<boolean> {
+  try {
+    const peek = (await res.clone().json()) as { error?: { type?: string; max_ctx?: number } }
+    if (peek?.error?.type !== "context_too_large") return false
+    const maxCtx = Number(peek.error.max_ctx)
+    if (!Number.isFinite(maxCtx) || maxCtx <= 0) return false
+    let modelID: string | undefined
+    try {
+      modelID = JSON.parse(requestBody)?.model
+    } catch {
+      return false
+    }
+    if (!modelID) return false
+    const ctrlBase = baseURL.replace(/\/+$/, "").replace(/\/v1$/, "")
+    const client = new LlamaSkeinClient({ client: createLocalClient(createLocalConfig({ baseUrl: ctrlBase })) })
+    const patch = await client.patchConfigModel({ id: modelID, configModelPatchRequest: { ctx_size: maxCtx } })
+    return !patch.error
+  } catch {
+    return false
+  }
+}
+
 function mergeDiscoveredModel(existing: Model | undefined, discovered: Model): Model {
   if (!existing) return discovered
   return {
@@ -1882,11 +1914,29 @@ export const layer = Layer.effect(
           const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
           if (combined) opts.signal = combined
 
-          const res = await fetchFn(input, {
+          let res = await fetchFn(input, {
             ...opts,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
             timeout: false,
           }).finally(() => headerTimeoutCtl?.clear())
+
+          // fork: if a local backend rejected the request because the configured
+          // context is too large to load, lower ctx to the safe max it reported
+          // and retry once — instead of stalling the conversation.
+          if (
+            res.status === 413 &&
+            model.api.npm === "@ai-sdk/openai-compatible" &&
+            typeof options["baseURL"] === "string" &&
+            opts.method === "POST" &&
+            typeof opts.body === "string" &&
+            (await adjustLocalContextOnOverflow(options["baseURL"] as string, opts.body, res))
+          ) {
+            res = await fetchFn(input, {
+              ...opts,
+              // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
+              timeout: false,
+            }).finally(() => headerTimeoutCtl?.clear())
+          }
 
           if (!chunkAbortCtl) return res
           return wrapSSE(res, chunkTimeout, chunkAbortCtl)
