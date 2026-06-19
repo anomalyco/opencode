@@ -75,14 +75,14 @@ export type Event =
   | EventTuiSessionSelect2
   | EventMcpToolsChanged
   | EventMcpBrowserOpenFailed
-  | EventCommandExecuted
-  | EventProjectUpdated
   | EventSessionStatus
   | EventSessionIdle
   | EventQuestionAsked
   | EventQuestionReplied
   | EventQuestionRejected
   | EventSessionCompacted
+  | EventCommandExecuted
+  | EventProjectUpdated
   | EventVcsBranchUpdated
   | EventWorkspaceReady
   | EventWorkspaceFailed
@@ -1479,43 +1479,6 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "command.executed"
-        properties: {
-          name: string
-          sessionID: string
-          arguments: string
-          messageID: string
-        }
-      }
-    | {
-        id: string
-        type: "project.updated"
-        properties: {
-          id: string
-          worktree: string
-          vcs?: "git"
-          name?: string
-          icon?: {
-            url?: string
-            override?: string
-            color?: string
-          }
-          commands?: {
-            /**
-             * Startup script to run when creating a new workspace (worktree)
-             */
-            start?: string
-          }
-          time: {
-            created: number
-            updated: number
-            initialized?: number
-          }
-          sandboxes: Array<string>
-        }
-      }
-    | {
-        id: string
         type: "session.status"
         properties: {
           sessionID: string
@@ -1564,6 +1527,43 @@ export type GlobalEvent = {
         type: "session.compacted"
         properties: {
           sessionID: string
+        }
+      }
+    | {
+        id: string
+        type: "command.executed"
+        properties: {
+          name: string
+          sessionID: string
+          arguments: string
+          messageID: string
+        }
+      }
+    | {
+        id: string
+        type: "project.updated"
+        properties: {
+          id: string
+          worktree: string
+          vcs?: "git"
+          name?: string
+          icon?: {
+            url?: string
+            override?: string
+            color?: string
+          }
+          commands?: {
+            /**
+             * Startup script to run when creating a new workspace (worktree)
+             */
+            start?: string
+          }
+          time: {
+            created: number
+            updated: number
+            initialized?: number
+          }
+          sandboxes: Array<string>
         }
       }
     | {
@@ -2418,6 +2418,24 @@ export type LocalCtxSizePayload = {
   ctx_size: number
 }
 
+export type LocalOffloadPayload = {
+  n_cpu_moe?: number
+  cpu_moe?: boolean
+  cpu_offload_gb?: number
+  override_tensor?: string
+}
+
+export type LocalOffloadRecommendation = {
+  applicable: boolean
+  backend: string
+  n_cpu_moe?: number
+  reason?: string
+  expert_bytes_total?: number
+  vram_free_mb?: number
+  fits_fully_on_gpu?: boolean
+  ctx_size?: number
+}
+
 export type McpStatusConnected = {
   status: "connected"
 }
@@ -2566,6 +2584,13 @@ export type ProviderAuthMethod = {
         }
       }
   >
+}
+
+export type ProviderBalance = {
+  remaining?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  limit?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  used?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  currency?: string
 }
 
 export type ProviderAuthAuthorization = {
@@ -5000,45 +5025,6 @@ export type EventMcpBrowserOpenFailed = {
   }
 }
 
-export type EventCommandExecuted = {
-  id: string
-  type: "command.executed"
-  properties: {
-    name: string
-    sessionID: string
-    arguments: string
-    messageID: string
-  }
-}
-
-export type EventProjectUpdated = {
-  id: string
-  type: "project.updated"
-  properties: {
-    id: string
-    worktree: string
-    vcs?: "git"
-    name?: string
-    icon?: {
-      url?: string
-      override?: string
-      color?: string
-    }
-    commands?: {
-      /**
-       * Startup script to run when creating a new workspace (worktree)
-       */
-      start?: string
-    }
-    time: {
-      created: number
-      updated: number
-      initialized?: number
-    }
-    sandboxes: Array<string>
-  }
-}
-
 export type EventSessionStatus = {
   id: string
   type: "session.status"
@@ -5094,6 +5080,45 @@ export type EventSessionCompacted = {
   type: "session.compacted"
   properties: {
     sessionID: string
+  }
+}
+
+export type EventCommandExecuted = {
+  id: string
+  type: "command.executed"
+  properties: {
+    name: string
+    sessionID: string
+    arguments: string
+    messageID: string
+  }
+}
+
+export type EventProjectUpdated = {
+  id: string
+  type: "project.updated"
+  properties: {
+    id: string
+    worktree: string
+    vcs?: "git"
+    name?: string
+    icon?: {
+      url?: string
+      override?: string
+      color?: string
+    }
+    commands?: {
+      /**
+       * Startup script to run when creating a new workspace (worktree)
+       */
+      start?: string
+    }
+    time: {
+      created: number
+      updated: number
+      initialized?: number
+    }
+    sandboxes: Array<string>
   }
 }
 
@@ -6592,6 +6617,70 @@ export type LocalModelSetCtxSizeResponses = {
 
 export type LocalModelSetCtxSizeResponse = LocalModelSetCtxSizeResponses[keyof LocalModelSetCtxSizeResponses]
 
+export type LocalModelSetOffloadData = {
+  body?: LocalOffloadPayload
+  path: {
+    providerID: string
+    modelID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/local/model/{providerID}/{modelID}/offload"
+}
+
+export type LocalModelSetOffloadErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LocalModelSetOffloadError = LocalModelSetOffloadErrors[keyof LocalModelSetOffloadErrors]
+
+export type LocalModelSetOffloadResponses = {
+  /**
+   * Offload settings updated
+   */
+  200: boolean
+}
+
+export type LocalModelSetOffloadResponse = LocalModelSetOffloadResponses[keyof LocalModelSetOffloadResponses]
+
+export type LocalModelOffloadRecommendationData = {
+  body?: never
+  path: {
+    providerID: string
+    modelID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/local/model/{providerID}/{modelID}/offload-recommendation"
+}
+
+export type LocalModelOffloadRecommendationErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type LocalModelOffloadRecommendationError =
+  LocalModelOffloadRecommendationErrors[keyof LocalModelOffloadRecommendationErrors]
+
+export type LocalModelOffloadRecommendationResponses = {
+  /**
+   * Recommended offload settings
+   */
+  200: LocalOffloadRecommendation
+}
+
+export type LocalModelOffloadRecommendationResponse =
+  LocalModelOffloadRecommendationResponses[keyof LocalModelOffloadRecommendationResponses]
+
 export type McpStatusData = {
   body?: never
   path?: never
@@ -7537,6 +7626,36 @@ export type ProviderAuthResponses = {
 }
 
 export type ProviderAuthResponse = ProviderAuthResponses[keyof ProviderAuthResponses]
+
+export type ProviderBalanceData = {
+  body?: never
+  path: {
+    providerID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/provider/{providerID}/balance"
+}
+
+export type ProviderBalanceErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProviderBalanceError = ProviderBalanceErrors[keyof ProviderBalanceErrors]
+
+export type ProviderBalanceResponses = {
+  /**
+   * Account balance/credits for the provider, or undefined if unsupported
+   */
+  200: ProviderBalance
+}
+
+export type ProviderBalanceResponse = ProviderBalanceResponses[keyof ProviderBalanceResponses]
 
 export type ProviderOauthAuthorizeData = {
   body?: {

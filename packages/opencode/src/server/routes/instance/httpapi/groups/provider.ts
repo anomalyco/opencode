@@ -8,6 +8,7 @@ import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ProviderBalance } from "@/provider/balance"
 
 const root = "/provider"
 
@@ -53,6 +54,21 @@ export const ProviderApi = HttpApi.make("provider")
             identifier: "provider.auth",
             summary: "Get provider auth methods",
             description: "Retrieve available authentication methods for all AI providers.",
+          }),
+        ),
+        HttpApiEndpoint.get("balance", `${root}/:providerID/balance`, {
+          params: { providerID: ProviderV2.ID },
+          query: WorkspaceRoutingQuery,
+          success: described(
+            Schema.UndefinedOr(ProviderBalance),
+            "Account balance/credits for the provider, or undefined if unsupported",
+          ),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "provider.balance",
+            summary: "Get provider account balance",
+            description:
+              "Get the remaining credits/balance for a pay-as-you-go provider (e.g. OpenRouter). Returns undefined when the provider does not expose a balance or no key is configured.",
           }),
         ),
         HttpApiEndpoint.post("authorize", `${root}/:providerID/oauth/authorize`, {

@@ -94,8 +94,13 @@ import type {
   LocalCtxSizePayload,
   LocalDisconnectErrors,
   LocalDisconnectResponses,
+  LocalModelOffloadRecommendationErrors,
+  LocalModelOffloadRecommendationResponses,
   LocalModelSetCtxSizeErrors,
   LocalModelSetCtxSizeResponses,
+  LocalModelSetOffloadErrors,
+  LocalModelSetOffloadResponses,
+  LocalOffloadPayload,
   LocalScanErrors,
   LocalScanResponses,
   LocationRef,
@@ -149,6 +154,8 @@ import type {
   Prompt,
   ProviderAuthErrors,
   ProviderAuthResponses,
+  ProviderBalanceErrors,
+  ProviderBalanceResponses,
   ProviderListErrors,
   ProviderListResponses,
   ProviderOauthAuthorizeErrors,
@@ -2191,6 +2198,242 @@ export class Formatter extends HeyApiClient {
   }
 }
 
+export class Model extends HeyApiClient {
+  /**
+   * Set model context window size
+   *
+   * Patch the ctx_size for a model on a llama-swap backend.
+   */
+  public setCtxSize<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      modelID: string
+      directory?: string
+      workspace?: string
+      localCtxSizePayload?: LocalCtxSizePayload
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "path", key: "modelID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "localCtxSizePayload", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      LocalModelSetCtxSizeResponses,
+      LocalModelSetCtxSizeErrors,
+      ThrowOnError
+    >({
+      url: "/local/model/{providerID}/{modelID}/ctx-size",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Set model CPU/MoE offload
+   *
+   * Patch CPU/MoE offload settings (n_cpu_moe, cpu_moe, cpu_offload_gb, override_tensor) for a model on a llama-skein backend.
+   */
+  public setOffload<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      modelID: string
+      directory?: string
+      workspace?: string
+      localOffloadPayload?: LocalOffloadPayload
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "path", key: "modelID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "localOffloadPayload", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<
+      LocalModelSetOffloadResponses,
+      LocalModelSetOffloadErrors,
+      ThrowOnError
+    >({
+      url: "/local/model/{providerID}/{modelID}/offload",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Recommend model CPU/MoE offload
+   *
+   * Fetch llama-skein's recommended n_cpu_moe for a model given current free VRAM. MoE-scoped.
+   */
+  public offloadRecommendation<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      modelID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "path", key: "modelID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<
+      LocalModelOffloadRecommendationResponses,
+      LocalModelOffloadRecommendationErrors,
+      ThrowOnError
+    >({
+      url: "/local/model/{providerID}/{modelID}/offload-recommendation",
+      ...options,
+      ...params,
+    })
+  }
+}
+
+export class Local extends HeyApiClient {
+  /**
+   * Scan for local providers
+   *
+   * Browse the local network via mDNS for llama-swap instances and probe each for its model list.
+   */
+  public scan<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<LocalScanResponses, LocalScanErrors, ThrowOnError>({
+      url: "/local/scan",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Add local provider to config
+   *
+   * Write an openai-compatible provider entry for a local llama-swap instance to the global config.
+   */
+  public connect<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      localConnectPayload?: LocalConnectPayload
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "localConnectPayload", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LocalConnectResponses, LocalConnectErrors, ThrowOnError>({
+      url: "/local/connect",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Remove local provider from config
+   *
+   * Delete a local llama-swap provider entry from the global config.
+   */
+  public disconnect<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<LocalDisconnectResponses, LocalDisconnectErrors, ThrowOnError>({
+      url: "/local/connect/{providerID}",
+      ...options,
+      ...params,
+    })
+  }
+
+  private _model?: Model
+  get model(): Model {
+    return (this._model ??= new Model({ client: this.client }))
+  }
+}
+
 export class Auth2 extends HeyApiClient {
   /**
    * Remove MCP OAuth
@@ -3296,6 +3539,38 @@ export class Provider extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<ProviderAuthResponses, ProviderAuthErrors, ThrowOnError>({
       url: "/provider/auth",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Get provider account balance
+   *
+   * Get the remaining credits/balance for a pay-as-you-go provider (e.g. OpenRouter). Returns undefined when the provider does not expose a balance or no key is configured.
+   */
+  public balance<ThrowOnError extends boolean = false>(
+    parameters: {
+      providerID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "providerID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ProviderBalanceResponses, ProviderBalanceErrors, ThrowOnError>({
+      url: "/provider/{providerID}/balance",
       ...options,
       ...params,
     })
@@ -5447,7 +5722,7 @@ export class Session3 extends HeyApiClient {
   }
 }
 
-export class Model extends HeyApiClient {
+export class Model2 extends HeyApiClient {
   /**
    * List models
    *
@@ -6592,9 +6867,9 @@ export class V2 extends HeyApiClient {
     return (this._session ??= new Session3({ client: this.client }))
   }
 
-  private _model?: Model
-  get model(): Model {
-    return (this._model ??= new Model({ client: this.client }))
+  private _model?: Model2
+  get model(): Model2 {
+    return (this._model ??= new Model2({ client: this.client }))
   }
 
   private _provider?: Provider2
@@ -6655,144 +6930,6 @@ export class V2 extends HeyApiClient {
   private _projectCopy?: ProjectCopy2
   get projectCopy(): ProjectCopy2 {
     return (this._projectCopy ??= new ProjectCopy2({ client: this.client }))
-  }
-}
-
-export class LocalModel extends HeyApiClient {
-  /**
-   * Set model context window size
-   *
-   * Patch the ctx_size for a model on a llama-swap backend.
-   */
-  public setCtxSize<ThrowOnError extends boolean = false>(
-    parameters: {
-      providerID: string
-      modelID: string
-      directory?: string
-      workspace?: string
-      localCtxSizePayload?: LocalCtxSizePayload
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "providerID" },
-            { in: "path", key: "modelID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { key: "localCtxSizePayload", map: "body" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).patch<LocalModelSetCtxSizeResponses, LocalModelSetCtxSizeErrors, ThrowOnError>({
-      url: "/local/model/{providerID}/{modelID}/ctx-size",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-}
-
-export class Local extends HeyApiClient {
-  /**
-   * Scan for local providers
-   *
-   * Browse the local network via mDNS for llama-swap instances and probe each for its model list.
-   */
-  public scan<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [{ args: [{ in: "query", key: "directory" }, { in: "query", key: "workspace" }] }],
-    )
-    return (options?.client ?? this.client).get<LocalScanResponses, LocalScanErrors, ThrowOnError>({
-      url: "/local/scan",
-      ...options,
-      ...params,
-    })
-  }
-
-  /**
-   * Add local provider to config
-   */
-  public connect<ThrowOnError extends boolean = false>(
-    parameters?: {
-      directory?: string
-      workspace?: string
-      localConnectPayload?: LocalConnectPayload
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-            { key: "localConnectPayload", map: "body" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).post<LocalConnectResponses, LocalConnectErrors, ThrowOnError>({
-      url: "/local/connect",
-      ...options,
-      ...params,
-      headers: {
-        "Content-Type": "application/json",
-        ...options?.headers,
-        ...params.headers,
-      },
-    })
-  }
-
-  /**
-   * Remove local provider from config
-   */
-  public disconnect<ThrowOnError extends boolean = false>(
-    parameters: {
-      providerID: string
-      directory?: string
-      workspace?: string
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams(
-      [parameters],
-      [
-        {
-          args: [
-            { in: "path", key: "providerID" },
-            { in: "query", key: "directory" },
-            { in: "query", key: "workspace" },
-          ],
-        },
-      ],
-    )
-    return (options?.client ?? this.client).delete<LocalDisconnectResponses, LocalDisconnectErrors, ThrowOnError>({
-      url: "/local/connect/{providerID}",
-      ...options,
-      ...params,
-    })
-  }
-
-  private _model?: LocalModel
-  get model(): LocalModel {
-    return (this._model ??= new LocalModel({ client: this.client }))
   }
 }
 
@@ -6884,6 +7021,11 @@ export class OpencodeClient extends HeyApiClient {
     return (this._formatter ??= new Formatter({ client: this.client }))
   }
 
+  private _local?: Local
+  get local(): Local {
+    return (this._local ??= new Local({ client: this.client }))
+  }
+
   private _mcp?: Mcp
   get mcp(): Mcp {
     return (this._mcp ??= new Mcp({ client: this.client }))
@@ -6937,10 +7079,5 @@ export class OpencodeClient extends HeyApiClient {
   private _v2?: V2
   get v2(): V2 {
     return (this._v2 ??= new V2({ client: this.client }))
-  }
-
-  private _local?: Local
-  get local(): Local {
-    return (this._local ??= new Local({ client: this.client }))
   }
 }

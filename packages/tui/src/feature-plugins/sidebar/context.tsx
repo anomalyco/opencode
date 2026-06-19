@@ -39,6 +39,9 @@ type MemSnapshot = {
 
 type Seg = { chars: number; color: string; filled: boolean }
 
+// Account balance for pay-as-you-go cloud providers (fork: see provider/balance.ts).
+type ProviderBalance = { remaining?: number; limit?: number; used?: number; currency?: string }
+
 function extractMem(hw: ResourceSnapshot): MemSnapshot | null {
   const modelMb = hw.loaded_model?.model_mb ?? 0
   const kvEstMb = hw.loaded_model?.kv_estimate_mb ?? 0
@@ -142,6 +145,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const cost = createMemo(() => session()?.cost ?? 0)
 
   const [mem, setMem] = createSignal<MemSnapshot | null>(null)
+  const [balance, setBalance] = createSignal<ProviderBalance | null>(null)
 
   const state = createMemo(() => {
     const last = msg().findLast((item): item is AssistantMessage => item.role === "assistant" && item.tokens.output > 0)
@@ -189,6 +193,37 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     },
   ))
 
+  // fork: poll remaining credits for pay-as-you-go cloud providers. Server-side
+  // probe registry decides support per provider (provider/balance.ts); local
+  // providers and providers without a probe simply return nothing.
+  createEffect(on(
+    () => (state().isLocal ? null : state().providerID),
+    (providerID) => {
+      if (!providerID) { setBalance(null); return }
+      const poll = async () => {
+        try {
+          const res = await props.api.client.provider.balance({ providerID })
+          const d = res.data
+          setBalance(
+            d
+              ? {
+                  remaining: typeof d.remaining === "number" ? d.remaining : undefined,
+                  limit: typeof d.limit === "number" ? d.limit : undefined,
+                  used: typeof d.used === "number" ? d.used : undefined,
+                  currency: typeof d.currency === "string" ? d.currency : undefined,
+                }
+              : null,
+          )
+        } catch {
+          setBalance(null)
+        }
+      }
+      poll()
+      const pollId = setInterval(poll, 60_000)
+      onCleanup(() => clearInterval(pollId))
+    },
+  ))
+
   function openCtxDialog() {
     const { providerID, modelID } = state()
     if (!providerID || !modelID) return
@@ -225,6 +260,9 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
           <>
             <text fg={theme().text} attributes={TextAttributes.BOLD}>Cost</text>
             <text fg={theme().textMuted}>{money.format(cost())} spent</text>
+            <Show when={balance()?.remaining != null}>
+              <text fg={theme().textMuted}>{money.format(balance()!.remaining!)} left</text>
+            </Show>
           </>
         }
       >
