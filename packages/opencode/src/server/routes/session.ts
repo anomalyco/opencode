@@ -4,6 +4,7 @@ import { describeRoute, validator, resolver } from "hono-openapi"
 import { SessionID, MessageID, PartID } from "@/session/schema"
 import z from "zod"
 import { Session } from "../../session"
+import { getOrCreateMain } from "../../session/ensure"
 import { MessageV2 } from "../../session/message-v2"
 import { SessionPrompt } from "../../session/prompt"
 import { SessionCompaction } from "../../session/compaction"
@@ -208,7 +209,7 @@ export const SessionRoutes = lazy(() =>
       validator("json", Session.create.schema.optional()),
       async (c) => {
         const body = c.req.valid("json") ?? {}
-        const session = await Session.create(body)
+        const session = body.parentID ? await Session.create(body) : await getOrCreateMain(body)
         return c.json(session)
       },
     )

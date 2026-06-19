@@ -12,6 +12,7 @@ import { Command } from "../command"
 import { Instance } from "./instance"
 import { Log } from "@/util/log"
 import { ShareNext } from "@/share/share-next"
+import { ensureSession } from "../session/ensure"
 
 export async function InstanceBootstrap() {
   Log.Default.info("bootstrapping", { directory: Instance.directory })
@@ -30,4 +31,6 @@ export async function InstanceBootstrap() {
       Project.setInitialized(Instance.project.id)
     }
   })
+
+  await ensureSession()
 }

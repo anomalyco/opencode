@@ -16,5 +16,7 @@
       "command": ["playwright-mcp", "--headless", "--browser", "chromium"],
       "enabled": true
     }
-  }
+  },
+  "ensureSession": true,
+  "ensureOneSession": true
 }
