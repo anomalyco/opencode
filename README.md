@@ -116,6 +116,48 @@ Learn more about [agents](https://opencode.ai/docs/agents).
 
 For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
 
+### Skills
+
+OpenCode uses skills — structured markdown files containing reusable instructions
+that are injected into the system prompt. Skills are auto-loaded at session start,
+but you can control this behaviour.
+
+#### autoLoad config
+
+Control which skills are injected into the system prompt at session start:
+
+```json
+{
+  "skills": {
+    "autoLoad": "core"
+  }
+}
+```
+
+| Value | Behaviour |
+|-------|-----------|
+| `"all"` | All skills injected at startup (default — existing behaviour) |
+| `"core"` | Only skills tagged `type: core` in their SKILL.md frontmatter |
+| `"none"` | No skills injected; use /skills picker to load on demand |
+
+#### /skills picker
+
+Type `/skills` in the chat input to open the interactive skill picker.
+Browse core and non-core skills, filter by typing, press Enter to load
+a skill into the current session.
+
+#### Tagging a skill as core
+
+Add a `type` field to your skill's SKILL.md frontmatter:
+
+```yaml
+---
+name: my-skill
+type: core
+description: Does X
+---
+```
+
 ### Contributing
 
 If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.

@@ -1,6 +1,8 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { Skill } from "../../src/skill"
+import { scanAvailableSkills } from "../../src/skill/scanner"
+import { loadSkillContent } from "../../src/skill/loader"
 import { Discovery } from "../../src/skill/discovery"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
@@ -278,6 +280,147 @@ description: A skill in the .claude/skills directory.
         }),
       )
     }),
+  )
+
+  it.live("parses skill with type: core frontmatter", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "core-skill", "SKILL.md"),
+              `---
+name: core-skill
+type: core
+description: A core skill.
+---
+
+# Core Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const item = (yield* skill.all()).find((s) => s.name === "core-skill")
+          expect(item).toBeDefined()
+          expect(item!.type).toBe("core")
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("parses skill with type: non-core frontmatter", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "noncore-skill", "SKILL.md"),
+              `---
+name: noncore-skill
+type: non-core
+description: A non-core skill.
+---
+
+# Non-Core Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const item = (yield* skill.all()).find((s) => s.name === "noncore-skill")
+          expect(item).toBeDefined()
+          expect(item!.type).toBe("non-core")
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("defaults to non-core when type is absent from frontmatter", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "untyped-skill", "SKILL.md"),
+              `---
+name: untyped-skill
+description: A skill without type.
+---
+
+# Untyped Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const item = (yield* skill.all()).find((s) => s.name === "untyped-skill")
+          expect(item).toBeDefined()
+          expect(item!.type).toBe("non-core")
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("defaults to non-core when type has invalid value", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "bad-skill", "SKILL.md"),
+              `---
+name: bad-skill
+type: invalid
+description: A skill with bad type.
+---
+
+# Bad Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const item = (yield* skill.all()).find((s) => s.name === "bad-skill")
+          expect(item).toBeDefined()
+          expect(item!.type).toBe("non-core")
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("built-in customize-opencode skill has type: core", () =>
+    provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const skill = yield* Skill.Service
+          const item = yield* skill.get("customize-opencode")
+          expect(item).toBeDefined()
+          expect(item!.type).toBe("core")
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("type field does not break skills without frontmatter", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "no-frontmatter", "SKILL.md"),
+              `# No Frontmatter
+
+Just content.
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          expect((yield* skill.all()).filter((s) => s.location !== "<built-in>")).toEqual([])
+        }),
+      { git: true },
+    ),
   )
 
   it.live("returns empty array when no skills exist", () =>
@@ -564,6 +707,118 @@ description: A skill in the .opencode/skills directory.
 
           const skill = yield* Skill.Service
           expect((yield* skill.dirs()).length).toBe(4)
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("scanAvailableSkills returns metadata for all skills", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "scan-skill", "SKILL.md"),
+              `---
+name: scan-skill
+type: core
+description: A scanned skill.
+---
+
+# Scan Skill
+`,
+            ),
+          )
+
+          const metas = yield* scanAvailableSkills()
+          const scanSkill = metas.find((m) => m.name === "scan-skill")
+          expect(scanSkill).toBeDefined()
+          expect(scanSkill!.type).toBe("core")
+          expect(scanSkill!.description).toBe("A scanned skill.")
+          expect(scanSkill!.loaded).toBe(false)
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("scanAvailableSkills shows loaded status after loadIntoSession", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "loadable", "SKILL.md"),
+              `---
+name: loadable
+type: non-core
+description: A loadable skill.
+---
+
+# Loadable Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          yield* skill.loadIntoSession("loadable")
+          const metas = yield* scanAvailableSkills()
+          const loaded = metas.find((m) => m.name === "loadable")
+          expect(loaded).toBeDefined()
+          expect(loaded!.loaded).toBe(true)
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("loadIntoSession is idempotent (duplicate load is no-op)", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "dup-skill", "SKILL.md"),
+              `---
+name: dup-skill
+description: A duplicate skill.
+---
+
+# Dup Skill
+`,
+            ),
+          )
+
+          const skill = yield* Skill.Service
+          const first = yield* skill.loadIntoSession("dup-skill")
+          const second = yield* skill.loadIntoSession("dup-skill")
+          expect(first).toBe(second)
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("loadSkillContent returns skill content without marking as loaded", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(() =>
+            Bun.write(
+              path.join(dir, ".opencode", "skill", "preview-skill", "SKILL.md"),
+              `---
+name: preview-skill
+description: A skill for preview.
+---
+
+# Preview Skill
+`,
+            ),
+          )
+
+          const content = yield* loadSkillContent("preview-skill")
+          expect(content).toContain("# Preview Skill")
+
+          const skill = yield* Skill.Service
+          const loaded = yield* skill.isLoaded("preview-skill")
+          expect(loaded).toBe(false)
         }),
       { git: true },
     ),

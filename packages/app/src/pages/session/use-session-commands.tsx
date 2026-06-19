@@ -118,6 +118,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const modelCommand = withCategory(language.t("command.category.model"))
   const mcpCommand = withCategory(language.t("command.category.mcp"))
   const agentCommand = withCategory(language.t("command.category.agent"))
+  const skillsCommand = withCategory(language.t("command.category.skills"))
   const permissionsCommand = withCategory(language.t("command.category.permissions"))
 
   const isAutoAcceptActive = () => {
@@ -539,6 +540,20 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }),
   ]
 
+  const skillsCmds = () => [
+    skillsCommand({
+      id: "skills.picker",
+      title: language.t("command.skills.picker"),
+      description: language.t("command.skills.picker.description"),
+      slash: "skills",
+      onSelect: () => {
+        void import("@/components/skill-picker").then((x) => {
+          dialog.show(() => <x.SkillPicker />)
+        })
+      },
+    }),
+  ]
+
   const agentCmds = () => [
     agentCommand({
       id: "agent.cycle",
@@ -581,6 +596,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     ...messageCmds(),
     ...modelCmds(),
     ...mcpCmds(),
+    ...skillsCmds(),
     ...agentCmds(),
     ...permissionsCmds(),
   ])

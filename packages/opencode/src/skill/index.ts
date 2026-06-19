@@ -34,9 +34,13 @@ const CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION =
   "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself."
 const CUSTOMIZE_OPENCODE_SKILL_BODY = SkillPlugin.CustomizeOpencodeContent
 
+const SKILL_TYPES = ["core", "non-core"] as const
+export type SkillType = (typeof SKILL_TYPES)[number]
+
 export const Info = Schema.Struct({
   name: Schema.String,
   description: Schema.optional(Schema.String),
+  type: Schema.optional(Schema.Literals([...SKILL_TYPES])),
   location: Schema.String,
   content: Schema.String,
 })
@@ -50,7 +54,7 @@ const Issue = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
 
-function isSkillFrontmatter(data: unknown): data is { name: string; description?: string } {
+function isSkillFrontmatter(data: unknown): data is { name: string; description?: string; type?: string } {
   return (
     isRecord(data) &&
     typeof data.name === "string" &&
@@ -82,6 +86,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Ski
 type State = {
   skills: Record<string, Info>
   dirs: Set<string>
+  loadedSkills: Set<string>
 }
 
 type DiscoveryState = {
@@ -100,6 +105,8 @@ export interface Interface {
   readonly all: () => Effect.Effect<Info[]>
   readonly dirs: () => Effect.Effect<string[]>
   readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
+  readonly loadIntoSession: (name: string) => Effect.Effect<string, NotFoundError>
+  readonly isLoaded: (name: string) => Effect.Effect<boolean>
 }
 
 const add = Effect.fnUntraced(function* (state: State, match: string, events: EventV2Bridge.Service["Service"]) {
@@ -131,9 +138,19 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
   }
 
   state.dirs.add(path.dirname(match))
+
+  if (md.data.type !== undefined && md.data.type !== "core" && md.data.type !== "non-core") {
+    yield* Effect.logWarning("invalid skill type, defaulting to non-core", {
+      skill: md.data.name,
+      type: md.data.type,
+    })
+  }
+  const skillType: SkillType = md.data.type === "core" ? "core" : "non-core"
+
   state.skills[md.data.name] = {
     name: md.data.name,
     description: md.data.description,
+    type: skillType,
     location: match,
     content: md.content,
   }
@@ -272,12 +289,13 @@ export const layer = Layer.effect(
     )
     const state = yield* InstanceState.make(
       Effect.fn("Skill.state")(function* () {
-        const s: State = { skills: {}, dirs: new Set() }
+        const s: State = { skills: {}, dirs: new Set(), loadedSkills: new Set() }
         // Register the built-in skill BEFORE disk discovery so a user-disk
         // skill with the same name can override it.
         s.skills[CUSTOMIZE_OPENCODE_SKILL_NAME] = {
           name: CUSTOMIZE_OPENCODE_SKILL_NAME,
           description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
+          type: "core",
           location: "<built-in>",
           content: CUSTOMIZE_OPENCODE_SKILL_BODY,
         }
@@ -314,7 +332,20 @@ export const layer = Layer.effect(
       return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
     })
 
-    return Service.of({ get, require, all, dirs, available })
+    const loadIntoSession = Effect.fn("Skill.loadIntoSession")(function* (name: string) {
+      const info = yield* require(name)
+      const s = yield* InstanceState.get(state)
+      if (s.loadedSkills.has(name)) return info.content
+      s.loadedSkills.add(name)
+      return info.content
+    })
+
+    const isLoaded = Effect.fn("Skill.isLoaded")(function* (name: string) {
+      const s = yield* InstanceState.get(state)
+      return s.loadedSkills.has(name)
+    })
+
+    return Service.of({ get, require, all, dirs, available, loadIntoSession, isLoaded })
   }),
 )
 
