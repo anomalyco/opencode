@@ -45,6 +45,8 @@ export function createChildStoreManager(input: {
   const disposers = new Map<string, () => void>()
   const mcpDirectories = new Set<string>()
   const mcpToggles = new Map<string, (enabled: boolean) => void>()
+  const axiDirectories = new Set<string>()
+  const axiToggles = new Map<string, (enabled: boolean) => void>()
 
   const markKey = (key: DirectoryKey) => {
     if (!key) return
@@ -118,6 +120,8 @@ export function createChildStoreManager(input: {
     lifecycle.delete(key)
     mcpDirectories.delete(key)
     mcpToggles.delete(key)
+    axiDirectories.delete(key)
+    axiToggles.delete(key)
     const dispose = disposers.get(key)
     if (dispose) {
       dispose()
@@ -182,9 +186,11 @@ export function createChildStoreManager(input: {
           const initialMeta = meta[0].value
           const initialIcon = icon[0].value
           const [mcpEnabled, setMcpEnabled] = createSignal(false)
+          const [axiEnabled, setAxiEnabled] = createSignal(false)
 
           const pathQuery = useQuery(() => input.queryOptions.path(key))
           const mcpQuery = useQuery(() => ({ ...input.queryOptions.mcp(key), enabled: mcpEnabled() }))
+          const axiQuery = useQuery(() => ({ ...input.queryOptions.axi(key), enabled: axiEnabled() }))
           const lspQuery = useQuery(() => input.queryOptions.lsp(key))
           const providerQuery = useQuery(() => input.queryOptions.providers(key))
 
@@ -227,6 +233,9 @@ export function createChildStoreManager(input: {
             get mcp() {
               return mcpQuery.isLoading ? {} : (mcpQuery.data ?? {})
             },
+            get axi() {
+              return axiQuery.isLoading ? {} : (axiQuery.data ?? {})
+            },
             get lsp_ready() {
               return !lspQuery.isLoading
             },
@@ -242,6 +251,7 @@ export function createChildStoreManager(input: {
           children[key] = child
           disposers.set(key, dispose)
           mcpToggles.set(key, setMcpEnabled)
+          axiToggles.set(key, setAxiEnabled)
 
           const onPersistedInit = (init: Promise<string> | string | null, run: () => void) => {
             if (!(init instanceof Promise)) return
@@ -281,6 +291,7 @@ export function createChildStoreManager(input: {
     const childStore = ensureChild(directory)
     pinForOwner(key)
     if (options.mcp) enableMcp(directory, key, childStore)
+    if (options.axi) enableAxi(directory, key)
     const shouldBootstrap = options.bootstrap ?? true
     if (shouldBootstrap && childStore[0].status === "loading") {
       input.onBootstrap(directory)
@@ -292,6 +303,7 @@ export function createChildStoreManager(input: {
     const key = directoryKey(directory)
     const childStore = ensureChild(directory)
     if (options.mcp) enableMcp(directory, key, childStore)
+    if (options.axi) enableAxi(directory, key)
     const shouldBootstrap = options.bootstrap ?? true
     if (shouldBootstrap && childStore[0].status === "loading") {
       input.onBootstrap(directory)
@@ -310,6 +322,12 @@ export function createChildStoreManager(input: {
     const key = directoryKey(directory)
     if (!mcpDirectories.delete(key)) return
     mcpToggles.get(key)?.(false)
+  }
+
+  function enableAxi(directory: string, key: DirectoryKey) {
+    if (axiDirectories.has(key)) return
+    axiDirectories.add(key)
+    axiToggles.get(key)?.(true)
   }
 
   function projectMeta(directory: string, patch: ProjectMeta) {
@@ -352,6 +370,7 @@ export function createChildStoreManager(input: {
     unpin,
     pinned,
     mcp: (directory: string) => mcpDirectories.has(directoryKey(directory)),
+    axi: (directory: string) => axiDirectories.has(directoryKey(directory)),
     disableMcp,
     disposeDirectory,
     runEviction,

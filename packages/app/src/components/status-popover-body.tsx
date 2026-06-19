@@ -280,8 +280,10 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const toggleMcp = useMcpToggle()
   const defaultServer = useDefaultServerKey(platform.getDefaultServer)
   const mcpNames = createMemo(() => Object.keys(sync().data.mcp ?? {}).sort((a, b) => a.localeCompare(b)))
+  const axiNames = createMemo(() => Object.keys(sync().data.axi ?? {}).sort((a, b) => a.localeCompare(b)))
   const mcpStatus = (name: string) => sync().data.mcp?.[name]?.status
   const mcpConnected = createMemo(() => mcpNames().filter((name) => mcpStatus(name) === "connected").length)
+  const mcpOrAxiConnected = createMemo(() => mcpConnected() + axiNames().length)
   const lspItems = createMemo(() => sync().data.lsp ?? [])
   const lspCount = createMemo(() => lspItems().length)
   const plugins = createMemo(() =>
@@ -308,7 +310,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
             </Tabs.Trigger>
           )}
           <Tabs.Trigger value="mcp" data-slot="tab" class="text-12-regular">
-            {mcpConnected() > 0 ? `${mcpConnected()} ` : ""}
+            {mcpOrAxiConnected() > 0 ? `${mcpOrAxiConnected()} ` : ""}
             {language.t("status.popover.tab.mcp")}
           </Tabs.Trigger>
           <Tabs.Trigger value="lsp" data-slot="tab" class="text-12-regular">
@@ -445,6 +447,24 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                     )
                   }}
                 </For>
+                <Show when={axiNames().length > 0}>
+                  <div class="text-12-medium text-text-weaker px-3 pt-3 pb-1">AXI</div>
+                  <For each={axiNames()}>
+                    {(key) => {
+                      const axi = () => sync().data.axi?.[key]
+                      return (
+                        <div class="flex items-center gap-2 w-full min-h-8 pl-3 pr-2 py-1 rounded-md text-left">
+                          <div class="size-1.5 rounded-full shrink-0 bg-icon-info-base" />
+                          <span class="flex flex-col min-w-0 flex-1">
+                            <span class="flex items-center gap-2 min-w-0">
+                              <span class="text-14-regular text-text-base truncate">{axi()?.name}</span>
+                            </span>
+                          </span>
+                        </div>
+                      )
+                    }}
+                  </For>
+                </Show>
               </Show>
             </div>
           </div>

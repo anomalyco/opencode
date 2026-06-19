@@ -682,7 +682,7 @@ export const dict = {
   "status.popover.trigger": "Status",
   "status.popover.ariaLabel": "Server configurations",
   "status.popover.tab.servers": "Servers",
-  "status.popover.tab.mcp": "MCP",
+  "status.popover.tab.mcp": "MCP/AXI",
   "status.popover.tab.lsp": "LSP",
   "status.popover.tab.plugins": "Plugins",
   "status.popover.action.manageServers": "Manage servers",

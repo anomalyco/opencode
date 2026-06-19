@@ -63,6 +63,9 @@ export type State = {
   mcp: {
     [name: string]: McpStatus
   }
+  axi: {
+    [name: string]: { name: string; uri: string; description?: string; mimeType?: string }
+  }
   lsp_ready: boolean
   lsp: LspStatus[]
   vcs: VcsInfo | undefined
@@ -99,6 +102,7 @@ export type IconCache = {
 export type ChildOptions = {
   bootstrap?: boolean
   mcp?: boolean
+  axi?: boolean
 }
 
 export type DirState = {
