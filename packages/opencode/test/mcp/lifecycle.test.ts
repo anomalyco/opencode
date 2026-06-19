@@ -4,6 +4,7 @@ import { expect, mock, beforeEach } from "bun:test"
 import {
   ListRootsRequestSchema,
   ResourceListChangedNotificationSchema,
+  ResourceUpdatedNotificationSchema,
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Deferred, Effect, Exit } from "effect"
@@ -24,6 +25,9 @@ interface MockClientState {
   listPromptsCalls: number
   listResourcesCalls: number
   listResourceTemplatesCalls: number
+  readResourceCalls: number
+  subscribedResources: string[]
+  unsubscribedResources: string[]
   getPromptTimeout?: number
   readResourceTimeout?: number
   requestCalls: number
@@ -80,6 +84,9 @@ function getOrCreateClientState(name?: string): MockClientState {
       listPromptsCalls: 0,
       listResourcesCalls: 0,
       listResourceTemplatesCalls: 0,
+      readResourceCalls: 0,
+      subscribedResources: [],
+      unsubscribedResources: [],
       requestCalls: 0,
       listToolsShouldFail: false,
       listToolsError: "listTools failed",
@@ -256,8 +263,17 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
     }
 
     async readResource(params: { uri: string }, options?: { timeout?: number }) {
+      if (this._state) this._state.readResourceCalls++
       if (this._state) this._state.readResourceTimeout = options?.timeout
       return { contents: [{ uri: params.uri, text: "test" }] }
+    }
+
+    async subscribeResource(params: { uri: string }) {
+      this._state?.subscribedResources.push(params.uri)
+    }
+
+    async unsubscribeResource(params: { uri: string }) {
+      this._state?.unsubscribedResources.push(params.uri)
     }
 
     async close() {
@@ -579,9 +595,162 @@ it.instance(
       expect(handler).toBeDefined()
       yield* Effect.promise(() => handler?.())
 
-      expect(
-        yield* awaitWithTimeout(Deferred.await(seen), "mcp.resources.changed event was not published"),
-      ).toBe("resource-notify-server")
+      expect(yield* awaitWithTimeout(Deferred.await(seen), "mcp.resources.changed event was not published")).toBe(
+        "resource-notify-server",
+      )
+    }),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "readResource subscribes once when the server supports resource subscriptions",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "resource-subscribe-server"
+        const serverState = getOrCreateClientState("resource-subscribe-server")
+        serverState.capabilities = { resources: { subscribe: true } }
+
+        yield* mcp.add("resource-subscribe-server", {
+          type: "local",
+          command: ["echo", "test"],
+          timeout: 2500,
+        })
+
+        const first = yield* mcp.readResource("resource-subscribe-server", "docs://readme")
+        const second = yield* mcp.readResource("resource-subscribe-server", "docs://readme")
+
+        expect(first?.contents).toEqual([{ uri: "docs://readme", text: "test" }])
+        expect(second?.contents).toEqual([{ uri: "docs://readme", text: "test" }])
+        expect(serverState.subscribedResources).toEqual(["docs://readme"])
+        expect(serverState.readResourceCalls).toBe(2)
+        expect(serverState.readResourceTimeout).toBe(2500)
+      }),
+    ),
+  { config: { mcp: {}, experimental: { mcp_timeout: 5000 } } },
+)
+
+it.instance(
+  "subscribeResource exposes explicit resource subscriptions",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "resource-selected-server"
+        const serverState = getOrCreateClientState("resource-selected-server")
+        serverState.capabilities = { resources: { subscribe: true } }
+
+        yield* mcp.add("resource-selected-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        yield* mcp.subscribeResource("resource-selected-server", "docs://selected")
+        yield* mcp.readResource("resource-selected-server", "docs://selected")
+
+        expect(serverState.subscribedResources).toEqual(["docs://selected"])
+        expect(serverState.readResourceCalls).toBe(1)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "readResource does not subscribe when the server does not support resource subscriptions",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "resource-read-server"
+        const serverState = getOrCreateClientState("resource-read-server")
+        serverState.capabilities = { resources: {} }
+
+        yield* mcp.add("resource-read-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        yield* mcp.readResource("resource-read-server", "docs://readme")
+
+        expect(serverState.subscribedResources).toEqual([])
+        expect(serverState.readResourceCalls).toBe(1)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "unsubscribeResource unsubscribes explicit resource subscriptions",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "resource-unsubscribe-server"
+        const serverState = getOrCreateClientState("resource-unsubscribe-server")
+        serverState.capabilities = { resources: { subscribe: true } }
+
+        yield* mcp.add("resource-unsubscribe-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        yield* mcp.readResource("resource-unsubscribe-server", "docs://readme")
+        yield* mcp.unsubscribeResource("resource-unsubscribe-server", "docs://readme")
+        yield* mcp.readResource("resource-unsubscribe-server", "docs://readme")
+
+        expect(serverState.subscribedResources).toEqual(["docs://readme", "docs://readme"])
+        expect(serverState.unsubscribedResources).toEqual(["docs://readme"])
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "resource update notifications publish server and URI for the current client only",
+  () =>
+    Effect.gen(function* () {
+      const mcp = yield* MCP.Service
+      const seen = yield* Deferred.make<{ server: string; uri: string }>()
+      const listener = (event: { payload: { type?: string; properties?: { server?: string; uri?: string } } }) => {
+        if (
+          event.payload.type === "mcp.resource.updated" &&
+          event.payload.properties?.server &&
+          event.payload.properties.uri
+        ) {
+          Deferred.doneUnsafe(
+            seen,
+            Effect.succeed({ server: event.payload.properties.server, uri: event.payload.properties.uri }),
+          )
+        }
+      }
+      yield* Effect.acquireRelease(
+        Effect.sync(() => GlobalBus.on("event", listener)),
+        () => Effect.sync(() => GlobalBus.off("event", listener)),
+      )
+
+      lastCreatedClientName = "resource-update-server-old"
+      const oldState = getOrCreateClientState("resource-update-server-old")
+      oldState.capabilities = { resources: { subscribe: true } }
+      yield* mcp.add("resource-update-server", { type: "local", command: ["echo", "test"] })
+      const oldHandler = oldState.notificationHandlers.get(ResourceUpdatedNotificationSchema)
+
+      lastCreatedClientName = "resource-update-server-new"
+      const newState = getOrCreateClientState("resource-update-server-new")
+      newState.capabilities = { resources: { subscribe: true } }
+      yield* mcp.add("resource-update-server", { type: "local", command: ["echo", "test"] })
+      const newHandler = newState.notificationHandlers.get(ResourceUpdatedNotificationSchema)
+
+      expect(oldHandler).toBeDefined()
+      expect(newHandler).toBeDefined()
+      yield* Effect.promise(() =>
+        oldHandler!({ method: "notifications/resources/updated", params: { uri: "docs://stale" } }),
+      )
+      yield* Effect.promise(() =>
+        newHandler!({ method: "notifications/resources/updated", params: { uri: "docs://current" } }),
+      )
+
+      expect(yield* awaitWithTimeout(Deferred.await(seen), "mcp.resource.updated event was not published")).toEqual({
+        server: "resource-update-server",
+        uri: "docs://current",
+      })
+      expect(newState.readResourceCalls).toBe(0)
     }),
   { config: { mcp: {} } },
 )

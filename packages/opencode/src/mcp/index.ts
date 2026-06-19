@@ -14,6 +14,7 @@ import {
   type LoggingMessageNotification,
   LoggingMessageNotificationSchema,
   ResourceListChangedNotificationSchema,
+  ResourceUpdatedNotificationSchema,
   type Tool as MCPToolDef,
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js"
@@ -62,6 +63,7 @@ export type Resource = Schema.Schema.Type<typeof Resource>
 
 export const ToolsChanged = McpEvent.ToolsChanged
 export const ResourcesChanged = McpEvent.ResourcesChanged
+export const ResourceUpdated = McpEvent.ResourceUpdated
 export const BrowserOpenFailed = McpEvent.BrowserOpenFailed
 
 export const Failed = NamedError.create("MCPFailed", {
@@ -147,6 +149,7 @@ interface State {
   clients: Record<string, MCPClient>
   defs: Record<string, MCPToolDef[]>
   instructions: Record<string, string>
+  resourceSubscriptions: Record<string, Set<string>>
 }
 
 export interface ServerInstructions {
@@ -177,6 +180,8 @@ export interface Interface {
     clientName: string,
     resourceUri: string,
   ) => Effect.Effect<Awaited<ReturnType<MCPClient["readResource"]>> | undefined>
+  readonly subscribeResource: (clientName: string, resourceUri: string) => Effect.Effect<void>
+  readonly unsubscribeResource: (clientName: string, resourceUri: string) => Effect.Effect<void>
   readonly startAuth: (
     mcpName: string,
   ) => Effect.Effect<{ authorizationUrl: string; oauthState: string }, NotFoundError>
@@ -438,6 +443,7 @@ export const layer = Layer.effect(
         delete s.clients[name]
         delete s.defs[name]
         delete s.instructions[name]
+        delete s.resourceSubscriptions[name]
         s.status[name] = { status: "failed", error: "Connection closed" }
         bridge.fork(
           Effect.logWarning("MCP connection closed", { server: name }).pipe(
@@ -457,6 +463,14 @@ export const layer = Layer.effect(
           if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
           await bridge.promise(events.publish(ResourcesChanged, { server: name }).pipe(Effect.ignore))
         })
+        if (capabilities.resources.subscribe) {
+          client.setNotificationHandler(ResourceUpdatedNotificationSchema, async (notification) => {
+            if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
+            await bridge.promise(
+              events.publish(ResourceUpdated, { server: name, uri: notification.params.uri }).pipe(Effect.ignore),
+            )
+          })
+        }
       }
       if (capabilities?.tools) {
         client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
@@ -501,6 +515,7 @@ export const layer = Layer.effect(
           clients: {},
           defs: {},
           instructions: {},
+          resourceSubscriptions: {},
         }
 
         yield* Effect.forEach(
@@ -523,6 +538,7 @@ export const layer = Layer.effect(
                 s.clients[key] = result.mcpClient
                 s.defs[key] = result.defs!
                 if (result.instructions) s.instructions[key] = result.instructions
+                s.resourceSubscriptions[key] = new Set()
                 watch(s, key, result.mcpClient, bridge, mcp.timeout)
               }
             }),
@@ -535,6 +551,7 @@ export const layer = Layer.effect(
             s.clients = {}
             s.defs = {}
             s.instructions = {}
+            s.resourceSubscriptions = {}
             yield* Effect.forEach(
               clients,
               (client) =>
@@ -565,6 +582,7 @@ export const layer = Layer.effect(
       delete s.clients[name]
       delete s.defs[name]
       delete s.instructions[name]
+      delete s.resourceSubscriptions[name]
       if (!client) return Effect.void
       return Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
     }
@@ -584,6 +602,7 @@ export const layer = Layer.effect(
       s.defs[name] = listed
       if (instructions) s.instructions[name] = instructions
       else delete s.instructions[name]
+      s.resourceSubscriptions[name] = new Set()
       watch(s, name, client, bridge, timeout)
       if (previous) yield* Effect.tryPromise(() => previous.close()).pipe(Effect.ignore)
       return s.status[name]
@@ -780,13 +799,53 @@ export const layer = Layer.effect(
       )
     })
 
+    const subscribeResource = Effect.fn("MCP.subscribeResource")(function* (clientName: string, resourceUri: string) {
+      const s = yield* InstanceState.get(state)
+      if (s.resourceSubscriptions[clientName]?.has(resourceUri)) return
+
+      const result = yield* withClient(
+        clientName,
+        async (client, timeout) => {
+          if (!client.getServerCapabilities()?.resources?.subscribe) return false
+          await client.subscribeResource({ uri: resourceUri }, { timeout })
+          return true
+        },
+        "subscribeResource",
+        { resourceUri },
+      )
+      if (result) (s.resourceSubscriptions[clientName] ??= new Set()).add(resourceUri)
+    })
+
     const readResource = Effect.fn("MCP.readResource")(function* (clientName: string, resourceUri: string) {
-      return yield* withClient(
+      const result = yield* withClient(
         clientName,
         (client, timeout) => client.readResource({ uri: resourceUri }, { timeout }),
         "readResource",
         { resourceUri },
       )
+      if (result) yield* subscribeResource(clientName, resourceUri).pipe(Effect.ignore)
+      return result
+    })
+
+    const unsubscribeResource = Effect.fn("MCP.unsubscribeResource")(function* (
+      clientName: string,
+      resourceUri: string,
+    ) {
+      const s = yield* InstanceState.get(state)
+      const subscribed = s.resourceSubscriptions[clientName]
+      if (!subscribed?.has(resourceUri)) return
+
+      const result = yield* withClient(
+        clientName,
+        async (client, timeout) => {
+          if (!client.getServerCapabilities()?.resources?.subscribe) return false
+          await client.unsubscribeResource({ uri: resourceUri }, { timeout })
+          return true
+        },
+        "unsubscribeResource",
+        { resourceUri },
+      )
+      if (result) subscribed.delete(resourceUri)
     })
 
     const getMcpConfig = Effect.fnUntraced(function* (mcpName: string) {
@@ -996,6 +1055,8 @@ export const layer = Layer.effect(
       disconnect,
       getPrompt,
       readResource,
+      subscribeResource,
+      unsubscribeResource,
       startAuth,
       authenticate,
       finishAuth,
