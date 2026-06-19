@@ -39,6 +39,7 @@ export type Event =
   | EventSessionNextToolInputEnded
   | EventSessionNextToolCalled
   | EventSessionNextToolProgress
+  | EventSessionNextToolProgressReport
   | EventSessionNextToolSuccess
   | EventSessionNextToolFailed
   | EventSessionNextRetried
@@ -1088,6 +1089,25 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.next.tool.progress.report"
+        properties: {
+          timestamp: number
+          sessionID: string
+          assistantMessageID: string
+          callID: string
+          report: {
+            progress: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            total?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+            message?: string
+            source?: string
+          }
+          structured: {
+            [key: string]: unknown
+          }
+        }
+      }
+    | {
+        id: string
         type: "session.next.tool.success"
         properties: {
           timestamp: number
@@ -1628,6 +1648,7 @@ export type GlobalEvent = {
     | SyncEventSessionNextToolInputEnded
     | SyncEventSessionNextToolCalled
     | SyncEventSessionNextToolProgress
+    | SyncEventSessionNextToolProgressReport
     | SyncEventSessionNextToolSuccess
     | SyncEventSessionNextToolFailed
     | SyncEventSessionNextRetried
@@ -2774,6 +2795,7 @@ export type V2Event =
   | V2EventSessionNextToolInputEnded
   | V2EventSessionNextToolCalled
   | V2EventSessionNextToolProgress
+  | V2EventSessionNextToolProgressReport
   | V2EventSessionNextToolSuccess
   | V2EventSessionNextToolFailed
   | V2EventSessionNextRetried
@@ -3554,6 +3576,32 @@ export type SyncEventSessionNextToolProgress = {
         [key: string]: unknown
       }
       content: Array<LlmToolContent>
+    }
+  }
+}
+
+export type SyncEventSessionNextToolProgressReport = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.tool.progress.report.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      assistantMessageID: string
+      callID: string
+      report: {
+        progress: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        total?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+        message?: string
+        source?: string
+      }
+      structured: {
+        [key: string]: unknown
+      }
     }
   }
 }
@@ -5589,6 +5637,35 @@ export type V2EventSessionNextToolProgress = {
   }
 }
 
+export type V2EventSessionNextToolProgressReport = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "session.next.tool.progress.report"
+  data: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    callID: string
+    report: {
+      progress: number | "NaN" | "Infinity" | "-Infinity"
+      total?: number | "NaN" | "Infinity" | "-Infinity"
+      message?: string
+      source: "mcp"
+    }
+    structured: {
+      [key: string]: unknown
+    }
+  }
+}
+
 export type V2EventSessionNextToolSuccess = {
   id: string
   metadata?: {
@@ -7074,6 +7151,26 @@ export type EventSessionNextToolProgress = {
       [key: string]: unknown
     }
     content: Array<LlmToolContent>
+  }
+}
+
+export type EventSessionNextToolProgressReport = {
+  id: string
+  type: "session.next.tool.progress.report"
+  properties: {
+    timestamp: number
+    sessionID: string
+    assistantMessageID: string
+    callID: string
+    report: {
+      progress: number | "NaN" | "Infinity" | "-Infinity"
+      total?: number | "NaN" | "Infinity" | "-Infinity"
+      message?: string
+      source?: string
+    }
+    structured: {
+      [key: string]: unknown
+    }
   }
 }
 

@@ -1079,8 +1079,7 @@ export const layer = Layer.effect(
     })
 
     const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts, never, EventV2Bridge.Service> =
-      Effect.fn("SessionPrompt.run")(
-      function* (sessionID: SessionID) {
+      Effect.fn("SessionPrompt.run")(function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
@@ -1337,8 +1336,7 @@ export const layer = Layer.effect(
 
         yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
         return yield* lastAssistant(sessionID)
-      },
-    )
+      })
 
     const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
       input: LoopInput,

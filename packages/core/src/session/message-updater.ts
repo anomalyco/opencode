@@ -294,6 +294,14 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
           }
         })
       },
+      "session.next.tool.progress.report": (event) => {
+        return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
+          const match = latestTool(draft, event.data.callID)
+          if (match && match.state.status === "running") {
+            match.state.structured = event.data.structured
+          }
+        })
+      },
       "session.next.tool.success": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)

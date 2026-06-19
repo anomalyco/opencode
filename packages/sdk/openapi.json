@@ -15359,6 +15359,9 @@
             "$ref": "#/components/schemas/EventSessionNextToolProgress"
           },
           {
+            "$ref": "#/components/schemas/EventSessionNextToolProgressReport"
+          },
+          {
             "$ref": "#/components/schemas/EventSessionNextToolSuccess"
           },
           {
@@ -18652,6 +18655,104 @@
                   },
                   "type": {
                     "type": "string",
+                    "enum": ["session.next.tool.progress.report"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "number"
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "assistantMessageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
+                      "callID": {
+                        "type": "string"
+                      },
+                      "report": {
+                        "type": "object",
+                        "properties": {
+                          "progress": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "total": {
+                            "anyOf": [
+                              {
+                                "type": "number"
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["NaN"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["-Infinity"]
+                              },
+                              {
+                                "type": "string",
+                                "enum": ["Infinity", "-Infinity", "NaN"]
+                              }
+                            ]
+                          },
+                          "message": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string"
+                          }
+                        },
+                        "required": ["progress"],
+                        "additionalProperties": false
+                      },
+                      "structured": {
+                        "type": "object"
+                      }
+                    },
+                    "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "report", "structured"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
                     "enum": ["session.next.tool.success"]
                   },
                   "properties": {
@@ -20495,6 +20596,9 @@
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextToolProgress"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEventSessionNextToolProgressReport"
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextToolSuccess"
@@ -23751,6 +23855,9 @@
             "$ref": "#/components/schemas/V2EventSessionNextToolProgress"
           },
           {
+            "$ref": "#/components/schemas/V2EventSessionNextToolProgressReport"
+          },
+          {
             "$ref": "#/components/schemas/V2EventSessionNextToolSuccess"
           },
           {
@@ -26139,6 +26246,125 @@
                   }
                 },
                 "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "structured", "content"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventSessionNextToolProgressReport": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.tool.progress.report.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "assistantMessageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
+                  "callID": {
+                    "type": "string"
+                  },
+                  "report": {
+                    "type": "object",
+                    "properties": {
+                      "progress": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["NaN"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["-Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      "total": {
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["NaN"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["-Infinity"]
+                          },
+                          {
+                            "type": "string",
+                            "enum": ["Infinity", "-Infinity", "NaN"]
+                          }
+                        ]
+                      },
+                      "message": {
+                        "type": "string"
+                      },
+                      "source": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["progress"],
+                    "additionalProperties": false
+                  },
+                  "structured": {
+                    "type": "object"
+                  }
+                },
+                "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "report", "structured"],
                 "additionalProperties": false
               }
             },
@@ -33180,6 +33406,103 @@
         "required": ["id", "type", "data"],
         "additionalProperties": false
       },
+      "V2EventSessionNextToolProgressReport": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.tool.progress.report"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "callID": {
+                "type": "string"
+              },
+              "report": {
+                "type": "object",
+                "properties": {
+                  "progress": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN", "Infinity", "-Infinity"]
+                      }
+                    ]
+                  },
+                  "total": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN", "Infinity", "-Infinity"]
+                      }
+                    ]
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": ["mcp"]
+                  }
+                },
+                "required": ["progress", "source"],
+                "additionalProperties": false
+              },
+              "structured": {
+                "type": "object"
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "report", "structured"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
       "V2EventSessionNextToolSuccess": {
         "type": "object",
         "properties": {
@@ -37480,6 +37803,96 @@
               }
             },
             "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "structured", "content"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionNextToolProgressReport": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.tool.progress.report"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "callID": {
+                "type": "string"
+              },
+              "report": {
+                "type": "object",
+                "properties": {
+                  "progress": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      }
+                    ]
+                  },
+                  "total": {
+                    "anyOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["NaN"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["Infinity"]
+                      },
+                      {
+                        "type": "string",
+                        "enum": ["-Infinity"]
+                      }
+                    ]
+                  },
+                  "message": {
+                    "type": "string"
+                  },
+                  "source": {
+                    "type": "string"
+                  }
+                },
+                "required": ["progress"],
+                "additionalProperties": false
+              },
+              "structured": {
+                "type": "object"
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "report", "structured"],
             "additionalProperties": false
           }
         },

@@ -303,6 +303,16 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
             match.state.content = [...event.data.content]
           })
           break
+        case "session.next.tool.progress.report":
+          message.update(event.data.sessionID, (draft) => {
+            const match = message.latestTool(
+              message.assistant(draft, event.data.assistantMessageID),
+              event.data.callID,
+            )
+            if (match?.state.status !== "running") return
+            match.state.structured = event.data.structured
+          })
+          break
         case "session.next.tool.success":
           message.update(event.data.sessionID, (draft) => {
             const match = message.latestTool(message.assistant(draft, event.data.assistantMessageID), event.data.callID)

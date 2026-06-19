@@ -339,6 +339,22 @@ export namespace Tool {
   })
   export type Progress = typeof Progress.Type
 
+  export const ProgressReport = Event.define({
+    type: "session.next.tool.progress.report",
+    ...options,
+    schema: {
+      ...ToolBase,
+      report: Schema.Struct({
+        progress: Schema.Finite,
+        total: Schema.Finite.pipe(Schema.optional),
+        message: Schema.String.pipe(Schema.optional),
+        source: Schema.Literal("mcp"),
+      }),
+      structured: Schema.Record(Schema.String, Schema.Any),
+    },
+  })
+  export type ProgressReport = typeof ProgressReport.Type
+
   export const Success = Event.define({
     type: "session.next.tool.success",
     ...options,
@@ -464,6 +480,7 @@ export const DurableDefinitions = Event.inventory(
   Tool.Input.Ended,
   Tool.Called,
   Tool.Progress,
+  Tool.ProgressReport,
   Tool.Success,
   Tool.Failed,
   Reasoning.Started,
@@ -500,6 +517,7 @@ export const Definitions = Event.inventory(
   Tool.Input.Ended,
   Tool.Called,
   Tool.Progress,
+  Tool.ProgressReport,
   Tool.Success,
   Tool.Failed,
   Retried,

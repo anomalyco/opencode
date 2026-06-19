@@ -101,6 +101,22 @@ describe("Tool.Progress", () => {
         state: { status: "running", structured: { phase: "checkpoint" }, content: content("saved") },
       })
 
+      yield* service.publish(SessionEvent.Tool.ProgressReport, {
+        sessionID,
+        timestamp,
+        assistantMessageID,
+        callID: "call-success",
+        report: { progress: 2, total: 4, message: "halfway", source: "mcp" },
+        structured: { source: "mcp", progress: 2, total: 4, message: "halfway" },
+      })
+      expect((yield* readAssistant).content[0]).toMatchObject({
+        state: {
+          status: "running",
+          structured: { source: "mcp", progress: 2, total: 4, message: "halfway" },
+          content: content("saved"),
+        },
+      })
+
       const success = yield* service.publish(SessionEvent.Tool.Success, {
         sessionID,
         timestamp,
@@ -150,6 +166,7 @@ describe("Tool.Progress", () => {
         .all()
         .pipe(Effect.orDie)
       expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Progress.type, 1))
+      expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.ProgressReport.type, 1))
       expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Success.type, 1))
       expect(rows.map((row) => row.type)).toContain(EventV2.versionedType(SessionEvent.Tool.Failed.type, 1))
     }),

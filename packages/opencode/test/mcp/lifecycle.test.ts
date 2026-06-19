@@ -1047,17 +1047,14 @@ it.instance(
         const abort = new AbortController()
         let progress: unknown
         yield* Effect.promise(() =>
-          tool.execute?.(
-            {},
-            {
-              toolCallId: "call_1",
-              messages: [],
-              abortSignal: abort.signal,
-              onprogress: (value: unknown) => {
-                progress = value
-              },
-            } as never,
-          ),
+          tool.execute?.({}, {
+            toolCallId: "call_1",
+            messages: [],
+            abortSignal: abort.signal,
+            onprogress: (value: unknown) => {
+              progress = value
+            },
+          } as never),
         )
 
         expect(serverState.callToolOptions?.resetTimeoutOnProgress).toBe(true)

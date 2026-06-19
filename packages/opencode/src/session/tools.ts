@@ -40,7 +40,7 @@ const SUPPORTED_MCP_RESOURCE_ATTACHMENT_MIMES = new Set([
   "image/webp",
 ])
 
-export function mcpProgressToToolProgress(progress: Parameters<ProgressCallback>[0]) {
+export function mcpProgressToToolProgressReport(progress: Parameters<ProgressCallback>[0]) {
   const structured: Record<string, unknown> = {
     source: "mcp",
     progress: progress.progress,
@@ -48,8 +48,13 @@ export function mcpProgressToToolProgress(progress: Parameters<ProgressCallback>
     ...(progress.message !== undefined ? { message: progress.message } : {}),
   }
   return {
+    report: {
+      progress: progress.progress,
+      ...(progress.total !== undefined ? { total: progress.total } : {}),
+      ...(progress.message !== undefined ? { message: progress.message } : {}),
+      source: "mcp" as const,
+    },
     structured,
-    content: progress.message ? [{ type: "text" as const, text: progress.message }] : [],
   }
 }
 
@@ -418,10 +423,10 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
             yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
             const onprogress: ProgressCallback = (progress) => {
-              const state = mcpProgressToToolProgress(progress)
+              const state = mcpProgressToToolProgressReport(progress)
               void run.promise(
                 events
-                  .publish(SessionEvent.Tool.Progress, {
+                  .publish(SessionEvent.Tool.ProgressReport, {
                     sessionID: ctx.sessionID,
                     assistantMessageID: SessionMessage.ID.make(input.processor.message.id),
                     callID: opts.toolCallId,
