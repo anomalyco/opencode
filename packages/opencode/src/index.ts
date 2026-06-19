@@ -29,6 +29,7 @@ import { DbCommand } from "./cli/cmd/db"
 import { errorMessage } from "./util/error"
 import { PluginCommand } from "./cli/cmd/plug"
 import { Heap } from "./cli/heap"
+import { ExitHandler } from "./util/exit-handler"
 
 const args = hideBin(process.argv)
 
@@ -44,7 +45,7 @@ function show(out: string) {
 
 const cli = yargs(args)
   .parserConfiguration({ "populate--": true })
-  .scriptName("opencode")
+  .scriptName("zero")
   .wrap(100)
   .help("help", "show help")
   .alias("help", "h")
@@ -111,32 +112,31 @@ const cli = yargs(args)
       cli.showHelp(show)
     }
     if (err) throw err
-    process.exit(1)
+    ExitHandler.setExitCode(1)
   })
   .strict()
 
-try {
-  if (args.includes("-h") || args.includes("--help")) {
-    await cli.parse(args, (err: Error | undefined, _argv: unknown, out: string) => {
-      if (err) throw err
-      if (!out) return
-      show(out)
-    })
-  } else {
-    await cli.parse()
-  }
-} catch (e) {
-  const formatted = FormatError(e)
-  if (formatted) UI.error(formatted)
-  if (formatted === undefined) {
-    UI.error("Unexpected error" + EOL)
-    process.stderr.write(errorMessage(e) + EOL)
-  }
-  process.exitCode = 1
-} finally {
-  // Some subprocesses don't react properly to SIGTERM and similar signals.
-  // Most notably, some docker-container-based MCP servers don't handle such signals unless
-  // run using `docker run --init`.
-  // Explicitly exit to avoid any hanging subprocesses.
-  process.exit()
+if (args.includes("-h") || args.includes("--help")) {
+  await cli.parse(args, (err: Error | undefined, _argv: unknown, out: string) => {
+    if (err) throw err
+    if (!out) return
+    show(out)
+  })
+  await ExitHandler.shutdown(0)
 }
+await cli.parse()
+  .catch((e) => {
+    const formatted = FormatError(e)
+    if (formatted) UI.error(formatted)
+    if (formatted === undefined) {
+      UI.error("Unexpected error" + EOL)
+      process.stderr.write(errorMessage(e) + EOL)
+    }
+    ExitHandler.setExitCode(1)
+  })
+  .finally(() => {
+    // Graceful shutdown with subprocess cleanup.
+    // In production, this kills hanging subprocesses (especially Docker MCP servers).
+    // In test mode (OPENCODE_TEST_MODE=1), subprocess killing is disabled to allow clean exit.
+    return ExitHandler.shutdown(process.exitCode ?? 0)
+  })
