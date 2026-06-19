@@ -457,7 +457,7 @@ export function Prompt(props: PromptProps) {
               let virtualText = ""
               if (part.type === "file" && part.source?.text) {
                 virtualText = part.source.text.value
-              } else if (part.type === "agent" && part.source) {
+              } else if ((part.type === "agent" || part.type === "skill") && part.source) {
                 virtualText = part.source.value
               }
 
@@ -483,7 +483,7 @@ export function Prompt(props: PromptProps) {
                 }
               }
 
-              if (part.type === "agent" && part.source) {
+              if ((part.type === "agent" || part.type === "skill") && part.source) {
                 return {
                   ...part,
                   source: {
