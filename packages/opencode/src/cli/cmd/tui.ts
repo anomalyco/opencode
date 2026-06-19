@@ -20,22 +20,19 @@ declare global {
 
 type RpcClient = ReturnType<typeof Rpc.client<typeof rpc>>
 
-function createWorkerFetch(client: RpcClient, workerError: () => string | undefined): typeof fetch {
+type WorkerFile = string | URL
+type WorkerManager = ReturnType<typeof createWorkerManager>
+
+function createWorkerFetch(worker: WorkerManager): typeof fetch {
   const fn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const request = new Request(input, init)
     const body = request.body ? await request.text() : undefined
-    const result = await client
-      .call("fetch", {
-        url: request.url,
-        method: request.method,
-        headers: Object.fromEntries(request.headers.entries()),
-        body,
-      })
-      .catch((error) => {
-        const detail = workerError()
-        if (detail) throw new Error(`TUI worker failed: ${detail}`)
-        throw error
-      })
+    const result = await worker.call("fetch", {
+      url: request.url,
+      method: request.method,
+      headers: Object.fromEntries(request.headers.entries()),
+      body,
+    })
     return new Response(result.body, {
       status: result.status,
       headers: result.headers,
@@ -44,14 +41,88 @@ function createWorkerFetch(client: RpcClient, workerError: () => string | undefi
   return fn as typeof fetch
 }
 
-function createEventSource(client: RpcClient): EventSource {
+function createEventSource(worker: WorkerManager): EventSource {
   return {
     subscribe: async (handler) => {
-      return client.on<GlobalEvent>("global.event", (e) => {
+      return worker.on<GlobalEvent>("global.event", (e) => {
         handler(e)
       })
     },
   }
+}
+
+function createWorkerManager(file: WorkerFile) {
+  const listeners = new Map<string, Set<(data: unknown) => void>>()
+  let stopped = false
+  let state = start()
+
+  function start() {
+    const worker = new Worker(file)
+    const client = Rpc.client<typeof rpc>(worker)
+    let workerError: string | undefined
+    worker.addEventListener("error", (event) => {
+      const error = "error" in event ? event.error : undefined
+      const message = "message" in event && typeof event.message === "string" ? event.message : undefined
+      workerError = error instanceof Error ? error.message : (message ?? "worker error")
+    })
+    for (const [event, handlers] of listeners) {
+      for (const handler of handlers) client.on(event, handler)
+    }
+    return { worker, client, error: () => workerError }
+  }
+
+  function restart(error: unknown) {
+    if (stopped) throw error
+    const previous = state
+    state = start()
+    previous.worker.terminate()
+  }
+
+  return {
+    call<Method extends keyof typeof rpc>(
+      method: Method,
+      input: Parameters<(typeof rpc)[Method]>[0],
+    ): Promise<ReturnType<(typeof rpc)[Method]>> {
+      return state.client.call(method, input).catch((error) => {
+        const detail = state.error()
+        if (!isWorkerTerminated(error)) {
+          if (detail) throw new Error(`TUI worker failed: ${detail}`)
+          throw error
+        }
+        restart(error)
+        return state.client.call(method, input).catch((retryError) => {
+          const nextDetail = state.error()
+          if (nextDetail) throw new Error(`TUI worker failed: ${nextDetail}`)
+          throw retryError
+        })
+      })
+    },
+    on<Data>(event: string, handler: (data: Data) => void) {
+      let handlers = listeners.get(event)
+      if (!handlers) {
+        handlers = new Set()
+        listeners.set(event, handlers)
+      }
+      const wrapped = (data: unknown) => {
+        if (listeners.get(event)?.has(wrapped)) handler(data as Data)
+      }
+      handlers.add(wrapped)
+      state.client.on(event, wrapped)
+      return () => {
+        handlers!.delete(wrapped)
+      }
+    },
+    async stop() {
+      if (stopped) return
+      stopped = true
+      await withTimeout(state.client.call("shutdown", undefined), 5000).catch(() => {})
+      state.worker.terminate()
+    },
+  }
+}
+
+function isWorkerTerminated(error: unknown) {
+  return error instanceof Error && error.message.includes("Worker has been terminated")
 }
 
 async function target() {
@@ -132,16 +203,9 @@ export const TuiThreadCommand = cmd({
       }
       const cwd = Filesystem.resolve(process.cwd())
 
-      const worker = new Worker(file)
-      let workerError: string | undefined
-      worker.addEventListener("error", (event) => {
-        const error = "error" in event ? event.error : undefined
-        const message = "message" in event && typeof event.message === "string" ? event.message : undefined
-        workerError = error instanceof Error ? error.message : (message ?? "worker error")
-      })
-      const client = Rpc.client<typeof rpc>(worker)
+      const worker = createWorkerManager(file)
       const reload = () => {
-        client.call("reload", undefined).catch(() => {})
+        worker.call("reload", undefined).catch(() => {})
       }
       process.on("SIGUSR2", reload)
 
@@ -150,8 +214,7 @@ export const TuiThreadCommand = cmd({
         if (stopped) return
         stopped = true
         process.off("SIGUSR2", reload)
-        await withTimeout(client.call("shutdown", undefined), 5000).catch(() => {})
-        worker.terminate()
+        await worker.stop()
       }
 
       const prompt = await input(args.prompt)
@@ -168,14 +231,14 @@ export const TuiThreadCommand = cmd({
 
       const transport = external
         ? {
-            url: (await client.call("server", network)).url,
+            url: (await worker.call("server", network)).url,
             fetch: undefined,
             events: undefined,
           }
         : {
             url: "http://opencode.internal",
-            fetch: createWorkerFetch(client, () => workerError),
-            events: createEventSource(client),
+            fetch: createWorkerFetch(worker),
+            events: createEventSource(worker),
           }
 
       try {
@@ -204,7 +267,7 @@ export const TuiThreadCommand = cmd({
             url: transport.url,
             async onSnapshot() {
               const tui = writeHeapSnapshot("tui.heapsnapshot")
-              const server = await client.call("snapshot", undefined)
+              const server = await worker.call("snapshot", undefined)
               return [tui, server]
             },
             config,
