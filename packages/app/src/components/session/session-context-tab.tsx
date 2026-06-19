@@ -96,13 +96,13 @@ export function SessionContextTab() {
   const providers = useProviders()
   const { params, view } = useSessionLayout()
 
-  const info = createMemo(() => (params.id ? sync.session.get(params.id) : undefined))
+  const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
 
   const messages = createMemo(
     () => {
       const id = params.id
       if (!id) return emptyMessages
-      return (sync.data.message[id] ?? []) as Message[]
+      return (sync().data.message[id] ?? []) as Message[]
     },
     emptyMessages,
     { equals: same },
@@ -180,7 +180,7 @@ export function SessionContextTab() {
         if (!c?.input) return []
         return estimateSessionContextBreakdown({
           messages: messages(),
-          parts: sync.data.part as Record<string, Part[] | undefined>,
+          parts: sync().data.part as Record<string, Part[] | undefined>,
           input: c.input,
           systemPrompt: systemPrompt(),
         })
@@ -221,7 +221,7 @@ export function SessionContextTab() {
   let scroll: HTMLDivElement | undefined
   let frame: number | undefined
   let pending: { x: number; y: number } | undefined
-  const getParts = (id: string) => (sync.data.part[id] ?? []) as Part[]
+  const getParts = (id: string) => (sync().data.part[id] ?? []) as Part[]
 
   const restoreScroll = () => {
     const el = scroll

@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
-import type { Renderable, ScrollBoxRenderable } from "@opentui/core"
+import { DiffRenderable, type Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { testRender, useRenderer } from "@opentui/solid"
 import type { TuiPluginApi, TuiPluginMeta, TuiRouteCurrent, TuiRouteDefinition } from "@opencode-ai/plugin/tui"
 import type { Session } from "@opencode-ai/sdk/v2"
@@ -63,9 +63,9 @@ test("brackets navigate diff hunks", async () => {
   )
   try {
     await viewer.app.waitForFrame((frame) => frame.includes("const first"))
-    await viewer.app.waitFor(() => Boolean(findRenderable(viewer.app.renderer.root, "diff-viewer-patches")))
+    await viewer.app.waitFor(() => Boolean(findScrollBox(viewer.app.renderer.root)))
     await viewer.app.flush()
-    const scroll = findRenderable(viewer.app.renderer.root, "diff-viewer-patches") as ScrollBoxRenderable
+    const scroll = findScrollBox(viewer.app.renderer.root)!
     const initial = scroll.scrollTop
 
     expect(TuiKeybind.defaultValue("diff_next_hunk")).toBe("]")
@@ -178,12 +178,14 @@ async function renderDiffViewer(vcsDiff: unknown[], height = 20) {
 
 const startRoute: TuiRouteCurrent = { name: "session", params: { sessionID: "session-1" } }
 
-function findRenderable(root: Renderable, id: string): Renderable | undefined {
-  if (root.id === id) return root
-  return root
-    .getChildren()
-    .map((child) => findRenderable(child, id))
-    .find(Boolean)
+function findScrollBox(root: Renderable): ScrollBoxRenderable | undefined {
+  if (root instanceof ScrollBoxRenderable && containsDiff(root)) return root
+  return root.getChildren().map(findScrollBox).find(Boolean)
+}
+
+function containsDiff(root: Renderable): boolean {
+  if (root instanceof DiffRenderable) return true
+  return root.getChildren().some(containsDiff)
 }
 
 const session = {
