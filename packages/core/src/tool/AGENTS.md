@@ -1,139 +1,59 @@
 # Core Tool Architecture
 
-This folder owns Core-native tool definition, contribution, effective lookup, and execution. Keep those concerns distinct even though `ToolRegistry` brings them together at runtime.
+This folder owns Core's one local tool representation, process and Location registration, effective lookup, and settlement.
 
-## Current Architecture
+## Representations
 
-```txt
-Public Tool.make      NativeTool value      ApplicationTools      Location built-ins       Location ToolRegistry                        Session runner
-        │                     │                     │                      │                         │                                         │
-        ├─ construct ─────────▶                     │                      │                         │                                         │
-        │                     │                     │                      │                         │                                         │
-        │                     ├─ scoped attach ─────▶                      │                         │                                         │
-        │                     │                     │                      │                         │                                         │
-        │                     │                     │                      ├─ scoped contributions ──▶                                         │
-        │                     │                     │                      │                         │                                         │
-        │                     │                     ├─ shared current entries ───────────────────────▶                                         │
-        │                     │                     │                      │                         │                                         │
-        │                     │                     │                      │                         ├─ effective definitions and settlement ──▶
-        │                     │                     │                      │                         │                                         │
+- `tool.ts` defines the opaque canonical `Tool.make({ description, input, output, execute, toModelOutput })` value. Application tools and shipped built-ins use the same type.
+- `application-tools.ts` stores process-scoped application registrations.
+- `tools.ts` exposes the registration-only `Tools.Service` view used by Location producers.
+- `registry.ts` stores only canonical tools, overlays Location registrations over application registrations, derives definitions, invokes tools, and applies generic output bounding.
+
+Do not add a second executable entry type, registry-owned executor, authorization callback, output-path callback, or legacy normalization path.
+
+## Construction
+
+Tool schemas and projection use `input` and `output` terminology. A tool value is opaque: its codecs, executor, definition derivation, and catalog permission declaration are private runtime details.
+
+Location-scoped built-in layers acquire `PermissionV2.Service` and every other required Location service while the layer is constructed. The executor captures those services. Permission sources are always constructed from the canonical invocation context:
+
+```ts
+const source = {
+  type: "tool" as const,
+  messageID: context.assistantMessageID,
+  callID: context.toolCallID,
+}
 ```
 
-There are three relevant representations:
+Leaves own resolution, permission, and side-effect ordering. Translate only expected typed errors into `ToolFailure`; do not use `catchCause`, because interruption and defects must survive.
 
-- `native.ts` defines the plain Core-native executable value exposed publicly as `Tool.make(...)`. It combines an `@opencode-ai/llm` model-facing definition with a Session-aware handler.
-- `application-tools.ts` stores process-scoped application contributions. It owns availability and scoped attachment, but it does not execute tools.
-- `registry.ts` is the single execution registry. Each Location owns one registry, its built-in contributions, effective precedence, input/output validation, permissions, and settlement.
+## Registration
 
-`ToolRegistry.Entry` is intentionally more powerful than the public native tool value. Internal Location tools may use Core-owned capabilities such as `assertPermission`; embedding applications receive only the narrow public execution context.
+Built-ins register through `Tools.Service.register({ [name]: tool })`. Application tools register through `ApplicationTools.Service.register(...)`, exposed publicly as `opencode.tools.register(...)`.
 
-## Placement And Layers
+Both are scoped:
 
-- `ApplicationTools.Service` is process-scoped and must be shared by current and future Locations.
-- `ToolRegistry.Service` is Location-scoped because built-in handlers close over Location services such as filesystem, permissions, and tool-output storage.
-- `LocationServiceMap` constructs fresh Location services while receiving the shared `ApplicationTools.Service` as a dependency.
-- `OpenCode.layer` exposes the same shared application-tool service through `opencode.tools.attach(...)`.
-- `ToolRegistry.defaultLayer` creates isolated application-tool state. It is suitable for self-contained consumers and tests, but not when attachments must be shared with a separately constructed `LocationServiceMap`.
+- The latest active same-placement registration wins.
+- Closing any registration removes only that registration and reveals the next active one.
+- Location registrations take precedence over application registrations.
+- An invocation captures the effective tool once settlement starts.
 
-Do not make `ToolRegistry` process-global. Do not move Location resources into `ApplicationTools`. Do not construct independent `ApplicationTools.layer` instances when the caller expects one attachment to appear across Locations.
+`ApplicationTools.Service` is process-scoped and shared by all Locations. `ToolRegistry.Service` is Location-scoped. Do not make the registry process-global or construct a separate application-tool service for each Location.
 
-## Contribution And Precedence
+## Permissions
 
-Built-in Location tools contribute through `ToolRegistry.contribute(...)`. Application tools attach through `ApplicationTools.attach(...)`, exposed publicly as `opencode.tools.attach(...)`.
+The registry has no `PermissionV2.Service` dependency and performs no execution authorization. An internal built-in-only operation attaches a permission action solely to preserve whole-tool definition filtering; it is not part of public `Tool.make`. Most tools default to their registered name; `edit`, `write`, and `apply_patch` declare the shared `edit` action.
 
-Both contribution mechanisms use `State` scoped transforms:
+Definition filtering is catalog visibility, not execution authorization. A call still executes the captured leaf policy if it reaches settlement.
 
-- Closing a contribution Scope rebuilds state without that contribution.
-- A later same-name application attachment wins while active.
-- Closing that later attachment reveals the earlier active application contribution.
-- A Location tool always takes precedence over an application tool with the same name.
-- Application attachment inputs are captured before registering the replayable transform; later caller mutation must not alter a contribution during an unrelated rebuild.
+## Output
 
-Do not introduce another application-specific tool type or registry. Plugins should contribute existing native tools or internal registry entries at the lifetime they actually own.
+Built-ins return complete validated domain output. `ToolRegistry.Materialization.settle` is the only execution and generic model-output bounding boundary and owns managed retention paths.
 
-## Dynamic Removal Semantics
+Producer capture limits are separate. For example, Bash keeps `AppProcess.maxOutputBytes` and accurately reports stdout/stderr capture loss, but it does not run model-output truncation or return a managed `outputPath`.
 
-Definitions and settlement intentionally resolve the current effective tools independently. There is no provider-turn snapshot, attachment lease, or draining detach.
+## Current Gaps
 
-```txt
-Embedding App               ApplicationTools       Location ToolRegistry                 Session Runner
-      │                             │                        │                                  │
-      ├─ attach({ opencord_run }) ──▶                        │                                  │
-      │                             │                        │                                  │
-      │                             │                        ◀─ definitions() ──────────────────┤
-      │                             │                        │                                  │
-      │                             ◀─ entries() ────────────┤                                  │
-      │                             │                        │                                  │
-      │                             │                        ├─ current effective definitions ──▶
-      │                             │                        │                                  │
-      ├─ attachment Scope closes ───▶                        │                                  │
-      │                             │                        │                                  │
-      │                             │                        ◀─ settle(opencord_run) ───────────┤
-      │                             │                        │                                  │
-      │                             ◀─ current lookup ───────┤                                  │
-      │                             │                        │                                  │
-      │                             │                        ├─ Unknown tool ───────────────────▶
-      │                             │                        │                                  │
-```
-
-Consequences of this choice:
-
-- Closing an attachment Scope revokes the tool immediately for calls that have not started settling.
-- A call produced from an earlier advertised definition may fail as unknown.
-- If a same-name replacement is currently active, a later call may execute that replacement.
-- An execution that already resolved its entry continues with the handler it captured.
-- Attachment Scope closure does not wait for already-started executions. Applications whose handlers depend on scoped resources must coordinate graceful shutdown themselves.
-
-These are deliberate simplifications. Do not add snapshots, semaphores, leases, or deferred finalizers without a concrete requirement for stronger consistency or graceful draining.
-
-## File Roles
-
-```txt
-tool/
-  native.ts             plain public/Core-native executable tool value
-  application-tools.ts  process-scoped State-backed application contributions
-  registry.ts           Location-scoped effective lookup, validation, and execution
-  builtins.ts           shipped Location tool layer composition
-  read.ts, bash.ts, ... individual Location-scoped built-in contributions
-```
-
-Keep model/provider-neutral tool schemas and output projection in `@opencode-ai/llm`. Keep Session identity, permissions, Location precedence, and settlement in Core.
-
-## Future Directions
-
-Tool availability may eventually gain a real third scope, such as Session-specific or plugin-owned contributions:
-
-```txt
-                                            ╭─────────────────╮
-                                            │ Tool definition │
-                                            ╰────────┬────────╯
-            ╭────────────────────────────────────────╰╮─ ─ ─ ─ ─ ─ ─ ─ future  ─ ─ ─ ─ ─ ─ ─ ─ ╮
-            │                                         │
-            ▼                                         ▼                                        ▼
-╭───────────────────────╮                ╭────────────────────────╮                ╭───────────────────────╮
-│ Process contributions │                │ Location contributions │                │ Session contributions │
-╰───────────┬───────────╯                ╰────────────┬───────────╯                ╰───────────┬───────────╯
-            │                                         │                                        │
-            │                                         │
-            ╰─────────────────────────────────────────◀─ ─ ─ ─ ─ ─ ─ ─  future ─ ─ ─ ─ ─ ─ ─ ─ ╯
-                                          ╭──────────────────────╮
-                                          │ Effective resolution │
-                                ╭─────────╰───────────┬──────────╯────────────╮
-                                │                     │                       │
-                                ▼                                             ▼
-                ╭───────────────────────────────╮                ╭─────────────────────────╮
-                │ Advertise current definitions │                │ Execute current handler │
-                ╰───────────────────────────────╯                ╰─────────────────────────╯
-```
-
-Prefer these directions only when a concrete use requires them:
-
-- **Contextual availability:** Add Session/agent/plugin filtering at effective resolution. Keep tool definitions independent from where they are enabled.
-- **Hierarchical overlays:** If a third contribution scope becomes real, consider one registry abstraction with process, Location, and Session overlays rather than adding another special registry service.
-- **Plugin tools:** Reuse the existing native tool value for restricted handlers and `ToolRegistry.Entry` for trusted Core-owned capabilities. Choose process or Location contribution lifetime explicitly.
-- **Stale-call rejection:** If executing a same-name replacement is unsafe, attach an identity/version to advertised definitions and reject stale calls without retaining removed handlers.
-- **Pinned provider turns:** If exact advertisement-to-execution consistency becomes necessary, snapshot effective entries for one provider turn. This weakens immediate revocation.
-- **Graceful plugin unload:** If attachment-owned resources must outlive started executions, add explicit execution draining. Keep this separate from whether new calls can discover the tool.
-- **Cluster placement:** `ApplicationTools` is process-global, not cluster-global. Cluster-wide contribution and execution ownership require a separate durable design.
-
-When choosing stronger semantics, state which property matters: immediate revocation, stale-call rejection, exact handler pinning, or graceful resource draining. They are different guarantees and should not arrive as one bundled lifecycle mechanism.
+- Plugin boot has not been redesigned to register canonical tools through `Tools.Service`; do not redesign it as part of leaf migrations.
+- MCP and future Session-scoped registrations still need an explicit canonical registration design.
+- The public Session result shape currently exposes managed `outputPaths`; full storage encapsulation requires a future opaque managed-output reference design.

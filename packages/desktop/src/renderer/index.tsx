@@ -2,7 +2,6 @@
 
 import {
   ACCEPTED_FILE_EXTENSIONS,
-  ACCEPTED_FILE_TYPES,
   AppBaseProviders,
   AppInterface,
   handleNotificationClick,
@@ -15,10 +14,11 @@ import {
   useCommand,
   useWslServers,
 } from "@opencode-ai/app"
+import type { UpdaterState } from "@opencode-ai/app/updater"
 import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { MemoryRouter } from "@solidjs/router"
-import { createEffect, createMemo, createResource, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
@@ -59,6 +59,9 @@ if (import.meta.env.VITE_SENTRY_DSN) {
 
 void initI18n()
 
+const [updaterState, setUpdaterState] = createSignal<UpdaterState>({ status: "disabled" })
+void window.api.updater.subscribe(setUpdaterState)
+
 const deepLinkEvent = "opencode:deep-link"
 
 const emitDeepLinks = (urls: string[]) => {
@@ -75,6 +78,7 @@ const listenForDeepLinks = () => {
 }
 
 const createPlatform = (): Platform => {
+  const attachmentPaths = new WeakMap<File, string>()
   const os = (() => {
     const ua = navigator.userAgent
     if (ua.includes("Mac")) return "macos"
@@ -140,13 +144,27 @@ const createPlatform = (): Platform => {
       })
     },
 
-    async openFilePickerDialog(opts) {
-      return window.api.openFilePicker({
+    async openAttachmentPickerDialog(opts, onFile) {
+      const result = await window.api.openFilePicker({
         multiple: opts?.multiple ?? false,
         title: opts?.title ?? t("desktop.dialog.chooseFile"),
-        accept: opts?.accept ?? ACCEPTED_FILE_TYPES,
+        defaultPath: opts?.defaultPath,
         extensions: opts?.extensions ?? ACCEPTED_FILE_EXTENSIONS,
       })
+      if (!result) return
+      try {
+        for (const file of result.files) {
+          const selected = new File([await window.api.readPickedFile(result.token, file.path)], file.name)
+          attachmentPaths.set(selected, file.path)
+          await onFile(selected)
+        }
+      } finally {
+        await window.api.releasePickedFiles(result.token)
+      }
+    },
+
+    getPathForFile(file) {
+      return attachmentPaths.get(file) ?? window.api.getPathForFile(file)
     },
 
     async saveFilePickerDialog(opts) {
@@ -177,16 +195,10 @@ const createPlatform = (): Platform => {
 
     storage,
 
-    checkUpdate: async () => {
-      const config = await window.api.getWindowConfig().catch(() => ({ updaterEnabled: false }))
-      if (!config.updaterEnabled) return { updateAvailable: false }
-      return window.api.checkUpdate()
-    },
-
-    updateAndRestart: async () => {
-      const config = await window.api.getWindowConfig().catch(() => ({ updaterEnabled: false }))
-      if (!config.updaterEnabled) return
-      await window.api.installUpdate()
+    updater: {
+      state: updaterState,
+      check: () => window.api.updater.check(),
+      install: () => window.api.updater.install(),
     },
 
     exportDebugLogs: () => window.api.exportDebugLogs(),

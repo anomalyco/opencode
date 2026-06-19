@@ -1,11 +1,4 @@
-import {
-  ToolOutput as LLMToolOutput,
-  type LLMEvent,
-  type ProviderMetadata,
-  type ToolOutput as LLMToolOutputType,
-  type ToolResultValue,
-  type Usage,
-} from "@opencode-ai/llm"
+import { ToolOutput, type LLMEvent, type ProviderMetadata, type ToolResultValue, type Usage } from "@opencode-ai/llm"
 import { DateTime, Effect } from "effect"
 import { EventV2 } from "../../event"
 import { ModelV2 } from "../../model"
@@ -45,13 +38,13 @@ const message = (value: unknown) => {
   }
 }
 
-type ToolOutput =
-  | { readonly structured: Record<string, unknown>; readonly content: LLMToolOutputType["content"] }
+type SettledOutput =
+  | { readonly structured: Record<string, unknown>; readonly content: ToolOutput["content"] }
   | { readonly error: { readonly type: "unknown"; readonly message: string } }
 
-const settledOutput = (value: LLMToolOutputType | undefined, result: ToolResultValue): ToolOutput => {
+const settledOutput = (value: ToolOutput | undefined, result: ToolResultValue): SettledOutput => {
   if (result.type === "error") return { error: { type: "unknown", message: message(result.value) } }
-  const settled = value ?? LLMToolOutput.fromResultValue(result)
+  const settled = value ?? ToolOutput.fromResultValue(result)
   if (!settled) throw new Error(`Unsupported tool result: ${message(result)}`)
   return { structured: record(settled.structured), content: settled.content }
 }
@@ -217,6 +210,11 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       })
     }
   })
+
+  const assistantMessageIDForTool = (callID: string) => {
+    const tool = tools.get(callID)
+    return tool ? Effect.succeed(tool.assistantMessageID) : Effect.die(`Unknown tool call: ${callID}`)
+  }
 
   const publish = Effect.fn("SessionRunner.publishLLMEvent")(function* (
     event: LLMEvent,
@@ -408,5 +406,6 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     hasAssistantStarted: () => assistantMessageID !== undefined,
     hasProviderError: () => providerFailed,
     startAssistant,
+    assistantMessageID: assistantMessageIDForTool,
   }
 }

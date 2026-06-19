@@ -307,6 +307,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Pretraži foldere",
   "dialog.directory.empty": "Nema pronađenih foldera",
+  "dialog.directory.action.selectFile": "Odaberi datoteku",
+  "dialog.directory.action.selectFolder": "Odaberi folder",
+  "dialog.directory.root": "Korijen",
+  "dialog.directory.parent": "Nadređeni folder",
+  "dialog.directory.readError": "Nije moguće pročitati ovaj folder",
 
   "dialog.server.title": "Serveri",
   "dialog.server.description": "Promijeni na koji se OpenCode server ova aplikacija povezuje.",

@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm"
 import { Effect, Semaphore } from "effect"
 import type { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { migrations } from "./migration.gen"
+import schema from "./schema.gen"
 
 type Database = EffectDrizzleSqlite.EffectSQLiteDatabase
 type Transaction = Parameters<Parameters<Database["transaction"]>[0]>[0]
@@ -15,7 +16,28 @@ export type Migration = {
 }
 
 export function apply(db: Database) {
-  return lock.withPermit(applyOnly(db, migrations))
+  return lock.withPermit(
+    Effect.gen(function* () {
+      const tables = yield* db.all<{ name: string }>(
+        sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'`,
+      )
+      if (tables.some((table) => table.name === "session")) return yield* applyOnly(db, migrations)
+      if (tables.length > 0) return yield* Effect.die("Database is not empty and has no session table")
+      yield* db.transaction((tx) =>
+        Effect.gen(function* () {
+          yield* schema.up(tx)
+          yield* tx.run(
+            sql`CREATE TABLE ${sql.identifier("migration")} (id TEXT PRIMARY KEY, time_completed INTEGER NOT NULL)`,
+          )
+          yield* Effect.forEach(migrations, (migration) =>
+            tx.run(
+              sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
+            ),
+          )
+        }),
+      )
+    }),
+  )
 }
 
 export function applyOnly(db: Database, input: Migration[]) {
@@ -48,7 +70,7 @@ export function applyOnly(db: Database, input: Migration[]) {
       if (completed.has(migration.id)) continue
       yield* db.transaction((tx) =>
         Effect.gen(function* () {
-          if (!process.env.OPENCODE_SKIP_MIGRATIONS) yield* migration.up(tx)
+          yield* migration.up(tx)
           yield* tx.run(
             sql`INSERT INTO ${sql.identifier("migration")} (id, time_completed) VALUES (${migration.id}, ${Date.now()})`,
           )

@@ -12,6 +12,7 @@ import { SessionTodo } from "@opencode-ai/core/session/todo"
 import { TodoWriteTool } from "@opencode-ai/core/tool/todowrite"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
 import { testEffect } from "./lib/effect"
+import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
 const sessionID = SessionV2.ID.make("ses_todowrite_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
@@ -35,7 +36,7 @@ const database = Database.layerFromPath(":memory:")
 const events = EventV2.layer.pipe(Layer.provide(database))
 const todos = SessionTodo.layer.pipe(Layer.provide(database), Layer.provide(events))
 const registry = ToolRegistry.defaultLayer.pipe(Layer.provide(permission))
-const tool = TodoWriteTool.layer.pipe(Layer.provide(registry), Layer.provide(todos))
+const tool = TodoWriteTool.layer.pipe(Layer.provide(registry), Layer.provide(permission), Layer.provide(todos))
 const it = testEffect(Layer.mergeAll(database, events, todos, permission, registry, tool))
 
 const setup = Effect.gen(function* () {
@@ -63,6 +64,7 @@ const setup = Effect.gen(function* () {
 
 const call = (todos: ReadonlyArray<SessionTodo.Info>, id = "call-todowrite") => ({
   sessionID,
+  ...toolIdentity,
   call: { type: "tool-call" as const, id, name: TodoWriteTool.name, input: { todos } },
 })
 
@@ -74,15 +76,15 @@ describe("TodoWriteTool", () => {
       const service = yield* SessionTodo.Service
       const todoList = [{ content: "Implement slice", status: "in_progress", priority: "high" }]
 
-      expect((yield* registry.definitions()).map((tool) => tool.name)).toEqual([TodoWriteTool.name])
-      expect(yield* registry.settle(call(todoList))).toEqual({
+      expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([TodoWriteTool.name])
+      expect(yield* settleTool(registry, call(todoList))).toEqual({
         result: { type: "text", value: JSON.stringify(todoList, null, 2) },
         output: {
           structured: { todos: todoList },
           content: [{ type: "text", text: JSON.stringify(todoList, null, 2) }],
         },
       })
-      expect(assertions).toEqual([{ sessionID, action: "todowrite", resources: ["*"], save: ["*"] }])
+      expect(assertions).toMatchObject([{ sessionID, action: "todowrite", resources: ["*"], save: ["*"] }])
       expect(yield* service.get(sessionID)).toEqual(todoList)
     }),
   )
@@ -95,12 +97,14 @@ describe("TodoWriteTool", () => {
       yield* service.update({ sessionID, todos: [{ content: "keep", status: "pending", priority: "low" }] })
       deny = true
 
-      expect(yield* registry.execute(call([{ content: "blocked", status: "completed", priority: "high" }]))).toEqual({
+      expect(
+        yield* executeTool(registry, call([{ content: "blocked", status: "completed", priority: "high" }])),
+      ).toEqual({
         type: "error",
         value: "Unable to update todos",
       })
       expect(yield* service.get(sessionID)).toEqual([{ content: "keep", status: "pending", priority: "low" }])
-      expect(assertions).toEqual([{ sessionID, action: "todowrite", resources: ["*"], save: ["*"] }])
+      expect(assertions).toMatchObject([{ sessionID, action: "todowrite", resources: ["*"], save: ["*"] }])
     }),
   )
 })

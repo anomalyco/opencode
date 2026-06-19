@@ -22,10 +22,10 @@ export function useProviders() {
   const dir = createMemo(() => decode64(params.dir) ?? "")
   const providers = () => {
     if (dir()) {
-      const [projectStore] = serverSync.child(dir())
+      const [projectStore] = serverSync().child(dir())
       if (projectStore.provider_ready) return projectStore.provider
     }
-    return serverSync.data.provider
+    return serverSync().data.provider
   }
   return {
     all: () => providers().all,

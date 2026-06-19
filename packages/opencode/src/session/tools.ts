@@ -17,12 +17,9 @@ import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import { SessionProcessor } from "./processor"
 import { PartID } from "./schema"
-import { Log } from "@opencode-ai/core/util/log"
 import { EffectBridge } from "@/effect/bridge"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-
-const log = Log.create({ service: "session.tools" })
 
 export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   agent: Agent.Info
@@ -33,7 +30,6 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   messages: SessionV1.WithParts[]
   promptOps: TaskPromptOps
 }) {
-  using _ = log.time("resolveTools")
   const tools: Record<string, AITool> = {}
   const run = yield* EffectBridge.make()
   const plugin = yield* Plugin.Service
@@ -123,7 +119,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     if (!execute) continue
 
     const schema = yield* Effect.promise(() => Promise.resolve(asSchema(item.inputSchema).jsonSchema))
-    const transformed = ProviderTransform.schema(input.model, schema)
+    const transformed = ProviderTransform.schema(input.model, { ...schema, properties: schema.properties ?? {} })
     item.inputSchema = jsonSchema(transformed)
     item.execute = (args, opts) =>
       run.promise(

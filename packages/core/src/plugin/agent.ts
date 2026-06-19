@@ -79,7 +79,7 @@ Your output must be:
 "implement rate limiting" -> Rate limiting implementation
 "how do I connect postgres to my API" -> Postgres API connection
 "best practices for React hooks" -> React hooks best practices
-"@src/auth.ts can you add refresh token support" -> Auth refresh token support
+"@src/credential.ts can you add refresh token support" -> Credential refresh token support
 "@utils/parser.ts this is broken" -> Parser bug fix
 "look at @config.json" -> Config review
 "@App.tsx add dark mode toggle" -> Dark mode toggle in App
