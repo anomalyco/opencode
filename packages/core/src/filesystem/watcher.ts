@@ -170,9 +170,10 @@ export const layer = Layer.effect(
             return
           const head = path.join(vcs, "HEAD")
           if (!fs.existsSync(head)) return
-          const w = fs.watch(head, { persistent: false })
+          const w = fs.watch(vcs, { persistent: false }, (_eventType, filename) => {
+            if (filename === "HEAD") runFork(events.publish(Event.Updated, { file: head, event: "change" }))
+          })
           yield* Effect.addFinalizer(() => Effect.sync(() => w.close()))
-          w.on("change", () => runFork(events.publish(Event.Updated, { file: head, event: "change" })))
           w.on("error", () => {})
         }).pipe(
           Effect.catchCause((cause) =>
