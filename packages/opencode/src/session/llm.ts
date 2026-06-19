@@ -112,6 +112,25 @@ const live: Layer.Layer<
         isWorkflow,
       })
 
+      // The OpenAI Responses backend (including the ChatGPT/Codex OAuth path) rejects
+      // requests that carry too many tool definitions with a generic 500 server_error,
+      // which the retry policy then loops on indefinitely. Cap the tool set so the
+      // request is accepted. Built-in/core tools are registered first, so the slice
+      // preserves them and drops the long tail of MCP tools.
+      if (input.model.api.npm === "@ai-sdk/openai") {
+        const OPENAI_RESPONSES_TOOL_LIMIT = 128
+        const toolNames = Object.keys(prepared.tools)
+        if (toolNames.length > OPENAI_RESPONSES_TOOL_LIMIT) {
+          const kept = new Set(toolNames.slice(0, OPENAI_RESPONSES_TOOL_LIMIT))
+          yield* Effect.logWarning("tool count exceeds OpenAI Responses limit; capping", {
+            modelID: input.model.id,
+            total: toolNames.length,
+            kept: kept.size,
+          })
+          prepared.tools = Object.fromEntries(Object.entries(prepared.tools).filter(([name]) => kept.has(name)))
+        }
+      }
+
       // Wire up toolExecutor for DWS workflow models so that tool calls
       // from the workflow service are executed via opencode's tool system
       // and results sent back over the WebSocket.
