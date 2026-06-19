@@ -13,6 +13,8 @@ import type { EventSource } from "@opencode-ai/tui/context/sdk"
 import { writeHeapSnapshot } from "v8"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
+import { Global } from "@opencode-ai/core/global"
+import { appendFileSync } from "fs"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -22,6 +24,15 @@ type RpcClient = ReturnType<typeof Rpc.client<typeof rpc>>
 
 type WorkerFile = string | URL
 type WorkerManager = ReturnType<typeof createWorkerManager>
+
+function workerDebug(event: string, data: Record<string, unknown> = {}) {
+  try {
+    appendFileSync(
+      path.join(Global.Path.log, "tui-worker-debug.log"),
+      JSON.stringify({ time: new Date().toISOString(), pid: process.pid, event, ...data }) + "\n",
+    )
+  } catch {}
+}
 
 function createWorkerFetch(worker: WorkerManager): typeof fetch {
   const fn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -54,9 +65,12 @@ function createEventSource(worker: WorkerManager): EventSource {
 function createWorkerManager(file: WorkerFile) {
   const listeners = new Map<string, Set<(data: unknown) => void>>()
   let stopped = false
+  let generation = 0
   let state = start()
 
   function start() {
+    generation += 1
+    workerDebug("start", { generation, file: String(file) })
     const worker = new Worker(file)
     const client = Rpc.client<typeof rpc>(worker)
     let workerError: string | undefined
@@ -64,6 +78,7 @@ function createWorkerManager(file: WorkerFile) {
       const error = "error" in event ? event.error : undefined
       const message = "message" in event && typeof event.message === "string" ? event.message : undefined
       workerError = error instanceof Error ? error.message : (message ?? "worker error")
+      workerDebug("error", { generation, error: workerError })
     })
     for (const [event, handlers] of listeners) {
       for (const handler of handlers) client.on(event, handler)
@@ -73,6 +88,7 @@ function createWorkerManager(file: WorkerFile) {
 
   function restart(error: unknown) {
     if (stopped) throw error
+    workerDebug("restart", { generation, error: errorMessage(error) })
     const previous = state
     state = start()
     previous.worker.terminate()
@@ -83,15 +99,23 @@ function createWorkerManager(file: WorkerFile) {
       method: Method,
       input: Parameters<(typeof rpc)[Method]>[0],
     ): Promise<ReturnType<(typeof rpc)[Method]>> {
+      workerDebug("call", { generation, method: String(method) })
       return state.client.call(method, input).catch((error) => {
         const detail = state.error()
         if (!isWorkerTerminated(error)) {
+          workerDebug("call_failed", { generation, method: String(method), error: errorMessage(error), detail })
           if (detail) throw new Error(`TUI worker failed: ${detail}`)
           throw error
         }
         restart(error)
         return state.client.call(method, input).catch((retryError) => {
           const nextDetail = state.error()
+          workerDebug("retry_failed", {
+            generation,
+            method: String(method),
+            error: errorMessage(retryError),
+            detail: nextDetail,
+          })
           if (nextDetail) throw new Error(`TUI worker failed: ${nextDetail}`)
           throw retryError
         })
@@ -115,6 +139,7 @@ function createWorkerManager(file: WorkerFile) {
     async stop() {
       if (stopped) return
       stopped = true
+      workerDebug("stop", { generation })
       await withTimeout(state.client.call("shutdown", undefined), 5000).catch(() => {})
       state.worker.terminate()
     },
