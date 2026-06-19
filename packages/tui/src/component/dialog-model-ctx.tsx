@@ -6,73 +6,16 @@ import { useToast } from "../ui/toast"
 import { DialogSelect } from "../ui/dialog-select"
 import { createClient, createConfig } from "../local/llama-skein/gen/client"
 import { LlamaSkeinClient } from "../local/llama-skein/gen/sdk.gen"
-import type { ResourceSnapshot } from "../local/llama-skein/gen/types.gen"
-
-const MIN_WORKFLOW_CTX = 65536
-const MAX_CTX = 262144
-
-// Compute the optimal ctx_size from actual hardware data.
-// kv_estimate_mb is the KV pre-allocated for the full current ctx_size.
-// freeMb is genuinely available VRAM as reported by the GPU driver (already
-// excludes driver/OS overhead — no artificial reserve needed).
-// Total KV budget = kvEstMb (already allocated) + freeMb (available to expand into).
-function computeRecommendedCtx(m: MemSnapshot, currentCtx: number): number | null {
-  if (m.kvEstMb <= 0 || currentCtx <= 0) return null
-  const kvBudgetMb = m.kvEstMb + m.freeMb
-  const tokens = Math.floor(kvBudgetMb * currentCtx / m.kvEstMb)
-  const rounded = Math.floor(tokens / 4096) * 4096
-  return Math.max(MIN_WORKFLOW_CTX, Math.min(MAX_CTX, rounded))
-}
-
-const PRESETS = [
-  4096, 8192, 12288, 16384, 20480, 24576, 28672, 32768,
-  36864, 40960, 49152, 57344, 65536,
-  73728, 81920, 98304, 114688, 131072,
-  163840, 196608, 262144, 393216, 524288, 786432, 1048576,
-]
-
-function fmtCtxK(n: number): string {
-  if (n >= 1024 && n % 1024 === 0) return `${n / 1024}k`
-  if (n >= 1000) return `${Math.round(n / 1024)}k`
-  return `${n}`
-}
-
-function fmtGB(mb: number): string {
-  return (mb / 1024).toFixed(1)
-}
-
-type MemSnapshot = {
-  freeMb: number
-  totalMb: number
-  usedMb: number
-  label: string
-  modelMb: number    // model weights (from file size); 0 if unknown
-  kvEstMb: number    // kv cache estimate; 0 if unknown
-}
-
-function extractMem(hw: ResourceSnapshot): MemSnapshot | null {
-  const modelMb = hw.loaded_model?.model_mb ?? 0
-  const kvEstMb = hw.loaded_model?.kv_estimate_mb ?? 0
-
-  if (hw.vram?.total_mb && hw.vram.total_mb > 100) {
-    return { freeMb: hw.vram.free_mb ?? 0, usedMb: hw.vram.used_mb ?? 0, totalMb: hw.vram.total_mb, label: "VRAM", modelMb, kvEstMb }
-  }
-  if (hw.memory?.total_mb) {
-    return {
-      freeMb: hw.memory.free_mb ?? 0,
-      usedMb: hw.memory.used_mb ?? 0,
-      totalMb: hw.memory.total_mb,
-      label: hw.memory.type === "unified" ? "Unified" : "RAM",
-      modelMb,
-      kvEstMb,
-    }
-  }
-  return null
-}
-
-function normalizeBaseURL(url: string): string {
-  return url.replace(/\/+$/, "").replace(/\/v1$/, "")
-}
+import {
+  computeRecommendedCtx,
+  extractMem,
+  fmtCtxK,
+  fmtGB,
+  MIN_WORKFLOW_CTX,
+  normalizeBaseURL,
+  PRESETS,
+  type MemSnapshot,
+} from "../local/model-fit"
 
 export function DialogModelCtx(props: { providerID: string; modelID: string }) {
   const dialog = useDialog()
