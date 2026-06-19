@@ -4846,7 +4846,7 @@ export default function ConfigPage() {
               </div>
             </div>
             <div class="config-scrollbar flex-1 overflow-y-auto p-2">
-              <div class="flex flex-col">
+              <div class="flex flex-col gap-1.5">
                 <SectionButton
                   current={state.section === "agents-md"}
                   title="AGENTS.md"
