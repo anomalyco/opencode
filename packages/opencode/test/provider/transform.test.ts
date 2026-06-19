@@ -4406,3 +4406,155 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
   })
 })
+
+describe("ProviderTransform.message - tool content flattening", () => {
+  const createModel = (overrides: Partial<any> = {}) =>
+    ({
+      id: "test/model",
+      providerID: "openai-compatible",
+      api: {
+        id: "test-model",
+        url: "https://api.test.com",
+        npm: "@ai-sdk/openai-compatible",
+      },
+      capabilities: {
+        toolcall: true,
+        temperature: true,
+        reasoning: false,
+        attachment: true,
+        input: { text: true, audio: false, image: true, video: false, pdf: true },
+        output: { text: true, audio: false, image: false, video: false, pdf: false },
+        interleaved: false,
+      },
+      cost: { input: 1, output: 1, cache: { read: 0, write: 0 } },
+      limit: { context: 1_000_000, output: 128_000 },
+      status: "active",
+      options: {},
+      headers: {},
+      ...overrides,
+    }) as any
+
+  test("flattens single text tool-result to string for MiMo", () => {
+    const model = createModel({ api: { id: "mimo-v2.5" } })
+    const msgs = [
+      {
+        role: "tool" as const,
+        content: [
+          {
+            type: "tool-result" as const,
+            output: { type: "text" as const, value: "The weather is sunny" },
+            toolCallId: "call_1",
+            toolName: "get_weather",
+          },
+        ],
+      },
+    ]
+    const result = ProviderTransform.message(msgs as any, model, {})
+    expect(result[0].content).toBe("The weather is sunny")
+  })
+
+  test("flattens single error tool-result to string for MiMo", () => {
+    const model = createModel({ api: { id: "mimo-v2.5" } })
+    const msgs = [
+      {
+        role: "tool" as const,
+        content: [
+          {
+            type: "tool-result" as const,
+            output: { type: "error-text" as const, value: "Tool failed" },
+          },
+        ],
+      },
+    ]
+    const result = ProviderTransform.message(msgs as any, model, {})
+    expect(result[0].content).toBe("Tool failed")
+  })
+
+  test("preserves multi-part tool content as array for MiMo", () => {
+    const model = createModel({ api: { id: "mimo-v2.5" } })
+    const msgs = [
+      {
+        role: "tool" as const,
+        content: [
+          { type: "tool-result" as const, output: { type: "text", value: "done" } },
+          { type: "tool-call" as const, id: "call_1", name: "get_weather", input: {} },
+        ],
+      },
+    ]
+    const result = ProviderTransform.message(msgs as any, model, {})
+    expect(Array.isArray(result[0].content)).toBe(true)
+  })
+
+  test("preserves tool content array with multiple tool-results for MiMo", () => {
+    const model = createModel({ api: { id: "mimo-v2.5" } })
+    const msgs = [
+      {
+        role: "tool" as const,
+        content: [
+          { type: "tool-result" as const, output: { type: "text", value: "result1" } },
+          { type: "tool-result" as const, output: { type: "text", value: "result2" } },
+        ],
+      },
+    ]
+    const result = ProviderTransform.message(msgs as any, model, {})
+    expect(Array.isArray(result[0].content)).toBe(true)
+    expect((result[0].content as any[]).length).toBe(2)
+  })
+
+  test("does not flatten assistant messages for MiMo", () => {
+    const model = createModel({ api: { id: "mimo-v2.5" } })
+    const msgs = [
+      { role: "assistant" as const, content: [{ type: "text" as const, text: "hello" }] },
+    ]
+    const result = ProviderTransform.message(msgs as any, model, {})
+    expect(Array.isArray(result[0].content)).toBe(true)
+  })
+
+  test("does not flatten for unlisted providers (e.g. OpenAI)", () => {
+    const model = createModel({ providerID: "openai", api: { id: "gpt-4o" } })
+    const msgs = [
+      {
+        role: "tool" as const,
+        content: [
+          { type: "tool-result" as const, output: { type: "text", value: "done" } },
+        ],
+      },
+    ]
+    const result = ProviderTransform.message(msgs as any, model, {})
+    expect(Array.isArray(result[0].content)).toBe(true)
+  })
+
+  test("flattens single text tool-result to string for GLM", () => {
+    const model = createModel({ api: { id: "glm-5.2" } })
+    const msgs = [
+      {
+        role: "tool" as const,
+        content: [
+          {
+            type: "tool-result" as const,
+            output: { type: "text" as const, value: "result" },
+          },
+        ],
+      },
+    ]
+    const result = ProviderTransform.message(msgs as any, model, {})
+    expect(result[0].content).toBe("result")
+  })
+
+  test("flattens tool content for Xiaomi provider", () => {
+    const model = createModel({ api: { id: "xiaomi-model" } })
+    const msgs = [
+      {
+        role: "tool" as const,
+        content: [
+          {
+            type: "tool-result" as const,
+            output: { type: "text" as const, value: "done" },
+          },
+        ],
+      },
+    ]
+    const result = ProviderTransform.message(msgs as any, model, {})
+    expect(result[0].content).toBe("done")
+  })
+})

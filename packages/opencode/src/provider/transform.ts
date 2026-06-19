@@ -22,6 +22,15 @@ export const OUTPUT_TOKEN_MAX = 32_000
 // branch that requests it stays in lockstep.
 const INCLUDE_ENCRYPTED_REASONING = ["reasoning.encrypted_content"] as const
 
+// Providers that require tool message content as a plain string, not ContentPart[].
+// These providers reject array-format tool content with 400 errors.
+// Extend by adding (id: string) => id.includes("provider-id") to the list.
+const FLATTEN_TOOL_CONTENT_PROVIDERS = [
+  (id: string) => id.includes("mimo"),
+  (id: string) => id.includes("glm"),
+  (id: string) => id.includes("xiaomi"),
+] as const
+
 export function sanitizeSurrogates(content: string) {
   return content.replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD")
 }
@@ -280,6 +289,24 @@ function normalizeMessages(
           { type: "reasoning" as const, text: "" },
         ],
       }
+    })
+  }
+
+  // Flatten tool message content for providers that require string-only content.
+  // These providers reject ContentPart[] array format for role=tool messages.
+  if (FLATTEN_TOOL_CONTENT_PROVIDERS.some((fn) => fn(model.api.id.toLowerCase()))) {
+    msgs = msgs.map((msg) => {
+      if (msg.role !== "tool") return msg
+      if (!Array.isArray(msg.content)) return msg
+      // Flatten single text/error-text tool-result to string; pass multi-part through
+      if (
+        msg.content.length === 1 &&
+        msg.content[0].type === "tool-result" &&
+        (msg.content[0].output.type === "text" || msg.content[0].output.type === "error-text")
+      ) {
+        return { ...msg, content: String(msg.content[0].output.value) } as unknown as ModelMessage
+      }
+      return msg
     })
   }
 
