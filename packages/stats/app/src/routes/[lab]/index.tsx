@@ -69,10 +69,10 @@ export default function StatsLab() {
   const githubStars = createAsync(() => getGitHubStars())
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const labName = createMemo(() => lab()?.name ?? formatCatalogLabName(labParam()))
-  const labTitle = createMemo(() => `${labName()} Models`)
+  const labTitle = createMemo(() => `${labName()} AI Model Usage & Rankings | OpenCode Data`)
   const labDescription = createMemo(
     () =>
-      `Explore ${labName()} models used in OpenCode, with recent token usage, context windows, release dates, and model-specific data.`,
+      `Compare ${labName()} models used in OpenCode Go, including token usage, model rankings, context windows, release dates, costs, and model-specific data.`,
   )
   const labUrl = createMemo(() => new URL(lab()?.id ?? labParam(), statsCanonicalBaseUrl).toString())
   const updateThemePreference = (preference: ThemePreference) => {
