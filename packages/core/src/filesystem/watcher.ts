@@ -5,7 +5,6 @@ import { createWrapper } from "@parcel/watcher/wrapper"
 import type ParcelWatcher from "@parcel/watcher"
 import { Cause, Context, Effect, Layer, Schema } from "effect"
 import fs from "fs"
-import os from "os"
 import path from "path"
 import { Config } from "../config"
 import { EventV2 } from "../event"
@@ -49,35 +48,6 @@ function getBackend() {
   if (process.platform === "linux") return "inotify"
 }
 
-function canWatch(): Promise<boolean> {
-  return new Promise((resolve) => {
-    let dir: string | undefined
-    let w: fs.FSWatcher | undefined
-    let settled = false
-
-    const cleanup = () => {
-      try { w?.close() } catch {}
-      if (dir) fs.rmSync(dir, { recursive: true, force: true })
-    }
-
-    const done = (ok: boolean) => {
-      if (settled) return
-      settled = true
-      cleanup()
-      resolve(ok)
-    }
-
-    try {
-      dir = fs.mkdtempSync(path.join(os.tmpdir(), "watcher-check-"))
-      w = fs.watch(dir, { persistent: false })
-      w.on("error", () => done(false))
-      setTimeout(() => done(true), 100)
-    } catch {
-      done(false)
-    }
-  })
-}
-
 function protecteds(dir: string) {
   return Protected.paths().filter((item) => {
     const relative = path.relative(dir, item)
@@ -108,14 +78,6 @@ export const layer = Layer.effect(
 
     const w = watcher()
     if (!w) return Service.of({})
-
-    if (!(yield* Effect.promise(() => canWatch()))) {
-      yield* Effect.logWarning("watcher: file watching unavailable on this system, file watching disabled", {
-        directory: location.directory,
-        backend,
-      })
-      return Service.of({})
-    }
 
     yield* Effect.logInfo("watcher backend", { directory: location.directory, platform: process.platform, backend })
     const events = yield* EventV2.Service
@@ -170,11 +132,21 @@ export const layer = Layer.effect(
             return
           const head = path.join(vcs, "HEAD")
           if (!fs.existsSync(head)) return
-          const w = fs.watch(vcs, { persistent: false }, (_eventType, filename) => {
-            if (filename === "HEAD") runFork(events.publish(Event.Updated, { file: head, event: "change" }))
+
+          let prev = ""
+          try { prev = fs.readFileSync(head, "utf8") } catch {}
+
+          fs.watchFile(head, { interval: 2000 }, () => {
+            try {
+              const next = fs.readFileSync(head, "utf8")
+              if (next !== prev) {
+                prev = next
+                runFork(events.publish(Event.Updated, { file: head, event: "change" }))
+              }
+            } catch {}
           })
-          yield* Effect.addFinalizer(() => Effect.sync(() => w.close()))
-          w.on("error", () => {})
+
+          yield* Effect.addFinalizer(() => Effect.sync(() => fs.unwatchFile(head)))
         }).pipe(
           Effect.catchCause((cause) =>
             Effect.logWarning("watcher: git HEAD tracking failed, continuing without git HEAD tracking", {
