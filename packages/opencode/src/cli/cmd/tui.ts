@@ -20,16 +20,22 @@ declare global {
 
 type RpcClient = ReturnType<typeof Rpc.client<typeof rpc>>
 
-function createWorkerFetch(client: RpcClient): typeof fetch {
+function createWorkerFetch(client: RpcClient, workerError: () => string | undefined): typeof fetch {
   const fn = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
     const request = new Request(input, init)
     const body = request.body ? await request.text() : undefined
-    const result = await client.call("fetch", {
-      url: request.url,
-      method: request.method,
-      headers: Object.fromEntries(request.headers.entries()),
-      body,
-    })
+    const result = await client
+      .call("fetch", {
+        url: request.url,
+        method: request.method,
+        headers: Object.fromEntries(request.headers.entries()),
+        body,
+      })
+      .catch((error) => {
+        const detail = workerError()
+        if (detail) throw new Error(`TUI worker failed: ${detail}`)
+        throw error
+      })
     return new Response(result.body, {
       status: result.status,
       headers: result.headers,
@@ -127,6 +133,15 @@ export const TuiThreadCommand = cmd({
       const cwd = Filesystem.resolve(process.cwd())
 
       const worker = new Worker(file)
+      let workerError: string | undefined
+      worker.addEventListener("error", (event) => {
+        workerError =
+          event instanceof ErrorEvent && event.error instanceof Error
+            ? event.error.message
+            : event instanceof ErrorEvent
+              ? event.message
+              : "worker error"
+      })
       const client = Rpc.client<typeof rpc>(worker)
       const reload = () => {
         client.call("reload", undefined).catch(() => {})
@@ -162,7 +177,7 @@ export const TuiThreadCommand = cmd({
           }
         : {
             url: "http://opencode.internal",
-            fetch: createWorkerFetch(client),
+            fetch: createWorkerFetch(client, () => workerError),
             events: createEventSource(client),
           }
 
