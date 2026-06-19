@@ -213,6 +213,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Layer.provideMerge(deps),
   )
   return SessionPrompt.layer.pipe(
+    Layer.provide(Ripgrep.defaultLayer),
     Layer.provide(Skill.defaultLayer),
     Layer.provide(SessionRevert.defaultLayer),
     Layer.provide(Image.defaultLayer),
@@ -2072,10 +2073,13 @@ noLLMServer.instance(
       const sessions = yield* Session.Service
       const session = yield* sessions.create({})
 
+      const reviewDir = path.join(dir, ".opencode", "skill", "review")
       yield* writeText(
-        path.join(dir, ".opencode", "skill", "review", "SKILL.md"),
+        path.join(reviewDir, "SKILL.md"),
         "---\nname: review\ndescription: Review implementation\n---\nReview the implementation carefully.\n",
       )
+      const reviewScript = path.join(reviewDir, "scripts", "check.ts")
+      yield* writeText(reviewScript, "export const check = true\n")
       yield* writeText(
         path.join(dir, ".opencode", "skill", "write-a-prd", "SKILL.md"),
         "---\nname: write-a-prd\ndescription: Write a PRD\n---\nWrite a focused PRD.\n",
@@ -2102,6 +2106,8 @@ noLLMServer.instance(
       expect(text).toContain("Use $review and $write-a-prd on this change")
       expect(text.filter((part) => part.includes("Review the implementation carefully."))).toHaveLength(1)
       expect(text.filter((part) => part.includes("Write a focused PRD."))).toHaveLength(1)
+      expect(text.some((part) => part.includes(`Base directory for this skill: ${pathToFileURL(reviewDir).href}`))).toBe(true)
+      expect(text.some((part) => part.includes(`<file>${reviewScript}</file>`))).toBe(true)
 
       yield* sessions.remove(session.id)
     }),

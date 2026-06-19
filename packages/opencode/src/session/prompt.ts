@@ -54,6 +54,7 @@ import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AgentAttachment, FileAttachment, Prompt, Source } from "@opencode-ai/core/session/prompt"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import * as DateTime from "effect/DateTime"
 import { eq } from "drizzle-orm"
 import { SessionTable } from "@opencode-ai/core/session/sql"
@@ -123,6 +124,7 @@ export const layer = Layer.effect(
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
     const skill = yield* Skill.Service
+    const ripgrep = yield* Ripgrep.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
@@ -174,6 +176,36 @@ export const layer = Layer.effect(
         { concurrency: "unbounded", discard: true },
       )
       return parts
+    })
+
+    const selectedSkillContent = Effect.fn("SessionPrompt.selectedSkillContent")(function* (info: Skill.Info) {
+      const dir = path.dirname(info.location)
+      const base = pathToFileURL(dir).href
+      const files = yield* ripgrep
+        .find({
+          cwd: dir,
+          pattern: "!**/SKILL.md",
+          hidden: true,
+          follow: false,
+          limit: 10,
+        })
+        .pipe(Effect.catch(() => Effect.succeed([] as { path: string }[])))
+
+      return [
+        `<skill_content name="${info.name}">`,
+        `# Skill: ${info.name}`,
+        "",
+        info.content.trim(),
+        "",
+        `Base directory for this skill: ${base}`,
+        "Relative paths in this skill (e.g., scripts/, reference/) are relative to this base directory.",
+        "Note: file list is sampled.",
+        "",
+        "<skill_files>",
+        files.map((file) => `<file>${path.resolve(dir, file.path)}</file>`).join("\n"),
+        "</skill_files>",
+        "</skill_content>",
+      ].join("\n")
     })
 
     const title = Effect.fn("SessionPrompt.ensureTitle")(function* (input: {
@@ -986,7 +1018,7 @@ export const layer = Layer.effect(
               sessionID: input.sessionID,
               type: "text",
               synthetic: true,
-              text: `## Skill: ${found.name}\n\n${found.content.trim()}`,
+              text: yield* selectedSkillContent(found),
             },
           ]
         }
@@ -1606,6 +1638,7 @@ export const defaultLayer = Layer.suspend(() =>
         SystemPrompt.defaultLayer,
         LLM.defaultLayer,
         Skill.defaultLayer,
+        Ripgrep.defaultLayer,
         CrossSpawnSpawner.defaultLayer,
         RuntimeFlags.defaultLayer,
         EventV2Bridge.defaultLayer,
@@ -1736,6 +1769,7 @@ export const node = LayerNode.make(layer, [
   Truncate.node,
   Image.node,
   Skill.node,
+  Ripgrep.node,
   CrossSpawnSpawner.node,
   Instruction.node,
   SessionRunState.node,
