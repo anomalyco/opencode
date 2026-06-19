@@ -7,6 +7,12 @@ import { ActorID, DocID, SubmitID } from "./schema"
 import { SessionID } from "@/session/schema"
 import { errors } from "../server/error"
 
+// Client reply to a server heartbeat ping (see Doc heartbeat). Cheap string check avoids JSON.parse
+// on the hot path; the only inbound control message on these channels is the pong.
+function isPong(data: string) {
+  return data.includes('"pong"')
+}
+
 export const SessionDocRoutes = () =>
   new Hono()
     .get(
@@ -218,7 +224,7 @@ export const SessionDocRoutes = () =>
           return typeof (value as { readyState?: unknown }).readyState === "number"
         }
 
-        let stop: (() => void) | undefined
+        let handle: ((() => void) & { pong: () => void }) | undefined
 
         return {
           onOpen(_event, ws) {
@@ -227,7 +233,7 @@ export const SessionDocRoutes = () =>
               ws.close()
               return
             }
-            stop = Doc.submitConnect({
+            handle = Doc.submitConnect({
               sessionID: param.sessionID,
               docID: query.docID,
               actorID: query.actorID,
@@ -235,11 +241,16 @@ export const SessionDocRoutes = () =>
                 send: (data) => {
                   if (socket.readyState === 1) socket.send(data)
                 },
+                close: () => socket.close(),
               },
             })
           },
+          onMessage(event) {
+            if (typeof event.data !== "string") return
+            if (isPong(event.data)) handle?.pong()
+          },
           onClose() {
-            stop?.()
+            handle?.()
           },
         }
       }),
@@ -321,7 +332,7 @@ export const SessionDocRoutes = () =>
           return typeof (value as { readyState?: unknown }).readyState === "number"
         }
 
-        let stop: (() => void) | undefined
+        let handle: ((() => void) & { pong: () => void }) | undefined
         return {
           onOpen(_event, ws) {
             const socket = ws.raw
@@ -329,15 +340,19 @@ export const SessionDocRoutes = () =>
               ws.close()
               return
             }
-            stop = Doc.questionSubmitConnect({
+            handle = Doc.questionSubmitConnect({
               sessionID: param.sessionID,
               requestID: query.requestID,
               actorID: query.actorID,
-              peer: { send: (data) => { if (socket.readyState === 1) socket.send(data) } },
+              peer: { send: (data) => { if (socket.readyState === 1) socket.send(data) }, close: () => socket.close() },
             })
           },
+          onMessage(event) {
+            if (typeof event.data !== "string") return
+            if (isPong(event.data)) handle?.pong()
+          },
           onClose() {
-            stop?.()
+            handle?.()
           },
         }
       }),
@@ -373,7 +388,7 @@ export const SessionDocRoutes = () =>
           z.object({ type: z.literal("presence"), entry: Doc.QuestionPresenceEntry }),
         ])
 
-        let stop: (() => void) | undefined
+        let handle: ((() => void) & { pong: () => void }) | undefined
         return {
           onOpen(_event, ws) {
             const socket = ws.raw
@@ -381,15 +396,19 @@ export const SessionDocRoutes = () =>
               ws.close()
               return
             }
-            stop = Doc.questionDraftConnect({
+            handle = Doc.questionDraftConnect({
               sessionID: param.sessionID,
               requestID: query.requestID,
               actorID: query.actorID,
-              peer: { send: (data) => { if (socket.readyState === 1) socket.send(data) } },
+              peer: { send: (data) => { if (socket.readyState === 1) socket.send(data) }, close: () => socket.close() },
             })
           },
           onMessage(event) {
             if (typeof event.data !== "string") return
+            if (isPong(event.data)) {
+              handle?.pong()
+              return
+            }
             let parsed: z.infer<typeof Inbound>
             try {
               parsed = Inbound.parse(JSON.parse(event.data))
@@ -403,7 +422,7 @@ export const SessionDocRoutes = () =>
             Doc.questionPresenceSet({ sessionID: param.sessionID, requestID: query.requestID, entry: parsed.entry })
           },
           onClose() {
-            stop?.()
+            handle?.()
           },
         }
       }),

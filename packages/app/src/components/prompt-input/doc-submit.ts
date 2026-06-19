@@ -66,6 +66,15 @@ const path = (input: { baseUrl: string; directory: string }, value: string) => {
   return url
 }
 
+// Server sends `{type:"ping"}` heartbeats so it can reap half-open sockets that never fire onClose.
+// We answer immediately with a pong; a frozen/suspended tab simply stops answering and gets reaped.
+const PONG = JSON.stringify({ type: "pong" })
+const handlePing = (socket: WebSocket, data: string) => {
+  if (!data.includes('"ping"')) return false
+  if (socket.readyState === WebSocket.OPEN) socket.send(PONG)
+  return true
+}
+
 const json = async (url: URL, body: unknown) => {
   const res = await fetch(url, {
     method: "POST",
@@ -223,6 +232,7 @@ export function connectQuestionSubmit(input: QuestionSocketInput) {
     ws = socket
     socket.addEventListener("message", (event) => {
       if (typeof event.data !== "string") return
+      if (handlePing(socket, event.data)) return
       const next = parse(event.data)
       if (next) input.event(next)
     })
@@ -338,6 +348,7 @@ export function connectQuestionDraft(input: DraftSocketInput): QuestionDraftChan
     socket.addEventListener("open", flush)
     socket.addEventListener("message", (event) => {
       if (typeof event.data !== "string") return
+      if (handlePing(socket, event.data)) return
       const next = draftMessage(event.data)
       if (!next) return
       if (next.type === "draft") input.onDraft(next.draft)
@@ -390,6 +401,7 @@ export function connectSubmit(input: SocketInput) {
     ws = socket
     socket.addEventListener("message", (event) => {
       if (typeof event.data !== "string") return
+      if (handlePing(socket, event.data)) return
       const next = parse(event.data)
       if (next) input.event(next)
     })

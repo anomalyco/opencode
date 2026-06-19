@@ -573,13 +573,65 @@ export namespace Doc {
   type SubmitPeer = {
     actorID: ActorID
     send: (data: string) => void
+    // Terminate the underlying socket so the WS onClose path runs the normal cleanup. Set by the
+    // route handler; absent only for peers created in tests that don't wire a socket.
+    close?: () => void
+    // Last time we heard from this peer (connect or pong). Drives zombie reaping below.
+    lastSeen: number
   }
 
   const LEAVE_GRACE = 2_000
+  // Heartbeat: a half-open socket (laptop sleep, wifi switch, backgrounded tab) never fires WS
+  // onClose and `send` does not error, so a dead peer lingers in `peers` for minutes and pollutes
+  // every vote's target set. We ping each peer and reap any that stops ponging, keeping `peers`
+  // (and thus targets()/cast()/presence) honest within ~PING_TIMEOUT.
+  const PING_INTERVAL = 4_000
+  const PING_TIMEOUT = 9_000
   // Keyed by targetID (doc id or question request id) — the single routing key for a vote's peers.
   const peers = new Map<string, Set<SubmitPeer>>()
   const timers = new Map<SubmitID, ReturnType<typeof setTimeout>>()
   const leaveTimers = new Map<string, ReturnType<typeof setTimeout>>()
+  let heartbeat: ReturnType<typeof setInterval> | undefined
+
+  // Both vote peers (`peers`) and draft/presence peers (`draftPeers`) share this liveness shape.
+  type LivePeer = { send: (data: string) => void; close?: () => void; lastSeen: number }
+  const ping = JSON.stringify({ type: "ping" })
+
+  function sweep() {
+    const now = Date.now()
+    const reap = (set: Set<LivePeer>) => {
+      for (const peer of set) {
+        if (now - peer.lastSeen > PING_TIMEOUT) {
+          // Dead: terminate the socket; its onClose runs the channel's cleanup (remove + scheduleLeave).
+          peer.close?.()
+          continue
+        }
+        peer.send(ping)
+      }
+    }
+    for (const set of peers.values()) reap(set)
+    for (const set of draftPeers.values()) reap(set)
+  }
+
+  function heartbeatStart() {
+    if (heartbeat) return
+    heartbeat = setInterval(sweep, PING_INTERVAL)
+    // Don't keep the process alive just for the heartbeat (Bun/Node both honor unref).
+    heartbeat?.unref?.()
+  }
+
+  function heartbeatStop() {
+    if (!heartbeat) return
+    if (peers.size > 0 || draftPeers.size > 0) return
+    clearInterval(heartbeat)
+    heartbeat = undefined
+  }
+
+  // Test-only: run one heartbeat pass synchronously (the live interval is time-driven and too slow
+  // for unit tests). Combine with `setSystemTime` to simulate elapsed time.
+  export function heartbeatSweep() {
+    sweep()
+  }
 
   function clamp(input?: number) {
     if (input === undefined) return DEFAULT
@@ -1104,16 +1156,23 @@ export namespace Doc {
   )
 
   // Shared peer-attach core. `targetID` routes casts/leaves; the caller validates the target first.
+  // Returns `stop` (run on socket close) and `pong` (call when the client answers a heartbeat ping).
   function connect(input: {
     sessionID: SessionID
     targetID: string
     actorID: ActorID
-    peer: { send: (data: string) => void }
+    peer: { send: (data: string) => void; close?: () => void }
   }) {
-    const peer = { actorID: input.actorID, send: input.peer.send }
+    const peer: SubmitPeer = {
+      actorID: input.actorID,
+      send: input.peer.send,
+      close: input.peer.close,
+      lastSeen: Date.now(),
+    }
     const set = peers.get(input.targetID) ?? new Set<SubmitPeer>()
     set.add(peer)
     peers.set(input.targetID, set)
+    heartbeatStart()
     cancelLeave(input.targetID, input.actorID)
     const state = active(input.sessionID, input.targetID, input.actorID)
     if (state) {
@@ -1124,11 +1183,18 @@ export namespace Doc {
       const last = recent(input.sessionID, input.targetID, input.actorID)
       if (last) peer.send(JSON.stringify({ type: last.status as SubmitEvent["type"], state: last } satisfies SubmitEvent))
     }
-    return () => {
+    // Returns the disposer (run on socket close); `.pong` refreshes liveness on a heartbeat reply.
+    const stop = () => {
       set.delete(peer)
       if (!Array.from(set).some((item) => item.actorID === peer.actorID)) scheduleLeave(input.targetID, peer.actorID)
       if (set.size === 0) peers.delete(input.targetID)
+      heartbeatStop()
     }
+    return Object.assign(stop, {
+      pong: () => {
+        peer.lastSeen = Date.now()
+      },
+    })
   }
 
   export const submitConnect = fn(
@@ -1136,7 +1202,7 @@ export namespace Doc {
       sessionID: SessionID.zod,
       docID: DocID.zod,
       actorID: ActorID.zod,
-      peer: z.custom<{ send: (data: string) => void }>(),
+      peer: z.custom<{ send: (data: string) => void; close?: () => void }>(),
     }),
     (input) => {
       Session.get(input.sessionID)
@@ -1150,7 +1216,7 @@ export namespace Doc {
       sessionID: SessionID.zod,
       requestID: z.string(),
       actorID: ActorID.zod,
-      peer: z.custom<{ send: (data: string) => void }>(),
+      peer: z.custom<{ send: (data: string) => void; close?: () => void }>(),
     }),
     (input) => {
       Session.get(input.sessionID)
@@ -1213,7 +1279,7 @@ export namespace Doc {
     .meta({ ref: "QuestionChannelEvent" })
   export type QuestionChannelEvent = z.infer<typeof QuestionChannelEvent>
 
-  type DraftPeer = { actorID: ActorID; send: (data: string) => void }
+  type DraftPeer = { actorID: ActorID; send: (data: string) => void; close?: () => void; lastSeen: number }
   const drafts = new Map<string, QuestionDraft>()
   const presences = new Map<string, Map<ActorID, QuestionPresenceEntry>>()
   const draftPeers = new Map<string, Set<DraftPeer>>()
@@ -1346,26 +1412,38 @@ export namespace Doc {
       sessionID: SessionID.zod,
       requestID: z.string(),
       actorID: ActorID.zod,
-      peer: z.custom<{ send: (data: string) => void }>(),
+      peer: z.custom<{ send: (data: string) => void; close?: () => void }>(),
     }),
     (input) => {
       Session.get(input.sessionID)
-      const peer = { actorID: input.actorID, send: input.peer.send }
+      const peer: DraftPeer = {
+        actorID: input.actorID,
+        send: input.peer.send,
+        close: input.peer.close,
+        lastSeen: Date.now(),
+      }
       const set = draftPeers.get(input.requestID) ?? new Set<DraftPeer>()
       set.add(peer)
       draftPeers.set(input.requestID, set)
+      heartbeatStart()
       cancelDraftLeave(input.requestID, input.actorID)
       // Snapshot current draft + presence so a late joiner sees the in-progress shared answer.
       const draft = drafts.get(input.requestID)
       if (draft) peer.send(JSON.stringify({ type: "draft", draft } satisfies QuestionChannelEvent))
       const list = Array.from(presences.get(input.requestID)?.values() ?? [])
       if (list.length) peer.send(JSON.stringify({ type: "presence", presence: list } satisfies QuestionChannelEvent))
-      return () => {
+      const stop = () => {
         set.delete(peer)
         if (!Array.from(set).some((item) => item.actorID === peer.actorID))
           scheduleDraftLeave(input.requestID, peer.actorID)
         if (set.size === 0) draftPeers.delete(input.requestID)
+        heartbeatStop()
       }
+      return Object.assign(stop, {
+        pong: () => {
+          peer.lastSeen = Date.now()
+        },
+      })
     },
   )
 
