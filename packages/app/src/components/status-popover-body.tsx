@@ -161,7 +161,7 @@ export function StatusPopoverServerBody() {
           const run = ++dialogRun
           void import("./dialog-select-server").then((x) => {
             if (dialogDead || dialogRun !== run) return
-            dialog.show(() => <x.DialogSelectServer />, defaultServer.refresh)
+            void dialog.show(() => <x.DialogSelectServer />, defaultServer.refresh)
           })
         },
       }}
@@ -258,7 +258,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
   const navigate = useNavigate()
   const settings = useSettings()
 
-  const fail = (err: unknown) => {
+  const _fail = (err: unknown) => {
     showToast({
       variant: "error",
       title: language.t("common.requestFailed"),
@@ -379,7 +379,7 @@ export function StatusPopoverBody(props: { shown: Accessor<boolean> }) {
                     const run = ++dialogRun
                     void import("./dialog-select-server").then((x) => {
                       if (dialogDead || dialogRun !== run) return
-                      dialog.show(() => <x.DialogSelectServer />, defaultServer.refresh)
+                      void dialog.show(() => <x.DialogSelectServer />, defaultServer.refresh)
                     })
                   }}
                 >

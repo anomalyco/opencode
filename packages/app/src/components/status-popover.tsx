@@ -25,6 +25,7 @@ export function StatusPopover() {
     const warn = mcp.some((item) => item.status === "needs_auth")
     if (failed) return "critical" as const
     if (warn) return "warning" as const
+    return undefined
   })
   const serverHealthy = () => global.servers.health[server.key]?.healthy === true
   const healthy = createMemo(() => global.servers.health[server.key]?.healthy === true && !mcpIssue())
@@ -93,6 +94,7 @@ function DirectoryStatusPopover() {
     const warn = mcp.some((item) => item.status === "needs_auth")
     if (failed) return "critical" as const
     if (warn) return "warning" as const
+    return undefined
   })
   const healthy = createMemo(() => serverHealth() === true && !mcpIssue())
   const state = createMemo<StatusPopoverState>(() => ({
