@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, describe, expect, mock, setSystemTime, spyOn, test } from "bun:test"
 import * as Y from "yjs"
 import { Instance } from "../../src/project/instance"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
@@ -33,6 +33,7 @@ describe("doc", () => {
   afterEach(() => {
     mock.restore()
     Server.basePath = "/"
+    setSystemTime() // reset any fake clock so later tests use real time
   })
 
   test("prompt doc and session actor are session-scoped", async () => {
@@ -855,6 +856,73 @@ describe("doc", () => {
         expect(state.status).toBe("pending")
         expect(state.actors.map((actor) => actor.actorID).sort()).toEqual([alice.actorID, bob.actorID].sort())
         stop()
+      },
+    })
+  })
+
+  test("heartbeat reaps a peer that stops ponging, keeps peers that pong", async () => {
+    await using tmp = await tmpdir()
+    await Instance.provide({
+      directory: tmp.path,
+      init: InstanceBootstrap,
+      fn: async () => {
+        await Project.fromDirectory(tmp.path)
+        const session = await Session.create({})
+        const { docID } = Doc.prompt(session.id)
+        const alice = Doc.actorUpsert({ sessionID: session.id, name: "Alice" })
+        const bob = Doc.actorUpsert({ sessionID: session.id, name: "Bob" })
+        const ghost = Doc.actorUpsert({ sessionID: session.id, name: "Ghost" })
+
+        const t0 = 1_000_000
+        setSystemTime(t0)
+        // A dead socket would never fire onClose; wire each peer's close() to its disposer so the
+        // sweep's terminate path mirrors the real onClose cleanup.
+        let stopAlice!: ReturnType<typeof Doc.submitConnect>
+        let stopBob!: ReturnType<typeof Doc.submitConnect>
+        let stopGhost!: ReturnType<typeof Doc.submitConnect>
+        stopAlice = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          peer: { send: () => {}, close: () => stopAlice() },
+        })
+        stopBob = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: bob.actorID,
+          peer: { send: () => {}, close: () => stopBob() },
+        })
+        stopGhost = Doc.submitConnect({
+          sessionID: session.id,
+          docID,
+          actorID: ghost.actorID,
+          peer: { send: () => {}, close: () => stopGhost() },
+        })
+
+        // 5s in: everyone still within the timeout. Alice & Bob answer the ping; Ghost goes silent.
+        setSystemTime(t0 + 5_000)
+        Doc.heartbeatSweep()
+        stopAlice.pong()
+        stopBob.pong()
+
+        // 11s in: Ghost has been silent for 11s (> PING_TIMEOUT), Alice/Bob ponged 6s ago.
+        setSystemTime(t0 + 11_000)
+        Doc.heartbeatSweep()
+
+        // A new vote whose snapshot still lists Ghost must exclude it — the heartbeat already pruned
+        // it from the connected-peer set that targets() intersects against.
+        const state = Doc.submitCreate({
+          sessionID: session.id,
+          docID,
+          actorID: alice.actorID,
+          actorIDs: [alice.actorID, bob.actorID, ghost.actorID],
+          prompt,
+        })
+        expect(state.status).toBe("pending")
+        expect(state.actors.map((actor) => actor.actorID).sort()).toEqual([alice.actorID, bob.actorID].sort())
+
+        stopAlice()
+        stopBob()
       },
     })
   })
