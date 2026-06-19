@@ -110,17 +110,10 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       if ((ctx.query.before || ctx.query.after) && ctx.query.limit === undefined)
         return yield* new HttpApiError.BadRequest({})
       if (ctx.query.before && ctx.query.after) return yield* new HttpApiError.BadRequest({})
-      if (ctx.query.before) {
-        const before = ctx.query.before
+      const cursor = ctx.query.before ?? ctx.query.after
+      if (cursor) {
         yield* Effect.try({
-          try: () => MessageV2.cursor.decode(before),
-          catch: () => new HttpApiError.BadRequest({}),
-        })
-      }
-      if (ctx.query.after) {
-        const after = ctx.query.after
-        yield* Effect.try({
-          try: () => MessageV2.cursor.decode(after),
+          try: () => MessageV2.cursor.decode(cursor),
           catch: () => new HttpApiError.BadRequest({}),
         })
       }
