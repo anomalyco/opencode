@@ -61,8 +61,7 @@ import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
 
-// @ts-ignore
-globalThis.AI_SDK_LOG_WARNINGS = false
+;(globalThis as Record<string, boolean>).AI_SDK_LOG_WARNINGS = false
 
 const decodeMessageInfo = Schema.decodeUnknownExit(SessionV1.Info)
 const decodeMessagePart = Schema.decodeUnknownExit(SessionV1.Part)
@@ -459,57 +458,55 @@ export const layer = Layer.effect(
               agent: input.agent,
               model: { providerID: model.providerID, modelID: model.modelID },
             }
-            yield* sessions.updateMessage(userMsg)
-            const userPart: SessionV1.Part = {
-              type: "text",
-              id: PartID.ascending(),
-              messageID: userMsg.id,
-              sessionID: input.sessionID,
-              text: "The following tool was executed by the user",
-              synthetic: true,
-            }
-            yield* sessions.updatePart(userPart)
+             yield* sessions.updateMessage(userMsg)
+             const userPart: SessionV1.Part = {
+               type: "text",
+               id: PartID.ascending(),
+               messageID: userMsg.id,
+               sessionID: input.sessionID,
+               text: "The following tool was executed by the user",
+               synthetic: true,
+             }
+             yield* sessions.updatePart(userPart)
 
-            const msg: SessionV1.Assistant = {
-              id: MessageID.ascending(),
-              sessionID: input.sessionID,
-              parentID: userMsg.id,
-              mode: input.agent,
-              agent: input.agent,
-              cost: 0,
-              path: { cwd: ctx.directory, root: ctx.worktree },
-              time: { created: Date.now() },
-              role: "assistant",
-              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-              modelID: model.modelID,
-              providerID: model.providerID,
-            }
-            yield* sessions.updateMessage(msg)
-            const started = Date.now()
-            const part: SessionV1.ToolPart = {
-              type: "tool",
-              id: PartID.ascending(),
-              messageID: msg.id,
-              sessionID: input.sessionID,
-              tool: ShellID.ToolID,
-              callID: ulid(),
-              state: {
-                status: "running",
-                time: { start: started },
-                input: { command: input.command },
-              },
-            }
-            yield* sessions.updatePart(part)
-            if (flags.experimentalEventSystem) {
-              yield* events.publish(SessionEvent.Shell.Started, {
-                sessionID: input.sessionID,
-                messageID: SessionMessage.ID.create(),
-                timestamp: DateTime.makeUnsafe(started),
-                callID: part.callID,
-                command: input.command,
-              })
-            }
-            return { msg, part, cwd: ctx.directory }
+             const msg: SessionV1.Assistant = {
+               id: MessageID.ascending(),
+               sessionID: input.sessionID,
+               parentID: userMsg.id,
+               mode: input.agent,
+               agent: input.agent,
+               cost: 0,
+               path: { cwd: ctx.directory, root: ctx.worktree },
+               time: { created: Date.now() },
+               role: "assistant",
+               tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+               modelID: model.modelID,
+               providerID: model.providerID,
+             }
+             yield* sessions.updateMessage(msg)
+             const started = Date.now()
+             const part: SessionV1.ToolPart = {
+               type: "tool",
+               id: PartID.ascending(),
+               messageID: msg.id,
+               sessionID: input.sessionID,
+               tool: ShellID.ToolID,
+               callID: ulid(),
+               state: {
+                 status: "running",
+                 time: { start: started },
+                 input: { command: input.command },
+               },
+             }
+             yield* sessions.updatePart(part)
+             yield* events.publish(SessionEvent.Shell.Started, {
+               sessionID: input.sessionID,
+               messageID: SessionMessage.ID.create(),
+               timestamp: DateTime.makeUnsafe(started),
+               callID: part.callID,
+               command: input.command,
+             })
+             return { msg, part, cwd: ctx.directory }
           }).pipe(Effect.ensuring(markReady))
 
           const cfg = yield* config.get()
@@ -518,37 +515,35 @@ export const layer = Layer.effect(
           let output = ""
           let aborted = false
 
-          const finish = Effect.uninterruptible(
-            Effect.gen(function* () {
-              if (aborted) {
-                output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
-              }
-              const completed = Date.now()
-              if (flags.experimentalEventSystem) {
-                yield* events.publish(SessionEvent.Shell.Ended, {
-                  sessionID: input.sessionID,
-                  timestamp: DateTime.makeUnsafe(completed),
-                  callID: part.callID,
-                  output,
-                })
-              }
-              if (!msg.time.completed) {
-                msg.time.completed = completed
-                yield* sessions.updateMessage(msg)
-              }
-              if (part.state.status === "running") {
-                part.state = {
-                  status: "completed",
-                  time: { ...part.state.time, end: completed },
-                  input: part.state.input,
-                  title: "",
-                  metadata: { output, description: "" },
-                  output,
-                }
-                yield* sessions.updatePart(part)
-              }
-            }),
-          )
+           const finish = Effect.uninterruptible(
+             Effect.gen(function* () {
+               if (aborted) {
+                 output += "\n\n" + ["<metadata>", "User aborted the command", "</metadata>"].join("\n")
+               }
+               const completed = Date.now()
+               yield* events.publish(SessionEvent.Shell.Ended, {
+                 sessionID: input.sessionID,
+                 timestamp: DateTime.makeUnsafe(completed),
+                 callID: part.callID,
+                 output,
+               })
+               if (!msg.time.completed) {
+                 msg.time.completed = completed
+                 yield* sessions.updateMessage(msg)
+               }
+               if (part.state.status === "running") {
+                 part.state = {
+                   status: "completed",
+                   time: { ...part.state.time, end: completed },
+                   input: part.state.input,
+                   title: "",
+                   metadata: { output, description: "" },
+                   output,
+                 }
+                 yield* sessions.updatePart(part)
+               }
+             }),
+           )
 
           const exit = yield* restore(
             Effect.gen(function* () {
@@ -1072,32 +1067,26 @@ export const layer = Layer.effect(
           agents: [] as AgentAttachment[],
           synthetic: [] as string[],
         },
-      )
-      // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-      if (flags.experimentalEventSystem) {
-        yield* events.publish(SessionEvent.Prompted, {
-          sessionID: input.sessionID,
-          messageID: SessionMessage.ID.create(),
-          timestamp: DateTime.makeUnsafe(info.time.created),
-          delivery: "steer",
-          prompt: new Prompt({
-            text: nextPrompt.text.join("\n"),
-            files: nextPrompt.files,
-            agents: nextPrompt.agents,
-          }),
-        })
-      }
-      for (const text of nextPrompt.synthetic) {
-        // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-        if (flags.experimentalEventSystem) {
-          yield* events.publish(SessionEvent.Synthetic, {
-            sessionID: input.sessionID,
-            messageID: SessionMessage.ID.create(),
-            timestamp: DateTime.makeUnsafe(info.time.created),
-            text,
-          })
-        }
-      }
+       )
+       yield* events.publish(SessionEvent.Prompted, {
+         sessionID: input.sessionID,
+         messageID: SessionMessage.ID.create(),
+         timestamp: DateTime.makeUnsafe(info.time.created),
+         delivery: "steer",
+         prompt: new Prompt({
+           text: nextPrompt.text.join("\n"),
+           files: nextPrompt.files,
+           agents: nextPrompt.agents,
+         }),
+       })
+       for (const text of nextPrompt.synthetic) {
+         yield* events.publish(SessionEvent.Synthetic, {
+           sessionID: input.sessionID,
+           messageID: SessionMessage.ID.create(),
+           timestamp: DateTime.makeUnsafe(info.time.created),
+           text,
+         })
+       }
 
       return { info, parts }
     }, Effect.scoped)

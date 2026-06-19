@@ -24,6 +24,7 @@ import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
+import { EventV2 } from "@opencode-ai/core/event"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { ModelV2 } from "@opencode-ai/core/model"
@@ -169,6 +170,14 @@ export const layer = Layer.effect(
           ? Effect.die("V2 step settlement has no owning assistant message")
           : Effect.succeed(ctx.v2AssistantMessageID)
 
+      // Helper to publish v2 events when migration is enabled.
+      // Eliminates repeated TODO(v2) dual-write checks throughout this function.
+      const publishIfMigrating = <E extends Record<string, any>>(
+        definition: EventV2.EventDefinition<E>,
+        data: E,
+      ): Effect.Effect<void> =>
+        mirrorAssistant ? events.publish(definition, data) : Effect.void
+
       const readToolCall = Effect.fn("SessionProcessor.readToolCall")(function* (toolCallID: string) {
         const call = ctx.toolcalls[toolCallID]
         if (!call) return undefined
@@ -204,7 +213,7 @@ export const layer = Layer.effect(
         toolCallID: string,
         output: {
           title: string
-          metadata: Record<string, any>
+      metadata: Record<string, unknown>
           output: string
           attachments?: SessionV1.FilePart[]
         },
@@ -247,17 +256,14 @@ export const layer = Layer.effect(
 
       const finishReasoning = Effect.fn("SessionProcessor.finishReasoning")(function* (reasoningID: string) {
         if (!(reasoningID in ctx.reasoningMap)) return
-        // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-        if (mirrorAssistant) {
-          yield* events.publish(SessionEvent.Reasoning.Ended, {
-            sessionID: ctx.sessionID,
-            assistantMessageID: yield* currentV2AssistantMessage(),
-            reasoningID,
-            text: ctx.reasoningMap[reasoningID].text,
-            providerMetadata: ctx.reasoningMap[reasoningID].metadata,
-            timestamp: DateTime.makeUnsafe(Date.now()),
-          })
-        }
+        yield* publishIfMigrating(SessionEvent.Reasoning.Ended, {
+          sessionID: ctx.sessionID,
+          assistantMessageID: yield* currentV2AssistantMessage(),
+          reasoningID,
+          text: ctx.reasoningMap[reasoningID].text,
+          providerMetadata: ctx.reasoningMap[reasoningID].metadata,
+          timestamp: DateTime.makeUnsafe(Date.now()),
+        })
         // oxlint-disable-next-line no-self-assign -- reactivity trigger
         ctx.reasoningMap[reasoningID].text = ctx.reasoningMap[reasoningID].text
         ctx.reasoningMap[reasoningID].time = { ...ctx.reasoningMap[reasoningID].time, end: Date.now() }
@@ -312,10 +318,9 @@ export const layer = Layer.effect(
           }
           return { call: ctx.toolcalls[input.id], part }
         }
-        // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
         const assistantMessageID = mirrorAssistant ? yield* ensureV2AssistantMessage() : undefined
         if (assistantMessageID) {
-          yield* events.publish(SessionEvent.Tool.Input.Started, {
+          yield* publishIfMigrating(SessionEvent.Tool.Input.Started, {
             sessionID: ctx.sessionID,
             assistantMessageID,
             callID: input.id,
@@ -349,7 +354,7 @@ export const layer = Layer.effect(
 
       const toolResultOutput = (
         value: Extract<StreamEvent, { type: "tool-result" }>,
-      ): { title: string; metadata: Record<string, any>; output: string; attachments?: SessionV1.FilePart[] } => {
+      ): { title: string; metadata: Record<string, unknown>; output: string; attachments?: SessionV1.FilePart[] } => {
         if (isRecord(value.result.value) && typeof value.result.value.output === "string") {
           return {
             title: typeof value.result.value.title === "string" ? value.result.value.title : value.name,
@@ -372,16 +377,13 @@ export const layer = Layer.effect(
         switch (value.type) {
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (mirrorAssistant) {
-              yield* events.publish(SessionEvent.Reasoning.Started, {
-                sessionID: ctx.sessionID,
-                assistantMessageID: yield* ensureV2AssistantMessage(),
-                reasoningID: value.id,
-                providerMetadata: value.providerMetadata,
-                timestamp: DateTime.makeUnsafe(Date.now()),
-              })
-            }
+            yield* publishIfMigrating(SessionEvent.Reasoning.Started, {
+              sessionID: ctx.sessionID,
+              assistantMessageID: yield* ensureV2AssistantMessage(),
+              reasoningID: value.id,
+              providerMetadata: value.providerMetadata,
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
             ctx.reasoningMap[value.id] = {
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -399,15 +401,13 @@ export const layer = Layer.effect(
             if (!(value.id in ctx.reasoningMap)) return
             ctx.reasoningMap[value.id].text += value.text
             if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
-            if (mirrorAssistant) {
-              yield* events.publish(SessionEvent.Reasoning.Delta, {
-                sessionID: ctx.sessionID,
-                assistantMessageID: yield* currentV2AssistantMessage(),
-                reasoningID: value.id,
-                delta: value.text,
-                timestamp: DateTime.makeUnsafe(Date.now()),
-              })
-            }
+            yield* publishIfMigrating(SessionEvent.Reasoning.Delta, {
+              sessionID: ctx.sessionID,
+              assistantMessageID: yield* currentV2AssistantMessage(),
+              reasoningID: value.id,
+              delta: value.text,
+              timestamp: DateTime.makeUnsafe(Date.now()),
+            })
             yield* session.updatePartDelta({
               sessionID: ctx.reasoningMap[value.id].sessionID,
               messageID: ctx.reasoningMap[value.id].messageID,
@@ -450,10 +450,9 @@ export const layer = Layer.effect(
 
           case "tool-input-end": {
             const toolCall = yield* ensureToolCall(value)
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (mirrorAssistant) {
-              const assistantMessageID = yield* requireV2AssistantMessage(toolCall.call)
-              yield* events.publish(SessionEvent.Tool.Input.Ended, {
+            const assistantMessageID = mirrorAssistant ? yield* requireV2AssistantMessage(toolCall.call) : undefined
+            if (assistantMessageID) {
+              yield* publishIfMigrating(SessionEvent.Tool.Input.Ended, {
                 sessionID: ctx.sessionID,
                 assistantMessageID,
                 callID: value.id,
@@ -472,10 +471,9 @@ export const layer = Layer.effect(
             const toolCall = yield* ensureToolCall(value)
             const input = isRecord(value.input) ? value.input : { value: value.input }
             if (!toolCall.call.inputEnded) {
-              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (mirrorAssistant) {
-                const assistantMessageID = yield* requireV2AssistantMessage(toolCall.call)
-                yield* events.publish(SessionEvent.Tool.Input.Ended, {
+              const assistantMessageID = mirrorAssistant ? yield* requireV2AssistantMessage(toolCall.call) : undefined
+              if (assistantMessageID) {
+                yield* publishIfMigrating(SessionEvent.Tool.Input.Ended, {
                   sessionID: ctx.sessionID,
                   assistantMessageID,
                   callID: value.id,
@@ -484,10 +482,9 @@ export const layer = Layer.effect(
                 })
               }
             }
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (mirrorAssistant) {
-              const assistantMessageID = yield* requireV2AssistantMessage(toolCall.call)
-              yield* events.publish(SessionEvent.Tool.Called, {
+            const assistantMessageID = mirrorAssistant ? yield* requireV2AssistantMessage(toolCall.call) : undefined
+            if (assistantMessageID) {
+              yield* publishIfMigrating(SessionEvent.Tool.Called, {
                 sessionID: ctx.sessionID,
                 assistantMessageID,
                 callID: value.id,
@@ -546,29 +543,28 @@ export const layer = Layer.effect(
             return
           }
 
-          case "tool-result": {
-            const toolCall = yield* readToolCall(value.id)
-            if (!toolCall && value.result.type === "error") return
-            if (value.result.type === "error") {
-              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (mirrorAssistant) {
-                const assistantMessageID = yield* requireV2AssistantMessage(toolCall?.call)
-                yield* events.publish(SessionEvent.Tool.Failed, {
-                  sessionID: ctx.sessionID,
-                  assistantMessageID,
-                  callID: value.id,
-                  error: { type: "unknown", message: errorMessage(value.result.value) },
-                  result: value.result,
-                  provider: {
-                    executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
-                    ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
-                  },
-                  timestamp: DateTime.makeUnsafe(Date.now()),
-                })
-              }
-              yield* failToolCall(value.id, value.result.value)
-              return
-            }
+           case "tool-result": {
+             const toolCall = yield* readToolCall(value.id)
+             if (!toolCall && value.result.type === "error") return
+             if (value.result.type === "error") {
+               const assistantMessageID = mirrorAssistant ? yield* requireV2AssistantMessage(toolCall?.call) : undefined
+               if (assistantMessageID) {
+                 yield* publishIfMigrating(SessionEvent.Tool.Failed, {
+                   sessionID: ctx.sessionID,
+                   assistantMessageID,
+                   callID: value.id,
+                   error: { type: "unknown", message: errorMessage(value.result.value) },
+                   result: value.result,
+                   provider: {
+                     executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
+                     ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
+                   },
+                   timestamp: DateTime.makeUnsafe(Date.now()),
+                 })
+               }
+               yield* failToolCall(value.id, value.result.value)
+               return
+             }
             const rawOutput = toolResultOutput(value)
             const normalized = yield* Effect.forEach(rawOutput.attachments ?? [], (attachment) =>
               attachment.mime.startsWith("image/")
@@ -583,203 +579,203 @@ export const layer = Layer.effect(
             )
             const omitted = normalized.filter(Exit.isFailure).length
             const attachments = normalized.filter(Exit.isSuccess).map((item) => item.value)
-            const output = {
-              ...rawOutput,
-              output:
-                omitted === 0
-                  ? rawOutput.output
-                  : `${rawOutput.output}\n\n[${omitted} image${omitted === 1 ? "" : "s"} omitted: could not be resized below the image size limit.]`,
-              attachments: attachments.length ? attachments : undefined,
-            }
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (mirrorAssistant) {
-              const assistantMessageID = yield* requireV2AssistantMessage(toolCall?.call)
-              const content = [
-                { type: "text" as const, text: output.output },
-                ...(output.attachments?.map(
-                  (item: SessionV1.FilePart) =>
-                    ({
-                      type: "file",
-                      uri: item.url,
-                      mime: item.mime,
-                      name: item.filename,
-                    }) as const,
-                ) ?? []),
-              ]
-              const unsupported = content.find((item) => item.type === "file" && !item.uri.startsWith("data:"))
-              if (unsupported?.type === "file") {
-                const error = new Error(
-                  `Tool attachment URI "${unsupported.uri}" must be materialized before durable V2 settlement`,
-                )
-                yield* events.publish(SessionEvent.Tool.Failed, {
-                  sessionID: ctx.sessionID,
-                  assistantMessageID,
-                  callID: value.id,
-                  error: {
-                    type: "unknown",
-                    message: error.message,
-                  },
-                  provider: {
-                    executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
-                    ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
-                  },
-                  timestamp: DateTime.makeUnsafe(Date.now()),
-                })
-                yield* failToolCall(value.id, error)
-                return
-              } else
-                yield* events.publish(SessionEvent.Tool.Success, {
-                  sessionID: ctx.sessionID,
-                  assistantMessageID,
-                  callID: value.id,
-                  structured: output.metadata,
-                  content,
-                  result: value.result,
-                  provider: {
-                    executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
-                    ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
-                  },
-                  timestamp: DateTime.makeUnsafe(Date.now()),
-                })
-            }
+             const output = {
+               ...rawOutput,
+               output:
+                 omitted === 0
+                   ? rawOutput.output
+                   : `${rawOutput.output}\n\n[${omitted} image${omitted === 1 ? "" : "s"} omitted: could not be resized below the image size limit.]`,
+               attachments: attachments.length ? attachments : undefined,
+             }
+             if (mirrorAssistant) {
+               const assistantMessageID = yield* requireV2AssistantMessage(toolCall?.call)
+               const content = [
+                 { type: "text" as const, text: output.output },
+                 ...(output.attachments?.map(
+                   (item: SessionV1.FilePart) =>
+                     ({
+                       type: "file",
+                       uri: item.url,
+                       mime: item.mime,
+                       name: item.filename,
+                     }) as const,
+                 ) ?? []),
+               ]
+               const unsupported = content.find((item) => item.type === "file" && !item.uri.startsWith("data:"))
+               if (unsupported?.type === "file") {
+                 const error = new Error(
+                   `Tool attachment URI "${unsupported.uri}" must be materialized before durable V2 settlement`,
+                 )
+                 yield* publishIfMigrating(SessionEvent.Tool.Failed, {
+                   sessionID: ctx.sessionID,
+                   assistantMessageID,
+                   callID: value.id,
+                   error: {
+                     type: "unknown",
+                     message: error.message,
+                   },
+                   provider: {
+                     executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
+                     ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
+                   },
+                   timestamp: DateTime.makeUnsafe(Date.now()),
+                 })
+                 yield* failToolCall(value.id, error)
+                 return
+               } else
+                 yield* publishIfMigrating(SessionEvent.Tool.Success, {
+                   sessionID: ctx.sessionID,
+                   assistantMessageID,
+                   callID: value.id,
+                   structured: output.metadata,
+                   content,
+                   result: value.result,
+                   provider: {
+                     executed: value.providerExecuted === true || toolCall?.part.metadata?.providerExecuted === true,
+                     ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
+                   },
+                   timestamp: DateTime.makeUnsafe(Date.now()),
+                 })
+             }
             yield* completeToolCall(value.id, output)
             return
           }
 
-          case "tool-error": {
-            const toolCall = yield* readToolCall(value.id)
-            // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-            if (mirrorAssistant) {
-              const assistantMessageID = yield* requireV2AssistantMessage(toolCall?.call)
-              yield* events.publish(SessionEvent.Tool.Failed, {
-                sessionID: ctx.sessionID,
-                assistantMessageID,
-                callID: value.id,
-                error: {
-                  type: "unknown",
-                  message: value.message,
-                },
-                provider: {
-                  executed: toolCall?.part.metadata?.providerExecuted === true,
-                  ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
-                },
-                timestamp: DateTime.makeUnsafe(Date.now()),
-              })
-            }
-            yield* failToolCall(value.id, value.error ?? new Error(value.message))
-            return
-          }
+           case "tool-error": {
+             const toolCall = yield* readToolCall(value.id)
+             if (mirrorAssistant) {
+               const assistantMessageID = yield* requireV2AssistantMessage(toolCall?.call)
+               yield* publishIfMigrating(SessionEvent.Tool.Failed, {
+                 sessionID: ctx.sessionID,
+                 assistantMessageID,
+                 callID: value.id,
+                 error: {
+                   type: "unknown",
+                   message: value.message,
+                 },
+                 provider: {
+                   executed: toolCall?.part.metadata?.providerExecuted === true,
+                   ...(value.providerMetadata ? { metadata: value.providerMetadata } : {}),
+                 },
+                 timestamp: DateTime.makeUnsafe(Date.now()),
+               })
+             }
+             yield* failToolCall(value.id, value.error ?? new Error(value.message))
+             return
+           }
 
           case "provider-error":
             throw new Error(value.message)
 
-          case "step-start":
-            if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
-            if (!ctx.assistantMessage.summary) {
-              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (mirrorAssistant) {
-                yield* ensureV2AssistantMessage()
-              }
-            }
-            yield* session.updatePart({
-              id: PartID.ascending(),
-              messageID: ctx.assistantMessage.id,
-              sessionID: ctx.sessionID,
-              snapshot: ctx.snapshot,
-              type: "step-start",
-            })
-            return
+           case "step-start":
+             if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
+             if (!ctx.assistantMessage.summary) {
+               yield* publishIfMigrating(SessionEvent.Step.Started, {
+                 sessionID: ctx.sessionID,
+                 assistantMessageID: yield* ensureV2AssistantMessage(),
+                 agent: ctx.assistantMessage.agent,
+                 model: {
+                   id: ModelV2.ID.make(ctx.model.id),
+                   providerID: ProviderV2.ID.make(ctx.model.providerID),
+                   variant: ModelV2.VariantID.make(ctx.assistantMessage.variant ?? "default"),
+                 },
+                 snapshot: ctx.snapshot,
+                 timestamp: DateTime.makeUnsafe(Date.now()),
+               })
+             }
+             yield* session.updatePart({
+               id: PartID.ascending(),
+               messageID: ctx.assistantMessage.id,
+               sessionID: ctx.sessionID,
+               snapshot: ctx.snapshot,
+               type: "step-start",
+             })
+             return
 
-          case "step-finish": {
-            const completedSnapshot = yield* snapshot.track()
-            yield* Effect.forEach(Object.keys(ctx.reasoningMap), finishReasoning)
-            const usage = Session.getUsage({
-              model: ctx.model,
-              usage: value.usage ?? new Usage({}),
-              metadata: value.providerMetadata,
-            })
-            if (!ctx.assistantMessage.summary) {
-              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (mirrorAssistant) {
-                yield* events.publish(SessionEvent.Step.Ended, {
-                  sessionID: ctx.sessionID,
-                  assistantMessageID: yield* currentV2AssistantMessage(),
-                  finish: value.reason,
-                  cost: usage.cost,
-                  tokens: usage.tokens,
-                  snapshot: completedSnapshot,
-                  timestamp: DateTime.makeUnsafe(Date.now()),
-                })
-                ctx.v2AssistantMessageID = undefined
-              }
-            }
-            ctx.assistantMessage.finish = value.reason
-            ctx.assistantMessage.cost += usage.cost
-            ctx.assistantMessage.tokens = usage.tokens
-            yield* session.updatePart({
-              id: PartID.ascending(),
-              reason: value.reason,
-              snapshot: completedSnapshot,
-              messageID: ctx.assistantMessage.id,
-              sessionID: ctx.assistantMessage.sessionID,
-              type: "step-finish",
-              tokens: usage.tokens,
-              cost: usage.cost,
-            })
-            yield* session.updateMessage(ctx.assistantMessage)
-            if (ctx.snapshot) {
-              const patch = yield* snapshot.patch(ctx.snapshot)
-              if (patch.files.length) {
-                yield* session.updatePart({
-                  id: PartID.ascending(),
-                  messageID: ctx.assistantMessage.id,
-                  sessionID: ctx.sessionID,
-                  type: "patch",
-                  hash: patch.hash,
-                  files: patch.files,
-                })
-              }
-              ctx.snapshot = undefined
-            }
-            yield* summary
-              .summarize({
-                sessionID: ctx.sessionID,
-                messageID: ctx.assistantMessage.parentID,
-              })
-              .pipe(Effect.ignore, Effect.forkIn(scope))
-            if (
-              !ctx.assistantMessage.summary &&
-              isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
-            ) {
-              ctx.needsCompaction = true
-            }
-            return
-          }
+           case "step-finish": {
+             const completedSnapshot = yield* snapshot.track()
+             yield* Effect.forEach(Object.keys(ctx.reasoningMap), finishReasoning)
+             const usage = Session.getUsage({
+               model: ctx.model,
+               usage: value.usage ?? new Usage({}),
+               metadata: value.providerMetadata,
+             })
+             if (!ctx.assistantMessage.summary) {
+               yield* publishIfMigrating(SessionEvent.Step.Ended, {
+                 sessionID: ctx.sessionID,
+                 assistantMessageID: yield* currentV2AssistantMessage(),
+                 finish: value.reason,
+                 cost: usage.cost,
+                 tokens: usage.tokens,
+                 snapshot: completedSnapshot,
+                 timestamp: DateTime.makeUnsafe(Date.now()),
+               })
+               ctx.v2AssistantMessageID = undefined
+             }
+             ctx.assistantMessage.finish = value.reason
+             ctx.assistantMessage.cost += usage.cost
+             ctx.assistantMessage.tokens = usage.tokens
+             yield* session.updatePart({
+               id: PartID.ascending(),
+               reason: value.reason,
+               snapshot: completedSnapshot,
+               messageID: ctx.assistantMessage.id,
+               sessionID: ctx.assistantMessage.sessionID,
+               type: "step-finish",
+               tokens: usage.tokens,
+               cost: usage.cost,
+             })
+             yield* session.updateMessage(ctx.assistantMessage)
+             if (ctx.snapshot) {
+               const patch = yield* snapshot.patch(ctx.snapshot)
+               if (patch.files.length) {
+                 yield* session.updatePart({
+                   id: PartID.ascending(),
+                   messageID: ctx.assistantMessage.id,
+                   sessionID: ctx.sessionID,
+                   type: "patch",
+                   hash: patch.hash,
+                   files: patch.files,
+                 })
+               }
+               ctx.snapshot = undefined
+             }
+             yield* summary
+               .summarize({
+                 sessionID: ctx.sessionID,
+                 messageID: ctx.assistantMessage.parentID,
+               })
+               .pipe(Effect.ignore, Effect.forkIn(scope))
+             if (
+               !ctx.assistantMessage.summary &&
+               isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
+             ) {
+               ctx.needsCompaction = true
+             }
+             return
+           }
 
-          case "text-start":
-            if (!ctx.assistantMessage.summary) {
-              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (mirrorAssistant) {
-                yield* events.publish(SessionEvent.Text.Started, {
-                  sessionID: ctx.sessionID,
-                  assistantMessageID: yield* ensureV2AssistantMessage(),
-                  timestamp: DateTime.makeUnsafe(Date.now()),
-                  textID: value.id,
-                })
-              }
-            }
-            ctx.currentText = {
-              id: PartID.ascending(),
-              messageID: ctx.assistantMessage.id,
-              sessionID: ctx.assistantMessage.sessionID,
-              type: "text",
-              text: "",
-              time: { start: Date.now() },
-              metadata: value.providerMetadata,
-            }
-            ctx.currentTextID = value.id
-            yield* session.updatePart(ctx.currentText)
-            return
+           case "text-start":
+             if (!ctx.assistantMessage.summary) {
+               yield* publishIfMigrating(SessionEvent.Text.Started, {
+                 sessionID: ctx.sessionID,
+                 assistantMessageID: yield* ensureV2AssistantMessage(),
+                 timestamp: DateTime.makeUnsafe(Date.now()),
+                 textID: value.id,
+               })
+             }
+             ctx.currentText = {
+               id: PartID.ascending(),
+               messageID: ctx.assistantMessage.id,
+               sessionID: ctx.assistantMessage.sessionID,
+               type: "text",
+               text: "",
+               time: { start: Date.now() },
+               metadata: value.providerMetadata,
+             }
+             ctx.currentTextID = value.id
+             yield* session.updatePart(ctx.currentText)
+             return
 
           case "text-delta":
             if (!ctx.currentText) return
@@ -803,40 +799,37 @@ export const layer = Layer.effect(
             })
             return
 
-          case "text-end":
-            if (!ctx.currentText) return
-            // oxlint-disable-next-line no-self-assign -- reactivity trigger
-            ctx.currentText.text = ctx.currentText.text
-            ctx.currentText.text = (yield* plugin.trigger(
-              "experimental.text.complete",
-              {
-                sessionID: ctx.sessionID,
-                messageID: ctx.assistantMessage.id,
-                partID: ctx.currentText.id,
-              },
-              { text: ctx.currentText.text },
-            )).text
-            if (!ctx.assistantMessage.summary) {
-              // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-              if (mirrorAssistant) {
-                yield* events.publish(SessionEvent.Text.Ended, {
-                  sessionID: ctx.sessionID,
-                  assistantMessageID: yield* currentV2AssistantMessage(),
-                  text: ctx.currentText.text,
-                  timestamp: DateTime.makeUnsafe(Date.now()),
-                  textID: value.id,
-                })
-              }
-            }
-            {
-              const end = Date.now()
-              ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
-            }
-            if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
-            yield* session.updatePart(ctx.currentText)
-            ctx.currentText = undefined
-            ctx.currentTextID = undefined
-            return
+           case "text-end":
+             if (!ctx.currentText) return
+             // oxlint-disable-next-line no-self-assign -- reactivity trigger
+             ctx.currentText.text = ctx.currentText.text
+             ctx.currentText.text = (yield* plugin.trigger(
+               "experimental.text.complete",
+               {
+                 sessionID: ctx.sessionID,
+                 messageID: ctx.assistantMessage.id,
+                 partID: ctx.currentText.id,
+               },
+               { text: ctx.currentText.text },
+             )).text
+             if (!ctx.assistantMessage.summary) {
+               yield* publishIfMigrating(SessionEvent.Text.Ended, {
+                 sessionID: ctx.sessionID,
+                 assistantMessageID: yield* currentV2AssistantMessage(),
+                 text: ctx.currentText.text,
+                 timestamp: DateTime.makeUnsafe(Date.now()),
+                 textID: value.id,
+               })
+             }
+             {
+               const end = Date.now()
+               ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
+             }
+             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
+             yield* session.updatePart(ctx.currentText)
+             ctx.currentText = undefined
+             ctx.currentTextID = undefined
+             return
 
           case "finish":
             return
@@ -935,20 +928,17 @@ export const layer = Layer.effect(
           yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return
         }
-        if (!ctx.assistantMessage.summary) {
-          // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-          if (mirrorAssistant) {
-            yield* events.publish(SessionEvent.Step.Failed, {
-              sessionID: ctx.sessionID,
-              assistantMessageID: yield* ensureV2AssistantMessage(),
-              error: {
-                type: "unknown",
-                message: errorMessage(e),
-              },
-              timestamp: DateTime.makeUnsafe(Date.now()),
-            })
-          }
-        }
+         if (!ctx.assistantMessage.summary) {
+           yield* publishIfMigrating(SessionEvent.Step.Failed, {
+             sessionID: ctx.sessionID,
+             assistantMessageID: yield* ensureV2AssistantMessage(),
+             error: {
+               type: "unknown",
+               message: errorMessage(e),
+             },
+             timestamp: DateTime.makeUnsafe(Date.now()),
+           })
+         }
         ctx.assistantMessage.error = error
         yield* events.publish(Session.Event.Error, {
           sessionID: ctx.assistantMessage.sessionID,
@@ -996,31 +986,28 @@ export const layer = Layer.effect(
                 provider: input.model.providerID,
                 parse,
                 set: (info) => {
-                  // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
-                  const event = mirrorAssistant
-                    ? events.publish(SessionEvent.Retried, {
-                        sessionID: ctx.sessionID,
-                        attempt: info.attempt,
-                        error: {
-                          message: info.message,
-                          isRetryable: true,
-                        },
-                        timestamp: DateTime.makeUnsafe(Date.now()),
-                      })
-                    : Effect.void
-                  return flushV2Fragments().pipe(
-                    Effect.andThen(event),
-                    Effect.andThen(
-                      status.set(ctx.sessionID, {
-                        type: "retry",
-                        attempt: info.attempt,
-                        message: info.message,
-                        action: info.action,
-                        next: info.next,
-                      }),
-                    ),
-                  )
-                },
+                   const event = publishIfMigrating(SessionEvent.Retried, {
+                     sessionID: ctx.sessionID,
+                     attempt: info.attempt,
+                     error: {
+                       message: info.message,
+                       isRetryable: true,
+                     },
+                     timestamp: DateTime.makeUnsafe(Date.now()),
+                   })
+                   return flushV2Fragments().pipe(
+                     Effect.andThen(event),
+                     Effect.andThen(
+                       status.set(ctx.sessionID, {
+                         type: "retry",
+                         attempt: info.attempt,
+                         message: info.message,
+                         action: info.action,
+                         next: info.next,
+                       }),
+                     ),
+                   )
+                 },
               }),
             ),
             Effect.catch(halt),
