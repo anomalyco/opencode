@@ -42,6 +42,8 @@ interface MockClientState {
   listToolsError: string
   listPromptsShouldFail: boolean
   listResourcesShouldFail: boolean
+  listResourceTemplatesShouldFail: boolean
+  completeShouldFail: boolean
   prompts: Array<{ name: string; description?: string }>
   resources: Array<{ name: string; uri: string; description?: string }>
   resourceTemplates: Array<{ name: string; uriTemplate: string; description?: string }>
@@ -101,6 +103,8 @@ function getOrCreateClientState(name?: string): MockClientState {
       listToolsError: "listTools failed",
       listPromptsShouldFail: false,
       listResourcesShouldFail: false,
+      listResourceTemplatesShouldFail: false,
+      completeShouldFail: false,
       prompts: [],
       resources: [],
       resourceTemplates: [],
@@ -261,6 +265,9 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
 
     async listResourceTemplates(params?: { cursor?: string }) {
       if (this._state) this._state.listResourceTemplatesCalls++
+      if (this._state?.listResourceTemplatesShouldFail) {
+        throw new Error("listResourceTemplates failed")
+      }
       const page = this._state?.resourceTemplatePages[params === undefined ? "initial" : (params.cursor ?? "")]
       if (page) return page
       return { resourceTemplates: this._state?.resourceTemplates ?? [] }
@@ -278,6 +285,9 @@ void mock.module("@modelcontextprotocol/sdk/client/index.js", () => ({
         this._state.completeCalls++
         this._state.completeTimeout = options?.timeout
         this._state.completeRequests.push(params)
+      }
+      if (this._state?.completeShouldFail) {
+        throw new Error("complete failed")
       }
       return { completion: { values: [`${params.argument.value}-one`, `${params.argument.value}-two`], total: 2 } }
     }
@@ -1168,9 +1178,10 @@ it.instance(
         })
 
         const templates = yield* mcp.resourceTemplates()
-        expect(Object.keys(templates)).toEqual(["resource-template-server:repo-file"])
-        expect(templates["resource-template-server:repo-file"]?.uriTemplate).toBe("repo://{owner}/{repo}/files/{path}")
-        expect(templates["resource-template-server:repo-file"]?.client).toBe("resource-template-server")
+        const key = "resource-template-server:repo://{owner}/{repo}/files/{path}"
+        expect(Object.keys(templates)).toEqual([key])
+        expect(templates[key]?.uriTemplate).toBe("repo://{owner}/{repo}/files/{path}")
+        expect(templates[key]?.client).toBe("resource-template-server")
         expect(serverState.listResourceTemplatesCalls).toBe(1)
       }),
     ),
@@ -1194,6 +1205,29 @@ it.instance(
 
         expect(yield* mcp.resourceTemplates()).toEqual({})
         expect(serverState.listResourceTemplatesCalls).toBe(0)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "resourceTemplates() returns an empty catalog when listing fails",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "failing-resource-template-server"
+        const serverState = getOrCreateClientState("failing-resource-template-server")
+        serverState.capabilities = { resources: {} }
+        serverState.listResourceTemplatesShouldFail = true
+        serverState.resourceTemplates = [{ name: "hidden", uriTemplate: "hidden://{id}" }]
+
+        yield* mcp.add("failing-resource-template-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        expect(yield* mcp.resourceTemplates()).toEqual({})
+        expect(serverState.listResourceTemplatesCalls).toBe(1)
       }),
     ),
   { config: { mcp: {} } },
@@ -1291,6 +1325,34 @@ it.instance(
 
         expect(result).toBeUndefined()
         expect(serverState.completeCalls).toBe(0)
+      }),
+    ),
+  { config: { mcp: {} } },
+)
+
+it.instance(
+  "complete() returns undefined when completion fails",
+  () =>
+    MCP.Service.use((mcp: MCPNS.Interface) =>
+      Effect.gen(function* () {
+        lastCreatedClientName = "failing-completion-server"
+        const serverState = getOrCreateClientState("failing-completion-server")
+        serverState.capabilities = { completions: {} }
+        serverState.completeShouldFail = true
+
+        yield* mcp.add("failing-completion-server", {
+          type: "local",
+          command: ["echo", "test"],
+        })
+
+        const result = yield* mcp.complete(
+          "failing-completion-server",
+          { type: "ref/prompt", name: "review" },
+          { name: "path", value: "src" },
+        )
+
+        expect(result).toBeUndefined()
+        expect(serverState.completeCalls).toBe(1)
       }),
     ),
   { config: { mcp: {} } },
