@@ -186,7 +186,7 @@ function transformApiResponse(data: any): Model[] {
       return {
         id: info.key || item.model_name,
         name: humanizeModelName(item.model_name || ""),
-        family: info.litellm_provider,
+        family: info.litellm_provider ?? undefined,
         release_date: "",
         attachment: info.supports_vision || info.supports_pdf_input || false,
         reasoning: info.supports_reasoning || false,
@@ -200,7 +200,7 @@ function transformApiResponse(data: any): Model[] {
         },
         limit: {
           context: (info.max_input_tokens || 0) + (info.max_output_tokens || 0),
-          input: info.max_input_tokens,
+          input: info.max_input_tokens ?? undefined,
           output: info.max_output_tokens || 0,
         },
         modalities: {
@@ -344,7 +344,7 @@ export const layer = Layer.effect(
         }),
       )
       return JSON.parse(text) as Record<string, Provider>
-    }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.orDie)
+    }).pipe(Effect.withSpan("ModelsDev.populate"), Effect.flatMap(withMammouthProvider), Effect.orDie)
 
     const [cachedGet, invalidate] = yield* Effect.cachedInvalidateWithTTL(populate, Duration.infinity)
 
