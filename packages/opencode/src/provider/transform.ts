@@ -4,6 +4,7 @@ import type { JSONSchema7 } from "@ai-sdk/provider"
 import type * as Provider from "./provider"
 import type * as ModelsDev from "@opencode-ai/core/models-dev"
 import { iife } from "@/util/iife"
+import { isRecord } from "@/util/record"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -1241,6 +1242,39 @@ export function maxOutputTokens(model: Provider.Model, outputTokenMax = OUTPUT_T
   return Math.min(model.limit.output, outputTokenMax) || outputTokenMax
 }
 
+function expandRefs(schema: JSONSchema7): JSONSchema7 {
+  const definitions = schema.$defs ?? (schema as any).definitions
+
+  function expand(value: unknown, seen = new Set<string>()): unknown {
+    if (Array.isArray(value)) return value.map((v) => expand(v, seen))
+    if (!isRecord(value)) return value
+
+    // Resolve local $ref
+    if (typeof value.$ref === "string" && definitions) {
+      const name =
+        value.$ref.match(/^#\/\$defs\/(.+)$/)?.[1] ??
+        value.$ref.match(/^#\/definitions\/(.+)$/)?.[1]
+      if (name && !seen.has(name)) {
+        const target = (definitions as Record<string, unknown>)[name]
+        if (target && isRecord(target)) {
+          const { $ref: _, ...targetRest } = value
+          seen.add(name)
+          return expand({ ...target, ...targetRest }, seen)
+        }
+      }
+    }
+
+    const result: Record<string, unknown> = {}
+    for (const [key, val] of Object.entries(value)) {
+      if (key === "$defs" || key === "definitions") continue
+      result[key] = expand(val, seen)
+    }
+    return result
+  }
+
+  return expand(schema) as JSONSchema7
+}
+
 export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 {
   /*
   if (["openai", "azure"].includes(providerID)) {
@@ -1276,6 +1310,11 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
     if (typeof sanitized === "object" && sanitized !== null && !Array.isArray(sanitized)) {
       schema = sanitized
     }
+  }
+
+  // Expand $ref/$defs for DeepSeek (rejects JSON Schema 2020-12 $ref pointers)
+  if (model.api.id.toLowerCase().includes("deepseek")) {
+    schema = expandRefs(schema)
   }
 
   // Convert integer enums to string enums for Google/Gemini

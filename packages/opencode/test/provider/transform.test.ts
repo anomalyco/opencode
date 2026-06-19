@@ -3935,3 +3935,109 @@ describe("ProviderTransform.providerOptions - ai-gateway-provider", () => {
     expect(result).toEqual({ openaiCompatible: { reasoningEffort: "high" } })
   })
 })
+
+describe("ProviderTransform.schema - deepseek $ref expansion", () => {
+  const deepseekModel = {
+    providerID: "deepseek",
+    api: { id: "deepseek-chat" },
+  } as any
+
+  test("expands simple $ref with $defs", () => {
+    const schema = {
+      type: "object",
+      properties: { query: { $ref: "#/$defs/Query" } },
+      $defs: { Query: { type: "string", description: "Search query" } },
+    } as any
+    const result = ProviderTransform.schema(deepseekModel, schema) as any
+    expect(result.properties?.query).toEqual({ type: "string", description: "Search query" })
+    expect(result.$defs).toBeUndefined()
+  })
+
+  test("expands nested $ref references", () => {
+    const schema = {
+      type: "object",
+      properties: { user: { $ref: "#/$defs/User" } },
+      $defs: {
+        User: {
+          type: "object",
+          properties: { name: { type: "string" }, address: { $ref: "#/$defs/Address" } },
+        },
+        Address: { type: "string" },
+      },
+    } as any
+    const result = ProviderTransform.schema(deepseekModel, schema) as any
+    expect(result.properties?.user).toEqual({
+      type: "object",
+      properties: { name: { type: "string" }, address: { type: "string" } },
+    })
+  })
+
+  test("handles circular $ref by returning empty object", () => {
+    const schema = {
+      type: "object",
+      properties: { node: { $ref: "#/$defs/Node" } },
+      $defs: { Node: { type: "object", properties: { self: { $ref: "#/$defs/Node" } } } },
+    } as any
+    const result = ProviderTransform.schema(deepseekModel, schema) as any
+    // Circular ref: second visit returns empty (seen set prevents infinite loop)
+    expect(result.properties?.node?.properties?.self).toBeDefined()
+  })
+
+  test("preserves description when expanding $ref", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        query: {
+          $ref: "#/$defs/Query",
+          description: "Override description",
+        },
+      },
+      $defs: { Query: { type: "string", description: "Original description" } },
+    } as any
+    const result = ProviderTransform.schema(deepseekModel, schema) as any
+    // Override description should be preserved over definition description
+    expect(result.properties?.query).toEqual({
+      type: "string",
+      description: "Override description",
+    })
+  })
+
+  test("expands definitions (legacy format)", () => {
+    const schema = {
+      type: "object",
+      properties: { query: { $ref: "#/definitions/Query" } },
+      definitions: { Query: { type: "string" } },
+    } as any
+    const result = ProviderTransform.schema(deepseekModel, schema) as any
+    expect(result.properties?.query).toEqual({ type: "string" })
+    expect(result.definitions).toBeUndefined()
+  })
+
+  test("does not expand $ref for non-DeepSeek providers", () => {
+    const openaiModel = { providerID: "openai", api: { id: "gpt-4o" } } as any
+    const schema = {
+      type: "object",
+      properties: { query: { $ref: "#/$defs/Query" } },
+      $defs: { Query: { type: "string" } },
+    } as any
+    const result = ProviderTransform.schema(openaiModel, schema) as any
+    // Should be unchanged — $ref preserved
+    expect(result.properties?.query?.$ref).toBe("#/$defs/Query")
+    expect(result.$defs).toBeDefined()
+  })
+
+  test("expands $ref in array items", () => {
+    const schema = {
+      type: "object",
+      properties: {
+        tags: {
+          type: "array",
+          items: { $ref: "#/$defs/Tag" },
+        },
+      },
+      $defs: { Tag: { type: "string" } },
+    } as any
+    const result = ProviderTransform.schema(deepseekModel, schema) as any
+    expect(result.properties?.tags?.items).toEqual({ type: "string" })
+  })
+})
