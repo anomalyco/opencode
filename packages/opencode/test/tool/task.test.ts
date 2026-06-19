@@ -381,6 +381,46 @@ describe("tool.task", () => {
     }),
   )
 
+  // Non-Anthropic models fabricate arbitrary task_id values that lack the "ses" prefix.
+  // SessionID.make threw synchronously on such values, escaping catchCause and crashing
+  // every subagent launch. The tool must fall through to a fresh child instead.
+  it.instance("execute creates a child when task_id is not a valid session id", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      let seen: SessionPrompt.PromptInput | undefined
+      const promptOps = stubOps({ text: "created", onPrompt: (input) => (seen = input) })
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          // Mimics grok-composer / GLM-4.7 fabricating a UUID as task_id
+          task_id: "4178c106-bf3c-4a14-89e4-07d68188bdd8",
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      const kids = yield* sessions.children(chat.id)
+      expect(kids).toHaveLength(1)
+      expect(kids[0]?.id).toBe(result.metadata.sessionId)
+      expect(result.output).toContain(`<task id="${result.metadata.sessionId}" state="completed">`)
+      expect(seen?.sessionID).toBe(result.metadata.sessionId)
+    }),
+  )
+
   it.instance(
     "execute shapes child permissions for task, todowrite, and primary tools",
     () =>

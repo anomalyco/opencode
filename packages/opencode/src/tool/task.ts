@@ -10,7 +10,7 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
-import { Effect, Exit, Schema, Scope } from "effect"
+import { Effect, Exit, Option, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
@@ -118,8 +118,13 @@ export const TaskTool = Tool.define(
         return yield* Effect.fail(new Error(`Unknown agent type: ${params.subagent_type} is not a valid agent type`))
       }
 
-      const session = params.task_id
-        ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
+      // Non-Anthropic models (e.g. grok-composer, GLM-4.7) fabricate arbitrary task_id values.
+      // SessionID.make throws synchronously on a non-"ses" value, which escapes Effect.catchCause
+      // and crashes the subagent launch. Validate with decodeUnknownOption so invalid IDs fall
+      // through to creating a fresh child session. https://github.com/anomalyco/opencode/issues/16755
+      const resumedID = params.task_id ? Schema.decodeUnknownOption(SessionID)(params.task_id) : Option.none<SessionID>()
+      const session = Option.isSome(resumedID)
+        ? yield* sessions.get(resumedID.value).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
       const parent = yield* sessions.get(ctx.sessionID)
       const childPermission = deriveSubagentSessionPermission({
