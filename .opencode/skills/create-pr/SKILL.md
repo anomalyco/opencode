@@ -64,6 +64,8 @@ Use the GitHub CLI:
 gh pr create --base <base> --head <branch> --title "<title>" --body "<body>"
 ```
 
+Never use em dashes (-- or —) in the body - they are a strong signal of AI-generated text and will get the PR ignored.
+
 Check if the repo has a PR template at `.github/pull_request_template.md`. If it does, use that format for the body.
 
 If no template exists, use this fallback:
