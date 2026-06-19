@@ -30,6 +30,11 @@ export type FileDiff = typeof FileDiff.Type
 
 const prune = "7.days"
 const limit = 2 * 1024 * 1024
+// Skip untracked top-level directories that contribute more candidate files
+// than this. A build cache (e.g. .cache/bazel) can dump hundreds of thousands
+// of files into the worktree; stat + hashing them on every snapshot can take
+// minutes, so the whole subtree is excluded instead.
+const crowd = 10_000
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
 const cfg = ["-c", "core.autocrlf=false", ...core]
 const quote = [...cfg, "-c", "core.quotepath=false"]
@@ -256,8 +261,37 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
 
           const tracked = diff.text.split("\0").filter(Boolean)
           const untracked = other.text.split("\0").filter(Boolean)
-          const all = Array.from(new Set([...tracked, ...untracked]))
-          if (!all.length) return
+
+          // Bucket untracked candidates by their top-level directory. A single
+          // untracked directory contributing more than `crowd` files (e.g. a
+          // build cache like .cache/bazel) would otherwise force a stat + hash
+          // of every file on each snapshot. Skip the whole subtree and exclude
+          // it going forward so later `ls-files` runs no longer enumerate it.
+          const counts = new Map<string, number>()
+          for (const item of untracked) {
+            const top = item.split("/")[0]
+            if (top === item) continue
+            counts.set(top, (counts.get(top) ?? 0) + 1)
+          }
+          const crowded = new Set(
+            Array.from(counts)
+              .filter(([, count]) => count > crowd)
+              .map(([dir]) => dir),
+          )
+          const crowdedExcludes = Array.from(crowded, (dir) => `${dir}/`)
+          if (crowded.size > 0) {
+            yield* Effect.logInfo("excluding crowded directories from snapshot", {
+              directories: Array.from(crowded),
+            })
+          }
+
+          const all = Array.from(
+            new Set([...tracked, ...untracked.filter((item) => !crowded.has(item.split("/")[0]))]),
+          )
+          if (!all.length) {
+            if (crowdedExcludes.length) yield* sync(crowdedExcludes)
+            return
+          }
 
           // Resolve source-repo ignore rules against the exact candidate set.
           // --no-index keeps this pattern-based even when a path is already tracked.
@@ -271,7 +305,10 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           }
 
           const allow = all.filter((item) => !ignored.has(item))
-          if (!allow.length) return
+          if (!allow.length) {
+            if (crowdedExcludes.length) yield* sync(crowdedExcludes)
+            return
+          }
 
           const large = new Set(
             (yield* Effect.all(
@@ -291,7 +328,9 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
             )).filter((item): item is string => Boolean(item)),
           )
           const block = new Set(untracked.filter((item) => large.has(item)))
-          yield* sync(Array.from(block))
+          // Persist both the crowded-directory excludes and the per-file blocks
+          // in a single write (sync rewrites info/exclude wholesale).
+          yield* sync([...crowdedExcludes, ...block])
           // Stage only the allowed candidate paths so snapshot updates stay scoped.
           yield* stage(allow.filter((item) => !block.has(item)))
         })
