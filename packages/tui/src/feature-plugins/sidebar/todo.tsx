@@ -19,7 +19,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
             <text fg={theme().text}>{open() ? "▼" : "▶"}</text>
           </Show>
           <text fg={theme().text}>
-            <b>Todo</b>
+            <b>Todos</b>
           </text>
         </box>
         <Show when={list().length <= 2 || open()}>
