@@ -43,3 +43,4 @@ bot/opencode.json
 bot/tmp_startup_configs/
 bot/venv/
 bot/.pytest_cache/
+bot/attaches/
