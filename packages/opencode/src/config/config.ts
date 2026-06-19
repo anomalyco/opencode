@@ -1057,6 +1057,12 @@ export namespace Config {
         .boolean()
         .optional()
         .describe("Create a root session on first instance bootstrap when none exist"),
+      ensureOneSession: z
+        .boolean()
+        .optional()
+        .describe(
+          "When true, only one active main session per directory; duplicate creates return existing or wait",
+        ),
       experimental: z
         .object({
           disable_paste_summary: z.boolean().optional(),

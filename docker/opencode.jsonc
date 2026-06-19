@@ -17,5 +17,6 @@
       "enabled": true
     }
   },
-  "ensureSession": true
+  "ensureSession": true,
+  "ensureOneSession": true
 }
