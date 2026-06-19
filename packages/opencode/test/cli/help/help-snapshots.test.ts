@@ -92,6 +92,19 @@ const SUBCOMMANDS = [
 const SNAPSHOT_ENV = { COLUMNS: "120" }
 
 describe("opencode CLI help-text snapshots", () => {
+  cliIt.live(
+    "invalid top-level flags include the parser error before help",
+    ({ opencode }) =>
+      Effect.gen(function* () {
+        const result = yield* opencode.spawn(["--definitely-not-real"], { env: SNAPSHOT_ENV })
+        expect(result.exitCode).toBe(1)
+        expect(result.stderr).toContain("Unknown arguments:")
+        expect(result.stderr).toContain("definitely-not-real")
+        expect(result.stderr).toContain("Commands:")
+      }),
+    30_000,
+  )
+
   // Single test, parallel spawns. Each command's help fires under
   // `concurrency: 8` — wall-clock stays under ~10s even for ~35 commands,
   // versus ~1 minute if we serialized.
