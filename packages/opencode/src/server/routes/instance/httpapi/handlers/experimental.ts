@@ -192,7 +192,7 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
         const filePath = join(axiDir, file)
         try {
           const stats = await stat(filePath)
-          if (!stats.isFile() && !stats.isSymbolicLink()) continue
+          if (!stats.isFile()) continue
         } catch {
           continue
         }

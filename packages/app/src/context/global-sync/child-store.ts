@@ -330,6 +330,12 @@ export function createChildStoreManager(input: {
     axiToggles.get(key)?.(true)
   }
 
+  function disableAxi(directory: string) {
+    const key = directoryKey(directory)
+    if (!axiDirectories.delete(key)) return
+    axiToggles.get(key)?.(false)
+  }
+
   function projectMeta(directory: string, patch: ProjectMeta) {
     const key = directoryKey(directory)
     const [store, setStore] = ensureChild(directory)
@@ -372,6 +378,7 @@ export function createChildStoreManager(input: {
     mcp: (directory: string) => mcpDirectories.has(directoryKey(directory)),
     axi: (directory: string) => axiDirectories.has(directoryKey(directory)),
     disableMcp,
+    disableAxi,
     disposeDirectory,
     runEviction,
     vcsCache,
