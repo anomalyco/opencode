@@ -6,6 +6,16 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import open from "open"
 import { networkInterfaces } from "os"
 
+type BrowserOpener = (target: string) => Promise<unknown>
+
+export function openBrowser(target: string, opener: BrowserOpener = open) {
+  try {
+    return Promise.resolve(opener(target)).catch(() => {})
+  } catch {
+    return Promise.resolve()
+  }
+}
+
 function getNetworkIPs() {
   const nets = networkInterfaces()
   const results: string[] = []
@@ -72,11 +82,11 @@ export const WebCommand = effectCmd({
       }
 
       // Open localhost in browser
-      open(localhostUrl).catch(() => {})
+      void openBrowser(localhostUrl)
     } else {
       const displayUrl = server.url.toString()
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, displayUrl)
-      open(displayUrl).catch(() => {})
+      void openBrowser(displayUrl)
     }
 
     yield* Effect.never
