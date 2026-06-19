@@ -600,6 +600,19 @@ export type AgentPart = {
   }
 }
 
+export type SkillPart = {
+  id: string
+  sessionID: string
+  messageID: string
+  type: "skill"
+  name: string
+  source?: {
+    value: string
+    start: number
+    end: number
+  }
+}
+
 export type RetryPart = {
   id: string
   sessionID: string
@@ -633,6 +646,7 @@ export type Part =
   | SnapshotPart
   | PatchPart
   | AgentPart
+  | SkillPart
   | RetryPart
   | CompactionPart
 
@@ -2605,6 +2619,17 @@ export type FilePartInput = {
 export type AgentPartInput = {
   id?: string
   type: "agent"
+  name: string
+  source?: {
+    value: string
+    start: number
+    end: number
+  }
+}
+
+export type SkillPartInput = {
+  id?: string
+  type: "skill"
   name: string
   source?: {
     value: string
@@ -7877,7 +7902,7 @@ export type SessionPromptData = {
     format?: OutputFormat
     system?: string
     variant?: string
-    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SkillPartInput | SubtaskPartInput>
   }
   path: {
     sessionID: string
@@ -8224,7 +8249,7 @@ export type SessionPromptAsyncData = {
     format?: OutputFormat
     system?: string
     variant?: string
-    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SubtaskPartInput>
+    parts: Array<TextPartInput | FilePartInput | AgentPartInput | SkillPartInput | SubtaskPartInput>
   }
   path: {
     sessionID: string

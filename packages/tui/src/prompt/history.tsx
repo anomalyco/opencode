@@ -1,7 +1,7 @@
 import path from "path"
 import { onMount } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
-import type { AgentPart, FilePart, TextPart } from "@opencode-ai/sdk/v2"
+import type { AgentPart, FilePart, SkillPart, TextPart } from "@opencode-ai/sdk/v2"
 import { createSimpleContext } from "../context/helper"
 import { useTuiPaths } from "../context/runtime"
 import { appendText, readText, writeText } from "../util/persistence"
@@ -12,6 +12,7 @@ export type PromptInfo = {
   parts: (
     | Omit<FilePart, "id" | "messageID" | "sessionID">
     | Omit<AgentPart, "id" | "messageID" | "sessionID">
+    | Omit<SkillPart, "id" | "messageID" | "sessionID">
     | (Omit<TextPart, "id" | "messageID" | "sessionID"> & {
         source?: {
           text: {

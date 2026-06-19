@@ -60,6 +60,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { Skill } from "@/skill"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -121,6 +122,7 @@ export const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const sys = yield* SystemPrompt.Service
     const llm = yield* LLM.Service
+    const skill = yield* Skill.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
@@ -972,10 +974,32 @@ export const layer = Layer.effect(
           ]
         }
 
+        if (part.type === "skill") {
+          const found = yield* skill.get(part.name)
+          if (!found) return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
+          return [
+            { ...part, messageID: info.id, sessionID: input.sessionID },
+            {
+              messageID: info.id,
+              sessionID: input.sessionID,
+              type: "text",
+              synthetic: true,
+              text: `## Skill: ${found.name}\n\n${found.content.trim()}`,
+            },
+          ]
+        }
+
         return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
       })
 
-      const resolvedParts = yield* Effect.forEach(input.parts, resolvePart, { concurrency: "unbounded" }).pipe(
+      const seenSkills = new Set<string>()
+      const promptParts = input.parts.filter((part) => {
+        if (part.type !== "skill") return true
+        if (seenSkills.has(part.name)) return false
+        seenSkills.add(part.name)
+        return true
+      })
+      const resolvedParts = yield* Effect.forEach(promptParts, resolvePart, { concurrency: "unbounded" }).pipe(
         Effect.map((x) => x.flat().map(assign)),
       )
 
@@ -1579,6 +1603,7 @@ export const defaultLayer = Layer.suspend(() =>
         Database.defaultLayer,
         SystemPrompt.defaultLayer,
         LLM.defaultLayer,
+        Skill.defaultLayer,
         CrossSpawnSpawner.defaultLayer,
         RuntimeFlags.defaultLayer,
         EventV2Bridge.defaultLayer,
@@ -1609,6 +1634,7 @@ export const PromptInput = Schema.Struct({
       SessionV1.TextPartInput,
       SessionV1.FilePartInput,
       SessionV1.AgentPartInput,
+      SessionV1.SkillPartInput,
       SessionV1.SubtaskPartInput,
     ]).annotate({ discriminator: "type" }),
   ),
@@ -1707,6 +1733,7 @@ export const node = LayerNode.make(layer, [
   ToolRegistry.node,
   Truncate.node,
   Image.node,
+  Skill.node,
   CrossSpawnSpawner.node,
   Instruction.node,
   SessionRunState.node,

@@ -28,7 +28,7 @@ import { useEvent } from "../../context/event"
 import { editorSelectionKey, useEditorContext, type EditorSelection } from "../../context/editor"
 import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
-import { promptOffsetWidth } from "../../prompt/display"
+import { displayCharAt, mentionTriggerIndex, promptOffsetWidth } from "../../prompt/display"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
@@ -203,6 +203,7 @@ export function Prompt(props: PromptProps) {
   })
   const editorContextLabelState = createMemo(() => editor.labelState())
   const [auto, setAuto] = createSignal<AutocompleteRef>()
+  const [skillTrigger, setSkillTrigger] = createSignal<{ start: number; end: number }>()
   const workspace = usePromptWorkspace(props.sessionID)
   const move = usePromptMove({ projectID: project.project, sessionID: () => props.sessionID })
   const [cursorVersion, setCursorVersion] = createSignal(0)
@@ -669,6 +670,11 @@ export function Prompt(props: PromptProps) {
         end = part.source.end
         virtualText = part.source.value
         styleId = agentStyleId
+      } else if (part.type === "skill" && part.source) {
+        start = part.source.start
+        end = part.source.end
+        virtualText = part.source.value
+        styleId = agentStyleId
       } else if (part.type === "text" && part.source?.text) {
         start = part.source.text.start
         end = part.source.text.end
@@ -708,6 +714,9 @@ export function Prompt(props: PromptProps) {
               if (part.type === "agent" && part.source) {
                 part.source.start = extmark.start
                 part.source.end = extmark.end
+              } else if (part.type === "skill" && part.source) {
+                part.source.start = extmark.start
+                part.source.end = extmark.end
               } else if (part.type === "file" && part.source?.text) {
                 part.source.text.start = extmark.start
                 part.source.text.end = extmark.end
@@ -725,6 +734,60 @@ export function Prompt(props: PromptProps) {
         draft.prompt.parts = newParts
       }),
     )
+  }
+
+  function insertSkill(skill: string) {
+    const trigger = skillTrigger()
+    if (!trigger) return
+    const charAfter = displayCharAt(input.plainText, trigger.end)
+    const virtualText = `$${skill}`
+    const insertText = virtualText + (charAfter === " " ? "" : " ")
+
+    input.cursorOffset = trigger.start
+    const startCursor = input.logicalCursor
+    input.cursorOffset = trigger.end
+    const endCursor = input.logicalCursor
+    input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
+    input.insertText(insertText)
+
+    const extmarkId = input.extmarks.create({
+      start: trigger.start,
+      end: trigger.start + promptOffsetWidth(virtualText),
+      virtual: true,
+      styleId: agentStyleId,
+      typeId: promptPartTypeId,
+    })
+
+    setStore(
+      produce((draft) => {
+        draft.prompt.input = input.plainText
+        const partIndex = draft.prompt.parts.length
+        draft.prompt.parts.push({
+          type: "skill",
+          name: skill,
+          source: {
+            value: virtualText,
+            start: trigger.start,
+            end: trigger.start + promptOffsetWidth(virtualText),
+          },
+        })
+        draft.extmarkToPartIndex.set(extmarkId, partIndex)
+      }),
+    )
+    setSkillTrigger(undefined)
+  }
+
+  function openSkillPicker(value: string) {
+    if (store.mode !== "normal") return
+    if (dialog.stack.length > 0) return
+    if (auto()?.visible) return
+    const offset = input.cursorOffset
+    const index = mentionTriggerIndex(value, offset, "$")
+    if (index === undefined) return
+    if (input.getTextRange(index, offset) !== "$") return
+
+    setSkillTrigger({ start: index, end: offset })
+    dialog.replace(() => <DialogSkill onSelect={insertSkill} />)
   }
 
   const stashCommands = createMemo(() =>
@@ -1029,6 +1092,13 @@ export function Prompt(props: PromptProps) {
 
     // Filter out text parts (pasted content) since they're now expanded inline
     const nonTextParts = store.prompt.parts.filter((part) => part.type !== "text")
+    const seenSkills = new Set<string>()
+    const sendingParts = nonTextParts.filter((part) => {
+      if (part.type !== "skill") return true
+      if (seenSkills.has(part.name)) return false
+      seenSkills.add(part.name)
+      return true
+    })
 
     // Capture mode before it gets reset
     const currentMode = store.mode
@@ -1099,7 +1169,7 @@ export function Prompt(props: PromptProps) {
                 type: "text",
                 text: inputText,
               },
-              ...nonTextParts,
+              ...sendingParts,
             ],
           },
           { throwOnError: true },
@@ -1372,6 +1442,7 @@ export function Prompt(props: PromptProps) {
                 const value = input.plainText
                 setStore("prompt", "input", value)
                 auto()?.onInput(value)
+                openSkillPicker(value)
                 syncExtmarksWithPromptParts()
                 setCursorVersion((value) => value + 1)
               }}

@@ -213,6 +213,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Layer.provideMerge(deps),
   )
   return SessionPrompt.layer.pipe(
+    Layer.provide(Skill.defaultLayer),
     Layer.provide(SessionRevert.defaultLayer),
     Layer.provide(Image.defaultLayer),
     Layer.provide(summary),
@@ -2056,6 +2057,51 @@ noLLMServer.instance(
       expect(text[0]?.startsWith("Called the Read tool with the following input:")).toBe(true)
       expect(text[1]?.includes("Read tool failed to read")).toBe(true)
       expect(text[2]).toBe("after-file")
+
+      yield* sessions.remove(session.id)
+    }),
+  { config: cfg },
+)
+
+noLLMServer.instance(
+  "resolves selected skill parts without replacing prompt text",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      yield* writeText(
+        path.join(dir, ".opencode", "skill", "review", "SKILL.md"),
+        "---\nname: review\ndescription: Review implementation\n---\nReview the implementation carefully.\n",
+      )
+      yield* writeText(
+        path.join(dir, ".opencode", "skill", "write-a-prd", "SKILL.md"),
+        "---\nname: write-a-prd\ndescription: Write a PRD\n---\nWrite a focused PRD.\n",
+      )
+
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "Use $review and $write-a-prd on this change" },
+          { type: "skill", name: "review", source: { value: "$review", start: 4, end: 11 } },
+          { type: "skill", name: "write-a-prd", source: { value: "$write-a-prd", start: 16, end: 28 } },
+          { type: "skill", name: "review", source: { value: "$review", start: 4, end: 11 } },
+        ],
+      })
+
+      if (msg.info.role !== "user") throw new Error("expected user message")
+
+      const skills = msg.parts.filter((part) => part.type === "skill").map((part) => part.name)
+      const text = msg.parts.filter((part) => part.type === "text").map((part) => part.text)
+
+      expect(skills).toEqual(["review", "write-a-prd"])
+      expect(text).toContain("Use $review and $write-a-prd on this change")
+      expect(text.filter((part) => part.includes("Review the implementation carefully."))).toHaveLength(1)
+      expect(text.filter((part) => part.includes("Write a focused PRD."))).toHaveLength(1)
 
       yield* sessions.remove(session.id)
     }),
