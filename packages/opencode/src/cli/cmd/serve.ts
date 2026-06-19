@@ -16,6 +16,7 @@ export const ServeCommand = effectCmd({
       console.log("Warning: OPENCODE_SERVER_PASSWORD is not set; server is unsecured.")
     }
     const opts = yield* resolveNetworkOptions(args)
+    if (opts.appName) process.env.OPENCODE_APP_NAME = opts.appName
     const server = yield* Effect.promise(() => Server.listen(opts))
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
 

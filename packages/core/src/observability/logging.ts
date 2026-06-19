@@ -1,4 +1,5 @@
 import { Formatter, Logger, type LogLevel } from "effect"
+import { mkdirSync } from "fs"
 import path from "path"
 import { Global } from "../global"
 import { runID } from "./shared"
@@ -46,7 +47,10 @@ function format(input: unknown) {
   return /^[^\s="\\]+$/.test(value) ? value : JSON.stringify(value)
 }
 
-export function fileLogger(file = path.join(Global.Path.log, "lildax.log"), id: string = runID) {
+export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), id: string = runID) {
+  // Ensure the log directory exists (app-name dir may not be created yet if
+  // --app-name wasn't known at module import time).
+  mkdirSync(path.dirname(file), { recursive: true })
   // Do not set batchWindow to 0; it causes high idle CPU usage.
   return Logger.toFile(formatter(id), file, { flag: "a" })
 }

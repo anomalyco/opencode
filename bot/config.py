@@ -15,9 +15,10 @@ DEFAULT_CONFIG = {
     "thinking_peer_id": 2000000506,
     "llama_server_path": "llama-server",
     "llama_server_host": "http://localhost:8081",  # URL удалённого llama-server
-    "opencode_config_path": "~/.config/lildax/config.json",
+    "opencode_config_path": "~/.config/opencode/config.json",
     "models": [],
     "default_model": "qwen3.5-122b",
+    "allowed_folders": ["/tmp"],
 }
 
 
@@ -46,7 +47,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--opencode-bin", type=str, default=None,
-    help="Path to opencode binary (lildax). Overrides opencode_bin_path from config."
+    help="Path to opencode binary. Overrides opencode_bin_path from config."
 )
 parser.add_argument(
     "--llama-host", type=str, default=None,
@@ -64,7 +65,7 @@ CONFIG = load_config(args.config)
 
 # ---------- Глобальные константы из конфигурации ----------
 VK_TOKEN = CONFIG["vk_token"]
-OPENCODE_URL = "http://127.0.0.1:4098" #CONFIG["opencode_url"]
+OPENCODE_URL = CONFIG["opencode_url"]
 SESSION_FILE = Path(CONFIG["session_file"])
 VK_API_VERSION = CONFIG["vk_api_version"]
 LONGPOLL_WAIT = CONFIG["longpoll_wait"]
@@ -76,6 +77,8 @@ LLAMA_SERVER_PATH = CONFIG.get("llama_server_path", None)
 LLAMA_SERVER_HOST = CONFIG.get("llama_server_host", "http://localhost:8081")
 MCP_SERVERS = CONFIG.get("mcp_servers", {})
 SUBAGENT_PREFIX = CONFIG.get("subagent_prefix", "[subagent] ")
+OPENCODE_APP_NAME = CONFIG.get("opencode-app-name")
+ALLOWED_FOLDERS = CONFIG.get("allowed_folders", ["/tmp"])
 
 if not VK_TOKEN:
     raise ValueError("VK_TOKEN is required in config file")
@@ -151,6 +154,8 @@ def switch_config(config_name: str) -> bool:
     current_module.LLAMA_SERVER_HOST = new_config.get("llama_server_host", "http://localhost:8081")
     current_module.MCP_SERVERS = new_config.get("mcp_servers", {})
     current_module.SUBAGENT_PREFIX = new_config.get("subagent_prefix", "[subagent] ")
+    current_module.OPENCODE_APP_NAME = new_config.get("opencode-app-name")
+    current_module.ALLOWED_FOLDERS = new_config.get("allowed_folders", ["/tmp"])
     current_module.OPENCODE_BIN = Path(new_config["opencode_bin_path"])
     if not current_module.OPENCODE_BIN.is_absolute():
         current_module.OPENCODE_BIN = (SCRIPT_DIR / current_module.OPENCODE_BIN).resolve()

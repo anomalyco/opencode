@@ -63,12 +63,17 @@ const cli = yargs(args)
     describe: "run without external plugins",
     type: "boolean",
   })
+  .option("app-name", {
+    describe: "app name used for config and data directories (default: opencode)",
+    type: "string",
+  })
   .middleware(async (opts) => {
     if (opts.printLogs) process.env.OPENCODE_PRINT_LOGS = "1"
     if (opts.logLevel) process.env.OPENCODE_LOG_LEVEL = opts.logLevel
     if (opts.pure) {
       process.env.OPENCODE_PURE = "1"
     }
+    if (opts.appName) process.env.OPENCODE_APP_NAME = opts.appName as string
 
     Heap.start()
 

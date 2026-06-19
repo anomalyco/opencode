@@ -1,5 +1,9 @@
 """
 HTTP клиент для OpenCode API
+
+Использует opencode API (/session/...) вместо v2 API (/api/session/...).
+v2 API был для lildax и использует SessionExecution.noopLayer - agent loop не работает.
+opencode API использует SessionPrompt с реальным agent loop.
 """
 import json
 from typing import Dict, List, Optional
@@ -42,11 +46,11 @@ class OpenCodeClient:
     async def create_session(self, model: str = None) -> str:
         """Создаёт новую сессию и возвращает её ID."""
         data = model_to_api_format(model or config.CLI_MODEL)
-        async with self.session.post(f"{self.base_url}/api/session", json=data) as resp:
+        # opencode API: POST /session
+        async with self.session.post(f"{self.base_url}/session", json=data) as resp:
             resp.raise_for_status()
             resp_data = await resp.json()
-            # API возвращает {data: {id: ...}}
-            session_id = resp_data.get("data", resp_data).get("id")
+            session_id = resp_data.get("id", resp_data.get("data", {}).get("id"))
             logger.debug(f"Created OpenCode session {session_id}")
             return session_id
 
@@ -55,13 +59,13 @@ class OpenCodeClient:
     ) -> Optional[List[dict]]:
         """Получает сообщения сессии."""
         try:
-            url = f"{self.base_url}/api/session/{session_id}/message?limit={limit}"
+            # opencode API: GET /session/:sessionID/message
+            url = f"{self.base_url}/session/{session_id}/message?limit={limit}"
             async with self.session.get(url) as resp:
                 if resp.status != 200:
                     return None
                 resp_data = await resp.json()
-                # API возвращает {data: [...], cursor: {...}}
-                return resp_data.get("data", resp_data)
+                return resp_data if isinstance(resp_data, list) else resp_data.get("data", resp_data)
         except Exception as e:
             logger.warning(f"Failed to fetch messages for {session_id}: {e}")
             return None
@@ -69,15 +73,21 @@ class OpenCodeClient:
     async def send_prompt(
         self, session_id: str, text: str
     ) -> bool:
-        """Отправляет промпт в сессию."""
-        url = f"{self.base_url}/api/session/{session_id}/prompt"
-        # API требует формат {prompt: {text: "..."}}
-        data = {"prompt": {"text": text}}
+        """Отправляет промпт в сессию.
+
+        Использует /session/:sessionID/prompt_async endpoint opencode API,
+        который реально запускает agent loop.
+        """
+        # opencode API: POST /session/:sessionID/prompt_async
+        # Формат: {parts: [{type: "text", text: "..."}]}
+        url = f"{self.base_url}/session/{session_id}/prompt_async"
+        data = {"parts": [{"type": "text", "text": text}]}
         async with self.session.post(url, json=data) as resp:
-            if resp.status == 200:
+            if resp.status in (200, 204):
                 logger.debug(f"Prompt sent for session {session_id}")
                 return True
-            logger.error(f"Failed to send prompt: {resp.status}")
+            text = await resp.text()
+            logger.error(f"Failed to send prompt: {resp.status} - {text}")
             return False
 
     # ---------- Разрешения ----------
@@ -85,11 +95,11 @@ class OpenCodeClient:
     async def get_pending_permissions(self) -> List[dict]:
         """Получает список ожидающих разрешений."""
         try:
-            async with self.session.get(f"{self.base_url}/api/permission/request") as resp:
+            # opencode API: GET /permission/request (если есть)
+            async with self.session.get(f"{self.base_url}/permission/request") as resp:
                 if resp.status != 200:
                     return []
                 resp_data = await resp.json()
-                # API возвращает {location: {...}, data: [...]}
                 return resp_data.get("data", resp_data)
         except Exception as e:
             logger.warning(f"Error fetching permissions: {e}")
@@ -104,8 +114,9 @@ class OpenCodeClient:
         """
         reply_map = {"always": "always", "once": "once", "never": "reject"}
         reply = reply_map.get(response, response)
-        url = f"{self.base_url}/api/session/{session_id}/permission/{permission_id}/reply"
-        data = {"reply": reply}
+        # opencode API: POST /session/:sessionID/permissions/:permissionID
+        url = f"{self.base_url}/session/{session_id}/permissions/{permission_id}"
+        data = {"response": reply}
         async with self.session.post(url, json=data) as resp:
             if resp.status in (200, 204):
                 logger.debug(f"Permission {permission_id} answered: {reply}")
@@ -118,11 +129,10 @@ class OpenCodeClient:
     async def get_pending_questions(self) -> List[dict]:
         """Получает список ожидающих вопросов."""
         try:
-            async with self.session.get(f"{self.base_url}/api/question/request") as resp:
+            async with self.session.get(f"{self.base_url}/question/request") as resp:
                 if resp.status != 200:
                     return []
                 resp_data = await resp.json()
-                # API возвращает {location: {...}, data: [...]}
                 return resp_data.get("data", resp_data)
         except Exception as e:
             logger.warning(f"Error fetching questions: {e}")
@@ -132,7 +142,7 @@ class OpenCodeClient:
         self, session_id: str, question_id: str, answer: str
     ) -> bool:
         """Отправляет ответ на вопрос."""
-        url = f"{self.base_url}/api/session/{session_id}/question/{question_id}/reply"
+        url = f"{self.base_url}/session/{session_id}/question/{question_id}/reply"
         data = {"answers": [[answer]]}
         async with self.session.post(url, json=data) as resp:
             if resp.status in (200, 204):
@@ -146,12 +156,12 @@ class OpenCodeClient:
     async def get_all_sessions(self) -> List[dict]:
         """Получает список всех сессий."""
         try:
-            async with self.session.get(f"{self.base_url}/api/session") as resp:
+            # opencode API: GET /session
+            async with self.session.get(f"{self.base_url}/session") as resp:
                 if resp.status != 200:
                     return []
                 resp_data = await resp.json()
-                # API возвращает {data: [...], cursor: {...}}
-                return resp_data.get("data", resp_data)
+                return resp_data if isinstance(resp_data, list) else resp_data.get("data", resp_data)
         except Exception as e:
             logger.warning(f"Error fetching sessions list: {e}")
             return []
@@ -164,7 +174,8 @@ class OpenCodeClient:
     async def delete_session(self, session_id: str) -> bool:
         """Удаляет сессию по ID."""
         try:
-            async with self.session.delete(f"{self.base_url}/api/session/{session_id}") as resp:
+            # opencode API: DELETE /session/:sessionID
+            async with self.session.delete(f"{self.base_url}/session/{session_id}") as resp:
                 if resp.status in (200, 204):
                     logger.debug(f"Deleted session {session_id}")
                     return True

@@ -125,6 +125,5 @@ export const defaultLayer = layer.pipe(
   Layer.provide(Git.defaultLayer),
   Layer.provide(EventV2.defaultLayer),
   Layer.provide(ProjectV2.defaultLayer),
-  Layer.provide(SessionExecution.noopLayer),
   Layer.provide(SessionV2.defaultLayer),
 )

@@ -32,6 +32,7 @@ import { SessionCompaction } from "@/session/compaction"
 import { Instruction } from "@/session/instruction"
 import { LLM } from "@/session/llm"
 import { SessionProcessor } from "@/session/processor"
+import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionPrompt } from "@/session/prompt"
 import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
@@ -63,6 +64,12 @@ import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { lazy } from "@/util/lazy"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@opencode-ai/server/cors"
+import { setExtraPlugins } from "@opencode-ai/core/plugin/boot"
+import { setCLIProvider } from "@/provider/provider"
+import { PluginV2 } from "@opencode-ai/core/plugin"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
+import type { Catalog } from "@opencode-ai/core/catalog"
 import { serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
 import { InstanceHttpApi, RootHttpApi } from "./api"
@@ -258,9 +265,41 @@ const app = LayerNode.group([
   PtyTicket.node,
 ])
 
+function cliProviderPlugin(providerURL: string, model: string) {
+  return {
+    id: PluginV2.ID.make("cli-provider"),
+    effect: Effect.succeed({
+      "catalog.transform": Effect.fn(function* (evt: Catalog.Editor) {
+        const providerID = ProviderV2.ID.make("cli")
+        evt.provider.update(providerID, (provider) => {
+          provider.name = "CLI Provider"
+          provider.api = { type: "aisdk", package: "@ai-sdk/openai-compatible", url: providerURL, settings: {} }
+          provider.request = { headers: {}, body: {} }
+        })
+        const modelID = ModelV2.ID.make(model)
+        evt.model.update(providerID, modelID, (m) => {
+          m.name = model
+          m.api = { id: modelID, type: "aisdk", package: "@ai-sdk/openai-compatible", settings: {} }
+          m.capabilities = { tools: true, input: ["text"], output: ["text"] }
+          m.limit = { output: 4096, context: 32768 }
+        })
+        evt.model.default.set(providerID, modelID)
+      }),
+    }),
+  }
+}
+
 export function createRoutes(
   corsOptions?: CorsOptions,
+  providerURL?: string,
+  model?: string,
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
+  if (providerURL && model) {
+    setExtraPlugins([cliProviderPlugin(providerURL, model)])
+    setCLIProvider({ providerURL, model })
+  } else {
+    setCLIProvider(undefined)
+  }
   return Layer.mergeAll(
     rootApiRoutes,
     eventApiRoutes,

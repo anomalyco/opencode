@@ -475,5 +475,6 @@ export const defaultLayer = layer.pipe(
   Layer.provide(EventV2.defaultLayer),
   Layer.provide(Database.defaultLayer),
   Layer.provide(ProjectV2.defaultLayer),
+  Layer.provide(SessionExecution.noopLayer),
   Layer.orDie,
 )

@@ -63,7 +63,20 @@
       "tailwindcss": "4.1.11",
       "virtua": "0.49.1",
       "vite": "7.1.4",
-      "@lydell/node-pty": "1.2.0-beta.12"
+      "@lydell/node-pty": "1.2.0-beta.12",
+      "@opentui/core": "0.3.4",
+      "@opentui/keymap": "0.3.4",
+      "@opentui/solid": "0.3.4",
+      "opentui-spinner": "0.0.7",
+      "solid-js": "1.9.10",
+      "solid-list": "0.3.0",
+      "vite-plugin-solid": "2.11.10",
+      "@solidjs/meta": "0.29.4",
+      "@solidjs/router": "0.15.4",
+      "@solidjs/start": "1.3.2",
+      "@sentry/solid": "10.36.0",
+      "@sentry/vite-plugin": "4.6.0",
+      "@solid-primitives/storage": "4.3.3"
     }
   },
   "devDependencies": {

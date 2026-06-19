@@ -15,6 +15,7 @@ export default Runtime.handler(
   Effect.fn("cli.serve")(function* (input) {
     const providerURL = Option.isSome(input["provider-url"]) ? input["provider-url"].value : undefined
     const model = Option.isSome(input.model) ? input.model.value : undefined
+    if (Option.isSome(input["app-name"])) process.env.OPENCODE_APP_NAME = input["app-name"].value
     return yield* Effect.scoped(
       Effect.gen(function* () {
         const daemon = yield* Daemon.Service

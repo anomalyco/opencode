@@ -16,6 +16,7 @@ from aiohttp import ClientSession, ClientTimeout
 import vk_keyboards
 import config as bot_config
 from config import (
+    ALLOWED_FOLDERS,
     ATTACHES_DIR,
     LLAMA_SERVER_HOST,
     LONGPOLL_WAIT,
@@ -137,11 +138,14 @@ class VKLongPoll:
         self.sse_listener.on("session.next.step.started", self._on_step_event)
         self.sse_listener.on("session.next.step.ended", self._on_step_event)
         self.sse_listener.on("session.next.step.failed", self._on_step_event)
-        self.sse_listener.on("permission.v2.asked", self._on_permission)
-        self.sse_listener.on("question.v2.asked", self._on_question)
+        self.sse_listener.on("permission.asked", self._on_permission)
+        self.sse_listener.on("permission.v2.asked", self._on_permission)  # v2 API fallback
+        self.sse_listener.on("question.asked", self._on_question)
+        self.sse_listener.on("question.v2.asked", self._on_question)  # v2 API fallback
         self.sse_listener.on("session.created", self._on_session_created)
         self.sse_listener.on("session.idle", self._on_session_idle)
         self.sse_listener.on("session.status", self._on_session_status)
+        self.sse_listener.on("todo.updated", self._on_todo_updated)
         self.sse_listener.on_any(self._on_any_event)
 
     async def _on_text_ended(self, event_type: str, data: dict):
@@ -197,7 +201,7 @@ class VKLongPoll:
                 desc = f" → [{preview}]" if preview else ""
             else:
                 desc = ""
-            await self.vk.send_message(target, f"✅ Готово: {tool_name}{desc}")
+            await self.vk.send_message(target, f"🔧 Готово: {tool_name}{desc}")
 
         elif action == "failed":
             error = data.get("error", {})
@@ -258,13 +262,16 @@ class VKLongPoll:
             return
         self.seen_permissions[session_id].add(perm_id)
 
-        resources = perm.get("resources", [])
-        if resources and all(r.startswith("/tmp") for r in resources):
-            logger.info(f"Auto-approving /tmp permission {perm_id}")
+        # Авто-аппрув для разрешённых папок из конфига (allowed_folders)
+        # opencode API использует "patterns", v2 API использует "resources"
+        resources = perm.get("patterns") or perm.get("resources", [])
+        if self._is_allowed_folder_permission(resources):
+            logger.info(f"🔓 Auto-approving allowed folder permission {perm_id}: {resources}")
             await self.opencode_client.send_permission_response(session_id, perm_id, "always")
             return
 
-        if self.session_mgr.get_grant_mode(session_id):
+        # Проверяем grant_mode для текущей сессии или родительской
+        if self._should_auto_grant(session_id):
             logger.debug(f"Auto-grant: approving permission {perm_id}")
             await self.opencode_client.send_permission_response(session_id, perm_id, "always")
             return
@@ -273,6 +280,38 @@ class VKLongPoll:
         keyboard = self._create_permission_keyboard()
         msg_id = await self.vk.send_message(user_id, msg, keyboard=keyboard)
         self.pending_permissions[perm_id] = (session_id, user_id, msg_id)
+
+    def _should_auto_grant(self, session_id: str) -> bool:
+        """Проверяет, нужно ли авто-аппрув для сессии (включая родительскую)."""
+        # Сначала проверяем текущую сессию
+        if self.session_mgr.get_grant_mode(session_id):
+            return True
+        # Если это дочерняя сессия - проверяем родительскую
+        parent_id = self.session_mgr.child_sessions.get(session_id)
+        if parent_id and self.session_mgr.get_grant_mode(parent_id):
+            return True
+        return False
+
+    def _is_allowed_folder_permission(self, patterns: list[str]) -> bool:
+        """Проверяет, находятся ли все паттерны в разрешённых папках из конфига."""
+        if not patterns:
+            return False
+
+        # Используем ALLOWED_FOLDERS из конфига
+        allowed_folders = ALLOWED_FOLDERS or []
+        if not allowed_folders:
+            return False
+
+        for pattern in patterns:
+            # Обрабатываем file:// URLs
+            if pattern.startswith("file://"):
+                pattern = pattern[7:]
+            # Убираем glob-суффиксы (*, **)
+            base_path = pattern.rstrip("*").rstrip("/")
+            # Проверяем, что базовый путь начинается с одной из разрешённых папок
+            if not any(base_path.startswith(folder) for folder in allowed_folders):
+                return False
+        return True
 
     async def _on_question(self, event_type: str, data: dict):
         """Обрабатывает вопрос через SSE"""
@@ -311,6 +350,8 @@ class VKLongPoll:
         self.parent_child_map[parent_id][session_id] = {
             "title": title,
         }
+        # Регистрируем дочернюю сессию в session_mgr для grant_mode
+        self.session_mgr.register_child_session(session_id, parent_id)
         target = THINKING_PEER_ID if THINKING_PEER_ID else parent_user
         await self.vk.send_message(target, f"🚀 Subagent started: {title}")
 
@@ -352,7 +393,48 @@ class VKLongPoll:
             attempt = status.get("attempt", "?") if isinstance(status, dict) else "?"
             logger.info(f"Session {session_id} retry attempt {attempt}")
 
-    _NOISY_EVENTS = {"session.next.text.delta", "session.next.reasoning.delta", "session.next.tool.input.delta", "file.watcher.updated"}
+    async def _on_todo_updated(self, event_type: str, data: dict):
+        """Обрабатывает обновление плана/задач"""
+        session_id = data.get("sessionID", "")
+        user_id = self.session_to_user.get(session_id)
+        if not user_id:
+            return
+
+        todos = data.get("todos", [])
+        if not todos:
+            return
+
+        target = THINKING_PEER_ID if THINKING_PEER_ID else user_id
+
+        # Формируем красивый список задач
+        status_icons = {
+            "pending": "⏳",
+            "in_progress": "🔄",
+            "completed": "✅",
+            "cancelled": "❌",
+        }
+
+        lines = ["📋 **План обновлён:**"]
+        for i, todo in enumerate(todos, 1):
+            status = todo.get("status", "pending")
+            content = todo.get("content", "?")
+            icon = status_icons.get(status, "❓")
+            lines.append(f"{i}. {icon} {content}")
+
+        await self.vk.send_message(target, "\n".join(lines))
+
+    _NOISY_EVENTS = {
+        "session.next.text.delta",
+        "session.next.reasoning.delta",
+        "session.next.tool.input.delta",
+        "file.watcher.updated",
+        "plugin.added",
+        "catalog.updated",
+        "integration.updated",
+        "reference.updated",
+        "server.heartbeat",
+        "message.part.delta",
+    }
 
     async def _on_any_event(self, event_type: str, data: dict):
         """Логирует все SSE события для отладки"""
@@ -362,58 +444,27 @@ class VKLongPoll:
 
     # ---------- Обработка разрешений ----------
     def _format_permission_message(self, perm: dict) -> str:
-        """Форматирует сообщение для запроса разрешения (новый формат v2 API).
+        """Форматирует сообщение для запроса разрешения."""
+        # opencode API: "permission" + "patterns", v2 API: "action" + "resources"
+        perm_type = perm.get("permission") or perm.get("action", "unknown")
+        patterns = perm.get("patterns") or perm.get("resources", [])
+        metadata = perm.get("metadata") or {}
 
-        Формат API:
-        - perm["action"] — тип операции (bash, write_file, read_file, etc.)
-        - perm["resources"] — список ресурсов (путей)
-        - perm["metadata"] — дополнительные данные (опционально)
-        """
-        import json
+        # Формируем краткое сообщение
+        if patterns:
+            patterns_str = ", ".join(f"`{p}`" for p in patterns[:3])
+            if len(patterns) > 3:
+                patterns_str += f" ... ({len(patterns)} total)"
+            return f"⚠️ **Запрос разрешения**\n\n`{perm_type}`: {patterns_str}"
 
-        perm_type = perm.get("action", "unknown")
-        resources = perm.get("resources", [])
-        path = resources[0] if resources else ""
+        # Fallback для bash команд
+        if perm_type == "bash":
+            command = metadata.get("command", metadata.get("cmd", "?"))
+            return f"⚠️ **Запрос разрешения**\n\n`bash`: `{command}`"
 
-        # Если path пустой, пробуем извлечь из metadata
-        if not path:
-            metadata = perm.get("metadata") or {}
-            path = metadata.get("path", "") or metadata.get("filepath", "")
-
-        # Fallback для external_directory: используем workdir
-        if not path and perm_type == "external_directory":
-            workdir = getattr(self.opencode_process, "workdir", None)
-            if workdir:
-                path = str(workdir)
-
-        tool_name = perm_type
-
-        # Формируем сообщение в зависимости от типа
-        if perm_type == "external_directory":
-            if path:
-                return f"⚠️ **Запрос разрешения**\n\nТип: `{perm_type}`\n\nПрограмма хочет получить доступ к директории:\n`{path}`"
-            else:
-                return f"⚠️ **Запрос разрешения**\n\nТип: `{perm_type}`\n\nПрограмма хочет получить доступ к директории.\n\nДанные: `{json.dumps(perm, ensure_ascii=False)}`"
-        elif perm_type in ("write_file", "edit", "multi_edit"):
-            if path:
-                return f"⚠️ **Запрос разрешения**\n\nИнструмент: `{tool_name}`\n\nПрограмма хочет записать файл:\n`{path}`"
-            else:
-                return f"⚠️ **Запрос разрешения**\n\nИнструмент: `{tool_name}`\n\nПрограмма хочет записать файл.\n\nДанные: `{json.dumps(perm, ensure_ascii=False)}`"
-        elif perm_type in ("read_file", "view", "read"):
-            if path:
-                return f"⚠️ **Запрос разрешения**\n\nИнструмент: `{tool_name}`\n\nПрограмма хочет прочитать файл:\n`{path}`"
-            else:
-                return f"⚠️ **Запрос разрешения**\n\nИнструмент: `{tool_name}`\n\nПрограмма хочет прочитать файл.\n\nДанные: `{json.dumps(perm, ensure_ascii=False)}`"
-        elif perm_type == "bash" or tool_name == "bash":
-            params = perm.get("metadata") or {}
-            command = params.get("command", params.get("cmd", "")) if isinstance(params, dict) else ""
-            display = command or path
-            if display:
-                return f"⚠️ **Запрос разрешения**\n\nИнструмент: `bash`\n\nПрограмма хочет выполнить команду:\n`{display}`"
-            else:
-                return f"⚠️ **Запрос разрешения**\n\nИнструмент: `bash`\n\nПрограмма хочет выполнить команду.\n\nДанные: `{json.dumps(perm, ensure_ascii=False)}`"
-        else:
-            return f"⚠️ **Запрос разрешения**\n\nИнструмент: `{tool_name}`\n\nДанные: `{json.dumps(perm, ensure_ascii=False)}`"
+        # Fallback - показываем тип и путь из metadata
+        filepath = metadata.get("filepath", metadata.get("path", "?"))
+        return f"⚠️ **Запрос разрешения**\n\n`{perm_type}`: `{filepath}`"
 
     def _create_permission_keyboard(self) -> dict:
         """Создает клавиатуру для ответа на разрешение"""
@@ -727,7 +778,7 @@ class VKLongPoll:
 
         success = await self.opencode_client.send_prompt(session_id, full_text)
         if not success:
-            # Сессия могла исчезнуть после рестарта lildax - пересоздаём
+            # Сессия могла исчезнуть после рестарта opencode - пересоздаём
             logger.warning(f"Failed to send prompt to {session_id}, recreating session")
             self.session_mgr.remove(user_id)
             session_id = await self.session_mgr.get_or_create(user_id)
@@ -777,7 +828,7 @@ class VKLongPoll:
             if saved_workdir:
                 self.opencode_process.workdir = saved_workdir
 
-            # Пересоздаём aiohttp сессию после рестарта lildax
+            # Пересоздаём aiohttp сессию после рестарта opencode
             await self.opencode_client.__aexit__(None, None, None)
             await self.opencode_client.__aenter__()
             new_session_id = await self.opencode_client.create_session()
@@ -979,7 +1030,7 @@ class VKLongPoll:
         try:
             # Даём серверу время на полную инициализацию после рестарта
             await asyncio.sleep(2)
-            # Пересоздаём aiohttp сессию после рестарта lildax
+            # Пересоздаём aiohttp сессию после рестарта opencode
             await self.opencode_client.__aexit__(None, None, None)
             await self.opencode_client.__aenter__()
             new_session_id = await self.opencode_client.create_session()
