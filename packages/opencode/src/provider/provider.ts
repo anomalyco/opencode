@@ -1112,6 +1112,16 @@ export interface Interface {
     { providerID: ProviderV2.ID; modelID: ModelV2.ID },
     DefaultModelError
   >
+  /**
+   * fork: update a model's cached context limit after a deliberate ctx-size
+   * change (local providers). Keeps the sidebar's context window in sync
+   * without a full re-discovery.
+   */
+  readonly setModelContextLimit: (
+    providerID: ProviderV2.ID,
+    modelID: ModelV2.ID,
+    context: number,
+  ) => Effect.Effect<boolean>
 }
 
 interface State {
@@ -1261,7 +1271,12 @@ function mergeDiscoveredModel(existing: Model | undefined, discovered: Model): M
       ...existing.api,
     },
     limit: {
-      context: existing.limit.context || discovered.limit.context,
+      // fork: for openai-compatible/local providers the backend is authoritative
+      // about its *current* context (e.g. after a ctx-size change + reload), so
+      // prefer the freshly-discovered value. `discovered` already falls back to
+      // the existing context when the backend reports nothing, so this never
+      // regresses to 0.
+      context: discovered.limit.context || existing.limit.context,
       input: existing.limit.input ?? discovered.limit.input,
       output: existing.limit.output || discovered.limit.output,
     },
@@ -1942,6 +1957,19 @@ export const layer = Layer.effect(
       return info
     })
 
+    const setModelContextLimit = Effect.fn("Provider.setModelContextLimit")(function* (
+      providerID: ProviderV2.ID,
+      modelID: ModelV2.ID,
+      context: number,
+    ) {
+      return yield* InstanceState.use(state, (s) => {
+        const model = s.providers[providerID]?.models[modelID]
+        if (!model || !Number.isFinite(context) || context <= 0) return false
+        model.limit = { ...model.limit, context }
+        return true
+      })
+    })
+
     const getLanguage = Effect.fn("Provider.getLanguage")(function* (model: Model) {
       const s = yield* InstanceState.get(state)
       const envs = yield* env.all()
@@ -2071,7 +2099,16 @@ export const layer = Layer.effect(
       }
     })
 
-    return Service.of({ list, getProvider, getModel, getLanguage, closest, getSmallModel, defaultModel })
+    return Service.of({
+      list,
+      getProvider,
+      getModel,
+      getLanguage,
+      closest,
+      getSmallModel,
+      defaultModel,
+      setModelContextLimit,
+    })
   }),
 )
 

@@ -167,7 +167,11 @@ export function DialogModelCtx(props: { providerID: string; modelID: string }) {
         return
       }
       await sync.refreshProviders()
-      toast.show({ variant: "info", message: `Context set to ${fmtCtxK(ctx_size)}` })
+      // The local backend reloads the model to apply a new context window.
+      toast.show({
+        variant: "info",
+        message: `Context set to ${fmtCtxK(ctx_size)} — reloading model…`,
+      })
       dialog.clear()
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)

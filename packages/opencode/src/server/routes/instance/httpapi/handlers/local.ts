@@ -1,4 +1,7 @@
 import { Config } from "@/config/config"
+import { Provider } from "@/provider/provider"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { probeModelIDs, scanLlamaSwap } from "@/local/mdns"
 import { createClient, createConfig } from "@/local/llama-skein/gen/client"
 import { LlamaSkeinClient } from "@/local/llama-skein/gen/sdk.gen"
@@ -63,6 +66,7 @@ function llamaClient(baseURL: string) {
 export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (handlers) =>
   Effect.gen(function* () {
     const configSvc = yield* Config.Service
+    const providerSvc = yield* Provider.Service
 
     const scan = Effect.fn("LocalHttpApi.scan")(function* () {
       const config = yield* configSvc.get()
@@ -260,7 +264,16 @@ export const localHandlers = HttpApiBuilder.group(InstanceHttpApi, "local", (han
       const res = yield* Effect.tryPromise(() =>
         llamaClient(baseURL).patchConfigModel({ id: modelID, configModelPatchRequest: { ctx_size } }),
       ).pipe(Effect.orElseSucceed(() => null))
-      return res !== null && !res.error
+      const ok = res !== null && !res.error
+      // fork: llama-skein reloads the model on a ctx change; sync our cached
+      // context limit immediately so the sidebar reflects the new window
+      // without waiting for a full re-discovery.
+      if (ok) {
+        yield* providerSvc
+          .setModelContextLimit(ProviderV2.ID.make(providerID), ModelV2.ID.make(modelID), ctx_size)
+          .pipe(Effect.orElseSucceed(() => false))
+      }
+      return ok
     })
 
     const setModelOffload = Effect.fn("LocalHttpApi.setModelOffload")(function* (ctx) {
