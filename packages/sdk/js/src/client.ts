@@ -30,16 +30,38 @@ function rewrite(request: Request, directory?: string) {
   return next
 }
 
+function defaultFetch(request: Request) {
+  const req = request as Request & { timeout?: boolean }
+  req.timeout = false
+  return fetch(req)
+}
+
+export function createUnauthorizedFallbackFetch(input: {
+  liveFetch?: (request: Request) => ReturnType<typeof fetch>
+  fallbackFetch: (request: Request) => ReturnType<typeof fetch>
+}) {
+  let fallback = false
+  const liveFetch = input.liveFetch ?? defaultFetch
+
+  return async (request: Request) => {
+    if (fallback) return input.fallbackFetch(request)
+
+    const retryRequest = request.clone()
+    const response = await liveFetch(request)
+    if (response.status === 401 || response.status === 403) {
+      fallback = true
+      return input.fallbackFetch(retryRequest)
+    }
+
+    return response
+  }
+}
+
 export function createOpencodeClient(config?: Config & { directory?: string }) {
   if (!config?.fetch) {
-    const customFetch: any = (req: any) => {
-      // @ts-ignore
-      req.timeout = false
-      return fetch(req)
-    }
     config = {
       ...config,
-      fetch: customFetch,
+      fetch: defaultFetch,
     }
   }
 
