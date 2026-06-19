@@ -326,6 +326,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "搜索文件夹",
   "dialog.directory.empty": "未找到文件夹",
+  "dialog.directory.action.selectFile": "选择文件",
+  "dialog.directory.action.selectFolder": "选择文件夹",
+  "dialog.directory.root": "根目录",
+  "dialog.directory.parent": "上级目录",
+  "dialog.directory.readError": "无法读取此文件夹",
 
   "dialog.server.title": "服务器",
   "dialog.server.description": "切换此应用连接的 OpenCode 服务器。",
