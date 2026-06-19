@@ -49,8 +49,9 @@ const rangeLabels: Record<UsageRange, string> = {
   "1M": "1 Month",
   "2M": "2 Months",
 }
-const statsHomeTitle = "OpenCode Data"
-const statsHomeDescription = "OpenCode usage data, market share, token cost, and session cost."
+const statsHomeTitle = "AI Model Usage Rankings | OpenCode Data"
+const statsHomeDescription =
+  "Explore OpenCode Go usage across AI models, including token volume, rankings, market share, token pricing, session cost, cache ratio, and geo breakdowns."
 const statsHomeFallbackUrl = "https://opencode.ai/data/"
 const statsUnfurlPath = "banner.jpg"
 const statsUnfurlAlt = "OpenCode Data wordmark on a dark patterned background"

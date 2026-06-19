@@ -120,11 +120,9 @@ export default function StatsModel() {
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const modelName = createMemo(() => catalogEntry()?.name ?? stats()?.model ?? modelParam() ?? "Model")
   const labName = createMemo(() => formatCatalogLabName(catalogEntry()?.lab ?? stats()?.provider ?? labParam()))
-  const modelTitle = createMemo(() => `${modelName()} Data`)
+  const modelTitle = createMemo(() => `${modelName()} Usage, Cost & Rank | OpenCode Data`)
   const modelDescription = createMemo(() =>
-    stats()
-      ? `${modelName()} usage, rank, token mix, cost, geo breakdown, and peer data across OpenCode Go.`
-      : `${modelName()} model facts, limits, and OpenCode Go usage availability.`,
+    `View ${modelName()} OpenCode Go usage data, including token volume, weekly rank, token mix, costs, cache ratio, sessions, geo breakdowns, and peer models.`,
   )
   const modelUrl = createMemo(() =>
     new URL(
