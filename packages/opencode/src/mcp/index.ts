@@ -75,6 +75,7 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("MCP
 }) {}
 
 type MCPClient = Client
+type CompleteParams = Parameters<MCPClient["complete"]>[0]
 
 function createClient(directory: string) {
   const client = new Client({ name: "opencode", version: InstallationVersion }, CLIENT_OPTIONS)
@@ -180,6 +181,12 @@ export interface Interface {
     clientName: string,
     resourceUri: string,
   ) => Effect.Effect<Awaited<ReturnType<MCPClient["readResource"]>> | undefined>
+  readonly complete: (
+    clientName: string,
+    ref: CompleteParams["ref"],
+    argument: CompleteParams["argument"],
+    context?: CompleteParams["context"],
+  ) => Effect.Effect<Awaited<ReturnType<MCPClient["complete"]>> | undefined>
   readonly subscribeResource: (clientName: string, resourceUri: string) => Effect.Effect<void>
   readonly unsubscribeResource: (clientName: string, resourceUri: string) => Effect.Effect<void>
   readonly startAuth: (
@@ -827,6 +834,23 @@ export const layer = Layer.effect(
       return result
     })
 
+    const complete = Effect.fn("MCP.complete")(function* (
+      clientName: string,
+      ref: CompleteParams["ref"],
+      argument: CompleteParams["argument"],
+      context?: CompleteParams["context"],
+    ) {
+      return yield* withClient(
+        clientName,
+        (client, timeout) => {
+          if (!client.getServerCapabilities()?.completions) return Promise.resolve(undefined)
+          return client.complete(context === undefined ? { ref, argument } : { ref, argument, context }, { timeout })
+        },
+        "complete",
+        { ref, argumentName: argument.name },
+      )
+    })
+
     const unsubscribeResource = Effect.fn("MCP.unsubscribeResource")(function* (
       clientName: string,
       resourceUri: string,
@@ -1055,6 +1079,7 @@ export const layer = Layer.effect(
       disconnect,
       getPrompt,
       readResource,
+      complete,
       subscribeResource,
       unsubscribeResource,
       startAuth,

@@ -47,6 +47,7 @@ const mcp = Layer.succeed(
     disconnect: () => Effect.void,
     getPrompt: () => Effect.succeed(undefined),
     readResource: () => Effect.succeed(undefined),
+    complete: () => Effect.succeed(undefined),
     subscribeResource: () => Effect.void,
     unsubscribeResource: () => Effect.void,
     startAuth: () => Effect.die("unexpected MCP auth"),
