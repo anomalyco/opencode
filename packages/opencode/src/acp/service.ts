@@ -245,10 +245,12 @@ export function make(input: {
     const limit = 100
     const sessions = yield* request(
       () =>
-        input.sdk.session.list(
+        input.sdk.experimental.session.list(
           {
             ...(params.cwd ? { directory: params.cwd } : {}),
             roots: true,
+            ...(cursor !== undefined && Number.isFinite(cursor) ? { cursor } : {}),
+            limit: limit + 1,
           },
           { throwOnError: true },
         ),
