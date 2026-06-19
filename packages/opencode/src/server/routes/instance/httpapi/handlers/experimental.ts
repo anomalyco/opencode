@@ -175,7 +175,9 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     })
 
     /** Scan ~/.local/bin/ for AXI tools (*-axi executables) and return as McpResource entries. */
-    async function scanAxiTools(): Promise<Record<string, { name: string; uri: string; description?: string; mimeType?: string; client: string }>> {
+    async function scanAxiTools(): Promise<
+      Record<string, { name: string; uri: string; description?: string; mimeType?: string; client: string }>
+    > {
       const axiDir = join(homedir(), ".local", "bin")
       let files: string[]
       try {
@@ -184,7 +186,10 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
         return {}
       }
 
-      const result: Record<string, { name: string; uri: string; description?: string; mimeType?: string; client: string }> = {}
+      const result: Record<
+        string,
+        { name: string; uri: string; description?: string; mimeType?: string; client: string }
+      > = {}
 
       for (const file of files) {
         if (!file.endsWith("-axi")) continue
@@ -210,10 +215,9 @@ export const experimentalHandlers = HttpApiBuilder.group(InstanceHttpApi, "exper
     }
 
     const resource = Effect.fn("ExperimentalHttpApi.resource")(function* () {
-      const [mcpResources, axiResources] = yield* Effect.all([
-        mcp.resources(),
-        Effect.promise(() => scanAxiTools()),
-      ], { concurrency: "unbounded" })
+      const [mcpResources, axiResources] = yield* Effect.all([mcp.resources(), Effect.promise(() => scanAxiTools())], {
+        concurrency: "unbounded",
+      })
       return { ...mcpResources, ...axiResources }
     })
 
