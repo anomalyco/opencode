@@ -165,7 +165,7 @@ function humanizeModelName(name: string): string {
     return versionParts.length > 0 ? `Claude ${modelType} ${versionParts.join(".")}` : `Claude ${modelType}`
   }
 
-  const specialCases: Record<string, string> = { gpt: "GPT", o4: "o4" }
+  const specialCases: Record<string, string> = { gpt: "GPT", o4: "o4", glm: "GLM" }
   return parts.map((p) => specialCases[p.toLowerCase()] ?? capitalize(p)).join(" ")
 }
 
