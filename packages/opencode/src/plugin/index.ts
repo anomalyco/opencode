@@ -159,8 +159,8 @@ export const layer = Layer.effect(
           get serverUrl(): URL {
             return Server.url ?? new URL("http://localhost:4096")
           },
-          // @ts-expect-error
-          $: typeof Bun === "undefined" ? undefined : Bun.$,
+          // Bun.$ is only available when running in Bun environment
+          $: typeof Bun !== "undefined" && "$" in Bun ? (Bun as any).$ : undefined,
         }
 
         for (const plugin of flags.disableDefaultPlugins ? [] : internalPlugins(flags)) {
