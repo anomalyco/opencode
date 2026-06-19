@@ -35,6 +35,7 @@ describe("bootstrapDirectory", () => {
       question: {},
       mcp_ready: true,
       mcp: {},
+      axi: {},
       lsp_ready: true,
       lsp: [],
       vcs: undefined,
@@ -48,6 +49,7 @@ describe("bootstrapDirectory", () => {
       directory: "/project",
       scope: ServerScope.local,
       mcp: false,
+      axi: false,
       global: {
         config: {} satisfies Config,
         path: { state: "", config: "", worktree: "/project", directory: "/project", home: "/home" },

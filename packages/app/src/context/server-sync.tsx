@@ -58,6 +58,30 @@ export const loadMcpQuery = (scope: ServerScope, directory: string, sdk: Opencod
     queryFn: () => sdk.mcp.status().then((r) => r.data ?? {}),
   })
 
+export const loadAxiQuery = (scope: ServerScope, directory: string, sdk: OpencodeClient) =>
+  queryOptions({
+    queryKey: [scope, directory, "axi"] as const,
+    queryFn: async () => {
+      const axiEntries: Record<string, { name: string; uri: string; description?: string; mimeType?: string }> = {}
+      try {
+        const resources = await sdk.experimental.resource.list().then((r) => r.data ?? {})
+        for (const [key, resource] of Object.entries(resources)) {
+          if (resource.client === "axi") {
+            axiEntries[key] = {
+              name: resource.name,
+              uri: resource.uri,
+              description: resource.description,
+              mimeType: resource.mimeType,
+            }
+          }
+        }
+      } catch {
+        // AXI failures should not break bootstrap — return empty
+      }
+      return axiEntries
+    },
+  })
+
 export const loadLspQuery = (scope: ServerScope, directory: string, sdk: OpencodeClient) =>
   queryOptions({
     queryKey: [scope, directory, "lsp"] as const,
@@ -78,6 +102,7 @@ function makeQueryOptionsApi(
       loadPathQuery(scope, directory, directory === null ? serverSDK() : sdkFor(directory)),
     agents: (directory: PathKey) => loadAgentsQuery(scope, directory, sdkFor(directory)),
     mcp: (directory: PathKey) => loadMcpQuery(scope, directory, sdkFor(directory)),
+    axi: (directory: PathKey) => loadAxiQuery(scope, directory, sdkFor(directory)),
     lsp: (directory: PathKey) => loadLspQuery(scope, directory, sdkFor(directory)),
     sessions: (directory: PathKey) => ({ queryKey: [scope, directory, "loadSessions"] as const }),
   }
@@ -344,6 +369,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         directory,
         scope: serverSDK.scope,
         mcp: children.mcp(key),
+        axi: children.axi(key),
         global: {
           config: globalStore.config,
           path: globalStore.path,
