@@ -225,13 +225,8 @@ export const layer = Layer.effect(
             },
           }).pipe(
             Effect.tapError((error) => Effect.logError("failed to load plugin", { path: load.spec, error })),
-            Effect.catch(() => {
-              // TODO: make proper events for this
-              // events.publish(Session.Event.Error, {
-              //   error: new NamedError.Unknown({
-              //     message: `Failed to load plugin ${load.spec}: ${message}`,
-              //   }).toObject(),
-              // })
+            Effect.catch((message) => {
+              publishPluginError(`Failed to load plugin ${load.spec}: ${message}`)
               return Effect.void
             }),
           )

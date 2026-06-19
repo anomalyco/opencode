@@ -49,7 +49,7 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   ).pipe(Layer.provide(Ripgrep.defaultLayer))
 
 const it = testEffect(layer())
-const background = testEffect(layer({ experimentalBackgroundSubagents: true }))
+const background = testEffect(layer({}))
 
 function defer<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void

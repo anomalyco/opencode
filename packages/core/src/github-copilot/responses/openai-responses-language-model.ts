@@ -1725,12 +1725,11 @@ function getResponsesModelConfig(modelId: string): ResponsesModelConfig {
   }
 }
 
-// TODO AI SDK 6: use optional here instead of nullish
 const openaiResponsesProviderOptionsSchema = z.object({
   include: z
     .array(z.enum(["reasoning.encrypted_content", "file_search_call.results", "message.output_text.logprobs"]))
-    .nullish(),
-  instructions: z.string().nullish(),
+    .optional(),
+  instructions: z.string().optional(),
 
   /**
    * Return the log probabilities of the tokens.
@@ -1751,20 +1750,20 @@ const openaiResponsesProviderOptionsSchema = z.object({
    * This maximum number applies across all built-in tool calls, not per individual tool.
    * Any further attempts to call a tool by the model will be ignored.
    */
-  maxToolCalls: z.number().nullish(),
+  maxToolCalls: z.number().optional(),
 
-  metadata: z.any().nullish(),
-  parallelToolCalls: z.boolean().nullish(),
-  previousResponseId: z.string().nullish(),
-  promptCacheKey: z.string().nullish(),
-  reasoningEffort: z.string().nullish(),
-  reasoningSummary: z.string().nullish(),
-  safetyIdentifier: z.string().nullish(),
-  serviceTier: z.enum(["auto", "flex", "priority"]).nullish(),
-  store: z.boolean().nullish(),
-  strictJsonSchema: z.boolean().nullish(),
-  textVerbosity: z.enum(["low", "medium", "high"]).nullish(),
-  user: z.string().nullish(),
+  metadata: z.any().optional(),
+  parallelToolCalls: z.boolean().optional(),
+  previousResponseId: z.string().optional(),
+  promptCacheKey: z.string().optional(),
+  reasoningEffort: z.string().optional(),
+  reasoningSummary: z.string().optional(),
+  safetyIdentifier: z.string().optional(),
+  serviceTier: z.enum(["auto", "flex", "priority"]).optional(),
+  store: z.boolean().optional(),
+  strictJsonSchema: z.boolean().optional(),
+  textVerbosity: z.enum(["low", "medium", "high"]).optional(),
+  user: z.string().optional(),
 })
 
 export type OpenAIResponsesProviderOptions = z.infer<typeof openaiResponsesProviderOptionsSchema>
