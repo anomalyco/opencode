@@ -36,10 +36,11 @@ import { Select } from "@opencode-ai/ui/select"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { ModelSelectorPopover } from "@/components/dialog-select-model"
 import { useProviders } from "@/hooks/use-providers"
-import { useCommand } from "@/context/command"
+import { matchKeybind, parseKeybind, useCommand } from "@/context/command"
 import { Persist, persisted } from "@/utils/persist"
 import { usePermission } from "@/context/permission"
 import { usePromptDocBridge } from "@/context/prompt-doc-bridge"
+import { useSessionPreviewBridge } from "@/context/session-preview-bridge"
 import { useLanguage } from "@/context/language"
 import { usePlatform } from "@/context/platform"
 import { useClientEnv } from "@/context/client-env"
@@ -49,7 +50,7 @@ import { createOpenDiffTab, createSessionTabs } from "@/pages/session/helpers"
 import { promptEnabled, promptProbe } from "@/testing/prompt"
 import { createTextFragment, getCursorPosition, setCursorPosition, setRangeEdge } from "./prompt-input/editor-dom"
 import { createPromptAttachments } from "./prompt-input/attachments"
-import { captureDisplayImage } from "./prompt-input/capture"
+import { dataUrlToPngFile } from "./prompt-input/capture"
 import { CaptureEditDialog } from "./prompt-input/capture-edit-dialog"
 import { ACCEPTED_FILE_TYPES } from "./prompt-input/files"
 import {
@@ -78,7 +79,7 @@ import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
 import { promptFromDocMarkdown } from "@/components/prompt-input/prompt-plain"
 import { PromptDocShell } from "./prompt-input/doc-shell"
-import { createPromptDoc } from "./prompt-input/doc"
+import { createPromptDoc, type PromptDocConfig } from "./prompt-input/doc"
 import { createOpenSessionFile } from "./prompt-input/open-session-file"
 import { lineRefToSelection } from "@/components/blocksuite/line-reference-url"
 import { createPromptContextSync } from "./prompt-input/context-sync"
@@ -161,6 +162,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const prompt = usePrompt()
   const layout = useLayout()
   const env = useClientEnv()
+  const submitKeys = createMemo(() => parseKeybind(env.promptSubmitKey()))
+  const newlineKeys = createMemo(() => parseKeybind(env.promptNewlineKey()))
   const comments = useComments()
   const dialog = useDialog()
   const providers = useProviders()
@@ -336,19 +339,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     applyingHistory: false,
   })
   const [height, setHeight] = createSignal(DOC_HEIGHT)
-  // 자동 확대: 입력창 포커스 시 전체 너비 expanded 로 자동 진입(기본 ON, localStorage 영속).
+  // 자동 확대: 입력창 포커스 시 전체 너비 expanded 로 자동 진입(기본 OFF, localStorage 영속).
   const [autoExpand, setAutoExpand] = createSignal(
     (() => {
       try {
-        return localStorage.getItem(AUTO_EXPAND_KEY) !== "0"
+        return localStorage.getItem(AUTO_EXPAND_KEY) === "1"
       } catch {
-        return true
+        return false
       }
     })(),
   )
   const [focusWithin, setFocusWithin] = createSignal(false)
-  // 탭 캡처 진행 중 여부. 아래 자동 확대 이펙트가 이 값을 보고 캡처 동안 입력창을 강제 축소한다.
-  const [capturing, setCapturing] = createSignal(false)
+  // 탭 캡처 진행 중 여부. 미리보기 헤더 버튼과 공유하기 위해 SessionPreviewBridge 컨텍스트가 소유한다.
+  // (아래 자동 확대 이펙트가 이 값을 보고 캡처 동안 입력창을 강제 축소한다.)
+  const previewBridge = useSessionPreviewBridge()
+  const capturing = previewBridge.capturing
+  const setCapturing = previewBridge.setCapturing
   // 컴포저 내부에서 시작된 클릭(포커스 못 받는 버튼/컨트롤 포함)으로 포커스가 body 로 빠지는 걸
   // '이탈'로 오인해 축소→재확장 깜빡이는 걸 막기 위한 플래그.
   let pointerDownInside = false
@@ -545,13 +551,26 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
 
   const parentParams = useParentParams()
+  const [docConfig, setDocConfig] = createStore<PromptDocConfig>({
+    sessionID: params.id,
+    url: sdk.url,
+    directory: sdk.directory,
+    submitKey: env.promptSubmitKey(),
+    user: parentParams.user[0],
+  })
+  createEffect(() => {
+    setDocConfig({
+      sessionID: params.id,
+      url: sdk.url,
+      directory: sdk.directory,
+      submitKey: env.promptSubmitKey(),
+      user: parentParams.user[0],
+    })
+  })
   const doc = createPromptDoc({
-    sessionID: () => params.id,
-    url: () => sdk.url,
-    directory: () => sdk.directory,
+    config: docConfig,
     client: sdk.client,
-    submit: () => void submit(),
-    user: () => parentParams.user[0],
+    onSubmit: () => void submit(),
   })
   // detach() keeps the doc handle (sync + undo history) alive across panel unmounts, so the
   // component itself owns the final teardown.
@@ -593,12 +612,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       })
     })
     bridge.setOpenLineReference((input) => {
-      if (store.mode !== "doc") return false
       openSessionFile({ path: input.path, selection: lineRefToSelection(input) })
       return true
     })
     bridge.setOpenFileReference((path, nodeType) => {
-      if (store.mode !== "doc") return false
       openSessionFile({ path: relPath(path), nodeType: nodeType === "directory" ? "directory" : "file" })
       return true
     })
@@ -966,16 +983,16 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   const captureTab = async () => {
     if (capturing()) return
     setCapturing(true)
+    // 미리보기 iframe 안에서 화면을 캡처(dataURL). 미연결/실패 시 undefined → 아무 일도 일어나지 않는다.
     let file: File | null = null
     try {
-      file = await captureDisplayImage()
+      const dataUrl = await previewBridge.capture()
+      if (dataUrl) file = await dataUrlToPngFile(dataUrl)
     } catch {
-      showToast({ title: language.t("common.requestFailed") })
-      setCapturing(false)
-      return
+      // 캡처 실패는 조용히 무시(토스트 없음).
     }
     if (!file) {
-      // 피커 취소 → 모달 없이 컴포저 복귀.
+      // 이미지를 못 받음 → 모달 없이 컴포저 복귀.
       setCapturing(false)
       return
     }
@@ -998,6 +1015,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       () => setCapturing(false),
     )
   }
+
+  // 미리보기 헤더(SessionBrowserChrome)의 캡처 버튼이 이 플로우를 호출할 수 있게 등록.
+  previewBridge.setCaptureHandler(captureTab)
+  onCleanup(() => previewBridge.setCaptureHandler(undefined))
 
   const setMode = (mode: PromptMode) => {
     if (store.mode === mode) return
@@ -2004,9 +2025,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       }
     }
 
-    // Handle Shift+Enter BEFORE IME check - Shift+Enter is never used for IME input
-    // and should always insert a newline regardless of composition state
-    if (event.key === "Enter" && event.shiftKey) {
+    // Newline shortcuts that carry a modifier (e.g. the default Shift+Enter) are never used for
+    // IME input, so handle them BEFORE the IME guard. Modifier-less newline keys (e.g. a plain
+    // Enter binding) are handled after the IME check below so they don't fire mid-composition.
+    const hasModifier = event.shiftKey || event.ctrlKey || event.metaKey || event.altKey
+    if (hasModifier && matchKeybind(newlineKeys(), event)) {
       addPart({ type: "text", content: "\n", start: 0, end: 0 })
       event.preventDefault()
       return
@@ -2071,8 +2094,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       return
     }
 
-    // Note: Shift+Enter is handled earlier, before IME check
-    if (event.key === "Enter" && !event.shiftKey) {
+    // Modifier-less newline keys land here (after the IME guard). Modifier-bearing newline
+    // shortcuts were already handled before the IME check above.
+    if (matchKeybind(newlineKeys(), event)) {
+      addPart({ type: "text", content: "\n", start: 0, end: 0 })
+      event.preventDefault()
+      return
+    }
+
+    if (matchKeybind(submitKeys(), event)) {
       event.preventDefault()
       if (event.repeat) return
       const action = submitAction()
@@ -2112,8 +2142,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         setTimeout(() => {
           if (!rootRef) return
           if (rootRef.contains(document.activeElement)) return
+          // iframe(미리보기 등)로 포커스가 넘어간 경우는 명백한 이탈 — pointerDownInside 는 부모 window 로
+          // pointerdown 이 안 와 stale 일 수 있으니 무시하고 축소한다.
+          const toIframe = document.activeElement instanceof HTMLIFrameElement
           // 컴포저 안의 포커스 못 받는 버튼/컨트롤을 눌러 포커스가 body 로 빠진 경우는 이탈이 아니다.
-          if (pointerDownInside) return
+          if (pointerDownInside && !toIframe) return
           setFocusWithin(false)
         }, 0)
       }}
@@ -2270,7 +2303,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               modes={modeButtons()}
               expand={composerExpand()}
               autoExpand={{ enabled: autoExpand(), onToggle: toggleAutoExpand }}
-              capture={{ active: capturing(), onCapture: captureTab }}
             />
           </Show>
 
@@ -2348,22 +2380,6 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       <Icon name="plus" class="size-4.5" />
                     </Button>
                   </TooltipKeybind>
-                  <Show when={!env.productionLayout()}>
-                    <Tooltip placement="top" value={language.t("prompt.action.captureTab")}>
-                      <Button
-                        data-action="prompt-capture-tab"
-                        type="button"
-                        variant="ghost"
-                        class="size-7.5 p-0"
-                        style={buttons()}
-                        onClick={captureTab}
-                        aria-disabled={capturing()}
-                        aria-label={language.t("prompt.action.captureTab")}
-                      >
-                        <Icon name="photo" class="size-4.5" />
-                      </Button>
-                    </Tooltip>
-                  </Show>
                   {modeButtons()}
                 </div>
               </Show>

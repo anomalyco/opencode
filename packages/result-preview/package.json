@@ -1,0 +1,21 @@
+{
+  "name": "@opencode-ai/result-preview",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "로컬 dev 검증용 예제 — AI 결과물(프레임워크 dev 서버)을 흉내 낸 SolidJS+Vite 앱. 자식 브릿지를 모듈로 포함해, VITE_PREVIEW_URL 로 가리켜 미리보기 통신을 검증한다.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@opencode-ai/preview-bridge": "workspace:*",
+    "@solidjs/router": "catalog:",
+    "solid-js": "catalog:"
+  },
+  "devDependencies": {
+    "vite": "catalog:",
+    "vite-plugin-solid": "catalog:"
+  }
+}

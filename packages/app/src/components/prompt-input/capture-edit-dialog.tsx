@@ -26,6 +26,8 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
   const [color, setColor] = createSignal<string>(COLORS[0])
   const [width, setWidth] = createSignal<number>(WIDTHS[1])
   const [cropping, setCropping] = createSignal(false)
+  // 자를 영역이 실제로 그려져 있는지(전체=미선택이면 false). 핸들/힌트/리셋 버튼 노출을 구동.
+  const [hasRegion, setHasRegion] = createSignal(false)
   const [strokeCount, setStrokeCount] = createSignal(0)
   const [adding, setAdding] = createSignal(false)
   const [zoom, setZoom] = createSignal(1) // 1 = fit. native 대비 배율은 zoom*scale.
@@ -40,6 +42,9 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
   const dim: Konva.Rect[] = [] // 크롭 바깥을 가리는 반투명 검정 4분할(top/bottom/left/right)
   // 적용된 크롭 영역(display 좌표). null 이면 전체. 크롭 모드를 꺼도 유지돼 추가 시 그대로 잘린다.
   let cropBox: { x: number; y: number; width: number; height: number } | null = null
+  // 드래그로 새 크롭 영역을 그리는 중인지 + 시작점(논리좌표).
+  let drawingCrop = false
+  let drawStart: { x: number; y: number } | null = null
   const strokes: Konva.Line[] = []
   let scale = 1
   let objectUrl: string | undefined
@@ -50,12 +55,14 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
   let zoomMax = 4
 
   onMount(async () => {
-    // ui Dialog 의 size 프리셋(고정 px width/height/max-height)을 덮어, 모달 자체를 80vw×80vh 로.
+    // ui Dialog 의 size 프리셋(고정 px width/height/max-height)을 덮는다.
+    // 세로는 90vh 고정(이미지 스케일 기준). 가로는 우선 90vw 로 펼쳐 가용 영역을 측정한 뒤,
+    // 아래에서 콘텐츠(이미지/툴바) 폭에 맞게 줄인다(최대 90vw 캡 유지).
     // 바깥 오버레이 flex(align/justify center)가 컨테이너를 화면 정중앙에 둔다.
     const dialogContainer = containerRef?.closest<HTMLElement>('[data-slot="dialog-container"]')
     if (dialogContainer) {
-      dialogContainer.style.width = "80vw"
-      dialogContainer.style.height = "80vh"
+      dialogContainer.style.width = "90vw"
+      dialogContainer.style.height = "90vh"
     }
 
     objectUrl = URL.createObjectURL(props.file)
@@ -69,8 +76,8 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
 
     const nativeW = img.naturalWidth || img.width
     const nativeH = img.naturalHeight || img.height
-    // 고정 모달(80vw×80vh) 안의 실제 가용 영역(스테이지 컨테이너 client 크기)을 측정해 그 안에 맞춘다.
-    // 양방향 모두 측정값 기준이라 초기엔 스크롤이 없고, 이미지는 공간을 채우는 적절한 크기로 보인다.
+    // 펼친 모달(90vw×90vh) 안의 실제 가용 영역(스테이지 컨테이너 client 크기)을 측정해 그 안에 맞춘다.
+    // 보통 세로(90vh)가 binding 되어 이미지 스케일을 결정하고, 가로는 아래에서 콘텐츠에 맞게 줄인다.
     const availImgW = Math.max(64, containerRef.clientWidth - PAD * 2)
     const availImgH = Math.max(64, containerRef.clientHeight - PAD * 2)
     scale = Math.min(1, availImgW / nativeW, availImgH / nativeH)
@@ -83,6 +90,25 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
     setZoomPct(Math.round(scale * 100))
 
     stage = new Konva.Stage({ container: containerRef, width: baseW, height: baseH })
+
+    // 가로 콘텐츠 핏: 모달 폭을 이미지(baseW)와 툴바 폭 중 큰 쪽 + 좌우 chrome 에 맞춰 줄인다.
+    // 90vw 로 펼친 상태에서 측정하므로 줄이기만 하고, min(90vw, …px) 로 두어 캡을 반응형으로 유지.
+    if (dialogContainer) {
+      // 툴바 intrinsic 폭: 닫기·추가의 ml-auto 때문에 평소 scrollWidth 는 가용폭 전체로 잡힌다.
+      // max-content 로 잠깐 바꿔 한 줄 실제 필요 폭만 잰 뒤 되돌린다.
+      const toolbarEl = containerRef.parentElement?.querySelector<HTMLElement>('[data-slot="toolbar"]')
+      let toolbarW = 0
+      if (toolbarEl) {
+        const prevWidth = toolbarEl.style.width
+        toolbarEl.style.width = "max-content"
+        toolbarW = toolbarEl.scrollWidth
+        toolbarEl.style.width = prevWidth
+      }
+      const desiredStageW = Math.max(baseW, toolbarW)
+      const chromeW = dialogContainer.clientWidth - containerRef.clientWidth // 좌우 패딩 합
+      const targetW = Math.round(desiredStageW + chromeW)
+      dialogContainer.style.width = `min(90vw, ${targetW}px)`
+    }
 
     const imageLayer = new Konva.Layer({ listening: false })
     imageLayer.add(new Konva.Image({ image: img, x: PAD, y: PAD, width: dispW, height: dispH }))
@@ -149,6 +175,13 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
     })
     transformer.nodes([cropRect])
     cropRect.on("dragmove transform", updateDim)
+    // 본체 위에서는 이동 커서. 떠나면 ""로 비워 CSS 의 crosshair(크롭 모드) 로 복귀.
+    cropRect.on("mouseenter", () => {
+      if (!drawingCrop && stage) stage.container().style.cursor = "move"
+    })
+    cropRect.on("mouseleave", () => {
+      if (stage) stage.container().style.cursor = ""
+    })
     cropLayer.add(cropRect, transformer)
     cropLayer.visible(false)
 
@@ -156,8 +189,23 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
     updateDim()
 
     let line: Konva.Line | undefined
-    stage.on("pointerdown", () => {
-      if (cropping()) return
+    stage.on("pointerdown", (e) => {
+      if (cropping()) {
+        // 본체(이동)·핸들(리사이즈) 위면 Konva 가 처리하게 두고 그리기 시작 안 함.
+        if (e.target === cropRect) return
+        if (e.target.findAncestor("Transformer", true)) return
+        // 빈(어두운) 영역에서 드래그 → 새 크롭 영역 그리기 시작.
+        const pos = clampToImg(stage!.getRelativePointerPosition())
+        if (!pos) return
+        drawStart = pos
+        drawingCrop = true
+        cropRect!.setAttrs({ x: pos.x, y: pos.y, width: 1, height: 1, scaleX: 1, scaleY: 1 })
+        transformer!.visible(false)
+        cropRect!.draggable(false)
+        cropRect!.listening(false)
+        updateDim()
+        return
+      }
       // getRelativePointerPosition: 스테이지 scale(줌) 반영 → 항상 논리좌표.
       const pos = stage!.getRelativePointerPosition()
       if (!pos) return
@@ -174,12 +222,25 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
       drawLayer!.add(line)
     })
     stage.on("pointermove", () => {
+      if (drawingCrop && drawStart) {
+        const pos = clampToImg(stage!.getRelativePointerPosition())
+        if (!pos) return
+        cropRect!.setAttrs({
+          x: Math.min(pos.x, drawStart.x),
+          y: Math.min(pos.y, drawStart.y),
+          width: Math.abs(pos.x - drawStart.x),
+          height: Math.abs(pos.y - drawStart.y),
+        })
+        updateDim()
+        return
+      }
       if (!line) return
       const pos = stage!.getRelativePointerPosition()
       if (!pos) return
       line.points(line.points().concat([pos.x, pos.y]))
     })
     const finishStroke = () => {
+      if (drawingCrop) finishDrawCrop()
       line = undefined
     }
     stage.on("pointerup", finishStroke)
@@ -236,6 +297,28 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
     containerRef.scrollTop = logicalY * next - (e.clientY - rect.top)
   }
 
+  // 포인터(논리좌표)를 이미지 영역 안으로 제한. 드래그-그리기 좌표 클램프에 사용.
+  const clampToImg = (pos: { x: number; y: number } | null) => {
+    if (!pos) return null
+    return {
+      x: Math.max(imgBounds.x, Math.min(pos.x, imgBounds.x + imgBounds.width)),
+      y: Math.max(imgBounds.y, Math.min(pos.y, imgBounds.y + imgBounds.height)),
+    }
+  }
+
+  // 드래그-그리기 종료. 너무 작으면(클릭) 전체로 되돌리고, 아니면 그린 영역을 확정해 핸들을 단다.
+  const finishDrawCrop = () => {
+    if (!drawingCrop || !cropRect) return
+    drawingCrop = false
+    drawStart = null
+    if (cropRect.width() < 24 || cropRect.height() < 24) {
+      cropRect.setAttrs({ ...imgBounds, scaleX: 1, scaleY: 1 })
+    }
+    updateDim()
+    refreshCrop()
+    transformer?.forceUpdate()
+  }
+
   // 크롭 사각형 기준으로 이미지 영역 안의 바깥 4영역을 반투명 검정으로 덮고, 잘릴 영역(cropBox)을 갱신한다.
   function updateDim() {
     if (!stage || !cropRect || dim.length < 4) return
@@ -254,6 +337,7 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
     bottom.setAttrs({ x: ix, y: y + h, width: imgBounds.width, height: Math.max(0, ib - (y + h)) })
     left.setAttrs({ x: ix, y, width: x - ix, height: h })
     right.setAttrs({ x: x + w, y, width: Math.max(0, ir - (x + w)), height: h })
+    setHasRegion(!isFullCrop())
     cropLayer?.batchDraw()
   }
 
@@ -265,14 +349,17 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
       cropBox.width >= imgBounds.width &&
       cropBox.height >= imgBounds.height)
 
-  // 편집 중에는 핸들+디밍을 보이고, 완료 후에도 자른 영역이 있으면 디밍은 계속 보여 어디가 잘릴지 표시한다.
+  // 편집 중이고 영역이 그려져 있을 때만 핸들/본체조작을 켠다. 전체(미선택)면 핸들을 숨기고
+  // cropRect 의 hit 도 꺼서, 빈 영역 드래그가 새 크롭 그리기로 시작되게 한다.
+  // 완료 후에도 자른 영역이 있으면 디밍은 계속 보여 어디가 잘릴지 표시한다.
   const refreshCrop = () => {
     if (!cropLayer || !transformer || !cropRect) return
     const editing = cropping()
-    cropLayer.visible(editing || !isFullCrop())
-    transformer.visible(editing)
-    cropRect.draggable(editing)
-    cropRect.listening(editing)
+    const region = !isFullCrop()
+    cropLayer.visible(editing || region)
+    transformer.visible(editing && region)
+    cropRect.draggable(editing && region)
+    cropRect.listening(editing && region)
     cropLayer.batchDraw()
   }
 
@@ -282,6 +369,9 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
     if (next) {
       transformer?.forceUpdate()
       updateDim()
+    } else if (stage) {
+      // 모드 해제 시 커서 원복(crosshair 클래스는 cropping() 반응으로 자동 제거).
+      stage.container().style.cursor = ""
     }
     refreshCrop()
   }
@@ -289,7 +379,6 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
   const resetCrop = () => {
     if (!cropRect) return
     cropRect.setAttrs({ ...imgBounds, scaleX: 1, scaleY: 1 })
-    transformer?.forceUpdate()
     updateDim()
     refreshCrop()
   }
@@ -329,7 +418,7 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
   }
 
   return (
-    <Dialog title={language.t("prompt.capture.editTitle")} size="x-large" class="![height:100%]">
+    <Dialog size="x-large" class="![height:100%]">
       <div data-component="capture-edit" class="flex h-full min-h-0 flex-col gap-3 p-4">
         <div data-slot="toolbar" class="flex shrink-0 flex-wrap items-center gap-2">
           {/* 색상 */}
@@ -387,11 +476,11 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
               aria-label={language.t("prompt.capture.toolPen")}
             />
           </Tooltip>
-          {/* 지우개 전용 아이콘이 없어 trash 로 대체(툴팁으로 의미 보강) */}
+          {/* 지우개 */}
           <Tooltip placement="top" value={language.t("prompt.capture.toolEraser")}>
             <IconButton
               type="button"
-              icon="trash"
+              icon="eraser"
               variant="ghost"
               class="size-7.5"
               data-selected={tool() === "eraser" ? "true" : undefined}
@@ -424,10 +513,13 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
           >
             {cropping() ? language.t("prompt.capture.toolCropDone") : language.t("prompt.capture.toolCrop")}
           </Button>
-          <Show when={cropping()}>
+          <Show when={cropping() && hasRegion()}>
             <Button type="button" variant="ghost" class="h-7.5" onClick={resetCrop}>
               {language.t("prompt.capture.toolCropReset")}
             </Button>
+          </Show>
+          <Show when={cropping() && !hasRegion()}>
+            <span class="text-12-regular text-text-weak">{language.t("prompt.capture.toolCropHint")}</span>
           </Show>
           <span class="h-5 w-px shrink-0 bg-border-weaker-base" />
           {/* 줌 */}
@@ -463,6 +555,15 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
               aria-label={language.t("prompt.capture.zoomIn")}
             />
           </Tooltip>
+          {/* 닫기 / 추가 */}
+          <div class="ml-auto flex items-center gap-2">
+            <Button type="button" variant="ghost" class="h-7.5" onClick={() => dialog.close()}>
+              {language.t("prompt.capture.close")}
+            </Button>
+            <Button type="button" variant="primary" class="h-7.5" disabled={adding()} onClick={onAddClick}>
+              {language.t("prompt.capture.add")}
+            </Button>
+          </div>
         </div>
 
         <div
@@ -471,17 +572,9 @@ export const CaptureEditDialog: Component<CaptureEditDialogProps> = (props) => {
           // 고정 모달 안의 가용 영역을 채우고, 캔버스가 작으면 가운데(safe: 줌으로 넘치면 시작점부터
           // 스크롤되게)에 둔다. 줌 인 하면 이 컨테이너 안에서만 스크롤되고 모달 크기는 그대로.
           class="flex min-h-0 w-full flex-1 overflow-auto rounded-md bg-surface-base [align-items:safe_center] [justify-content:safe_center]"
+          classList={{ "cursor-crosshair": cropping() }}
           onWheel={onWheel}
         />
-
-        <div data-slot="footer" class="flex shrink-0 justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={() => dialog.close()}>
-            {language.t("prompt.capture.close")}
-          </Button>
-          <Button type="button" variant="primary" disabled={adding()} onClick={onAddClick}>
-            {language.t("prompt.capture.add")}
-          </Button>
-        </div>
       </div>
     </Dialog>
   )

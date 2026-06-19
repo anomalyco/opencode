@@ -28,10 +28,6 @@ type ShellProps = {
     enabled: boolean
     onToggle: () => void
   }
-  capture?: {
-    active: boolean
-    onCapture: () => void
-  }
 }
 
 export const PromptDocShell: Component<ShellProps> = (props) => {

@@ -1,3 +1,14 @@
+import { blobToPngFile } from "./capture-export"
+
+/**
+ * 미리보기 브릿지가 돌려준 dataURL(이미지) 을 PNG File 로 변환한다.
+ * 브라우저에서 data: URL 은 fetch 로 바로 Blob 화할 수 있다.
+ */
+export async function dataUrlToPngFile(dataUrl: string): Promise<File> {
+  const blob = await (await fetch(dataUrl)).blob()
+  return blobToPngFile(blob)
+}
+
 type DisplayMediaConstraints = MediaStreamConstraints & {
   // Chromium hint to default the picker to the current tab.
   preferCurrentTab?: boolean

@@ -1,5 +1,12 @@
 import { Component, createSignal, type JSX, onCleanup, onMount, Show } from "solid-js"
 import { useSDK } from "@/context/sdk"
+import { usePromptDocBridge } from "@/context/prompt-doc-bridge"
+import {
+  OPEN_FILE_REFERENCE,
+  OPEN_LINE_REFERENCE,
+  type OpenFileReferenceDetail,
+  type OpenLineReferenceDetail,
+} from "./doc-block-events"
 import { createPage } from "./blocksuite-doc"
 
 function theme() {
@@ -10,6 +17,7 @@ function theme() {
 
 export const DocMessage: Component<{ id: string; fallback?: JSX.Element }> = (props) => {
   const sdk = useSDK()
+  const bridge = usePromptDocBridge()
   const [fail, setFail] = createSignal(false)
   let el: HTMLDivElement | undefined
   let page: Awaited<ReturnType<typeof createPage>> | undefined
@@ -22,8 +30,25 @@ export const DocMessage: Component<{ id: string; fallback?: JSX.Element }> = (pr
       return
     }
 
+    const onFile = (event: Event) => {
+      const detail = (event as CustomEvent<OpenFileReferenceDetail>).detail
+      if (!detail?.path) return
+      bridge.openFileReference(detail.path, detail.nodeType)
+    }
+    const onLine = (event: Event) => {
+      const detail = (event as CustomEvent<OpenLineReferenceDetail>).detail
+      if (!detail?.path) return
+      bridge.openLineReference(detail)
+    }
+    host.addEventListener(OPEN_FILE_REFERENCE, onFile)
+    host.addEventListener(OPEN_LINE_REFERENCE, onLine)
+    onCleanup(() => {
+      host.removeEventListener(OPEN_FILE_REFERENCE, onFile)
+      host.removeEventListener(OPEN_LINE_REFERENCE, onLine)
+    })
+
     void createPage({
-      theme,
+      theme: theme(),
       init: false,
       readonly: true,
       sync: {

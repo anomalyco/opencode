@@ -1,6 +1,7 @@
 {
   "permission": "allow",
   "model": "google/gemini-3.5-flash",
+  "plugin": ["./preview-bridge-plugin.js"],
   "provider": {
     "google": {
       "options": {

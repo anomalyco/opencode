@@ -477,7 +477,7 @@ export namespace Doc {
     },
   )
 
-  const DEFAULT = 120_000
+  const DEFAULT = 15_000
   const MIN = 10_000
   const MAX = 600_000
   const MAX_NAME = 64

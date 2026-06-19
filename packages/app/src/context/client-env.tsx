@@ -22,6 +22,8 @@ export function createClientEnv() {
   const disableChangeFiles = import.meta.env.VITE_DISABLE_CHANGE_FILES === STRING_TRUE
   const disableChatIntro = import.meta.env.VITE_DISABLE_CHAT_INTRO === STRING_TRUE
   const disableAnswerClose = import.meta.env.VITE_DISABLE_ANSWER_CLOSE === STRING_TRUE
+  const promptSubmitKey = import.meta.env.VITE_PROMPT_SUBMIT_KEY?.trim() || "enter"
+  const promptNewlineKey = import.meta.env.VITE_PROMPT_NEWLINE_KEY?.trim() || "shift+enter"
   const [devMode] = useStorageSignal(key, false, {
     storage: "local", 
     parse: (value) => value === STRING_TRUE,
@@ -38,6 +40,8 @@ export function createClientEnv() {
     disableChangeFiles: () => disableChangeFiles && !devMode(),
     disableChatIntro: () => disableChatIntro && !devMode(),
     disableAnswerClose: () => disableAnswerClose && !devMode(),
+    promptSubmitKey: () => promptSubmitKey,
+    promptNewlineKey: () => promptNewlineKey,
     submitFailureCloseSec,
   }
 }

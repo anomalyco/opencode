@@ -1,7 +1,7 @@
 import { createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { OpencodeClient, SessionActor } from "@opencode-ai/sdk/v2/client"
-import { createPage, type DocActor, type DocMountInput } from "@/components/blocksuite/blocksuite-doc"
+import { createPage, type DocActor } from "@/components/blocksuite/blocksuite-doc"
 import type { FileNodeType } from "@/components/blocksuite/file-reference-block"
 import type { LineRefInput } from "@/components/blocksuite/line-reference-url"
 import type { DocSyncOpts } from "@/components/blocksuite/opencode-doc-source"
@@ -10,13 +10,18 @@ import { clearActor, loadActor, saveActor } from "./doc-actor"
 
 type DocHandle = Awaited<ReturnType<typeof createPage>>
 
-type PromptDocInput = {
-  sessionID: () => string | undefined
-  url: () => string
-  directory: () => string
+export type PromptDocConfig = {
+  sessionID: string | undefined
+  url: string
+  directory: string
+  submitKey?: string
+  user?: { id: string; name: string; color?: string }
+}
+
+export type PromptDocInput = {
+  config: PromptDocConfig
   client: OpencodeClient
-  submit: () => void
-  user?: () => { id: string; name: string; color?: string } | undefined
+  onSubmit: () => void
 }
 
 // Bootstrap requests (actor registration + prompt doc lookup) run before the sync layer exists, so a
@@ -38,7 +43,7 @@ async function withRetry<T>(alive: (() => boolean) | undefined, task: () => Prom
 }
 
 async function register(input: PromptDocInput, sessionID: string, alive?: () => boolean) {
-  const user = input.user?.()
+  const user = input.config.user
   // With a ?user= param the identity is keyed by that user id (stable per user, distinct across
   // users); without it, per tab. We never force a tab/browser-stored actorID onto a user-scoped
   // identity — that would merge two different users into one. The server also de-dupes by user id.
@@ -46,7 +51,7 @@ async function register(input: PromptDocInput, sessionID: string, alive?: () => 
   const actor = await withRetry(alive, async () => {
     const res = await input.client.session.actor.upsert({
       sessionID,
-      directory: input.directory(),
+      directory: input.config.directory,
       ...(stored ? { actorID: stored } : {}),
       ...(user ? { userID: user.id, name: user.name } : {}),
       ...(user?.color ? { color: user.color } : {}),
@@ -61,7 +66,7 @@ async function register(input: PromptDocInput, sessionID: string, alive?: () => 
 
 async function promptDoc(input: PromptDocInput, sessionID: string, alive?: () => boolean) {
   return withRetry(alive, async () => {
-    const res = await input.client.session.promptDoc({ sessionID, directory: input.directory() })
+    const res = await input.client.session.promptDoc({ sessionID, directory: input.config.directory })
     if (!res.data?.docID) throw new Error("prompt doc lookup failed")
     return res.data
   })
@@ -70,8 +75,7 @@ async function promptDoc(input: PromptDocInput, sessionID: string, alive?: () =>
 export function createPromptDoc(input: PromptDocInput) {
   const clientID = crypto.randomUUID()
   let handle: DocHandle | undefined
-  let theme: DocMountInput["theme"] | undefined
-  let locale: DocMountInput["locale"] | undefined
+  let theme: "light" | "dark" | undefined
   let sync: DocSyncOpts | undefined
   let init = true
   let historySub: { dispose: () => void } | undefined
@@ -143,8 +147,8 @@ export function createPromptDoc(input: PromptDocInput) {
     setDocID(doc.docID)
     sync = {
       docID: doc.docID,
-      baseUrl: input.url(),
-      directory: input.directory(),
+      baseUrl: input.config.url,
+      directory: input.config.directory,
       client: input.client,
       actorID: actor.actorID,
       name: label(actor.actorID, actor.name),
@@ -166,17 +170,17 @@ export function createPromptDoc(input: PromptDocInput) {
     },
   ) => {
     const el = mounted
-    const themeFn = theme
+    const scheme = theme
     const next = opts?.sync ?? sync
-    if (!el || !themeFn || !next) return
+    if (!el || !scheme || !next) return
     if (!opts?.keep) await drop()
     const current = handle
     const fresh = await createPage({
-      theme: themeFn,
-      locale,
+      theme: scheme,
       sync: next,
       init: opts?.init ?? init,
-      submit: input.submit,
+      onSubmit: input.onSubmit,
+      submitKey: input.config.submitKey,
       onDraftChange: () => {
         syncFilled()
         syncHistory()
@@ -226,7 +230,7 @@ export function createPromptDoc(input: PromptDocInput) {
 
   const refresh = async (sessionID: string, opts?: { init?: boolean }) => {
     // Stop retrying if the user navigates to a different session while the server is still down.
-    const doc = await promptDoc(input, sessionID, () => input.sessionID() === sessionID)
+    const doc = await promptDoc(input, sessionID, () => input.config.sessionID === sessionID)
     setDocID(doc.docID)
     if (live !== doc.docID || handle?.collection.id !== doc.docID || sync?.docID !== doc.docID) {
       await pivot(sessionID, doc.docID, opts)
@@ -236,12 +240,11 @@ export function createPromptDoc(input: PromptDocInput) {
     return doc.docID
   }
 
-  const mount = (opts: { el: HTMLElement; theme: () => "light" | "dark"; locale?: () => string }) => {
+  const mount = (opts: { el: HTMLElement; theme: "light" | "dark" }) => {
     mounted = opts.el
     theme = opts.theme
-    locale = opts.locale
 
-    const sessionID = input.sessionID()
+    const sessionID = input.config.sessionID
     if (!sessionID) return Promise.resolve()
 
     return serialize(async (alive) => {
@@ -270,7 +273,6 @@ export function createPromptDoc(input: PromptDocInput) {
   const detach = () => {
     mounted = undefined
     theme = undefined
-    locale = undefined
     // Keep the handle (sync connection + own-edit undo history) alive across panel unmounts, so
     // leaving and re-entering doc mode does not rebuild the editor and wipe undo history. The DOM
     // is detached only; mount() reuses the handle for the same doc. serialize() bumps the
@@ -284,7 +286,6 @@ export function createPromptDoc(input: PromptDocInput) {
   const dispose = () => {
     mounted = undefined
     theme = undefined
-    locale = undefined
     // Full teardown (unlike detach): releases the editor and sync connection without clearing the
     // stored actor identity the way reset() does.
     void serialize(async () => {
@@ -301,7 +302,7 @@ export function createPromptDoc(input: PromptDocInput) {
     live = undefined
     setActor(undefined)
     setDocID(undefined)
-    if (sessionID) clearActor(sessionID, input.user?.()?.id)
+    if (sessionID) clearActor(sessionID, input.config.user?.id)
     setHistory({ undo: false, redo: false })
     setFilled(false)
     void serialize(async () => {
@@ -339,7 +340,7 @@ export function createPromptDoc(input: PromptDocInput) {
 
   const addReference = (path: string, nodeType?: FileNodeType) => handle?.addReference(path, nodeType) ?? false
 
-  const addLineReference = (input: LineRefInput) => handle?.addLineReference(input) ?? false
+  const addLineReference = (ref: LineRefInput) => handle?.addLineReference(ref) ?? false
 
   const actors = () => {
     const list: DocActor[] = handle?.actors() ?? []
@@ -350,11 +351,11 @@ export function createPromptDoc(input: PromptDocInput) {
   }
 
   const advance = async (id?: string) => {
-    const sessionID = id ?? input.sessionID()
+    const sessionID = id ?? input.config.sessionID
     if (!sessionID) return
     const res = await input.client.session.promptDoc2.advance({
       sessionID,
-      directory: input.directory(),
+      directory: input.config.directory,
       clientID,
     })
     const next = res.data
@@ -362,7 +363,7 @@ export function createPromptDoc(input: PromptDocInput) {
     await pivot(sessionID, next.docID, { init: true })
     const ready = await input.client.session.promptDoc2.ready({
       sessionID,
-      directory: input.directory(),
+      directory: input.config.directory,
       docID: next.docID,
       clientID,
     })
@@ -397,10 +398,9 @@ export function createPromptDoc(input: PromptDocInput) {
     advance,
     undo,
     redo,
-    setTheme: (scheme: "light" | "dark") => handle?.setTheme(scheme),
-    watchTheme: () => {
-      if (!handle || !theme) return
-      handle.setTheme(theme())
+    setTheme: (scheme: "light" | "dark") => {
+      theme = scheme
+      handle?.setTheme(scheme)
     },
   }
 }

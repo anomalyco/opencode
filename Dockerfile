@@ -43,6 +43,8 @@ COPY --from=build /app/packages/opencode/dist/opencode-linux-x64/bin/opencode /u
 COPY docker/AGENTS.md /etc/opencode/AGENTS.md
 COPY docker/.gitignore /etc/opencode/.gitignore
 COPY docker/opencode.jsonc /etc/opencode/opencode.jsonc
+COPY docker/preview-bridge-plugin.js /etc/opencode/preview-bridge-plugin.js
+COPY docker/preview-bridge.js /etc/opencode/preview-bridge.js
 
 EXPOSE 8888
 
