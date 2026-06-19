@@ -39,6 +39,7 @@ export type WorkspaceSidebarContext = {
   sidebarHovering: Accessor<boolean>
   clearHoverProjectSoon: () => void
   prefetchSession: (session: Session, priority?: "high" | "low") => void
+  renameSession: (session: Session) => void
   archiveSession: (session: Session) => Promise<void>
   workspaceName: (directory: string, projectId?: string, branch?: string) => string | undefined
   renameWorkspace: (directory: string, next: string, projectId?: string, branch?: string) => void
@@ -268,6 +269,7 @@ const WorkspaceSessionList = (props: {
           sidebarExpanded={props.ctx.sidebarExpanded}
           clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
           prefetchSession={props.ctx.prefetchSession}
+          renameSession={props.ctx.renameSession}
           archiveSession={props.ctx.archiveSession}
         />
       )}

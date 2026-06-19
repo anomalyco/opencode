@@ -83,6 +83,7 @@ export type SessionItemProps = {
   sidebarExpanded: Accessor<boolean>
   clearHoverProjectSoon: () => void
   prefetchSession: (session: Session, priority?: "high" | "low") => void
+  renameSession: (session: Session) => void
   archiveSession: (session: Session) => Promise<void>
 }
 
@@ -233,14 +234,28 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
 
           <Show when={!props.level}>
             <div
-              class="shrink-0 overflow-hidden transition-[width,opacity]"
+              class="shrink-0 overflow-hidden transition-[width,opacity] flex items-center gap-0.5"
               classList={{
-                "w-6 opacity-100 pointer-events-auto": !!props.mobile,
+                "w-[50px] opacity-100 pointer-events-auto": !!props.mobile,
                 "w-0 opacity-0 pointer-events-none": !props.mobile,
-                "group-hover/session:w-6 group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
-                "group-focus-within/session:w-6 group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
+                "group-hover/session:w-[50px] group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
+                "group-focus-within/session:w-[50px] group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto":
+                  true,
               }}
             >
+              <Tooltip value={language.t("common.rename")} placement="top">
+                <IconButton
+                  icon="edit"
+                  variant="ghost"
+                  class="size-6 rounded-md"
+                  aria-label={language.t("common.rename")}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    props.renameSession(props.session)
+                  }}
+                />
+              </Tooltip>
               <Tooltip value={language.t("common.archive")} placement="top">
                 <IconButton
                   icon="archive"

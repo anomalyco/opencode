@@ -4,7 +4,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
 import { CHANNEL } from "./constants"
-import { getStore } from "./store"
+import { getStore, stripJsonBom } from "./store"
 
 const TAURI_MIGRATED_KEY = "tauriMigrated"
 
@@ -39,7 +39,7 @@ function tauriAppId() {
 function migrateFile(datPath: string, filename: string) {
   let data: Record<string, unknown>
   try {
-    data = JSON.parse(readFileSync(datPath, "utf-8"))
+    data = JSON.parse(stripJsonBom(readFileSync(datPath, "utf-8")))
   } catch (err) {
     log.warn("tauri migration: failed to parse", filename, err)
     return

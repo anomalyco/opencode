@@ -990,6 +990,14 @@ export default function Layout(props: ParentProps) {
     }
   }
 
+  function renameSession(session: Session) {
+    void import("@/components/dialog-rename-session").then((x) => {
+      dialog.show(() => (
+        <x.DialogRenameSession sessionID={session.id} title={session.title} directory={session.directory} />
+      ))
+    })
+  }
+
   command.register("layout", () => {
     const commands: CommandOption[] = [
       {
@@ -1975,6 +1983,7 @@ export default function Layout(props: ParentProps) {
     sidebarHovering,
     clearHoverProjectSoon,
     prefetchSession,
+    renameSession,
     archiveSession,
     workspaceName,
     renameWorkspace,
@@ -2021,6 +2030,7 @@ export default function Layout(props: ParentProps) {
       sidebarExpanded,
       clearHoverProjectSoon,
       prefetchSession,
+      renameSession,
       archiveSession,
     },
   }

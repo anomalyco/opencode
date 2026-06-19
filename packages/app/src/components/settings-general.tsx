@@ -273,6 +273,24 @@ export const SettingsGeneral: Component = () => {
     <div class="flex flex-col gap-1">
       <SettingsList>
         <SettingsRow
+          title={language.t("settings.general.row.archivedSessions.title")}
+          description={language.t("settings.general.row.archivedSessions.description")}
+        >
+          <Button
+            data-action="settings-archived-sessions"
+            size="small"
+            variant="secondary"
+            onClick={() => {
+              void import("@/components/dialog-archived-sessions").then((module) => {
+                dialog.show(() => <module.DialogArchivedSessions />)
+              })
+            }}
+          >
+            {language.t("settings.general.row.archivedSessions.action")}
+          </Button>
+        </SettingsRow>
+
+        <SettingsRow
           title={language.t("settings.general.row.language.title")}
           description={language.t("settings.general.row.language.description")}
         >
