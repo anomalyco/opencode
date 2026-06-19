@@ -1,5 +1,6 @@
 import { centsToMicroCents } from "@opencode-ai/console-core/util/price.js"
 import { buildRateLimitKey, getRedis } from "./redis"
+import { logger } from "./logger"
 
 export function createProviderBudgetTracker(
   providers: {
@@ -22,13 +23,15 @@ export function createProviderBudgetTracker(
   const keys = Object.fromEntries(
     tracked.map((provider) => [provider.id, buildRateLimitKey("provider-budget", provider.id, interval)]),
   )
+  let budgetUsage: Record<string, number> = {}
 
   return {
     check: async () => {
-      const ids = tracked.filter((provider) => provider.budgetMode === "fill").map((provider) => provider.id)
+      const ids = tracked.map((provider) => provider.id)
       if (ids.length === 0) return {}
       const values = await redis.mget<(string | number | null)[]>(ids.map((id) => keys[id]))
-      return Object.fromEntries(ids.map((id, index) => [id, Number(values[index] ?? 0)]))
+      budgetUsage = Object.fromEntries(ids.map((id, index) => [id, Number(values[index] ?? 0)]))
+      return budgetUsage
     },
     track: async (provider: string, costInCent: number) => {
       const config = tracked.find((item) => item.id === provider)
@@ -40,6 +43,10 @@ export function createProviderBudgetTracker(
       pipeline.incrby(keys[provider], cost)
       pipeline.expire(keys[provider], 120)
       await pipeline.exec()
+      logger.metric({
+        "provider.budget_usage": budgetUsage[provider] + cost,
+        "model.budget_usage": cost,
+      })
     },
   }
 }
