@@ -134,6 +134,47 @@ describe("applyGlobalEvent", () => {
 })
 
 describe("applyDirectoryEvent", () => {
+  test("initializes text delta accumulation from the current part text", () => {
+    const part = { ...textPart("part", "session", "message"), text: "existing" }
+    const [store, setStore] = createStore(baseState({ part: { message: [part] } }))
+
+    applyDirectoryEvent({
+      event: {
+        type: "message.part.delta",
+        properties: { messageID: "message", partID: "part", field: "text", delta: " appended" },
+      },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+    })
+
+    expect(store.part_text_accum_delta.part).toBe("existing appended")
+    expect((store.part.message?.[0] as { text: string }).text).toBe("existing appended")
+  })
+
+  test("preserves a Home-specific retained session limit", () => {
+    const [store, setStore] = createStore(
+      baseState({
+        limit: 1,
+        session: [rootSession({ id: "a" }), rootSession({ id: "b" }), rootSession({ id: "c" })],
+      }),
+    )
+
+    applyDirectoryEvent({
+      event: { type: "session.created", properties: { info: rootSession({ id: "d" }) } },
+      store,
+      setStore,
+      push() {},
+      directory: "/tmp",
+      loadLsp() {},
+      retainedLimit: 3,
+    })
+
+    expect(store.session).toHaveLength(3)
+  })
+
   test("inserts root sessions in sorted order and updates sessionTotal", () => {
     const [store, setStore] = createStore(
       baseState({

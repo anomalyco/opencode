@@ -282,6 +282,11 @@ export const dict = {
   "dialog.fork.empty": "Aucun message à partir duquel bifurquer",
   "dialog.directory.search.placeholder": "Rechercher des dossiers",
   "dialog.directory.empty": "Aucun dossier trouvé",
+  "dialog.directory.action.selectFile": "Sélectionner le fichier",
+  "dialog.directory.action.selectFolder": "Sélectionner le dossier",
+  "dialog.directory.root": "Racine",
+  "dialog.directory.parent": "Parent",
+  "dialog.directory.readError": "Impossible de lire ce dossier",
   "dialog.server.title": "Serveurs",
   "dialog.server.description": "Changez le serveur OpenCode auquel cette application se connecte.",
   "dialog.server.search.placeholder": "Rechercher des serveurs",
@@ -417,7 +422,7 @@ export const dict = {
   "error.page.version": "Version : {{version}}",
   "error.dev.rootNotFound":
     "Élément racine introuvable. Avez-vous oublié de l'ajouter à votre index.html ? Ou peut-être que l'attribut id est mal orthographié ?",
-  "error.globalSync.connectFailed":
+  "error.serverSync.connectFailed":
     "Impossible de se connecter au serveur. Y a-t-il un serveur en cours d'exécution à `{{url}}` ?",
   "directory.error.invalidUrl": "Répertoire invalide dans l'URL.",
   "error.chain.unknown": "Erreur inconnue",
@@ -860,8 +865,8 @@ export const dict = {
   "common.key.insert": "Inser",
   "common.unknown": "inconnu",
   "error.page.circular": "[Circulaire]",
-  "error.globalSDK.noServerAvailable": "Aucun serveur disponible",
-  "error.globalSDK.serverNotAvailable": "Serveur non disponible",
+  "error.serverSDK.noServerAvailable": "Aucun serveur disponible",
+  "error.serverSDK.serverNotAvailable": "Serveur non disponible",
   "error.childStore.persistedCacheCreateFailed": "Échec de la création du cache persistant",
   "error.childStore.persistedProjectMetadataCreateFailed":
     "Échec de la création des métadonnées de projet persistantes",

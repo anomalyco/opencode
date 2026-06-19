@@ -306,6 +306,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Поиск папок",
   "dialog.directory.empty": "Папки не найдены",
+  "dialog.directory.action.selectFile": "Выбрать файл",
+  "dialog.directory.action.selectFolder": "Выбрать папку",
+  "dialog.directory.root": "Корень",
+  "dialog.directory.parent": "Родительская папка",
+  "dialog.directory.readError": "Не удалось прочитать эту папку",
 
   "dialog.server.title": "Серверы",
   "dialog.server.description": "Переключите сервер OpenCode к которому подключается приложение.",
@@ -461,7 +466,7 @@ export const dict = {
   "error.dev.rootNotFound":
     "Корневой элемент не найден. Вы забыли добавить его в index.html? Или, может быть, атрибут id был написан неправильно?",
 
-  "error.globalSync.connectFailed": "Не удалось подключиться к серверу. Запущен ли сервер по адресу `{{url}}`?",
+  "error.serverSync.connectFailed": "Не удалось подключиться к серверу. Запущен ли сервер по адресу `{{url}}`?",
   "directory.error.invalidUrl": "Недопустимая директория в URL.",
 
   "error.chain.unknown": "Неизвестная ошибка",
@@ -929,8 +934,8 @@ export const dict = {
   "common.key.insert": "Insert",
   "common.unknown": "неизвестно",
   "error.page.circular": "[Циклично]",
-  "error.globalSDK.noServerAvailable": "Нет доступного сервера",
-  "error.globalSDK.serverNotAvailable": "Сервер недоступен",
+  "error.serverSDK.noServerAvailable": "Нет доступного сервера",
+  "error.serverSDK.serverNotAvailable": "Сервер недоступен",
   "error.childStore.persistedCacheCreateFailed": "Не удалось создать постоянный кэш",
   "error.childStore.persistedProjectMetadataCreateFailed": "Не удалось создать постоянные метаданные проекта",
   "error.childStore.persistedProjectIconCreateFailed": "Не удалось создать постоянный значок проекта",

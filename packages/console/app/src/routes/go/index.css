@@ -90,6 +90,7 @@ body {
 
 [data-page="go"] {
   background: var(--color-background);
+  overflow-x: clip;
   --padding: 5rem;
   --vertical-padding: 4rem;
 
@@ -322,6 +323,37 @@ body {
       }
       [data-slot="zen logo dark"] {
         display: block;
+      }
+    }
+  }
+
+  [data-component="desktop-app-banner"] {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 32px;
+
+    [data-slot="badge"] {
+      background: var(--color-background-strong);
+      color: var(--color-text-inverted);
+      font-weight: 500;
+      padding: 4px 8px;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    [data-slot="content"] {
+      display: flex;
+      align-items: center;
+      gap: 1ch;
+    }
+
+    [data-slot="text"] {
+      color: var(--color-text-strong);
+      line-height: 1.4;
+
+      @media (max-width: 30.625rem) {
+        display: none;
       }
     }
   }
@@ -629,6 +661,10 @@ body {
 
       [data-bar][data-kind="free"] {
         fill: var(--color-text-strong);
+      }
+
+      [data-bar][data-kind="promo"] {
+        fill: color-mix(in srgb, var(--bar-go) 50%, transparent);
       }
 
       [data-val] {

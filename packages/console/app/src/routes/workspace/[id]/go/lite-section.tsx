@@ -15,6 +15,7 @@ import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { formError } from "~/lib/form-error"
 import { formatResetTime, liteResetTimeKeys } from "~/lib/format-reset-time"
+import { createReferralFromCookie } from "~/lib/referral-invite"
 
 import { IconAlipay, IconUpi } from "~/component/icon"
 
@@ -74,16 +75,14 @@ const createLiteCheckoutUrl = action(
   async (workspaceID: string, successUrl: string, cancelUrl: string, method?: "alipay" | "upi") => {
     "use server"
     return json(
-      await withActor(
-        () =>
-          Billing.generateLiteCheckoutUrl({ successUrl, cancelUrl, method })
-            .then((data) => ({ error: undefined, data }))
-            .catch((e) => ({
-              error: e.message as string,
-              data: undefined,
-            })),
-        workspaceID,
-      ),
+      await withActor(async () => {
+        const data = await Billing.generateLiteCheckoutUrl({ successUrl, cancelUrl, method })
+        await createReferralFromCookie()
+        return { error: undefined, data }
+      }, workspaceID).catch((e) => ({
+        error: e.message as string,
+        data: undefined,
+      })),
       { revalidate: [queryBillingInfo.key, queryLiteSubscription.key] },
     )
   },
@@ -258,18 +257,19 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
           </p>
           <h3 data-slot="promo-models-title">{i18n.t("workspace.lite.promo.modelsTitle")}</h3>
           <ul data-slot="promo-models">
-            <li>Kimi K2.5</li>
+            <li>Kimi K2.7 Code</li>
             <li>Kimi K2.6</li>
-            <li>GLM-5</li>
+            <li>GLM-5.2</li>
             <li>GLM-5.1</li>
-            <li>MiMo-V2.5-Pro</li>
-            <li>MiMo-V2.5</li>
-            <li>MiniMax M2.5</li>
+            <li>MiniMax M3</li>
             <li>MiniMax M2.7</li>
-            <li>Qwen3.5 Plus</li>
+            <li>Qwen3.7 Max</li>
+            <li>Qwen3.7 Plus</li>
             <li>Qwen3.6 Plus</li>
             <li>DeepSeek V4 Pro</li>
             <li>DeepSeek V4 Flash</li>
+            <li>MiMo-V2.5</li>
+            <li>MiMo-V2.5-Pro</li>
           </ul>
           <p data-slot="promo-description">{i18n.t("workspace.lite.promo.footer")}</p>
           <div data-slot="subscribe-actions">

@@ -313,6 +313,11 @@ export const dict = {
 
   "dialog.directory.search.placeholder": "Пошук папок",
   "dialog.directory.empty": "Папок не знайдено",
+  "dialog.directory.action.selectFile": "Вибрати файл",
+  "dialog.directory.action.selectFolder": "Вибрати папку",
+  "dialog.directory.root": "Корінь",
+  "dialog.directory.parent": "Батьківська папка",
+  "dialog.directory.readError": "Не вдалося прочитати цю папку",
 
   "app.server.unreachable": "Не вдалося досягти {{server}}",
   "app.server.retrying": "Автоматичне повторення...",
@@ -483,9 +488,9 @@ export const dict = {
   "error.dev.rootNotFound":
     "Кореневий елемент не знайдено. Ви забули додати його до index.html? Або, можливо, атрибут id було написано з помилкою?",
 
-  "error.globalSync.connectFailed": "Не вдалося підключитися до сервера. Чи працює сервер за адресою `{{url}}`?",
-  "error.globalSDK.noServerAvailable": "Сервер недоступний",
-  "error.globalSDK.serverNotAvailable": "Сервер недоступний",
+  "error.serverSync.connectFailed": "Не вдалося підключитися до сервера. Чи працює сервер за адресою `{{url}}`?",
+  "error.serverSDK.noServerAvailable": "Сервер недоступний",
+  "error.serverSDK.serverNotAvailable": "Сервер недоступний",
   "error.childStore.persistedCacheCreateFailed": "Не вдалося створити постійний кеш",
   "error.childStore.persistedProjectMetadataCreateFailed": "Не вдалося створити постійні метадані проєкту",
   "error.childStore.persistedProjectIconCreateFailed": "Не вдалося створити постійну іконку проєкту",
@@ -759,17 +764,15 @@ export const dict = {
   "settings.general.row.followup.option.queue": "Черга",
   "settings.general.row.followup.option.steer": "Керування",
   "settings.general.row.showFileTree.title": "Дерево файлів",
-  "settings.general.row.showFileTree.description":
-    "Показувати перемикач і панель дерева файлів у сесіях на робочому столі",
+  "settings.general.row.showFileTree.description": "Показувати панель дерева файлів у сесіях",
   "settings.general.row.showNavigation.title": "Елементи навігації",
   "settings.general.row.showNavigation.description": "Показувати кнопки назад і вперед у заголовку робочого столу",
   "settings.general.row.showSearch.title": "Палітра команд",
-  "settings.general.row.showSearch.description":
-    "Показувати кнопку пошуку та палітри команд у заголовку робочого столу",
+  "settings.general.row.showSearch.description": "Показувати кнопку пошуку та палітри команд у заголовку",
   "settings.general.row.showTerminal.title": "Термінал",
   "settings.general.row.showTerminal.description": "Показувати кнопку термінала в заголовку робочого столу",
   "settings.general.row.showStatus.title": "Статус сервера",
-  "settings.general.row.showStatus.description": "Показувати кнопку статусу сервера в заголовку робочого столу",
+  "settings.general.row.showStatus.description": "Показувати кнопку статусу сервера в заголовку",
   "settings.general.row.reasoningSummaries.title": "Показувати підсумки мислення",
   "settings.general.row.reasoningSummaries.description": "Відображати підсумки мислення моделі на часовій шкалі",
   "settings.general.row.shellToolPartsExpanded.title": "Розгортати частини інструменту оболонки",

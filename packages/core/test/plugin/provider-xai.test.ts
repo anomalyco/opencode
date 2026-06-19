@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
+import { EventV2 } from "@opencode-ai/core/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { XAIPlugin } from "@opencode-ai/core/plugin/provider/xai"
@@ -7,12 +8,12 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
 import { fakeSelectorSdk } from "./provider-helper"
 
-const it = testEffect(PluginV2.defaultLayer)
+const it = testEffect(PluginV2.locationLayer.pipe(Layer.provide(EventV2.defaultLayer)))
 
 const model = new ModelV2.Info({
   ...ModelV2.Info.empty(ProviderV2.ID.make("xai"), ModelV2.ID.make("grok-4")),
-  apiID: ModelV2.ID.make("grok-4"),
-  endpoint: {
+  api: {
+    id: ModelV2.ID.make("grok-4"),
     type: "aisdk",
     package: "@ai-sdk/xai",
   },
@@ -71,7 +72,7 @@ describe("XAIPlugin", () => {
     }),
   )
 
-  it.effect("uses responses with the model apiID for xAI language models", () =>
+  it.effect("uses responses with the model api.id for xAI language models", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const calls: string[] = []
@@ -80,7 +81,7 @@ describe("XAIPlugin", () => {
       const result = yield* plugin.trigger(
         "aisdk.language",
         {
-          model: new ModelV2.Info({ ...model, id: ModelV2.ID.make("alias"), apiID: ModelV2.ID.make("grok-4") }),
+          model: new ModelV2.Info({ ...model, id: ModelV2.ID.make("alias") }),
           sdk: fakeSelectorSdk(calls),
           options: {},
         },

@@ -73,6 +73,46 @@ const expectLLMError = (error: unknown) => {
 const errorHttp = (error: LLMError) => ("http" in error.reason ? error.reason.http : undefined)
 
 describe("RequestExecutor", () => {
+  it.effect("classifies context overflow responses", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "InvalidRequest", classification: "context-overflow" })
+    }).pipe(
+      Effect.provide(
+        responsesLayer([
+          new Response('{"error":{"code":"context_length_exceeded","message":"prompt too long"}}', {
+            status: 400,
+          }),
+        ]),
+      ),
+    ),
+  )
+
+  it.effect("does not classify generic HTTP 413 payload errors as context overflow", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
+      expect("classification" in error.reason ? error.reason.classification : undefined).toBeUndefined()
+    }).pipe(Effect.provide(responsesLayer([new Response("request too large", { status: 413 })]))),
+  )
+
+  it.effect("does not classify ordinary invalid requests as context overflow", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
+      expect("classification" in error.reason ? error.reason.classification : undefined).toBeUndefined()
+    }).pipe(Effect.provide(responsesLayer([new Response("invalid parameter", { status: 400 })]))),
+  )
+
   it.effect("returns redacted diagnostics for retryable rate limits", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
@@ -106,8 +146,8 @@ describe("RequestExecutor", () => {
       expect(errorHttp(error)?.body).toBe("rate limited")
     }).pipe(
       Effect.provide(
-        responsesLayer([
-          ...Array.from(
+        responsesLayer(
+          Array.from(
             { length: 3 },
             () =>
               new Response("rate limited", {
@@ -115,7 +155,7 @@ describe("RequestExecutor", () => {
                 headers: { "retry-after-ms": "0", "x-request-id": "req_123", "x-api-key": "secret" },
               }),
           ),
-        ]),
+        ),
       ),
     ),
   )
@@ -388,7 +428,9 @@ describe("RequestExecutor", () => {
   it.effect("does not retry after a successful response reaches stream parsing", () =>
     Effect.gen(function* () {
       const attempts = yield* Ref.make(0)
-      const model = OpenAIChat.model({ id: "gpt-4o-mini", baseURL: "https://api.openai.test/v1" })
+      const model = OpenAIChat.route
+        .with({ endpoint: { baseURL: "https://api.openai.test/v1" } })
+        .model({ id: "gpt-4o-mini" })
       const error = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
         Effect.provide(
           dynamicResponse((input) =>

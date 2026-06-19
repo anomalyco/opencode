@@ -80,6 +80,7 @@ export const DESKTOP_MENU: DesktopMenu[] = [
       { type: "item", label: "Settings", command: "settings.open", accelerator: { macos: "Cmd+," } },
       { type: "item", label: "Reload Webview", action: "view.reload" },
       { type: "item", label: "Restart", action: "app.relaunch" },
+      { type: "item", label: "Export Logs...", command: "logs.export" },
       { type: "separator" },
       { type: "item", role: "hide" },
       { type: "item", role: "hideOthers" },
@@ -140,7 +141,7 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     id: "view",
     label: "View",
     items: [
-      { type: "item", label: "Toggle Sidebar", command: "sidebar.toggle", accelerator: { macos: "Cmd+B" } },
+      { type: "item", label: "Toggle Sidebar", command: "sidebar.toggle" },
       { type: "item", label: "Toggle Terminal", command: "terminal.toggle", accelerator: { macos: "Ctrl+`" } },
       { type: "item", label: "Toggle File Tree", command: "fileTree.toggle" },
       { type: "separator" },
@@ -201,6 +202,7 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     items: [
       { type: "item", label: "OpenCode Documentation", href: "https://opencode.ai/docs" },
       { type: "item", label: "Support Forum", href: "https://discord.com/invite/opencode" },
+      { type: "item", label: "Export Logs...", command: "logs.export" },
       { type: "separator" },
       {
         type: "item",

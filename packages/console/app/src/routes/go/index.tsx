@@ -23,16 +23,17 @@ const checkLoggedIn = query(async () => {
 }, "checkLoggedIn.get")
 
 const models = [
+  { name: "GLM-5.2", provider: "DeepInfra, Fireworks AI, Z.ai" },
   { name: "GLM-5.1", provider: "DeepInfra, Fireworks AI, Z.ai" },
-  { name: "GLM-5", provider: "DeepInfra, Fireworks AI, Z.ai" },
-  { name: "Kimi K2.5", provider: "Moonshot AI" },
+  { name: "Kimi K2.7 Code", provider: "Moonshot AI" },
   { name: "Kimi K2.6", provider: "Moonshot AI" },
   { name: "MiMo-V2.5-Pro", provider: "Xiaomi MiMo" },
   { name: "MiMo-V2.5", provider: "Xiaomi MiMo" },
-  { name: "Qwen3.5 Plus", provider: "Alibaba Cloud Model Studio" },
+  { name: "Qwen3.7 Max", provider: "Alibaba Cloud Model Studio" },
+  { name: "Qwen3.7 Plus", provider: "Alibaba Cloud Model Studio" },
   { name: "Qwen3.6 Plus", provider: "Alibaba Cloud Model Studio" },
+  { name: "MiniMax M3", provider: "MiniMax" },
   { name: "MiniMax M2.7", provider: "MiniMax" },
-  { name: "MiniMax M2.5", provider: "MiniMax" },
   { name: "DeepSeek V4 Pro", provider: "DeepSeek" },
   { name: "DeepSeek V4 Flash", provider: "DeepSeek" },
 ]
@@ -60,18 +61,18 @@ function LimitsGraph(props: { href: string }) {
 
   const free = 200
   const graph = [
-    { id: "glm-5.1", name: "GLM-5.1", req: 880, d: "100ms" },
-    { id: "kimi-k2.6", name: "Kimi K2.6", req: 1150, d: "150ms" },
-    { id: "mimo-v2.5-pro", name: "MiMo-V2.5-Pro", req: 1290, d: "150ms" },
-    { id: "qwen3.6-plus", name: "Qwen3.6 Plus", req: 3300, d: "280ms" },
-    { id: "minimax-m2.7", name: "MiniMax M2.7", req: 3400, d: "300ms" },
-    { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 3450, d: "200ms" },
-    { id: "qwen3.5-plus", name: "Qwen3.5 Plus", req: 10200, d: "360ms" },
+    { id: "glm-5.2", name: "GLM-5.2", req: 880, d: "100ms" },
+    { id: "qwen3.7-max", name: "Qwen3.7 Max", req: 950, d: "110ms" },
+    { id: "kimi-k2.7-code", name: "Kimi K2.7 Code", req: 1150, d: "150ms" },
+    { id: "mimo-v2.5-pro", name: "MiMo-V2.5-Pro", req: 3250, d: "210ms" },
+    { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", req: 3450, d: "240ms" },
+    { id: "qwen3.7-plus", name: "Qwen3.7 Plus", req: 4300, d: "250ms" },
+    { id: "minimax-m3", name: "MiniMax M3 (3x usage)", req: 9600, baseReq: 3200, d: "280ms" },
+    { id: "mimo-v2.5", name: "MiMo-V2.5", req: 30100, d: "340ms" },
     { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", req: 31650, d: "340ms" },
   ]
 
   const w = 720
-  const h = 330
   const left = 40
   const right = 60
   const top = 18
@@ -107,6 +108,7 @@ function LimitsGraph(props: { href: string }) {
   const bh = 8
   const gap = 20
   const step = bh + gap
+  const h = 330 + Math.max(0, graph.length - 8) * step
   const sep = bh + 40
   const fy = top + 22
   const gy = (i: number) => fy + sep + step * i
@@ -155,12 +157,24 @@ function LimitsGraph(props: { href: string }) {
                   <rect
                     x={left}
                     y={gy(i()) - bh / 2}
-                    width={Math.max(0, x(ratio(m.req)) - left)}
+                    width={Math.max(0, x(ratio(m.baseReq ?? m.req)) - left)}
                     height={bh}
                     data-bar
                     data-kind="go"
                     data-model={m.id}
+                    data-segment={m.baseReq ? "base" : undefined}
                   />
+                  {m.baseReq && (
+                    <rect
+                      x={x(ratio(m.baseReq)) + 2}
+                      y={gy(i()) - bh / 2}
+                      width={Math.max(0, x(ratio(m.req)) - x(ratio(m.baseReq)) - 2)}
+                      height={bh}
+                      data-bar
+                      data-kind="promo"
+                      data-model={m.id}
+                    />
+                  )}
                 </g>
               )}
             </For>
@@ -250,6 +264,12 @@ export default function Home() {
 
         <div data-component="content">
           <section data-component="hero">
+            <div data-component="desktop-app-banner">
+              <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
+              <div data-slot="content">
+                <span data-slot="text">{i18n.t("go.banner.text")}</span>
+              </div>
+            </div>
             <div data-slot="hero-copy">
               <img data-slot="zen logo light" src={goLogoLight} alt="" />
               <img data-slot="zen logo dark" src={goLogoDark} alt="" />

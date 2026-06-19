@@ -49,7 +49,7 @@ export const Controlled = {
           label="Controlled checkbox"
           description="Toggled from Storybook state."
         />
-        <div style={{ "font-family": "var(--font-family-sans)", "font-size": "12px", color: "#808080" }}>
+        <div style={{ "font-family": "var(--v2-font-family-sans)", "font-size": "12px", color: "#808080" }}>
           Checked: {String(checked())}
         </div>
       </div>
