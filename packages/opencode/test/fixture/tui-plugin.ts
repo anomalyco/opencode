@@ -325,6 +325,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
       part: opts.state?.part ?? (() => []),
       lsp: opts.state?.lsp ?? (() => []),
       mcp: opts.state?.mcp ?? (() => []),
+      mcp_resource: opts.state?.mcp_resource ?? (() => []),
     },
     theme: {
       get current() {
