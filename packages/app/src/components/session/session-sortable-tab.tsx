@@ -9,6 +9,7 @@ import { getFilename } from "@opencode-ai/core/util/path"
 import { useFile } from "@/context/file"
 import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
+import { useSessionLayout } from "@/pages/session/session-layout"
 
 export function FileVisual(props: { path: string; active?: boolean }): JSX.Element {
   return (
@@ -31,8 +32,10 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
   const file = useFile()
   const language = useLanguage()
   const command = useCommand()
+  const { tabs } = useSessionLayout()
   const sortable = createSortable(props.tab)
   const path = createMemo(() => file.pathFromTab(props.tab))
+  const dirty = createMemo(() => tabs().dirty(props.tab))
   const content = createMemo(() => {
     const value = path()
     if (!value) return
@@ -40,24 +43,33 @@ export function SortableTab(props: { tab: string; onTabClose: (tab: string) => v
   })
   return (
     <div use:sortable class="h-full flex items-center" classList={{ "opacity-0": sortable.isActiveDraggable }}>
-      <div class="relative">
+      <div class="relative group">
         <Tabs.Trigger
           value={props.tab}
           closeButton={
-            <TooltipKeybind
-              title={language.t("common.closeTab")}
-              keybind={command.keybind("tab.close")}
-              placement="bottom"
-              gutter={10}
-            >
-              <IconButton
-                icon="close-small"
-                variant="ghost"
-                class="h-5 w-5"
-                onClick={() => props.onTabClose(props.tab)}
-                aria-label={language.t("common.closeTab")}
-              />
-            </TooltipKeybind>
+            <span class="relative inline-flex size-5 items-center justify-center">
+              <Show when={dirty()}>
+                <span
+                  aria-label={language.t("common.unsavedChanges")}
+                  class="absolute inline-block size-2 rounded-full bg-text-weak group-hover:opacity-0"
+                />
+              </Show>
+              <TooltipKeybind
+                title={language.t("common.closeTab")}
+                keybind={command.keybind("tab.close")}
+                placement="bottom"
+                gutter={10}
+              >
+                <IconButton
+                  icon="close-small"
+                  variant="ghost"
+                  class="h-5 w-5"
+                  classList={{ "opacity-0 group-hover:opacity-100": dirty() }}
+                  onClick={() => props.onTabClose(props.tab)}
+                  aria-label={language.t("common.closeTab")}
+                />
+              </TooltipKeybind>
+            </span>
           }
           hideCloseButton
           onMiddleClick={() => props.onTabClose(props.tab)}

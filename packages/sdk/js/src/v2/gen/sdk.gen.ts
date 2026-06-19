@@ -68,6 +68,8 @@ import type {
   FileReadResponses,
   FileStatusErrors,
   FileStatusResponses,
+  FileWriteErrors,
+  FileWriteResponses,
   FindFilesErrors,
   FindFilesResponses,
   FindSymbolsErrors,
@@ -91,6 +93,20 @@ import type {
   InstanceDisposeErrors,
   InstanceDisposeResponses,
   LocationRef,
+  LspBufferCloseErrors,
+  LspBufferCloseResponses,
+  LspBufferErrors,
+  LspBufferResponses,
+  LspCompletionErrors,
+  LspCompletionResponses,
+  LspDefinitionErrors,
+  LspDefinitionResponses,
+  LspDiagnosticsErrors,
+  LspDiagnosticsResponses,
+  LspHoverErrors,
+  LspHoverResponses,
+  LspReferencesErrors,
+  LspReferencesResponses,
   LspStatusErrors,
   LspStatusResponses,
   McpAddErrors,
@@ -1920,6 +1936,47 @@ export class File extends HeyApiClient {
       ...params,
     })
   }
+
+  /**
+   * Write file
+   *
+   * Write content to a file in the project, with optional conflict detection.
+   */
+  public write<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      path: string
+      content?: string
+      expectedSha?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "path" },
+            { in: "body", key: "content" },
+            { in: "body", key: "expectedSha" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<FileWriteResponses, FileWriteErrors, ThrowOnError>({
+      url: "/file/write",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
 }
 
 export class Instance extends HeyApiClient {
@@ -2216,6 +2273,296 @@ export class Lsp extends HeyApiClient {
       url: "/lsp",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * LSP hover
+   *
+   * Get hover information for a position in a file via LSP.
+   */
+  public hover<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      path?: string
+      line?: number
+      character?: number
+      triggerKind?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      triggerCharacter?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "path" },
+            { in: "body", key: "line" },
+            { in: "body", key: "character" },
+            { in: "body", key: "triggerKind" },
+            { in: "body", key: "triggerCharacter" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LspHoverResponses, LspHoverErrors, ThrowOnError>({
+      url: "/lsp/hover",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * LSP definition
+   *
+   * Find the definition of the symbol at a position in a file via LSP.
+   */
+  public definition<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      path?: string
+      line?: number
+      character?: number
+      triggerKind?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      triggerCharacter?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "path" },
+            { in: "body", key: "line" },
+            { in: "body", key: "character" },
+            { in: "body", key: "triggerKind" },
+            { in: "body", key: "triggerCharacter" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LspDefinitionResponses, LspDefinitionErrors, ThrowOnError>({
+      url: "/lsp/definition",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * LSP references
+   *
+   * Find references to the symbol at a position in a file via LSP.
+   */
+  public references<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      path?: string
+      line?: number
+      character?: number
+      triggerKind?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      triggerCharacter?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "path" },
+            { in: "body", key: "line" },
+            { in: "body", key: "character" },
+            { in: "body", key: "triggerKind" },
+            { in: "body", key: "triggerCharacter" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LspReferencesResponses, LspReferencesErrors, ThrowOnError>({
+      url: "/lsp/references",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * LSP completion
+   *
+   * Get completion suggestions for a position in a file via LSP.
+   */
+  public completion<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      path?: string
+      line?: number
+      character?: number
+      triggerKind?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+      triggerCharacter?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "path" },
+            { in: "body", key: "line" },
+            { in: "body", key: "character" },
+            { in: "body", key: "triggerKind" },
+            { in: "body", key: "triggerCharacter" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LspCompletionResponses, LspCompletionErrors, ThrowOnError>({
+      url: "/lsp/completion",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * LSP diagnostics
+   *
+   * Get diagnostics for a single file via LSP.
+   */
+  public diagnostics<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory?: string
+      workspace?: string
+      path: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "query", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<LspDiagnosticsResponses, LspDiagnosticsErrors, ThrowOnError>({
+      url: "/lsp/diagnostics",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * LSP buffer sync
+   *
+   * Push the editor's in-memory buffer (text + monotonic version) so LSP features reflect unsaved edits.
+   */
+  public buffer<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      path?: string
+      text?: string
+      version?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "path" },
+            { in: "body", key: "text" },
+            { in: "body", key: "version" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<LspBufferResponses, LspBufferErrors, ThrowOnError>({
+      url: "/lsp/buffer",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * LSP buffer close
+   *
+   * Close the editor buffer so the LSP server reverts to disk-backed analysis.
+   */
+  public bufferClose<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      path?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "path" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<LspBufferCloseResponses, LspBufferCloseErrors, ThrowOnError>({
+      url: "/lsp/buffer/close",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 }

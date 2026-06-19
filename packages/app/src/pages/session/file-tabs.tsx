@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, Match, on, onCleanup, Switch } from "solid-js"
+import { createEffect, createMemo, createSignal, Match, on, onCleanup, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -9,9 +9,22 @@ import { createLineCommentController } from "@opencode-ai/session-ui/line-commen
 import { sampledChecksum } from "@opencode-ai/core/util/encode"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { IconButton } from "@opencode-ai/ui/icon-button"
+import { CodeEditor } from "@opencode-ai/ui/code-editor"
+import { lspExtensions, type LspDiagnostic, type LspExtensionsOptions } from "@opencode-ai/ui/code-editor-lsp"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
+import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { showToast } from "@/utils/toast"
+import { useSDK } from "@/context/sdk"
+import {
+  registerActiveEditor,
+  clearActiveEditor,
+  createFileSaver,
+  setPendingEditOpen,
+  takePendingEditOpen,
+  type PendingEditPos,
+} from "@/pages/session/file-save"
+import { confirmChoice } from "@/pages/session/file-confirm-dialog"
 import { selectionFromLines, useFile, type FileSelection, type SelectedLineRange } from "@/context/file"
 import { useComments } from "@/context/comments"
 import { useLanguage } from "@/context/language"
@@ -177,6 +190,8 @@ export function FileTabContent(props: { tab: string }) {
   const language = useLanguage()
   const prompt = usePrompt()
   const fileComponent = useFileComponent()
+  const sdk = useSDK()
+  const dialog = useDialog()
   const { sessionKey, tabs, view } = useSessionLayout()
   const activeFileTab = createSessionTabs({
     tabs,
@@ -200,6 +215,188 @@ export function FileTabContent(props: { tab: string }) {
   })
   const contents = createMemo(() => state()?.content?.content ?? "")
   const cacheKey = createMemo(() => sampledChecksum(contents()))
+
+  const [editMode, setEditMode] = createSignal(false)
+  const [editorValue, setEditorValue] = createSignal("")
+
+  const isDirty = () => tabs().dirty(props.tab)
+  const setDirty = (value: boolean) => tabs().setDirty(props.tab, value)
+
+  const writeFile = async (content: string, expectedSha?: string) => {
+    const res = await sdk().client.file.write({
+      path: path() ?? "",
+      content,
+      ...(expectedSha ? { expectedSha } : {}),
+    })
+    if (res.error) throw res.error
+    return (res.data ?? {}) as { conflict?: boolean; sha?: string; written?: boolean }
+  }
+
+  const saver = createFileSaver({
+    editing: editMode,
+    currentText: () => editorValue(),
+    isDirty,
+    setDirty,
+    write: writeFile,
+    reloadFromDisk: async () => {
+      const p = path()
+      if (p) await file.load(p, { force: true })
+      seedFromDisk()
+    },
+    leaveEditMode: () => setEditMode(false),
+    promptConflict: async () =>
+      (await confirmChoice(dialog, {
+        title: language.t("file.conflict.title"),
+        description: language.t("file.conflict.description"),
+        choices: [
+          { value: "reload", label: language.t("common.reload") },
+          { value: "overwrite", label: language.t("common.overwrite"), variant: "primary" },
+        ],
+      })) as "reload" | "overwrite" | undefined,
+    promptUnsaved: async () =>
+      (await confirmChoice(dialog, {
+        title: language.t("file.unsaved.title"),
+        description: language.t("file.unsaved.description"),
+        choices: [
+          { value: "cancel", label: language.t("common.cancel"), variant: "ghost" },
+          { value: "discard", label: language.t("common.discard") },
+          { value: "save", label: language.t("common.save"), variant: "primary" },
+        ],
+      })) as "save" | "discard" | "cancel" | undefined,
+    onSaved: () => {
+      const p = path()
+      if (p) void file.load(p, { force: true })
+      showToast({ variant: "success", title: language.t("toast.file.saved.title") })
+    },
+    onError: () => showToast({ variant: "error", title: language.t("toast.file.saveFailed.title") }),
+  })
+
+  const save = () => saver.save()
+  const guardLeave = () => saver.guard()
+
+  const seedFromDisk = () => {
+    const text = contents()
+    setEditorValue(text)
+    saver.setBaseline(text, undefined)
+    setDirty(false)
+  }
+
+  const enterEditMode = () => {
+    if (editMode()) return
+    seedFromDisk()
+    setEditMode(true)
+  }
+
+  const onEditorChange = (next: string) => {
+    setEditorValue(next)
+    saver.onChange(next)
+  }
+
+  const [pendingSelection, setPendingSelection] = createSignal<PendingEditPos | undefined>(undefined)
+
+  createEffect(() => {
+    const p = path()
+    if (!p) return
+    if (!state()?.loaded) return
+    const pos = takePendingEditOpen(file.normalize(p))
+    if (!pos) return
+    seedFromDisk()
+    setEditMode(true)
+    setPendingSelection(pos)
+    queueMicrotask(() => setPendingSelection(undefined))
+  })
+
+  // Per-tab monotonic buffer version; a successful save keeps the buffer open at the same version (no bump, no re-open).
+  let bufferVersion = 0
+  const diagnosticsSubs = new Set<(list: LspDiagnostic[]) => void>()
+
+  const samePath = (a: string, b: string) => file.normalize(a) === file.normalize(b)
+
+  createEffect(() => {
+    const p = path()
+    if (!p) return
+    const unsub = sdk().event.on("lsp.diagnostics", (e) => {
+      const props = e.properties
+      if (!samePath(props.path, p)) return
+      const list = (props.diagnostics ?? []) as LspDiagnostic[]
+      for (const cb of diagnosticsSubs) cb(list)
+    })
+    onCleanup(unsub)
+  })
+
+  const buildLspOptions = (p: string): LspExtensionsOptions => {
+    const client = () => sdk().client.lsp
+    return {
+      path: p,
+      bumpVersion: () => ++bufferVersion,
+      lsp: {
+        buffer: (input) => client().buffer(input).then((r) => r.data),
+        bufferClose: (input) => client().bufferClose(input).then((r) => r.data),
+        completion: (input) => client().completion(input).then((r) => r.data),
+        hover: (input) => client().hover(input).then((r) => r.data),
+        definition: (input) => client().definition(input).then((r) => r.data),
+        diagnostics: (input) => client().diagnostics(input).then((r) => r.data),
+      },
+      onOpenLocation: (target, pos) => {
+        // Definitions outside the workspace arrive as absolute paths the file API can't read; surface a notice instead of a broken tab.
+        if (target.startsWith("/") || target.startsWith("file://")) {
+          showToast({ variant: "default", title: language.t("toast.file.definitionExternal.title") })
+          return
+        }
+        const normalized = file.normalize(target)
+        if (!normalized) return
+        setPendingEditOpen(normalized, pos)
+        void (async () => {
+          await tabs().open(file.tab(normalized))
+          await file.load(normalized)
+        })()
+      },
+      subscribeDiagnostics: (_path, cb) => {
+        diagnosticsSubs.add(cb)
+        return () => diagnosticsSubs.delete(cb)
+      },
+    }
+  }
+
+  const editorExtensions = createMemo(() => {
+    const p = path()
+    if (!p) return []
+    return lspExtensions(buildLspOptions(p))
+  })
+
+  const toggleEditMode = async () => {
+    if (!editMode()) {
+      enterEditMode()
+      return
+    }
+    if (!(await guardLeave())) return
+    setEditMode(false)
+  }
+
+  createEffect(() => {
+    if (activeFileTab() !== props.tab) return
+    registerActiveEditor({
+      tab: props.tab,
+      editing: editMode,
+      dirty: isDirty,
+      save,
+      guard: guardLeave,
+    })
+  })
+  onCleanup(() => clearActiveEditor(props.tab))
+
+  createEffect(
+    on(
+      contents,
+      (next, prev) => {
+        if (prev === undefined) return
+        if (next === prev) return
+        if (!editMode() || !isDirty()) return
+        showToast({ variant: "default", title: language.t("toast.file.changedExternally.title") })
+      },
+      { defer: true },
+    ),
+  )
   const selectedLines = createMemo<SelectedLineRange | null>(() => {
     const p = path()
     if (!p) return null
@@ -439,17 +636,58 @@ export function FileTabContent(props: { tab: string }) {
     </div>
   )
 
+  const EditViewToggle = () => (
+    <div class="absolute right-3 top-2 z-10 flex items-center gap-x-0.5 rounded-md border border-border-weak bg-surface-base p-0.5">
+      <IconButton
+        icon="open-file"
+        variant={editMode() ? "ghost" : "secondary"}
+        size="small"
+        class="h-6 px-2 rounded"
+        aria-label={language.t("file.edit.toggle.view")}
+        aria-pressed={!editMode()}
+        onClick={() => void toggleEditMode()}
+      />
+      <IconButton
+        icon="pencil-line"
+        variant={editMode() ? "secondary" : "ghost"}
+        size="small"
+        class="h-6 px-2 rounded"
+        aria-label={language.t("file.edit.toggle.edit")}
+        aria-pressed={editMode()}
+        onClick={() => void toggleEditMode()}
+      />
+    </div>
+  )
+
   return (
     <Tabs.Content value={props.tab} class="mt-3 relative h-full">
-      <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
-        <Switch>
-          <Match when={state()?.loaded}>{renderFile(contents())}</Match>
-          <Match when={state()?.loading}>
-            <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
-          </Match>
-          <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
-        </Switch>
-      </ScrollView>
+      <Show when={state()?.loaded}>
+        <EditViewToggle />
+      </Show>
+      <Switch>
+        <Match when={state()?.loaded && editMode()}>
+          <div class="h-full">
+            <CodeEditor
+              value={editorValue()}
+              path={path()}
+              onChange={onEditorChange}
+              onSaveRequested={() => void save()}
+              extensions={editorExtensions()}
+              initialSelection={pendingSelection()}
+              class="h-full"
+            />
+          </div>
+        </Match>
+        <Match when={state()?.loaded}>
+          <ScrollView class="h-full" viewportRef={scrollSync.setViewport} onScroll={scrollSync.handleScroll as any}>
+            {renderFile(contents())}
+          </ScrollView>
+        </Match>
+        <Match when={state()?.loading}>
+          <div class="px-6 py-4 text-text-weak">{language.t("common.loading")}...</div>
+        </Match>
+        <Match when={state()?.error}>{(err) => <div class="px-6 py-4 text-text-weak">{err()}</div>}</Match>
+      </Switch>
     </Tabs.Content>
   )
 }

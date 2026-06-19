@@ -1,0 +1,5 @@
+[test]
+# Registers happy-dom and compiles SolidJS TSX to its DOM build so component
+# tests (e.g. code-editor.test.tsx mounting CodeMirror 6) can render real DOM.
+# Logic-only tests are unaffected.
+preload = ["./test/dom-preload.ts"]

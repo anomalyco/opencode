@@ -18,6 +18,7 @@ import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/u
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
 import { requireServerKey } from "@/utils/session-route"
 import { type DraftTab, useTabs } from "./tabs"
+import { createTabWriteGuard } from "./tab-write-guard"
 
 export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 
@@ -57,6 +58,7 @@ export function getProjectAvatarVariant(key?: string): ProjectAvatarVariant {
 type SessionTabs = {
   active?: string
   all: string[]
+  dirty?: Record<string, boolean>
 }
 
 type SessionView = {
@@ -592,6 +594,8 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       if (sessionTimer !== undefined) window.clearTimeout(sessionTimer)
     })
 
+    const { runTabWrite, tabsWriting } = createTabWriteGuard()
+
     return {
       route,
       ready,
@@ -601,6 +605,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           setStore("home", "selection", reconcile(selection))
         },
       },
+      tabsWriting,
       handoff: {
         tabs: createMemo(() => store.handoff?.tabs),
         setTabs(dir: string, id: string) {
@@ -940,28 +945,61 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           tabs,
           active: createMemo(() => tabs().active),
           all: createMemo(() => tabs().all.filter((tab) => tab !== "review")),
+          dirty(tab: string) {
+            return tabs().dirty?.[tab] ?? false
+          },
+          setDirty(tab: string, value: boolean) {
+            const session = key()
+            const current = store.sessionTabs[session]
+            if (!current) {
+              if (!value) return
+              setStore("sessionTabs", session, { all: [], dirty: { [tab]: true } })
+              return
+            }
+            if (!value) {
+              if (!current.dirty?.[tab]) return
+              setStore(
+                "sessionTabs",
+                session,
+                "dirty",
+                produce((draft) => {
+                  if (draft) delete draft[tab]
+                }),
+              )
+              return
+            }
+            if (!current.dirty) {
+              setStore("sessionTabs", session, "dirty", { [tab]: true })
+              return
+            }
+            setStore("sessionTabs", session, "dirty", tab, true)
+          },
           setActive(tab: string | undefined) {
             const session = key()
             const next = tab ? normalize(tab) : tab
-            if (!store.sessionTabs[session]) {
-              setStore("sessionTabs", session, { all: [], active: next })
-            } else {
-              setStore("sessionTabs", session, "active", next)
-            }
+            runTabWrite(() => {
+              if (!store.sessionTabs[session]) {
+                setStore("sessionTabs", session, { all: [], active: next })
+              } else {
+                setStore("sessionTabs", session, "active", next)
+              }
+            })
           },
           setAll(all: string[]) {
             const session = key()
             const next = normalizeAll(all).filter((tab) => tab !== "review")
-            if (!store.sessionTabs[session]) {
-              setStore("sessionTabs", session, { all: next, active: undefined })
-            } else {
-              setStore("sessionTabs", session, "all", next)
-            }
+            runTabWrite(() => {
+              if (!store.sessionTabs[session]) {
+                setStore("sessionTabs", session, { all: next, active: undefined })
+              } else {
+                setStore("sessionTabs", session, "all", next)
+              }
+            })
           },
           async open(tab: string) {
             const session = key()
             const next = nextSessionTabsForOpen(store.sessionTabs[session], normalize(tab))
-            setStore("sessionTabs", session, next)
+            runTabWrite(() => setStore("sessionTabs", session, next))
           },
           close(tab: string) {
             const session = key()
@@ -975,8 +1013,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             }
 
             const all = current.all.filter((x) => x !== tab)
+            const clearDirty = () => {
+              if (!current.dirty?.[tab]) return
+              setStore(
+                "sessionTabs",
+                session,
+                "dirty",
+                produce((draft) => {
+                  if (draft) delete draft[tab]
+                }),
+              )
+            }
             if (current.active !== tab) {
-              setStore("sessionTabs", session, "all", all)
+              batch(() => {
+                setStore("sessionTabs", session, "all", all)
+                clearDirty()
+              })
               return
             }
 
@@ -985,6 +1037,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             batch(() => {
               setStore("sessionTabs", session, "all", all)
               setStore("sessionTabs", session, "active", next)
+              clearDirty()
             })
           },
           move(tab: string, to: number) {

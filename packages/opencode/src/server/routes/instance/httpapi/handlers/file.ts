@@ -3,9 +3,11 @@ import { FileSystem } from "@opencode-ai/core/filesystem"
 import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/location-services"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { FileMutation } from "@opencode-ai/core/file-mutation"
 import { Location } from "@opencode-ai/core/location"
 import { AbsolutePath, RelativePath } from "@opencode-ai/core/schema"
 import { Effect, Layer, Option } from "effect"
+import { createHash } from "node:crypto"
 import ignore from "ignore"
 import path from "path"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -128,6 +130,58 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       return []
     })
 
+    const write = Effect.fn("FileHttpApi.write")(function* (ctx: {
+      query: { path: string }
+      payload: { content: string; expectedSha?: string }
+    }) {
+      const directory = (yield* InstanceState.context).directory
+      const file = path.resolve(directory, ctx.query.path)
+      if (!FSUtil.contains(directory, file)) return yield* Effect.die(new Error("Path escapes the location"))
+
+      const fileExists = yield* FSUtil.Service.use((fs) => fs.existsSafe(file))
+
+      if (fileExists) {
+        const item = yield* filesystem(
+          FileSystem.Service.use((fs) => fs.read({ path: RelativePath.make(ctx.query.path) })),
+        )
+        const text = item.content.includes(0)
+          ? Option.none<string>()
+          : yield* Effect.sync(() => new TextDecoder("utf-8", { fatal: true }).decode(item.content)).pipe(Effect.option)
+        if (Option.isNone(text)) return yield* Effect.die(new Error("Cannot write to binary file"))
+      }
+
+      const target = {
+        canonical: file,
+        resource: path.relative(directory, file),
+      }
+
+      if (ctx.payload.expectedSha !== undefined) {
+        // A sha mismatch (or missing file) is returned as a normal result, not an Effect failure, so the editor can surface a conflict.
+        if (!fileExists) {
+          return { path: ctx.query.path, written: false as const, conflict: true as const }
+        }
+        const currentBytes = yield* FSUtil.Service.use((fs) => fs.readFile(file)).pipe(Effect.orDie)
+        const currentSha = createHash("sha256").update(currentBytes).digest("hex")
+        if (currentSha !== ctx.payload.expectedSha) {
+          return { path: ctx.query.path, written: false as const, conflict: true as const }
+        }
+        yield* filesystem(
+          FileMutation.Service.use((mut) =>
+            mut.writeIfUnchanged({ target, content: ctx.payload.content, expected: currentBytes }),
+          ),
+        ).pipe(Effect.orDie)
+      } else {
+        yield* filesystem(
+          FileMutation.Service.use((mut) => mut.writeTextPreservingBom({ target, content: ctx.payload.content })),
+        ).pipe(Effect.orDie)
+      }
+
+      const newBytes = yield* FSUtil.Service.use((fs) => fs.readFile(file)).pipe(Effect.orDie)
+      const newSha = createHash("sha256").update(newBytes).digest("hex")
+
+      return { path: ctx.query.path, written: true as const, sha: newSha }
+    })
+
     return handlers
       .handle("findText", findText)
       .handle("findFile", findFile)
@@ -135,5 +189,6 @@ export const fileHandlers = HttpApiBuilder.group(InstanceHttpApi, "file", (handl
       .handle("list", list)
       .handle("content", content)
       .handle("status", status)
+      .handle("write", write)
   }),
 ).pipe(Layer.provide(locationServiceMapLayer))

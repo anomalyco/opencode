@@ -1,5 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { EventV2 } from "@opencode-ai/core/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import * as LSPClient from "./client"
 import path from "path"
@@ -10,13 +11,12 @@ import { Process } from "@/util/process"
 import { spawn as lspspawn } from "./launch"
 import { Effect, Layer, Context, Schema } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { containsPath } from "@/project/instance-context"
+import { containsPath, type InstanceContext } from "@/project/instance-context"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LspEvent } from "@opencode-ai/schema/lsp-event"
 
 export const Event = LspEvent
-
 const Position = Schema.Struct({
   line: NonNegativeInt,
   character: NonNegativeInt,
@@ -27,6 +27,20 @@ export const Range = Schema.Struct({
   end: Position,
 }).annotate({ identifier: "Range" })
 export type Range = typeof Range.Type
+
+export const DiagnosticOut = Schema.Struct({
+  range: Range,
+  severity: Schema.optional(Schema.Number),
+  message: Schema.String,
+  source: Schema.optional(Schema.String),
+  code: Schema.optional(Schema.Union([Schema.String, Schema.Number])),
+}).annotate({ identifier: "Diagnostic" })
+export type DiagnosticOut = typeof DiagnosticOut.Type
+
+export const Diagnostics = EventV2.define({
+  type: "lsp.diagnostics",
+  schema: { path: Schema.String, diagnostics: Schema.Array(DiagnosticOut) },
+})
 
 export const Symbol = Schema.Struct({
   name: Schema.String,
@@ -121,6 +135,8 @@ export interface Interface {
   readonly status: () => Effect.Effect<Status[]>
   readonly hasClients: (file: string) => Effect.Effect<boolean>
   readonly touchFile: (input: string, diagnostics?: "document" | "full") => Effect.Effect<void>
+  readonly syncBuffer: (input: { file: string; text: string; version: number }) => Effect.Effect<void>
+  readonly closeBuffer: (file: string) => Effect.Effect<void>
   readonly diagnostics: () => Effect.Effect<Record<string, LSPClient.Diagnostic[]>>
   readonly hover: (input: LocInput) => Effect.Effect<any>
   readonly definition: (input: LocInput) => Effect.Effect<any[]>
@@ -128,6 +144,10 @@ export interface Interface {
   readonly implementation: (input: LocInput) => Effect.Effect<any[]>
   readonly documentSymbol: (uri: string) => Effect.Effect<(DocumentSymbol | Symbol)[]>
   readonly workspaceSymbol: (query: string) => Effect.Effect<Symbol[]>
+  readonly completion: (
+    input: LocInput,
+    context?: { triggerKind: number; triggerCharacter?: string },
+  ) => Effect.Effect<any>
   readonly prepareCallHierarchy: (input: LocInput) => Effect.Effect<any[]>
   readonly incomingCalls: (input: LocInput) => Effect.Effect<any[]>
   readonly outgoingCalls: (input: LocInput) => Effect.Effect<any[]>
@@ -205,9 +225,29 @@ const layer = Layer.effect(
       }),
     )
 
+    // Capture the instance-fiber runtime so the async callback publishes with the correct routed location, and convert the absolute path to workspace-relative for the event.
+    const publishDiagnostics =
+      (ctx: InstanceContext, context: Context.Context<any>) =>
+      (input: { path: string; diagnostics: LSPClient.Diagnostic[] }) => {
+        const relative = path.relative(ctx.directory, input.path)
+        Effect.runForkWith(context)(
+          events.publish(Diagnostics, {
+            path: relative,
+            diagnostics: input.diagnostics.map((d) => ({
+              range: d.range,
+              severity: d.severity,
+              message: d.message,
+              source: d.source,
+              code: typeof d.code === "string" || typeof d.code === "number" ? d.code : undefined,
+            })),
+          }),
+        )
+      }
+
     const getClients = Effect.fnUntraced(function* (file: string) {
       const ctx = yield* InstanceState.context
       if (!containsPath(file, ctx)) return [] as LSPClient.Info[]
+      const instanceContext = (yield* Effect.context<never>()) as Context.Context<any>
       const s = yield* InstanceState.get(state)
       const clients = yield* Effect.promise(async () => {
         const extension = path.parse(file).ext || file
@@ -233,6 +273,7 @@ const layer = Layer.effect(
             root,
             directory: ctx.directory,
             instance: ctx,
+            onDiagnostics: publishDiagnostics(ctx, instanceContext),
           }).catch(async () => {
             s.broken.add(key)
             await Process.stop(handle.process)
@@ -361,6 +402,24 @@ const layer = Layer.effect(
       )
     })
 
+    const syncBuffer = Effect.fn("LSP.syncBuffer")(function* (input: { file: string; text: string; version: number }) {
+      const clients = yield* getClients(input.file)
+      yield* Effect.promise(() =>
+        Promise.all(
+          clients.map((client) =>
+            client.notify.open({ path: input.file, buffer: { text: input.text, version: input.version } }),
+          ),
+        ).catch(() => {}),
+      )
+    })
+
+    const closeBuffer = Effect.fn("LSP.closeBuffer")(function* (file: string) {
+      const clients = yield* getClients(file)
+      yield* Effect.promise(() =>
+        Promise.all(clients.map((client) => client.notify.close({ path: file }))).catch(() => {}),
+      )
+    })
+
     const diagnostics = Effect.fn("LSP.diagnostics")(function* () {
       const results: Record<string, LSPClient.Diagnostic[]> = {}
       const all = yield* runAll(async (client) => client.diagnostics)
@@ -440,6 +499,21 @@ const layer = Layer.effect(
       return results.flat()
     })
 
+    const completion = Effect.fn("LSP.completion")(function* (
+      input: LocInput,
+      context?: { triggerKind: number; triggerCharacter?: string },
+    ) {
+      return yield* run(input.file, (client) =>
+        client.connection
+          .sendRequest("textDocument/completion", {
+            textDocument: { uri: pathToFileURL(input.file).href },
+            position: { line: input.line, character: input.character },
+            context: context ?? { triggerKind: 1 /* Invoked */ },
+          })
+          .catch(() => null),
+      )
+    })
+
     const prepareCallHierarchy = Effect.fn("LSP.prepareCallHierarchy")(function* (input: LocInput) {
       const results = yield* run(input.file, (client) =>
         client.connection
@@ -482,6 +556,8 @@ const layer = Layer.effect(
       status,
       hasClients,
       touchFile,
+      syncBuffer,
+      closeBuffer,
       diagnostics,
       hover,
       definition,
@@ -489,6 +565,7 @@ const layer = Layer.effect(
       implementation,
       documentSymbol,
       workspaceSymbol,
+      completion,
       prepareCallHierarchy,
       incomingCalls,
       outgoingCalls,

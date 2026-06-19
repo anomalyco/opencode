@@ -15,6 +15,7 @@ import { useTerminal } from "@/context/terminal"
 import { showToast } from "@/utils/toast"
 import { findLast } from "@opencode-ai/core/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { activeEditor, guardTab } from "@/pages/session/file-save"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -239,10 +240,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     )
   }
 
-  const closeTab = () => {
+  const closeTab = async () => {
     const tab = closableTab()
     if (!tab) return
+    if (!(await guardTab(tab))) return
     tabs().close(tab)
+  }
+
+  const saveActiveFile = () => {
+    const editor = activeEditor()
+    if (!editor || !editor.editing() || !editor.dirty()) return
+    void editor.save()
   }
 
   const addSelection = () => {
@@ -463,6 +471,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         keybind: "mod+k,mod+p",
         slash: "open",
         onSelect: openFile,
+      }),
+      fileCommand({
+        id: "file.save",
+        title: language.t("file.save.command"),
+        keybind: "mod+s",
+        hidden: true,
+        onSelect: saveActiveFile,
       }),
       tab &&
         fileCommand({

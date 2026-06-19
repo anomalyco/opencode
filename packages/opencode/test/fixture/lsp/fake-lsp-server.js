@@ -7,6 +7,12 @@ let initializeParams = null
 let diagnosticRequestCount = 0
 let registeredCapability = false
 const pendingClientRequests = new Map()
+let completionResponse = null
+let lastCompletionParams = null
+// Records textDocument/didOpen, didChange, didClose notifications in order so
+// buffer-sync tests can assert exactly what the client sent.
+const documentNotifications = []
+
 let pullConfig = {
   delayMs: 0,
   registerOn: undefined,
@@ -113,13 +119,12 @@ function handle(raw) {
 
   if (data.method === "initialize") {
     initializeParams = data.params
-    sendResponse(data.id, {
-      capabilities: {
-        textDocumentSync: {
-          change: 2,
-        },
+    const capabilities = {
+      textDocumentSync: {
+        change: 2,
       },
-    })
+    }
+    sendResponse(data.id, { capabilities })
     return
   }
 
@@ -139,13 +144,25 @@ function handle(raw) {
   }
 
   if (data.method === "textDocument/didOpen") {
+    documentNotifications.push({ method: "didOpen", params: data.params })
     maybeRegister("didOpen")
     return
   }
 
   if (data.method === "textDocument/didChange") {
     lastChange = data.params
+    documentNotifications.push({ method: "didChange", params: data.params })
     maybeRegister("didChange")
+    return
+  }
+
+  if (data.method === "textDocument/didClose") {
+    documentNotifications.push({ method: "didClose", params: data.params })
+    return
+  }
+
+  if (data.method === "test/get-document-notifications") {
+    sendResponse(data.id, documentNotifications)
     return
   }
 
@@ -233,6 +250,23 @@ function handle(raw) {
       },
       workspaceDelayForIdentifier(data.params?.identifier ?? ""),
     )
+    return
+  }
+
+  if (data.method === "test/set-completion-response") {
+    completionResponse = data.params?.response ?? null
+    sendResponse(data.id, null)
+    return
+  }
+
+  if (data.method === "test/get-last-completion-params") {
+    sendResponse(data.id, lastCompletionParams)
+    return
+  }
+
+  if (data.method === "textDocument/completion") {
+    lastCompletionParams = data.params
+    sendResponse(data.id, completionResponse)
     return
   }
 

@@ -39,6 +39,8 @@ const lsp = Layer.succeed(
     status: () => Effect.succeed([]),
     hasClients: () => Effect.succeed(true),
     touchFile: () => Effect.void,
+    syncBuffer: () => Effect.void,
+    closeBuffer: () => Effect.void,
     diagnostics: () => Effect.succeed({}),
     hover: () => Effect.succeed([]),
     definition: () => Effect.succeed([]),
@@ -53,6 +55,7 @@ const lsp = Layer.succeed(
     prepareCallHierarchy: () => Effect.succeed([]),
     incomingCalls: () => Effect.succeed([]),
     outgoingCalls: () => Effect.succeed([]),
+    completion: () => Effect.succeed(null),
   }),
 )
 
