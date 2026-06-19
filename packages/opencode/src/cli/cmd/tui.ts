@@ -280,7 +280,7 @@ export const TuiThreadCommand = cmd({
       }
 
       setTimeout(() => {
-        client.call("checkUpgrade", { directory: cwd }).catch(() => {})
+        worker.call("checkUpgrade", { directory: cwd }).catch(() => {})
       }, 1000).unref?.()
 
       try {
