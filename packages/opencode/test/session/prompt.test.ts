@@ -2108,6 +2108,58 @@ noLLMServer.instance(
   { config: cfg },
 )
 
+noLLMServer.instance(
+  "does not inject denied selected skill content",
+  () =>
+    Effect.gen(function* () {
+      const { directory: dir } = yield* TestInstance
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({})
+
+      yield* writeText(
+        path.join(dir, ".opencode", "skill", "denied", "SKILL.md"),
+        "---\nname: denied\ndescription: Denied skill\n---\nDenied skill secret instructions.\n",
+      )
+
+      const msg = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        noReply: true,
+        parts: [
+          { type: "text", text: "Use $denied on this change" },
+          { type: "skill", name: "denied", source: { value: "$denied", start: 4, end: 11 } },
+        ],
+      })
+
+      if (msg.info.role !== "user") throw new Error("expected user message")
+
+      const skills = msg.parts.filter((part) => part.type === "skill").map((part) => part.name)
+      const text = msg.parts.filter((part) => part.type === "text").map((part) => part.text)
+
+      expect(skills).toEqual(["denied"])
+      expect(text).toContain("Use $denied on this change")
+      expect(text.some((part) => part.includes("Denied skill secret instructions."))).toBe(false)
+      expect(text.some((part) => part.includes("## Skill: denied"))).toBe(false)
+
+      yield* sessions.remove(session.id)
+    }),
+  {
+    config: {
+      ...cfg,
+      agent: {
+        build: {
+          permission: {
+            skill: {
+              denied: "deny",
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
 // Special characters in filenames
 
 noLLMServer.instance(

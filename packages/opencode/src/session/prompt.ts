@@ -975,6 +975,8 @@ export const layer = Layer.effect(
         }
 
         if (part.type === "skill") {
+          const perm = Permission.evaluate("skill", part.name, ag.permission)
+          if (perm.action === "deny") return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
           const found = yield* skill.get(part.name)
           if (!found) return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
           return [
