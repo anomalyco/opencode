@@ -157,9 +157,6 @@ export async function handler(
       logger.metric({
         provider: providerInfo.id,
         "provider.model": providerInfo.model,
-        ...(providerBudgetUsage?.[providerInfo.id]
-          ? { "provider.budget_usage": providerBudgetUsage?.[providerInfo.id] }
-          : {}),
       })
 
       const startTimestamp = Date.now()

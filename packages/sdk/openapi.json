@@ -810,6 +810,60 @@
         ]
       }
     },
+    "/experimental/capabilities": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.capabilities.get",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Experimental capabilities",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExperimentalCapabilities"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Get experimental features enabled on the OpenCode server.",
+        "summary": "Get experimental capabilities",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.experimental.capabilities.get({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/experimental/console": {
       "get": {
         "tags": ["experimental"],
@@ -21022,6 +21076,16 @@
           }
         },
         "required": ["id", "name", "source", "env", "options", "models"],
+        "additionalProperties": false
+      },
+      "ExperimentalCapabilities": {
+        "type": "object",
+        "properties": {
+          "backgroundSubagents": {
+            "type": "boolean"
+          }
+        },
+        "required": ["backgroundSubagents"],
         "additionalProperties": false
       },
       "ConsoleState": {
