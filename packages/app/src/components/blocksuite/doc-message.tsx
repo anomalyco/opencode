@@ -48,7 +48,7 @@ export const DocMessage: Component<{ id: string; fallback?: JSX.Element }> = (pr
     })
 
     void createPage({
-      theme,
+      theme: theme(),
       init: false,
       readonly: true,
       sync: {

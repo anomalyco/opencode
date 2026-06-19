@@ -5,7 +5,6 @@ import {
   type OpenFileReferenceDetail,
   type OpenLineReferenceDetail,
 } from "@/components/blocksuite/doc-block-events"
-import { useLanguage } from "@/context/language"
 import { usePromptDocBridge } from "@/context/prompt-doc-bridge"
 import type { createPromptDoc } from "./doc"
 
@@ -20,7 +19,6 @@ function theme() {
 }
 
 export const PromptDocPanel: Component<PanelProps> = (props) => {
-  const language = useLanguage()
   const bridge = usePromptDocBridge()
   const [root, setRoot] = createSignal<HTMLDivElement>()
 
@@ -42,7 +40,7 @@ export const PromptDocPanel: Component<PanelProps> = (props) => {
     el.addEventListener(OPEN_LINE_REFERENCE, onLine)
     el.addEventListener(OPEN_FILE_REFERENCE, onFile)
 
-    void props.doc.mount({ el, theme, locale: language.locale })
+    void props.doc.mount({ el, theme: theme() })
     onCleanup(() => {
       el.removeEventListener(OPEN_LINE_REFERENCE, onLine)
       el.removeEventListener(OPEN_FILE_REFERENCE, onFile)
@@ -51,8 +49,7 @@ export const PromptDocPanel: Component<PanelProps> = (props) => {
   })
 
   createEffect(() => {
-    theme()
-    props.doc.watchTheme()
+    props.doc.setTheme(theme())
   })
 
   return (

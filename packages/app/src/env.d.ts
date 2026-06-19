@@ -12,10 +12,10 @@ interface ImportMetaEnv {
    */
   readonly VITE_MODEL_PIN_TIER: string
   /**
-   * Sticky session title header. Set to `hidden` at build time to omit the bar.
-   * @example VITE_SESSION_HEADER=hidden
+   * Set exactly to the string `true` to hide the sticky session title header.
+   * @example VITE_DISABLE_SESSION_HEADER=true
    */
-  readonly VITE_SESSION_HEADER: string
+  readonly VITE_DISABLE_SESSION_HEADER?: string
   /**
    * Set exactly to the string `true` to use the production/minimal app layout unless devMode is enabled.
    * @example VITE_PRODUCTION_LAYOUT=true
@@ -47,6 +47,16 @@ interface ImportMetaEnv {
    * @example VITE_DISABLE_CHAT_INTRO=true
    */
   readonly VITE_DISABLE_CHAT_INTRO?: string
+  /**
+   * Prompt submit shortcut (parseKeybind format). Defaults to `enter`.
+   * @example VITE_PROMPT_SUBMIT_KEY=mod+enter
+   */
+  readonly VITE_PROMPT_SUBMIT_KEY?: string
+  /**
+   * Prompt newline shortcut (parseKeybind format). Defaults to `shift+enter`.
+   * @example VITE_PROMPT_NEWLINE_KEY=shift+enter
+   */
+  readonly VITE_PROMPT_NEWLINE_KEY?: string
 }
 
 interface ImportMeta {

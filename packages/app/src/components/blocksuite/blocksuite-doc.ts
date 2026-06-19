@@ -15,18 +15,20 @@ import { FileReferenceBlockSpec, withFileReferenceSchema, type FileNodeType } fr
 import { LineReferenceBlockSpec, withLineReferenceSchema } from "./line-reference-block"
 import { lineReferenceUrl, normLineRef, type LineRefInput } from "./line-reference-url"
 import { actor, label, type DocActor } from "./actor"
+import { matchKeybind, parseKeybind } from "@/context/command"
 import { patchSlashMenu } from "./slash-menu-patch"
 import { patchFormatBar } from "./format-bar-patch"
 
 export type { DocActor } from "./actor"
 
 export type DocMountInput = {
-  theme: () => "light" | "dark"
-  locale?: () => string
+  theme: "light" | "dark"
   sync?: DocSyncOpts
   init?: boolean
   readonly?: boolean
-  submit?: () => void
+  onSubmit?: () => void
+  /** Submit shortcut in parseKeybind format. Defaults to `enter`. */
+  submitKey?: string
   onDraftChange?: () => void
 }
 
@@ -188,7 +190,7 @@ export async function createPage(input: DocMountInput) {
   let checks = 0
 
   const applyTheme = () => {
-    editor.std.get(ThemeProvider).app$.value = scheme(input.theme())
+    editor.std.get(ThemeProvider).app$.value = scheme(input.theme)
   }
 
   const focus = async (ready?: Awaited<ReturnType<typeof inlineReady>>) => {
@@ -381,12 +383,14 @@ export async function createPage(input: DocMountInput) {
       cursors = input.readonly ? undefined : watchCursorLabels(editor, el)
       unkeys?.()
       unkeys = undefined
-      const send = input.submit
+      const send = input.onSubmit
       if (!input.readonly && send) {
+        const submitKeys = parseKeybind(input.submitKey?.trim() || "enter")
         const onKey = (event: KeyboardEvent) => {
-          if (event.key !== "Enter" || event.isComposing) return
-          if (event.altKey || event.metaKey || event.ctrlKey) return
-          if (!event.shiftKey) return
+          // IME 조합 중 전송 방지. 전송 키가 아닌 입력(예: 기본값에서 Shift+Enter)은
+          // 가로채지 않고 BlockSuite 네이티브 줄바꿈에 맡긴다.
+          if (event.isComposing) return
+          if (!matchKeybind(submitKeys, event)) return
           event.preventDefault()
           event.stopPropagation()
           if (event.repeat) return
