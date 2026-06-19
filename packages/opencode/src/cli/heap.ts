@@ -31,7 +31,9 @@ export function start() {
     )
     await Promise.resolve()
       .then(() => writeHeapSnapshot(file))
-      .catch(() => {})
+      .catch((err) => {
+        console.error("Failed to write heap snapshot", err)
+      })
 
     lock = false
   }

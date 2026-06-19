@@ -505,7 +505,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       if (!autoload) return { autoload: false }
       return {
         autoload: true,
-        vars(_options: Record<string, any>) {
+        vars() {
           const endpoint = location === "global" ? "aiplatform.googleapis.com" : `${location}-aiplatform.googleapis.com`
           return {
             ...(project && { GOOGLE_VERTEX_PROJECT: project }),
@@ -1553,7 +1553,9 @@ export const layer = Layer.effect(
                   providers[gitlab].models[modelID] = model
                 }
               }
-            } catch (e) {}
+            } catch (e) {
+              console.error("Failed to load GitLab models", e)
+            }
           })
         }
 

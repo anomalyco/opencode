@@ -424,7 +424,6 @@ describe("session.llm native recorded", () => {
         })
         continue
       }
-      test.skip(`${scenario.name}: drives a tool loop to a final text answer`, () => {})
       continue
     }
     const it = testEffect(recordedNativeLLMLayer(scenario))
