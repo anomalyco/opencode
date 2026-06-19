@@ -171,12 +171,31 @@ type SkillMarketLoadResult = {
   error?: string
 }
 
+type SkillMarketLoadStage = "index" | "skills"
+
+type SkillMarketLoadMeta = {
+  repo: string
+  slow: boolean
+  timeoutMs: number
+  stage: SkillMarketLoadStage
+  total: number
+  completed: number
+  failed: number
+}
+
 type ParsedSkillMarketRepo = {
   repo: string
   branch?: string
 }
 
 const CUSTOM_SKILL_MARKET_PREFIX = "custom-skill-market:"
+const CUSTOM_SKILL_MARKET_STORAGE_KEY = "opencode.config.skillMarket.customRepos"
+const CUSTOM_SKILL_MARKET_STORAGE_LIMIT = 24
+const SKILL_MARKET_LOAD_TIMEOUT_MS = 30_000
+const SKILL_MARKET_SLOW_LOAD_MS = 8_000
+const SKILL_MARKET_FILE_TIMEOUT_MS = 12_000
+const SKILL_MARKET_FILE_CONCURRENCY = 8
+const SKILL_MARKET_MAX_SKILLS = 80
 
 const SKILL_MARKET_REPOS: SkillMarketRepo[] = [
   {
@@ -488,34 +507,135 @@ function skillMarketRepoURL(repo: ParsedSkillMarketRepo) {
   return `https://github.com/${repo.repo}/tree/${branch}`
 }
 
+function isCustomSkillMarketRepoID(id: string) {
+  return id.startsWith(CUSTOM_SKILL_MARKET_PREFIX)
+}
+
+function storedSkillMarketRepo(value: unknown): ParsedSkillMarketRepo | undefined {
+  if (typeof value === "string") return parseSkillMarketRepoInput(value)
+  if (typeof value !== "object" || value === null) return
+
+  const record = value as Record<string, unknown>
+  if (typeof record.repo !== "string") return
+  const branch = typeof record.branch === "string" ? record.branch : undefined
+  return cleanRepoParts(record.repo, branch)
+}
+
+function uniqueSkillMarketRepos(repos: ParsedSkillMarketRepo[]) {
+  const next = new Map<string, ParsedSkillMarketRepo>()
+  for (const repo of repos) {
+    next.set(skillMarketRepoID(repo), repo)
+  }
+  return Array.from(next.values()).slice(0, CUSTOM_SKILL_MARKET_STORAGE_LIMIT)
+}
+
+function loadStoredSkillMarketRepos(): ParsedSkillMarketRepo[] {
+  if (typeof localStorage !== "object") return []
+
+  try {
+    const raw = localStorage.getItem(CUSTOM_SKILL_MARKET_STORAGE_KEY)
+    if (!raw) return []
+
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return uniqueSkillMarketRepos(
+      parsed.map(storedSkillMarketRepo).filter((item): item is ParsedSkillMarketRepo => !!item),
+    )
+  } catch {
+    return []
+  }
+}
+
+function saveStoredSkillMarketRepos(repos: ParsedSkillMarketRepo[]) {
+  if (typeof localStorage !== "object") return
+
+  try {
+    localStorage.setItem(CUSTOM_SKILL_MARKET_STORAGE_KEY, JSON.stringify(uniqueSkillMarketRepos(repos)))
+  } catch {
+    // Best-effort UI preference persistence.
+  }
+}
+
+function prependSkillMarketRepo(repos: ParsedSkillMarketRepo[], repo: ParsedSkillMarketRepo) {
+  return uniqueSkillMarketRepos([repo, ...repos.filter((item) => skillMarketRepoID(item) !== skillMarketRepoID(repo))])
+}
+
+function sameSkillMarketRepos(a: ParsedSkillMarketRepo[], b: ParsedSkillMarketRepo[]) {
+  if (a.length !== b.length) return false
+  return a.every((repo, index) => {
+    const other = b[index]
+    return !!other && skillMarketRepoID(repo) === skillMarketRepoID(other)
+  })
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === "AbortError"
+}
+
+function isSkillMarketTimeoutError(error: unknown) {
+  return error instanceof Error && error.name === "SkillMarketTimeoutError"
+}
+
+function skillMarketTimeoutError(message: string) {
+  const error = new Error(message)
+  error.name = "SkillMarketTimeoutError"
+  return error
+}
+
+async function withSkillMarketTimeout<T>(promise: Promise<T>, timeoutMs: number, onTimeout: () => void): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          onTimeout()
+          reject(skillMarketTimeoutError(`Skill marketplace request timed out after ${timeoutMs / 1000}s`))
+        }, timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 function cdnPath(path: string) {
   return path.split("/").map(encodeURIComponent).join("/")
 }
 
-async function marketJSON<T>(fetcher: typeof fetch, url: string): Promise<T> {
-  const resp = await fetcher(url)
+async function marketJSON<T>(fetcher: typeof fetch, url: string, signal?: AbortSignal): Promise<T> {
+  const resp = await fetcher(url, { signal })
   if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`)
   return resp.json() as Promise<T>
 }
 
-async function marketRepoFiles(fetcher: typeof fetch, repo: SkillMarketRepo) {
+async function marketRepoFiles(fetcher: typeof fetch, repo: SkillMarketRepo, signal?: AbortSignal) {
   const branches = repo.branch ? [repo.branch] : ["main", "master"]
   let lastErr: unknown
 
   for (const branch of branches) {
     try {
+      console.debug("[skill-market] fetch index", { repo: repo.repo, branch })
       const data = await marketJSON<{ files?: Array<{ name?: string; type?: string }> }>(
         fetcher,
         `https://data.jsdelivr.com/v1/package/gh/${repo.repo}@${encodeURIComponent(branch)}/flat`,
+        signal,
       )
+      const paths = (data.files ?? [])
+        .map((item) => (typeof item.name === "string" ? item.name : ""))
+        .filter((path, index) => {
+          const item = data.files?.[index]
+          return !!path && (!item?.type || item.type === "file") && /(^|\/)SKILL\.md$/i.test(path)
+        })
+        .map((path) => path.replace(/^\/+/, ""))
+        .slice(0, SKILL_MARKET_MAX_SKILLS)
+      console.debug("[skill-market] index loaded", { repo: repo.repo, branch, skills: paths.length })
       return {
         branch,
-        paths: (data.files ?? [])
-          .filter((item) => (!item.type || item.type === "file") && item.name && /(^|\/)SKILL\.md$/i.test(item.name))
-          .map((item) => item.name!.replace(/^\/+/, ""))
-          .slice(0, 80),
+        paths,
       }
     } catch (err) {
+      console.warn("[skill-market] index failed", { repo: repo.repo, branch, error: String(err) })
       lastErr = err
     }
   }
@@ -523,34 +643,81 @@ async function marketRepoFiles(fetcher: typeof fetch, repo: SkillMarketRepo) {
   throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
 }
 
-async function loadMarketSkills(repo: SkillMarketRepo, fetcher: typeof fetch): Promise<SkillMarketItem[]> {
-  const { branch, paths } = await marketRepoFiles(fetcher, repo)
+async function loadMarketSkills(
+  repo: SkillMarketRepo,
+  fetcher: typeof fetch,
+  signal?: AbortSignal,
+  onProgress?: (progress: Omit<SkillMarketLoadMeta, "repo" | "slow" | "timeoutMs">) => void,
+): Promise<SkillMarketItem[]> {
+  onProgress?.({ stage: "index", total: 0, completed: 0, failed: 0 })
+  const { branch, paths } = await withSkillMarketTimeout(
+    marketRepoFiles(fetcher, repo, signal),
+    SKILL_MARKET_LOAD_TIMEOUT_MS,
+    () => {
+      console.warn("[skill-market] index timeout", { repo: repo.repo, branch: repo.branch })
+    },
+  )
+  onProgress?.({ stage: "skills", total: paths.length, completed: 0, failed: 0 })
 
-  const list = await Promise.all(
-    paths.map(async (path) => {
+  let loaded = 0
+  let failed = 0
+  let cursor = 0
+  const list: Array<SkillMarketItem | undefined> = []
+  const workerCount = Math.min(SKILL_MARKET_FILE_CONCURRENCY, paths.length)
+  const workers = Array.from({ length: workerCount }, async () => {
+    while (cursor < paths.length) {
+      const index = cursor
+      cursor += 1
+      const path = paths[index]
+      if (!path) continue
       const sourceUrl = `https://cdn.jsdelivr.net/gh/${repo.repo}@${encodeURIComponent(branch)}/${cdnPath(path)}`
       try {
-        const resp = await fetcher(sourceUrl)
-        if (!resp.ok) return
-        const content = await resp.text()
-        const meta = skillMeta(content, path)
-        const folder = skillFolder(meta.name, name(dir(path)))
-        return {
-          id: `${repo.repo}:${path}`,
-          name: meta.name,
-          description: meta.description,
-          path,
-          repo: repo.repo,
-          repoLabel: repo.label,
-          content,
-          sourceUrl,
-          folder,
-        }
-      } catch {
-        return
+        console.debug("[skill-market] fetch skill", { repo: repo.repo, branch, path })
+        list[index] = await withSkillMarketTimeout(
+          (async () => {
+            const resp = await fetcher(sourceUrl, { signal })
+            if (!resp.ok) {
+              console.warn("[skill-market] skill response failed", {
+                repo: repo.repo,
+                branch,
+                path,
+                status: resp.status,
+                statusText: resp.statusText,
+              })
+              return undefined
+            }
+            const content = await resp.text()
+            const meta = skillMeta(content, path)
+            const folder = skillFolder(meta.name, name(dir(path)))
+            return {
+              id: `${repo.repo}:${path}`,
+              name: meta.name,
+              description: meta.description,
+              path,
+              repo: repo.repo,
+              repoLabel: repo.label,
+              content,
+              sourceUrl,
+              folder,
+            }
+          })(),
+          SKILL_MARKET_FILE_TIMEOUT_MS,
+          () => {
+            console.warn("[skill-market] skill timeout", { repo: repo.repo, branch, path })
+          },
+        )
+        if (list[index]) loaded += 1
+        else failed += 1
+      } catch (err) {
+        failed += 1
+        console.warn("[skill-market] skill failed", { repo: repo.repo, branch, path, error: String(err) })
+      } finally {
+        onProgress?.({ stage: "skills", total: paths.length, completed: loaded + failed, failed })
       }
-    }),
-  )
+    }
+  })
+
+  await Promise.all(workers)
 
   return list
     .filter((item): item is SkillMarketItem => !!item)
@@ -2669,7 +2836,7 @@ export default function ConfigPage() {
     skillMarketRepo: SKILL_MARKET_REPOS[0]?.id ?? "",
     skillMarketCustomInput: "",
     skillMarketCustomError: "",
-    skillMarketCustomRepo: undefined as ParsedSkillMarketRepo | undefined,
+    skillMarketCustomRepos: loadStoredSkillMarketRepos(),
     skillMarketInstalling: "",
     treeClosed: {} as Record<string, boolean>,
     busy: false,
@@ -2767,12 +2934,10 @@ export default function ConfigPage() {
   const t = language.t
   const [marketSkills, setMarketSkills] = createSignal<SkillMarketLoadResult>({ skills: [] })
   const [marketSkillsLoading, setMarketSkillsLoading] = createSignal(false)
+  const [marketLoadMeta, setMarketLoadMeta] = createSignal<SkillMarketLoadMeta>()
   let marketLoadRun = 0
-  const customSkillMarketRepo = createMemo<SkillMarketRepo | undefined>(() => {
-    const repo = state.skillMarketCustomRepo
-    if (!repo) return
-
-    return {
+  const customSkillMarketRepos = createMemo<SkillMarketRepo[]>(() =>
+    state.skillMarketCustomRepos.map((repo) => ({
       id: skillMarketRepoID(repo),
       label: repo.repo,
       repo: repo.repo,
@@ -2781,12 +2946,9 @@ export default function ConfigPage() {
         ? t("config.skills.market.custom.repoDescriptionWithBranch", { branch: repo.branch })
         : t("config.skills.market.custom.repoDescription"),
       url: skillMarketRepoURL(repo),
-    }
-  })
-  const skillMarketRepos = createMemo<SkillMarketRepo[]>(() => {
-    const custom = customSkillMarketRepo()
-    return custom ? [custom, ...SKILL_MARKET_REPOS] : SKILL_MARKET_REPOS
-  })
+    })),
+  )
+  const skillMarketRepos = createMemo<SkillMarketRepo[]>(() => [...customSkillMarketRepos(), ...SKILL_MARKET_REPOS])
   const selectedMarketRepo = createMemo(() => skillMarketRepos().find((item) => item.id === state.skillMarketRepo))
 
   function loadSelectedMarketRepo() {
@@ -2794,24 +2956,72 @@ export default function ConfigPage() {
     if (!repo) {
       setMarketSkills({ skills: [] })
       setMarketSkillsLoading(false)
+      setMarketLoadMeta(undefined)
       return
     }
 
     const run = ++marketLoadRun
+    const controller = typeof AbortController === "function" ? new AbortController() : undefined
+    const slowTimer = setTimeout(() => {
+      if (marketLoadRun !== run) return
+      console.warn("[skill-market] load slow", { repo: repo.repo, branch: repo.branch })
+      setMarketLoadMeta((meta) => (meta ? { ...meta, slow: true } : meta))
+    }, SKILL_MARKET_SLOW_LOAD_MS)
+    const fetcher = platform.fetch ?? fetch
     setMarketSkillsLoading(true)
-    void loadMarketSkills(repo, platform.fetchExternal ?? platform.fetch ?? fetch)
+    setMarketLoadMeta({
+      repo: repo.label,
+      slow: false,
+      timeoutMs: SKILL_MARKET_LOAD_TIMEOUT_MS,
+      stage: "index",
+      total: 0,
+      completed: 0,
+      failed: 0,
+    })
+    console.debug("[skill-market] load start", {
+      repo: repo.repo,
+      branch: repo.branch,
+      id: repo.id,
+      fetcher: platform.fetch ? "platform.fetch" : "window.fetch",
+    })
+    void loadMarketSkills(repo, fetcher, controller?.signal, (progress) => {
+      if (marketLoadRun !== run) return
+      setMarketLoadMeta((meta) => (meta ? { ...meta, ...progress } : meta))
+    })
       .then((skills) => {
         if (marketLoadRun !== run) return
+        console.debug("[skill-market] load success", {
+          repo: repo.repo,
+          branch: repo.branch,
+          count: skills.length,
+        })
         setMarketSkills({ skills })
+        if (isCustomSkillMarketRepoID(repo.id)) {
+          const parsed = cleanRepoParts(repo.repo, repo.branch)
+          if (parsed) {
+            const next = prependSkillMarketRepo(state.skillMarketCustomRepos, parsed)
+            if (!sameSkillMarketRepos(state.skillMarketCustomRepos, next)) {
+              setState("skillMarketCustomRepos", next)
+            }
+            saveStoredSkillMarketRepos(next)
+          }
+        }
       })
       .catch((err: unknown) => {
         if (marketLoadRun !== run) return
-        const message = err instanceof Error ? err.message : String(err)
+        const message = isAbortError(err) || isSkillMarketTimeoutError(err)
+          ? t("config.skills.market.loadTimeout", { seconds: String(SKILL_MARKET_LOAD_TIMEOUT_MS / 1000) })
+          : err instanceof Error
+            ? err.message
+            : String(err)
+        console.warn("[skill-market] load failed", { repo: repo.repo, branch: repo.branch, error: message })
         setMarketSkills({ skills: [], error: message })
       })
       .finally(() => {
+        clearTimeout(slowTimer)
         if (marketLoadRun !== run) return
         setMarketSkillsLoading(false)
+        setMarketLoadMeta(undefined)
       })
   }
 
@@ -2829,7 +3039,7 @@ export default function ConfigPage() {
 
     batch(() => {
       setState("skillMarketCustomError", "")
-      setState("skillMarketCustomRepo", repo)
+      setState("skillMarketCustomRepos", (repos) => prependSkillMarketRepo(repos, repo))
       setState("skillMarketRepo", skillMarketRepoID(repo))
     })
   }
@@ -5615,6 +5825,7 @@ export default function ConfigPage() {
                           selected={state.skillMarketRepo}
                           skills={marketSkills().skills}
                           loading={marketSkillsLoading()}
+                          loadMeta={marketLoadMeta()}
                           error={marketSkills().error}
                           installing={state.skillMarketInstalling}
                           installed={installedSkillFolders()}
@@ -5802,11 +6013,59 @@ function SkillCreator(props: {
   )
 }
 
+function SkillMarketLoading(props: { meta?: SkillMarketLoadMeta }) {
+  const language = useLanguage()
+  const seconds = () => String(Math.round((props.meta?.timeoutMs ?? SKILL_MARKET_LOAD_TIMEOUT_MS) / 1000))
+  const stage = () => {
+    if (props.meta?.stage === "skills") return language.t("config.skills.market.loading.stage.skills")
+    return language.t("config.skills.market.loading.stage.index")
+  }
+  const progress = () => {
+    const meta = props.meta
+    if (!meta || meta.total === 0) return
+    return language.t("config.skills.market.loading.progress", {
+      completed: String(meta.completed),
+      total: String(meta.total),
+      failed: String(meta.failed),
+    })
+  }
+
+  return (
+    <div class="rounded-xl border border-border-weak-base bg-background-base p-5">
+      <div class="flex items-start gap-3">
+        <Spinner class="mt-0.5 size-4 shrink-0 text-icon-weak-base" />
+        <div class="min-w-0">
+          <div class="text-13-medium text-text-strong">
+            {language.t("config.skills.market.loading.title", {
+              repo: props.meta?.repo ?? language.t("config.skills.market.skills"),
+            })}
+          </div>
+          <div class="mt-2 text-12-regular leading-5 text-text-weak">
+            {language.t("config.skills.market.loading.description", { seconds: seconds() })}
+          </div>
+          <div class="mt-3 rounded-lg border border-border-weak-base bg-background-panel px-3 py-2">
+            <div class="text-12-medium text-text-strong">{stage()}</div>
+            <Show when={progress()}>
+              {(value) => <div class="mt-1 text-12-regular text-text-weak">{value()}</div>}
+            </Show>
+          </div>
+          <Show when={props.meta?.slow}>
+            <div class="mt-3 rounded-lg border border-border-warning-base/40 bg-surface-warning-base/10 px-3 py-2 text-12-regular leading-5 text-text-warning-base">
+              {language.t("config.skills.market.loading.slow")}
+            </div>
+          </Show>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function SkillMarket(props: {
   repos: SkillMarketRepo[]
   selected: string
   skills: SkillMarketItem[]
   loading: boolean
+  loadMeta?: SkillMarketLoadMeta
   error?: unknown
   installing: string
   installed: Set<string>
@@ -6016,7 +6275,7 @@ function SkillMarket(props: {
 
             <Show
               when={!props.loading}
-              fallback={<Wait text={`${language.t("common.loading")}${language.t("common.loading.ellipsis")}`} />}
+              fallback={<SkillMarketLoading meta={props.loadMeta} />}
             >
               <Show
                 when={!errorText()}
