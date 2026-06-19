@@ -11,6 +11,31 @@ import { Effect } from "effect"
 const DEFAULT_TIMEOUT = 30_000
 const MAX_LIST_PAGES = 1_000
 
+const KNOWN_FORMATS = new Set([
+  "date-time", "date", "time", "duration",
+  "email", "idn-email",
+  "hostname", "idn-hostname", "ipv4", "ipv6",
+  "uri", "uri-reference", "uri-template", "iri", "iri-reference",
+  "json-pointer", "relative-json-pointer",
+  "regex", "uuid",
+])
+
+function stripUnknownFormats(schema: JSONSchema7): JSONSchema7 {
+  if (typeof schema !== "object" || schema === null) return schema
+  const result: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(schema)) {
+    if (key === "format" && typeof value === "string" && !KNOWN_FORMATS.has(value)) continue
+    if (Array.isArray(value)) {
+      result[key] = value.map((v) => stripUnknownFormats(v as JSONSchema7))
+    } else if (typeof value === "object" && value !== null) {
+      result[key] = stripUnknownFormats(value as JSONSchema7)
+    } else {
+      result[key] = value
+    }
+  }
+  return result as JSONSchema7
+}
+
 const TolerantListToolsResultSchema = ListToolsResultSchema.extend({
   tools: ToolSchema.omit({ outputSchema: true }).array(),
 })
@@ -49,7 +74,7 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
 
   return dynamicTool({
     description: mcpTool.description ?? "",
-    inputSchema: jsonSchema(inputSchema),
+    inputSchema: jsonSchema(stripUnknownFormats(inputSchema)),
     execute: async (args: unknown, options) => {
       const result = await client.callTool(
         {

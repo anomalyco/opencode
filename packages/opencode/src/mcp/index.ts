@@ -5,6 +5,9 @@ import { type Tool } from "ai"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Client, type ClientOptions } from "@modelcontextprotocol/sdk/client/index.js"
+import Ajv from "ajv"
+import addFormats from "ajv-formats"
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
@@ -37,6 +40,8 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { McpCatalog } from "./catalog"
 
 const DEFAULT_TIMEOUT = 30_000
+const ajv = new Ajv({ strict: false, validateFormats: false })
+addFormats(ajv)
 const CLIENT_OPTIONS = {
   capabilities: {
     // https://github.com/anomalyco/opencode/issues/11948
@@ -48,6 +53,7 @@ const CLIENT_OPTIONS = {
     // https://github.com/anomalyco/opencode/issues/28567
     // tasks: {},
   },
+  jsonSchemaValidator: new AjvJsonSchemaValidator(ajv),
 } satisfies ClientOptions
 
 export const Resource = Schema.Struct({
