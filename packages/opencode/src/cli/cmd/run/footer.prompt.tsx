@@ -336,7 +336,7 @@ export function createPromptState(input: PromptInput): PromptState {
   const resources = createMemo<Auto[]>(() => {
     return input.resources().map((item) => ({
       kind: "mention",
-      display: Locale.truncateMiddle(`@${item.name} (${item.uri})`, width()),
+      display: Locale.truncateMiddle(`${item.client === "axi" ? "✧ " : "◎ "}@${item.name} (${item.uri})`, width()),
       value: item.name,
       description: item.description,
       part: {
