@@ -361,6 +361,9 @@ disable a server inherited from a parent config. String values such as header
 tokens support `{env:VAR}` interpolation (and `{file:path}`); the shell-style
 `${VAR}` is not substituted.
 
+Local servers accept an optional `cwd` field to set the working directory for
+the server process. Relative paths resolve from the workspace directory.
+
 ## Permissions
 
 ```json
