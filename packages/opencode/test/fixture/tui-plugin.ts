@@ -104,6 +104,7 @@ type Opts = {
     part?: HostPluginApi["state"]["part"]
     lsp?: HostPluginApi["state"]["lsp"]
     mcp?: HostPluginApi["state"]["mcp"]
+    mcp_resource?: HostPluginApi["state"]["mcp_resource"]
   }
   theme?: {
     selected?: string
