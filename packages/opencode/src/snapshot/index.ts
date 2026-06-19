@@ -120,7 +120,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               "-z",
             ],
             {
-              cwd: state.directory,
+              cwd: state.worktree,
               stdin: feed(files),
             },
           )
@@ -136,7 +136,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               ...args(["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"]),
             ],
             {
-              cwd: state.directory,
+              cwd: state.worktree,
               stdin: feed(files),
             },
           )
@@ -147,7 +147,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           const result = yield* git(
             [...cfg, ...args(["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"])],
             {
-              cwd: state.directory,
+              cwd: state.worktree,
               stdin: feed(files),
             },
           )
@@ -236,10 +236,10 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
           const [diff, other] = yield* Effect.all(
             [
               git([...quote, ...args(["diff-files", "--name-only", "-z", "--", "."])], {
-                cwd: state.directory,
+                cwd: state.worktree,
               }),
               git([...quote, ...args(["ls-files", "--others", "--exclude-standard", "-z", "--", "."])], {
-                cwd: state.directory,
+                cwd: state.worktree,
               }),
             ],
             { concurrency: 2 },
@@ -277,7 +277,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
             (yield* Effect.all(
               allow.map((item) =>
                 fs
-                  .stat(path.join(state.directory, item))
+                  .stat(path.join(state.worktree, item))
                   .pipe(Effect.catch(() => Effect.void))
                   .pipe(
                     Effect.map((stat) => {
@@ -352,7 +352,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               const result = yield* git(
                 [...quote, ...args(["diff", "--cached", "--no-ext-diff", "--name-only", hash, "--", "."])],
                 {
-                  cwd: state.directory,
+                  cwd: state.worktree,
                 },
               )
               if (result.code !== 0) {
@@ -685,7 +685,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
 
               const statuses = yield* git(
                 [...quote, ...args(["diff", "--no-ext-diff", "--name-status", "--no-renames", from, to, "--", "."])],
-                { cwd: state.directory },
+                { cwd: state.worktree },
               )
 
               for (const line of statuses.text.trim().split("\n")) {
@@ -698,7 +698,7 @@ export const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Serv
               const numstat = yield* git(
                 [...quote, ...args(["diff", "--no-ext-diff", "--no-renames", "--numstat", from, to, "--", "."])],
                 {
-                  cwd: state.directory,
+                  cwd: state.worktree,
                 },
               )
 

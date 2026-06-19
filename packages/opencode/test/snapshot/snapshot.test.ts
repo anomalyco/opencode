@@ -138,6 +138,24 @@ it.instance(
   { git: true },
 )
 
+it.live(
+  "tracks files when opened from a git subdirectory",
+  Effect.gen(function* () {
+    const dir = yield* scopedGitTmpdir()
+    const subdir = `${dir}/src`
+    yield* mkdirp(subdir)
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const file = fwd(dir, "src", "date.txt")
+      yield* write(file, "initial")
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(file, "changed")
+      expect((yield* snapshot.patch(before!)).files).toContain(file)
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
 it.instance(
   "multiple file operations",
   withTrackedSnapshot(({ tmp, snapshot, before }) =>
