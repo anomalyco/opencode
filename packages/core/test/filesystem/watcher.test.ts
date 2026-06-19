@@ -237,6 +237,25 @@ describeWatcher("Watcher", () => {
     ),
   )
 
+  it.live("does not crash when .git/HEAD is missing", () =>
+    withTmp(
+      (directory) =>
+        Effect.gen(function* () {
+          const fs = yield* FSUtil.Service
+          yield* ready(directory)
+          const head = path.join(directory, ".git", "HEAD")
+          yield* fs.remove(head, { force: true })
+          yield* Effect.sleep("100 millis")
+        }),
+      {
+        git: true,
+        init: async (directory) => {
+          await fs.unlink(path.join(directory, ".git", "HEAD"))
+        },
+      },
+    ),
+  )
+
   const describeSymlink = process.platform !== "win32" ? describe : describe.skip
   describeSymlink("symlinked .git", () => {
     it.live("publishes .git/HEAD events through a symlinked .git directory", () =>
