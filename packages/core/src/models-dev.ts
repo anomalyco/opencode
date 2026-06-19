@@ -127,6 +127,7 @@ const ALLOWED_MODEL_FAMILIES = [
   "kimi",
   "qwen",
   "glm",
+  "minimax",
 ]
 
 function isAllowedModel(name: string): boolean {
