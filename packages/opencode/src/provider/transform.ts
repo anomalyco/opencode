@@ -539,6 +539,7 @@ const GPT5_FAMILY_RE = /(?:^|\/)gpt-5(?:[.-]|$)/
 const GPT5_VERSION_RE = /(?:^|\/)gpt-5[.-](\d+)(?:[.-]|$)/
 const GPT5_PRO_RE = /(?:^|\/)gpt-5[.-]?pro(?:[.-]|$)/
 const GPT5_VERSIONED_PRO_RE = /(?:^|\/)gpt-5[.-]\d+[.-]pro(?:[.-]|$)/
+const GLM52_RE = /(?:^|[\/_-])glm[-_.]?5(?:[._-]|p)2(?:\D|$)/
 
 function gpt5Version(apiId: string) {
   return Number(GPT5_VERSION_RE.exec(apiId)?.[1]) || undefined
@@ -666,6 +667,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   if (!model.capabilities.reasoning) return {}
 
   const id = model.id.toLowerCase()
+  const glm52 = GLM52_RE.test(id) || GLM52_RE.test(model.api.id.toLowerCase())
   if (
     model.api.id.toLowerCase().includes("minimax-m3") &&
     ["@ai-sdk/anthropic", "@ai-sdk/openai-compatible"].includes(model.api.npm)
@@ -677,20 +679,20 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   }
   const adaptiveThinkingOmitted = anthropicOmitsThinking(model.api.id)
   const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
-  if (id.includes("glm-5.2") && model.api.npm === "@openrouter/ai-sdk-provider") {
+  if (glm52 && model.api.npm === "@openrouter/ai-sdk-provider") {
     // OpenRouter maps xhigh to GLM-5.2's native max effort.
     return {
       high: { reasoning: { effort: "high" } },
       xhigh: { reasoning: { effort: "xhigh" } },
     }
   }
-  if (id.includes("glm-5.2") && model.api.npm === "@ai-sdk/openai-compatible") {
+  if (glm52 && model.api.npm === "@ai-sdk/openai-compatible") {
     return {
       high: { reasoningEffort: "high" },
       max: { reasoningEffort: "max" },
     }
   }
-  if (id.includes("glm-5.2") && model.api.npm === "@ai-sdk/anthropic") {
+  if (glm52 && model.api.npm === "@ai-sdk/anthropic") {
     return {
       high: { effort: "high" },
       max: { effort: "max" },
@@ -702,7 +704,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     id.includes("deepseek-r1") ||
     id.includes("deepseek-v3") ||
     id.includes("minimax") ||
-    (id.includes("glm") && !id.includes("glm-5.2")) ||
+    (id.includes("glm") && !glm52) ||
     id.includes("kimi") ||
     id.includes("k2p") ||
     id.includes("qwen") ||

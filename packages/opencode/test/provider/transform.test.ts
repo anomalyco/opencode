@@ -2710,6 +2710,54 @@ describe("ProviderTransform.variants", () => {
     })
   })
 
+  for (const id of [
+    "fireworks-ai/accounts/fireworks/models/glm-5p2",
+    "venice/zai-org-glm-5-2",
+    "umans-ai/umans-glm-5.2",
+  ]) {
+    test(`recognizes GLM-5.2 model ID ${id}`, () => {
+      const model = createMockModel({
+        id,
+        api: {
+          id: id.slice(id.indexOf("/") + 1),
+          url: "https://api.test.com",
+          npm: "@ai-sdk/openai-compatible",
+        },
+      })
+      expect(ProviderTransform.variants(model)).toEqual({
+        high: { reasoningEffort: "high" },
+        max: { reasoningEffort: "max" },
+      })
+    })
+  }
+
+  test("recognizes GLM-5.2 from the API ID when the configured model ID is an alias", () => {
+    const model = createMockModel({
+      id: "custom/my-glm",
+      api: {
+        id: "accounts/fireworks/models/glm-5p2",
+        url: "https://api.fireworks.ai/inference/v1",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    expect(ProviderTransform.variants(model)).toEqual({
+      high: { reasoningEffort: "high" },
+      max: { reasoningEffort: "max" },
+    })
+  })
+
+  test("does not recognize GLM-5.20 as GLM-5.2", () => {
+    const model = createMockModel({
+      id: "zhipuai/glm-5.20",
+      api: {
+        id: "glm-5.20",
+        url: "https://open.bigmodel.cn/api/paas/v4",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    expect(ProviderTransform.variants(model)).toEqual({})
+  })
+
   test("glm-5.2 returns openrouter effort variants for openrouter", () => {
     const model = createMockModel({
       id: "openrouter/z-ai/glm-5.2",
