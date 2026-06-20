@@ -145,6 +145,7 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
                       continent: inserted("continent"),
                       sessions: inserted("sessions"),
                       requests: inserted("requests"),
+                      unique_users: inserted("unique_users"),
                       input_tokens: inserted("input_tokens"),
                       output_tokens: inserted("output_tokens"),
                       reasoning_tokens: inserted("reasoning_tokens"),

@@ -171,6 +171,7 @@ export default function StatsHome() {
               <>
                 <Hero updatedAt={stats().updatedAt} />
                 <TopModelsSection data={stats().usage} leaderboard={stats().leaderboard} />
+                <UniqueUsersSection data={stats().users} />
                 <SessionCostSection data={stats().sessionCost} />
                 <TokenCostSection data={stats().tokenCost} catalog={catalog() ?? null} />
                 <CacheRatioSection data={stats().cacheRatio} />
@@ -598,6 +599,8 @@ function FilterPills<T extends string>(props: {
 function TopModelsChart(props: {
   data: UsagePoint[]
   range: UsageRange
+  metric?: "tokens" | "users"
+  ariaLabel?: string
   activeModel: string | undefined
   onActiveModelChange: (model: string | undefined) => void
 }) {
@@ -606,6 +609,7 @@ function TopModelsChart(props: {
   const maxTotal = createMemo(() => getTopModelsMaxTotal(props.data))
   const segmentOrder = createMemo(() => getTopModelsSegmentOrder(props.data))
   const activePoint = createMemo(() => props.data[activeIndex() ?? -1])
+  const metric = createMemo(() => props.metric ?? "tokens")
 
   createEffect(() => scrollDenseChartToEnd(chartRef, props.range, props.data.length))
 
@@ -614,9 +618,10 @@ function TopModelsChart(props: {
       ref={chartRef}
       data-component="top-models-chart"
       data-range={props.range}
+      data-metric={metric()}
       data-dense-labels={isDenseColumnRange(props.range) ? "true" : undefined}
       role="img"
-      aria-label="Stacked top model usage chart"
+      aria-label={props.ariaLabel ?? "Stacked top model usage chart"}
       style={{ "--top-models-count": props.data.length } as JSX.CSSProperties}
       onPointerLeave={(event) => {
         if (event.pointerType === "touch") return
@@ -633,7 +638,7 @@ function TopModelsChart(props: {
               data-mobile-hidden={isTopModelsMobileAxisHidden(index(), props.data.length) ? "true" : undefined}
             >
               <span data-slot="axis-label">
-                <span data-slot="axis-total">{formatTokens(usageTotal(day))}</span>
+                <span data-slot="axis-total">{formatUsageChartValue(usageTotal(day), metric())}</span>
                 <span data-slot="axis-date">
                   <span data-slot="axis-date-full">{day.date}</span>
                   <span data-slot="axis-date-mobile">{formatTopModelsMobileDate(day.date, props.range)}</span>
@@ -657,7 +662,7 @@ function TopModelsChart(props: {
               data-slot="top-models-bar"
               role="button"
               tabIndex={0}
-              aria-label={`${day.date} ${formatTokens(usageTotal(day))}`}
+              aria-label={`${day.date} ${formatUsageChartValue(usageTotal(day), metric())} ${usageChartTotalLabel(metric())}`}
               data-active={activeIndex() === dayIndex() ? "true" : undefined}
               data-muted={activeIndex() !== undefined && activeIndex() !== dayIndex() ? "true" : undefined}
               style={{ "--top-models-bar-height": `${getTopModelsBarHeight(usageTotal(day), maxTotal())}%` }}
@@ -739,7 +744,9 @@ function TopModelsChart(props: {
                     data-placement={dayIndex() > props.data.length * 0.62 ? "left" : "right"}
                   >
                     <strong>{point().date}</strong>
-                    <span>{formatTokens(usageTotal(point()))} total</span>
+                    <span>
+                      {formatUsageChartValue(usageTotal(point()), metric())} {usageChartTotalLabel(metric())}
+                    </span>
                     <div data-slot="tooltip-divider" />
                     <For each={visibleTopModelsSegments(point())}>
                       {(item) => (
@@ -759,7 +766,7 @@ function TopModelsChart(props: {
                             />{" "}
                             {item.segment.model}
                           </span>
-                          <b>{formatTokens(item.segment.value)}</b>
+                          <b>{formatUsageChartValue(item.segment.value, metric())}</b>
                         </p>
                       )}
                     </For>
@@ -771,6 +778,31 @@ function TopModelsChart(props: {
         </For>
       </div>
     </div>
+  )
+}
+
+function UniqueUsersSection(props: { data: StatsHomeData["users"] }) {
+  const [activeModel, setActiveModel] = createSignal<string>()
+  const data = createMemo(() => props.data.Go["2M"])
+
+  return (
+    <section id="unique-users" data-section="unique-users">
+      <SectionBridge label="TOP MODELS" href="#top-models" />
+      <SectionTitle title="Unique Users" description="Daily unique OpenCode Go users by model." />
+      <Show
+        when={data().some((item) => usageTotal(item) > 0)}
+        fallback={<EmptyState title="No user data" description="No user-bearing model_stat rows matched this window." />}
+      >
+        <TopModelsChart
+          data={data()}
+          range="2M"
+          metric="users"
+          ariaLabel="Stacked unique user chart by model"
+          activeModel={activeModel()}
+          onActiveModelChange={setActiveModel}
+        />
+      </Show>
+    </section>
   )
 }
 
@@ -862,6 +894,22 @@ function usageTotal(point: UsagePoint) {
 function formatTokens(value: number) {
   if (value >= 1) return `${value.toFixed(value >= 10 ? 0 : 1)}T`
   return `${Math.round(value * 1000)}B`
+}
+
+function formatUsageChartValue(value: number, metric: "tokens" | "users") {
+  if (metric === "users") return formatUsers(value)
+  return formatTokens(value)
+}
+
+function usageChartTotalLabel(metric: "tokens" | "users") {
+  if (metric === "users") return "model users"
+  return "total"
+}
+
+function formatUsers(value: number) {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`
+  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}K`
+  return new Intl.NumberFormat("en").format(Math.round(value))
 }
 
 function Leaderboard(props: {
