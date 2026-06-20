@@ -1829,9 +1829,8 @@ describe("SessionRunnerLLM", () => {
         ],
         [
           LLMEvent.stepStart({ index: 0 }),
-          LLMEvent.toolCall({ id: "call-forbidden", name: "echo", input: { text: "forbidden" } }),
-          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
-          LLMEvent.finish({ reason: "tool-calls" }),
+          LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+          LLMEvent.finish({ reason: "stop" }),
         ],
       ]
       toolExecutionGate = yield* Deferred.make<void>()
