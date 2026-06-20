@@ -18,7 +18,14 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
 import { SessionStore } from "@opencode-ai/core/session/store"
-import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import {
+  MessageTable,
+  PartTable,
+  SessionInputTable,
+  SessionMessageTable,
+  SessionTable,
+} from "@opencode-ai/core/session/sql"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { testEffect } from "./lib/effect"
 
 const database = Database.layerFromPath(":memory:")
@@ -613,6 +620,68 @@ describe("SessionProjector", () => {
           time: { created },
         }),
       ])
+    }),
+  )
+})
+
+describe("SessionProjector orphan-part tolerance", () => {
+  const it = testEffect(Layer.mergeAll(database, events, projector))
+  const sessionID = SessionV2.ID.make("ses_orphan_test")
+  const messageID = SessionV1.MessageID.make("msg_orphan")
+  const partID = SessionV1.PartID.make("prt_orphan")
+
+  it.effect("does not throw and does not insert part when parent message is gone", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "orphan-test",
+          directory: "/project",
+          title: "orphan test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+
+      // Insert a message row directly, then delete it to simulate cascade-delete
+      yield* db
+        .insert(MessageTable)
+        .values({ id: messageID, session_id: sessionID, time_created: 0, data: {} as never })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db.delete(MessageTable).where(eq(MessageTable.id, messageID)).run().pipe(Effect.orDie)
+
+      const evts = yield* EventV2.Service
+
+      // Late PartUpdated arrives after the parent was deleted
+      const exit = yield* evts
+        .publish(SessionV1.Event.PartUpdated, {
+          sessionID,
+          time: 0,
+          part: {
+            id: partID,
+            sessionID,
+            messageID,
+            type: "text",
+            text: "late orphan part",
+          } as SessionV1.TextPart,
+        })
+        .pipe(Effect.exit)
+
+      // Must not defect
+      expect(exit._tag).toBe("Success")
+
+      // Part row must NOT exist in PartTable
+      const row = yield* db.select().from(PartTable).where(eq(PartTable.id, partID)).get().pipe(Effect.orDie)
+      expect(row).toBeUndefined()
     }),
   )
 })

@@ -366,7 +366,17 @@ export const layerWith = (options?: LayerOptions) =>
                         }),
                       { behavior: "immediate" },
                     )
-                    .pipe(Effect.orDie)
+                    .pipe(
+                      Effect.tapError((error) =>
+                        Effect.logError("durable event commit failed", {
+                          eventID: event.id,
+                          eventType: event.type,
+                          aggregateID,
+                          error,
+                        }),
+                      ),
+                      Effect.orDie,
+                    )
                   if (committed) {
                     yield* Effect.forEach(
                       synchronized.get(committed.aggregateID) ?? [],
