@@ -98,7 +98,7 @@ const GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW = "go_upsell_account_rate_limit_don
 const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
 const GO_UPSELL_PROVIDERS = new Set(["opencode", "opencode-go"])
 
-type LayoutRole = "text" | "block" | "error" | "summary" | "inline" | "subagent"
+type LayoutRole = "block" | "inline" | "subagent"
 
 export const sessionLayoutRoles = new WeakMap<BaseRenderable, LayoutRole>()
 
@@ -1538,7 +1538,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       </Show>
       <Show when={props.message.error && props.message.error.name !== "MessageAbortedError"}>
         <box
-          ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "error")}
+          ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "block")}
           border={["left"]}
           paddingTop={1}
           paddingBottom={1}
@@ -1553,7 +1553,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       </Show>
       <Switch>
         <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
-          <box ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "summary")} paddingLeft={3}>
+          <box ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "block")} paddingLeft={3}>
             <text marginTop={1}>
               <span
                 style={{
@@ -1619,7 +1619,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   return (
     <Show when={content()}>
       <box
-        ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "text")}
+        ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "block")}
         paddingLeft={3}
         marginTop={1}
         flexDirection="column"
@@ -1701,7 +1701,12 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
   const { theme, syntax } = useTheme()
   return (
     <Show when={props.part.text.trim()}>
-      <box ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "text")} paddingLeft={3} marginTop={1} flexShrink={0}>
+      <box
+        ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "block")}
+        paddingLeft={3}
+        marginTop={1}
+        flexShrink={0}
+      >
         <markdown
           syntaxStyle={syntax()}
           streaming={true}
@@ -1953,10 +1958,7 @@ export function InlineToolRow(props: {
         setPreLayoutSiblingMargin(el, (previous) => {
           const role = previous ? sessionLayoutRoles.get(previous) : undefined
           const previousInline = role === "inline" || role === "subagent"
-          return role === "text" ||
-            role === "block" ||
-            role === "error" ||
-            role === "summary" ||
+          return role === "block" ||
             (previousInline && (role === "subagent") !== Boolean(props.subagent)) ||
             props.separateAfter?.(previous?.id)
             ? 1

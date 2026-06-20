@@ -145,7 +145,7 @@ function LoadedReadBeforeSubagentFixture() {
 function AssistantSummaryBeforeSubagentFixture() {
   return (
     <box flexDirection="column" width={72}>
-      <box ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "summary")} paddingLeft={3}>
+      <box ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "block")} paddingLeft={3}>
         <text>▣ Build · Little Frank · 53.1s</text>
       </box>
       <InlineToolRow icon="✓" complete={true} pending="" subagent={true}>
@@ -159,7 +159,7 @@ function AssistantErrorBeforeSubagentFixture() {
   return (
     <box flexDirection="column" width={72}>
       <box
-        ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "error")}
+        ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "block")}
         border={["left"]}
         paddingTop={1}
         paddingBottom={1}
@@ -184,7 +184,7 @@ function StickyScrollFixture(props: { separated: boolean; scroll: (scroll: Scrol
         <text>Second row</text>
       </box>
       <Show when={props.separated}>
-        <box ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "text")}>
+        <box ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "block")}>
           <text>Assistant text</text>
         </box>
       </Show>
