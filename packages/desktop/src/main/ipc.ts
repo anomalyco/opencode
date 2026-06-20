@@ -1,4 +1,6 @@
 import { execFile } from "node:child_process"
+import { stat } from "node:fs/promises"
+import { basename } from "node:path"
 import { BrowserWindow, Notification, app, clipboard, dialog, ipcMain, shell } from "electron"
 import type { IpcMainEvent, IpcMainInvokeEvent } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
@@ -14,6 +16,7 @@ import type {
   WslConfig,
 } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
+import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
 import {
   abortExtraAgentTest,
   listExtraAgentServers,
@@ -55,6 +58,8 @@ const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
   return [{ name: "Files", extensions: ext }]
 }
+
+const pickedFiles = createPickedFileAuthorizations()
 
 type Deps = {
   killSidecar: () => Promise<void> | void
@@ -179,7 +184,7 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle(
     "open-file-picker",
     async (
-      _event: IpcMainInvokeEvent,
+      event: IpcMainInvokeEvent,
       opts?: { multiple?: boolean; title?: string; defaultPath?: string; accept?: string[]; extensions?: string[] },
     ) => {
       const result = await dialog.showOpenDialog({
@@ -189,9 +194,26 @@ export function registerIpcHandlers(deps: Deps) {
         filters: pickerFilters(opts?.extensions),
       })
       if (result.canceled) return null
-      return opts?.multiple ? result.filePaths : result.filePaths[0]
+      const files = await Promise.all(
+        result.filePaths.map(async (filePath) => ({
+          path: filePath,
+          name: basename(filePath),
+          size: (await stat(filePath)).size,
+        })),
+      )
+      assertAttachmentBudget(files)
+      const token = pickedFiles.add(event.sender.id, result.filePaths)
+      return { token, files }
     },
   )
+
+  ipcMain.handle("read-picked-file", async (event: IpcMainInvokeEvent, token: string, filePath: string) => {
+    return pickedFiles.read(event.sender.id, token, filePath)
+  })
+
+  ipcMain.handle("release-picked-files", (event: IpcMainInvokeEvent, token: string) => {
+    pickedFiles.release(event.sender.id, token)
+  })
 
   ipcMain.handle(
     "save-file-picker",

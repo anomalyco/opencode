@@ -168,7 +168,12 @@ const createPlatform = (refreshExtraAgents?: () => void): Platform => {
         accept: opts?.accept ?? ACCEPTED_FILE_TYPES,
         extensions: opts?.extensions ?? ACCEPTED_FILE_EXTENSIONS,
       })
-      return handleWslPicker(result)
+      if (!result) return handleWslPicker(null)
+      // Extract paths from token-authorized result and release authorization
+      const paths = result.files.map((f) => f.path)
+      desktopApi.releasePickedFiles(result.token)
+      const pathResult = opts?.multiple ? paths : paths[0] ?? null
+      return handleWslPicker(pathResult)
     },
 
     async saveFilePickerDialog(opts) {
