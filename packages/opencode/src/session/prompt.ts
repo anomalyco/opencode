@@ -1322,7 +1322,10 @@ export const layer = Layer.effect(
               sessionID,
               parentSessionID: session.parentID,
               system,
-              messages: [...modelMsgs, ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }] : [])],
+              messages: [
+                ...modelMsgs,
+                ...(isLastStep ? [{ role: "assistant" as const, content: MAX_STEPS_PROMPT }] : []),
+              ],
               tools,
               model,
               toolChoice: format.type === "json_schema" ? "required" : undefined,
