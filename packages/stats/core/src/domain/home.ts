@@ -248,15 +248,15 @@ function buildStatsModelData(
   )
     .filter((item) => item.totalTokens > 0)
     .toSorted((a, b) => b.totalTokens - a.totalTokens || a.model.localeCompare(b.model))
-  const peers = aggregateByModelName(rowsForProduct(normalized, SITE_PRODUCT, window.start, window.end))
+  const windowPeers = aggregateByModelName(rowsForProduct(normalized, SITE_PRODUCT, window.start, window.end))
     .filter((item) => item.totalTokens > 0)
     .toSorted((a, b) => b.totalTokens - a.totalTokens || a.model.localeCompare(b.model))
   const rankIndex = rankPeers.findIndex((item) => item.model === model)
   const rank = rankIndex >= 0 ? rankIndex + 1 : null
   const previousRankIndex = previousRankPeers.findIndex((item) => item.model === model)
-  const peerRankIndex = peers.findIndex((item) => item.model === model)
-  const peerRank = peerRankIndex >= 0 ? peerRankIndex + 1 : 1
-  const totalTokens = peers.reduce((sum, item) => sum + item.totalTokens, 0)
+  const peerRank = rankIndex >= 0 ? rankIndex + 1 : 1
+  const totalTokens = windowPeers.reduce((sum, item) => sum + item.totalTokens, 0)
+  const peerTokens = rankPeers.reduce((sum, item) => sum + item.totalTokens, 0)
 
   return {
     updatedAt: Number.isFinite(latestUpdate) ? new Date(latestUpdate).toISOString() : null,
@@ -266,7 +266,7 @@ function buildStatsModelData(
     author: formatProvider(current.provider),
     rank,
     previousRank: previousRankIndex >= 0 ? previousRankIndex + 1 : null,
-    totalModels: peers.length,
+    totalModels: windowPeers.length,
     tokenShare: totalTokens > 0 ? round((current.totalTokens / totalTokens) * 100, 2) : 0,
     tokenChange: percentChange(current.totalTokens, previous.totalTokens),
     totals: {
@@ -285,7 +285,7 @@ function buildStatsModelData(
     usage: buildModelUsage(currentRows, window, "2M"),
     tokenMix: buildModelTokenMix(current),
     country: createRangeRecord((range) => buildCountryStats(geo, getWindow(range, earliest, latest))),
-    peers: buildModelPeers(peers, peerRank, totalTokens),
+    peers: buildModelPeers(rankPeers, peerRank, peerTokens),
   }
 }
 
