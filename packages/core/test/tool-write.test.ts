@@ -70,6 +70,7 @@ const withTool = <A, E, R>(directory: string, body: (registry: ToolRegistry.Inte
     Layer.provide(permission),
     Layer.provide(resolution),
     Layer.provide(mutation),
+    Layer.provide(filesystem),
   )
   return Effect.gen(function* () {
     return yield* body(yield* ToolRegistry.Service)
@@ -227,6 +228,53 @@ describe("WriteTool", () => {
         Effect.promise(() =>
           Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
         ),
+    ),
+  )
+
+  it.live("creates a new empty file when content is empty", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return withTool(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const settled = yield* settleTool(registry, call({ path: "empty.txt", content: "" }))
+            expect(settled.result).toEqual({ type: "text", value: "Created file successfully: empty.txt" })
+            expect(settled.output?.structured).toMatchObject({ resource: "empty.txt", existed: false })
+            expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "empty.txt"), "utf8"))).toBe("")
+            expect(writes).toHaveLength(1)
+          }),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("refuses to overwrite an existing non-empty file with empty or whitespace-only content", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const existing = path.join(tmp.path, "keep.txt")
+
+          for (const content of ["", "   \n\t"]) {
+            reset()
+            yield* Effect.promise(() => fs.writeFile(existing, "important"))
+            const result = yield* withTool(tmp.path, (registry) =>
+              executeTool(registry, call({ path: "keep.txt", content })),
+            )
+            expect(result).toEqual({
+              type: "error",
+              value:
+                "Refusing to overwrite keep.txt with empty content: the file already has content. " +
+                "Provide the file's full intended contents, or remove the file explicitly if you mean to delete it.",
+            })
+            // The original content must remain untouched and nothing should be written.
+            expect(yield* Effect.promise(() => fs.readFile(existing, "utf8"))).toBe("important")
+            expect(writes).toEqual([])
+          }
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
 

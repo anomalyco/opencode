@@ -9,6 +9,7 @@ export * as WriteTool from "./write"
 import { ToolFailure } from "@opencode-ai/llm"
 import { Effect, Layer, Schema } from "effect"
 import { FileMutation } from "../file-mutation"
+import { FSUtil } from "../fs-util"
 import { LocationMutation } from "../location-mutation"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
@@ -22,7 +23,7 @@ export const Input = Schema.Struct({
     description:
       "File path to write. Relative paths resolve within the active Location. Absolute paths inside that Location are accepted; external absolute paths require external_directory approval.",
   }),
-  content: Schema.NonEmptyString.annotate({ description: "Content to write to the file" }),
+  content: Schema.String.annotate({ description: "Content to write to the file" }),
 })
 
 export const Output = Schema.Struct({
@@ -47,6 +48,7 @@ export const layer = Layer.effectDiscard(
     const tools = yield* Tools.Service
     const mutation = yield* LocationMutation.Service
     const files = yield* FileMutation.Service
+    const fs = yield* FSUtil.Service
     const permission = yield* PermissionV2.Service
 
     yield* tools
@@ -58,32 +60,58 @@ export const layer = Layer.effectDiscard(
             input: Input,
             output: Output,
             toModelOutput: ({ output }) => [{ type: "text", text: toModelOutput(output) }],
-            execute: (input, context) =>
-              Effect.gen(function* () {
+            execute: (input, context) => {
+              const unableToWrite = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+                effect.pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to write ${input.path}` })))
+
+              return Effect.gen(function* () {
                 const source = {
                   type: "tool" as const,
                   messageID: context.assistantMessageID,
                   callID: context.toolCallID,
                 }
-                const target = yield* mutation.resolve({ path: input.path, kind: "file" })
+                const target = yield* unableToWrite(mutation.resolve({ path: input.path, kind: "file" }))
                 const external = target.externalDirectory
                 if (external)
-                  yield* permission.assert({
-                    ...LocationMutation.externalDirectoryPermission(external),
+                  yield* unableToWrite(
+                    permission.assert({
+                      ...LocationMutation.externalDirectoryPermission(external),
+                      sessionID: context.sessionID,
+                      agent: context.agent,
+                      source,
+                    }),
+                  )
+                yield* unableToWrite(
+                  permission.assert({
+                    action: "edit",
+                    resources: [target.resource],
+                    save: ["*"],
                     sessionID: context.sessionID,
                     agent: context.agent,
                     source,
-                  })
-                yield* permission.assert({
-                  action: "edit",
-                  resources: [target.resource],
-                  save: ["*"],
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source,
-                })
-                return yield* files.writeTextPreservingBom({ target, content: input.content })
-              }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to write ${input.path}` }))),
+                  }),
+                )
+
+                // Guard against silently wiping an existing file: empty or whitespace-only
+                // content is only allowed when the target does not yet exist or is already
+                // effectively empty. Creating a new empty file (e.g. __init__.py, .gitkeep)
+                // stays supported.
+                if (input.content.trim() === "") {
+                  const current = yield* unableToWrite(
+                    fs
+                      .readFile(target.canonical)
+                      .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined))),
+                  )
+                  if (current !== undefined && new TextDecoder().decode(current).trim() !== "") {
+                    return yield* new ToolFailure({
+                      message: `Refusing to overwrite ${input.path} with empty content: the file already has content. Provide the file's full intended contents, or remove the file explicitly if you mean to delete it.`,
+                    })
+                  }
+                }
+
+                return yield* unableToWrite(files.writeTextPreservingBom({ target, content: input.content }))
+              })
+            },
           }),
           "edit",
         ),
