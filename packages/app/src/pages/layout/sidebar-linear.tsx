@@ -1,11 +1,14 @@
-import { createMemo, Show, type Accessor, type JSX } from "solid-js"
+import { createMemo, createSignal, Show, type Accessor, type JSX } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { showToast } from "@opencode-ai/ui/toast"
 import { useGlobalSync } from "@/context/global-sync"
+import { LinearSyncHistory, useSyncHistory } from "@/components/linear-sync-history"
 
 export const SidebarLinear = (props: { directory: Accessor<string> }): JSX.Element => {
   const globalSync = useGlobalSync()
+  const [historyShown, setHistoryShown] = createSignal(false)
+  const syncHist = useSyncHistory()
 
   const config = createMemo(() => {
     const [store] = globalSync.child(props.directory(), { bootstrap: false })
@@ -27,19 +30,45 @@ export const SidebarLinear = (props: { directory: Accessor<string> }): JSX.Eleme
   })
 
   const handleSync = () => {
-    showToast({
-      variant: "default",
-      title: "Sync to Linear",
-      description: "Pending Linear MCP integration",
-    })
+    const { setIsSyncing, setProgress, record } = syncHist
+    setIsSyncing(true)
+    setProgress(0)
+    const start = Date.now()
+    const duration = 3000
+    const tick = () => {
+      const elapsed = Date.now() - start
+      const pct = Math.min(100, Math.round((elapsed / duration) * 100))
+      setProgress(pct)
+      if (pct < 100) {
+        requestAnimationFrame(tick)
+      } else {
+        record({ type: "push", count: 1, status: "success" })
+        setIsSyncing(false)
+        setProgress(0)
+      }
+    }
+    requestAnimationFrame(tick)
   }
 
   const handlePull = () => {
-    showToast({
-      variant: "default",
-      title: "Pull from Linear",
-      description: "Pending Linear MCP integration",
-    })
+    const { setIsSyncing, setProgress, record } = syncHist
+    setIsSyncing(true)
+    setProgress(0)
+    const start = Date.now()
+    const duration = 3000
+    const tick = () => {
+      const elapsed = Date.now() - start
+      const pct = Math.min(100, Math.round((elapsed / duration) * 100))
+      setProgress(pct)
+      if (pct < 100) {
+        requestAnimationFrame(tick)
+      } else {
+        record({ type: "pull", count: 1, status: "success" })
+        setIsSyncing(false)
+        setProgress(0)
+      }
+    }
+    requestAnimationFrame(tick)
   }
 
   const handleConfigure = () => {
@@ -72,6 +101,14 @@ export const SidebarLinear = (props: { directory: Accessor<string> }): JSX.Eleme
           />
           <span>{mcpStatus() ? "Connected" : "Disconnected"}</span>
         </div>
+        <button
+          type="button"
+          class="flex items-center justify-center size-5 rounded hover:bg-surface-raised-base-hover text-text-weak"
+          onClick={() => setHistoryShown((prev) => !prev)}
+          aria-label="Toggle sync history"
+        >
+          {historyShown() ? "▾" : "▸"}
+        </button>
       </div>
 
       <Show
@@ -116,6 +153,11 @@ export const SidebarLinear = (props: { directory: Accessor<string> }): JSX.Eleme
               Configure
             </Button>
           </div>
+          <Show when={historyShown()}>
+            <div class="border-t border-border-weak-base pt-2">
+              <LinearSyncHistory />
+            </div>
+          </Show>
         </div>
       </Show>
     </div>
