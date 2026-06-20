@@ -39,7 +39,7 @@ export function sampledChecksum(content: string, limit = 500_000): string | unde
     Math.floor(content.length * 0.25),
     Math.floor(content.length * 0.5),
     Math.floor(content.length * 0.75),
-    content.length - size,
+    content.length,
   ]
   const hashes = points
     .map((point) => {
