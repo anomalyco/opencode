@@ -28,6 +28,19 @@ export const RETRY_BACKOFF_FACTOR = 2
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
 
+function hasTransientText(value: string) {
+  const lower = value.toLowerCase()
+  return (
+    lower.includes("rate increased too quickly") ||
+    lower.includes("rate limit") ||
+    lower.includes("rate limited") ||
+    lower.includes("too many requests") ||
+    lower.includes("retry error") ||
+    lower.includes("you can retry your request") ||
+    lower.includes("an error occurred while processing your request")
+  )
+}
+
 function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
 }
@@ -70,9 +83,12 @@ export function retryable(error: Err, provider: string) {
   if (SessionV1.ContextOverflowError.isInstance(error)) return undefined
   if (SessionV1.APIError.isInstance(error)) {
     const status = error.data.statusCode
-    // 5xx errors are transient server failures and should always be retried,
-    // even when the provider SDK doesn't explicitly mark them as retryable.
-    if (!error.data.isRetryable && !(status !== undefined && status >= 500)) return undefined
+    const lower = `${error.data.message}\n${error.data.responseBody ?? ""}`.toLowerCase()
+    const transient = status === 429 || hasTransientText(lower)
+    // 5xx errors plus provider rate limits/transient retry advisories are
+    // transient failures and should be retried even when the provider SDK
+    // doesn't explicitly mark them as retryable.
+    if (!error.data.isRetryable && !(status !== undefined && status >= 500) && !transient) return undefined
     if (error.data.responseBody?.includes("FreeUsageLimitError")) {
       return {
         message: GO_UPSELL_MESSAGE,
@@ -125,12 +141,7 @@ export function retryable(error: Err, provider: string) {
   // Check for rate limit patterns in plain text error messages
   const msg = isRecord(error.data) ? error.data.message : undefined
   if (typeof msg === "string") {
-    const lower = msg.toLowerCase()
-    if (
-      lower.includes("rate increased too quickly") ||
-      lower.includes("rate limit") ||
-      lower.includes("too many requests")
-    ) {
+    if (hasTransientText(msg)) {
       return { message: msg }
     }
   }

@@ -31,6 +31,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import * as DateTime from "effect/DateTime"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ToolOutput, Usage, type LLMEvent } from "@opencode-ai/llm"
+import { ProviderError } from "@/provider/error"
 
 const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
@@ -978,6 +979,12 @@ export const layer = Layer.effect(
               Stream.takeUntil(() => ctx.needsCompaction),
               Stream.runDrain,
             )
+            const parts = yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
+              Effect.provideService(Database.Service, database),
+            )
+            if (parts.length === 0 && !ctx.assistantMessage.error && !ctx.needsCompaction) {
+              yield* Effect.fail(new ProviderError.ResponseStreamError("Provider stream ended without content"))
+            }
           }).pipe(
             Effect.onInterrupt(() =>
               Effect.gen(function* () {

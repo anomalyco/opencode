@@ -397,6 +397,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             variant: msg.model?.variant ?? null,
           })
         },
+        sync(msg: { sessionID: string; agent: string; model: ModelKey }) {
+          const session = id()
+          if (!session) return
+          if (msg.sessionID !== session) return
+
+          setSaved("session", session, {
+            agent: msg.agent,
+            model: msg.model,
+            variant: msg.model?.variant ?? null,
+          })
+        },
       },
     }
     return result

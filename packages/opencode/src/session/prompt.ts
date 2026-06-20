@@ -612,6 +612,42 @@ export const layer = Layer.effect(
       return yield* Effect.die(err)
     })
 
+    const modelFromSessionRow = (model: { id: string; providerID: string; variant?: string | null }) => ({
+      providerID: ProviderV2.ID.make(model.providerID),
+      modelID: ModelV2.ID.make(model.id),
+      ...(model.variant && model.variant !== "default" ? { variant: model.variant } : {}),
+    })
+
+    const sameModel = (left: SessionV1.User["model"], right: SessionV1.User["model"]) =>
+      left.providerID === right.providerID &&
+      left.modelID === right.modelID &&
+      (left.variant ?? "default") === (right.variant ?? "default")
+
+    const syntheticOnlyUser = (m: SessionV1.WithParts) =>
+      m.info.role === "user" && m.parts.length > 0 && m.parts.every((p) => "synthetic" in p && p.synthetic === true)
+
+    const recoverSyntheticPollutedModel = Effect.fnUntraced(function* (
+      sessionID: SessionID,
+      candidate: SessionV1.User["model"],
+    ) {
+      const latestUser = yield* sessions
+        .findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model)
+        .pipe(Effect.orDie)
+      if (
+        Option.isNone(latestUser) ||
+        latestUser.value.info.role !== "user" ||
+        !syntheticOnlyUser(latestUser.value) ||
+        !sameModel(candidate, latestUser.value.info.model)
+      ) {
+        return undefined
+      }
+      const latestRealUser = yield* sessions
+        .findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model && !syntheticOnlyUser(m))
+        .pipe(Effect.orDie)
+      if (Option.isSome(latestRealUser) && latestRealUser.value.info.role === "user") return latestRealUser.value.info.model
+      return undefined
+    })
+
     const currentModel = Effect.fnUntraced(function* (sessionID: SessionID) {
       const current = yield* db
         .select({ model: SessionTable.model })
@@ -619,17 +655,12 @@ export const layer = Layer.effect(
         .where(eq(SessionTable.id, sessionID))
         .get()
         .pipe(Effect.orDie)
-      if (current?.model) {
-        return {
-          providerID: ProviderV2.ID.make(current.model.providerID),
-          modelID: ModelV2.ID.make(current.model.id),
-          ...(current.model.variant && current.model.variant !== "default" ? { variant: current.model.variant } : {}),
-        }
-      }
-      const match = yield* sessions
-        .findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model)
+      const rowModel = current?.model ? modelFromSessionRow(current.model) : undefined
+      if (rowModel) return (yield* recoverSyntheticPollutedModel(sessionID, rowModel)) ?? rowModel
+      const latestRealUser = yield* sessions
+        .findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model && !syntheticOnlyUser(m))
         .pipe(Effect.orDie)
-      if (Option.isSome(match) && match.value.info.role === "user") return match.value.info.model
+      if (Option.isSome(latestRealUser) && latestRealUser.value.info.role === "user") return latestRealUser.value.info.model
       return yield* provider.defaultModel().pipe(Effect.orDie)
     })
 
@@ -650,7 +681,9 @@ export const layer = Layer.effect(
         .where(eq(SessionTable.id, input.sessionID))
         .get()
         .pipe(Effect.orDie)
-      const model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
+      const model = input.model
+        ? ((yield* recoverSyntheticPollutedModel(input.sessionID, input.model)) ?? input.model)
+        : (ag.model ?? (yield* currentModel(input.sessionID)))
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
       const full =
         !input.variant && ag.variant && same
@@ -1153,6 +1186,21 @@ export const layer = Layer.effect(
           const lastAssistantMsg = msgs.findLast(
             (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
           )
+          if (
+            lastAssistant &&
+            lastAssistant.time.completed &&
+            !lastAssistant.finish &&
+            !lastAssistant.error &&
+            lastAssistantMsg?.parts.length === 0
+          ) {
+            // This is a stale/incomplete assistant row from an interrupted run.
+            // Do not convert it into MessageAbortedError or publish Session.Event.Error:
+            // OmO's fallback hook treats those as retry/fallback triggers, which can
+            // incorrectly switch the main session model during resume.
+            lastAssistant.finish = "stop"
+            yield* sessions.updateMessage(lastAssistant)
+            continue
+          }
           // Some providers return "stop" even when the assistant message contains
           // tool calls. Keep the loop running so tool results can be sent back to
           // the model, but ignore cleanup-marked interrupted orphans.
@@ -1254,14 +1302,22 @@ export const layer = Layer.effect(
           yield* sessions.updateMessage(msg)
 
           const finalizeInterruptedAssistant = Effect.gen(function* () {
-            if (msg.time.completed) return
-            msg.error ??= MessageV2.fromError(new DOMException("Aborted", "AbortError"), {
-              providerID: msg.providerID,
-              aborted: true,
-            })
-            msg.time.completed = Date.now()
+            if (msg.time.completed && (msg.finish || msg.error)) return
+            msg.finish ??= "stop"
+            msg.time.completed ??= Date.now()
             yield* sessions.updateMessage(msg)
           })
+
+          const finalizeFailedAssistant = (cause: Cause.Cause<unknown>) =>
+            Effect.gen(function* () {
+              if (Cause.hasInterruptsOnly(cause)) return
+              if (msg.finish || msg.error) return
+              msg.error = MessageV2.fromError(Cause.squash(cause), { providerID: msg.providerID })
+              msg.finish = "error"
+              msg.time.completed ??= Date.now()
+              yield* events.publish(Session.Event.Error, { sessionID, error: msg.error })
+              yield* sessions.updateMessage(msg)
+            })
 
           const handle = yield* processor
             .create({
@@ -1269,7 +1325,10 @@ export const layer = Layer.effect(
               sessionID,
               model,
             })
-            .pipe(Effect.onInterrupt(() => finalizeInterruptedAssistant))
+            .pipe(
+              Effect.onInterrupt(() => finalizeInterruptedAssistant),
+              Effect.catchCause((cause) => finalizeFailedAssistant(cause).pipe(Effect.andThen(Effect.failCause(cause)))),
+            )
 
           const outcome: "break" | "continue" = yield* Effect.gen(function* () {
             const lastUserMsg = msgs.findLast((m) => m.info.role === "user")
@@ -1373,6 +1432,7 @@ export const layer = Layer.effect(
           }).pipe(
             Effect.ensuring(instruction.clear(handle.message.id)),
             Effect.onInterrupt(() => finalizeInterruptedAssistant),
+            Effect.catchCause((cause) => finalizeFailedAssistant(cause).pipe(Effect.andThen(Effect.failCause(cause)))),
           )
           if (outcome === "break") break
           continue

@@ -13,6 +13,29 @@ const message = (input?: { agent?: string; model?: UserMessage["model"] }) =>
   }) as UserMessage
 
 describe("syncSessionModel", () => {
+  test("syncs the last message when authoritative sync is available", () => {
+    const calls: unknown[] = []
+
+    syncSessionModel(
+      {
+        session: {
+          sync(value) {
+            calls.push(["sync", value])
+          },
+          restore(value) {
+            calls.push(["restore", value])
+          },
+          reset() {},
+        },
+      },
+      message({ model: { providerID: "anthropic", modelID: "claude-opus-4-8", variant: "max" } }),
+    )
+
+    expect(calls).toEqual([
+      ["sync", message({ model: { providerID: "anthropic", modelID: "claude-opus-4-8", variant: "max" } })],
+    ])
+  })
+
   test("restores the last message through session state", () => {
     const calls: unknown[] = []
 

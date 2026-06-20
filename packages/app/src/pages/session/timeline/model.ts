@@ -1,4 +1,4 @@
-import type { Message, UserMessage } from "@opencode-ai/sdk/v2"
+import type { Message, Part, UserMessage } from "@opencode-ai/sdk/v2"
 import { createMemo, createResource, onCleanup, untrack, type Accessor } from "solid-js"
 import { getSessionPrefetch, SESSION_PREFETCH_TTL } from "@/context/global-sync/session-prefetch"
 import { useSDK } from "@/context/sdk"
@@ -58,7 +58,7 @@ export function createTimelineModel(input: {
   const userMessages = createMemo(() => selectUserMessages(messages()), emptyUserMessages, { equals: same })
   const visibleUserMessages = createMemo(
     () => {
-      return selectVisibleUserMessages(userMessages(), input.revertMessageID())
+      return selectVisibleUserMessages(userMessages(), input.revertMessageID(), sync().data.part)
     },
     emptyUserMessages,
     { equals: same },
@@ -108,9 +108,21 @@ export function selectUserMessages(messages: Message[]) {
   return messages.filter((message): message is UserMessage => message.role === "user")
 }
 
-export function selectVisibleUserMessages(messages: UserMessage[], revertMessageID?: string) {
-  if (!revertMessageID) return messages
-  return messages.filter((message) => message.id < revertMessageID)
+export function isInternalUserMessage(message: UserMessage, partsByMessage: Record<string, Part[] | undefined> = {}) {
+  const parts = partsByMessage[message.id]
+  return !!parts?.length && parts.every((part) => "synthetic" in part && part.synthetic === true)
+}
+
+export function selectVisibleUserMessages(
+  messages: UserMessage[],
+  revertMessageID?: string,
+  partsByMessage: Record<string, Part[] | undefined> = {},
+) {
+  if (!revertMessageID && Object.keys(partsByMessage).length === 0) return messages
+  return messages.filter((message) => {
+    if (revertMessageID && message.id >= revertMessageID) return false
+    return !isInternalUserMessage(message, partsByMessage)
+  })
 }
 
 export async function loadOlderTimeline(input: {

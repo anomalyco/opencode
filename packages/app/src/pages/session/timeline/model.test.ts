@@ -1,9 +1,18 @@
 import { describe, expect, test } from "bun:test"
-import type { AssistantMessage, Message, UserMessage } from "@opencode-ai/sdk/v2"
-import { loadOlderTimeline, selectUserMessages, selectVisibleUserMessages } from "./model"
+import type { AssistantMessage, Message, Part, UserMessage } from "@opencode-ai/sdk/v2"
+import { isInternalUserMessage, loadOlderTimeline, selectUserMessages, selectVisibleUserMessages } from "./model"
 
 const user = (id: string) => ({ id, role: "user" }) as UserMessage
 const assistant = (id: string) => ({ id, role: "assistant" }) as AssistantMessage
+const textPart = (messageID: string, input: { synthetic?: boolean; text?: string } = {}) =>
+  ({
+    id: `prt_${messageID}_${input.synthetic ? "synthetic" : "real"}`,
+    sessionID: "ses",
+    messageID,
+    type: "text",
+    text: input.text ?? "continue",
+    synthetic: input.synthetic,
+  }) as Part
 
 describe("timeline model", () => {
   test("selects users and applies the revert boundary", () => {
@@ -13,6 +22,28 @@ describe("timeline model", () => {
     expect(users.map((message) => message.id)).toEqual(["msg_1", "msg_3", "msg_5"])
     expect(selectVisibleUserMessages(users, "msg_5").map((message) => message.id)).toEqual(["msg_1", "msg_3"])
     expect(selectVisibleUserMessages(users)).toBe(users)
+  })
+
+  test("hides synthetic-only internal continuation user messages", () => {
+    const real = user("msg_1")
+    const internal = user("msg_2")
+
+    expect(
+      selectVisibleUserMessages([real, internal], undefined, {
+        msg_1: [textPart("msg_1", { text: "real prompt" })],
+        msg_2: [textPart("msg_2", { synthetic: true, text: "continue\n<!-- OMO_INTERNAL_INITIATOR -->" })],
+      }),
+    ).toEqual([real])
+    expect(isInternalUserMessage(internal, { msg_2: [textPart("msg_2", { synthetic: true })] })).toBe(true)
+  })
+
+  test("keeps mixed real and synthetic user messages visible", () => {
+    const mixed = user("msg_1")
+    expect(
+      selectVisibleUserMessages([mixed], undefined, {
+        msg_1: [textPart("msg_1", { synthetic: true }), textPart("msg_1", { text: "real prompt" })],
+      }),
+    ).toEqual([mixed])
   })
 
   test("loads pages until a visible user turn is added", async () => {
