@@ -515,6 +515,7 @@ export function topK(model: Provider.Model) {
 }
 
 const WIDELY_SUPPORTED_EFFORTS = ["low", "medium", "high"]
+const FIREWORKS_GLM5_EFFORTS = ["none", ...WIDELY_SUPPORTED_EFFORTS, "max"]
 const OPENAI_EFFORTS = ["none", "minimal", ...WIDELY_SUPPORTED_EFFORTS, "xhigh"]
 const OPENAI_GPT5_1_EFFORTS = ["none", ...WIDELY_SUPPORTED_EFFORTS]
 const OPENAI_GPT5_2_PLUS_EFFORTS = [...OPENAI_GPT5_1_EFFORTS, "xhigh"]
@@ -638,6 +639,14 @@ function googleThinkingBudgetMax(apiId: string) {
   return 24_576
 }
 
+export function isFireworksGlm5(model: Pick<Provider.Model, "providerID" | "api">) {
+  return (
+    model.providerID === "fireworks-ai" &&
+    model.api.npm === "@ai-sdk/openai-compatible" &&
+    model.api.id.toLowerCase().includes("accounts/fireworks/models/glm-5")
+  )
+}
+
 // SAP's Zod schema drops unknown top-level keys; reasoning controls survive
 // only via `modelParams` (catchall), forwarded verbatim by the SAP SDKs.
 function wrapInSapModelParams(variants: Record<string, Record<string, any>>): Record<string, Record<string, any>> {
@@ -663,6 +672,9 @@ function googleThinkingVariants(model: Provider.Model): Record<string, Record<st
 }
 
 export function variants(model: Provider.Model): Record<string, Record<string, any>> {
+  if (isFireworksGlm5(model)) {
+    return Object.fromEntries(FIREWORKS_GLM5_EFFORTS.map((effort) => [effort, { reasoningEffort: effort }]))
+  }
   if (!model.capabilities.reasoning) return {}
 
   const id = model.id.toLowerCase()

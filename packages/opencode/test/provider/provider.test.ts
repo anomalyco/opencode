@@ -1310,6 +1310,32 @@ test("models.dev normalization fills required response fields", () => {
   expect(model.release_date).toBe("")
 })
 
+test("models.dev normalization enables Fireworks GLM 5 reasoning variants", () => {
+  const provider = {
+    id: "fireworks-ai",
+    name: "Fireworks AI",
+    env: ["FIREWORKS_API_KEY"],
+    npm: "@ai-sdk/openai-compatible",
+    api: "https://api.fireworks.ai/inference/v1/",
+    models: {
+      "accounts/fireworks/models/glm-5p2": {
+        id: "accounts/fireworks/models/glm-5p2",
+        name: "GLM 5.2",
+        family: "glm",
+        reasoning: false,
+        cost: { input: 1.4, output: 4.4 },
+        limit: { context: 202_800, output: 131_072 },
+      },
+    },
+  } as unknown as ModelsDev.Provider
+
+  const model = Provider.fromModelsDevProvider(provider).models["accounts/fireworks/models/glm-5p2"]
+  expect(model.capabilities.reasoning).toBe(true)
+  expect(model.capabilities.interleaved).toEqual({ field: "reasoning_content" })
+  expect(Object.keys(model.variants ?? {})).toEqual(["none", "low", "medium", "high", "max"])
+  expect(model.variants?.max.reasoningEffort).toBe("max")
+})
+
 it.instance("model variants are generated for reasoning models", () =>
   Effect.gen(function* () {
     yield* set("ANTHROPIC_API_KEY", "test-api-key")

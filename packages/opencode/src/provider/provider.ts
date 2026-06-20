@@ -1213,9 +1213,23 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     variants: {},
   }
 
+  const normalized = ProviderTransform.isFireworksGlm5(base)
+    ? {
+        ...base,
+        capabilities: {
+          ...base.capabilities,
+          reasoning: true,
+          interleaved:
+            typeof base.capabilities.interleaved === "object"
+              ? base.capabilities.interleaved
+              : { field: "reasoning_content" as const },
+        },
+      }
+    : base
+
   return {
-    ...base,
-    variants: mapValues(ProviderTransform.variants(base), (v) => v),
+    ...normalized,
+    variants: mapValues(ProviderTransform.variants(normalized), (v) => v),
   }
 }
 
@@ -1457,6 +1471,12 @@ export const layer = Layer.effect(
               family: model.family ?? existingModel?.family ?? "",
               release_date: model.release_date ?? existingModel?.release_date ?? "",
               variants: {},
+            }
+            if (ProviderTransform.isFireworksGlm5(parsedModel)) {
+              parsedModel.capabilities.reasoning = true
+              if (parsedModel.capabilities.interleaved === false) {
+                parsedModel.capabilities.interleaved = { field: "reasoning_content" }
+              }
             }
             const merged = mergeDeep(ProviderTransform.variants(parsedModel), model.variants ?? {})
             parsedModel.variants = mapValues(

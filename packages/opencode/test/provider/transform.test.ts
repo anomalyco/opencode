@@ -2895,6 +2895,23 @@ describe("ProviderTransform.variants", () => {
     expect(result).toEqual({})
   })
 
+  test("fireworks glm 5.2 returns none through max reasoning efforts", () => {
+    const model = createMockModel({
+      id: "fireworks-ai/accounts/fireworks/models/glm-5p2",
+      providerID: "fireworks-ai",
+      capabilities: { reasoning: false },
+      api: {
+        id: "accounts/fireworks/models/glm-5p2",
+        url: "https://api.fireworks.ai/inference/v1/",
+        npm: "@ai-sdk/openai-compatible",
+      },
+    })
+    const result = ProviderTransform.variants(model)
+    expect(Object.keys(result)).toEqual(["none", "low", "medium", "high", "max"])
+    expect(result.none).toEqual({ reasoningEffort: "none" })
+    expect(result.max).toEqual({ reasoningEffort: "max" })
+  })
+
   test("mistral models with reasoning support return variants", () => {
     const model = createMockModel({
       id: "mistral/mistral-small-latest",
