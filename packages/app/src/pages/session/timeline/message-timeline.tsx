@@ -1112,7 +1112,6 @@ export function MessageTimeline(props: {
             <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
               <div
                 data-slot="session-turn-assistant-content"
-                aria-hidden={workingTurn(assistantPartRow().userMessageID)}
               >
                 {renderAssistantPartGroup(assistantPartRow, onSizeChange)}
               </div>
