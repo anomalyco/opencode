@@ -1,6 +1,6 @@
 export * as EventV2 from "./event"
 
-import { Cause, Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Option, PubSub, Schedule, Schema, Stream } from "effect"
 import { and, asc, eq, gt } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
@@ -9,6 +9,7 @@ import { externalID, type ExternalID, NonNegativeInt, withStatics } from "./sche
 import { Identifier } from "./util/identifier"
 import { LayerNode } from "./effect/layer-node"
 import { isDeepStrictEqual } from "node:util"
+import { SqlError } from "effect/unstable/sql/SqlError"
 
 export const ID = Schema.String.check(Schema.isStartsWith("evt_")).pipe(
   Schema.brand("Event.ID"),
@@ -48,6 +49,15 @@ export type Payload<D extends Definition = Definition> = {
   readonly metadata?: Record<string, unknown>
   /** Internal replay marker for projectors that own non-replicated operational state. */
   readonly replay?: boolean
+}
+
+const sqliteLockRetrySchedule = Schedule.exponential("40 millis").pipe(Schedule.jittered, Schedule.take(8))
+
+// NOTE: gate on the reason tag, not error.isRetryable. In effect@4.0.0-beta.66 the
+// SqlError isRetryable flags are inverted (LockTimeoutError=false, ConstraintError=true),
+// so isRetryable would crash on locks and retry FK violations forever. Revisit on effect bump.
+export function isLockTimeoutSqlError(error: unknown) {
+  return error instanceof SqlError && error.reason._tag === "LockTimeoutError"
 }
 
 export type Projector<D extends Definition = Definition> = (event: Payload<D>) => Effect.Effect<void>
@@ -367,6 +377,10 @@ export const layerWith = (options?: LayerOptions) =>
                       { behavior: "immediate" },
                     )
                     .pipe(
+                      Effect.retry({
+                        while: isLockTimeoutSqlError,
+                        schedule: sqliteLockRetrySchedule,
+                      }),
                       Effect.tapError((error) =>
                         Effect.logError("durable event commit failed", {
                           eventID: event.id,

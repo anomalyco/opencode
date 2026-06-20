@@ -8,6 +8,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { V2Schema } from "@opencode-ai/core/v2-schema"
 import { eq } from "drizzle-orm"
+import { ConstraintError, LockTimeoutError, SqlError } from "effect/unstable/sql/SqlError"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
@@ -139,6 +140,21 @@ describe("EventV2", () => {
   it.effect("stores definitions in the exported registry", () =>
     Effect.sync(() => {
       expect(EventV2.registry.get(Message.type)).toBe(Message)
+    }),
+  )
+
+  it.effect("retries only SQLite lock timeouts", () =>
+    Effect.sync(() => {
+      expect(
+        EventV2.isLockTimeoutSqlError(
+          new SqlError({ reason: new LockTimeoutError({ cause: new Error("locked") }) }),
+        ),
+      ).toBeTrue()
+      expect(
+        EventV2.isLockTimeoutSqlError(
+          new SqlError({ reason: new ConstraintError({ cause: new Error("constraint") }) }),
+        ),
+      ).toBeFalse()
     }),
   )
 
