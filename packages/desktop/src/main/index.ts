@@ -38,7 +38,7 @@ import {
   setDockIcon,
 } from "./windows"
 import { migrate } from "./migrate"
-import { checkUpdate, checkForUpdates, installUpdate, setupAutoUpdater } from "./updater"
+import { checkUpdate, checkForUpdates, installUpdate, setupAutoUpdater, getUpdaterController } from "./updater"
 import { Deferred, Effect, Fiber } from "effect"
 
 const APP_NAMES: Record<string, string> = {
@@ -277,6 +277,14 @@ const main = Effect.gen(function* () {
     runUpdater: async (alertOnFail) => checkForUpdates(alertOnFail, killBackends),
     checkUpdate: async () => checkUpdate(),
     installUpdate: async () => installUpdate(killBackends),
+    getUpdaterState: async () => {
+      const ctrl = getUpdaterController()
+      return ctrl ? ctrl.getState() : { status: "disabled" }
+    },
+    onUpdaterStateChanged: (listener) => {
+      const ctrl = getUpdaterController()
+      return ctrl ? ctrl.subscribe(listener) : () => {}
+    },
     setBackgroundColor: (color) => setBackgroundColor(color),
     exportDebugLogs: () => exportDebugLogs(),
     recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
@@ -288,7 +296,7 @@ const main = Effect.gen(function* () {
   app.setAsDefaultProtocolClient("opencode")
   registerRendererProtocol()
   setDockIcon()
-  setupAutoUpdater()
+  setupAutoUpdater(killBackends).start()
   yield* Effect.promise(() => startNetLog()).pipe(
     Effect.catch((error) =>
       Effect.sync(() => {

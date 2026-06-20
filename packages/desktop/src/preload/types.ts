@@ -16,6 +16,16 @@ export type LinuxDisplayBackend = "wayland" | "auto"
 export type TitlebarTheme = {
   mode: "light" | "dark"
 }
+export type UpdaterState =
+  | { status: "disabled" }
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "downloading"; version: string; percent?: number }
+  | { status: "ready"; version: string }
+  | { status: "up-to-date" }
+  | { status: "installing"; version: string }
+  | { status: "error"; message: string }
+
 export type WindowConfig = {
   updaterEnabled: boolean
 }
@@ -224,6 +234,8 @@ export type ElectronAPI = {
   runUpdater: (alertOnFail: boolean) => Promise<void>
   checkUpdate: () => Promise<{ updateAvailable: boolean; version?: string }>
   installUpdate: () => Promise<void>
+  getUpdaterState: () => Promise<UpdaterState>
+  onUpdaterStateChanged: (cb: (state: UpdaterState) => void) => () => void
   setBackgroundColor: (color: string) => Promise<void>
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void>

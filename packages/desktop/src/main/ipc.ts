@@ -9,6 +9,7 @@ import type {
   ServerReadyData,
   SqliteMigrationProgress,
   TitlebarTheme,
+  UpdaterState,
   WindowConfig,
   WslConfig,
 } from "../preload/types"
@@ -21,6 +22,8 @@ import {
   testOpenclawBridge,
 } from "./extra-agents"
 import { getStore } from "./store"
+import type { UpdaterController } from "./updater-controller"
+import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
 import {
   createConfigFile,
@@ -73,6 +76,8 @@ type Deps = {
   runUpdater: (alertOnFail: boolean) => Promise<void> | void
   checkUpdate: () => Promise<{ updateAvailable: boolean; version?: string }>
   installUpdate: () => Promise<void> | void
+  getUpdaterState: () => Promise<UpdaterState>
+  onUpdaterStateChanged: (listener: (state: UpdaterState) => void) => () => void
   setBackgroundColor: (color: string) => void
   exportDebugLogs: () => Promise<string>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void> | void
@@ -108,6 +113,23 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("run-updater", (_event: IpcMainInvokeEvent, alertOnFail: boolean) => deps.runUpdater(alertOnFail))
   ipcMain.handle("check-update", () => deps.checkUpdate())
   ipcMain.handle("install-update", () => deps.installUpdate())
+  ipcMain.handle("get-updater-state", () => deps.getUpdaterState())
+
+  const updaterSubs = createUpdaterSubscriptions()
+  ipcMain.on("subscribe-updater-state", (event: IpcMainEvent, id: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) return
+    updaterSubs.set(
+      win.id,
+      deps.onUpdaterStateChanged((state) => {
+        if (!win.isDestroyed()) win.webContents.send("updater-state-changed", id, state)
+      }),
+    )
+  })
+  ipcMain.on("unsubscribe-updater-state", (_event: IpcMainEvent, _id: string) => {
+    const win = BrowserWindow.fromWebContents(_event.sender)
+    if (win) updaterSubs.delete(win.id)
+  })
   ipcMain.handle("set-background-color", (_event: IpcMainInvokeEvent, color: string) => deps.setBackgroundColor(color))
   ipcMain.handle("export-debug-logs", () => deps.exportDebugLogs())
   ipcMain.handle("record-fatal-renderer-error", (_event: IpcMainInvokeEvent, error: FatalRendererError) =>
