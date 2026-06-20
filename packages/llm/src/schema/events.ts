@@ -175,7 +175,7 @@ export const ToolError = Schema.Struct({
   id: ToolCallID,
   name: Schema.String,
   message: Schema.String,
-  error: Schema.optional(Schema.Defect),
+  error: Schema.optional(Schema.Defect()),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.ToolError" })
 export type ToolError = Schema.Schema.Type<typeof ToolError>

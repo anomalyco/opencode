@@ -704,7 +704,7 @@ describe("SessionRunnerLLM", () => {
       yield* events.publish(SessionEvent.Moved, {
         sessionID,
         timestamp: DateTime.makeUnsafe(1),
-        location: { directory: AbsolutePath.make("/moved") },
+        location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
       })
       expect(
         yield* db
@@ -762,7 +762,7 @@ describe("SessionRunnerLLM", () => {
           .publish(SessionEvent.Moved, {
             sessionID,
             timestamp: DateTime.makeUnsafe(1),
-            location: { directory: AbsolutePath.make("/moved") },
+            location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
           })
           .pipe(Effect.asVoid)
       })

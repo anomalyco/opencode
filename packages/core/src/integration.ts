@@ -154,7 +154,7 @@ export class CodeRequiredError extends Schema.TaggedErrorClass<CodeRequiredError
 }) {}
 
 export class AuthorizationError extends Schema.TaggedErrorClass<AuthorizationError>()("Integration.Authorization", {
-  cause: Schema.Defect,
+  cause: Schema.Defect(),
 }) {}
 
 export type Error = CodeRequiredError | AuthorizationError
