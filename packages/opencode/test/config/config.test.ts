@@ -515,6 +515,21 @@ it.instance("handles environment variable substitution", () =>
   ),
 )
 
+it.instance("loads .env from global config directory for {env:} substitution", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    yield* FSUtil.use.writeWithDirs(path.join(dir, ".env"), "MY_DOTENV_VAR=from-global-dotenv\n")
+    yield* writeConfigEffect(dir, {
+      $schema: "https://opencode.ai/config.json",
+      username: "{env:MY_DOTENV_VAR}",
+    })
+    yield* withGlobalConfigDir(dir, Effect.gen(function* () {
+      const config = yield* Config.use.get()
+      expect(config.username).toBe("from-global-dotenv")
+    }))
+  }).pipe(Effect.ensuring(Effect.sync(() => delete process.env.MY_DOTENV_VAR))),
+)
+
 it.instance("preserves env variables when adding $schema to config", () =>
   withProcessEnv(
     "PRESERVE_VAR",

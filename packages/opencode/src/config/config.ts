@@ -244,6 +244,8 @@ export const layer = Layer.effect(
     })
 
     const loadGlobal = Effect.fnUntraced(function* (env?: Record<string, string>) {
+      const envPath = path.join(Global.Path.config, ".env")
+      if (existsSync(envPath)) process.loadEnvFile(envPath)
       let result: Info = {}
       // Seed the default global config with the schema for editor completion, but avoid writing when the user
       // explicitly routes config through env-provided paths or content.
