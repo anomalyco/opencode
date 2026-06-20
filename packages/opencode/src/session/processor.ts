@@ -89,7 +89,7 @@ interface ProcessorContext extends Input {
 
 type StreamEvent = LLMEvent
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") {}
+export class Service extends Context.Service<Service, Interface>()("@opencode/SessionProcessor") { }
 
 export const layer = Layer.effect(
   Service,
@@ -516,10 +516,10 @@ export const layer = Layer.effect(
                 match.state.status === "running"
                   ? { ...match.state, input }
                   : {
-                    status: "running",
-                    input,
-                    time: { start: Date.now() },
-                  },
+                      status: "running",
+                      input,
+                      time: { start: Date.now() },
+                    },
               metadata: match.metadata?.providerExecuted
                 ? { ...value.providerMetadata, providerExecuted: true }
                 : value.providerMetadata,
@@ -582,12 +582,12 @@ export const layer = Layer.effect(
             const normalized = yield* Effect.forEach(rawOutput.attachments ?? [], (attachment) =>
               attachment.mime.startsWith("image/")
                 ? image.normalize(attachment).pipe(
-                  Effect.catchIf(
-                    (error) => error instanceof Image.ResizerUnavailableError,
-                    () => Effect.succeed(attachment),
-                  ),
-                  Effect.exit,
-                )
+                    Effect.catchIf(
+                      (error) => error instanceof Image.ResizerUnavailableError,
+                      () => Effect.succeed(attachment),
+                    ),
+                    Effect.exit,
+                  )
                 : Effect.succeed(Exit.succeed<SessionV1.FilePart>(attachment)),
             )
             const omitted = normalized.filter(Exit.isFailure).length
@@ -1008,14 +1008,14 @@ export const layer = Layer.effect(
                   // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
                   const event = mirrorAssistant
                     ? events.publish(SessionEvent.Retried, {
-                      sessionID: ctx.sessionID,
-                      attempt: info.attempt,
-                      error: {
-                        message: info.message,
-                        isRetryable: true,
-                      },
-                      timestamp: DateTime.makeUnsafe(Date.now()),
-                    })
+                        sessionID: ctx.sessionID,
+                        attempt: info.attempt,
+                        error: {
+                          message: info.message,
+                          isRetryable: true,
+                        },
+                        timestamp: DateTime.makeUnsafe(Date.now()),
+                      })
                     : Effect.void
                   return flushV2Fragments().pipe(
                     Effect.andThen(event),
