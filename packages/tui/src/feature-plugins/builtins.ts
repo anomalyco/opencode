@@ -6,6 +6,7 @@ import SidebarFiles from "./sidebar/files"
 import SidebarFooter from "./sidebar/footer"
 import SidebarLsp from "./sidebar/lsp"
 import SidebarMcp from "./sidebar/mcp"
+import SidebarHistory from "./sidebar/history"
 import SidebarTodo from "./sidebar/todo"
 import DiffViewer from "./system/diff-viewer"
 import Notifications from "./system/notifications"
@@ -27,6 +28,7 @@ export function createBuiltinPlugins(options: { experimentalEventSystem: boolean
     SidebarLsp,
     SidebarTodo,
     SidebarFiles,
+    SidebarHistory,
     SidebarFooter,
     Notifications,
     PluginManager,

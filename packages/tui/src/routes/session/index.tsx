@@ -17,6 +17,7 @@ import {
 import { Dynamic } from "solid-js/web"
 import path from "node:path"
 import { mkdir, writeFile } from "node:fs/promises"
+import { setScrollToMessage } from "../../context/scroll-to-message"
 import { useRoute, useRouteData } from "../../context/route"
 import { useProject } from "../../context/project"
 import { useSync } from "../../context/sync"
@@ -1161,7 +1162,13 @@ export function Session() {
           <box flexGrow={1} minHeight={0} paddingBottom={1} paddingLeft={2} paddingRight={2} gap={1}>
             <Show when={session()}>
               <scrollbox
-                ref={(r) => (scroll = r)}
+                ref={(r) => {
+                  scroll = r
+                  setScrollToMessage(r ? (messageID: string) => {
+                    const child = r.getChildren().find((c) => c.id === messageID)
+                    if (child) r.scrollBy(child.y - r.y - 1)
+                  } : undefined)
+                }}
                 viewportOptions={{
                   paddingRight: showScrollbar() ? 1 : 0,
                 }}
