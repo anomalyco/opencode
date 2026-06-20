@@ -33,6 +33,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ToolOutput, Usage, type LLMEvent } from "@opencode-ai/llm"
 
 const DOOM_LOOP_THRESHOLD = 3
+const DOOP_REASONING_TEXT_REPEAT_THRESHOLD = 100;
 export type Result = "compact" | "stop" | "continue"
 
 export interface Handle {
@@ -83,6 +84,7 @@ interface ProcessorContext extends Input {
   currentTextID: string | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
   v2AssistantMessageID: SessionMessage.ID | undefined
+  reasoningTextRepeatCount: number;
 }
 
 type StreamEvent = LLMEvent
@@ -397,6 +399,13 @@ export const layer = Layer.effect(
           case "reasoning-delta":
             // Match dev: silently drop orphan deltas (no preceding reasoning-start).
             if (!(value.id in ctx.reasoningMap)) return
+            // Some providers (e.g Kimi 2.6) gets stuck in reasoning loop. This is used to avoid that
+            if (ctx.reasoningMap[value.id].text.endsWith(value.text)) {
+              ctx.reasoningTextRepeatCount++;
+              if (ctx.reasoningTextRepeatCount > DOOP_REASONING_TEXT_REPEAT_THRESHOLD) {
+                yield* Effect.fail(new Error("Reasoning loop detected: text is repeating infinitely."));
+              }
+            }
             ctx.reasoningMap[value.id].text += value.text
             if (value.providerMetadata) ctx.reasoningMap[value.id].metadata = value.providerMetadata
             if (mirrorAssistant) {
@@ -507,10 +516,10 @@ export const layer = Layer.effect(
                 match.state.status === "running"
                   ? { ...match.state, input }
                   : {
-                      status: "running",
-                      input,
-                      time: { start: Date.now() },
-                    },
+                    status: "running",
+                    input,
+                    time: { start: Date.now() },
+                  },
               metadata: match.metadata?.providerExecuted
                 ? { ...value.providerMetadata, providerExecuted: true }
                 : value.providerMetadata,
@@ -573,12 +582,12 @@ export const layer = Layer.effect(
             const normalized = yield* Effect.forEach(rawOutput.attachments ?? [], (attachment) =>
               attachment.mime.startsWith("image/")
                 ? image.normalize(attachment).pipe(
-                    Effect.catchIf(
-                      (error) => error instanceof Image.ResizerUnavailableError,
-                      () => Effect.succeed(attachment),
-                    ),
-                    Effect.exit,
-                  )
+                  Effect.catchIf(
+                    (error) => error instanceof Image.ResizerUnavailableError,
+                    () => Effect.succeed(attachment),
+                  ),
+                  Effect.exit,
+                )
                 : Effect.succeed(Exit.succeed<SessionV1.FilePart>(attachment)),
             )
             const omitted = normalized.filter(Exit.isFailure).length
@@ -999,14 +1008,14 @@ export const layer = Layer.effect(
                   // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
                   const event = mirrorAssistant
                     ? events.publish(SessionEvent.Retried, {
-                        sessionID: ctx.sessionID,
-                        attempt: info.attempt,
-                        error: {
-                          message: info.message,
-                          isRetryable: true,
-                        },
-                        timestamp: DateTime.makeUnsafe(Date.now()),
-                      })
+                      sessionID: ctx.sessionID,
+                      attempt: info.attempt,
+                      error: {
+                        message: info.message,
+                        isRetryable: true,
+                      },
+                      timestamp: DateTime.makeUnsafe(Date.now()),
+                    })
                     : Effect.void
                   return flushV2Fragments().pipe(
                     Effect.andThen(event),
