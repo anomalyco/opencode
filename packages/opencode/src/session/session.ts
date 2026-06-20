@@ -45,6 +45,8 @@ import { NonNegativeInt, optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { InstanceRef } from "@/effect/instance-ref"
+import { Instance } from "@/project/instance"
 
 const runtime = makeRuntime(Database.Service, Database.defaultLayer)
 
@@ -461,6 +463,18 @@ export type NotFound = NotFoundError
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
   readonly listGlobal: (input?: GlobalListInput) => Effect.Effect<GlobalInfo[]>
+  readonly createNext: (input: {
+    id?: SessionID
+    title?: string
+    agent?: string
+    model?: Schema.Schema.Type<typeof Model>
+    parentID?: SessionID
+    workspaceID?: WorkspaceV2.ID
+    directory: string
+    path?: string
+    metadata?: typeof Metadata.Type
+    permission?: PermissionV1.Ruleset
+  }) => Effect.Effect<Info>
   readonly create: (input?: {
     parentID?: SessionID
     title?: string
@@ -935,6 +949,7 @@ export const layer: Layer.Layer<
     return Service.of({
       list,
       listGlobal,
+      createNext,
       create,
       fork,
       touch,
@@ -971,6 +986,136 @@ export const defaultLayer = layer.pipe(
   Layer.provide(SessionV2.defaultLayer),
   Layer.provide(RuntimeFlags.defaultLayer),
 )
+
+const sessionRuntime = makeRuntime(Service, defaultLayer)
+
+type LegacyModel = {
+  id?: string
+  providerID: string
+  modelID?: string
+  variant?: string
+}
+
+type LegacyCreateInput = {
+  id?: string
+  title?: string
+  agent?: string
+  model?: LegacyModel
+  parentID?: string
+  workspaceID?: string
+  directory?: string
+  path?: string
+  metadata?: typeof Metadata.Type
+  permission?: PermissionV1.Ruleset
+}
+
+type LegacyCreateNextInput = LegacyCreateInput & {
+  directory: string
+}
+
+type LegacyMessage = Record<string, unknown>
+type LegacyPart = Record<string, unknown>
+
+function withCurrentInstance<A, E, R>(effect: Effect.Effect<A, E, R>) {
+  const ctx = Instance.current()
+  return ctx ? effect.pipe(Effect.provideService(InstanceRef, ctx)) : effect
+}
+
+function runSession<A, E>(fn: (session: Interface) => Effect.Effect<A, E, Service>) {
+  return sessionRuntime.runPromise((session) => withCurrentInstance(fn(session)))
+}
+
+function coerceCreateInput(input?: LegacyCreateInput) {
+  if (!input) return undefined
+  const output = {
+    ...input,
+    ...(input.parentID ? { parentID: SessionID.make(input.parentID) } : {}),
+    ...(input.workspaceID ? { workspaceID: WorkspaceV2.ID.make(input.workspaceID) } : {}),
+    ...(input.model
+      ? {
+          model: {
+            id: ModelV2.ID.make(input.model.id ?? input.model.modelID ?? ""),
+            providerID: ProviderV2.ID.make(input.model.providerID),
+            variant: input.model.variant,
+          },
+        }
+      : {}),
+  }
+  return output as Parameters<Interface["create"]>[0]
+}
+
+function coerceMessageModel(input: unknown) {
+  if (!input || typeof input !== "object") return input
+  const model = input as Record<string, unknown>
+  if (typeof model.providerID !== "string" || typeof model.modelID !== "string") return input
+  return {
+    ...model,
+    providerID: ProviderV2.ID.make(model.providerID),
+    modelID: ModelV2.ID.make(model.modelID),
+  }
+}
+
+function coerceMessage(message: LegacyMessage) {
+  const output = {
+    ...message,
+    id: MessageID.ascending(message.id as string),
+    sessionID: SessionID.make(message.sessionID as string),
+    ...(typeof message.parentID === "string" ? { parentID: MessageID.ascending(message.parentID) } : {}),
+    ...(typeof message.providerID === "string" ? { providerID: ProviderV2.ID.make(message.providerID) } : {}),
+    ...(typeof message.modelID === "string" ? { modelID: ModelV2.ID.make(message.modelID) } : {}),
+    ...(message.model ? { model: coerceMessageModel(message.model) } : {}),
+  }
+  return output as SessionV1.Info
+}
+
+function coercePart(part: LegacyPart) {
+  return {
+    ...part,
+    id: PartID.ascending(part.id as string),
+    messageID: MessageID.ascending(part.messageID as string),
+    sessionID: SessionID.make(part.sessionID as string),
+  } as SessionV1.Part
+}
+
+export const create = (input?: LegacyCreateInput) => runSession((session) => session.create(coerceCreateInput(input)))
+
+export const createNext = (input: LegacyCreateNextInput) =>
+  runSession((session) => session.createNext(coerceCreateInput(input) as Parameters<Interface["createNext"]>[0]))
+
+export const get = (sessionID: string) => runSession((session) => session.get(SessionID.make(sessionID)))
+
+export const messages = (input: { sessionID: string; limit?: number }) =>
+  runSession((session) => session.messages({ ...input, sessionID: SessionID.make(input.sessionID) }))
+
+export const remove = (sessionID: string) => runSession((session) => session.remove(SessionID.make(sessionID)))
+
+export const update = async (sessionID: string, fn: (draft: Info) => void) => {
+  const current = await get(sessionID)
+  const draft = structuredClone(current)
+  fn(draft)
+
+  if (draft.title !== current.title)
+    await runSession((session) => session.setTitle({ sessionID: SessionID.make(sessionID), title: draft.title }))
+  if (JSON.stringify(draft.metadata) !== JSON.stringify(current.metadata)) {
+    await runSession((session) =>
+      session.setMetadata({ sessionID: SessionID.make(sessionID), metadata: draft.metadata ?? {} }),
+    )
+  }
+  if (JSON.stringify(draft.permission) !== JSON.stringify(current.permission)) {
+    await runSession((session) =>
+      session.setPermission({
+        sessionID: SessionID.make(sessionID),
+        permission: draft.permission ?? [],
+      }),
+    )
+  }
+  return draft
+}
+
+export const updateMessage = (message: LegacyMessage) =>
+  runSession((session) => session.updateMessage(coerceMessage(message)))
+
+export const updatePart = (part: LegacyPart) => runSession((session) => session.updatePart(coercePart(part)))
 
 const cancelBackgroundJobs = Effect.fn("Session.cancelBackgroundJobs")(function* (
   background: BackgroundJob.Interface,

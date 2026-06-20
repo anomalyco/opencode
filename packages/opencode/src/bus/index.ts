@@ -16,7 +16,7 @@ export namespace Bus {
     })
   }
 
-  export function subscribe<P>(event: Event<string, P>, fn: (payload: Envelope<P>) => void | Promise<void>) {
+  export function subscribe<P>(event: Event<string, P>, fn: (payload: Envelope<P>) => unknown | Promise<unknown>) {
     const handler = (input: { payload?: unknown }) => {
       if (!input.payload || typeof input.payload !== "object") return
       if (!("type" in input.payload) || input.payload.type !== event.type) return

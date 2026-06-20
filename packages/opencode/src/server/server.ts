@@ -67,6 +67,10 @@ export async function openapi() {
   return OpenApi.fromApi(PublicApi)
 }
 
+export function App() {
+  return Default().app
+}
+
 export let url: URL | undefined
 
 export async function listen(opts: ListenOptions): Promise<Listener> {

@@ -68,6 +68,20 @@ export type DefWithoutID<
   M extends Metadata = Metadata,
 > = Omit<Def<Parameters, M>, "id">
 
+export interface InitDef<
+  Parameters extends Schema.Decoder<unknown> = Schema.Decoder<unknown>,
+  M extends Metadata = Metadata,
+> extends Omit<DefWithoutID<Parameters, M>, "execute"> {
+  execute(args: Schema.Schema.Type<Parameters>, ctx: Context): Effect.Effect<ExecuteResult<M>, unknown>
+}
+
+export interface LegacyDef<
+  Parameters extends Schema.Decoder<unknown> = Schema.Decoder<unknown>,
+  M extends Metadata = Metadata,
+> extends Omit<Def<Parameters, M>, "execute"> {
+  execute(args: Schema.Schema.Type<Parameters>, ctx: Context): Promise<ExecuteResult<M>>
+}
+
 export interface Info<
   Parameters extends Schema.Decoder<unknown> = Schema.Decoder<unknown>,
   M extends Metadata = Metadata,
@@ -77,8 +91,8 @@ export interface Info<
 }
 
 type Init<Parameters extends Schema.Decoder<unknown>, M extends Metadata> =
-  | DefWithoutID<Parameters, M>
-  | (() => Effect.Effect<DefWithoutID<Parameters, M>>)
+  | InitDef<Parameters, M>
+  | (() => Effect.Effect<InitDef<Parameters, M>, unknown>)
 
 export type InferParameters<T> =
   T extends Info<infer P, any>
@@ -104,7 +118,7 @@ function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadat
 ) {
   return () =>
     Effect.gen(function* () {
-      const toolInfo = typeof init === "function" ? { ...(yield* init()) } : { ...init }
+      const toolInfo = typeof init === "function" ? { ...(yield* init().pipe(Effect.orDie)) } : { ...init }
       // Compile the parser closure once per tool init; `decodeUnknownEffect`
       // allocates a new closure per call, so hoisting avoids re-closing it for
       // every LLM tool invocation.
@@ -144,8 +158,17 @@ function wrap<Parameters extends Schema.Decoder<unknown>, Result extends Metadat
           }
         }).pipe(Effect.orDie, Effect.withSpan("Tool.execute", { attributes: attrs }))
       }
-      return toolInfo
+      return toolInfo as DefWithoutID<Parameters, Result>
     })
+}
+
+type Defined<Parameters extends Schema.Decoder<unknown>, Result extends Metadata, R, ID extends string> = Effect.Effect<
+  Info<Parameters, Result>,
+  never,
+  R | Truncate.Service | Agent.Service
+> & {
+  id: ID
+  init: () => Promise<LegacyDef<Parameters, Result>>
 }
 
 export function define<
@@ -153,10 +176,7 @@ export function define<
   Result extends Metadata,
   R,
   ID extends string = string,
->(
-  id: ID,
-  init: Effect.Effect<Init<Parameters, Result>, never, R>,
-): Effect.Effect<Info<Parameters, Result>, never, R | Truncate.Service | Agent.Service> & { id: ID } {
+>(id: ID, init: Effect.Effect<Init<Parameters, Result>, never, R>): Defined<Parameters, Result, R, ID> {
   return Object.assign(
     Effect.gen(function* () {
       const resolved = yield* init
@@ -164,7 +184,12 @@ export function define<
       const agents = yield* Agent.Service
       return { id, init: wrap(id, resolved, truncate, agents) }
     }),
-    { id },
+    {
+      id,
+      init: async () => {
+        throw new Error("Tool.init() requires a runtime; use Tool.init(info) inside the tool registry.")
+      },
+    },
   )
 }
 

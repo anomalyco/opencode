@@ -1975,6 +1975,8 @@ export const node = LayerNode.make(layer, [
 
 const legacyRuntime = makeRuntime(Service, defaultLayer)
 
+export const list = async () => (await legacyRuntime.runPromise((provider) => provider.list())) as Record<string, Info>
+
 export const getModel = (providerID: ProviderV2.ID, modelID: ModelV2.ID) =>
   legacyRuntime.runPromise((provider) => provider.getModel(providerID, modelID))
 

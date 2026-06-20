@@ -40,4 +40,16 @@ export const defaultLayer = layer
 
 export const node = LayerNode.make(layer, [])
 
+export function get(key: string) {
+  return process.env[key]
+}
+
+export function set(key: string, value: string) {
+  process.env[key] = value
+}
+
+export function remove(key: string) {
+  delete process.env[key]
+}
+
 export * as Env from "."

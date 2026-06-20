@@ -31,6 +31,7 @@ import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
+import { makeRuntime } from "@/effect/run-service"
 
 type State = {
   hooks: Hooks[]
@@ -312,5 +313,9 @@ export const defaultLayer = layer.pipe(
 )
 
 export const node = LayerNode.make(layer, [EventV2Bridge.node, Config.node, RuntimeFlags.node])
+
+const legacyRuntime = makeRuntime(Service, defaultLayer)
+
+export const init = () => legacyRuntime.runPromise((plugin) => plugin.init())
 
 export * as Plugin from "."

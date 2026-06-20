@@ -15,9 +15,9 @@ import {
   StructuredOutputError,
   SubtaskPart,
   User,
-  WithParts,
   type ToolPart,
 } from "@opencode-ai/core/v1/session"
+import type { WithParts } from "@opencode-ai/core/v1/session"
 
 import { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
@@ -37,6 +37,8 @@ import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
 import type { Provider } from "@/provider/provider"
 import { Effect, Schema } from "effect"
+
+export type { WithParts } from "@opencode-ai/core/v1/session"
 
 /** Error shape thrown by Bun's fetch() when gzip/br decompression fails mid-stream */
 interface FetchDecompressionError extends Error {

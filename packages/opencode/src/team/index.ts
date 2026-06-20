@@ -382,7 +382,7 @@ export namespace Team {
         await Provider.getModel(parsed.providerID, parsed.modelID)
       } catch (e: unknown) {
         if (Provider.ModelNotFoundError.isInstance(e)) {
-          const hint = e.data.suggestions?.length ? ` Did you mean: ${e.data.suggestions.join(", ")}?` : ""
+          const hint = e.suggestions?.length ? ` Did you mean: ${e.suggestions.join(", ")}?` : ""
           return { error: `Model not found: ${input.model}.${hint}` }
         }
         throw e

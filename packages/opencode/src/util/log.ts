@@ -18,6 +18,8 @@ function write(level: "debug" | "info" | "warn" | "error", message: string, fiel
 }
 
 export namespace Log {
+  export function init(_input?: { print?: boolean; dev?: boolean; level?: string }) {}
+
   export function create(fields: Fields = {}) {
     return {
       debug(message: string, next?: Fields) {

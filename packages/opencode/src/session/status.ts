@@ -107,4 +107,7 @@ function legacyWithInstance<A, E, R>(effect: Effect.Effect<A, E, R>) {
 export const get = (sessionID: string) =>
   legacyRuntime.runSync((status) => legacyWithInstance(status.get(SessionID.make(sessionID))))
 
+export const set = (sessionID: string, info: Info) =>
+  legacyRuntime.runSync((status) => legacyWithInstance(status.set(SessionID.make(sessionID), info)))
+
 export * as SessionStatus from "./status"

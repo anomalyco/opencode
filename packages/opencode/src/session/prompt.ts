@@ -1704,7 +1704,7 @@ export const node = LayerNode.make(layer, [
   Database.node,
 ])
 
-const legacyRuntime = makeRuntime(Service, defaultLayer)
+const legacyRuntime = makeRuntime(Service, defaultLayer as Layer.Layer<Service, never, never>)
 
 function legacyWithInstance<A, E, R>(effect: Effect.Effect<A, E, R>) {
   const ctx = Instance.current()

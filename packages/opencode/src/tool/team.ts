@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Layer, ManagedRuntime, Schema } from "effect"
 import * as Tool from "./tool"
 import { Team, TeamTasks, WRITE_TOOLS, type TeamTask } from "../team"
 import { TeamMessaging } from "../team/messaging"
@@ -8,8 +8,10 @@ import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
 import { Bus } from "../bus"
 import { TeamEvent } from "../team/events"
+import { Truncate } from "./truncate"
+import { attach } from "../effect/run-service"
 
-type Metadata = Record<string, unknown>
+type Metadata = Record<string, any>
 
 const Priority = Schema.Literals(["high", "medium", "low"])
 const TaskStatus = Schema.Literals(["pending", "in_progress", "completed", "cancelled", "blocked"])
@@ -28,9 +30,29 @@ const TeamTaskInput = Schema.Struct({
   depends_on: Schema.optional(Schema.mutable(Schema.Array(Schema.String))),
 })
 
-const runPromise = <A>(evaluate: () => Promise<A>) => Effect.tryPromise(evaluate).pipe(Effect.orDie)
+const runPromise = <A>(evaluate: () => Promise<A>) => Effect.promise(evaluate)
 
 const emptyMetadata = {} satisfies Metadata
+const legacyToolRuntime = ManagedRuntime.make(
+  Layer.mergeAll(Agent.defaultLayer, Provider.defaultLayer, Session.defaultLayer, Truncate.defaultLayer),
+)
+
+function installLegacyInit<Parameters extends Schema.Decoder<unknown>, Result extends Metadata>(
+  tool: Effect.Effect<Tool.Info<Parameters, Result>, never, unknown> & {
+    init: () => Promise<Tool.LegacyDef<Parameters, Result>>
+  },
+) {
+  tool.init = async () => {
+    const info = await legacyToolRuntime.runPromise(
+      attach(tool as unknown as Effect.Effect<Tool.Info<Parameters, Result>, never, never>),
+    )
+    const next = await legacyToolRuntime.runPromise(attach(Tool.init(info)))
+    return {
+      ...next,
+      execute: (args, ctx) => legacyToolRuntime.runPromise(attach(next.execute(args, ctx))),
+    }
+  }
+}
 
 function error(output: string) {
   return { title: "Error", output, metadata: emptyMetadata }
@@ -76,7 +98,9 @@ export const TeamCreateTool = Tool.define<typeof TeamCreateParameters, Metadata,
             )
           }
           if (existingTeam?.role === "lead") {
-            return error(`You are already leading team "${existingTeam.team.name}". Only one team per session is allowed.`)
+            return error(
+              `You are already leading team "${existingTeam.team.name}". Only one team per session is allowed.`,
+            )
           }
 
           yield* runPromise(() =>
@@ -149,11 +173,7 @@ export const TeamSpawnParameters = Schema.Struct({
   }),
 })
 
-export const TeamSpawnTool = Tool.define<
-  typeof TeamSpawnParameters,
-  Metadata,
-  Agent.Service | Provider.Service
->(
+export const TeamSpawnTool = Tool.define<typeof TeamSpawnParameters, Metadata, Agent.Service | Provider.Service>(
   "team_spawn",
   Effect.gen(function* () {
     const agents = yield* Agent.Service
@@ -185,10 +205,10 @@ export const TeamSpawnTool = Tool.define<
               const parsed = Provider.parseModel(params.model)
               return yield* provider.getModel(parsed.providerID, parsed.modelID).pipe(
                 Effect.as(parsed),
-                Effect.catchAll((err) =>
+                Effect.catch((err) =>
                   Effect.succeed({
                     error: `Model not found: ${params.model}.${
-                      err.data.suggestions?.length ? ` Did you mean: ${err.data.suggestions.join(", ")}?` : ""
+                      err.suggestions?.length ? ` Did you mean: ${err.suggestions.join(", ")}?` : ""
                     }`,
                   } as const),
                 ),
@@ -196,7 +216,7 @@ export const TeamSpawnTool = Tool.define<
             }
             if (next.model) return next.model
             const lastUser = ctx.messages.findLast((message) => message.info.role === "user")
-            if (lastUser) return lastUser.info.model
+            if (lastUser?.info.role === "user") return lastUser.info.model
             return yield* provider.defaultModel().pipe(Effect.orDie)
           })
           if ("error" in model) return error(model.error)
@@ -310,8 +330,7 @@ export const TeamTasksParameters = Schema.Struct({
 export const TeamTasksTool = Tool.define<typeof TeamTasksParameters, Metadata, never>(
   "team_tasks",
   Effect.succeed({
-    description:
-      "View or update the shared task list for the team. Use list, add, complete, or update.",
+    description: "View or update the shared task list for the team. Use list, add, complete, or update.",
     parameters: TeamTasksParameters,
     execute: (params, ctx) =>
       Effect.gen(function* () {
@@ -329,8 +348,7 @@ export const TeamTasksTool = Tool.define<typeof TeamTasksParameters, Metadata, n
               title: "Task list",
               output: tasks
                 .map((task) => {
-                  const status =
-                    task.status === "in_progress" ? `in_progress (${task.assignee ?? "?"})` : task.status
+                  const status = task.status === "in_progress" ? `in_progress (${task.assignee ?? "?"})` : task.status
                   const deps = task.depends_on?.length ? ` [deps: ${task.depends_on.join(", ")}]` : ""
                   return `[${task.id}] ${task.content} - ${status} (${task.priority})${deps}`
                 })
@@ -410,11 +428,7 @@ export const TeamApprovePlanParameters = Schema.Struct({
   feedback: Schema.optional(Schema.String).annotate({ description: "Feedback for the teammate" }),
 })
 
-export const TeamApprovePlanTool = Tool.define<
-  typeof TeamApprovePlanParameters,
-  Metadata,
-  Session.Service
->(
+export const TeamApprovePlanTool = Tool.define<typeof TeamApprovePlanParameters, Metadata, Session.Service>(
   "team_approve_plan",
   Effect.gen(function* () {
     const session = yield* Session.Service
@@ -542,7 +556,10 @@ export const TeamShutdownTool = Tool.define<typeof TeamShutdownParameters, Metad
               "2. Stop working after sending your summary.",
             ].join("\n"),
           }),
-        ).pipe(Effect.as(true), Effect.catchAll(() => Effect.succeed(false)))
+        ).pipe(
+          Effect.as(true),
+          Effect.catch(() => Effect.succeed(false)),
+        )
         if (!sent) yield* runPromise(() => Team.transitionMemberStatus(teamInfo.team.name, params.name, "shutdown"))
         if (member.status === "busy") yield* runPromise(() => Team.cancelMember(teamInfo.team.name, params.name))
 
@@ -583,7 +600,7 @@ export const TeamCleanupTool = Tool.define<typeof TeamCleanupParameters, Metadat
               .join("\n"),
             metadata: emptyMetadata,
           }),
-          Effect.catchAll((err) =>
+          Effect.catch((err) =>
             Effect.succeed({
               title: "Cleanup failed",
               output: `Failed to clean up team: ${err instanceof Error ? err.message : String(err)}`,
@@ -594,3 +611,13 @@ export const TeamCleanupTool = Tool.define<typeof TeamCleanupParameters, Metadat
       }),
   }),
 )
+
+installLegacyInit(TeamCreateTool)
+installLegacyInit(TeamSpawnTool)
+installLegacyInit(TeamMessageTool)
+installLegacyInit(TeamBroadcastTool)
+installLegacyInit(TeamTasksTool)
+installLegacyInit(TeamClaimTool)
+installLegacyInit(TeamApprovePlanTool)
+installLegacyInit(TeamShutdownTool)
+installLegacyInit(TeamCleanupTool)
