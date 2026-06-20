@@ -29,6 +29,8 @@ import { WebSearchTool } from "./websearch"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
+import { UltraVerifyTool } from "../agent/ultra/ultra-verify"
+import { UltraPhaseTool } from "../agent/ultra/ultra-phase"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -212,6 +214,8 @@ export const layer = Layer.effect(
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          ultraVerify: Tool.init(UltraVerifyTool),
+          ultraPhase: Tool.init(UltraPhaseTool),
         })
 
         return {
@@ -231,6 +235,8 @@ export const layer = Layer.effect(
             tool.search,
             tool.skill,
             tool.patch,
+            tool.ultraVerify,
+            tool.ultraPhase,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
           ],
