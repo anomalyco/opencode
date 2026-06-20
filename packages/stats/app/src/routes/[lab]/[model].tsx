@@ -376,10 +376,15 @@ function ModelUsageSection(props: { data: ModelUsagePoint[] }) {
 function ModelUsersSection(props: { data: ModelUsagePoint[] }) {
   return (
     <section id="users" data-section="model-panel">
-      <SectionTitle title="Unique Users" description="Daily unique OpenCode Go users over the recent two-month window." />
+      <SectionTitle
+        title="Unique Users"
+        description="Daily unique OpenCode Go users over the recent two-month window."
+      />
       <Show
         when={props.data.some((item) => item.users > 0)}
-        fallback={<ModelEmptyState title="No user data" description="No user-bearing rows landed in the current window." />}
+        fallback={
+          <ModelEmptyState title="No user data" description="No user-bearing rows landed in the current window." />
+        }
       >
         <ModelColumnChart data={props.data} metric="users" ariaLabel="Daily unique user chart" />
       </Show>
@@ -387,11 +392,7 @@ function ModelUsersSection(props: { data: ModelUsagePoint[] }) {
   )
 }
 
-function ModelColumnChart(props: {
-  data: ModelUsagePoint[]
-  metric: "tokens" | "users"
-  ariaLabel: string
-}) {
+function ModelColumnChart(props: { data: ModelUsagePoint[]; metric: "tokens" | "users"; ariaLabel: string }) {
   const [activeIndex, setActiveIndex] = createSignal<number>()
   const max = createMemo(() => Math.max(0, ...props.data.map((item) => modelUsageMetricValue(item, props.metric))) || 1)
   const activePoint = createMemo(() => {
@@ -458,9 +459,11 @@ function ModelColumnChart(props: {
             >
               <div
                 data-slot="model-usage-bar"
-                style={{
-                  "--model-usage-fill": `${modelUsageHeight(modelUsageMetricValue(point, props.metric), max())}%`,
-                } as JSX.CSSProperties}
+                style={
+                  {
+                    "--model-usage-fill": `${modelUsageHeight(modelUsageMetricValue(point, props.metric), max())}%`,
+                  } as JSX.CSSProperties
+                }
               />
               <Show when={activeIndex() === index() && activePoint()}>
                 {(active) => (

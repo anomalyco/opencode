@@ -791,7 +791,9 @@ function UniqueUsersSection(props: { data: StatsHomeData["users"] }) {
       <SectionTitle title="Unique Users" description="Daily unique OpenCode Go users by model." />
       <Show
         when={data().some((item) => usageTotal(item) > 0)}
-        fallback={<EmptyState title="No user data" description="No user-bearing model_stat rows matched this window." />}
+        fallback={
+          <EmptyState title="No user data" description="No user-bearing model_stat rows matched this window." />
+        }
       >
         <TopModelsChart
           data={data()}

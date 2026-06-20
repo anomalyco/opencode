@@ -1578,7 +1578,10 @@
   left: auto;
 }
 
-[data-page="stats"] :is([data-section="top-models"], [data-section="unique-users"]) [data-component="chart-tooltip"] strong,
+[data-page="stats"]
+  :is([data-section="top-models"], [data-section="unique-users"])
+  [data-component="chart-tooltip"]
+  strong,
 [data-page="stats"]
   :is([data-section="top-models"], [data-section="unique-users"])
   [data-component="chart-tooltip"]
@@ -1589,7 +1592,10 @@
   white-space: nowrap;
 }
 
-[data-page="stats"] :is([data-section="top-models"], [data-section="unique-users"]) [data-component="chart-tooltip"] strong {
+[data-page="stats"]
+  :is([data-section="top-models"], [data-section="unique-users"])
+  [data-component="chart-tooltip"]
+  strong {
   padding: 8px 8px 0;
   font-weight: 500;
 }
