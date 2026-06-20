@@ -13,7 +13,7 @@ import {
   parseQuestionAnswers,
   parseQuestions,
   parseTodos,
-  sessionLayoutRoles,
+  alwaysSeparate,
   toolDisplay,
 } from "../../../src/routes/session"
 
@@ -55,7 +55,7 @@ const tools: readonly ToolFixture[] = [
 function ShellOutput() {
   return (
     <box
-      ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "block")}
+      ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
       marginTop={1}
       paddingTop={1}
       paddingBottom={1}
@@ -73,7 +73,7 @@ function ShellOutput() {
 
 function UserMessage() {
   return (
-    <box id="message-user">
+    <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)}>
       <box paddingTop={1} paddingBottom={1} paddingLeft={2}>
         <text>Check whether the next tool remains separated.</text>
       </box>
@@ -96,7 +96,6 @@ function Fixture(props: { errorExpanded?: boolean; before?: "shell" | "user" }) 
               failed={Boolean(item.error)}
               error={item.error}
               errorExpanded={props.errorExpanded}
-              separateAfter={(id) => id === "message-user"}
             >
               {item.label}
             </InlineToolRow>
@@ -107,16 +106,16 @@ function Fixture(props: { errorExpanded?: boolean; before?: "shell" | "user" }) 
   )
 }
 
-function SubagentGroupFixture() {
+function TaskRowsFixture() {
   return (
     <box flexDirection="column" width={72}>
       <InlineToolRow icon="✱" complete={true} pending="">
         Grep "Task" (2 matches)
       </InlineToolRow>
-      <InlineToolRow icon="⠙" complete={true} pending="" subagent={true}>
+      <InlineToolRow icon="⠙" complete={true} pending="">
         Explore Task — Inspect active task spacing
       </InlineToolRow>
-      <InlineToolRow icon="✓" complete={true} pending="" subagent={true}>
+      <InlineToolRow icon="✓" complete={true} pending="">
         {"General Task — Confirm completed task spacing\n↳ 1 toolcall · 501ms"}
       </InlineToolRow>
       <InlineToolRow icon="→" complete={true} pending="">
@@ -126,40 +125,40 @@ function SubagentGroupFixture() {
   )
 }
 
-function LoadedReadBeforeSubagentFixture() {
+function LoadedReadBeforeTaskFixture() {
   return (
     <box flexDirection="column" width={72}>
       <InlineToolRow icon="→" complete={true} pending="">
         Read src/cli/cmd/tui/routes/session/index.tsx
       </InlineToolRow>
-      <box ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "inline")} paddingLeft={3}>
+      <box paddingLeft={3}>
         <text paddingLeft={3}>↳ Loaded src/cli/cmd/tui/routes/session/tools.tsx</text>
       </box>
-      <InlineToolRow icon="✓" complete={true} pending="" subagent={true}>
+      <InlineToolRow icon="✓" complete={true} pending="">
         {"Explore Task — Inspect active task spacing\n↳ 1 toolcall · 501ms"}
       </InlineToolRow>
     </box>
   )
 }
 
-function AssistantSummaryBeforeSubagentFixture() {
+function AssistantSummaryBeforeInlineFixture() {
   return (
     <box flexDirection="column" width={72}>
-      <box ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "block")} paddingLeft={3}>
+      <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3}>
         <text>▣ Build · Little Frank · 53.1s</text>
       </box>
-      <InlineToolRow icon="✓" complete={true} pending="" subagent={true}>
+      <InlineToolRow icon="✓" complete={true} pending="">
         {"Build Task — Review changes\n↳ 48 toolcalls · 1m 40s"}
       </InlineToolRow>
     </box>
   )
 }
 
-function AssistantErrorBeforeSubagentFixture() {
+function AssistantErrorBeforeInlineFixture() {
   return (
     <box flexDirection="column" width={72}>
       <box
-        ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "block")}
+        ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
         border={["left"]}
         paddingTop={1}
         paddingBottom={1}
@@ -167,7 +166,7 @@ function AssistantErrorBeforeSubagentFixture() {
       >
         <text>Managed inference requires an active Member plan</text>
       </box>
-      <InlineToolRow icon="✓" complete={true} pending="" subagent={true}>
+      <InlineToolRow icon="✓" complete={true} pending="">
         {"Build Task — Review changes\n↳ 48 toolcalls · 1m 40s"}
       </InlineToolRow>
     </box>
@@ -184,7 +183,7 @@ function StickyScrollFixture(props: { separated: boolean; scroll: (scroll: Scrol
         <text>Second row</text>
       </box>
       <Show when={props.separated}>
-        <box ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "block")}>
+        <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)}>
           <text>Assistant text</text>
         </box>
       </Show>
@@ -213,6 +212,7 @@ function FailedCompleteToolFixture() {
 
 async function renderFrame(component: () => JSX.Element, options: { width: number; height: number }) {
   testSetup = await testRender(component, options)
+  await testSetup.renderOnce()
   await testSetup.renderOnce()
 
   return testSetup
@@ -308,22 +308,20 @@ describe("TUI inline tool wrapping", () => {
     expect(await renderFrame(() => <Fixture before="user" />, { width: 72, height: 14 })).toMatchSnapshot()
   })
 
-  test("separates a contiguous subagent group from inline tools", async () => {
-    expect(await renderFrame(() => <SubagentGroupFixture />, { width: 72, height: 10 })).toMatchSnapshot()
+  test("separates after a multi-line task row", async () => {
+    expect(await renderFrame(() => <TaskRowsFixture />, { width: 72, height: 10 })).toMatchSnapshot()
   })
 
-  test("separates a subagent group after an expanded read", async () => {
-    expect(await renderFrame(() => <LoadedReadBeforeSubagentFixture />, { width: 72, height: 8 })).toMatchSnapshot()
+  test("does not treat task rows differently from other inline rows", async () => {
+    expect(await renderFrame(() => <LoadedReadBeforeTaskFixture />, { width: 72, height: 8 })).toMatchSnapshot()
   })
 
-  test("separates a subagent from the previous assistant summary", async () => {
-    expect(
-      await renderFrame(() => <AssistantSummaryBeforeSubagentFixture />, { width: 72, height: 5 }),
-    ).toMatchSnapshot()
+  test("separates an inline row from the previous assistant summary", async () => {
+    expect(await renderFrame(() => <AssistantSummaryBeforeInlineFixture />, { width: 72, height: 5 })).toMatchSnapshot()
   })
 
-  test("separates a subagent from the previous assistant error", async () => {
-    expect(await renderFrame(() => <AssistantErrorBeforeSubagentFixture />, { width: 72, height: 7 })).toMatchSnapshot()
+  test("separates an inline row from the previous assistant error", async () => {
+    expect(await renderFrame(() => <AssistantErrorBeforeInlineFixture />, { width: 72, height: 7 })).toMatchSnapshot()
   })
 
   test("updates sticky-bottom geometry when a text separator mounts and unmounts", async () => {
