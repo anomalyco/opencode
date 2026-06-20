@@ -11,8 +11,15 @@
 // To retire this shim later, migrate those callers to upstream's Effect logging
 // and delete this file (and its manifest entry).
 
+import fs from "fs"
+import path from "path"
+import { Global } from "../global"
+
 const LEVELS = { DEBUG: 10, INFO: 20, WARN: 30, ERROR: 40 } as const
 type LevelName = keyof typeof LEVELS
+
+const LOG_FILE = path.join(Global.Path.log, "opencode.log")
+let logDirReady = false
 
 function threshold(): number {
   const env = (process.env["OPENCODE_LOG_LEVEL"] ?? "INFO").toUpperCase()
@@ -47,8 +54,21 @@ export function create(tags: Record<string, any> = {}): Logger {
   const emit = (level: LevelName, message?: any, extra?: Record<string, any>) => {
     if (LEVELS[level] < threshold()) return
     const line = format(level, message, extra)
-    if (level === "ERROR" || level === "WARN") process.stderr.write(line + "\n")
-    else process.stdout.write(line + "\n")
+    // fork: write to opencode's log file, never stdout/stderr. Writing to the
+    // terminal corrupts the TUI — these lines (local-provider-sync,
+    // openai-compatible discovery, beads) were rendering inside the chat input.
+    // Mirror to stderr only when OPENCODE_PRINT_LOGS=1, matching the Effect
+    // file logger in observability/logging.ts.
+    try {
+      if (!logDirReady) {
+        fs.mkdirSync(Global.Path.log, { recursive: true })
+        logDirReady = true
+      }
+      fs.appendFileSync(LOG_FILE, line + "\n")
+    } catch {
+      // disk/log unavailable — drop the line rather than crash or corrupt the UI.
+    }
+    if (process.env["OPENCODE_PRINT_LOGS"] === "1") process.stderr.write(line + "\n")
   }
 
   const result: Logger = {
