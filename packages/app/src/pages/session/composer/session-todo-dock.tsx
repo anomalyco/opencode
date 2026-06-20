@@ -7,7 +7,7 @@ import { useSpring } from "@opencode-ai/ui/motion-spring"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextStrikethrough } from "@opencode-ai/ui/text-strikethrough"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { Index, createEffect, createMemo } from "solid-js"
+import { Index, createEffect, createMemo, For } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/context/language"
 
@@ -210,40 +210,40 @@ function TodoList(props: { todos: Todo[] }) {
           setStore("stuck", e.currentTarget.scrollTop > 0)
         }}
       >
-        <Index each={props.todos}>
+        <For each={props.todos}>
           {(todo) => (
             <Checkbox
               readOnly
-              checked={todo().status === "completed"}
-              indeterminate={todo().status === "in_progress"}
-              data-in-progress={todo().status === "in_progress" ? "" : undefined}
-              data-state={todo().status}
-              icon={dot(todo().status)}
+              checked={todo.status === "completed"}
+              indeterminate={todo.status === "in_progress"}
+              data-in-progress={todo.status === "in_progress" ? "" : undefined}
+              data-state={todo.status}
+              icon={dot(todo.status)}
               style={{
                 "--checkbox-align": "flex-start",
                 "--checkbox-offset": "1px",
                 transition: "opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
-                opacity: todo().status === "pending" ? "0.94" : "1",
+                opacity: todo.status === "pending" ? "0.94" : "1",
               }}
             >
               <TextStrikethrough
-                active={todo().status === "completed" || todo().status === "cancelled"}
-                text={todo().content}
+                active={todo.status === "completed" || todo.status === "cancelled"}
+                text={todo.content}
                 class="text-14-regular min-w-0 break-words"
                 style={{
                   "line-height": "var(--line-height-normal)",
                   transition:
                     "color 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1)), opacity 220ms var(--tool-motion-ease, cubic-bezier(0.22, 1, 0.36, 1))",
                   color:
-                    todo().status === "completed" || todo().status === "cancelled"
+                    todo.status === "completed" || todo.status === "cancelled"
                       ? "var(--text-weak)"
                       : "var(--text-strong)",
-                  opacity: todo().status === "pending" ? "0.92" : "1",
+                  opacity: todo.status === "pending" ? "0.92" : "1",
                 }}
               />
             </Checkbox>
           )}
-        </Index>
+        </For>
       </div>
       <div
         class="pointer-events-none absolute top-0 left-0 right-0 h-4 transition-opacity duration-150"
