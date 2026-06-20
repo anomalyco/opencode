@@ -16,6 +16,18 @@ export const Flag = {
   OTEL_EXPORTER_OTLP_ENDPOINT: process.env["OTEL_EXPORTER_OTLP_ENDPOINT"],
   OTEL_EXPORTER_OTLP_HEADERS: process.env["OTEL_EXPORTER_OTLP_HEADERS"],
 
+  // Evaluated at access time because tests and embedding runtimes can set OTLP
+  // protocol env vars after this module has loaded.
+  get OTEL_EXPORTER_OTLP_PROTOCOL() {
+    return process.env["OTEL_EXPORTER_OTLP_PROTOCOL"]
+  },
+  get OTEL_EXPORTER_OTLP_TRACES_PROTOCOL() {
+    return process.env["OTEL_EXPORTER_OTLP_TRACES_PROTOCOL"]
+  },
+  get OTEL_EXPORTER_OTLP_LOGS_PROTOCOL() {
+    return process.env["OTEL_EXPORTER_OTLP_LOGS_PROTOCOL"]
+  },
+
   OPENCODE_AUTO_HEAP_SNAPSHOT: truthy("OPENCODE_AUTO_HEAP_SNAPSHOT"),
   OPENCODE_GIT_BASH_PATH: process.env["OPENCODE_GIT_BASH_PATH"],
   OPENCODE_CONFIG: process.env["OPENCODE_CONFIG"],

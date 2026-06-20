@@ -1,10 +1,15 @@
 import { Layer } from "effect"
-import { OtlpLogger } from "effect/unstable/observability"
+import { OtlpLogger, OtlpSerialization } from "effect/unstable/observability"
 import { Flag } from "../flag/flag"
 import { InstallationChannel, InstallationVersion } from "../installation/version"
 import { runID } from "./shared"
 
 const endpoint = Flag.OTEL_EXPORTER_OTLP_ENDPOINT
+
+export type OtlpProtocol = "http/json" | "http/protobuf"
+export type OtlpSignal = "logs" | "traces"
+
+const defaultProtocol: OtlpProtocol = "http/json"
 
 const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
   ? Flag.OTEL_EXPORTER_OTLP_HEADERS.split(",").reduce(
@@ -16,6 +21,24 @@ const headers = Flag.OTEL_EXPORTER_OTLP_HEADERS
       {} as Record<string, string>,
     )
   : undefined
+
+function protocolValue(signal: OtlpSignal) {
+  return (
+    (signal === "logs" ? Flag.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL : Flag.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL) ??
+    Flag.OTEL_EXPORTER_OTLP_PROTOCOL
+  )
+}
+
+export function protocol(signal: OtlpSignal): OtlpProtocol {
+  const value = protocolValue(signal)
+  if (value === "http/json") return value
+  if (value === "http/protobuf") return value
+  return defaultProtocol
+}
+
+export function serializationLayer() {
+  return protocol("logs") === "http/protobuf" ? OtlpSerialization.layerProtobuf : OtlpSerialization.layerJson
+}
 
 function resourceAttributes() {
   const value = process.env.OTEL_RESOURCE_ATTRIBUTES
@@ -55,7 +78,10 @@ export function loggers() {
 export async function tracingLayer() {
   if (!endpoint) return Layer.empty
   const NodeSdk = await import("@effect/opentelemetry/NodeSdk")
-  const OTLP = await import("@opentelemetry/exporter-trace-otlp-http")
+  const OTLP =
+    protocol("traces") === "http/protobuf"
+      ? await import("@opentelemetry/exporter-trace-otlp-proto")
+      : await import("@opentelemetry/exporter-trace-otlp-http")
   const SdkBase = await import("@opentelemetry/sdk-trace-base")
   const { AsyncLocalStorageContextManager } = await import("@opentelemetry/context-async-hooks")
   const { context } = await import("@opentelemetry/api")

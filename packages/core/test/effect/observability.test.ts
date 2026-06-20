@@ -1,21 +1,71 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { NodeFileSystem } from "@effect/platform-node"
 import { Effect, Layer, Logger } from "effect"
+import { OtlpSerialization } from "effect/unstable/observability"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { fileLogger } from "../../src/observability/logging"
-import { resource } from "../../src/observability/otlp"
+import { protocol, resource, serializationLayer } from "../../src/observability/otlp"
 
 const otelResourceAttributes = process.env.OTEL_RESOURCE_ATTRIBUTES
+const otelProtocol = process.env.OTEL_EXPORTER_OTLP_PROTOCOL
+const otelTracesProtocol = process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+const otelLogsProtocol = process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL
 const opencodeClient = process.env.OPENCODE_CLIENT
 
 afterEach(() => {
   if (otelResourceAttributes === undefined) delete process.env.OTEL_RESOURCE_ATTRIBUTES
   else process.env.OTEL_RESOURCE_ATTRIBUTES = otelResourceAttributes
+  if (otelProtocol === undefined) delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
+  else process.env.OTEL_EXPORTER_OTLP_PROTOCOL = otelProtocol
+  if (otelTracesProtocol === undefined) delete process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+  else process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = otelTracesProtocol
+  if (otelLogsProtocol === undefined) delete process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL
+  else process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = otelLogsProtocol
 
   if (opencodeClient === undefined) delete process.env.OPENCODE_CLIENT
   else process.env.OPENCODE_CLIENT = opencodeClient
+})
+
+describe("protocol", () => {
+  test("defaults to json", () => {
+    delete process.env.OTEL_EXPORTER_OTLP_PROTOCOL
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+    delete process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL
+
+    expect(protocol("logs")).toBe("http/json")
+    expect(protocol("traces")).toBe("http/json")
+    expect(serializationLayer()).toBe(OtlpSerialization.layerJson)
+  })
+
+  test("uses general protobuf protocol for logs and traces", () => {
+    process.env.OTEL_EXPORTER_OTLP_PROTOCOL = "http/protobuf"
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+    delete process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL
+
+    expect(protocol("logs")).toBe("http/protobuf")
+    expect(protocol("traces")).toBe("http/protobuf")
+    expect(serializationLayer()).toBe(OtlpSerialization.layerProtobuf)
+  })
+
+  test("signal-specific protocol overrides the general protocol", () => {
+    process.env.OTEL_EXPORTER_OTLP_PROTOCOL = "http/protobuf"
+    process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = "http/json"
+    process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = "http/protobuf"
+
+    expect(protocol("logs")).toBe("http/protobuf")
+    expect(protocol("traces")).toBe("http/json")
+    expect(serializationLayer()).toBe(OtlpSerialization.layerProtobuf)
+  })
+
+  test("unsupported protocol falls back to json", () => {
+    process.env.OTEL_EXPORTER_OTLP_PROTOCOL = "grpc"
+    delete process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL
+    delete process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL
+
+    expect(protocol("logs")).toBe("http/json")
+  })
 })
 
 describe("resource", () => {

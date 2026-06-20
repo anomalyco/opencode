@@ -40,6 +40,9 @@ const originalEnv = {
   OPENCODE_EXPERIMENTAL_WORKSPACES: process.env.OPENCODE_EXPERIMENTAL_WORKSPACES,
   OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
   OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
+  OTEL_EXPORTER_OTLP_PROTOCOL: process.env.OTEL_EXPORTER_OTLP_PROTOCOL,
+  OTEL_EXPORTER_OTLP_TRACES_PROTOCOL: process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL,
+  OTEL_EXPORTER_OTLP_LOGS_PROTOCOL: process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL,
   OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
 }
 
@@ -428,6 +431,9 @@ describe("workspace CRUD", () => {
         process.env.OPENCODE_AUTH_CONTENT = JSON.stringify({ test: { type: "api", key: "secret" } })
         process.env.OTEL_EXPORTER_OTLP_HEADERS = "authorization=otel"
         process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "https://otel.test"
+        process.env.OTEL_EXPORTER_OTLP_PROTOCOL = "http/protobuf"
+        process.env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL = "http/json"
+        process.env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL = "http/protobuf"
         process.env.OTEL_RESOURCE_ATTRIBUTES = "service.name=opencode-test"
 
         const workspaceID = WorkspaceV2.ID.ascending("wrk_create_local")
@@ -491,6 +497,9 @@ describe("workspace CRUD", () => {
         expect(recorded.calls.create[0].env.OPENCODE_EXPERIMENTAL_WORKSPACES).toBe("true")
         expect(recorded.calls.create[0].env.OTEL_EXPORTER_OTLP_HEADERS).toBe("authorization=otel")
         expect(recorded.calls.create[0].env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe("https://otel.test")
+        expect(recorded.calls.create[0].env.OTEL_EXPORTER_OTLP_PROTOCOL).toBe("http/protobuf")
+        expect(recorded.calls.create[0].env.OTEL_EXPORTER_OTLP_TRACES_PROTOCOL).toBe("http/json")
+        expect(recorded.calls.create[0].env.OTEL_EXPORTER_OTLP_LOGS_PROTOCOL).toBe("http/protobuf")
         expect(recorded.calls.create[0].env.OTEL_RESOURCE_ATTRIBUTES).toBe("service.name=opencode-test")
         expect((yield* workspace.status()).find((item) => item.workspaceID === workspaceID)?.status).toBe("connected")
 
