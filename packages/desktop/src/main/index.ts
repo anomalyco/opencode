@@ -15,6 +15,7 @@ import type { InitStep, ServerReadyData, SqliteMigrationProgress, WslConfig } fr
 import { checkAppExists, resolveAppPath, wslPath } from "./apps"
 import { CHANNEL, UPDATER_ENABLED } from "./constants"
 import { reloadExtraAgents } from "./extra-agents"
+import { forwardInitializationFailure } from "./initialization"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand, sendSqliteMigrationProgress } from "./ipc"
 import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
 import { parseMarkdown } from "./markdown"
@@ -235,7 +236,7 @@ const main = Effect.gen(function* () {
     })
   }
 
-  const serverReady = Deferred.makeUnsafe<ServerReadyData>()
+  const serverReady = Deferred.makeUnsafe<ServerReadyData, unknown>()
   const loadingComplete = Deferred.makeUnsafe<void>()
   let reloadBackend: () => Promise<void> = async () => {
     throw new Error("Backend reload is not ready")
@@ -380,12 +381,14 @@ const main = Effect.gen(function* () {
   }
 
   const queueBackendReload = (reason: string) => {
-    const restart = reloading.catch(() => {}).then(async () => {
-      logger.warn("restarting sidecar", { reason })
-      setInitStep({ phase: "server_waiting" })
-      await startSidecar("reload", false)
-      setInitStep({ phase: "done" })
-    })
+    const restart = reloading
+      .catch(() => {})
+      .then(async () => {
+        logger.warn("restarting sidecar", { reason })
+        setInitStep({ phase: "server_waiting" })
+        await startSidecar("reload", false)
+        setInitStep({ phase: "done" })
+      })
     reloading = restart.catch(() => {})
     return restart
   }
@@ -404,7 +407,7 @@ const main = Effect.gen(function* () {
         }),
       ),
     )
-  }).pipe(Effect.forkChild)
+  }).pipe(forwardInitializationFailure(serverReady), Effect.forkChild)
 
   if (needsMigration) {
     const show = yield* loadingTask.pipe(
