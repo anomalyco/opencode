@@ -2005,6 +2005,7 @@ function BlockTool(props: {
   children: JSX.Element
   onClick?: () => void
   part?: ToolPart
+  index?: number
   spinner?: boolean
 }) {
   const { theme } = useTheme()
@@ -2013,7 +2014,7 @@ function BlockTool(props: {
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
   return (
     <box
-      id={props.part ? `tool-block-${props.part.messageID}-${props.part.id}` : undefined}
+      id={props.part ? toolBlockID(props.part, props.index) : undefined}
       border={["left"]}
       paddingTop={1}
       paddingBottom={1}
@@ -2046,6 +2047,10 @@ function BlockTool(props: {
       </Show>
     </box>
   )
+}
+
+export function toolBlockID(part: Pick<ToolPart, "messageID" | "id">, index?: number) {
+  return `tool-block-${part.messageID}-${part.id}${index === undefined ? "" : `-${index}`}`
 }
 
 function Shell(props: ToolProps) {
@@ -2439,8 +2444,8 @@ function ApplyPatch(props: ToolProps) {
     <Switch>
       <Match when={files().length > 0}>
         <For each={files()}>
-          {(file) => (
-            <BlockTool title={title(file)} part={props.part}>
+          {(file, index) => (
+            <BlockTool title={title(file)} part={props.part} index={index()}>
               <Show
                 when={file.type !== "delete"}
                 fallback={

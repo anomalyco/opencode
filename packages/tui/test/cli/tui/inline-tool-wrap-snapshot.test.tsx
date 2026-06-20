@@ -13,6 +13,7 @@ import {
   parseQuestionAnswers,
   parseQuestions,
   parseTodos,
+  toolBlockID,
   toolDisplay,
 } from "../../../src/routes/session"
 
@@ -243,6 +244,15 @@ describe("TUI inline tool wrapping", () => {
     expect(parseQuestions([{}, { question: 1 }, { question: "Continue?" }])).toEqual([{ question: "Continue?" }])
     expect(parseQuestionAnswers([null, ["yes", 1], "no"])).toEqual([[], ["yes"], []])
     expect(parseQuestionAnswers({})).toBeUndefined()
+  })
+
+  test("assigns unique block IDs when one tool renders multiple blocks", () => {
+    const part = { messageID: "message-one", id: "part-one" }
+    expect(toolBlockID(part)).toBe("tool-block-message-one-part-one")
+    expect([toolBlockID(part, 0), toolBlockID(part, 1)]).toEqual([
+      "tool-block-message-one-part-one-0",
+      "tool-block-message-one-part-one-1",
+    ])
   })
 
   test("ignores diagnostics with malformed nested ranges", () => {
