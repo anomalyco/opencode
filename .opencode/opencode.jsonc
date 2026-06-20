@@ -10,7 +10,15 @@
       "packages/opencode/migration/*": "deny",
     },
   },
-  "mcp": {},
+  "mcp": {
+    "linear": {
+      "type": "remote",
+      "url": "https://mcp.linear.app/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:LINEAR_API_KEY}"
+      }
+    }
+  },
   "tools": {
     "github-triage": false,
     "github-pr-search": false,

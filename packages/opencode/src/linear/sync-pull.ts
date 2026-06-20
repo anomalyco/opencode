@@ -350,9 +350,7 @@ export namespace SyncPull {
     sessionID: SessionID,
   ) {
     yield* Effect.logDebug("subscribeAndResync started", { sessionID: String(sessionID) })
-    // TODO T17: wire to real Bus.subscribe for Todo.Progressed events
-    // When a todo is progressed, check if it has a linear_issue_id
-    // and push the update back to Linear via SyncPush.push
+    // TODO(2026-06-21, plan-T17): wire to real Bus.subscribe for Todo.Progressed events
     yield* Effect.void
   })
 }

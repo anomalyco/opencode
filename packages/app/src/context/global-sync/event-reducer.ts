@@ -182,7 +182,7 @@ export function applyDirectoryEvent(input: {
       const props = event.properties as { sessionID: string; id: string }
       const existing = input.store.todo[props.sessionID]
       if (existing) {
-        input.setStore("todo", props.sessionID, existing.filter((t: any) => t.id !== props.id))
+        input.setStore("todo", props.sessionID, existing.filter((t: Todo) => t.id !== props.id))
       }
       break
     }

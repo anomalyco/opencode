@@ -72,7 +72,7 @@ export const DialogEditTodo: Component<DialogEditTodoProps> = (props) => {
       return
     }
 
-    // TODO: SDK doesn't have todo.add() or todo.update() yet
+    // TODO(2026-06-21, plan-T20): SDK doesn't have todo.add() or todo.update() yet — will land in T22 (SDK methods)
     // Once available, call:
     // - For create: sdk.client.todo.add({ sessionID, todo: { ... } })
     // - For edit: sdk.client.todo.update({ sessionID, todoID, patch: { ... } })
@@ -95,8 +95,6 @@ export const DialogEditTodo: Component<DialogEditTodoProps> = (props) => {
       title: props.mode === "create" ? "Todo created" : "Todo updated",
       description: `${title}${store.priority ? ` (${store.priority})` : ""}`,
     })
-
-    console.log(`[TODO ${props.mode.toUpperCase()}]`, todoData)
 
     handleClose()
   }

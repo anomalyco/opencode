@@ -47,13 +47,7 @@ export function useSyncHistory() {
 export function LinearSyncHistory() {
   const { entries: syncEntries, isSyncing: syncing, progress: pct } = useSyncHistory()
 
-  // TODO: wire to Todo.Progressed event in T17
-  // Subscribe to global SDK events for automatic sync recording:
-  // const globalSDK = useGlobalSDK()
-  // createEffect(() => {
-  //   const s = globalSDK
-  //   // watch for todo changes
-  // })
+  // TODO(2026-06-21, plan-T17): wire to Todo.Progressed event — depends on bus integration
 
   return (
     <div class="flex flex-col gap-1">
