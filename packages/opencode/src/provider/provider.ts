@@ -999,9 +999,14 @@ const ProviderCost = Schema.Struct({
 })
 
 const ProviderLimit = Schema.Struct({
+  // For llama-skein local models `context` carries the backend's `max_safe_ctx`
+  // (the prompt budget to trim to), NOT the raw n_ctx — see discoverOpenAICompatibleModels.
   context: Schema.Finite,
   input: optionalOmitUndefined(Schema.Finite),
   output: Schema.Finite,
+  // fork: hard n_ctx (`configured_ctx`) when the value above is a safe budget below it.
+  // Optional + only set for local fit-aware providers; for display ("safe X of N").
+  contextMax: optionalOmitUndefined(Schema.Finite),
 })
 
 export const Model = Schema.Struct({
@@ -1293,6 +1298,39 @@ async function adjustLocalContextOnOverflow(baseURL: string, requestBody: string
   }
 }
 
+/**
+ * fork: pull each local llama-skein backend's `/api/fit` report so we can size a
+ * model's context window to its `max_safe_ctx` — the prompt budget that already
+ * reserves output + a tokenizer-mismatch margin below the hard n_ctx. Using this
+ * instead of the raw `context_length` is what stops the "context exceeded" 413s
+ * (the model's own /models endpoint reports n_ctx, with no headroom).
+ *
+ * `controlBase` is the control-plane root (baseURL minus the `/v1` suffix). For a
+ * non-llama-skein backend `/api/fit` simply errors → empty map → callers fall
+ * back to the existing context_length behaviour. Never throws.
+ */
+async function fetchLocalModelFit(
+  controlBase: string,
+): Promise<Map<string, { maxSafeCtx: number; configuredCtx?: number }>> {
+  const out = new Map<string, { maxSafeCtx: number; configuredCtx?: number }>()
+  try {
+    const client = new LlamaSkeinClient({ client: createLocalClient(createLocalConfig({ baseUrl: controlBase })) })
+    const res = await client.getFitReport()
+    if (res.error || !res.data?.models) return out
+    for (const fit of res.data.models) {
+      // fit_level "no" means the backend couldn't reason about this GGUF (e.g. a
+      // non-standard merge with no arch metadata) — treat as unknown, skip it.
+      if (fit.fit_level === "no") continue
+      const safe = numberFrom(fit.max_safe_ctx)
+      if (!safe) continue
+      out.set(fit.model, { maxSafeCtx: safe, configuredCtx: numberFrom(fit.configured_ctx) })
+    }
+  } catch {
+    // not a llama-skein backend, or unreachable — fall back silently.
+  }
+  return out
+}
+
 function mergeDiscoveredModel(existing: Model | undefined, discovered: Model): Model {
   if (!existing) return discovered
   return {
@@ -1311,6 +1349,9 @@ function mergeDiscoveredModel(existing: Model | undefined, discovered: Model): M
       context: discovered.limit.context || existing.limit.context,
       input: existing.limit.input ?? discovered.limit.input,
       output: existing.limit.output || discovered.limit.output,
+      // fork: prefer the freshly-discovered hard n_ctx; only fall back to the
+      // existing one. Cleared to undefined if neither side knows it.
+      contextMax: discovered.limit.contextMax ?? existing.limit.contextMax,
     },
   }
 }
@@ -1323,6 +1364,10 @@ async function discoverOpenAICompatibleModels(input: {
   const base = String(input.provider.options?.baseURL ?? "").replace(/\/+$/, "")
   if (!base) return {}
   const url = `${base}/models`
+  // fork: control-plane root for /api/fit lives one level up from the openai-compatible
+  // `/v1` path. Fetched in parallel; empty for non-llama-skein backends.
+  const controlBase = base.replace(/\/v1$/, "")
+  const fitPromise = fetchLocalModelFit(controlBase)
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), 2000)
   const apiKey = typeof input.provider.options?.apiKey === "string" ? input.provider.options.apiKey : undefined
@@ -1334,8 +1379,9 @@ async function discoverOpenAICompatibleModels(input: {
       if (!response.ok) return null
       return response.json() as Promise<{ data?: Array<Record<string, unknown>> }>
     })
-    .then((body) => {
+    .then(async (body) => {
       if (!body) return {}
+      const fitByModel = await fitPromise
       const discovered: Record<string, Model> = {}
       for (const item of body.data ?? []) {
         const rawID = item.id
@@ -1344,8 +1390,15 @@ async function discoverOpenAICompatibleModels(input: {
         const existingModel = input.existing?.models[modelID]
         const name =
           typeof item.name === "string" && item.name.trim() ? item.name.trim() : (existingModel?.name ?? modelID)
-        const context =
+        // fork: a llama-skein /api/fit `max_safe_ctx` is the authoritative trim
+        // target — prefer it over the model's self-reported raw n_ctx. When fit
+        // is unavailable (non-llama-skein, fit_level "no", unreachable) fall back
+        // to the reported context_length chain so a model is never blocked.
+        const fit = fitByModel.get(modelID)
+        const reportedContext =
           numberFrom(item.context_length) ?? numberFrom(item.max_context_length) ?? existingModel?.limit.context ?? 0
+        const context = fit?.maxSafeCtx ?? reportedContext
+        const contextMax = fit ? (fit.configuredCtx ?? reportedContext ?? undefined) : undefined
         const output = numberFrom(item.max_output_tokens) ?? existingModel?.limit.output ?? 0
         discovered[modelID] = {
           id: ModelV2.ID.make(modelID),
@@ -1364,6 +1417,7 @@ async function discoverOpenAICompatibleModels(input: {
             context,
             input: existingModel?.limit.input,
             output,
+            ...(contextMax ? { contextMax } : {}),
           },
           capabilities: {
             temperature: existingModel?.capabilities.temperature ?? true,

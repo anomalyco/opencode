@@ -141,6 +141,10 @@ export interface Interface {
   readonly isOverflow: (input: {
     tokens: SessionV1.Assistant["tokens"]
     model: Provider.Model
+    // fork: the messages about to be sent. When provided, isOverflow also
+    // estimates the *outgoing* prompt and triggers if it approaches the budget —
+    // catching growth (tool results, file reads) the last turn's `tokens` missed.
+    messages?: SessionV1.WithParts[]
   }) => Effect.Effect<boolean>
   readonly prune: (input: { sessionID: SessionID }) => Effect.Effect<void>
   readonly process: (input: {
@@ -178,13 +182,24 @@ export const layer = Layer.effect(
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: SessionV1.Assistant["tokens"]
       model: Provider.Model
+      messages?: SessionV1.WithParts[]
     }) {
-      return overflow({
-        cfg: yield* config.get(),
-        tokens: input.tokens,
-        model: input.model,
-        outputTokenMax: flags.outputTokenMax,
-      })
+      const cfg = yield* config.get()
+      // Lagging indicator: the last completed assistant turn's reported usage.
+      if (overflow({ cfg, tokens: input.tokens, model: input.model, outputTokenMax: flags.outputTokenMax })) return true
+      // fork: leading indicator. The reported usage above is a turn behind — a
+      // single large tool result or file read can grow the *next* prompt past
+      // the model's max_safe_ctx before any turn ever measured it (the cause of
+      // mid-session "context exceeded" 413s on local backends). Estimate the
+      // assembled outgoing prompt and compact pre-emptively when it nears budget.
+      if (input.messages?.length && cfg.compaction?.auto !== false) {
+        const budget = usable({ cfg, model: input.model, outputTokenMax: flags.outputTokenMax })
+        if (budget > 0) {
+          const size = yield* estimate({ messages: input.messages, model: input.model })
+          if (size >= budget) return true
+        }
+      }
+      return false
     })
 
     const estimate = Effect.fn("SessionCompaction.estimate")(function* (input: {

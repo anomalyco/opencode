@@ -321,6 +321,105 @@ export type OffloadRecommendation = {
     ctx_size?: number;
 };
 
+/**
+ * Per-dimension fit scores in [0,1], weighted by use-case (ported from llmfit fit.rs ScoreComponents).
+ */
+export type FitScore = {
+    /**
+     * Model quality score (benchmark-derived).
+     */
+    quality?: number;
+    /**
+     * Speed score from estimated tokens/sec on this host.
+     */
+    speed?: number;
+    /**
+     * Memory-headroom score: how comfortably the model fits.
+     */
+    fit?: number;
+    /**
+     * Context-capacity score: usable context vs the model's trained max.
+     */
+    context?: number;
+    /**
+     * Weighted overall score.
+     */
+    overall?: number;
+};
+
+/**
+ * Fit of one model to THIS host: whether it runs, how well, and the max SAFE context (output- and overhead-reserved). Ported from llmfit fit.rs ModelFit.
+ */
+export type ModelFit = {
+    /**
+     * Model ID.
+     */
+    model: string;
+    /**
+     * Inference backend.
+     */
+    backend: 'llamacpp' | 'mlx' | 'vllm';
+    /**
+     * How well the model fits this host.
+     */
+    fit_level: 'perfect' | 'good' | 'tight' | 'marginal' | 'no';
+    /**
+     * How the model would run given memory.
+     */
+    run_mode?: 'gpu' | 'tensor_parallel' | 'moe_offload' | 'cpu_offload' | 'cpu_only';
+    /**
+     * Current --ctx-size in the model command (the KV allocation / hard n_ctx).
+     */
+    configured_ctx?: number;
+    /**
+     * Max context callers should fill: reserves the output budget plus compute/overhead so prompt+generation never exceed the backend's hard n_ctx. THIS is the number opencode/skein should trim to, not configured_ctx.
+     */
+    max_safe_ctx: number;
+    /**
+     * Model weights resident size (MB).
+     */
+    model_mb?: number;
+    /**
+     * KV-cache size (MB) at max_safe_ctx, given the host's cache-type quantization.
+     */
+    kv_mb_at_max_safe_ctx?: number;
+    /**
+     * Total VRAM/unified memory pool (MB).
+     */
+    vram_total_mb?: number;
+    /**
+     * Estimated VRAM needed: weights + KV + compute buffers (MB).
+     */
+    vram_required_mb?: number;
+    /**
+     * Estimated generation throughput on this host (benchmark-derived).
+     */
+    est_tokens_per_sec?: number;
+    score?: FitScore;
+    /**
+     * Human-readable explanation of the fit verdict.
+     */
+    reason?: string;
+};
+
+/**
+ * Fit of every configured model to this host. Aggregated by skein across providers for fleet placement.
+ */
+export type FitReport = {
+    /**
+     * Total VRAM/unified pool (MB).
+     */
+    vram_total_mb?: number;
+    /**
+     * Currently free VRAM (MB).
+     */
+    vram_free_mb?: number;
+    /**
+     * Per-model fit results.
+     */
+    models: Array<ModelFit>;
+};
+
 export type GetSystemVersionData = {
     body?: never;
     path?: never;
@@ -704,3 +803,52 @@ export type SetDefaultModelResponses = {
 };
 
 export type SetDefaultModelResponse = SetDefaultModelResponses[keyof SetDefaultModelResponses];
+
+export type GetFitReportData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/fit';
+};
+
+export type GetFitReportResponses = {
+    /**
+     * Per-host fit report.
+     */
+    200: FitReport;
+};
+
+export type GetFitReportResponse = GetFitReportResponses[keyof GetFitReportResponses];
+
+export type GetModelFitData = {
+    body?: never;
+    path: {
+        /**
+         * Model ID or alias.
+         */
+        model: string;
+    };
+    query?: {
+        /**
+         * Score this context size instead of computing max_safe_ctx.
+         */
+        ctx?: number;
+    };
+    url: '/api/fit/{model}';
+};
+
+export type GetModelFitErrors = {
+    /**
+     * Model not found.
+     */
+    404: unknown;
+};
+
+export type GetModelFitResponses = {
+    /**
+     * Fit result for the model.
+     */
+    200: ModelFit;
+};
+
+export type GetModelFitResponse = GetModelFitResponses[keyof GetModelFitResponses];

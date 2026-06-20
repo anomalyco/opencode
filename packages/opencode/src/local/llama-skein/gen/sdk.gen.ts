@@ -2,7 +2,7 @@
 
 import { buildClientParams, type Client, type Options as Options2, type TDataShape } from './client';
 import { client } from './client.gen';
-import type { AddConfigModelErrors, AddConfigModelResponses, ClearDefaultModelErrors, ClearDefaultModelResponses, ConfigDefaultModelRequest, ConfigGroupPatchRequest, ConfigModelPatchRequest, ConfigModelRequest, GetConfigInfoResponses, GetConfigModelErrors, GetConfigModelResponses, GetDefaultModelResponses, GetHardwareResponses, GetOffloadRecommendationErrors, GetOffloadRecommendationResponses, GetSystemCapabilitiesResponses, GetSystemVersionResponses, ListModelsResponses, PatchConfigGroupErrors, PatchConfigGroupResponses, PatchConfigModelErrors, PatchConfigModelResponses, ReloadConfigErrors, ReloadConfigResponses, RemoveConfigModelErrors, RemoveConfigModelResponses, SetDefaultModelErrors, SetDefaultModelResponses } from './types.gen';
+import type { AddConfigModelErrors, AddConfigModelResponses, ClearDefaultModelErrors, ClearDefaultModelResponses, ConfigDefaultModelRequest, ConfigGroupPatchRequest, ConfigModelPatchRequest, ConfigModelRequest, GetConfigInfoResponses, GetConfigModelErrors, GetConfigModelResponses, GetDefaultModelResponses, GetFitReportResponses, GetHardwareResponses, GetModelFitErrors, GetModelFitResponses, GetOffloadRecommendationErrors, GetOffloadRecommendationResponses, GetSystemCapabilitiesResponses, GetSystemVersionResponses, ListModelsResponses, PatchConfigGroupErrors, PatchConfigGroupResponses, PatchConfigModelErrors, PatchConfigModelResponses, ReloadConfigErrors, ReloadConfigResponses, RemoveConfigModelErrors, RemoveConfigModelResponses, SetDefaultModelErrors, SetDefaultModelResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean> = Options2<TData, ThrowOnError> & {
     /**
@@ -218,6 +218,28 @@ export class LlamaSkeinClient extends HeyApiClient {
                 ...options?.headers,
                 ...params.headers
             }
+        });
+    }
+    
+    /**
+     * Fit report for every configured model on this host: fit level, max-safe context, throughput estimate. The per-host payload skein aggregates for fleet placement.
+     */
+    public getFitReport<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
+        return (options?.client ?? this.client).get<GetFitReportResponses, unknown, ThrowOnError>({ url: '/api/fit', ...options });
+    }
+    
+    /**
+     * Fit of one model to this host. Optional ctx query scores a specific context size instead of computing the max-safe one.
+     */
+    public getModelFit<ThrowOnError extends boolean = false>(parameters: {
+        model: string;
+        ctx?: number;
+    }, options?: Options<never, ThrowOnError>) {
+        const params = buildClientParams([parameters], [{ args: [{ in: 'path', key: 'model' }, { in: 'query', key: 'ctx' }] }]);
+        return (options?.client ?? this.client).get<GetModelFitResponses, GetModelFitErrors, ThrowOnError>({
+            url: '/api/fit/{model}',
+            ...options,
+            ...params
         });
     }
 }
