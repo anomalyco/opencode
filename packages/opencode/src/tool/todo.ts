@@ -29,7 +29,7 @@ export const TodoWriteTool = Tool.define<typeof parameters, Metadata, Todo.Servi
             metadata: {},
           })
 
-          yield* todo.update({
+          yield* todo.replaceAll({
             sessionID: ctx.sessionID,
             todos: params.todos,
           })

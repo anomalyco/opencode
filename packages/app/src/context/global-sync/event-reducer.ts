@@ -172,6 +172,25 @@ export function applyDirectoryEvent(input: {
       input.setSessionTodo?.(props.sessionID, props.todos)
       break
     }
+    case "todo.created": {
+      const props = event.properties as { sessionID: string; todo: Todo }
+      const existing = input.store.todo[props.sessionID]
+      input.setStore("todo", props.sessionID, existing ? [...existing, props.todo] : [props.todo])
+      break
+    }
+    case "todo.deleted": {
+      const props = event.properties as { sessionID: string; id: string }
+      const existing = input.store.todo[props.sessionID]
+      if (existing) {
+        input.setStore("todo", props.sessionID, existing.filter((t: any) => t.id !== props.id))
+      }
+      break
+    }
+    case "todo.progressed": {
+      const props = event.properties as { sessionID: string }
+      input.setSessionTodo?.(props.sessionID, undefined)
+      break
+    }
     case "session.status": {
       const props = event.properties as { sessionID: string; status: SessionStatus }
       input.setStore("session_status", props.sessionID, reconcile(props.status))

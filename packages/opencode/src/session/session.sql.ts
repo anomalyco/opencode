@@ -84,15 +84,27 @@ export const TodoTable = sqliteTable(
       .$type<SessionID>()
       .notNull()
       .references(() => SessionTable.id, { onDelete: "cascade" }),
+    id: text("id").$type<string>().notNull(),
     content: text().notNull(),
     status: text().notNull(),
     priority: text().notNull(),
     position: integer().notNull(),
+    parent_id: text("parent_id"),
+    level: integer("level").notNull().default(0),
+    title: text("title").notNull().default(""),
+    description: text("description").notNull().default(""),
+    labels: text("labels").notNull().default("[]"),
+    due_date: text("due_date"),
+    team_id: text("team_id"),
+    project_id: text("project_id"),
+    assignee_id: text("assignee_id"),
+    linear_issue_id: text("linear_issue_id"),
     ...Timestamps,
   },
   (table) => [
-    primaryKey({ columns: [table.session_id, table.position] }),
+    primaryKey({ columns: [table.session_id, table.id] }),
     index("todo_session_idx").on(table.session_id),
+    index("todo_parent_id_idx").on(table.parent_id),
   ],
 )
 
