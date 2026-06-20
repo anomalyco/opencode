@@ -746,7 +746,7 @@ export function RunFooterView(props: RunFooterViewProps) {
                                 .map((item) => `/${item}`)
                                 .join(" ")
                               composer.replacePrompt({
-                                text: `/${names.map((item) => `/${item}`).join(" ")} `,
+                                text: `${names.map((item) => `/${item}`).join(" ")} `,
                                 parts: [],
                                 command: {
                                   name,
