@@ -248,15 +248,17 @@ function SessionProviders(props: ParentProps) {
   )
 }
 
-// The draft page only renders the prompt composer, so it drops TerminalProvider.
+// The draft page renders the prompt composer plus workspace terminal support.
 // FileProvider and CommentsProvider stay because PromptInput uses file search and comment context.
 function DraftProviders(props: ParentProps) {
   return (
-    <FileProvider>
-      <PromptProvider>
-        <CommentsProvider>{props.children}</CommentsProvider>
-      </PromptProvider>
-    </FileProvider>
+    <TerminalProvider>
+      <FileProvider>
+        <PromptProvider>
+          <CommentsProvider>{props.children}</CommentsProvider>
+        </PromptProvider>
+      </FileProvider>
+    </TerminalProvider>
   )
 }
 

@@ -8,6 +8,7 @@ import { useServer } from "./server"
 import { defaultTitle, titleNumber } from "./terminal-title"
 import { Persist, persisted, removePersisted } from "@/utils/persist"
 import { ScopedKey, ServerScope, type ServerScope as ServerScopeValue } from "@/utils/server-scope"
+import { base64Encode } from "@opencode-ai/core/util/encode"
 
 export type LocalPTY = {
   id: string
@@ -378,6 +379,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
     const params = useParams()
     const cache = new Map<string, TerminalCacheEntry>()
     const scope = server.scope()
+    const dir = createMemo(() => params.dir ?? base64Encode(sdk().directory))
 
     caches.add(cache)
     onCleanup(() => caches.delete(cache))
@@ -421,11 +423,11 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       return entry.value
     }
 
-    const workspace = createMemo(() => loadWorkspace(params.dir!, params.id, scope))
+    const workspace = createMemo(() => loadWorkspace(dir(), params.id, scope))
 
     createEffect(
       on(
-        () => ({ dir: params.dir, id: params.id, scope }),
+        () => ({ dir: dir(), id: params.id, scope }),
         (next, prev) => {
           if (!prev?.dir) return
           if (next.dir === prev.dir && next.id === prev.id && next.scope === prev.scope) return
