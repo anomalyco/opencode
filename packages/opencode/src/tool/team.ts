@@ -3,9 +3,9 @@ import * as Tool from "./tool"
 import { Team, TeamTasks, WRITE_TOOLS, type TeamTask } from "../team"
 import { TeamMessaging } from "../team/messaging"
 import { Session } from "../session/session"
-import { SessionID } from "../session/schema"
 import { Agent } from "../agent/agent"
 import { Provider } from "../provider/provider"
+import { Permission } from "../permission"
 import { Bus } from "../bus"
 import { TeamEvent } from "../team/events"
 import { Truncate } from "./truncate"
@@ -85,11 +85,9 @@ export const TeamCreateParameters = Schema.Struct({
   }),
 })
 
-export const TeamCreateTool = Tool.define<typeof TeamCreateParameters, Metadata, Session.Service>(
+export const TeamCreateTool = Tool.define<typeof TeamCreateParameters, Metadata, never>(
   "team_create",
   Effect.gen(function* () {
-    const session = yield* Session.Service
-
     return {
       description:
         "Create a new agent team for coordinating parallel work across multiple sessions. " +
@@ -129,25 +127,25 @@ export const TeamCreateTool = Tool.define<typeof TeamCreateParameters, Metadata,
           }
 
           if (params.delegate) {
-            const current = yield* session.get(ctx.sessionID)
-            yield* session.setPermission({
-              sessionID: ctx.sessionID,
-              permission: [
-                ...(current.permission ?? []),
-                ...WRITE_TOOLS.map((tool) => ({
-                  permission: tool,
-                  pattern: "*",
-                  action: "deny" as const,
-                })),
-              ],
-            })
+            yield* runPromise(() =>
+              Session.update(ctx.sessionID, (draft) => {
+                draft.permission = Permission.merge(
+                  draft.permission ?? [],
+                  WRITE_TOOLS.map((tool) => ({
+                    permission: tool,
+                    pattern: "*",
+                    action: "deny" as const,
+                  })),
+                )
+              }),
+            )
           }
 
           return {
             title: `Created team: ${params.name}`,
             output: [
               `Team "${params.name}" created. You are the lead.`,
-              params.delegate ? "Delegate mode enabled: coordination tools only." : "",
+              params.delegate ? "DELEGATE MODE enabled: coordination tools only." : "",
               "",
               "Next steps:",
               "- Use team_spawn to add teammates",
@@ -373,11 +371,12 @@ export const TeamTasksTool = Tool.define<typeof TeamTasksParameters, Metadata, n
             }
           }
           case "complete": {
-            if (!params.task_id) return error("No task_id provided.")
-            yield* runPromise(() => TeamTasks.complete(teamName, params.task_id!))
+            const taskID = params.task_id
+            if (!taskID) return error("No task_id provided.")
+            yield* runPromise(() => TeamTasks.complete(teamName, taskID))
             return {
-              title: `Completed task ${params.task_id}`,
-              output: `Task "${params.task_id}" marked as completed. Dependent tasks may have been unblocked.`,
+              title: `Completed task ${taskID}`,
+              output: `Task "${taskID}" marked as completed. Dependent tasks may have been unblocked.`,
               metadata: emptyMetadata,
             }
           }
@@ -392,6 +391,7 @@ export const TeamTasksTool = Tool.define<typeof TeamTasksParameters, Metadata, n
             }
           }
         }
+        return error("Unsupported team_tasks action.")
       }),
   }),
 )
@@ -434,11 +434,9 @@ export const TeamApprovePlanParameters = Schema.Struct({
   feedback: Schema.optional(Schema.String).annotate({ description: "Feedback for the teammate" }),
 })
 
-export const TeamApprovePlanTool = Tool.define<typeof TeamApprovePlanParameters, Metadata, Session.Service>(
+export const TeamApprovePlanTool = Tool.define<typeof TeamApprovePlanParameters, Metadata, never>(
   "team_approve_plan",
   Effect.gen(function* () {
-    const session = yield* Session.Service
-
     return {
       description: "Approve or reject a teammate's implementation plan.",
       parameters: TeamApprovePlanParameters,
@@ -455,31 +453,16 @@ export const TeamApprovePlanTool = Tool.define<typeof TeamApprovePlanParameters,
             )
           }
 
+          yield* runPromise(() =>
+            Team.approvePlan({
+              teamName: teamInfo.team.name,
+              memberName: params.name,
+              approved: params.approved,
+              feedback: params.feedback,
+            }),
+          )
+
           if (params.approved) {
-            const current = yield* session.get(SessionID.make(member.sessionID))
-            yield* session.setPermission({
-              sessionID: SessionID.make(member.sessionID),
-              permission: (current.permission ?? []).filter((rule) => rule.pattern !== "*:plan-approval"),
-            })
-            yield* runPromise(() => Team.setMemberPlanApproval(teamInfo.team.name, params.name, "approved"))
-            yield* runPromise(() =>
-              TeamMessaging.send({
-                teamName: teamInfo.team.name,
-                from: "lead",
-                to: params.name,
-                text: params.feedback
-                  ? `Your plan has been APPROVED. You now have full write access. Feedback: ${params.feedback}`
-                  : "Your plan has been APPROVED. You now have full write access. Proceed with implementation.",
-              }),
-            )
-            yield* runPromise(() =>
-              Bus.publish(TeamEvent.PlanApproval, {
-                teamName: teamInfo.team.name,
-                memberName: params.name,
-                approved: true,
-                feedback: params.feedback,
-              }),
-            )
             return {
               title: `Plan approved: ${params.name}`,
               output: `Approved "${params.name}"'s plan. Write tools are now unlocked for this teammate.`,
@@ -487,25 +470,6 @@ export const TeamApprovePlanTool = Tool.define<typeof TeamApprovePlanParameters,
             }
           }
 
-          yield* runPromise(() => Team.setMemberPlanApproval(teamInfo.team.name, params.name, "rejected"))
-          yield* runPromise(() =>
-            TeamMessaging.send({
-              teamName: teamInfo.team.name,
-              from: "lead",
-              to: params.name,
-              text: `Your plan has been REJECTED. Please revise and resubmit. Feedback: ${
-                params.feedback ?? "No specific feedback provided."
-              }`,
-            }),
-          )
-          yield* runPromise(() =>
-            Bus.publish(TeamEvent.PlanApproval, {
-              teamName: teamInfo.team.name,
-              memberName: params.name,
-              approved: false,
-              feedback: params.feedback,
-            }),
-          )
           return {
             title: `Plan rejected: ${params.name}`,
             output: `Rejected "${params.name}"'s plan. They remain in read-only mode and should revise.`,
@@ -595,7 +559,10 @@ export const TeamCleanupTool = Tool.define<typeof TeamCleanupParameters, Metadat
         }
 
         const wasDelegate = teamInfo.team.delegate === true
-        return yield* Effect.tryPromise(() => Team.cleanup(params.name)).pipe(
+        return yield* Effect.tryPromise({
+          try: () => Team.cleanup(params.name),
+          catch: (err) => (err instanceof Error ? err : new Error(String(err))),
+        }).pipe(
           Effect.as({
             title: `Team cleaned up: ${params.name}`,
             output: [

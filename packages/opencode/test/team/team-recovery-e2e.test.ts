@@ -4,12 +4,9 @@ import { Instance } from "../../src/project/instance"
 import { Team } from "../../src/team"
 import { TeamMessaging } from "../../src/team/messaging"
 import { Session } from "../../src/session"
-import { SessionPrompt } from "../../src/session/prompt"
 import { SessionStatus } from "../../src/session/status"
 import { Identifier } from "../../src/id/id"
 import { Log } from "../../src/util/log"
-import { Bus } from "../../src/bus"
-import { TeamEvent } from "../../src/team/events"
 import { tmpdir } from "../fixture/fixture"
 
 Log.init({ print: false })
@@ -98,9 +95,22 @@ beforeEach(() => {
   serverState.requests.length = 0
 })
 
-afterAll(() => {
-  serverState.server?.stop()
+afterAll(async () => {
+  await serverState.server?.stop()
 })
+
+async function waitFor(
+  condition: () => Promise<boolean>,
+  timeoutMs: number = 30000,
+  intervalMs: number = 100,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    if (await condition()) return true
+    await Bun.sleep(intervalMs)
+  }
+  return false
+}
 
 describe("Team recovery e2e: full restart cycle", () => {
   test("recovery marks active members interrupted, team_message auto-wakes them", async () => {
@@ -227,9 +237,7 @@ describe("Team recovery e2e: full restart cycle", () => {
         const lastMsg = msgs[msgs.length - 1]
         expect(lastMsg.info.role).toBe("user")
         const textParts = lastMsg.parts.filter((p) => p.type === "text")
-        const hasNotification = textParts.some(
-          (p) => p.type === "text" && p.text.includes("Server was restarted"),
-        )
+        const hasNotification = textParts.some((p) => p.type === "text" && p.text.includes("Server was restarted"))
         expect(hasNotification).toBe(true)
 
         // ===== PHASE 4: User says "continue" — lead LLM sends team_message =====
@@ -249,17 +257,14 @@ describe("Team recovery e2e: full restart cycle", () => {
           text: "Continue your work on the session module research.",
         })
 
-        // Give the auto-waked loop time to process
-        await Bun.sleep(500)
-
         // Verify the teammate's loop ran (mock LLM was called)
-        const anthropicRequests = serverState.requests.filter((r) =>
-          r.url.includes("/v1/messages"),
+        const sawAnthropicRequest = await waitFor(async () =>
+          serverState.requests.some((r) => r.url.includes("/v1/messages")),
         )
-        expect(anthropicRequests.length).toBeGreaterThanOrEqual(1)
+        expect(sawAnthropicRequest).toBe(true)
 
         // Wait for loop to fully complete
-        await Bun.sleep(500)
+        await waitFor(async () => SessionStatus.get(memberSessionID!).type === "idle")
 
         // The session status should return to idle after the loop finishes
         const statusAfter = SessionStatus.get(memberSessionID!)

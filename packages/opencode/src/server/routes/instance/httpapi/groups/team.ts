@@ -94,75 +94,112 @@ export class TeamApiError extends Schema.TaggedErrorClass<TeamApiError>()(
 ) {}
 
 export const TeamPaths = {
+  list: "/team",
+  get: "/team/:teamName",
+  tasks: "/team/:teamName/tasks",
   bySession: "/team/by-session/:sessionID",
   delegate: "/team/:teamName/delegate",
   cancel: "/team/:teamName/cancel",
   message: "/session/:sessionID/team-message",
 } as const
 
-export const TeamApi = HttpApi.make("team")
-  .add(
-    HttpApiGroup.make("team")
-      .add(
-        HttpApiEndpoint.get("bySession", TeamPaths.bySession, {
-          params: { sessionID: SessionID },
-          query: WorkspaceRoutingQuery,
-          success: described(TeamSessionResponse, "Team metadata for a session"),
-          error: TeamApiError,
-        }).annotateMerge(
-          OpenApi.annotations({
-            identifier: "team.bySession",
-            summary: "Get team by session",
-            description: "Return the team, role, and shared task list for the provided session.",
-          }),
-        ),
-        HttpApiEndpoint.post("delegate", TeamPaths.delegate, {
-          params: { teamName: Schema.String },
-          query: WorkspaceRoutingQuery,
-          payload: TeamDelegatePayload,
-          success: described(TeamDelegateResponse, "Delegate mode updated"),
-          error: TeamApiError,
-        }).annotateMerge(
-          OpenApi.annotations({
-            identifier: "team.delegate",
-            summary: "Set team delegate mode",
-            description: "Toggle delegate mode for a team and update lead session write permissions.",
-          }),
-        ),
-        HttpApiEndpoint.post("cancel", TeamPaths.cancel, {
-          params: { teamName: Schema.String },
-          query: WorkspaceRoutingQuery,
-          payload: TeamCancelPayload,
-          success: described(TeamCancelResponse, "Cancelled teammate runs"),
-          error: TeamApiError,
-        }).annotateMerge(
-          OpenApi.annotations({
-            identifier: "team.cancel",
-            summary: "Cancel teammate work",
-            description: "Cancel one teammate or all active teammates in a team.",
-          }),
-        ),
-        HttpApiEndpoint.post("message", TeamPaths.message, {
-          params: { sessionID: SessionID },
-          query: WorkspaceRoutingQuery,
-          payload: TeamMessagePayload,
-          success: described(TeamOkResponse, "Message sent"),
-          error: TeamApiError,
-        }).annotateMerge(
-          OpenApi.annotations({
-            identifier: "team.message",
-            summary: "Send team message",
-            description: "Send a direct message from the current team session to another teammate or the lead.",
-          }),
-        ),
-      )
-      .annotateMerge(
+export const TeamApi = HttpApi.make("team").add(
+  HttpApiGroup.make("team")
+    .add(
+      HttpApiEndpoint.get("list", TeamPaths.list, {
+        query: WorkspaceRoutingQuery,
+        success: described(Schema.Array(TeamInfo), "Team list"),
+        error: TeamApiError,
+      }).annotateMerge(
         OpenApi.annotations({
-          title: "team",
-          description: "Experimental agent team routes.",
+          identifier: "team.list",
+          summary: "List teams",
+          description: "Return all active agent teams for the current project.",
         }),
-      )
-      .middleware(InstanceContextMiddleware)
-      .middleware(WorkspaceRoutingMiddleware)
-      .middleware(Authorization),
-  )
+      ),
+      HttpApiEndpoint.get("get", TeamPaths.get, {
+        params: { teamName: Schema.String },
+        query: WorkspaceRoutingQuery,
+        success: described(TeamInfo, "Team metadata"),
+        error: TeamApiError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "team.get",
+          summary: "Get team",
+          description: "Return metadata for an active agent team.",
+        }),
+      ),
+      HttpApiEndpoint.get("tasks", TeamPaths.tasks, {
+        params: { teamName: Schema.String },
+        query: WorkspaceRoutingQuery,
+        success: described(Schema.Array(TeamTask), "Team task list"),
+        error: TeamApiError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "team.tasks",
+          summary: "Get team tasks",
+          description: "Return the shared task list for an agent team.",
+        }),
+      ),
+      HttpApiEndpoint.get("bySession", TeamPaths.bySession, {
+        params: { sessionID: SessionID },
+        query: WorkspaceRoutingQuery,
+        success: described(TeamSessionResponse, "Team metadata for a session"),
+        error: TeamApiError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "team.bySession",
+          summary: "Get team by session",
+          description: "Return the team, role, and shared task list for the provided session.",
+        }),
+      ),
+      HttpApiEndpoint.post("delegate", TeamPaths.delegate, {
+        params: { teamName: Schema.String },
+        query: WorkspaceRoutingQuery,
+        payload: TeamDelegatePayload,
+        success: described(TeamDelegateResponse, "Delegate mode updated"),
+        error: TeamApiError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "team.delegate",
+          summary: "Set team delegate mode",
+          description: "Toggle delegate mode for a team and update lead session write permissions.",
+        }),
+      ),
+      HttpApiEndpoint.post("cancel", TeamPaths.cancel, {
+        params: { teamName: Schema.String },
+        query: WorkspaceRoutingQuery,
+        payload: TeamCancelPayload,
+        success: described(TeamCancelResponse, "Cancelled teammate runs"),
+        error: TeamApiError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "team.cancel",
+          summary: "Cancel teammate work",
+          description: "Cancel one teammate or all active teammates in a team.",
+        }),
+      ),
+      HttpApiEndpoint.post("message", TeamPaths.message, {
+        params: { sessionID: SessionID },
+        query: WorkspaceRoutingQuery,
+        payload: TeamMessagePayload,
+        success: described(TeamOkResponse, "Message sent"),
+        error: TeamApiError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "team.message",
+          summary: "Send team message",
+          description: "Send a direct message from the current team session to another teammate or the lead.",
+        }),
+      ),
+    )
+    .annotateMerge(
+      OpenApi.annotations({
+        title: "team",
+        description: "Experimental agent team routes.",
+      }),
+    )
+    .middleware(InstanceContextMiddleware)
+    .middleware(WorkspaceRoutingMiddleware)
+    .middleware(Authorization),
+)

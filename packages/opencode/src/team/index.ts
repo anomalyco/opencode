@@ -98,7 +98,7 @@ function normalizeTeam(team: TeamInfo): TeamInfo {
 
 function canTransition<T extends string>(current: T, next: T, map: Record<T, T[]>) {
   if (current === next) return true
-  return map[current]?.includes(next) === true
+  return map[current]?.includes(next)
 }
 
 export namespace Team {
@@ -137,23 +137,7 @@ export namespace Team {
     return Bus.subscribe(TeamEvent.Cleaned, async (event) => {
       if (!event.properties.delegate) return
 
-      try {
-        const { Session } = await import("../session")
-        await Session.update(event.properties.leadSessionID, (draft) => {
-          draft.permission = (draft.permission ?? []).filter(
-            (rule) => !((WRITE_TOOLS as readonly string[]).includes(rule.permission) && rule.action === "deny"),
-          )
-        })
-        log.info("restored lead session permissions", {
-          teamName: event.properties.teamName,
-          sessionID: event.properties.leadSessionID,
-        })
-      } catch (err: unknown) {
-        log.warn("failed to restore lead session permissions", {
-          teamName: event.properties.teamName,
-          error: err instanceof Error ? err.message : String(err),
-        })
-      }
+      await restoreLeadPermissions(event.properties.teamName, event.properties.leadSessionID)
     })
   }
 
@@ -413,7 +397,6 @@ export namespace Team {
     const { SessionPrompt } = await import("../session/prompt")
     const { Identifier } = await import("../id/id")
     const { Instance: Inst } = await import("../project/instance")
-    const { TeamMessaging } = await import("./messaging")
 
     const label = `${input.model.providerID}/${input.model.modelID}`
 
@@ -693,6 +676,7 @@ export namespace Team {
     )
     await Storage.remove(configKey(teamName))
     await Storage.remove(tasksKey(teamName))
+    if (team.delegate) await restoreLeadPermissions(teamName, team.leadSessionID)
 
     log.info("team cleaned up", { teamName })
     await Bus.publish(TeamEvent.Cleaned, {
@@ -726,7 +710,7 @@ export namespace Team {
     await transitionExecutionStatus(teamName, memberName, "cancel_requested")
 
     for (const _ of [0, 1, 2]) {
-      SessionPrompt.cancel(member.sessionID)
+      await SessionPrompt.cancel(member.sessionID)
       await transitionExecutionStatus(teamName, memberName, "cancelling")
       await Bun.sleep(120)
       const next = await get(teamName)
@@ -768,11 +752,31 @@ export namespace Team {
       if (TERMINAL_EXECUTION_STATES.has(member.execution_status ?? "idle")) continue
       log.info("cancelling member", { teamName, memberName: member.name, sessionID: member.sessionID })
       await transitionExecutionStatus(teamName, member.name, "cancel_requested")
-      SessionPrompt.cancel(member.sessionID)
+      await SessionPrompt.cancel(member.sessionID)
       await transitionExecutionStatus(teamName, member.name, "cancelling")
       count++
     }
     return count
+  }
+
+  async function restoreLeadPermissions(teamName: string, leadSessionID: string) {
+    try {
+      const { Session } = await import("../session")
+      await Session.update(leadSessionID, (draft) => {
+        draft.permission = (draft.permission ?? []).filter(
+          (rule) => !((WRITE_TOOLS as readonly string[]).includes(rule.permission) && rule.action === "deny"),
+        )
+      })
+      log.info("restored lead session permissions", {
+        teamName,
+        sessionID: leadSessionID,
+      })
+    } catch (err: unknown) {
+      log.warn("failed to restore lead session permissions", {
+        teamName,
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
   }
 
   /**

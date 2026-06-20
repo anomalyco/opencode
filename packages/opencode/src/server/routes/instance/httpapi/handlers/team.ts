@@ -1,5 +1,6 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Effect } from "effect"
+import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceState } from "@/effect/instance-state"
 import { Permission } from "@/permission"
@@ -24,13 +25,31 @@ const runLegacyTeam = <A>(operation: () => Promise<A>) =>
     })
   })
 
+function teamNotFound() {
+  return HttpServerResponse.jsonUnsafe({ error: "Team not found" }, { status: 404 })
+}
+
 export const teamHandlers = HttpApiBuilder.group(InstanceHttpApi, "team", (handlers) =>
   Effect.gen(function* () {
     const sessions = yield* Session.Service
 
-    const bySession = Effect.fn("TeamHttpApi.bySession")(function* (ctx: {
-      params: { sessionID: SessionID }
-    }) {
+    const list = Effect.fn("TeamHttpApi.list")(function* () {
+      return yield* runLegacyTeam(() => Team.list())
+    })
+
+    const get = Effect.fn("TeamHttpApi.get")(function* (ctx: { params: { teamName: string } }) {
+      const team = yield* runLegacyTeam(() => Team.get(ctx.params.teamName))
+      if (!team) return teamNotFound()
+      return team
+    })
+
+    const tasks = Effect.fn("TeamHttpApi.tasks")(function* (ctx: { params: { teamName: string } }) {
+      const team = yield* runLegacyTeam(() => Team.get(ctx.params.teamName))
+      if (!team) return []
+      return yield* runLegacyTeam(() => TeamTasks.list(ctx.params.teamName))
+    })
+
+    const bySession = Effect.fn("TeamHttpApi.bySession")(function* (ctx: { params: { sessionID: SessionID } }) {
       return yield* runLegacyTeam(async () => {
         const match = await Team.findBySession(ctx.params.sessionID)
         if (!match) return null
@@ -51,12 +70,12 @@ export const teamHandlers = HttpApiBuilder.group(InstanceHttpApi, "team", (handl
         await Team.setDelegate(ctx.params.teamName, ctx.payload.enabled)
         return await Team.get(ctx.params.teamName)
       })
-      if (!team) return yield* new TeamApiError({ message: `Team "${ctx.params.teamName}" not found` })
+      if (!team) return teamNotFound()
 
       const leadSessionID = SessionID.make(team.leadSessionID)
-      const current = yield* sessions.get(leadSessionID).pipe(
-        Effect.mapError(() => new TeamApiError({ message: `Lead session "${team.leadSessionID}" not found` })),
-      )
+      const current = yield* sessions
+        .get(leadSessionID)
+        .pipe(Effect.mapError(() => new TeamApiError({ message: `Lead session "${team.leadSessionID}" not found` })))
       const existing = current.permission ?? []
       const permission = ctx.payload.enabled
         ? Permission.merge(existing, delegateDenyRules(existing))
@@ -97,6 +116,9 @@ export const teamHandlers = HttpApiBuilder.group(InstanceHttpApi, "team", (handl
     })
 
     return handlers
+      .handle("list", list)
+      .handle("get", get)
+      .handle("tasks", tasks)
       .handle("bySession", bySession)
       .handle("delegate", delegate)
       .handle("cancel", cancel)
@@ -106,7 +128,6 @@ export const teamHandlers = HttpApiBuilder.group(InstanceHttpApi, "team", (handl
 
 function delegateDenyRules(existing: PermissionV1.Ruleset) {
   return WRITE_TOOLS.filter(
-    (tool) =>
-      !existing.some((rule) => rule.permission === tool && rule.pattern === "*" && rule.action === "deny"),
+    (tool) => !existing.some((rule) => rule.permission === tool && rule.pattern === "*" && rule.action === "deny"),
   ).map((tool) => ({ permission: tool, pattern: "*", action: "deny" as const }))
 }

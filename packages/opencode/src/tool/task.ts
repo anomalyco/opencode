@@ -22,6 +22,17 @@ export interface TaskPromptOps {
 }
 
 const id = "task"
+const TEAM_TOOLS = [
+  "team_create",
+  "team_spawn",
+  "team_message",
+  "team_broadcast",
+  "team_tasks",
+  "team_claim",
+  "team_approve_plan",
+  "team_shutdown",
+  "team_cleanup",
+] as const
 const BACKGROUND_DESCRIPTION = [
   "Background mode: background=true launches the subagent asynchronously and returns immediately.",
   "Foreground is the default; use it when you need the result before continuing.",
@@ -167,7 +178,9 @@ export const TaskTool = Tool.define(
         const currentCount = getCallCount(ctx.sessionID)
         if (currentCount >= callerTaskBudget) {
           return yield* Effect.fail(
-            new Error(`Task budget exhausted (${currentCount}/${callerTaskBudget} calls). Return control to caller to continue.`),
+            new Error(
+              `Task budget exhausted (${currentCount}/${callerTaskBudget} calls). Return control to caller to continue.`,
+            ),
           )
         }
 
@@ -192,9 +205,8 @@ export const TaskTool = Tool.define(
         ...(next.permission.some((rule) => rule.permission === "todowrite")
           ? []
           : [{ permission: "todowrite" as const, pattern: "*" as const, action: "deny" as const }]),
-        ...(targetTaskBudget > 0
-          ? []
-          : [{ permission: id, pattern: "*" as const, action: "deny" as const }]),
+        ...(targetTaskBudget > 0 ? [] : [{ permission: id, pattern: "*" as const, action: "deny" as const }]),
+        ...TEAM_TOOLS.map((t) => ({ permission: t, pattern: "*" as const, action: "deny" as const })),
         ...(cfg.experimental?.primary_tools?.map((permission) => ({
           permission,
           pattern: "*" as const,

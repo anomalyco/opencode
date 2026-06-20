@@ -420,6 +420,56 @@ describe("tool.task", () => {
             action: "deny",
           },
           {
+            permission: "task",
+            pattern: "*",
+            action: "deny",
+          },
+          {
+            permission: "team_create",
+            pattern: "*",
+            action: "deny",
+          },
+          {
+            permission: "team_spawn",
+            pattern: "*",
+            action: "deny",
+          },
+          {
+            permission: "team_message",
+            pattern: "*",
+            action: "deny",
+          },
+          {
+            permission: "team_broadcast",
+            pattern: "*",
+            action: "deny",
+          },
+          {
+            permission: "team_tasks",
+            pattern: "*",
+            action: "deny",
+          },
+          {
+            permission: "team_claim",
+            pattern: "*",
+            action: "deny",
+          },
+          {
+            permission: "team_approve_plan",
+            pattern: "*",
+            action: "deny",
+          },
+          {
+            permission: "team_shutdown",
+            pattern: "*",
+            action: "deny",
+          },
+          {
+            permission: "team_cleanup",
+            pattern: "*",
+            action: "deny",
+          },
+          {
             permission: "bash",
             pattern: "*",
             action: "deny",

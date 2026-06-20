@@ -39,9 +39,7 @@ const ALL_TEAM_TOOL_IDS = [
 
 /** Read the task.ts source to extract the TEAM_TOOLS constant */
 async function readTeamToolsFromSource() {
-  const src = await Bun.file(
-    new URL("../../src/tool/task.ts", import.meta.url).pathname,
-  ).text()
+  const src = await Bun.file(new URL("../../src/tool/task.ts", import.meta.url).pathname).text()
 
   // Extract the TEAM_TOOLS array contents between [ and ] as const
   const match = src.match(/const TEAM_TOOLS\s*=\s*\[([\s\S]*?)\]\s*as const/)
@@ -78,42 +76,30 @@ describe("task subagent team tool isolation", () => {
   })
 
   test("task.ts denies team tools in session permission rules", async () => {
-    const src = await Bun.file(
-      new URL("../../src/tool/task.ts", import.meta.url).pathname,
-    ).text()
+    const src = await Bun.file(new URL("../../src/tool/task.ts", import.meta.url).pathname).text()
 
     // Verify the TEAM_TOOLS.map deny pattern exists in the permission array
     expect(src).toContain("...TEAM_TOOLS.map((t) => ({")
     expect(src).toContain('action: "deny" as const')
 
-    // Verify it's inside the Session.create permission array (after todoread deny)
-    const permissionSection = src.slice(
-      src.indexOf("Session.create({"),
-      src.indexOf("const msg = await MessageV2"),
-    )
+    // Verify it's inside the child session deny list.
+    const permissionSection = src.slice(src.indexOf("const childToolDenies = ["), src.indexOf("const nextSession ="))
     expect(permissionSection).toContain("TEAM_TOOLS.map")
   })
 
-  test("task.ts hides team tools from LLM tool list", async () => {
-    const src = await Bun.file(
-      new URL("../../src/tool/task.ts", import.meta.url).pathname,
-    ).text()
+  test("task.ts isolates team tools through session permissions", async () => {
+    const src = await Bun.file(new URL("../../src/tool/task.ts", import.meta.url).pathname).text()
 
-    // Verify the tools map includes TEAM_TOOLS set to false
-    const toolsSection = src.slice(
-      src.indexOf("tools: {"),
-      src.indexOf("parts: promptParts"),
-    )
-    expect(toolsSection).toContain("...Object.fromEntries(TEAM_TOOLS.map((t) => [t, false]))")
+    expect(src).toContain("const childToolDenies = [")
+    expect(src).toContain("...TEAM_TOOLS.map((t) => ({")
+    expect(src).not.toContain("Object.fromEntries(TEAM_TOOLS")
   })
 
   test("teammate system prompt documents relay pattern", async () => {
-    const src = await Bun.file(
-      new URL("../../src/tool/team.ts", import.meta.url).pathname,
-    ).text()
+    const src = await Bun.file(new URL("../../src/team/index.ts", import.meta.url).pathname).text()
 
     expect(src).toContain("SUBAGENT RELAY")
     expect(src).toContain("they CANNOT communicate with the team")
-    expect(src).toContain("relaying any relevant findings")
+    expect(src).toContain("relaying any relevant subagent findings")
   })
 })
