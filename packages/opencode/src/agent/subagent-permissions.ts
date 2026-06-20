@@ -8,7 +8,11 @@ import type { Agent } from "./agent"
  * 1. The parent session's deny rules and external_directory rules.
  *    Parent agent restrictions only govern that agent; the subagent's own
  *    permissions determine its capabilities.
- * 2. Default `todowrite` and `task` denies if the subagent's own ruleset
+ * 2. The parent session's allow rules for MCP tools — subagents need
+ *    explicit allow permissions to execute MCP tools (context7_resolve-library-id,
+ *    matrix_matrix_read, etc.). Without this, subagents can see MCP tools in
+ *    their tool list but get permission denied on execution. (#16491, #3808)
+ * 3. Default `todowrite` and `task` denies if the subagent's own ruleset
  *    doesn't already permit them.
  */
 export function deriveSubagentSessionPermission(input: {
@@ -17,7 +21,13 @@ export function deriveSubagentSessionPermission(input: {
 }): PermissionV1.Ruleset {
   const canTask = input.subagent.permission.some((rule) => rule.permission === "task")
   const canTodo = input.subagent.permission.some((rule) => rule.permission === "todowrite")
+  const parentSessionMcpAllows = input.parentSessionPermission.filter(
+    (rule) =>
+      rule.action === "allow" &&
+      (rule.permission === "*" || rule.permission.includes("_")),
+  )
   return [
+    ...parentSessionMcpAllows,
     ...input.parentSessionPermission.filter(
       (rule) => rule.permission === "external_directory" || rule.action === "deny",
     ),

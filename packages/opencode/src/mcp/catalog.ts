@@ -51,10 +51,15 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
     description: mcpTool.description ?? "",
     inputSchema: jsonSchema(inputSchema),
     execute: async (args: unknown, options) => {
+      const cleanArgs = Object.fromEntries(
+        Object.entries((args || {}) as Record<string, unknown>).filter(
+          ([, v]) => v !== null && v !== undefined,
+        ),
+      )
       const result = await client.callTool(
         {
           name: mcpTool.name,
-          arguments: (args || {}) as Record<string, unknown>,
+          arguments: cleanArgs,
         },
         CallToolResultSchema,
         {
