@@ -13,7 +13,7 @@ import {
   parseQuestionAnswers,
   parseQuestions,
   parseTodos,
-  setSessionLayoutRole,
+  sessionLayoutRoles,
   toolDisplay,
 } from "../../../src/routes/session"
 
@@ -55,7 +55,7 @@ const tools: readonly ToolFixture[] = [
 function ShellOutput() {
   return (
     <box
-      ref={(el: BoxRenderable) => setSessionLayoutRole(el, "block")}
+      ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "block")}
       marginTop={1}
       paddingTop={1}
       paddingBottom={1}
@@ -132,7 +132,7 @@ function LoadedReadBeforeSubagentFixture() {
       <InlineToolRow icon="→" complete={true} pending="">
         Read src/cli/cmd/tui/routes/session/index.tsx
       </InlineToolRow>
-      <box ref={(el: BoxRenderable) => setSessionLayoutRole(el, "inline")} paddingLeft={3}>
+      <box ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "inline")} paddingLeft={3}>
         <text paddingLeft={3}>↳ Loaded src/cli/cmd/tui/routes/session/tools.tsx</text>
       </box>
       <InlineToolRow icon="✓" complete={true} pending="" subagent={true}>
@@ -145,7 +145,7 @@ function LoadedReadBeforeSubagentFixture() {
 function AssistantSummaryBeforeSubagentFixture() {
   return (
     <box flexDirection="column" width={72}>
-      <box ref={(el: BoxRenderable) => setSessionLayoutRole(el, "summary")} paddingLeft={3}>
+      <box ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "summary")} paddingLeft={3}>
         <text>▣ Build · Little Frank · 53.1s</text>
       </box>
       <InlineToolRow icon="✓" complete={true} pending="" subagent={true}>
@@ -159,7 +159,7 @@ function AssistantErrorBeforeSubagentFixture() {
   return (
     <box flexDirection="column" width={72}>
       <box
-        ref={(el: BoxRenderable) => setSessionLayoutRole(el, "error")}
+        ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "error")}
         border={["left"]}
         paddingTop={1}
         paddingBottom={1}
@@ -184,7 +184,7 @@ function StickyScrollFixture(props: { separated: boolean; scroll: (scroll: Scrol
         <text>Second row</text>
       </box>
       <Show when={props.separated}>
-        <box ref={(el: BoxRenderable) => setSessionLayoutRole(el, "text")}>
+        <box ref={(el: BoxRenderable) => sessionLayoutRoles.set(el, "text")}>
           <text>Assistant text</text>
         </box>
       </Show>
