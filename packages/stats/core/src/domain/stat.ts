@@ -147,6 +147,18 @@ export function combineRows<T extends StatBaseRow>(left: T, right: T): T {
   }
 }
 
+export function isMissingUniqueUsersColumn(cause: unknown): boolean {
+  return errorText(cause).includes("Unknown column 'unique_users'")
+}
+
+export function omitUniqueUsers<T extends { unique_users?: number }>(rows: T[]) {
+  return rows.map((row) => {
+    const result = { ...row }
+    delete result.unique_users
+    return result
+  })
+}
+
 export function statPeriodKey(row: StatBaseRow) {
   return [row.grain, row.period_key, row.dataset, row.tier, row.client, row.source].join("\u0000")
 }
@@ -240,6 +252,15 @@ function unique(values: string[]) {
 
 export function inserted(column: string) {
   return sql.raw(`values(\`${column}\`)`)
+}
+
+function errorText(cause: unknown): string {
+  if (cause instanceof Error) return `${cause.message} ${errorText((cause as { cause?: unknown }).cause)}`
+  if (typeof cause === "object" && cause)
+    return Object.values(cause as Record<string, unknown>)
+      .map(errorText)
+      .join(" ")
+  return String(cause)
 }
 
 export function weightedAverage(
