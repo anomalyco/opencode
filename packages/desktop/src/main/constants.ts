@@ -7,6 +7,7 @@ export const CHANNEL: Channel = raw === "dev" || raw === "beta" || raw === "prod
 export const SETTINGS_STORE = "opencode.settings"
 export const DEFAULT_SERVER_URL_KEY = "defaultServerUrl"
 export const WSL_ENABLED_KEY = "wslEnabled"
+export const WSL_SERVERS_KEY = "wslServers"
 export const PINCH_ZOOM_ENABLED_KEY = "pinchZoomEnabled"
 export const CUSTOM_EDITOR_PATH_KEY = "customEditorPath"
 export const DEFAULT_EDITOR_KEY = "defaultEditor"

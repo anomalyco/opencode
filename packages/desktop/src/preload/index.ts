@@ -18,6 +18,29 @@ const api: ElectronAPI = {
   setDefaultServerUrl: (url) => ipcRenderer.invoke("set-default-server-url", url),
   getWslConfig: () => ipcRenderer.invoke("get-wsl-config"),
   setWslConfig: (config) => ipcRenderer.invoke("set-wsl-config", config),
+  wslServers: {
+    getState: () => ipcRenderer.invoke("wsl-servers-get-state"),
+    subscribe: (cb) => {
+      const handler = (_: unknown, event: unknown) => cb(event as any)
+      ipcRenderer.on("wsl-servers-event", handler)
+      ipcRenderer.invoke("wsl-servers-subscribe")
+      return () => {
+        ipcRenderer.removeListener("wsl-servers-event", handler)
+        ipcRenderer.invoke("wsl-servers-unsubscribe")
+      }
+    },
+    probeRuntime: () => ipcRenderer.invoke("wsl-servers-probe-runtime"),
+    refreshDistros: () => ipcRenderer.invoke("wsl-servers-refresh-distros"),
+    installWsl: () => ipcRenderer.invoke("wsl-servers-install-wsl"),
+    installDistro: (name) => ipcRenderer.invoke("wsl-servers-install-distro", name),
+    probeDistro: (name) => ipcRenderer.invoke("wsl-servers-probe-distro", name),
+    probeOpencode: (name) => ipcRenderer.invoke("wsl-servers-probe-opencode", name),
+    installOpencode: (name) => ipcRenderer.invoke("wsl-servers-install-opencode", name),
+    openTerminal: (name) => ipcRenderer.invoke("wsl-servers-open-terminal", name),
+    addServer: (distro) => ipcRenderer.invoke("wsl-servers-add", distro),
+    removeServer: (id) => ipcRenderer.invoke("wsl-servers-remove", id),
+    startServer: (id) => ipcRenderer.invoke("wsl-servers-start", id),
+  },
   getDisplayBackend: () => ipcRenderer.invoke("get-display-backend"),
   setDisplayBackend: (backend) => ipcRenderer.invoke("set-display-backend", backend),
   parseMarkdownCommand: (markdown) => ipcRenderer.invoke("parse-markdown", markdown),

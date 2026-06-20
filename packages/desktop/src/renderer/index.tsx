@@ -325,6 +325,8 @@ const createPlatform = (refreshExtraAgents?: () => void): Platform => {
       await desktopApi.setWslConfig({ enabled })
     },
 
+    wslServers: desktopApi.wslServers,
+
     getDefaultServer: async () => {
       const url = await desktopApi.getDefaultServerUrl().catch(() => null)
       if (!url) return null

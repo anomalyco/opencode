@@ -12,6 +12,22 @@ export type SqliteMigrationProgress = { type: "InProgress"; value: number } | { 
 
 export type WslConfig = { enabled: boolean }
 
+export type {
+  WslDistroProbe,
+  WslInstalledDistro,
+  WslJob,
+  WslOnlineDistro,
+  WslOpencodeCheck,
+  WslRuntimeCheck,
+  WslServerConfig,
+  WslServerItem,
+  WslServerRuntime,
+  WslServersEvent,
+  WslServersState,
+} from "@opencode-ai/app/wsl/types"
+import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
+export type WslServersAPI = WslServersPlatform
+
 export type LinuxDisplayBackend = "wayland" | "auto"
 export type TitlebarTheme = {
   mode: "light" | "dark"
@@ -154,6 +170,7 @@ export type ElectronAPI = {
   setDefaultServerUrl: (url: string | null) => Promise<void>
   getWslConfig: () => Promise<WslConfig>
   setWslConfig: (config: WslConfig) => Promise<void>
+  wslServers: WslServersAPI
   getDisplayBackend: () => Promise<LinuxDisplayBackend | null>
   setDisplayBackend: (backend: LinuxDisplayBackend | null) => Promise<void>
   parseMarkdownCommand: (markdown: string) => Promise<string>

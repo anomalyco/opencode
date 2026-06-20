@@ -2,6 +2,7 @@ import { createSimpleContext } from "@opencode-ai/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
 import { ServerConnection } from "./server"
+import type { WslServersPlatform } from "../wsl/types"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
@@ -225,6 +226,9 @@ export type Platform = {
 
   /** Set the configured WSL integration (desktop only) */
   setWslEnabled?(config: boolean): Promise<void> | void
+
+  /** WSL multi-server management API (Windows desktop only) */
+  wslServers?: WslServersPlatform
 
   /** Get the configured OpenClaw integration (desktop only) */
   getOpenclawConfig?(): Promise<OpenclawConfig>

@@ -29,6 +29,9 @@ import {
   spawnLocalServer,
   type SidecarListener,
 } from "./server"
+import { createWslServersController, type WslServersController } from "./wsl/servers"
+import { spawnWslSidecar } from "./wsl/sidecar"
+import { registerWslIpcHandlers } from "./wsl/ipc"
 import {
   createLoadingWindow,
   createMainWindow,
@@ -290,6 +293,14 @@ const main = Effect.gen(function* () {
     recordFatalRendererError: (error) => writeLog("renderer", "fatal renderer error", { ...error }, "error"),
   })
 
+  const wslController: WslServersController = createWslServersController(app.getVersion(), (distro) =>
+    spawnWslSidecar(distro, {
+      onLine: (line) => writeLog("wsl", line.stream, { text: line.text }),
+    }),
+  )
+  registerWslIpcHandlers(wslController)
+  app.on("before-quit", () => wslController.stopAll())
+
   yield* Effect.promise(() => app.whenReady())
 
   if (!TEST_ONBOARDING) migrate()
@@ -432,6 +443,7 @@ const main = Effect.gen(function* () {
 
   yield* Fiber.await(loadingTask)
   setInitStep({ phase: "done" })
+  wslController.initialize()
 
   if (overlay) yield* Deferred.await(loadingComplete)
 
