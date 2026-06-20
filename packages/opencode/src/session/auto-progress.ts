@@ -12,9 +12,13 @@ type State = {
 
 export namespace AutoProgress {
   export interface Interface {
+    /** Activate the auto-progress engine for a session. Idempotent. */
     readonly start: (sessionID: SessionID) => Effect.Effect<void>
+    /** Deactivate the auto-progress engine for a session. */
     readonly stop: (sessionID: SessionID) => Effect.Effect<void>
+    /** Get the engine state for a session: "idle" or "running". */
     readonly status: (sessionID: SessionID) => Effect.Effect<"idle" | "running" | "paused">
+    /** Whether the engine is currently active for a session. */
     readonly isActive: (sessionID: SessionID) => Effect.Effect<boolean>
   }
 

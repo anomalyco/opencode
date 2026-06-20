@@ -9,7 +9,10 @@ import { SessionID } from "@/session/schema"
 
 /** Pull service: converts Linear issues to local todos via MCP. */
 export namespace SyncPull {
-  /** Effect context tag for the Linear MCP client consumed by pull(). */
+  /**
+   * Effect context tag for the Linear MCP client consumed by pull().
+   * Must be provided in the layer that calls pull().
+   */
   export const Client = Context.Service<LinearMcpClient>("@opencode/SyncPull/Client")
 
   /** Fatal error when pull cannot proceed at all (e.g., missing config). */
@@ -337,7 +340,11 @@ export namespace SyncPull {
 
   /**
    * Subscribe to local todo progression events and resync to Linear.
-   * Currently a stub — logs on call. TODO T17: wire to Bus.subscribe for Todo.Progressed events.
+   *
+   * When a todo is progressed, checks if it has a `linear_issue_id`
+   * and pushes the update back to Linear via `SyncPush.push`.
+   *
+   * @param sessionID - The session to watch for progress events
    */
   export const subscribeAndResync = Effect.fn("SyncPull.subscribeAndResync")(function* (
     sessionID: SessionID,

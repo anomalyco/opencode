@@ -2,138 +2,231 @@
 
 ## Overview
 
-Bidirectional sync between OpenCode todos and Linear issues via the [Linear MCP server](https://mcp.linear.app/mcp). Uses the Model Context Protocol (StreamableHTTP) for all Linear API interactions — no direct Linear REST/GraphQL calls.
+Bidirectional sync between OpenCode todos and Linear issues via the [Linear MCP server](https://mcp.linear.app/mcp). Uses the Model Context Protocol (StreamableHTTP) for all Linear API interactions. No direct Linear REST or GraphQL calls are made from opencode code.
 
-## Architecture
+The sync model is git-push style: you create todos locally, then push them to Linear. You can also pull active Linear issues back into local todos. Conflicts are resolved by deduplication on `linear_issue_id`.
 
+## Setup
+
+1. **Get a Linear API key** from [Linear Settings → API](https://linear.app/settings/api). It starts with `lina_` and is 48 characters.
+
+2. **Set the environment variable:**
+
+   ```bash
+   export LINEAR_API_KEY=lina_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+   ```
+
+3. **Configure project and team IDs** via `.opencode/config.json` or the `dialog-linear-config` UI:
+
+   ```json
+   {
+     "linear": {
+       "projectId": "your-linear-project-id",
+       "teamId": "your-linear-team-id",
+       "syncMode": "manual"
+     }
+   }
+   ```
+
+   Find project and team IDs by running `/linear-status` with valid credentials, or check your Linear workspace URL: `https://linear.app/<workspace>/project/<project-id>`.
+
+## MCP Transport
+
+The `LinearMcpClient` uses `StreamableHTTPClientTransport` to connect to `https://mcp.linear.app/mcp`. Authentication is via an `Authorization: Bearer ${LINEAR_API_KEY}` header.
+
+```ts
+const client = yield* LinearMcpClient.create({
+  url: "https://mcp.linear.app/mcp",
+  key: process.env.LINEAR_API_KEY,
+})
 ```
-┌─────────────┐      ┌──────────────────┐      ┌───────────────────┐
-│  OpenCode    │      │  LinearMcpClient │      │  Linear MCP       │
-│  Todos       │◄────►│  (MCP Transport) │◄────►│  Server           │
-│              │      │                  │      │  (mcp.linear.app) │
-│  push() ─────┼─────►│  callTool()      │─────►│  save_issue       │
-│  pull() ◄────┼──────│  callTool()      │◄─────│  list_issues      │
-└─────────────┘      └──────────────────┘      └───────────────────┘
-```
 
-### Layers
+Note: `mcp-remote` was unavailable during development, so the integration uses direct transport. The client connects on `create()`, fails on disconnect, and cleans up on `close()`.
 
-- **Kernel Layer**: Todo service (`src/session/todo.ts`) — manages local todo state
-- **Sync Layer**: SyncPush + SyncPull (`src/linear/sync-push.ts`, `src/linear/sync-pull.ts`) — bridges todos ↔ Linear issues
-- **Transport Layer**: `LinearMcpClient` (`src/linear/mcp-client.ts`) — MCP protocol client over StreamableHTTP
+## Tool Naming
 
-## Configuration
+**CRITICAL**: Linear MCP tools are NOT prefixed with `linear_`. Use the exact names from `src/linear/tool-names.ts`:
 
-Add a `linear` section to `.opencode/config.json`:
+| Tool | Name |
+|------|------|
+| Save issue | `save_issue` |
+| List issues | `list_issues` |
+| Get issue | `get_issue` |
+| Save comment | `save_comment` |
+| List comments | `list_comments` |
 
-```json
+For the full list, import `ISSUE`, `COMMENT`, `USER`, `TEAM`, `PROJECT`, etc. from `src/linear/tool-names.ts`.
+
+## Tool Categories
+
+The Linear MCP server exposes tools across 12 categories:
+
+| Category | Count | Key Tools |
+|----------|-------|-----------|
+| `ISSUE` | 7 | `get_issue`, `list_issues`, `save_issue`, `list_issue_statuses` |
+| `COMMENT` | 3 | `list_comments`, `save_comment`, `delete_comment` |
+| `USER` | 2 | `get_user`, `list_users` |
+| `TEAM` | 2 | `get_team`, `list_teams` |
+| `PROJECT` | 4 | `get_project`, `list_projects`, `save_project` |
+| `CYCLE` | 1 | `list_cycles` |
+| `DOCUMENT` | 3 | `get_document`, `list_documents`, `save_document` |
+| `ATTACHMENT` | 5 | `get_attachment`, `create_attachment`, `prepare_attachment_upload` |
+| `MILESTONE` | 3 | `get_milestone`, `list_milestones`, `save_milestone` |
+| `DIFF` | 3 | `get_diff`, `list_diffs`, `get_diff_threads` |
+| `STATUS_UPDATE` | 3 | `get_status_updates`, `save_status_update`, `delete_status_update` |
+| `IMAGE` | 1 | `extract_images` |
+
+Total: 39 tools. See `src/linear/tool-names.ts` for the complete flat record.
+
+## Linear Schema
+
+### Input shape
+
+Linear MCP tools follow GraphQL conventions. The input is wrapped in an `input` object:
+
+```ts
 {
-  "linear": {
-    "projectId": "your-linear-project-id",
-    "teamId": "your-linear-team-id",
-    "syncMode": "manual"
+  input: {
+    title: string
+    description: string
+    teamId: string
+    projectId: string
+    priority: number
+    assigneeId?: string
   }
 }
 ```
 
-### Fields
+### Response shape
 
-| Field | Type | Default | Description |
-|-------|------|---------|-------------|
-| `projectId` | `string` | optional | Linear project ID for issue mapping |
-| `teamId` | `string` | optional | Linear team ID for issue creation |
-| `syncMode` | `"manual"` \| `"auto-push"` \| `"auto-pull"` \| `"bidirectional"` | `"manual"` | Sync strategy |
-| `autoPush` | `boolean` | `false` | Whether to automatically push on todo creation |
+The MCP response contains JSON-encoded GraphQL data inside `content[].text`:
 
-### Authentication
-
-The Linear MCP server authenticates via Bearer token. Set the `LINEAR_API_KEY` environment variable:
-
-```bash
-export LINEAR_API_KEY=lina_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```ts
+{
+  content: [
+    {
+      type: "text",
+      text: '{"data":{"saveIssue":{"id":"abc-123",...}}}'
+    }
+  ]
+}
 ```
 
-The client connects to `https://mcp.linear.app/mcp` by default. A custom URL can be passed to `LinearMcpClient.create({ url, key })`.
+Both `SyncPush` and `SyncPull` use defensive parsing to extract fields from this nested structure. Do not assume a flat response.
+
+## Priority Mapping
+
+| Todo Priority | Linear Priority |
+|--------------|-----------------|
+| `urgent` | `1` (Urgent) |
+| `high` | `2` (High) |
+| `medium` | `3` (Medium) |
+| `low` | `4` (Low) |
+| `none` | `0` (No priority) |
+
+Linear uses `0` for no priority and `1` for urgent. This is the reverse of typical numeric priority ordering.
+
+## Sync Engines
+
+### Push (`SyncPush.push()`)
+
+Converts local todos to Linear issues via `ISSUE.SAVE`:
+
+- Skips todos that already have a `linear_issue_id`
+- Processes todos concurrently (up to `DEFAULT_BATCH = 10`)
+- On success, updates the todo with the new `linear_issue_id`
+- On per-todo failure, collects the error and continues
+
+### Pull (`SyncPull.pull()`)
+
+Converts Linear issues to local todos via `ISSUE.LIST`:
+
+- Fetches all issues for the configured project (paginated, 50 per page)
+- Filters to active states only: `unstarted` and `started`
+- Skips issues whose `linear_issue_id` already exists locally (dedup)
+- Resolves parent-child relationships from Linear to local `parent_id`
+- Creates todos in batch with configurable concurrency
 
 ## Commands
 
+Four slash commands are registered in the TUI:
+
+### `/auto-progress`
+
+Toggles the auto-progress engine for the current session. See `src/session/auto-progress.md` for details.
+
 ### `/linear-push`
 
-Push todos to Linear as issues. Supported via `SyncPush.push()`:
+Push todos to Linear as issues.
 
 ```
 Usage: /linear-push [todoIds... | "all"]
 ```
 
 - Omitting `todoIds` pushes all todos without `linear_issue_id`
-- `"all"` pushes all pending todos
+- `"all"` pushes all todos
 - Specific IDs push only those todos
 - Todos that already have a `linear_issue_id` are skipped
 
-Priority mapping:
-| Todo Priority | Linear Priority |
-|--------------|-----------------|
-| urgent | 1 (Urgent) |
-| high | 2 (High) |
-| medium | 3 (Medium) |
-| low | 4 (Low) |
-| none | 0 (No priority) |
-
 ### `/linear-pull`
 
-Pull Linear issues into local todos. Supported via `SyncPull.pull()`:
+Pull Linear issues into local todos.
 
-- Issues with state `unstarted` or `started` are pulled as pending/in_progress todos
+- Issues with state `unstarted` or `started` are pulled
 - Issues with state `completed` or `cancelled` are skipped
 - Existing todos with a matching `linear_issue_id` are skipped (dedup)
-- Supports pagination through large issue lists (50 per page)
-- Parent-child relationships in Linear are resolved to local `parent_id` references
-
-State mapping:
-| Linear State | Todo Status |
-|-------------|-------------|
-| unstarted | pending |
-| started | in_progress |
-| completed | completed |
-| cancelled | cancelled |
+- Supports pagination through large issue lists
 
 ### `/linear-status`
 
 Display current Linear sync status:
+
 - Connection state
 - Configured project and team IDs
 - Sync mode
 - Last sync timestamp
 
-### `/auto-progress`
+## Architecture Diagram
 
-Toggle the auto-progress engine for the current session. See `src/session/auto-progress.md` for details.
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    OpenCode Kernel                           │
+│  ┌─────────────┐      ┌─────────────────┐                  │
+│  │ Todo.Service│◄────►│ AutoProgress    │                  │
+│  │ (SQLite)    │      │ (Bus consumer)  │                  │
+│  └──────┬──────┘      └─────────────────┘                  │
+│         │                                                    │
+│         │ push()                    pull()                   │
+│         ▼                        ▲                          │
+│  ┌──────────────┐         ┌──────────────┐                  │
+│  │  SyncPush    │         │  SyncPull    │                  │
+│  │  mapTodoTo   │         │  mapIssueTo  │                  │
+│  │  Issue       │         │  Todo        │                  │
+│  └──────┬───────┘         └──────┬───────┘                  │
+│         │                        │                           │
+│         │    callTool()          │   callTool()              │
+│         ▼                        ▼                           │
+│  ┌─────────────────────────────────────┐                    │
+│  │     LinearMcpClient                 │                    │
+│  │     StreamableHTTPClientTransport   │                    │
+│  │     https://mcp.linear.app/mcp      │                    │
+│  └─────────────────────────────────────┘                    │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                    ┌───────────────────┐
+                    │  Linear MCP Server │
+                    │  (GraphQL API)     │
+                    └───────────────────┘
+```
 
-## Tool Names
-
-The Linear MCP server exposes 39 tools across 8 categories (defined in `src/linear/tool-names.ts`):
-
-| Category | Tools |
-|----------|-------|
-| Issue | `get_issue`, `list_issues`, `save_issue`, `list_issue_statuses`, `get_issue_status`, `list_issue_labels`, `create_issue_label` |
-| Comment | `list_comments`, `save_comment`, `delete_comment` |
-| User | `get_user`, `list_users` |
-| Team | `get_team`, `list_teams` |
-| Project | `get_project`, `list_projects`, `save_project`, `list_project_labels` |
-| Cycle | `list_cycles` |
-| Document | `get_document`, `list_documents`, `save_document` |
-| Attachment | `get_attachment`, `create_attachment`, `prepare_attachment_upload`, `create_attachment_from_upload`, `delete_attachment` |
-| Milestone | `get_milestone`, `list_milestones`, `save_milestone` |
-| Diff | `get_diff`, `list_diffs`, `get_diff_threads` |
-| Status Update | `get_status_updates`, `save_status_update`, `delete_status_update` |
-| Image | `extract_images` |
-| Docs | `search_documentation` |
+The kernel layer (`Todo.Service`, `AutoProgress`) is standalone. The sync layer (`SyncPush`, `SyncPull`, `LinearMcpClient`) is user-triggered via slash commands.
 
 ## Troubleshooting
 
 ### "LINEAR_API_KEY not set"
 
-Set the `LINEAR_API_KEY` environment variable:
+Set the `LINEAR_API_KEY` environment variable and restart opencode:
 
 ```bash
 export LINEAR_API_KEY=lina_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
@@ -142,13 +235,14 @@ export LINEAR_API_KEY=lina_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ### "Failed to connect to Linear MCP"
 
 Check:
-1. The API key is valid
+
+1. The API key is valid and has not expired
 2. Network access to `https://mcp.linear.app/mcp` is allowed
 3. The MCP server is not rate-limiting your requests
 
 ### "Linear config missing projectId or teamId"
 
-Add `projectId` and `teamId` to the `linear` section of `.opencode/config.json`:
+Add both fields to the `linear` section of `.opencode/config.json`:
 
 ```json
 {
@@ -159,20 +253,24 @@ Add `projectId` and `teamId` to the `linear` section of `.opencode/config.json`:
 }
 ```
 
-Find these IDs by running `/linear-status` with valid credentials, or check your Linear workspace URL: `https://linear.app/<workspace>/project/<project-id>`.
-
 ### "Failed to extract Linear issue ID from response"
 
-The MCP response format didn't match the expected GraphQL shape. Check:
+The MCP response format did not match the expected GraphQL shape. Check:
+
 1. The Linear MCP server version is compatible
 2. The issue was actually created (check Linear workspace)
-3. Network/proxy isn't modifying the response
+3. Network or proxy is not modifying the response
+
+### Sync conflicts / duplicates on pull
+
+Pull skips by `linear_issue_id`. After a successful push, the todo is updated with the Linear issue ID. If you see duplicates, check that the push succeeded and the ID was saved. The `extractId()` parser in `sync-push.ts` handles multiple response shapes, but new MCP versions may change the format.
 
 ## Testing
 
 ```bash
-# Run unit tests (mocked MCP)
 cd opencode/packages/opencode
+
+# Run unit tests (mocked MCP)
 bun test src/linear/
 
 # Run integration tests
@@ -187,10 +285,16 @@ LINEAR_API_KEY=... bun test src/linear/integration.test.ts
 | File | Purpose |
 |------|---------|
 | `src/linear/mcp-client.ts` | MCP client (connect, listTools, callTool, close) |
-| `src/linear/sync-push.ts` | Push todos → Linear issues |
-| `src/linear/sync-pull.ts` | Pull Linear issues → todos |
+| `src/linear/sync-push.ts` | Push todos to Linear issues |
+| `src/linear/sync-pull.ts` | Pull Linear issues into todos |
 | `src/linear/tool-names.ts` | All 39 Linear MCP tool name constants |
-| `src/linear/integration.test.ts` | Round-trip integration tests (mock) |
+| `src/linear/integration.test.ts` | Round-trip integration tests |
 | `src/session/todo.ts` | Kernel todo service |
 | `src/session/auto-progress.ts` | Auto-progress engine |
 | `src/cli/cmd/tui/command/linear.ts` | Slash commands |
+
+## References
+
+- [`OPENCODE_TODO_LINEAR_GUIDE.md`](../../../../../OPENCODE_TODO_LINEAR_GUIDE.md) — Top-level quickstart (10 min to first sync)
+- [`src/session/todo.md`](../session/todo.md) — Todo schema and service docs
+- [`src/session/auto-progress.md`](../session/auto-progress.md) — Auto-progress engine docs

@@ -64,7 +64,9 @@ export namespace Todo {
   }
 
   export interface Interface {
+    /** Replace all todos for a session in a single transaction. Publishes Todo.Updated. */
     readonly replaceAll: (input: { sessionID: SessionID; todos: Info[] }) => Effect.Effect<void>
+    /** Load all todos for a session, ordered by position. */
     readonly get: (sessionID: SessionID) => Effect.Effect<Info[]>
     /** Insert a single todo. Generates id via crypto.randomUUID() if missing. Returns the created todo. */
     readonly create: (input: { sessionID: SessionID; todo: Info }) => Effect.Effect<Info>

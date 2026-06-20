@@ -8,7 +8,10 @@ import { SessionID } from "@/session/schema"
 
 /** Push service: converts local todos to Linear issues via MCP. */
 export namespace SyncPush {
-  /** Effect context tag for the Linear MCP client consumed by push(). */
+  /**
+   * Effect context tag for the Linear MCP client consumed by push().
+   * Must be provided in the layer that calls push().
+   */
   export const Client = Context.Service<LinearMcpClient>("@opencode/SyncPush/Client")
 
   /** Fatal error when push cannot proceed at all (e.g., missing config). */
