@@ -50,6 +50,12 @@ export const Prompt = Schema.Struct({
   }),
 }).annotate({ description: "Prompt size settings" })
 
+const SpinnerVerbsMode = Schema.Literals(["replace", "append"])
+const SpinnerVerbs = Schema.Struct({
+  mode: SpinnerVerbsMode,
+  verbs: Schema.mutable(Schema.Array(Schema.String)),
+})
+
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.String),
@@ -63,10 +69,11 @@ export const Info = Schema.Struct({
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
+  spinner_verbs: Schema.optional(SpinnerVerbs).annotate({ description: "Customize spinner verbs shown while the model is thinking" }),
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse"> & {
+export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse" | "spinner_verbs"> & {
   attention: {
     enabled: boolean
     notifications: boolean
@@ -78,6 +85,7 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | 
   keybinds: TuiKeybind.BindingLookupView
   leader_timeout: number
   mouse: boolean
+  spinner_verbs: string[]
 }
 
 export const ResolveOptions = Schema.Struct({
@@ -97,6 +105,13 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
     }
   }
 
+  const defaultSpinnerVerbs = ["Thinking", "Working", "Processing", "Analyzing", "Computing"]
+  const spinnerVerbs = input.spinner_verbs
+    ? input.spinner_verbs.mode === "replace"
+      ? [...input.spinner_verbs.verbs]
+      : [...defaultSpinnerVerbs, ...input.spinner_verbs.verbs]
+    : []
+
   return {
     ...input,
     attention: {
@@ -113,6 +128,7 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
     }),
     leader_timeout: input.leader_timeout ?? LeaderTimeoutDefault,
     mouse: input.mouse ?? true,
+    spinner_verbs: spinnerVerbs,
   }
 }
 
