@@ -21,6 +21,7 @@
     "packages/opencode/src/cli/cmd/pattern-detection.ts",
     "packages/opencode/src/cli/cmd/hook.ts",
     "packages/opencode/src/local/mdns.ts",
+    "packages/opencode/src/local/skein-loading.ts",
     "packages/opencode/src/server/routes/instance/httpapi/handlers/local.ts",
     "packages/opencode/src/server/routes/instance/httpapi/groups/local.ts",
     "packages/tui/src/component/dialog-model-ctx.tsx",

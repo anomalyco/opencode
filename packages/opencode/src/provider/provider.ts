@@ -15,6 +15,7 @@ import { Env } from "../env"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { iife } from "@/util/iife"
 import { ThemeState } from "@opencode-ai/core/local/theme-state"
+import { SkeinLoading } from "@/local/skein-loading"
 // fork: control-plane client used to auto-lower ctx on a local "context too large" 413.
 import { createClient as createLocalClient, createConfig as createLocalConfig } from "@/local/llama-skein/gen/client"
 import { LlamaSkeinClient } from "@/local/llama-skein/gen/sdk.gen"
@@ -87,6 +88,81 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   })
 
   return new Response(body, {
+    headers: new Headers(res.headers),
+    status: res.status,
+    statusText: res.statusText,
+  })
+}
+
+// fork (skein-duey): llama-skein streams model-load "loading theme" flavor as
+// reasoning_content SSE deltas tagged with a top-level `skein_loading: true`.
+// opencode persisted those as reasoning, ballooning the session DB to GBs and
+// filling the disk. They are pure UI flavor — show live, never store.
+//
+// The Vercel ai-sdk discards unknown TOP-LEVEL fields, so `skein_loading` is only
+// visible on the RAW SSE chunk. We strip those events HERE, before the ai-sdk, so
+// they never enter the reasoning/message/persistence path at all. `onLoading`
+// receives the flavor text for transient live display (which never persists).
+export function stripSkeinLoading(res: Response, onLoading?: (text: string) => void): Response {
+  if (!res.body) return res
+  if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
+
+  const decoder = new TextDecoder()
+  const encoder = new TextEncoder()
+  let buffer = ""
+
+  // Returns the flavor text when `line` is a `data:` event carrying
+  // skein_loading:true, else null (= pass the line through untouched).
+  const loadingText = (line: string): string | null => {
+    const trimmed = line.trimStart()
+    if (!trimmed.startsWith("data:")) return null
+    const payload = trimmed.slice(trimmed.indexOf("data:") + "data:".length).trim()
+    if (payload === "" || payload === "[DONE]") return null
+    if (!payload.includes("skein_loading")) return null // cheap pre-filter before JSON.parse
+    try {
+      const obj = JSON.parse(payload) as {
+        skein_loading?: boolean
+        choices?: Array<{ delta?: { reasoning_content?: string; content?: string } }>
+      }
+      if (obj?.skein_loading !== true) return null
+      const delta = obj.choices?.[0]?.delta
+      const text = delta?.reasoning_content ?? delta?.content ?? ""
+      return typeof text === "string" ? text : ""
+    } catch {
+      return null // unparseable — never drop content we don't understand
+    }
+  }
+
+  const transform = new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, ctrl) {
+      buffer += decoder.decode(chunk, { stream: true })
+      let out = ""
+      let nl: number
+      while ((nl = buffer.indexOf("\n")) !== -1) {
+        const line = buffer.slice(0, nl + 1) // keep the newline for byte-exact passthrough
+        buffer = buffer.slice(nl + 1)
+        const text = loadingText(line)
+        if (text !== null) {
+          if (text && onLoading) onLoading(text)
+          continue // DROP: never reaches the ai-sdk / persistence
+        }
+        out += line
+      }
+      if (out) ctrl.enqueue(encoder.encode(out))
+    },
+    flush(ctrl) {
+      if (!buffer) return
+      const text = loadingText(buffer)
+      if (text !== null) {
+        if (text && onLoading) onLoading(text)
+      } else {
+        ctrl.enqueue(encoder.encode(buffer))
+      }
+      buffer = ""
+    },
+  })
+
+  return new Response(res.body.pipeThrough(transform), {
     headers: new Headers(res.headers),
     status: res.status,
     statusText: res.statusText,
@@ -1995,6 +2071,14 @@ export const layer = Layer.effect(
               // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
               timeout: false,
             }).finally(() => headerTimeoutCtl?.clear())
+          }
+
+          // fork (skein-duey): for llama-skein local providers, strip the
+          // skein_loading flavor deltas from the raw stream before the ai-sdk so
+          // they are never persisted as reasoning. Surface their text for live
+          // display via the transient loading channel (never stored).
+          if (model.api.npm === "@ai-sdk/openai-compatible") {
+            res = stripSkeinLoading(res, (text) => SkeinLoading.emit(text))
           }
 
           if (!chunkAbortCtl) return res
