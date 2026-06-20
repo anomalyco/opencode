@@ -6,6 +6,11 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js"
 import type { Tool as MCPTool } from "@modelcontextprotocol/sdk/types.js"
 
+/**
+ * Error type for Linear MCP operations.
+ * The actual message is stored in `.data.message` (NamedError stores the class name in `.message`).
+ * Use `LinearMcpError.isInstance(e)` to check, then access `e.data.message`.
+ */
 export const LinearMcpError = NamedError.create(
   "LinearMcpError",
   z.object({
@@ -15,11 +20,15 @@ export const LinearMcpError = NamedError.create(
 )
 export type LinearMcpError = InstanceType<typeof LinearMcpError>
 
+/** Options for creating a LinearMcpClient */
 export interface Opts {
+  /** MCP server URL (default: https://mcp.linear.app/mcp) */
   url?: string
+  /** API key (default: process.env.LINEAR_API_KEY) */
   key?: string
 }
 
+/** Re-export of MCP SDK Tool type */
 export type Tool = MCPTool
 
 function err(message: string, cause?: unknown): LinearMcpError {
@@ -30,6 +39,12 @@ function fail(message: string, cause?: unknown): Effect.Effect<never, LinearMcpE
   return Effect.fail(err(message, cause))
 }
 
+/**
+ * StreamableHTTP client for the Linear MCP server.
+ *
+ * Wraps the MCP SDK Client with linear-opencode lifecycle:
+ * connect on create, fail on disconnect, cleanup on close.
+ */
 export class LinearMcpClient {
   readonly client: Client
   readonly transport: StreamableHTTPClientTransport
@@ -41,7 +56,11 @@ export class LinearMcpClient {
     this.connected = true
   }
 
-  /** Connect to the Linear MCP server and return a ready client */
+  /**
+   * Connect to the Linear MCP server and return a ready client.
+   * Reads `LINEAR_API_KEY` from env if not passed via opts.
+   * Fails with `LinearMcpError` if the key is missing or connection fails.
+   */
   static create = Effect.fn("LinearMcpClient.create")(function* (opts: Opts = {}) {
     const url = opts.url ?? "https://mcp.linear.app/mcp"
     const key = opts.key ?? process.env.LINEAR_API_KEY
@@ -64,6 +83,7 @@ export class LinearMcpClient {
     })
   })
 
+  /** List available tools from the Linear MCP server. Fails if disconnected. */
   listTools(): Effect.Effect<Tool[], LinearMcpError> {
     const self = this
     return Effect.gen(function* () {
@@ -75,6 +95,11 @@ export class LinearMcpClient {
     })
   }
 
+  /**
+   * Call a named tool on the Linear MCP server.
+   * The result format follows MCP protocol: `{ content: [{ type: "text", text: "..." }] }`.
+   * The `text` field typically contains JSON-encoded Linear GraphQL response data.
+   */
   callTool(name: string, args: Record<string, unknown>): Effect.Effect<unknown, LinearMcpError> {
     const self = this
     return Effect.gen(function* () {
@@ -86,6 +111,7 @@ export class LinearMcpClient {
     })
   }
 
+  /** Disconnect from the MCP server. Idempotent — safe to call multiple times. */
   close(): Effect.Effect<void> {
     const self = this
     return Effect.gen(function* () {
@@ -95,6 +121,7 @@ export class LinearMcpClient {
     })
   }
 
+  /** Returns "connected" if the client is active, "disconnected" after close(). */
   status(): Effect.Effect<"connected" | "disconnected"> {
     return Effect.succeed(this.connected ? "connected" : "disconnected")
   }

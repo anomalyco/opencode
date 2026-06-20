@@ -7,19 +7,28 @@ import { Config } from "@/config/config"
 import { Bus } from "@/bus"
 import { SessionID } from "@/session/schema"
 
+/** Pull service: converts Linear issues to local todos via MCP. */
 export namespace SyncPull {
+  /** Effect context tag for the Linear MCP client consumed by pull(). */
   export const Client = Context.Service<LinearMcpClient>("@opencode/SyncPull/Client")
 
+  /** Fatal error when pull cannot proceed at all (e.g., missing config). */
   export class Error extends Schema.TaggedErrorClass<Error>()("SyncPullError", {
     message: Schema.String,
     cause: Schema.optional(Schema.Defect),
   }) {}
 
+  /** Summary of a pull operation. */
   export class Result extends Schema.Class<Result>("SyncPullResult")({
+    /** Number of issues successfully pulled into local todos. */
     pulled: Schema.Number,
+    /** Number of issues skipped (already exist locally by linear_issue_id or inactive state). */
     skipped: Schema.Number,
+    /** Number of issues that failed to pull. */
     failed: Schema.Number,
+    /** Linear issue IDs that were pulled. */
     ids: Schema.Array(Schema.String),
+    /** Per-issue error details for failed pulls. */
     errors: Schema.Array(
       Schema.Struct({
         linearIssueId: Schema.String,
@@ -28,9 +37,17 @@ export namespace SyncPull {
     ),
   }) {}
 
+  /** Maximum number of concurrent pull/todo-create operations. */
   export const DEFAULT_BATCH = 10
 
-  /** Map Linear state type to todo status */
+  /**
+   * Map a Linear state type string to an OpenCode todo status.
+   * - "unstarted" → "pending"
+   * - "started" → "in_progress"
+   * - "completed" → "completed"
+   * - "canceled"/"cancelled" → "cancelled"
+   * - any other value → "pending" (fallback)
+   */
   export const mapStateToStatus = (
     linearState: string,
   ): "pending" | "in_progress" | "completed" | "cancelled" => {
@@ -49,7 +66,11 @@ export namespace SyncPull {
     }
   }
 
-  /** Map Linear priority number (0-4) to string */
+  /**
+   * Map a Linear priority number (0-4) to a todo priority string.
+   * - 1 → "urgent", 2 → "high", 3 → "medium", 4 → "low"
+   * - 0 or any other value → "none"
+   */
   export const mapReversePriority = (p: number): string => {
     switch (p) {
       case 1:
@@ -153,6 +174,17 @@ export namespace SyncPull {
   /** Active Linear state types to pull (ignore completed/cancelled) */
   const ACTIVE_STATES = new Set(["unstarted", "started"])
 
+  /**
+   * Pull Linear issues into local todos.
+   *
+   * - Fetches all issues for the configured project via `list_issues` (paginated, 50/page)
+   * - Filters to active states only: `unstarted` and `started`
+   * - Skips issues whose `linear_issue_id` already exists locally (dedup)
+   * - Resolves parent-child relationships from Linear to local `parent_id`
+   * - Creates todos in batch with configurable concurrency
+   *
+   * Returns a Result with pulled/skipped/failed counts and per-error details.
+   */
   export const pull = Effect.fn("SyncPull.pull")(function* (input: {
     sessionID: SessionID
   }) {
@@ -303,6 +335,10 @@ export namespace SyncPull {
     return new Result({ pulled, skipped, failed: errors.length, ids, errors })
   })
 
+  /**
+   * Subscribe to local todo progression events and resync to Linear.
+   * Currently a stub — logs on call. TODO T17: wire to Bus.subscribe for Todo.Progressed events.
+   */
   export const subscribeAndResync = Effect.fn("SyncPull.subscribeAndResync")(function* (
     sessionID: SessionID,
   ) {

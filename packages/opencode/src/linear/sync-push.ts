@@ -6,19 +6,27 @@ import { Config } from "@/config/config"
 import { Bus } from "@/bus"
 import { SessionID } from "@/session/schema"
 
+/** Push service: converts local todos to Linear issues via MCP. */
 export namespace SyncPush {
+  /** Effect context tag for the Linear MCP client consumed by push(). */
   export const Client = Context.Service<LinearMcpClient>("@opencode/SyncPush/Client")
 
+  /** Fatal error when push cannot proceed at all (e.g., missing config). */
   export class Error extends Schema.TaggedErrorClass<Error>()("SyncPushError", {
     message: Schema.String,
     todoID: Schema.optional(Schema.String),
     cause: Schema.optional(Schema.Defect),
   }) {}
 
+  /** Summary of a push operation. */
   export class Result extends Schema.Class<Result>("SyncPushResult")({
+    /** Number of todos successfully pushed to Linear. */
     pushed: Schema.Number,
+    /** Number of todos that failed to push. */
     failed: Schema.Number,
+    /** Linear issue IDs created by the push. */
     ids: Schema.Array(Schema.String),
+    /** Per-todo error details for failed pushes. */
     errors: Schema.Array(
       Schema.Struct({
         id: Schema.String,
@@ -27,8 +35,10 @@ export namespace SyncPush {
     ),
   }) {}
 
+  /** Maximum number of concurrent push operations. */
   export const DEFAULT_BATCH = 10
 
+  /** Map a todo priority string to a Linear priority number (0=no priority, 1=urgent…4=low). */
   export const mapPriority = (p: "high" | "medium" | "low" | "none" | "urgent" | undefined): 0 | 1 | 2 | 3 | 4 => {
     switch (p) {
       case "urgent":
@@ -44,6 +54,7 @@ export namespace SyncPush {
     }
   }
 
+  /** Map a Todo.Info + Linear config into the input shape for MCP save_issue. */
   export const mapTodoToIssue = Effect.fn("SyncPush.mapTodoToIssue")(function* (
     todo: Todo.Info,
     cfg: Config.Linear,
@@ -106,6 +117,16 @@ export namespace SyncPush {
     return
   }
 
+  /**
+   * Push todos to Linear as issues.
+   *
+   * - Skips todos that already have a `linear_issue_id`
+   * - Processes todos concurrently (up to DEFAULT_BATCH)
+   * - On success, updates the todo with the new `linear_issue_id`
+   * - On per-todo failure, collects the error and continues
+   *
+   * Returns a Result with pushed/failed counts, issue IDs, and per-error details.
+   */
   export const push = Effect.fn("SyncPush.push")(function* (input: {
     sessionID: SessionID
     todoIds?: string[] | "all"
