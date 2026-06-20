@@ -179,6 +179,10 @@ export const Info = Schema.Struct({
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),
+      level_limit: Schema.optional(NonNegativeInt).annotate({
+        description:
+          "Maximum depth for subagent session trees. Defaults to 5. Set to 0 to disable the depth limit.",
+      }),
       policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
         description: "Policy statements applied to supported resources, such as provider access",
       }),

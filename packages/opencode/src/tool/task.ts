@@ -40,6 +40,8 @@ const BACKGROUND_UPDATED = [
   "Work on non-overlapping tasks, or briefly tell the user what you sent and end your response.",
 ].join("\n")
 
+const taskCallState = new Map<SessionID, number>()
+
 const BaseParameterFields = {
   description: Schema.String.annotate({ description: "A short (3-5 words) description of the task" }),
   prompt: Schema.String.annotate({ description: "The task for the agent to perform" }),
@@ -78,6 +80,14 @@ function renderOutput(input: {
   ].join("\n")
 }
 
+function getCallCount(sessionID: SessionID) {
+  return taskCallState.get(sessionID) ?? 0
+}
+
+function incrementCallCount(sessionID: SessionID) {
+  taskCallState.set(sessionID, getCallCount(sessionID) + 1)
+}
+
 export const TaskTool = Tool.define(
   id,
   Effect.gen(function* () {
@@ -101,7 +111,10 @@ export const TaskTool = Tool.define(
         )
       }
 
-      if (!ctx.extra?.bypassAgentCheck) {
+      const parent = yield* sessions.get(ctx.sessionID)
+      const isSubagent = parent.parentID !== undefined
+
+      if (!ctx.extra?.bypassAgentCheck || isSubagent) {
         yield* ctx.ask({
           permission: id,
           patterns: [params.subagent_type],
@@ -121,7 +134,56 @@ export const TaskTool = Tool.define(
       const session = params.task_id
         ? yield* sessions.get(SessionID.make(params.task_id)).pipe(Effect.catchCause(() => Effect.succeed(undefined)))
         : undefined
-      const parent = yield* sessions.get(ctx.sessionID)
+      if (isSubagent && session && session.parentID !== ctx.sessionID) {
+        return yield* Effect.fail(
+          new Error(
+            `Cannot resume session: not a child of caller session. Session "${params.task_id}" is not owned by this caller.`,
+          ),
+        )
+      }
+
+      function sessionDepth(sessionID: SessionID): Effect.Effect<number> {
+        return sessions.get(sessionID).pipe(
+          Effect.catchCause(() => Effect.succeed(undefined)),
+          Effect.flatMap((current) => {
+            if (!current?.parentID) return Effect.succeed(0)
+            return sessionDepth(current.parentID).pipe(Effect.map((depth) => depth + 1))
+          }),
+        )
+      }
+
+      const caller = yield* agent.get(ctx.agent)
+      const targetTaskBudget = next.task_budget ?? 0
+      if (isSubagent) {
+        const callerTaskBudget = caller?.task_budget ?? 0
+        if (callerTaskBudget <= 0) {
+          return yield* Effect.fail(
+            new Error(
+              "Caller has no task budget configured. Set task_budget > 0 on the calling agent to enable nested delegation.",
+            ),
+          )
+        }
+
+        const currentCount = getCallCount(ctx.sessionID)
+        if (currentCount >= callerTaskBudget) {
+          return yield* Effect.fail(
+            new Error(`Task budget exhausted (${currentCount}/${callerTaskBudget} calls). Return control to caller to continue.`),
+          )
+        }
+
+        const levelLimit = cfg.experimental?.level_limit ?? 5
+        const currentDepth = levelLimit > 0 ? yield* sessionDepth(ctx.sessionID) : 0
+        if (levelLimit > 0 && currentDepth >= levelLimit) {
+          return yield* Effect.fail(
+            new Error(
+              `Level limit reached (depth ${currentDepth}/${levelLimit}). Cannot create deeper subagent sessions. Return control to caller.`,
+            ),
+          )
+        }
+
+        incrementCallCount(ctx.sessionID)
+      }
+
       const childPermission = deriveSubagentSessionPermission({
         parentSessionPermission: parent.permission ?? [],
         subagent: next,
@@ -130,7 +192,7 @@ export const TaskTool = Tool.define(
         ...(next.permission.some((rule) => rule.permission === "todowrite")
           ? []
           : [{ permission: "todowrite" as const, pattern: "*" as const, action: "deny" as const }]),
-        ...(next.permission.some((rule) => rule.permission === id)
+        ...(targetTaskBudget > 0
           ? []
           : [{ permission: id, pattern: "*" as const, action: "deny" as const }]),
         ...(cfg.experimental?.primary_tools?.map((permission) => ({

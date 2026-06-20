@@ -1,12 +1,13 @@
-import { useDialog } from "@tui/ui/dialog"
-import { DialogSelect, type DialogSelectOption } from "@tui/ui/dialog-select"
+import { DialogSelect, type DialogSelectOption } from "../ui/dialog-select"
 import { createMemo, onMount, Show } from "solid-js"
 import { useTheme, type Theme } from "../context/theme"
 import { useSync } from "../context/sync"
 import { useRouteData } from "../context/route"
 import { useRoute } from "../context/route"
-import { useToast } from "../ui/toast"
 import { useSDK } from "../context/sdk"
+import { useDialog } from "../ui/dialog"
+
+type TeamMemberStatus = "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
 
 type TeamResponse = {
   team: {
@@ -16,7 +17,7 @@ type TeamResponse = {
       name: string
       sessionID: string
       agent: string
-      status: string
+      status: TeamMemberStatus
     }>
   }
   role: "lead" | "member"
@@ -56,7 +57,7 @@ function statusIcon(status: string): string {
   }
 }
 
-function statusColor(status: string, theme: Theme): string {
+function statusColor(status: string, theme: Theme) {
   switch (status) {
     case "busy":
       return theme.primary
@@ -85,7 +86,6 @@ export function DialogTeam() {
   const sync = useSync()
   const route = useRouteData("session")
   const nav = useRoute()
-  const toast = useToast()
   const sdk = useSDK()
 
   const teamInfo = createMemo(() => sync.data.team[route.sessionID])
@@ -166,19 +166,9 @@ export function DialogTeam() {
         title={`Team: ${teamInfo()!.teamName} (${teamInfo()!.role})`}
         options={options()}
         onSelect={handleSelect}
-        keybind={[
+        actions={[
           {
-            keybind: { name: "m", ctrl: false, meta: false, shift: false, leader: false },
-            title: "message",
-            onTrigger: (option) => {
-              const [type] = option.value.split(":", 2)
-              if (type === "member") {
-                toast.show({ message: "Use team_message tool from the prompt to message teammates", variant: "info" })
-              }
-            },
-          },
-          {
-            keybind: { name: "l", ctrl: false, meta: false, shift: false, leader: false },
+            command: "team.lead",
             title: "go to lead",
             onTrigger: () => {
               const info = teamInfo()

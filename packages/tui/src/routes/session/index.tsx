@@ -52,6 +52,7 @@ import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
+import { DialogSessionTree } from "./dialog-session-tree"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
 import { SubagentFooter } from "./subagent-footer.tsx"
@@ -139,6 +140,8 @@ const sessionBindingCommands = [
   "session.export",
   "session.child.first",
   "session.parent",
+  "session.root",
+  "session.tree",
   "session.child.next",
   "session.child.previous",
   "team.next",
@@ -198,17 +201,48 @@ export function Session() {
   const { theme } = useTheme()
   const promptRef = usePromptRef()
   const session = createMemo(() => sync.session.get(route.sessionID))
+  const sortSessions = (a: (typeof sync.data.session)[number], b: (typeof sync.data.session)[number]) =>
+    a.time.created - b.time.created || a.id.localeCompare(b.id)
 
   createEffect(() => {
     const title = Locale.truncate(session()?.title ?? "", 50)
     setEpilogue(sessionEpilogue({ title, sessionID: session()?.id }))
   })
   onCleanup(() => setEpilogue())
-  const children = createMemo(() => {
-    const parentID = session()?.parentID ?? session()?.id
+  const rootSession = createMemo(() => {
+    const root = (current: NonNullable<ReturnType<typeof session>>): NonNullable<ReturnType<typeof session>> => {
+      if (!current.parentID) return current
+      return root(sync.session.get(current.parentID) ?? current)
+    }
+    const current = session()
+    if (!current) return
+    return root(current)
+  })
+  const directChildren = createMemo(() =>
+    sync.data.session.filter((x) => x.parentID === route.sessionID).toSorted(sortSessions),
+  )
+  const siblings = createMemo(() => {
+    const current = session()
+    if (!current) return []
+    if (!current.parentID) return [current]
     return sync.data.session
-      .filter((x) => x.parentID === parentID || x.id === parentID)
-      .toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .filter((x) => x.parentID === current.parentID)
+      .toSorted(sortSessions)
+  })
+  const descendants = createMemo(() => {
+    const root = rootSession()
+    if (!root) return []
+    const collect = (sessionID: string): (typeof sync.data.session) =>
+      sync.data.session
+        .filter((x) => x.parentID === sessionID)
+        .toSorted(sortSessions)
+        .flatMap((child) => [child, ...collect(child.id)])
+    return collect(root.id)
+  })
+  const sessionTree = createMemo(() => {
+    const root = rootSession()
+    if (!root) return []
+    return [root, ...descendants()]
   })
   const messages = createMemo(() => sync.data.message[route.sessionID] ?? [])
   const foregroundTasks = createMemo(() =>
@@ -226,11 +260,11 @@ export function Session() {
   )
   const permissions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+    return sessionTree().flatMap((x) => sync.data.permission[x.id] ?? [])
   })
   const questions = createMemo(() => {
     if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.question[x.id] ?? [])
+    return sessionTree().flatMap((x) => sync.data.question[x.id] ?? [])
   })
   const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
@@ -435,23 +469,27 @@ export function Session() {
   }
 
   function moveFirstChild() {
-    if (children().length === 1) return
-    const next = children().find((x) => !!x.parentID)
+    const next = directChildren()[0]
     if (next) enterChild(next.id)
   }
 
   function moveChild(direction: number) {
-    if (children().length === 1) return
+    const sessions = siblings()
+    if (sessions.length <= 1) return
 
-    const sessions = children().filter((x) => !!x.parentID)
-    let next = sessions.findIndex((x) => x.id === session()?.id) - direction
+    let next = sessions.findIndex((x) => x.id === session()?.id) + direction
 
     if (next >= sessions.length) next = 0
     if (next < 0) next = sessions.length - 1
     if (sessions[next]) enterChild(sessions[next].id)
   }
 
-  function childSessionHandler(func: () => void) {
+  function moveRoot() {
+    const root = rootSession()
+    if (root) enterChild(root.id)
+  }
+
+  function subagentSessionHandler(func: () => void) {
     return () => {
       if (!session()?.parentID || dialog.stack.length > 0) return
       func()
@@ -1130,6 +1168,7 @@ export function Session() {
       value: "session.child.first",
       category: "Session",
       hidden: true,
+      enabled: directChildren().length > 0,
       run: () => {
         dialog.clear()
         moveFirstChild()
@@ -1141,7 +1180,7 @@ export function Session() {
       category: "Session",
       hidden: true,
       enabled: !!session()?.parentID,
-      run: childSessionHandler(() => {
+      run: subagentSessionHandler(() => {
         const parentID = session()?.parentID
         if (parentID) {
           navigate({
@@ -1153,12 +1192,35 @@ export function Session() {
       }),
     },
     {
+      title: "Go to root session",
+      value: "session.root",
+      category: "Session",
+      hidden: true,
+      enabled: !!session()?.parentID,
+      run: subagentSessionHandler(() => {
+        dialog.clear()
+        moveRoot()
+      }),
+    },
+    {
+      title: "Session tree",
+      value: "session.tree",
+      category: "Session",
+      enabled: sessionTree().length > 1,
+      slash: {
+        name: "tree",
+      },
+      run: () => {
+        dialog.replace(() => <DialogSessionTree />)
+      },
+    },
+    {
       title: "Next child session",
       value: "session.child.next",
       category: "Session",
       hidden: true,
-      enabled: !!session()?.parentID,
-      run: childSessionHandler(() => {
+      enabled: !!session()?.parentID && siblings().length > 1,
+      run: subagentSessionHandler(() => {
         dialog.clear()
         moveChild(1)
       }),
@@ -1168,8 +1230,8 @@ export function Session() {
       value: "session.child.previous",
       category: "Session",
       hidden: true,
-      enabled: !!session()?.parentID,
-      run: childSessionHandler(() => {
+      enabled: !!session()?.parentID && siblings().length > 1,
+      run: subagentSessionHandler(() => {
         dialog.clear()
         moveChild(-1)
       }),

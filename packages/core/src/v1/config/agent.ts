@@ -1,7 +1,7 @@
 export * as ConfigAgentV1 from "./agent"
 
 import { Schema, SchemaGetter } from "effect"
-import { PositiveInt } from "../../schema"
+import { NonNegativeInt, PositiveInt } from "../../schema"
 import { ConfigPermissionV1 } from "./permission"
 
 const Color = Schema.Union([
@@ -34,6 +34,10 @@ const AgentSchema = Schema.StructWithRest(
     steps: Schema.optional(PositiveInt).annotate({
       description: "Maximum number of agentic iterations before forcing text-only response",
     }),
+    task_budget: Schema.optional(NonNegativeInt).annotate({
+      description:
+        "Maximum task calls this agent can make per session when delegating to other subagents. Omit or set to 0 to disable nested delegation.",
+    }),
     maxSteps: Schema.optional(PositiveInt).annotate({ description: "@deprecated Use 'steps' field instead." }),
     permission: Schema.optional(ConfigPermissionV1.Info),
   }),
@@ -52,6 +56,7 @@ const KNOWN_KEYS = new Set([
   "hidden",
   "color",
   "steps",
+  "task_budget",
   "maxSteps",
   "options",
   "permission",
