@@ -1,24 +1,40 @@
-import { describe, expect, test } from "bun:test"
+import { beforeAll, describe, expect, mock, test } from "bun:test"
 
-import { isNushell, mergeShellEnv, parseShellEnv, resolveUserShell } from "./shell-env"
+type ShellEnvModule = typeof import("./shell-env")
+
+let shellEnv: ShellEnvModule | undefined
+
+function module(): ShellEnvModule {
+  if (!shellEnv) throw new Error("shell-env module was not loaded")
+  return shellEnv
+}
+
+beforeAll(async () => {
+  mock.module("./logging", () => ({
+    getLogger: () => ({
+      log: () => undefined,
+    }),
+  }))
+  shellEnv = await import("./shell-env")
+})
 
 describe("shell env", () => {
   test("parseShellEnv supports null-delimited pairs", () => {
-    const env = parseShellEnv(Buffer.from("PATH=/usr/bin:/bin\0FOO=bar=baz\0\0"))
+    const env = module().parseShellEnv(Buffer.from("PATH=/usr/bin:/bin\0FOO=bar=baz\0\0"))
 
     expect(env.PATH).toBe("/usr/bin:/bin")
     expect(env.FOO).toBe("bar=baz")
   })
 
   test("parseShellEnv ignores invalid entries", () => {
-    const env = parseShellEnv(Buffer.from("INVALID\0=empty\0OK=1\0"))
+    const env = module().parseShellEnv(Buffer.from("INVALID\0=empty\0OK=1\0"))
 
     expect(Object.keys(env).length).toBe(1)
     expect(env.OK).toBe("1")
   })
 
   test("mergeShellEnv keeps explicit overrides", () => {
-    const env = mergeShellEnv(
+    const env = module().mergeShellEnv(
       {
         PATH: "/shell/path",
         HOME: "/tmp/home",
@@ -35,16 +51,16 @@ describe("shell env", () => {
   })
 
   test("resolveUserShell falls back to the login shell before /bin/sh", () => {
-    expect(resolveUserShell("/custom/env-shell", "/bin/zsh")).toBe("/custom/env-shell")
-    expect(resolveUserShell(undefined, "/bin/zsh")).toBe("/bin/zsh")
-    expect(resolveUserShell(undefined, "unknown")).toBe("/bin/sh")
-    expect(resolveUserShell(undefined, undefined)).toBe("/bin/sh")
+    expect(module().resolveUserShell("/custom/env-shell", "/bin/zsh")).toBe("/custom/env-shell")
+    expect(module().resolveUserShell(undefined, "/bin/zsh")).toBe("/bin/zsh")
+    expect(module().resolveUserShell(undefined, "unknown")).toBe("/bin/sh")
+    expect(module().resolveUserShell(undefined, undefined)).toBe("/bin/sh")
   })
 
   test("isNushell handles path and binary name", () => {
-    expect(isNushell("nu")).toBe(true)
-    expect(isNushell("/opt/homebrew/bin/nu")).toBe(true)
-    expect(isNushell("C:\\Program Files\\nu.exe")).toBe(true)
-    expect(isNushell("/bin/zsh")).toBe(false)
+    expect(module().isNushell("nu")).toBe(true)
+    expect(module().isNushell("/opt/homebrew/bin/nu")).toBe(true)
+    expect(module().isNushell("C:\\Program Files\\nu.exe")).toBe(true)
+    expect(module().isNushell("/bin/zsh")).toBe(false)
   })
 })
