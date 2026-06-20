@@ -31,6 +31,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { makeRuntime } from "@/effect/run-service"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 
@@ -1971,5 +1972,12 @@ export const node = LayerNode.make(layer, [
   ModelsDev.node,
   RuntimeFlags.node,
 ])
+
+const legacyRuntime = makeRuntime(Service, defaultLayer)
+
+export const getModel = (providerID: ProviderV2.ID, modelID: ModelV2.ID) =>
+  legacyRuntime.runPromise((provider) => provider.getModel(providerID, modelID))
+
+export const defaultModel = () => legacyRuntime.runPromise((provider) => provider.defaultModel())
 
 export * as Provider from "./provider"

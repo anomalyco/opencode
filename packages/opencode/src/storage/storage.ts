@@ -5,6 +5,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, Exit, Layer, Option, RcMap, Schema, Context, TxReentrantLock } from "effect"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Git } from "@/git"
+import { makeRuntime } from "@/effect/run-service"
 
 type Migration = (dir: string, fs: FSUtil.Interface, git: Git.Interface) => Effect.Effect<void, FSUtil.Error>
 
@@ -325,5 +326,14 @@ export const layer = Layer.effect(
 export const defaultLayer = layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(Git.defaultLayer))
 
 export const node = LayerNode.make(layer, [FSUtil.node, Git.node])
+
+const runtime = makeRuntime(Service, defaultLayer)
+
+export const remove = (key: string[]) => runtime.runPromise((storage) => storage.remove(key))
+export const read = <T>(key: string[]) => runtime.runPromise((storage) => storage.read<T>(key))
+export const update = <T>(key: string[], fn: (draft: T) => void) =>
+  runtime.runPromise((storage) => storage.update(key, fn))
+export const write = <T>(key: string[], content: T) => runtime.runPromise((storage) => storage.write(key, content))
+export const list = (prefix: string[]) => runtime.runPromise((storage) => storage.list(prefix))
 
 export * as Storage from "./storage"

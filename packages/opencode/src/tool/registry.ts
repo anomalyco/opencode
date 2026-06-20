@@ -52,6 +52,17 @@ import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import {
+  TeamCreateTool,
+  TeamSpawnTool,
+  TeamMessageTool,
+  TeamBroadcastTool,
+  TeamTasksTool,
+  TeamClaimTool,
+  TeamApprovePlanTool,
+  TeamShutdownTool,
+  TeamCleanupTool,
+} from "./team"
 
 export function webSearchEnabled(providerID: ProviderV2.ID, flags = { exa: false, parallel: false }) {
   return providerID === ProviderV2.ID.opencode || flags.exa || flags.parallel
@@ -105,6 +116,15 @@ export const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const teamCreate = yield* TeamCreateTool
+    const teamSpawn = yield* TeamSpawnTool
+    const teamMessage = yield* TeamMessageTool
+    const teamBroadcast = yield* TeamBroadcastTool
+    const teamTasks = yield* TeamTasksTool
+    const teamClaim = yield* TeamClaimTool
+    const teamApprovePlan = yield* TeamApprovePlanTool
+    const teamShutdown = yield* TeamShutdownTool
+    const teamCleanup = yield* TeamCleanupTool
     const agent = yield* Agent.Service
 
     const state = yield* InstanceState.make<State>(
@@ -212,6 +232,15 @@ export const layer = Layer.effect(
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          teamCreate: Tool.init(teamCreate),
+          teamSpawn: Tool.init(teamSpawn),
+          teamMessage: Tool.init(teamMessage),
+          teamBroadcast: Tool.init(teamBroadcast),
+          teamTasks: Tool.init(teamTasks),
+          teamClaim: Tool.init(teamClaim),
+          teamApprovePlan: Tool.init(teamApprovePlan),
+          teamShutdown: Tool.init(teamShutdown),
+          teamCleanup: Tool.init(teamCleanup),
         })
 
         return {
@@ -233,6 +262,19 @@ export const layer = Layer.effect(
             tool.patch,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
+            ...(flags.experimentalAgentTeams
+              ? [
+                  tool.teamCreate,
+                  tool.teamSpawn,
+                  tool.teamMessage,
+                  tool.teamBroadcast,
+                  tool.teamTasks,
+                  tool.teamClaim,
+                  tool.teamApprovePlan,
+                  tool.teamShutdown,
+                  tool.teamCleanup,
+                ]
+              : []),
           ],
           task: tool.task,
           read: tool.read,

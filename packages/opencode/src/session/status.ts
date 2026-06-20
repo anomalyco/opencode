@@ -5,6 +5,9 @@ import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { Effect, Layer, Context, Schema } from "effect"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
+import { makeRuntime } from "@/effect/run-service"
+import { InstanceRef } from "@/effect/instance-ref"
+import { Instance } from "@/project/instance"
 
 export const Info = Schema.Union([
   Schema.Struct({
@@ -93,5 +96,15 @@ export const layer = Layer.effect(
 export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer))
 
 export const node = LayerNode.make(layer, [EventV2Bridge.node])
+
+const legacyRuntime = makeRuntime(Service, defaultLayer)
+
+function legacyWithInstance<A, E, R>(effect: Effect.Effect<A, E, R>) {
+  const ctx = Instance.current()
+  return ctx ? effect.pipe(Effect.provideService(InstanceRef, ctx)) : effect
+}
+
+export const get = (sessionID: string) =>
+  legacyRuntime.runSync((status) => legacyWithInstance(status.get(SessionID.make(sessionID))))
 
 export * as SessionStatus from "./status"

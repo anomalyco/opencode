@@ -229,6 +229,11 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
 
     const abort = Effect.fn("SessionHttpApi.abort")(function* (ctx: { params: { sessionID: SessionID } }) {
       yield* promptSvc.cancel(ctx.params.sessionID)
+      yield* Effect.tryPromise(async () => {
+        const { Team } = await import("@/team")
+        const match = await Team.findBySession(ctx.params.sessionID)
+        if (match?.role === "lead") await Team.cancelAllMembers(match.team.name)
+      }).pipe(Effect.ignore)
       return true
     })
 

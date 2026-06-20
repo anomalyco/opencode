@@ -60,6 +60,9 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { makeRuntime } from "@/effect/run-service"
+import { InstanceRef } from "@/effect/instance-ref"
+import { Instance } from "@/project/instance"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -1700,5 +1703,24 @@ export const node = LayerNode.make(layer, [
   RuntimeFlags.node,
   Database.node,
 ])
+
+const legacyRuntime = makeRuntime(Service, defaultLayer)
+
+function legacyWithInstance<A, E, R>(effect: Effect.Effect<A, E, R>) {
+  const ctx = Instance.current()
+  return ctx ? effect.pipe(Effect.provideService(InstanceRef, ctx)) : effect
+}
+
+export const loop = (input: { sessionID: string }) =>
+  legacyRuntime.runPromise((prompt) =>
+    legacyWithInstance(
+      prompt.loop({
+        sessionID: SessionID.make(input.sessionID),
+      }),
+    ),
+  )
+
+export const cancel = (sessionID: string) =>
+  legacyRuntime.runPromise((prompt) => legacyWithInstance(prompt.cancel(SessionID.make(sessionID))))
 
 export * as SessionPrompt from "./prompt"
