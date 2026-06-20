@@ -477,6 +477,22 @@ export namespace Config {
   })
   export type Skills = z.infer<typeof Skills>
 
+  export const Linear = z
+    .object({
+      projectId: z.string().optional().describe("Linear project ID for issue mapping"),
+      teamId: z.string().optional().describe("Linear team ID for issue creation"),
+      syncMode: z
+        .enum(["manual", "auto-push", "auto-pull", "bidirectional"])
+        .default("manual")
+        .describe("Issue sync strategy with Linear"),
+      autoPush: z.boolean().default(false).describe("Automatically push issues to Linear"),
+    })
+    .strict()
+    .meta({
+      ref: "LinearConfig",
+    })
+  export type Linear = z.infer<typeof Linear>
+
   export const Agent = z
     .object({
       model: ModelId.optional(),
@@ -1053,6 +1069,7 @@ export namespace Config {
             .describe("Timeout in milliseconds for model context protocol (MCP) requests"),
         })
         .optional(),
+      linear: Linear.optional().describe("Linear integration settings for issue tracking and sync"),
     })
     .strict()
     .meta({
@@ -1061,6 +1078,10 @@ export namespace Config {
 
   export type Info = z.output<typeof Info> & {
     plugin_origins?: PluginOrigin[]
+  }
+
+  export function linear(): Linear {
+    return { syncMode: "manual", autoPush: false }
   }
 
   type State = {
