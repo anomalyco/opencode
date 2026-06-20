@@ -218,7 +218,7 @@ function normalizeMessages(
   if (
     model.providerID === "mistral" ||
     model.api.id.toLowerCase().includes("mistral") ||
-    model.api.id.toLocaleLowerCase().includes("devstral")
+    model.api.id.toLowerCase().includes("devstral")
   ) {
     const scrub = (id: string) => {
       return id
