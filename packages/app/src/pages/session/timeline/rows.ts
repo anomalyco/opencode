@@ -210,14 +210,7 @@ export namespace Timeline {
 
     if (isActive && status === "retry") rows.push(new TimelineRow.Retry({ userMessageID: userMessage.id }))
 
-    const diffs = (userMessage.summary?.diffs ?? [])
-      .reduceRight<SummaryDiff[]>((result, diff) => {
-        if (!isSummaryDiff(diff)) return result
-        if (result.some((item) => item.file === diff.file)) return result
-        result.push(diff)
-        return result
-      }, [])
-      .reverse()
+    const diffs = uniqueSummaryDiffs(userMessage.summary?.diffs ?? [])
     if (diffs.length > 0 && (status === "idle" || !isActive)) {
       rows.push(
         new TimelineRow.DiffSummary({
@@ -242,8 +235,18 @@ export namespace Timeline {
     return rows
   }
 
-  function isSummaryDiff(value: SnapshotFileDiff): value is SummaryDiff {
-    return typeof value.file === "string"
+  function uniqueSummaryDiffs(diffs: SnapshotFileDiff[]) {
+    const files = new Set<string>()
+    return diffs
+      .reduceRight<SummaryDiff[]>((result, diff) => {
+        const file = diff.file
+        if (typeof file !== "string") return result
+        if (files.has(file)) return result
+        files.add(file)
+        result.push({ ...diff, file })
+        return result
+      }, [])
+      .reverse()
   }
 
   function reasoningHeading(text: string) {
