@@ -21,7 +21,7 @@ export type TokenCostEntry = { model: string; total: number; input: number; outp
 export type CacheRatioEntry = { model: string; ratio: number; cached: number; uncached: number; total: number }
 export type SessionCostEntry = { model: string; cost: number; tokens: number }
 export type CountryEntry = { country: string; continent: string; tokens: number; share: number; rank: number }
-export type ModelUsagePoint = { date: string; tokens: number; sessions: number; cost: number }
+export type ModelUsagePoint = { date: string; tokens: number; users: number; sessions: number; cost: number }
 export type ModelMixEntry = { label: string; tokens: number; share: number }
 export type ModelPeerEntry = {
   model: string
@@ -82,6 +82,7 @@ export type StatsLabData = {
 export type StatsHomeData = {
   updatedAt: string | null
   usage: Record<UsageProduct, Record<UsageRange, UsagePoint[]>>
+  users: Record<UsageProduct, Record<UsageRange, UsagePoint[]>>
   leaderboard: Record<UsageProduct, Record<UsageRange, LeaderboardEntry[]>>
   market: Record<UsageRange, MarketDay[]>
   tokenCost: Record<TokenProduct, TokenCostEntry[]>
@@ -118,6 +119,7 @@ type ModelAggregate = {
   model: string
   provider: string
   sessions: number
+  uniqueUsers: number
   inputTokens: number
   outputTokens: number
   reasoningTokens: number
@@ -200,6 +202,18 @@ function buildStatsHomeData(
         ),
       ),
     ),
+    users: createUsageProductRecord((product) =>
+      createRangeRecord((range) =>
+        buildUsagePoints(
+          normalized,
+          product,
+          range,
+          getWindow(range, earliest, latest),
+          getWindow("1W", earliest, latest),
+          "users",
+        ),
+      ),
+    ),
     leaderboard: createUsageProductRecord((product) =>
       createRangeRecord((range) => buildLeaderboard(normalized, product, getWindow("1W", earliest, latest))),
     ),
@@ -248,15 +262,15 @@ function buildStatsModelData(
   )
     .filter((item) => item.totalTokens > 0)
     .toSorted((a, b) => b.totalTokens - a.totalTokens || a.model.localeCompare(b.model))
-  const peers = aggregateByModelName(rowsForProduct(normalized, SITE_PRODUCT, window.start, window.end))
+  const windowPeers = aggregateByModelName(rowsForProduct(normalized, SITE_PRODUCT, window.start, window.end))
     .filter((item) => item.totalTokens > 0)
     .toSorted((a, b) => b.totalTokens - a.totalTokens || a.model.localeCompare(b.model))
   const rankIndex = rankPeers.findIndex((item) => item.model === model)
   const rank = rankIndex >= 0 ? rankIndex + 1 : null
   const previousRankIndex = previousRankPeers.findIndex((item) => item.model === model)
-  const peerRankIndex = peers.findIndex((item) => item.model === model)
-  const peerRank = peerRankIndex >= 0 ? peerRankIndex + 1 : 1
-  const totalTokens = peers.reduce((sum, item) => sum + item.totalTokens, 0)
+  const peerRank = rankIndex >= 0 ? rankIndex + 1 : 1
+  const totalTokens = windowPeers.reduce((sum, item) => sum + item.totalTokens, 0)
+  const peerTokens = rankPeers.reduce((sum, item) => sum + item.totalTokens, 0)
 
   return {
     updatedAt: Number.isFinite(latestUpdate) ? new Date(latestUpdate).toISOString() : null,
@@ -266,7 +280,7 @@ function buildStatsModelData(
     author: formatProvider(current.provider),
     rank,
     previousRank: previousRankIndex >= 0 ? previousRankIndex + 1 : null,
-    totalModels: peers.length,
+    totalModels: windowPeers.length,
     tokenShare: totalTokens > 0 ? round((current.totalTokens / totalTokens) * 100, 2) : 0,
     tokenChange: percentChange(current.totalTokens, previous.totalTokens),
     totals: {
@@ -285,7 +299,7 @@ function buildStatsModelData(
     usage: buildModelUsage(currentRows, window, "2M"),
     tokenMix: buildModelTokenMix(current),
     country: createRangeRecord((range) => buildCountryStats(geo, getWindow(range, earliest, latest))),
-    peers: buildModelPeers(peers, peerRank, totalTokens),
+    peers: buildModelPeers(rankPeers, peerRank, peerTokens),
   }
 }
 
@@ -340,6 +354,7 @@ function emptyStatsHomeData(): StatsHomeData {
   return {
     updatedAt: null,
     usage: createUsageProductRecord(() => createRangeRecord(() => [])),
+    users: createUsageProductRecord(() => createRangeRecord(() => [])),
     leaderboard: createUsageProductRecord(() => createRangeRecord(() => [])),
     market: createRangeRecord(() => []),
     tokenCost: createTokenProductRecord(() => []),
@@ -355,26 +370,37 @@ function buildUsagePoints(
   range: UsageRange,
   window: DateWindow,
   rankWindow: DateWindow,
+  metric: "tokens" | "users" = "tokens",
 ) {
   const modelOrder = aggregateByModelName(rowsForProduct(rows, product, rankWindow.start, rankWindow.end))
-    .toSorted((a, b) => b.totalTokens - a.totalTokens)
+    .toSorted((a, b) => modelUsageValue(b, metric) - modelUsageValue(a, metric))
     .slice(0, TOP_MODEL_SEGMENT_LIMIT)
     .map((item) => item.model)
 
   return createBuckets(window, range).map((bucket) => {
     const bucketRows = aggregateByModelName(rowsForProduct(rows, product, bucket.start, bucket.end))
-    const byModel = new Map(bucketRows.map((item) => [item.model, item.totalTokens]))
-    const segmentTokens = modelOrder.map((model) => ({ model, tokens: byModel.get(model) ?? 0 }))
-    const knownTokens = segmentTokens.reduce((sum, item) => sum + item.tokens, 0)
-    const totalTokens = bucketRows.reduce((sum, item) => sum + item.totalTokens, 0)
+    const byModel = new Map(bucketRows.map((item) => [item.model, modelUsageValue(item, metric)]))
+    const segments = modelOrder.map((model) => ({ model, value: byModel.get(model) ?? 0 }))
+    const knownValue = segments.reduce((sum, item) => sum + item.value, 0)
+    const totalValue = bucketRows.reduce((sum, item) => sum + modelUsageValue(item, metric), 0)
     return {
       date: bucket.label,
       segments: [
-        ...segmentTokens.map((item) => ({ model: item.model, value: round(item.tokens / 1_000_000_000_000, 4) })),
-        { model: "Other", value: round(Math.max(totalTokens - knownTokens, 0) / 1_000_000_000_000, 4) },
+        ...segments.map((item) => ({ model: item.model, value: usagePointValue(item.value, metric) })),
+        { model: "Other", value: usagePointValue(Math.max(totalValue - knownValue, 0), metric) },
       ],
     }
   })
+}
+
+function modelUsageValue(item: ModelAggregate, metric: "tokens" | "users") {
+  if (metric === "users") return item.uniqueUsers
+  return item.totalTokens
+}
+
+function usagePointValue(value: number, metric: "tokens" | "users") {
+  if (metric === "users") return value
+  return round(value / 1_000_000_000_000, 4)
 }
 
 function buildLeaderboard(rows: StatMetricRow[], product: UsageProduct, rankWindow: DateWindow) {
@@ -502,6 +528,7 @@ function buildModelUsage(rows: StatMetricRow[], window: DateWindow, range: Usage
     return {
       date: bucket.label,
       tokens: aggregate.totalTokens,
+      users: aggregate.uniqueUsers,
       sessions: aggregate.sessions,
       cost: round(microcentsToDollars(aggregate.totalCostMicrocents), 2),
     }
@@ -601,6 +628,7 @@ function combineRowsForModel(model: string, rows: StatMetricRow[]): ModelAggrega
     model,
     provider: "unknown",
     sessions: 0,
+    uniqueUsers: 0,
     inputTokens: 0,
     outputTokens: 0,
     reasoningTokens: 0,
@@ -617,6 +645,7 @@ function combineModelAggregate(current: ModelAggregate | undefined, row: StatMet
     model: row.model,
     provider: row.provider,
     sessions: (current?.sessions ?? 0) + row.sessions,
+    uniqueUsers: (current?.uniqueUsers ?? 0) + row.uniqueUsers,
     inputTokens: (current?.inputTokens ?? 0) + row.inputTokens,
     outputTokens: (current?.outputTokens ?? 0) + row.outputTokens,
     reasoningTokens: (current?.reasoningTokens ?? 0) + row.reasoningTokens,
