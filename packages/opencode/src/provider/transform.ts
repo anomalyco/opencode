@@ -677,13 +677,23 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
   }
   const adaptiveThinkingOmitted = anthropicOmitsThinking(model.api.id)
   const adaptiveEfforts = anthropicAdaptiveEfforts(model.api.id)
-  // GLM-5.2 exposes two thinking-effort levels (High and Max), unlike earlier
-  // GLM models which only support a binary thinking toggle.
-  // See: https://docs.z.ai/devpack/latest-model
-  if (id.includes("glm-5.2")) {
+  if (id.includes("glm-5.2") && model.api.npm === "@openrouter/ai-sdk-provider") {
+    // OpenRouter maps xhigh to GLM-5.2's native max effort.
+    return {
+      high: { reasoning: { effort: "high" } },
+      xhigh: { reasoning: { effort: "xhigh" } },
+    }
+  }
+  if (id.includes("glm-5.2") && model.api.npm === "@ai-sdk/openai-compatible") {
     return {
       high: { reasoningEffort: "high" },
       max: { reasoningEffort: "max" },
+    }
+  }
+  if (id.includes("glm-5.2") && model.api.npm === "@ai-sdk/anthropic") {
+    return {
+      high: { effort: "high" },
+      max: { effort: "max" },
     }
   }
   if (
@@ -692,7 +702,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
     id.includes("deepseek-r1") ||
     id.includes("deepseek-v3") ||
     id.includes("minimax") ||
-    id.includes("glm") ||
+    (id.includes("glm") && !id.includes("glm-5.2")) ||
     id.includes("kimi") ||
     id.includes("k2p") ||
     id.includes("qwen") ||
