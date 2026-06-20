@@ -127,6 +127,7 @@ export const layer = Layer.effect(
         currentTextID: undefined,
         reasoningMap: {},
         v2AssistantMessageID: undefined,
+        reasoningTextRepeatCount: 0
       }
       const mirrorAssistant = flags.experimentalEventSystem && !input.assistantMessage.summary
       let aborted = false
