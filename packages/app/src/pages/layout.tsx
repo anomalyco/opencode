@@ -76,6 +76,7 @@ import {
   latestRootSession,
   sortedRootSessions,
 } from "./layout/helpers"
+import { sessionTitle } from "@/utils/session-title"
 import {
   collectNewSessionDeepLinks,
   collectOpenProjectDeepLinks,
@@ -988,6 +989,67 @@ export default function Layout(props: ParentProps) {
         navigate(`/${params.dir}/session`)
       }
     }
+  }
+
+  async function executeDeleteSession(session: Session) {
+    const [store] = serverSync().child(session.directory, { bootstrap: false })
+    const sessions = store.session ?? []
+    const index = sessions.findIndex((s) => s.id === session.id)
+    const nextSession = sessions[index + 1] ?? sessions[index - 1]
+
+    const result = await serverSDK()
+      .client.session.delete({ sessionID: session.id, directory: session.directory })
+      .then((x) => x.data)
+      .catch((err) => {
+        showToast({
+          title: language.t("session.delete.failed.title"),
+          description: errorMessage(err),
+        })
+        return false
+      })
+
+    if (!result) return
+
+    if (session.id === params.id) {
+      if (nextSession) {
+        navigate(`/${params.dir}/session/${nextSession.id}`)
+      } else {
+        navigate(`/${params.dir}/session`)
+      }
+    }
+  }
+
+  function confirmDeleteSession(session: Session) {
+    dialog.show(() => <DialogDeleteSession session={session} />)
+  }
+
+  function DialogDeleteSession(props: { session: Session }) {
+    const name = createMemo(() => sessionTitle(props.session.title))
+
+    const handleDelete = async () => {
+      await executeDeleteSession(props.session)
+      dialog.close()
+    }
+
+    return (
+      <Dialog title={language.t("session.delete.title")} fit>
+        <div class="flex flex-col gap-4 pl-6 pr-2.5 pb-3">
+          <div class="flex flex-col gap-1">
+            <span class="text-14-regular text-text-strong">
+              {language.t("session.delete.confirm", { name: name() })}
+            </span>
+          </div>
+          <div class="flex justify-end gap-2">
+            <Button variant="ghost" size="large" onClick={() => dialog.close()}>
+              {language.t("common.cancel")}
+            </Button>
+            <Button variant="primary" size="large" onClick={handleDelete}>
+              {language.t("session.delete.button")}
+            </Button>
+          </div>
+        </div>
+      </Dialog>
+    )
   }
 
   command.register("layout", () => {
@@ -1976,6 +2038,7 @@ export default function Layout(props: ParentProps) {
     clearHoverProjectSoon,
     prefetchSession,
     archiveSession,
+    confirmDeleteSession,
     workspaceName,
     renameWorkspace,
     editorOpen,
@@ -2022,6 +2085,7 @@ export default function Layout(props: ParentProps) {
       clearHoverProjectSoon,
       prefetchSession,
       archiveSession,
+      confirmDeleteSession,
     },
   }
 

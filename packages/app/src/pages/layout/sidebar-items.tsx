@@ -84,6 +84,7 @@ export type SessionItemProps = {
   clearHoverProjectSoon: () => void
   prefetchSession: (session: Session, priority?: "high" | "low") => void
   archiveSession: (session: Session) => Promise<void>
+  confirmDeleteSession: (session: Session) => void
 }
 
 const SessionRow = (props: {
@@ -233,12 +234,12 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
 
           <Show when={!props.level}>
             <div
-              class="shrink-0 overflow-hidden transition-[width,opacity]"
+              class="shrink-0 overflow-hidden transition-[width,opacity] flex items-center gap-1"
               classList={{
-                "w-6 opacity-100 pointer-events-auto": !!props.mobile,
+                "w-[3.25rem] opacity-100 pointer-events-auto": !!props.mobile,
                 "w-0 opacity-0 pointer-events-none": !props.mobile,
-                "group-hover/session:w-6 group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
-                "group-focus-within/session:w-6 group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
+                "group-hover/session:w-[3.25rem] group-hover/session:opacity-100 group-hover/session:pointer-events-auto": true,
+                "group-focus-within/session:w-[3.25rem] group-focus-within/session:opacity-100 group-focus-within/session:pointer-events-auto": true,
               }}
             >
               <Tooltip value={language.t("common.archive")} placement="top">
@@ -251,6 +252,19 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
                     event.preventDefault()
                     event.stopPropagation()
                     void props.archiveSession(props.session)
+                  }}
+                />
+              </Tooltip>
+              <Tooltip value={language.t("common.delete")} placement="top">
+                <IconButton
+                  icon="trash"
+                  variant="ghost"
+                  class="size-6 rounded-md"
+                  aria-label={language.t("common.delete")}
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    props.confirmDeleteSession(props.session)
                   }}
                 />
               </Tooltip>
