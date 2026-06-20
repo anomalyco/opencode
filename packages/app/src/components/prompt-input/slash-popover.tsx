@@ -21,7 +21,7 @@ export interface SlashCommand {
 
 type PromptPopoverProps = {
   popover: "at" | "slash" | null
-  setSlashPopoverRef: (el: HTMLDivElement) => void
+  setPopoverRef: (el: HTMLDivElement) => void
   atFlat: AtOption[]
   atActive?: string
   atKey: (item: AtOption) => string
@@ -43,9 +43,7 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
   return (
     <Show when={props.popover}>
       <div
-        ref={(el) => {
-          if (props.popover === "slash") props.setSlashPopoverRef(el)
-        }}
+        ref={props.setPopoverRef}
         class="absolute inset-x-0 -top-2 -translate-y-full origin-bottom-left max-h-80 min-h-10
                  overflow-auto no-scrollbar flex flex-col p-2 rounded-[12px]
                  border border-white/10 shadow-[var(--shadow-lg-border-base)]"
@@ -62,13 +60,14 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
               when={props.atFlat.length > 0}
               fallback={<div class="text-text-weak px-2 py-1">{props.t("prompt.popover.emptyResults")}</div>}
             >
-              <For each={props.atFlat.slice(0, 10)}>
+              <For each={props.atFlat}>
                 {(item) => {
                   const key = props.atKey(item)
 
                   if (item.type === "agent") {
                     return (
                       <button
+                        data-prompt-popover-active={props.atActive === key ? "" : undefined}
                         class="w-full flex items-center gap-x-2 rounded-md px-2 py-0.5"
                         classList={{ "bg-surface-raised-base-active": props.atActive === key }}
                         onClick={() => props.onAtSelect(item)}
@@ -87,6 +86,7 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
 
                   return (
                     <button
+                      data-prompt-popover-active={props.atActive === key ? "" : undefined}
                       class="w-full flex items-center gap-x-2 rounded-md px-2 py-0.5"
                       classList={{ "bg-surface-raised-base-active": props.atActive === key }}
                       onClick={() => props.onAtSelect(item)}
@@ -117,6 +117,7 @@ export const PromptPopover: Component<PromptPopoverProps> = (props) => {
                 {(cmd) => (
                   <button
                     data-slash-id={cmd.id}
+                    data-prompt-popover-active={props.slashActive === cmd.id ? "" : undefined}
                     classList={{
                       "w-full flex items-center justify-between gap-4 rounded-md px-2 py-1": true,
                       "bg-surface-raised-base-hover": props.slashActive === cmd.id,

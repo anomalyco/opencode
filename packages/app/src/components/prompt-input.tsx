@@ -408,7 +408,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   let editorRef!: HTMLDivElement
   let fileInputRef: HTMLInputElement | undefined
   let scrollRef!: HTMLDivElement
-  let slashPopoverRef!: HTMLDivElement
+  let popoverRef: HTMLDivElement | undefined
   let inputUndo = createInputUndoState(createInputUndoEntry(DEFAULT_PROMPT, 0))
   let inputUndoLast = 0
 
@@ -1119,15 +1119,22 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     ),
   )
 
-  // Auto-scroll active command into view when navigating with keyboard
-  createEffect(() => {
-    const activeId = slashActive()
-    if (!activeId || !slashPopoverRef) return
+  const scrollActivePopoverItemIntoView = () => {
+    const container = popoverRef
+    if (!container) return
 
     requestAnimationFrame(() => {
-      const element = slashPopoverRef.querySelector(`[data-slash-id="${activeId}"]`)
-      element?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+      const element = container.querySelector<HTMLElement>("[data-prompt-popover-active]")
+      element?.scrollIntoView({ block: "nearest" })
     })
+  }
+
+  // Auto-scroll active popover item into view when navigating with keyboard.
+  createEffect(() => {
+    const popover = store.popover
+    const active = popover === "at" ? atActive() : popover === "slash" ? slashActive() : undefined
+    if (!active) return
+    scrollActivePopoverItemIntoView()
   })
 
   if (promptEnabled()) {
@@ -1841,7 +1848,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     <div class="relative size-full _max-h-[320px] flex flex-col gap-0">
       <PromptPopover
         popover={store.popover}
-        setSlashPopoverRef={(el) => (slashPopoverRef = el)}
+        setPopoverRef={(el) => (popoverRef = el)}
         atFlat={atFlat()}
         atActive={atActive() ?? undefined}
         atKey={atKey}
