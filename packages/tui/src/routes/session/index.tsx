@@ -2014,7 +2014,11 @@ function BlockTool(props: {
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
   return (
     <box
-      id={props.part ? toolBlockID(props.part, props.index) : undefined}
+      id={
+        props.part
+          ? `tool-block-${props.part.messageID}-${props.part.id}${props.index === undefined ? "" : `-${props.index}`}`
+          : undefined
+      }
       border={["left"]}
       paddingTop={1}
       paddingBottom={1}
@@ -2047,10 +2051,6 @@ function BlockTool(props: {
       </Show>
     </box>
   )
-}
-
-export function toolBlockID(part: Pick<ToolPart, "messageID" | "id">, index?: number) {
-  return `tool-block-${part.messageID}-${part.id}${index === undefined ? "" : `-${index}`}`
 }
 
 function Shell(props: ToolProps) {
