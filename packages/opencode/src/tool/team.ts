@@ -9,7 +9,8 @@ import { Provider } from "../provider/provider"
 import { Bus } from "../bus"
 import { TeamEvent } from "../team/events"
 import { Truncate } from "./truncate"
-import { attach } from "../effect/run-service"
+import { Instance } from "../project/instance"
+import { InstanceRef } from "../effect/instance-ref"
 
 type Metadata = Record<string, any>
 
@@ -37,6 +38,11 @@ const legacyToolRuntime = ManagedRuntime.make(
   Layer.mergeAll(Agent.defaultLayer, Provider.defaultLayer, Session.defaultLayer, Truncate.defaultLayer),
 )
 
+function withLegacyInstance<A, E, R>(effect: Effect.Effect<A, E, R>) {
+  const ctx = Instance.current()
+  return ctx ? effect.pipe(Effect.provideService(InstanceRef, ctx)) : effect
+}
+
 function installLegacyInit<Parameters extends Schema.Decoder<unknown>, Result extends Metadata>(
   tool: Effect.Effect<Tool.Info<Parameters, Result>, never, unknown> & {
     init: () => Promise<Tool.LegacyDef<Parameters, Result>>
@@ -44,12 +50,12 @@ function installLegacyInit<Parameters extends Schema.Decoder<unknown>, Result ex
 ) {
   tool.init = async () => {
     const info = await legacyToolRuntime.runPromise(
-      attach(tool as unknown as Effect.Effect<Tool.Info<Parameters, Result>, never, never>),
+      withLegacyInstance(tool as unknown as Effect.Effect<Tool.Info<Parameters, Result>, never, never>),
     )
-    const next = await legacyToolRuntime.runPromise(attach(Tool.init(info)))
+    const next = await legacyToolRuntime.runPromise(withLegacyInstance(Tool.init(info)))
     return {
       ...next,
-      execute: (args, ctx) => legacyToolRuntime.runPromise(attach(next.execute(args, ctx))),
+      execute: (args, ctx) => legacyToolRuntime.runPromise(withLegacyInstance(next.execute(args, ctx))),
     }
   }
 }

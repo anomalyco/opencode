@@ -28,6 +28,8 @@ import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Instance } from "@/project/instance"
+import { InstanceRef } from "@/effect/instance-ref"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
@@ -1975,11 +1977,17 @@ export const node = LayerNode.make(layer, [
 
 const legacyRuntime = makeRuntime(Service, defaultLayer)
 
-export const list = async () => (await legacyRuntime.runPromise((provider) => provider.list())) as Record<string, Info>
+function legacyWithInstance<A, E, R>(effect: Effect.Effect<A, E, R>) {
+  const ctx = Instance.current()
+  return ctx ? effect.pipe(Effect.provideService(InstanceRef, ctx)) : effect
+}
+
+export const list = async () =>
+  (await legacyRuntime.runPromise((provider) => legacyWithInstance(provider.list()))) as Record<string, Info>
 
 export const getModel = (providerID: ProviderV2.ID, modelID: ModelV2.ID) =>
-  legacyRuntime.runPromise((provider) => provider.getModel(providerID, modelID))
+  legacyRuntime.runPromise((provider) => legacyWithInstance(provider.getModel(providerID, modelID)))
 
-export const defaultModel = () => legacyRuntime.runPromise((provider) => provider.defaultModel())
+export const defaultModel = () => legacyRuntime.runPromise((provider) => legacyWithInstance(provider.defaultModel()))
 
 export * as Provider from "./provider"

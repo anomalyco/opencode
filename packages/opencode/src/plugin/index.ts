@@ -32,6 +32,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
 import { makeRuntime } from "@/effect/run-service"
+import { Instance } from "@/project/instance"
+import { InstanceRef } from "@/effect/instance-ref"
 
 type State = {
   hooks: Hooks[]
@@ -316,6 +318,11 @@ export const node = LayerNode.make(layer, [EventV2Bridge.node, Config.node, Runt
 
 const legacyRuntime = makeRuntime(Service, defaultLayer)
 
-export const init = () => legacyRuntime.runPromise((plugin) => plugin.init())
+function legacyWithInstance<A, E, R>(effect: Effect.Effect<A, E, R>) {
+  const ctx = Instance.current()
+  return ctx ? effect.pipe(Effect.provideService(InstanceRef, ctx)) : effect
+}
+
+export const init = () => legacyRuntime.runPromise((plugin) => legacyWithInstance(plugin.init()))
 
 export * as Plugin from "."
