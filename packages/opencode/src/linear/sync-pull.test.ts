@@ -338,3 +338,129 @@ describe("SyncPull.mapReversePriority", () => {
     expect(SyncPull.mapReversePriority(99)).toBe("none")
   })
 })
+
+describe("SyncPull.pull (extended coverage)", () => {
+  test("pull extracts labels from Linear issues", async () => {
+    const client = new FakeMcpClient()
+    client.setResponse(
+      ISSUE.LIST,
+      issueRes([
+        makeIssue("LIN-10", {
+          labels: { nodes: [{ name: "bug" }, { name: "frontend" }] },
+        }),
+      ]),
+    )
+
+    const store: Store = []
+    const created: Todo.Info[] = []
+
+    const result = await Effect.runPromise(
+      provide(SyncPull.pull({ sessionID: sid }), client, store, created),
+    )
+
+    expect(result.pulled).toBe(1)
+    expect(result.ids).toEqual(["LIN-10"])
+    expect(created[0]!.labels).toEqual(["bug", "frontend"])
+  })
+
+  test("pull handles non-GraphQL content structure gracefully", async () => {
+    const client = new FakeMcpClient()
+    client.setResponse(ISSUE.LIST, {
+      content: [
+        { type: "text", text: "not json" },
+        { type: "text", text: JSON.stringify({}) },
+        { type: "text", text: JSON.stringify({ data: { issues: {} } }) },
+        {
+          type: "text",
+          text: JSON.stringify({
+            data: { issues: { nodes: [makeIssue("LIN-11")] } },
+          }),
+        },
+      ],
+    })
+
+    const store: Store = []
+    const created: Todo.Info[] = []
+
+    const result = await Effect.runPromise(
+      provide(SyncPull.pull({ sessionID: sid }), client, store, created),
+    )
+
+    expect(result.pulled).toBe(1)
+    expect(created[0]!.linear_issue_id).toBe("LIN-11")
+  })
+
+  test("pull resolves parent issue reference from existing todos", async () => {
+    const client = new FakeMcpClient()
+    client.setResponse(
+      ISSUE.LIST,
+      issueRes([
+        makeIssue("LIN-2", {
+          title: "Sub task",
+          parent: { id: "LIN-1" },
+        }),
+      ]),
+    )
+
+    const store: Store = [makeTodo("t1", { linear_issue_id: "LIN-1", title: "Parent" })]
+    const created: Todo.Info[] = []
+
+    const result = await Effect.runPromise(
+      provide(SyncPull.pull({ sessionID: sid }), client, store, created),
+    )
+
+    expect(result.pulled).toBe(1)
+    expect(created[0]!.parent_id).toBe("t1")
+  })
+
+  test("pull returns empty when all issues have inactive states", async () => {
+    const client = new FakeMcpClient()
+    client.setResponse(
+      ISSUE.LIST,
+      issueRes([
+        makeIssue("LIN-7", { state: { type: "completed" } }),
+        makeIssue("LIN-8", { state: { type: "cancelled" } }),
+      ]),
+    )
+
+    const store: Store = []
+    const created: Todo.Info[] = []
+
+    const result = await Effect.runPromise(
+      provide(SyncPull.pull({ sessionID: sid }), client, store, created),
+    )
+
+    expect(result.pulled).toBe(0)
+    expect(result.skipped).toBe(0)
+    expect(result.ids).toEqual([])
+  })
+
+  test("pull handles MCP response where no content matches GraphQL shape", async () => {
+    const client = new FakeMcpClient()
+    client.setResponse(ISSUE.LIST, {
+      content: [
+        { type: "text", text: JSON.stringify({ data: {} }) },
+        { type: "text", text: JSON.stringify({ foo: "bar" }) },
+      ],
+    })
+
+    const store: Store = []
+    const created: Todo.Info[] = []
+
+    const result = await Effect.runPromise(
+      provide(SyncPull.pull({ sessionID: sid }), client, store, created),
+    )
+
+    expect(result.pulled).toBe(0)
+    expect(result.ids).toEqual([])
+  })
+
+
+})
+
+describe("SyncPull.subscribeAndResync", () => {
+  test("subscribeAndResync runs without error", async () => {
+    const result = await Effect.runPromise(SyncPull.subscribeAndResync(sid))
+    expect(result).toBeUndefined()
+  })
+})
