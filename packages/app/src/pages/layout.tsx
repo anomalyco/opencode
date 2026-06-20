@@ -87,6 +87,7 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { SidebarLinear } from "./layout/sidebar-linear"
 
 export default function Layout(props: ParentProps) {
   const [store, setStore, , ready] = persisted(
@@ -2289,6 +2290,8 @@ export default function Layout(props: ParentProps) {
                 </>
               </Show>
             </div>
+
+            <SidebarLinear directory={worktree} />
           </>
         </Show>
 
