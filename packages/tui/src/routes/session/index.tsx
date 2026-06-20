@@ -25,7 +25,14 @@ import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner } from "../../component/spinner"
 import { createSyntaxStyleMemo, generateSubtleSyntax, selectedForeground, useTheme } from "../../context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA } from "@opentui/core"
+import {
+  BoxRenderable,
+  ScrollBoxRenderable,
+  addDefaultParsers,
+  TextAttributes,
+  RGBA,
+  type BaseRenderable,
+} from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   AssistantMessage,
@@ -90,6 +97,14 @@ const GO_UPSELL_ACCOUNT_RATE_LIMIT_LAST_SEEN_AT = "go_upsell_account_rate_limit_
 const GO_UPSELL_ACCOUNT_RATE_LIMIT_DONT_SHOW = "go_upsell_account_rate_limit_dont_show"
 const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
 const GO_UPSELL_PROVIDERS = new Set(["opencode", "opencode-go"])
+
+type LayoutRole = "text" | "block" | "error" | "summary" | "inline" | "subagent"
+
+const layoutRoles = new WeakMap<BaseRenderable, LayoutRole>()
+
+export function setSessionLayoutRole(renderable: BaseRenderable, role: LayoutRole) {
+  layoutRoles.set(renderable, role)
+}
 
 type RetryAction = Extract<SessionStatus, { type: "retry" }>["action"]
 
@@ -1527,7 +1542,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       </Show>
       <Show when={props.message.error && props.message.error.name !== "MessageAbortedError"}>
         <box
-          id={`assistant-error-${props.message.id}`}
+          ref={(el: BoxRenderable) => setSessionLayoutRole(el, "error")}
           border={["left"]}
           paddingTop={1}
           paddingBottom={1}
@@ -1542,7 +1557,7 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
       </Show>
       <Switch>
         <Match when={props.last || final() || props.message.error?.name === "MessageAbortedError"}>
-          <box id={`assistant-summary-${props.message.id}`} paddingLeft={3}>
+          <box ref={(el: BoxRenderable) => setSessionLayoutRole(el, "summary")} paddingLeft={3}>
             <text marginTop={1}>
               <span
                 style={{
@@ -1608,7 +1623,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   return (
     <Show when={content()}>
       <box
-        id={`text-${props.part.messageID}-${props.part.id}`}
+        ref={(el: BoxRenderable) => setSessionLayoutRole(el, "text")}
         paddingLeft={3}
         marginTop={1}
         flexDirection="column"
@@ -1690,7 +1705,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
   const { theme, syntax } = useTheme()
   return (
     <Show when={props.part.text.trim()}>
-      <box id={`text-${props.part.messageID}-${props.part.id}`} paddingLeft={3} marginTop={1} flexShrink={0}>
+      <box ref={(el: BoxRenderable) => setSessionLayoutRole(el, "text")} paddingLeft={3} marginTop={1} flexShrink={0}>
         <markdown
           syntaxStyle={syntax()}
           streaming={true}
@@ -1881,7 +1896,6 @@ function InlineTool(props: {
 
   return (
     <InlineToolRow
-      id={`tool-inline-${props.subagent ? "subagent-" : ""}${props.part.messageID}-${props.part.id}`}
       icon={props.icon}
       iconColor={props.iconColor}
       color={fg()}
@@ -1913,7 +1927,6 @@ function InlineTool(props: {
 }
 
 export function InlineToolRow(props: {
-  id?: string
   icon: string
   iconColor?: RGBA
   color?: RGBA
@@ -1935,20 +1948,20 @@ export function InlineToolRow(props: {
 }) {
   return (
     <box
-      id={props.id}
       paddingLeft={3}
       onMouseOver={props.onMouseOver}
       onMouseOut={props.onMouseOut}
       onMouseUp={props.onMouseUp}
       ref={(el: BoxRenderable) => {
+        setSessionLayoutRole(el, props.subagent ? "subagent" : "inline")
         setPreLayoutSiblingMargin(el, (previous) => {
-          const previousInline = previous?.id.startsWith("tool-inline-") ?? false
-          const previousSubagent = previous?.id.startsWith("tool-inline-subagent-") ?? false
-          return previous?.id.startsWith("text-") ||
-            previous?.id.startsWith("tool-block-") ||
-            previous?.id.startsWith("assistant-error-") ||
-            previous?.id.startsWith("assistant-summary-") ||
-            (previousInline && previousSubagent !== Boolean(props.subagent)) ||
+          const role = previous ? layoutRoles.get(previous) : undefined
+          const previousInline = role === "inline" || role === "subagent"
+          return role === "text" ||
+            role === "block" ||
+            role === "error" ||
+            role === "summary" ||
+            (previousInline && (role === "subagent") !== Boolean(props.subagent)) ||
             props.separateAfter?.(previous?.id)
             ? 1
             : 0
@@ -2005,7 +2018,6 @@ function BlockTool(props: {
   children: JSX.Element
   onClick?: () => void
   part?: ToolPart
-  index?: number
   spinner?: boolean
 }) {
   const { theme } = useTheme()
@@ -2014,11 +2026,7 @@ function BlockTool(props: {
   const error = createMemo(() => (props.part?.state.status === "error" ? props.part.state.error : undefined))
   return (
     <box
-      id={
-        props.part
-          ? `tool-block-${props.part.messageID}-${props.part.id}${props.index === undefined ? "" : `-${props.index}`}`
-          : undefined
-      }
+      ref={(el: BoxRenderable) => setSessionLayoutRole(el, "block")}
       border={["left"]}
       paddingTop={1}
       paddingBottom={1}
@@ -2184,8 +2192,8 @@ function Read(props: ToolProps) {
         Read {pathFormatter.format(stringValue(props.input.filePath))} {input(props.input, ["filePath"])}
       </InlineTool>
       <For each={loaded()}>
-        {(filepath, index) => (
-          <box id={`tool-inline-loaded-${props.part.messageID}-${props.part.id}-${index()}`} paddingLeft={3}>
+        {(filepath) => (
+          <box ref={(el: BoxRenderable) => setSessionLayoutRole(el, "inline")} paddingLeft={3}>
             <text paddingLeft={3} fg={theme.textMuted}>
               ↳ Loaded {pathFormatter.format(filepath)}
             </text>
@@ -2444,8 +2452,8 @@ function ApplyPatch(props: ToolProps) {
     <Switch>
       <Match when={files().length > 0}>
         <For each={files()}>
-          {(file, index) => (
-            <BlockTool title={title(file)} part={props.part} index={index()}>
+          {(file) => (
+            <BlockTool title={title(file)} part={props.part}>
               <Show
                 when={file.type !== "delete"}
                 fallback={

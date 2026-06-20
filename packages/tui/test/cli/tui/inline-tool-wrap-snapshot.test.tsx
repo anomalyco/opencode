@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { createSignal, For, Show } from "solid-js"
-import type { ScrollBoxRenderable } from "@opentui/core"
+import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { testRender, type JSX } from "@opentui/solid"
 import {
   formatCompletedSubagentDetail,
@@ -13,6 +13,7 @@ import {
   parseQuestionAnswers,
   parseQuestions,
   parseTodos,
+  setSessionLayoutRole,
   toolDisplay,
 } from "../../../src/routes/session"
 
@@ -53,7 +54,14 @@ const tools: readonly ToolFixture[] = [
 
 function ShellOutput() {
   return (
-    <box id="tool-block-shell" marginTop={1} paddingTop={1} paddingBottom={1} paddingLeft={2} gap={1}>
+    <box
+      ref={(el: BoxRenderable) => setSessionLayoutRole(el, "block")}
+      marginTop={1}
+      paddingTop={1}
+      paddingBottom={1}
+      paddingLeft={2}
+      gap={1}
+    >
       <text paddingLeft={3}># List files</text>
       <box gap={1}>
         <text>$ ls</text>
@@ -102,16 +110,16 @@ function Fixture(props: { errorExpanded?: boolean; before?: "shell" | "user" }) 
 function SubagentGroupFixture() {
   return (
     <box flexDirection="column" width={72}>
-      <InlineToolRow id="tool-inline-before" icon="✱" complete={true} pending="">
+      <InlineToolRow icon="✱" complete={true} pending="">
         Grep "Task" (2 matches)
       </InlineToolRow>
-      <InlineToolRow id="tool-inline-subagent-one" icon="⠙" complete={true} pending="" subagent={true}>
+      <InlineToolRow icon="⠙" complete={true} pending="" subagent={true}>
         Explore Task — Inspect active task spacing
       </InlineToolRow>
-      <InlineToolRow id="tool-inline-subagent-two" icon="✓" complete={true} pending="" subagent={true}>
+      <InlineToolRow icon="✓" complete={true} pending="" subagent={true}>
         {"General Task — Confirm completed task spacing\n↳ 1 toolcall · 501ms"}
       </InlineToolRow>
-      <InlineToolRow id="tool-inline-after" icon="→" complete={true} pending="">
+      <InlineToolRow icon="→" complete={true} pending="">
         Read src/cli/cmd/tui/routes/session/index.tsx
       </InlineToolRow>
     </box>
@@ -121,13 +129,13 @@ function SubagentGroupFixture() {
 function LoadedReadBeforeSubagentFixture() {
   return (
     <box flexDirection="column" width={72}>
-      <InlineToolRow id="tool-inline-read" icon="→" complete={true} pending="">
+      <InlineToolRow icon="→" complete={true} pending="">
         Read src/cli/cmd/tui/routes/session/index.tsx
       </InlineToolRow>
-      <box id="tool-inline-loaded-read-child" paddingLeft={3}>
+      <box ref={(el: BoxRenderable) => setSessionLayoutRole(el, "inline")} paddingLeft={3}>
         <text paddingLeft={3}>↳ Loaded src/cli/cmd/tui/routes/session/tools.tsx</text>
       </box>
-      <InlineToolRow id="tool-inline-subagent-after-read" icon="✓" complete={true} pending="" subagent={true}>
+      <InlineToolRow icon="✓" complete={true} pending="" subagent={true}>
         {"Explore Task — Inspect active task spacing\n↳ 1 toolcall · 501ms"}
       </InlineToolRow>
     </box>
@@ -137,10 +145,10 @@ function LoadedReadBeforeSubagentFixture() {
 function AssistantSummaryBeforeSubagentFixture() {
   return (
     <box flexDirection="column" width={72}>
-      <box id="assistant-summary-message-one" paddingLeft={3}>
+      <box ref={(el: BoxRenderable) => setSessionLayoutRole(el, "summary")} paddingLeft={3}>
         <text>▣ Build · Little Frank · 53.1s</text>
       </box>
-      <InlineToolRow id="tool-inline-subagent-one" icon="✓" complete={true} pending="" subagent={true}>
+      <InlineToolRow icon="✓" complete={true} pending="" subagent={true}>
         {"Build Task — Review changes\n↳ 48 toolcalls · 1m 40s"}
       </InlineToolRow>
     </box>
@@ -150,10 +158,16 @@ function AssistantSummaryBeforeSubagentFixture() {
 function AssistantErrorBeforeSubagentFixture() {
   return (
     <box flexDirection="column" width={72}>
-      <box id="assistant-error-message-one" border={["left"]} paddingTop={1} paddingBottom={1} paddingLeft={2}>
+      <box
+        ref={(el: BoxRenderable) => setSessionLayoutRole(el, "error")}
+        border={["left"]}
+        paddingTop={1}
+        paddingBottom={1}
+        paddingLeft={2}
+      >
         <text>Managed inference requires an active Member plan</text>
       </box>
-      <InlineToolRow id="tool-inline-subagent-one" icon="✓" complete={true} pending="" subagent={true}>
+      <InlineToolRow icon="✓" complete={true} pending="" subagent={true}>
         {"Build Task — Review changes\n↳ 48 toolcalls · 1m 40s"}
       </InlineToolRow>
     </box>
@@ -170,7 +184,7 @@ function StickyScrollFixture(props: { separated: boolean; scroll: (scroll: Scrol
         <text>Second row</text>
       </box>
       <Show when={props.separated}>
-        <box id="text-before-tool">
+        <box ref={(el: BoxRenderable) => setSessionLayoutRole(el, "text")}>
           <text>Assistant text</text>
         </box>
       </Show>
