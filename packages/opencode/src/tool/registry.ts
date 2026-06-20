@@ -15,6 +15,7 @@ import { TodoAssignTool } from "./todo_assign"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
+import { AutoProgressTool } from "./auto_progress"
 import { SkillTool } from "./skill"
 import { Tool } from "./tool"
 import { Config } from "../config/config"
@@ -47,6 +48,7 @@ import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
 import { Instruction } from "../session/instruction"
 import { AppFileSystem } from "../filesystem"
+import { AutoProgress } from "../session/auto-progress"
 import { Bus } from "../bus"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
@@ -93,6 +95,7 @@ export namespace ToolRegistry {
     | FileTime.Service
     | Instruction.Service
     | AppFileSystem.Service
+    | AutoProgress.Service
     | Bus.Service
     | HttpClient.HttpClient
     | ChildProcessSpawner
@@ -129,6 +132,7 @@ export namespace ToolRegistry {
       const greptool = yield* GrepTool
       const patchtool = yield* ApplyPatchTool
       const skilltool = yield* SkillTool
+      const autoprogress = yield* AutoProgressTool
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -206,6 +210,7 @@ export namespace ToolRegistry {
             search: Tool.init(websearch),
             code: Tool.init(codesearch),
             skill: Tool.init(skilltool),
+            autoprogress: Tool.init(autoprogress),
             patch: Tool.init(patchtool),
             question: Tool.init(question),
             lsp: Tool.init(lsptool),
@@ -230,6 +235,7 @@ export namespace ToolRegistry {
               tool.todoupdate,
               tool.tododelete,
               tool.todoassign,
+              tool.autoprogress,
               tool.search,
               tool.code,
               tool.skill,
@@ -351,6 +357,7 @@ export namespace ToolRegistry {
       Layer.provide(FileTime.defaultLayer),
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(AppFileSystem.defaultLayer),
+      Layer.provide(AutoProgress.defaultLayer),
       Layer.provide(Bus.layer),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(Format.defaultLayer),

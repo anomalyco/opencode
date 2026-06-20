@@ -7,6 +7,7 @@ import SidebarLsp from "../feature-plugins/sidebar/lsp"
 import SidebarTodo from "../feature-plugins/sidebar/todo"
 import SidebarFiles from "../feature-plugins/sidebar/files"
 import SidebarFooter from "../feature-plugins/sidebar/footer"
+import LinearCommands from "../feature-plugins/linear/commands"
 import PluginManager from "../feature-plugins/system/plugins"
 import type { TuiPlugin, TuiPluginModule } from "@opencode-ai/plugin/tui"
 
@@ -25,5 +26,6 @@ export const INTERNAL_TUI_PLUGINS: InternalTuiPlugin[] = [
   SidebarTodo,
   SidebarFiles,
   SidebarFooter,
+  LinearCommands,
   PluginManager,
 ]
