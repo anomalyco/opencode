@@ -12,6 +12,8 @@ import { getStore } from "./store"
 import { getPinchZoomEnabled, setPinchZoomEnabled, setTitlebar, updateTitlebar } from "./windows"
 import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
+import { readDesktopConfig } from "./desktop-config"
+import { getLogger } from "./logging"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -51,6 +53,7 @@ export function registerIpcHandlers(deps: Deps) {
     deps.setDefaultServerUrl(url),
   )
   ipcMain.handle("get-display-backend", () => deps.getDisplayBackend())
+  ipcMain.handle("get-desktop-config", () => readDesktopConfig(getLogger()))
   ipcMain.handle("set-display-backend", (_event: IpcMainInvokeEvent, backend: string | null) =>
     deps.setDisplayBackend(backend),
   )

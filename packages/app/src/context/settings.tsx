@@ -2,6 +2,7 @@ import { createStore, reconcile } from "solid-js/store"
 import { createEffect, createMemo } from "solid-js"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { persisted } from "@/utils/persist"
+import { usePlatform } from "./platform"
 
 export interface NotificationSettings {
   agent: boolean
@@ -148,19 +149,42 @@ function withFallback<T>(read: () => T | undefined, fallback: T) {
   return createMemo(() => read() ?? fallback)
 }
 
+function desktopFallback<T>(read: () => T | undefined, config: () => T | undefined, fallback: T) {
+  return createMemo(() => config() ?? read() ?? fallback)
+}
+
 export const { use: useSettings, provider: SettingsProvider } = createSimpleContext({
   name: "Settings",
   gate: false,
   init: () => {
+    const platform = usePlatform()
+    const desktopConfig = () => (platform.platform === "desktop" ? platform.desktopConfig?.() : undefined)
     const [store, setStore, _, ready] = persisted("settings.v3", createStore<Settings>(defaultSettings))
-    const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
-    const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
-    const showStatus = withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus)
-    const showCustomAgents = withFallback(
+    const showFileTree = desktopFallback(
+      () => store.general?.showFileTree,
+      () => desktopConfig()?.general?.showFileTree,
+      defaultSettings.general.showFileTree,
+    )
+    const showSearch = desktopFallback(
+      () => store.general?.showSearch,
+      () => desktopConfig()?.general?.showSearch,
+      defaultSettings.general.showSearch,
+    )
+    const showStatus = desktopFallback(
+      () => store.general?.showStatus,
+      () => desktopConfig()?.general?.showStatus,
+      defaultSettings.general.showStatus,
+    )
+    const showCustomAgents = desktopFallback(
       () => store.general?.showCustomAgents,
+      () => desktopConfig()?.general?.showCustomAgents,
       defaultSettings.general.showCustomAgents,
     )
-    const newLayoutDesigns = withFallback(() => store.general?.newLayoutDesigns, newLayoutDesignsDefault)
+    const newLayoutDesigns = desktopFallback(
+      () => store.general?.newLayoutDesigns,
+      () => desktopConfig()?.general?.newLayoutDesigns,
+      newLayoutDesignsDefault,
+    )
     const visible = (preference: () => boolean) => createMemo(() => !newLayoutDesigns() || preference())
 
     createEffect(() => {
@@ -181,16 +205,26 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         return store
       },
       general: {
-        autoSave: withFallback(() => store.general?.autoSave, defaultSettings.general.autoSave),
+        autoSave: desktopFallback(
+          () => store.general?.autoSave,
+          () => desktopConfig()?.general?.autoSave,
+          defaultSettings.general.autoSave,
+        ),
         setAutoSave(value: boolean) {
           setStore("general", "autoSave", value)
         },
-        releaseNotes: withFallback(() => store.general?.releaseNotes, defaultSettings.general.releaseNotes),
+        releaseNotes: desktopFallback(
+          () => store.general?.releaseNotes,
+          () => desktopConfig()?.general?.releaseNotes,
+          defaultSettings.general.releaseNotes,
+        ),
         setReleaseNotes(value: boolean) {
           setStore("general", "releaseNotes", value)
         },
-        followup: withFallback(
+        followup: desktopFallback(
           () => (store.general?.followup === "queue" ? "steer" : store.general?.followup),
+          () =>
+            desktopConfig()?.general?.followup === "queue" ? "steer" : desktopConfig()?.general?.followup,
           defaultSettings.general.followup,
         ),
         setFollowup(value: "queue" | "steer") {
@@ -200,7 +234,11 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowFileTree(value: boolean) {
           setStore("general", "showFileTree", value)
         },
-        showNavigation: withFallback(() => store.general?.showNavigation, defaultSettings.general.showNavigation),
+        showNavigation: desktopFallback(
+          () => store.general?.showNavigation,
+          () => desktopConfig()?.general?.showNavigation,
+          defaultSettings.general.showNavigation,
+        ),
         setShowNavigation(value: boolean) {
           setStore("general", "showNavigation", value)
         },
@@ -212,33 +250,41 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowStatus(value: boolean) {
           setStore("general", "showStatus", value)
         },
-        showTerminal: withFallback(() => store.general?.showTerminal, defaultSettings.general.showTerminal),
+        showTerminal: desktopFallback(
+          () => store.general?.showTerminal,
+          () => desktopConfig()?.general?.showTerminal,
+          defaultSettings.general.showTerminal,
+        ),
         setShowTerminal(value: boolean) {
           setStore("general", "showTerminal", value)
         },
-        showReasoningSummaries: withFallback(
+        showReasoningSummaries: desktopFallback(
           () => store.general?.showReasoningSummaries,
+          () => desktopConfig()?.general?.showReasoningSummaries,
           defaultSettings.general.showReasoningSummaries,
         ),
         setShowReasoningSummaries(value: boolean) {
           setStore("general", "showReasoningSummaries", value)
         },
-        shellToolPartsExpanded: withFallback(
+        shellToolPartsExpanded: desktopFallback(
           () => store.general?.shellToolPartsExpanded,
+          () => desktopConfig()?.general?.shellToolPartsExpanded,
           defaultSettings.general.shellToolPartsExpanded,
         ),
         setShellToolPartsExpanded(value: boolean) {
           setStore("general", "shellToolPartsExpanded", value)
         },
-        editToolPartsExpanded: withFallback(
+        editToolPartsExpanded: desktopFallback(
           () => store.general?.editToolPartsExpanded,
+          () => desktopConfig()?.general?.editToolPartsExpanded,
           defaultSettings.general.editToolPartsExpanded,
         ),
         setEditToolPartsExpanded(value: boolean) {
           setStore("general", "editToolPartsExpanded", value)
         },
-        showSessionProgressBar: withFallback(
+        showSessionProgressBar: desktopFallback(
           () => store.general?.showSessionProgressBar,
+          () => desktopConfig()?.general?.showSessionProgressBar,
           defaultSettings.general.showSessionProgressBar,
         ),
         setShowSessionProgressBar(value: boolean) {
@@ -295,7 +341,11 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
       },
       permissions: {
-        autoApprove: withFallback(() => store.permissions?.autoApprove, defaultSettings.permissions.autoApprove),
+        autoApprove: desktopFallback(
+          () => store.permissions?.autoApprove,
+          () => desktopConfig()?.permissions?.autoApprove,
+          defaultSettings.permissions.autoApprove,
+        ),
         setAutoApprove(value: boolean) {
           setStore("permissions", "autoApprove", value)
         },
@@ -315,30 +365,51 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
       },
       sounds: {
-        agentEnabled: withFallback(() => store.sounds?.agentEnabled, defaultSettings.sounds.agentEnabled),
+        agentEnabled: desktopFallback(
+          () => store.sounds?.agentEnabled,
+          () => desktopConfig()?.sounds?.agentEnabled,
+          defaultSettings.sounds.agentEnabled,
+        ),
         setAgentEnabled(value: boolean) {
           setStore("sounds", "agentEnabled", value)
         },
-        agent: withFallback(() => store.sounds?.agent, defaultSettings.sounds.agent),
+        agent: desktopFallback(
+          () => store.sounds?.agent,
+          () => desktopConfig()?.sounds?.agent,
+          defaultSettings.sounds.agent,
+        ),
         setAgent(value: string) {
           setStore("sounds", "agent", value)
         },
-        permissionsEnabled: withFallback(
+        permissionsEnabled: desktopFallback(
           () => store.sounds?.permissionsEnabled,
+          () => desktopConfig()?.sounds?.permissionsEnabled,
           defaultSettings.sounds.permissionsEnabled,
         ),
         setPermissionsEnabled(value: boolean) {
           setStore("sounds", "permissionsEnabled", value)
         },
-        permissions: withFallback(() => store.sounds?.permissions, defaultSettings.sounds.permissions),
+        permissions: desktopFallback(
+          () => store.sounds?.permissions,
+          () => desktopConfig()?.sounds?.permissions,
+          defaultSettings.sounds.permissions,
+        ),
         setPermissions(value: string) {
           setStore("sounds", "permissions", value)
         },
-        errorsEnabled: withFallback(() => store.sounds?.errorsEnabled, defaultSettings.sounds.errorsEnabled),
+        errorsEnabled: desktopFallback(
+          () => store.sounds?.errorsEnabled,
+          () => desktopConfig()?.sounds?.errorsEnabled,
+          defaultSettings.sounds.errorsEnabled,
+        ),
         setErrorsEnabled(value: boolean) {
           setStore("sounds", "errorsEnabled", value)
         },
-        errors: withFallback(() => store.sounds?.errors, defaultSettings.sounds.errors),
+        errors: desktopFallback(
+          () => store.sounds?.errors,
+          () => desktopConfig()?.sounds?.errors,
+          defaultSettings.sounds.errors,
+        ),
         setErrors(value: string) {
           setStore("sounds", "errors", value)
         },

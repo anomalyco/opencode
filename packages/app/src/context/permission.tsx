@@ -5,6 +5,7 @@ import type { PermissionRequest } from "@opencode-ai/sdk/v2/client"
 import { Persist, persisted } from "@/utils/persist"
 import { useServerSDK } from "@/context/server-sdk"
 import { useServerSync } from "./server-sync"
+import { usePlatform } from "./platform"
 import { useParams } from "@solidjs/router"
 import { decode64 } from "@/utils/base64"
 import {
@@ -49,8 +50,12 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
   gate: false,
   init: () => {
     const params = useParams()
+    const platform = usePlatform()
     const serverSDK = useServerSDK()
     const serverSync = useServerSync()
+    const autoApprove = createMemo(
+      () => platform.platform === "desktop" && platform.desktopConfig?.()?.permissions?.autoApprove === true,
+    )
 
     const permissionsEnabled = createMemo(() => {
       const directory = decode64(params.dir)
@@ -142,15 +147,18 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
     }
 
     function isAutoAccepting(sessionID: string, directory?: string) {
+      if (autoApprove()) return true
       const session = directory ? serverSync().child(directory, { bootstrap: false })[0].session : []
       return autoRespondsPermission(store.autoAccept, session, { sessionID }, directory)
     }
 
     function isAutoAcceptingDirectory(directory: string) {
+      if (autoApprove()) return true
       return isDirectoryAutoAccepting(store.autoAccept, directory)
     }
 
     function shouldAutoRespond(permission: PermissionRequest, directory?: string) {
+      if (autoApprove()) return true
       const session = directory ? serverSync().child(directory, { bootstrap: false })[0].session : []
       return autoRespondsPermission(store.autoAccept, session, permission, directory)
     }

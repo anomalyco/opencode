@@ -102,6 +102,28 @@ Place your global OpenCode config in `~/.config/opencode/opencode.json`. Use glo
 
 For TUI-specific settings, use `~/.config/opencode/tui.json`.
 
+For Desktop-specific settings, use `~/.config/opencode/desktop.json`.
+
+```json title="desktop.json"
+{
+  "general": {
+    "showReasoningSummaries": false,
+    "shellToolPartsExpanded": false,
+    "editToolPartsExpanded": false,
+    "showSessionProgressBar": true,
+    "showCustomAgents": false
+  },
+  "permissions": {
+    "autoApprove": true
+  },
+  "sounds": {
+    "agentEnabled": false,
+    "permissionsEnabled": false,
+    "errorsEnabled": false
+  }
+}
+```
+
 Global config overrides remote organizational defaults.
 
 ---

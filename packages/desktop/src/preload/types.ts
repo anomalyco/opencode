@@ -1,4 +1,5 @@
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
+import type { DesktopConfig } from "@opencode-ai/app/desktop-config"
 import type { WslServersPlatform } from "@opencode-ai/app/wsl/types"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 export type {
@@ -50,6 +51,7 @@ export type ElectronAPI = {
   getDefaultServerUrl: () => Promise<string | null>
   setDefaultServerUrl: (url: string | null) => Promise<void>
   getDisplayBackend: () => Promise<LinuxDisplayBackend | null>
+  getDesktopConfig: () => Promise<DesktopConfig | undefined>
   setDisplayBackend: (backend: LinuxDisplayBackend | null) => Promise<void>
   parseMarkdownCommand: (markdown: string) => Promise<string>
   checkAppExists: (appName: string) => Promise<boolean>

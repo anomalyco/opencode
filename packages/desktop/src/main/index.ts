@@ -38,6 +38,7 @@ import { createWslServersController } from "./wsl/servers"
 import { registerWslIpcHandlers } from "./wsl/ipc"
 import { spawnWslSidecar } from "./wsl/sidecar"
 import { migrate } from "./migrate"
+import { readDesktopConfig } from "./desktop-config"
 
 const APP_NAMES: Record<string, string> = {
   dev: "OpenCode Dev",
@@ -173,6 +174,7 @@ const main = Effect.gen(function* () {
     packaged: app.isPackaged,
     onboardingTest: Boolean(onboardingTestRoot),
   })
+  void readDesktopConfig(logger)
 
   ensureLoopbackNoProxy()
   useEnvProxy()

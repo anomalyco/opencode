@@ -14,11 +14,12 @@ import {
   useCommand,
   useWslServers,
 } from "@opencode-ai/app"
+import type { DesktopConfig } from "@opencode-ai/app/desktop-config"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import * as Sentry from "@sentry/solid"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { MemoryRouter } from "@solidjs/router"
-import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show, type Accessor } from "solid-js"
 import { render } from "solid-js/web"
 import pkg from "../../package.json"
 import { initI18n, t } from "./i18n"
@@ -77,7 +78,7 @@ const listenForDeepLinks = () => {
   return window.api.onDeepLink((urls) => emitDeepLinks(urls))
 }
 
-const createPlatform = (): Platform => {
+const createPlatform = (desktopConfig: Accessor<DesktopConfig | undefined>): Platform => {
   const attachmentPaths = new WeakMap<File, string>()
   const os = (() => {
     const ua = navigator.userAgent
@@ -136,6 +137,7 @@ const createPlatform = (): Platform => {
     platform: "desktop",
     os,
     version: pkg.version,
+    desktopConfig,
 
     async openDirectoryPickerDialog(opts) {
       return window.api.openDirectoryPicker({
@@ -283,7 +285,8 @@ window.api.onMenuCommand((id) => {
 listenForDeepLinks()
 
 render(() => {
-  const platform = createPlatform()
+  const [desktopConfig] = createResource(() => window.api.getDesktopConfig().catch(() => undefined))
+  const platform = createPlatform(() => desktopConfig.latest)
   const loadLocale = async () => {
     const current = await platform.storage?.("opencode.global.dat").getItem("language")
     const legacy = current ? undefined : await platform.storage?.().getItem("language.v1")
@@ -339,7 +342,7 @@ render(() => {
     )
 
     const ready = createMemo(
-      () => !defaultServer.loading && !sidecar.loading && !windowCount.loading && !locale.loading,
+      () => !defaultServer.loading && !desktopConfig.loading && !sidecar.loading && !windowCount.loading && !locale.loading,
     )
     const servers = createMemo(() => {
       const data = initializationData(sidecar)
