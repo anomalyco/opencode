@@ -27,6 +27,7 @@ export type ModelStatMetric = {
   provider: string
   model: string
   sessions: number
+  uniqueUsers: number
   inputTokens: number
   outputTokens: number
   reasoningTokens: number
@@ -64,6 +65,7 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
                 provider: modelStat.provider,
                 model: modelStat.model,
                 sessions: modelStat.sessions,
+                uniqueUsers: modelStat.unique_users,
                 inputTokens: modelStat.input_tokens,
                 outputTokens: modelStat.output_tokens,
                 reasoningTokens: modelStat.reasoning_tokens,
@@ -101,6 +103,7 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
                       provider_model: inserted("provider_model"),
                       sessions: inserted("sessions"),
                       requests: inserted("requests"),
+                      unique_users: inserted("unique_users"),
                       input_tokens: inserted("input_tokens"),
                       output_tokens: inserted("output_tokens"),
                       reasoning_tokens: inserted("reasoning_tokens"),
