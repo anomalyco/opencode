@@ -8,6 +8,10 @@ import { GrepTool } from "./grep"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { TodoWriteTool } from "./todo"
+import { TodoAddTool } from "./todo_add"
+import { TodoUpdateTool } from "./todo_update"
+import { TodoDeleteTool } from "./todo_delete"
+import { TodoAssignTool } from "./todo_assign"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
@@ -109,6 +113,10 @@ export namespace ToolRegistry {
       const read = yield* ReadTool
       const question = yield* QuestionTool
       const todo = yield* TodoWriteTool
+      const todoadd = yield* TodoAddTool
+      const todoupdate = yield* TodoUpdateTool
+      const tododelete = yield* TodoDeleteTool
+      const todoassign = yield* TodoAssignTool
       const lsptool = yield* LspTool
       const plan = yield* PlanExitTool
       const webfetch = yield* WebFetchTool
@@ -191,6 +199,10 @@ export namespace ToolRegistry {
             task: Tool.init(task),
             fetch: Tool.init(webfetch),
             todo: Tool.init(todo),
+            todoadd: Tool.init(todoadd),
+            todoupdate: Tool.init(todoupdate),
+            tododelete: Tool.init(tododelete),
+            todoassign: Tool.init(todoassign),
             search: Tool.init(websearch),
             code: Tool.init(codesearch),
             skill: Tool.init(skilltool),
@@ -214,6 +226,10 @@ export namespace ToolRegistry {
               tool.task,
               tool.fetch,
               tool.todo,
+              tool.todoadd,
+              tool.todoupdate,
+              tool.tododelete,
+              tool.todoassign,
               tool.search,
               tool.code,
               tool.skill,

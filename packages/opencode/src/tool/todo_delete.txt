@@ -1,0 +1,1 @@
+Use this tool to delete a single todo item by its id. Returns a confirmation with the remaining todo count for the session.

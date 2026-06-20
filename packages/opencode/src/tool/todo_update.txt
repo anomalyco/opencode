@@ -1,0 +1,1 @@
+Use this tool to partially update an existing todo item by its id. Only the fields provided in the parameters are modified; all other fields retain their current values. Supports updating title, description, content, status, priority, due_date, assignee_id, and labels.

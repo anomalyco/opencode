@@ -1,0 +1,1 @@
+Use this tool to create a single todo item and append it to the session's todo list. Supports setting title, description, content, status, priority, parent_id, level, due_date, assignee_id, and labels. If content is not provided, it defaults to the title value for backward compatibility.
