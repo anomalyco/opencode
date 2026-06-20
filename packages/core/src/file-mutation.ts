@@ -148,9 +148,15 @@ export const layer = Layer.effect(
           if (!sameBytes(current, input.expected)) {
             return yield* new StaleContentError({ path: input.target.canonical })
           }
-          yield* typeof input.content === "string"
-            ? fs.writeFileString(input.target.canonical, input.content)
-            : fs.writeFile(input.target.canonical, input.content)
+          const write =
+            typeof input.content === "string"
+              ? fs.writeFileString(input.target.canonical, input.content)
+              : fs.writeFile(input.target.canonical, input.content)
+          yield* write.pipe(
+            Effect.catchReason("PlatformError", "NotFound", () =>
+              fs.ensureDir(dirname(input.target.canonical)).pipe(Effect.andThen(write)),
+            ),
+          )
           return writeResult(input.target, true)
         }),
       ),
