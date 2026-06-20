@@ -1233,13 +1233,19 @@ export const layer = Layer.effect(
           }
 
           step++
-          if (step === 1)
-            yield* title({
-              session,
-              modelID: lastUser.model.modelID,
-              providerID: lastUser.model.providerID,
-              history: msgs,
-            }).pipe(Effect.ignore, Effect.forkIn(scope))
+          if (step === 1) {
+            const cfg = yield* config.get()
+            const skipTitleOption = cfg.provider?.[lastUser.model.providerID]?.models?.[lastUser.model.modelID]?.options?.["skip-title"]
+
+            if (!(typeof skipTitleOption === "boolean" && skipTitleOption === true)) {
+              yield* title({
+                session,
+                modelID: lastUser.model.modelID,
+                providerID: lastUser.model.providerID,
+                history: msgs,
+              }).pipe(Effect.ignore, Effect.forkIn(scope))
+            }
+          }
 
           const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
           const task = tasks.pop()

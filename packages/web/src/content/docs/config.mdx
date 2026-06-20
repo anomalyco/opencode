@@ -478,6 +478,29 @@ Bearer tokens (`AWS_BEARER_TOKEN_BEDROCK` or `/connect`) take precedence over pr
 
 [Learn more about Amazon Bedrock configuration](/docs/providers#amazon-bedrock).
 
+##### Model-specific options
+
+You can also provide configuration for specific models within a provider using `models` and `options`. This is useful for fine-tuning behavior on a per-model basis.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "lmstudio": {
+      "models": {
+        "google/gemma-4-26b-a4b": {
+          "options": {
+            "skip-title": true
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+In this example, the `skip-title` option tells OpenCode not to generate a session title for this specific model.
+
 ---
 
 ### Themes
