@@ -1318,9 +1318,14 @@ async function fetchLocalModelFit(
     const res = await client.getFitReport()
     if (res.error || !res.data?.models) return out
     for (const fit of res.data.models) {
-      // fit_level "no" means the backend couldn't reason about this GGUF (e.g. a
-      // non-standard merge with no arch metadata) — treat as unknown, skip it.
-      if (fit.fit_level === "no") continue
+      // `max_safe_ctx` is the authoritative prompt ceiling whenever the engine
+      // could compute it (>0) — independent of `fit_level`. fit_level is a
+      // VRAM/placement verdict: "no" means the model won't fully fit VRAM (it
+      // still runs via CPU offload), NOT that the safe ctx is invalid. Honoring
+      // it only when fit_level≠"no" wrongly discarded a real ceiling and let the
+      // 413 through (qwopus-MTP: fit_level "no", max_safe_ctx 70942 < n_ctx
+      // 86016 — exactly the value that prevents the overflow). A genuine
+      // can't-compute yields max_safe_ctx 0, caught below → fall back.
       const safe = numberFrom(fit.max_safe_ctx)
       if (!safe) continue
       out.set(fit.model, { maxSafeCtx: safe, configuredCtx: numberFrom(fit.configured_ctx) })
