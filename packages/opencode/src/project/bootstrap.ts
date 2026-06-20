@@ -10,6 +10,7 @@ import { ShareNext } from "@/share/share-next"
 import { Effect, Layer } from "effect"
 import { Config } from "@/config/config"
 import { Service } from "./bootstrap-service"
+import { Flag } from "@/flag/flag"
 
 export { Service } from "./bootstrap-service"
 export type { Interface } from "./bootstrap-service"
@@ -43,6 +44,26 @@ export const layer = Layer.effect(
         (s) => s.init().pipe(Effect.catchCause((cause) => Effect.logWarning("init failed", { cause }))),
         { concurrency: "unbounded", discard: true },
       ).pipe(Effect.withSpan("InstanceBootstrap.init"))
+
+      yield* Effect.sync(() => {
+        if (!Flag.OPENCODE_EXPERIMENTAL_AGENT_TEAMS) return
+
+        // Team recovery is intentionally detached from bootstrap completion.
+        void import("../team")
+          .then(({ Team }) => {
+            Team.onCleanedRestorePermissions()
+            void Team.recover()
+              .catch((error) => {
+                console.warn("team recovery failed", error instanceof Error ? error.message : error)
+              })
+              .finally(() => {
+                Team.autoCleanup()
+              })
+          })
+          .catch((error) => {
+            console.warn("team bootstrap failed", error instanceof Error ? error.message : error)
+          })
+      })
     }).pipe(Effect.withSpan("InstanceBootstrap"))
 
     return Service.of({ run })
