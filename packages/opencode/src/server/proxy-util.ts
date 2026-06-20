@@ -14,6 +14,8 @@ const hop = new Set([
 function sanitize(out: Headers) {
   for (const key of hop) out.delete(key)
   out.delete("accept-encoding")
+  out.delete("authorization")
+  out.delete("cookie")
   out.delete("x-opencode-directory")
   out.delete("x-opencode-workspace")
 }
