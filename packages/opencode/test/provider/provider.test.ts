@@ -77,7 +77,7 @@ const paid = (providers: Record<string, { models: Record<string, { cost: { input
 
 const languageBaseURL = (language: unknown) => (language as { config: { baseURL: string } }).config.baseURL
 
-const it = testEffect(Layer.mergeAll(Provider.defaultLayer, Env.defaultLayer, Plugin.defaultLayer))
+const it = testEffect(Layer.mergeAll(Provider.defaultLayer, Env.defaultLayer, Plugin.defaultLayer, Auth.defaultLayer))
 const experimentalModels = testEffect(providerLayer({ enableExperimentalModels: true }))
 
 const alphaProviderConfig = {
@@ -520,6 +520,33 @@ it.instance(
           env: [],
           models: { "model-1": { name: "Model 1", tool_call: true, limit: { context: 8000, output: 2000 } } },
           options: { apiKey: "test-key", baseURL: "https://custom.override.com/v1" },
+        },
+      },
+    },
+  },
+)
+
+it.instance("provider loaded from auth metadata with baseURL", () =>
+  Effect.gen(function* () {
+    const auth = yield* Auth.Service
+    yield* auth.set("custom-auth-provider", {
+      type: "api",
+      key: "test-api-key",
+      metadata: { baseURL: "http://localhost:1234/v1" }
+    })
+    const providers = yield* list
+    expect(providers[ProviderV2.ID.make("custom-auth-provider")]).toBeDefined()
+    expect(providers[ProviderV2.ID.make("custom-auth-provider")].options.baseURL).toBe("http://localhost:1234/v1")
+    expect(providers[ProviderV2.ID.make("custom-auth-provider")].key).toBe("test-api-key")
+  }),
+  {
+    config: {
+      provider: {
+        "custom-auth-provider": {
+          name: "Custom Auth Provider",
+          npm: "@ai-sdk/openai-compatible",
+          env: [],
+          models: { "model-1": { name: "Model 1", tool_call: true, limit: { context: 8000, output: 2000 } } },
         },
       },
     },

@@ -43,6 +43,9 @@ type ProviderOption =
   | (ProviderOptionBase & {
       type: "custom"
     })
+  | (ProviderOptionBase & {
+      type: "localhost"
+    })
 
 export function providerOptions(list: { id: string; name: string }[]): ProviderOption[] {
   return [
@@ -67,6 +70,13 @@ export function providerOptions(list: { id: string; name: string }[]): ProviderO
         category: provider.id in PROVIDER_PRIORITY ? "Popular" : "Providers",
       })),
     ),
+    {
+      type: "localhost",
+      title: "Localhost",
+      value: "__opencode_localhost__",
+      description: "Ollama, LM Studio, etc.",
+      category: "Providers",
+    },
     {
       type: "custom",
       title: "Other",
@@ -113,10 +123,104 @@ export function createDialogProviderOptions() {
     return promptCustomProviderID()
   }
 
+  async function promptLocalhostSetup(): Promise<{ providerID: string; apiLink: string; apiKey: string } | undefined> {
+    const providerID = await new Promise<string | null>((resolve) => {
+      dialog.replace(
+        () => (
+          <DialogSelect
+            title="Select local provider"
+            options={[
+              { title: "Ollama", value: "ollama" },
+              { title: "LM Studio", value: "lm-studio" },
+              { title: "Llama.cpp", value: "llama-cpp" },
+              { title: "Other (custom ID)", value: "custom" },
+            ]}
+            onSelect={(option) => resolve(option.value)}
+          />
+        ),
+        () => resolve(null),
+      )
+    })
+    if (!providerID) return
+
+    let finalProviderID = providerID
+    if (providerID === "custom") {
+      const customID = await promptCustomProviderID()
+      if (!customID) return
+      finalProviderID = customID
+    }
+
+    const defaultLink = {
+      ollama: "http://localhost:11434/v1",
+      "lm-studio": "http://localhost:1234/v1",
+      "llama-cpp": "http://localhost:8080/v1",
+    }[providerID] ?? "http://localhost:11434/v1"
+
+    const apiLink = await DialogPrompt.show(dialog, "API Link (baseURL)", {
+      placeholder: defaultLink,
+      description: () => (
+        <text fg={theme.textMuted}>
+          Enter the local endpoint URL (e.g. {defaultLink})
+        </text>
+      ),
+    })
+    if (apiLink === null) return
+
+    const apiKey = await DialogPrompt.show(dialog, "API Key", {
+      placeholder: "None (optional)",
+      description: () => (
+        <text fg={theme.textMuted}>
+          Enter an API key if required by your local server
+        </text>
+      ),
+    })
+    if (apiKey === null) return
+
+    return {
+      providerID: finalProviderID,
+      apiLink: apiLink.trim() || defaultLink,
+      apiKey: apiKey.trim() || "no-key",
+    }
+  }
+
   const options = createMemo(() => {
     return pipe(
       providerOptions(sync.data.provider_next.all),
       map((provider) => {
+        if (provider.type === "localhost") {
+          return {
+            title: provider.title,
+            value: provider.value,
+            description: provider.description,
+            category: provider.category,
+            async onSelect() {
+              const result = await promptLocalhostSetup()
+              if (!result) return
+              const { providerID, apiLink, apiKey } = result
+
+              await sdk.client.auth.set({
+                providerID,
+                auth: {
+                  type: "api",
+                  key: apiKey,
+                  metadata: { baseURL: apiLink },
+                },
+              })
+              await sdk.client.instance.dispose()
+              await sync.bootstrap()
+              if (!sync.data.provider_next.all.some((p) => p.id === providerID)) {
+                toast.show({
+                  variant: "info",
+                  message: `Saved local credential for ${providerID}. Configure it in opencode.json to use it.`,
+                })
+                dialog.clear()
+                return
+              }
+              dialog.replace(() => <DialogModel providerID={providerID} />)
+            },
+          }
+        }
+
         if (provider.type === "custom") {
           return {
             title: provider.title,

@@ -1487,10 +1487,14 @@ export const layer = Layer.effect(
           const providerID = ProviderV2.ID.make(id)
           if (disabled.has(providerID)) continue
           if (provider.type === "api") {
-            mergeProvider(providerID, {
+            const patch: Partial<Info> = {
               source: "api",
               key: provider.key,
-            })
+            }
+            if (provider.metadata?.baseURL) {
+              patch.options = { baseURL: provider.metadata.baseURL }
+            }
+            mergeProvider(providerID, patch)
           }
         }
 
