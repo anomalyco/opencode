@@ -22,7 +22,7 @@ export const Input = Schema.Struct({
     description:
       "File path to write. Relative paths resolve within the active Location. Absolute paths inside that Location are accepted; external absolute paths require external_directory approval.",
   }),
-  content: Schema.String.annotate({ description: "Content to write to the file" }),
+  content: Schema.NonEmptyString.annotate({ description: "Content to write to the file" }),
 })
 
 export const Output = Schema.Struct({
