@@ -90,6 +90,9 @@ export namespace Flag {
   export const OPENCODE_MODELS_PATH = process.env["OPENCODE_MODELS_PATH"]
   export const OPENCODE_DISABLE_EMBEDDED_WEB_UI = truthy("OPENCODE_DISABLE_EMBEDDED_WEB_UI")
   export const OPENCODE_DB = process.env["OPENCODE_DB"]
+  // DB 를 네트워크 FS(EFS 등)에 둘 때 사용. locking_mode=EXCLUSIVE 로 WAL 의 -shm
+  // 공유메모리 의존을 없애 단일 프로세스가 네트워크 FS 위에서 WAL 을 쓸 수 있게 한다.
+  export const OPENCODE_DB_EXCLUSIVE_LOCK = truthy("OPENCODE_DB_EXCLUSIVE_LOCK")
   export const OPENCODE_DISABLE_CHANNEL_DB = truthy("OPENCODE_DISABLE_CHANNEL_DB")
   export const OPENCODE_SKIP_MIGRATIONS = truthy("OPENCODE_SKIP_MIGRATIONS")
   export const OPENCODE_STRICT_CONFIG_DEPS = truthy("OPENCODE_STRICT_CONFIG_DEPS")

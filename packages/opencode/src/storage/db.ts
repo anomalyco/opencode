@@ -87,6 +87,11 @@ export namespace Database {
 
     const db = init(Path)
 
+    // 네트워크 FS(EFS) 에 DB 를 둘 때: WAL 의 wal-index(-shm)는 호스트 로컬 공유메모리라
+    // 노드 경계를 못 넘어 깨진다. locking_mode=EXCLUSIVE 면 wal-index 를 heap 에 두어
+    // -shm 없이 단일 프로세스가 네트워크 FS 위에서 WAL 을 쓸 수 있다(SQLite 공식 지원).
+    // WAL 전환 전에 설정해야 -shm 없이 진입한다.
+    if (Flag.OPENCODE_DB_EXCLUSIVE_LOCK) db.run("PRAGMA locking_mode = EXCLUSIVE")
     db.run("PRAGMA journal_mode = WAL")
     db.run("PRAGMA synchronous = NORMAL")
     db.run("PRAGMA busy_timeout = 5000")
