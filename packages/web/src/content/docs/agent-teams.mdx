@@ -27,6 +27,34 @@ Use teams when you need multiple agents working simultaneously on different part
 
 ---
 
+## Teams with nested subagents
+
+Teammates can delegate focused follow-up work to nested subagents through the Task tool when their agent configuration allows it with `task_budget` and `permission.task`.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "level_limit": 3
+  },
+  "agent": {
+    "reviewer": {
+      "mode": "subagent",
+      "task_budget": 2,
+      "permission": {
+        "task": "allow"
+      }
+    }
+  }
+}
+```
+
+Nested subagents are not team members. They cannot use `team_*` tools, claim team tasks, or message teammates directly. The teammate that launched the nested subagent remains responsible for relaying useful findings back to the team with `team_message` or `team_broadcast`.
+
+This keeps the team graph flat while still allowing each teammate to use specialist subagents for local research, review, or implementation details.
+
+---
+
 ## Getting started
 
 ### Enable the feature

@@ -139,6 +139,40 @@ Hidden system agent that creates session summaries. It runs automatically and is
 
 ---
 
+## Nested subagents and teams
+
+Subagents can delegate to other subagents when their `task_budget` allows it. This is useful for nested specialist workflows where a parent subagent coordinates a small amount of deeper research or implementation.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "experimental": {
+    "level_limit": 3
+  },
+  "agent": {
+    "reviewer": {
+      "mode": "subagent",
+      "task_budget": 2,
+      "permission": {
+        "task": "allow"
+      }
+    }
+  }
+}
+```
+
+Agent Teams are experimental and must be enabled explicitly:
+
+```bash frame="none"
+OPENCODE_EXPERIMENTAL_AGENT_TEAMS=1 opencode
+```
+
+Use teams when you want multiple teammate sessions to coordinate through `team_message`, `team_broadcast`, task claiming, and plan approval. A teammate can still call `task` to delegate to a nested subagent, but that child subagent is not added to the team graph and cannot use `team_*` tools. The teammate should relay any relevant child findings back to the team.
+
+[Learn more about Agent Teams](/docs/agent-teams).
+
+---
+
 ## Configure
 
 You can customize the built-in agents or create your own through configuration. Agents can be configured in two ways:

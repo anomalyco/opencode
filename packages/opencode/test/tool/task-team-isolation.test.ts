@@ -9,33 +9,11 @@ import { describe, expect, test } from "bun:test"
  * 2. The deny rules and tool visibility are correctly generated
  */
 
-// We can't directly import the private TEAM_TOOLS constant, so we
-// verify via the module's exported behavior. We do import the team
-// tool exports to get the authoritative list of team tool IDs.
-import {
-  TeamCreateTool,
-  TeamSpawnTool,
-  TeamMessageTool,
-  TeamBroadcastTool,
-  TeamTasksTool,
-  TeamClaimTool,
-  TeamApprovePlanTool,
-  TeamShutdownTool,
-  TeamCleanupTool,
-} from "../../src/tool/team"
-
-/** The authoritative set of all team tool IDs from team.ts */
-const ALL_TEAM_TOOL_IDS = [
-  TeamCreateTool.id,
-  TeamSpawnTool.id,
-  TeamMessageTool.id,
-  TeamBroadcastTool.id,
-  TeamTasksTool.id,
-  TeamClaimTool.id,
-  TeamApprovePlanTool.id,
-  TeamShutdownTool.id,
-  TeamCleanupTool.id,
-]
+/** Read the team tool IDs from team.ts without importing its runtime provider dependencies. */
+async function readTeamToolIDsFromSource() {
+  const src = await Bun.file(new URL("../../src/tool/team.ts", import.meta.url).pathname).text()
+  return [...src.matchAll(/Tool\.define<[\s\S]*?>\(\s*\n\s*"([^"]+)"/g)].map((m) => m[1])
+}
 
 /** Read the task.ts source to extract the TEAM_TOOLS constant */
 async function readTeamToolsFromSource() {
@@ -58,8 +36,9 @@ describe("task subagent team tool isolation", () => {
 
   test("TEAM_TOOLS covers all 9 team tools", async () => {
     const tools = await readTeamToolsFromSource()
+    const teamToolIDs = await readTeamToolIDsFromSource()
     expect(tools.length).toBe(9)
-    for (const id of ALL_TEAM_TOOL_IDS) {
+    for (const id of teamToolIDs) {
       expect(tools).toContain(id)
     }
   })
@@ -72,7 +51,8 @@ describe("task subagent team tool isolation", () => {
 
   test("TEAM_TOOLS matches authoritative team tool IDs exactly", async () => {
     const tools = await readTeamToolsFromSource()
-    expect(tools.sort()).toEqual([...ALL_TEAM_TOOL_IDS].sort())
+    const teamToolIDs = await readTeamToolIDsFromSource()
+    expect(tools.sort()).toEqual(teamToolIDs.sort())
   })
 
   test("task.ts denies team tools in session permission rules", async () => {
@@ -101,5 +81,16 @@ describe("task subagent team tool isolation", () => {
     expect(src).toContain("SUBAGENT RELAY")
     expect(src).toContain("they CANNOT communicate with the team")
     expect(src).toContain("relaying any relevant subagent findings")
+  })
+
+  test("team members can delegate to nested subagents without adding them to the team graph", async () => {
+    const permissionSrc = await Bun.file(new URL("../../src/agent/subagent-permissions.ts", import.meta.url).pathname).text()
+    expect(permissionSrc).toContain("const canTask = (input.subagent.task_budget ?? 0) > 0")
+    expect(permissionSrc).toContain('...(canTask ? [] : [{ permission: "task"')
+    expect(await readTeamToolsFromSource()).toEqual(await readTeamToolIDsFromSource())
+
+    const teamSrc = await Bun.file(new URL("../../src/team/index.ts", import.meta.url).pathname).text()
+    expect(teamSrc).toContain("SUBAGENT RELAY")
+    expect(teamSrc).toContain("they CANNOT communicate with the team")
   })
 })
