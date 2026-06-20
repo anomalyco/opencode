@@ -15,7 +15,7 @@ import { createScrollPersistence, type SessionScroll } from "./layout-scroll"
 import { createPathHelpers } from "./file/path"
 import type { ProjectAvatarVariant } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { migrateLegacySessionStateKeys, ServerScope, SessionStateKey } from "@/utils/server-scope"
-import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./layout-helpers"
+import { createSessionKeyReader, ensureSessionKey, mergeProjectOverrides, pruneSessionKeys } from "./layout-helpers"
 
 export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 
@@ -415,14 +415,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         ? serverSync().data.project.find((x) => x.id === projectID)
         : serverSync().data.project.find((x) => x.worktree === project.worktree)
 
-      // Preserve local icon override from per-workspace localStorage cache (childStore.icon).
-      // Without this, different subdirectories of the same git repo would share the same
-      // icon from the database instead of using their individual overrides.
-      const base = { ...metadata, ...project }
-      if (childStore.icon) {
-        return { ...base, icon: { ...base.icon, override: childStore.icon } }
-      }
-      return base
+      return mergeProjectOverrides({
+        metadata,
+        meta: childStore.projectMeta,
+        iconOverride: childStore.icon,
+        project,
+      })
     }
 
     const roots = createMemo(() => {
