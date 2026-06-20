@@ -66,6 +66,8 @@ export type PromptProps = {
   hint?: JSX.Element
   right?: JSX.Element
   showPlaceholder?: boolean
+  selectedTeammate?: string | null
+  onTeammateMessageSent?: () => void
   placeholders?: {
     normal?: string[]
     shell?: string[]
@@ -157,6 +159,18 @@ export function Prompt(props: PromptProps) {
   const dialog = useDialog()
   const toast = useToast()
   const status = createMemo(() => sync.data.session_status?.[props.sessionID ?? ""] ?? { type: "idle" })
+  const teamBusy = createMemo(() => {
+    const sessionID = props.sessionID
+    if (!sessionID) return 0
+    const team = sync.data.team[sessionID]
+    if (!team || team.role !== "lead") return 0
+    return team.members.filter((member) => {
+      if (member.status === "shutdown") return false
+      return ["starting", "running", "cancel_requested", "cancelling", "completing"].includes(
+        member.execution_status ?? "idle",
+      )
+    }).length
+  })
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
@@ -389,7 +403,7 @@ export function Prompt(props: PromptProps) {
         name: "session.interrupt",
         category: "Session",
         hidden: true,
-        enabled: status().type !== "idle",
+        enabled: status().type !== "idle" || teamBusy() > 0,
         run: () => {
           if (auto()?.visible) return
           if (!input.focused) return
@@ -399,6 +413,21 @@ export function Prompt(props: PromptProps) {
             return
           }
           if (!props.sessionID) return
+
+          if (status().type === "idle" && teamBusy() > 0) {
+            const team = sync.data.team[props.sessionID]
+            for (const member of team?.members ?? []) {
+              if (member.status !== "shutdown" && member.execution_status !== "idle") {
+                void fetch(`${sdk.url}/team/${team.teamName}/cancel`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ member: member.name }),
+                })
+              }
+            }
+            dialog.clear()
+            return
+          }
 
           setStore("interrupt", store.interrupt + 1)
 
@@ -1050,7 +1079,24 @@ export function Prompt(props: PromptProps) {
           ]
         : []
 
-    if (store.mode === "shell") {
+    if (props.selectedTeammate) {
+      move.startSubmit()
+      const teammate = props.selectedTeammate
+      fetch(`${sdk.url}/session/${sessionID}/team-message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          agent: agent.name,
+          to: teammate,
+          text: inputText,
+        }),
+      }).then((response) => {
+        if (!response.ok) toast.show({ message: `Failed to message @${teammate}`, variant: "error" })
+      }).catch(() => {
+        toast.show({ message: `Failed to message @${teammate}`, variant: "error" })
+      })
+      props.onTeammateMessageSent?.()
+    } else if (store.mode === "shell") {
       move.startSubmit()
       void sdk.client.session.shell({
         sessionID,

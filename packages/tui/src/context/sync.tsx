@@ -37,6 +37,44 @@ const emptyConsoleState: ConsoleState = {
   switchableOrgCount: 0,
 }
 
+type TeamMember = {
+  name: string
+  sessionID: string
+  agent: string
+  status: "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
+  execution_status?:
+    | "idle"
+    | "starting"
+    | "running"
+    | "cancel_requested"
+    | "cancelling"
+    | "cancelled"
+    | "completing"
+    | "completed"
+    | "failed"
+    | "timed_out"
+  model?: string
+  planApproval?: "none" | "pending" | "approved" | "rejected"
+}
+
+type TeamTask = {
+  id: string
+  content: string
+  status: string
+  priority: string
+  assignee?: string
+  depends_on?: string[]
+}
+
+type TeamEntry = {
+  teamName: string
+  role: "lead" | "member"
+  memberName?: string
+  delegate?: boolean
+  members: TeamMember[]
+  tasks: TeamTask[]
+}
+
 function search<T>(items: T[], target: string, key: (item: T) => string) {
   let left = 0
   let right = items.length - 1
@@ -103,6 +141,7 @@ export const {
       }
       formatter: FormatterStatus[]
       vcs: VcsInfo | undefined
+      team: Record<string, TeamEntry>
     }>({
       provider_next: {
         all: [],
@@ -133,6 +172,7 @@ export const {
       mcp_resource: {},
       formatter: [],
       vcs: undefined,
+      team: {},
     })
 
     const event = useEvent()
@@ -165,7 +205,133 @@ export const {
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
     }
 
+    function setTeam(sessionID: string, data: {
+      team: { name: string; delegate?: boolean; members?: TeamMember[] }
+      role: "lead" | "member"
+      memberName?: string
+      tasks?: TeamTask[]
+    }) {
+      setStore("team", sessionID, {
+        teamName: data.team.name,
+        role: data.role,
+        memberName: data.memberName,
+        delegate: data.team.delegate,
+        members: data.team.members ?? [],
+        tasks: data.tasks ?? [],
+      })
+    }
+
+    function refreshTeam(sessionID: string) {
+      if (store.team[sessionID]) return Promise.resolve()
+      return fetch(`${sdk.url}/team/by-session/${sessionID}`)
+        .then((response) => response.json())
+        .then((data: unknown) => {
+          if (!data || typeof data !== "object" || !("team" in data)) return
+          setTeam(sessionID, data as Parameters<typeof setTeam>[1])
+        })
+        .catch(() => {})
+    }
+
     event.subscribe((event, { workspace }) => {
+      if (typeof event.type === "string" && event.type.startsWith("team.")) {
+        const raw = event as { type: string; properties: Record<string, unknown> }
+        switch (raw.type) {
+          case "team.created": {
+            const team = raw.properties.team as {
+              name: string
+              leadSessionID: string
+              delegate?: boolean
+              members?: TeamMember[]
+            }
+            setStore("team", team.leadSessionID, {
+              teamName: team.name,
+              role: "lead",
+              delegate: team.delegate,
+              members: team.members ?? [],
+              tasks: [],
+            })
+            break
+          }
+          case "team.member.spawned": {
+            const teamName = raw.properties.teamName as string
+            const member = raw.properties.member as TeamMember
+            const teamEntry = Object.values(store.team).find((entry) => entry.teamName === teamName)
+            for (const [sid, entry] of Object.entries(store.team)) {
+              if (entry.teamName !== teamName) continue
+              setStore("team", sid, "members", (previous) => [
+                ...(previous ?? []).filter((item) => item.name !== member.name),
+                member,
+              ])
+            }
+            setStore("team", member.sessionID, {
+              teamName,
+              role: "member",
+              memberName: member.name,
+              delegate: teamEntry?.delegate,
+              members: [...(teamEntry?.members ?? []).filter((item) => item.name !== member.name), member],
+              tasks: teamEntry?.tasks ?? [],
+            })
+            break
+          }
+          case "team.member.status": {
+            const teamName = raw.properties.teamName as string
+            const memberName = raw.properties.memberName as string
+            const status = raw.properties.status as TeamMember["status"]
+            for (const [sid, entry] of Object.entries(store.team)) {
+              if (entry.teamName !== teamName) continue
+              const idx = entry.members.findIndex((member) => member.name === memberName)
+              if (idx >= 0) setStore("team", sid, "members", idx, "status", status)
+            }
+            break
+          }
+          case "team.member.execution": {
+            const teamName = raw.properties.teamName as string
+            const memberName = raw.properties.memberName as string
+            const status = raw.properties.status as NonNullable<TeamMember["execution_status"]>
+            for (const [sid, entry] of Object.entries(store.team)) {
+              if (entry.teamName !== teamName) continue
+              const idx = entry.members.findIndex((member) => member.name === memberName)
+              if (idx >= 0) setStore("team", sid, "members", idx, "execution_status", status)
+            }
+            break
+          }
+          case "team.task.updated": {
+            const teamName = raw.properties.teamName as string
+            const tasks = raw.properties.tasks as TeamTask[]
+            for (const [sid, entry] of Object.entries(store.team)) {
+              if (entry.teamName === teamName) setStore("team", sid, "tasks", reconcile(tasks))
+            }
+            break
+          }
+          case "team.task.claimed": {
+            const teamName = raw.properties.teamName as string
+            const taskId = raw.properties.taskId as string
+            const memberName = raw.properties.memberName as string
+            for (const [sid, entry] of Object.entries(store.team)) {
+              if (entry.teamName !== teamName) continue
+              const idx = entry.tasks.findIndex((task) => task.id === taskId)
+              if (idx < 0) continue
+              setStore("team", sid, "tasks", idx, "status", "in_progress")
+              setStore("team", sid, "tasks", idx, "assignee", memberName)
+            }
+            break
+          }
+          case "team.cleaned": {
+            const teamName = raw.properties.teamName as string
+            setStore(
+              "team",
+              produce((draft) => {
+                for (const [sid, entry] of Object.entries(draft)) {
+                  if (entry.teamName === teamName) delete draft[sid]
+                }
+              }),
+            )
+            break
+          }
+        }
+        return
+      }
+
       switch (event.type) {
         case "server.instance.disposed":
           void bootstrap()
@@ -586,6 +752,7 @@ export const {
               sdk.client.session.messages({ sessionID, limit: 100 }),
               sdk.client.session.todo({ sessionID }),
               sdk.client.session.diff({ sessionID }),
+              refreshTeam(sessionID),
             ])
             setStore(
               produce((draft) => {

@@ -78,6 +78,7 @@ import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
 import { DialogRetryAction } from "../../component/dialog-retry-action"
+import { DialogTeam } from "../../component/dialog-team"
 import { getRevertDiffFiles } from "../../util/revert-diff"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useOpencodeKeymap } from "../../keymap"
 import { PathFormatterProvider, usePathFormatter } from "../../context/path-format"
@@ -140,6 +141,10 @@ const sessionBindingCommands = [
   "session.parent",
   "session.child.next",
   "session.child.previous",
+  "team.next",
+  "team.previous",
+  "team.lead",
+  "team.delegate.toggle",
 ] as const
 
 const sessionGlobalBindingCommands = [
@@ -254,10 +259,13 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [selectedTeammate, setSelectedTeammate] = createSignal<string | null>(null)
+  const teamInfo = createMemo(() => sync.data.team[route.sessionID])
+  const teamMembers = createMemo(() => (teamInfo()?.members ?? []).filter((member) => member.sessionID && member.status !== "shutdown"))
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
-    if (session()?.parentID) return false
+    if (session()?.parentID && !teamInfo()) return false
     if (sidebarOpen()) return true
     if (sidebar() === "auto" && wide()) return true
     return false
@@ -1011,6 +1019,99 @@ export function Session() {
       },
     },
     {
+      title: "Team overview",
+      value: "team.overview",
+      category: "Team",
+      slash: {
+        name: "team",
+      },
+      enabled: !!teamInfo(),
+      run: () => {
+        dialog.replace(() => <DialogTeam />)
+      },
+    },
+    {
+      title: "Next teammate",
+      value: "team.next",
+      category: "Team",
+      hidden: true,
+      enabled: !!teamInfo() && teamMembers().length > 0,
+      run: () => {
+        const members = teamMembers()
+        if (!members.length) return
+        const current = selectedTeammate()
+        if (!current) {
+          setSelectedTeammate(members[0]!.name)
+          return
+        }
+        const index = members.findIndex((member) => member.name === current)
+        setSelectedTeammate(index < 0 || index === members.length - 1 ? null : members[index + 1]!.name)
+      },
+    },
+    {
+      title: "Previous teammate",
+      value: "team.previous",
+      category: "Team",
+      hidden: true,
+      enabled: !!teamInfo() && teamMembers().length > 0,
+      run: () => {
+        const members = teamMembers()
+        if (!members.length) return
+        const current = selectedTeammate()
+        if (!current) {
+          setSelectedTeammate(members[members.length - 1]!.name)
+          return
+        }
+        const index = members.findIndex((member) => member.name === current)
+        setSelectedTeammate(index <= 0 ? null : members[index - 1]!.name)
+      },
+    },
+    {
+      title: "Go to team lead",
+      value: "team.lead",
+      category: "Team",
+      hidden: true,
+      enabled: !!teamInfo(),
+      run: () => {
+        const info = teamInfo()
+        if (!info) return
+        for (const [sessionID, entry] of Object.entries(sync.data.team)) {
+          if (entry.teamName === info.teamName && entry.role === "lead") {
+            navigate({ type: "session", sessionID })
+            dialog.clear()
+            return
+          }
+        }
+      },
+    },
+    {
+      title: "Toggle delegate mode",
+      value: "team.delegate.toggle",
+      category: "Team",
+      slash: {
+        name: "delegate",
+      },
+      enabled: !!teamInfo() && teamInfo()?.role === "lead",
+      run: async () => {
+        const info = teamInfo()
+        if (!info) return
+        const response = await fetch(`${sdk.url}/team/${info.teamName}/delegate`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: !info.delegate }),
+        })
+        if (!response.ok) {
+          toast.show({ message: "Failed to toggle delegate mode", variant: "error" })
+          return
+        }
+        const data = (await response.json()) as { delegate: boolean }
+        for (const [sessionID, entry] of Object.entries(sync.data.team)) {
+          if (entry.teamName === info.teamName) sync.set("team", sessionID, "delegate", data.delegate)
+        }
+        dialog.clear()
+      },
+    },
+    {
       title: "Background subagents",
       value: "session.background",
       category: "Session",
@@ -1308,6 +1409,8 @@ export function Session() {
                         toBottom()
                       }}
                       sessionID={route.sessionID}
+                      selectedTeammate={selectedTeammate()}
+                      onTeammateMessageSent={() => setSelectedTeammate(null)}
                       right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
                     />
                   </pluginRuntime.Slot>
