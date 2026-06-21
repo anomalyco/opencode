@@ -2,13 +2,13 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { VenicePlugin } from "@opencode-ai/core/plugin/provider/venice"
-import { fakeSelectorSdk, it, model } from "./provider-helper"
+import { addPlugin, fakeSelectorSdk, it, model } from "./provider-helper"
 
 describe("VenicePlugin", () => {
   it.effect("creates a Venice SDK for venice-ai-sdk-provider", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(VenicePlugin)
+      yield* addPlugin(plugin, VenicePlugin)
       const result = yield* plugin.trigger(
         "aisdk.sdk",
         { model: model("venice", "model"), package: "venice-ai-sdk-provider", options: { name: "venice" } },
@@ -22,7 +22,7 @@ describe("VenicePlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const observed: string[] = []
-      yield* plugin.add(VenicePlugin)
+      yield* addPlugin(plugin, VenicePlugin)
       yield* plugin.add({
         id: PluginV2.ID.make("inspector"),
         effect: Effect.succeed({
@@ -49,7 +49,7 @@ describe("VenicePlugin", () => {
   it.effect("only handles the bundled venice-ai-sdk-provider package", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(VenicePlugin)
+      yield* addPlugin(plugin, VenicePlugin)
       const similar = yield* plugin.trigger(
         "aisdk.sdk",
         {
@@ -73,7 +73,7 @@ describe("VenicePlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const calls: string[] = []
-      yield* plugin.add(VenicePlugin)
+      yield* addPlugin(plugin, VenicePlugin)
       const result = yield* plugin.trigger(
         "aisdk.language",
         { model: model("venice", "alias"), sdk: fakeSelectorSdk(calls), options: {} },

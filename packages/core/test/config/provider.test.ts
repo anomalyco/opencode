@@ -7,7 +7,8 @@ import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { it, withEnv } from "../plugin/provider-helper"
+import { it, required, withEnv } from "../plugin/provider-helper"
+import { catalogHost, host, integrationHost } from "../plugin/host"
 
 function request(headers: Record<string, string>, variant?: string) {
   return {
@@ -58,14 +59,14 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
       yield* plugin.add({
         ...ConfigProviderPlugin.Plugin,
-        effect: ConfigProviderPlugin.Plugin.effect.pipe(
+        effect: ConfigProviderPlugin.Plugin.effect(
+          host({ catalog: catalogHost(catalog), integration: integrationHost(integrations) }),
+        ).pipe(
           Effect.provideService(Config.Service, config),
-          Effect.provideService(Catalog.Service, catalog),
-          Effect.provideService(Integration.Service, integrations),
         ),
       })
 
-      const model = yield* catalog.model.get(providerID, modelID)
+      const model = required(yield* catalog.model.get(providerID, modelID))
       expect(model.variants).toMatchObject([
         {
           id: "high",
@@ -119,14 +120,14 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
       yield* plugin.add({
         ...ConfigProviderPlugin.Plugin,
-        effect: ConfigProviderPlugin.Plugin.effect.pipe(
+        effect: ConfigProviderPlugin.Plugin.effect(
+          host({ catalog: catalogHost(catalog), integration: integrationHost(integrations) }),
+        ).pipe(
           Effect.provideService(Config.Service, config),
-          Effect.provideService(Catalog.Service, catalog),
-          Effect.provideService(Integration.Service, integrations),
         ),
       })
 
-      const model = yield* catalog.model.get(providerID, modelID)
+      const model = required(yield* catalog.model.get(providerID, modelID))
       expect(model.variants[0]).toMatchObject({
         id: "high",
         body: {},
@@ -222,16 +223,16 @@ describe("ConfigProviderPlugin.Plugin", () => {
 
         yield* plugin.add({
           ...ConfigProviderPlugin.Plugin,
-          effect: ConfigProviderPlugin.Plugin.effect.pipe(
+          effect: ConfigProviderPlugin.Plugin.effect(
+            host({ catalog: catalogHost(catalog), integration: integrationHost(integrations) }),
+          ).pipe(
             Effect.provideService(Config.Service, config),
-            Effect.provideService(Catalog.Service, catalog),
-            Effect.provideService(Integration.Service, integrations),
           ),
         })
 
-        const provider = yield* catalog.provider.get(providerID)
-        const model = yield* catalog.model.get(providerID, modelID)
-        expect(Option.getOrUndefined(yield* catalog.model.default())?.id).toBe(ModelV2.ID.make("default"))
+        const provider = required(yield* catalog.provider.get(providerID))
+        const model = required(yield* catalog.model.get(providerID, modelID))
+        expect((yield* catalog.model.default())?.id).toBe(ModelV2.ID.make("default"))
         expect(provider.name).toBe("Renamed")
         expect((yield* integrations.get(Integration.ID.make("custom")))?.methods).toContainEqual({
           type: "env",
