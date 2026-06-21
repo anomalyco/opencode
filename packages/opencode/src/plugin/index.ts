@@ -10,7 +10,6 @@ import { Config } from "@/config/config"
 import { createOpencodeClient } from "@opencode-ai/sdk"
 import { ServerAuth } from "@/server/auth"
 import { CodexAuthPlugin } from "./openai/codex"
-import { Session } from "@/session/session"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { CopilotAuthPlugin } from "./github-copilot/copilot"
 import { gitlabAuthPlugin as GitlabAuthPlugin } from "opencode-gitlab-auth"
@@ -32,8 +31,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
 import { makeRuntime } from "@/effect/run-service"
-import { Instance } from "@/project/instance"
 import { InstanceRef } from "@/effect/instance-ref"
+import { currentInstance } from "@/project/instance-current"
 
 type State = {
   hooks: Hooks[]
@@ -136,7 +135,12 @@ export const layer = Layer.effect(
         const bridge = yield* EffectBridge.make()
 
         function publishPluginError(message: string) {
-          bridge.fork(events.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() }))
+          bridge.fork(
+            Effect.gen(function* () {
+              const { Session } = yield* Effect.promise(() => import("@/session/session"))
+              yield* events.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
+            }),
+          )
         }
 
         const { Server } = yield* Effect.promise(() => import("../server/server"))
@@ -319,7 +323,7 @@ export const node = LayerNode.make(layer, [EventV2Bridge.node, Config.node, Runt
 const legacyRuntime = makeRuntime(Service, defaultLayer)
 
 function legacyWithInstance<A, E, R>(effect: Effect.Effect<A, E, R>) {
-  const ctx = Instance.current()
+  const ctx = currentInstance()
   return ctx ? effect.pipe(Effect.provideService(InstanceRef, ctx)) : effect
 }
 

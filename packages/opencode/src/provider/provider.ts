@@ -28,12 +28,12 @@ import { optionalOmitUndefined } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { Instance } from "@/project/instance"
 import { InstanceRef } from "@/effect/instance-ref"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
 import { makeRuntime } from "@/effect/run-service"
+import { currentInstance } from "@/project/instance-current"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 10_000
 
@@ -1978,7 +1978,7 @@ export const node = LayerNode.make(layer, [
 const legacyRuntime = makeRuntime(Service, defaultLayer)
 
 function legacyWithInstance<A, E, R>(effect: Effect.Effect<A, E, R>) {
-  const ctx = Instance.current()
+  const ctx = currentInstance()
   return ctx ? effect.pipe(Effect.provideService(InstanceRef, ctx)) : effect
 }
 

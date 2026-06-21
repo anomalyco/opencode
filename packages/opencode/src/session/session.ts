@@ -46,7 +46,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { InstanceRef } from "@/effect/instance-ref"
-import { Instance } from "@/project/instance"
+import { currentInstance } from "@/project/instance-current"
 
 const runtime = makeRuntime(Database.Service, Database.defaultLayer)
 
@@ -1017,7 +1017,7 @@ type LegacyMessage = Record<string, unknown>
 type LegacyPart = Record<string, unknown>
 
 function withCurrentInstance<A, E, R>(effect: Effect.Effect<A, E, R>) {
-  const ctx = Instance.current()
+  const ctx = currentInstance()
   return ctx ? effect.pipe(Effect.provideService(InstanceRef, ctx)) : effect
 }
 

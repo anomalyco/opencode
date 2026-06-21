@@ -1,9 +1,11 @@
-import { AsyncLocalStorage } from "node:async_hooks"
 import type { InstanceContext } from "./instance-context"
+import {
+  currentInstance,
+  provideInstanceContext,
+  requireInstanceContext,
+  setCurrentInstance,
+} from "./instance-current"
 import { InstanceRuntime } from "./instance-runtime"
-
-const storage = new AsyncLocalStorage<InstanceContext>()
-let fallback: InstanceContext | undefined
 
 type LegacyProvideInput<T> = {
   directory: string
@@ -13,16 +15,10 @@ type LegacyProvideInput<T> = {
   fn: (ctx: InstanceContext) => T
 }
 
-function requireContext() {
-  const ctx = storage.getStore() ?? fallback
-  if (!ctx) throw new Error("Instance context is not available")
-  return ctx
-}
-
 function provide<T>(ctx: InstanceContext, fn: () => T): T
 function provide<T>(input: LegacyProvideInput<T>): Promise<Awaited<T>>
 function provide<T>(ctxOrInput: InstanceContext | LegacyProvideInput<T>, fn?: () => T): T | Promise<Awaited<T>> {
-  if (fn) return storage.run(ctxOrInput as InstanceContext, fn)
+  if (fn) return provideInstanceContext(ctxOrInput as InstanceContext, fn)
   const input = ctxOrInput as LegacyProvideInput<T>
   return provideLegacy(input)
 }
@@ -34,7 +30,7 @@ async function provideLegacy<T>(input: LegacyProvideInput<T>): Promise<Awaited<T
     project: input.project,
   })
   try {
-    return await storage.run(ctx, async () => {
+    return await provideInstanceContext(ctx, async () => {
       await input.init?.(ctx.directory)
       return input.fn(ctx)
     })
@@ -45,19 +41,19 @@ async function provideLegacy<T>(input: LegacyProvideInput<T>): Promise<Awaited<T
 
 export const Instance = {
   set(ctx: InstanceContext) {
-    fallback = ctx
+    setCurrentInstance(ctx)
   },
   current() {
-    return storage.getStore() ?? fallback
+    return currentInstance()
   },
   provide,
   get directory() {
-    return requireContext().directory
+    return requireInstanceContext().directory
   },
   get worktree() {
-    return requireContext().worktree
+    return requireInstanceContext().worktree
   },
   get project() {
-    return requireContext().project
+    return requireInstanceContext().project
   },
 }
