@@ -171,12 +171,16 @@ export const layer = Layer.effectDiscard(
                   orElse: () => Effect.fail(new Error("Request timed out")),
                 }),
               )
-              const content = convert(new TextDecoder().decode(body), contentType, input.format)
+              const content = new TextDecoder().decode(body)
+              const output = yield* Effect.try({
+                try: () => convert(content, contentType, input.format),
+                catch: (error) => error,
+              })
               return {
                 url: input.url,
                 contentType,
                 format: input.format,
-                output: content,
+                output,
               }
             }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to fetch ${input.url}` }))),
         }),
