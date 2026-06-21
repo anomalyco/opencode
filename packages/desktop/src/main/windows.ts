@@ -89,6 +89,7 @@ function overlay(theme: Partial<TitlebarTheme> = {}, zoom = 1) {
 
 export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = {}) {
   titlebarThemes.set(win, theme)
+  nativeTheme.themeSource = theme.mode ?? tone()
   updateTitlebar(win)
 }
 
