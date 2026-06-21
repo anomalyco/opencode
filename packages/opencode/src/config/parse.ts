@@ -39,17 +39,10 @@ export function schema<S extends EffectSchema.Decoder<unknown, never>>(
 ): DeepMutable<S["Type"]> {
   const extra = topLevelExtraKeys(schema, data)
   if (extra.length) {
-    throw new InvalidError({
-      path: source,
-      issues: [
-        {
-          code: "unrecognized_keys",
-          keys: extra,
-          path: [],
-          message: `Unrecognized key${extra.length === 1 ? "" : "s"}: ${extra.join(", ")}`,
-        },
-      ],
-    })
+    console.warn(`Config "${source}": ignoring unrecognized keys: ${extra.join(", ")}`)
+    data = Object.fromEntries(
+      Object.entries(data as Record<string, unknown>).filter(([key]) => !extra.includes(key)),
+    )
   }
 
   const decoded = EffectSchema.decodeUnknownExit(schema)(data, { errors: "all", propertyOrder: "original" })
