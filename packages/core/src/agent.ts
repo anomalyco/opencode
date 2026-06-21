@@ -1,7 +1,6 @@
 export * as AgentV2 from "./agent"
 
-import { Array, Context, Effect, Layer, Schema, Scope } from "effect"
-import { castDraft, enableMapSet, type Draft } from "immer"
+import { Array, Context, Effect, Layer, Schema, Scope, Types } from "effect"
 import { ModelV2 } from "./model"
 import { PermissionSchema } from "./permission/schema"
 import { ProviderV2 } from "./provider"
@@ -49,21 +48,19 @@ export interface Selection {
 }
 
 type Data = {
-  agents: Map<ID, Info>
+  agents: Map<ID, Types.DeepMutable<Info>>
   default?: ID
 }
 
-export type Editor = {
+export type Draft = {
   list: () => readonly Info[]
   get: (id: ID) => Info | undefined
   default: (id: ID | undefined) => void
-  update: (id: ID, fn: (agent: Draft<Info>) => void) => void
+  update: (id: ID, fn: (agent: Types.DeepMutable<Info>) => void) => void
   remove: (id: ID) => void
 }
 
-export interface Interface {
-  readonly transform: State.Interface<Data, Editor>["transform"]
-  readonly update: State.Interface<Data, Editor>["update"]
+export interface Interface extends State.Transformable<Draft> {
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
   readonly default: () => Effect.Effect<Info | undefined>
   readonly resolve: (id?: ID | string) => Effect.Effect<Info | undefined>
@@ -73,21 +70,19 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Agent") {}
 
-enableMapSet()
-
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const state = State.create<Data, Editor>({
+    const state = State.create<Data, Draft>({
       initial: () => ({ agents: new Map() }),
-      editor: (draft) => ({
+      draft: (draft) => ({
         list: () => Array.fromIterable(draft.agents.values()) as Info[],
         get: (id) => draft.agents.get(id),
         default: (id) => {
           draft.default = id
         },
         update: (id, fn) => {
-          const current = draft.agents.get(id) ?? castDraft(Info.empty(id))
+          const current = draft.agents.get(id) ?? (Info.empty(id) as Types.DeepMutable<Info>)
           if (!draft.agents.has(id)) draft.agents.set(id, current)
           fn(current)
           current.id = id
@@ -113,7 +108,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       transform: state.transform,
-      update: state.update,
+      rebuild: state.rebuild,
       get: Effect.fn("AgentV2.get")(function* (id) {
         return state.get().agents.get(id)
       }),

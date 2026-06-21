@@ -2,7 +2,7 @@ import { describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { GatewayPlugin } from "@opencode-ai/core/plugin/provider/gateway"
-import { it, model } from "./provider-helper"
+import { addPlugin, it, model } from "./provider-helper"
 
 const gatewayCalls: Record<string, unknown>[] = []
 const vercelGatewayModels = ["anthropic/claude-sonnet-4", "openai/gpt-5", "google/gemini-2.5-pro"]
@@ -27,7 +27,7 @@ describe("GatewayPlugin", () => {
     Effect.gen(function* () {
       gatewayCalls.length = 0
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(GatewayPlugin)
+      yield* addPlugin(plugin, GatewayPlugin)
       const result = yield* plugin.trigger(
         "aisdk.sdk",
         { model: model("gateway", "model"), package: "@ai-sdk/gateway", options: { name: "gateway" } },
@@ -42,7 +42,7 @@ describe("GatewayPlugin", () => {
     Effect.gen(function* () {
       gatewayCalls.length = 0
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(GatewayPlugin)
+      yield* addPlugin(plugin, GatewayPlugin)
 
       const result = yield* plugin.trigger(
         "aisdk.sdk",
@@ -63,7 +63,7 @@ describe("GatewayPlugin", () => {
     Effect.gen(function* () {
       gatewayCalls.length = 0
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(GatewayPlugin)
+      yield* addPlugin(plugin, GatewayPlugin)
 
       for (const modelID of vercelGatewayModels) {
         const ignored = yield* plugin.trigger(

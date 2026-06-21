@@ -6,7 +6,6 @@ export type ClientOptions = {
 
 export type Event =
   | EventModelsDevRefreshed
-  | EventPluginAdded
   | EventIntegrationUpdated
   | EventCatalogUpdated
   | EventSessionCreated
@@ -53,6 +52,7 @@ export type Event =
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventFileEdited
+  | EventPluginAdded
   | EventPermissionV2Asked
   | EventPermissionV2Replied
   | EventReferenceUpdated
@@ -745,13 +745,6 @@ export type GlobalEvent = {
       }
     | {
         id: string
-        type: "plugin.added"
-        properties: {
-          id: string
-        }
-      }
-    | {
-        id: string
         type: "integration.updated"
         properties: {
           [key: string]: unknown
@@ -1268,6 +1261,13 @@ export type GlobalEvent = {
         type: "file.edited"
         properties: {
           file: string
+        }
+      }
+    | {
+        id: string
+        type: "plugin.added"
+        properties: {
+          id: string
         }
       }
     | {
@@ -4009,7 +4009,7 @@ export type ModelV2Info = {
     }
   }>
   time: {
-    released: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+    released: number
   }
   cost: Array<{
     tier?: {
@@ -4231,14 +4231,6 @@ export type EventModelsDevRefreshed = {
   type: "models-dev.refreshed"
   properties: {
     [key: string]: unknown
-  }
-}
-
-export type EventPluginAdded = {
-  id: string
-  type: "plugin.added"
-  properties: {
-    id: string
   }
 }
 
@@ -4805,6 +4797,14 @@ export type EventFileEdited = {
   type: "file.edited"
   properties: {
     file: string
+  }
+}
+
+export type EventPluginAdded = {
+  id: string
+  type: "plugin.added"
+  properties: {
+    id: string
   }
 }
 

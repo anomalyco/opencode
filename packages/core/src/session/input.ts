@@ -74,11 +74,11 @@ export const admit = Effect.fn("SessionInput.admit")(function* (
     })
     .pipe(
       Effect.flatMap((event) =>
-        event.seq === undefined
+        event.durable === undefined
           ? Effect.die("Prompt admission event is missing aggregate sequence")
           : Effect.succeed(
               new Admitted({
-                admittedSeq: event.seq,
+                admittedSeq: event.durable.seq,
                 id: input.id,
                 sessionID: input.sessionID,
                 prompt: input.prompt,
@@ -117,13 +117,6 @@ export const projectAdmitted = Effect.fn("SessionInput.projectAdmitted")(functio
     readonly timeCreated: DateTime.Utc
   },
 ) {
-  const message = yield* db
-    .select({ id: SessionMessageTable.id })
-    .from(SessionMessageTable)
-    .where(eq(SessionMessageTable.id, input.id))
-    .get()
-    .pipe(Effect.orDie)
-  if (message) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
   const stored = yield* db
     .insert(SessionInputTable)
     .values({
@@ -207,37 +200,6 @@ export const equivalent = (
 const matchesPrompt = (input: Admitted, expected: { readonly sessionID: SessionSchema.ID; readonly prompt: Prompt }) =>
   input.sessionID === expected.sessionID &&
   JSON.stringify(encodePrompt(input.prompt)) === JSON.stringify(encodePrompt(expected.prompt))
-
-export const guardReservedID = Effect.fn("SessionInput.guardReservedID")(function* (
-  db: DatabaseService,
-  event: EventV2.Payload,
-) {
-  if (
-    Schema.is(SessionEvent.PromptLifecycle.Admitted)(event) ||
-    Schema.is(SessionEvent.PromptLifecycle.Promoted)(event)
-  )
-    return
-  const id = reservedID(event)
-  if (id === undefined) return
-  const admitted = yield* db
-    .select({ id: SessionInputTable.id })
-    .from(SessionInputTable)
-    .where(eq(SessionInputTable.id, id))
-    .get()
-    .pipe(Effect.orDie)
-  if (admitted === undefined) return
-  return yield* Effect.die(new LifecycleConflict({ id }))
-})
-
-const reservedID = (event: EventV2.Payload) => {
-  if (Schema.is(SessionEvent.Step.Started)(event)) return event.data.assistantMessageID
-  if (Schema.is(SessionEvent.AgentSwitched)(event)) return event.data.messageID
-  if (Schema.is(SessionEvent.ModelSwitched)(event)) return event.data.messageID
-  if (Schema.is(SessionEvent.Prompted)(event)) return event.data.messageID
-  if (Schema.is(SessionEvent.Synthetic)(event)) return event.data.messageID
-  if (Schema.is(SessionEvent.Shell.Started)(event)) return event.data.messageID
-  if (Schema.is(SessionEvent.Compaction.Started)(event)) return event.data.messageID
-}
 
 export const projectLegacyPrompted = Effect.fn("SessionInput.projectLegacyPrompted")(function* (
   db: DatabaseService,

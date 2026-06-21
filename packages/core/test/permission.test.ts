@@ -74,8 +74,7 @@ function setup(rules: PermissionV2.Ruleset = []) {
 function setRules(rules: PermissionV2.Ruleset) {
   return Effect.gen(function* () {
     const agents = yield* AgentV2.Service
-    const update = yield* agents.transform()
-    yield* update((editor) =>
+    yield* agents.transform((editor) =>
       editor.update(AgentV2.ID.make("test"), (agent) => {
         agent.permissions = [...rules]
       }),
@@ -130,7 +129,7 @@ describe("PermissionV2", () => {
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
       const agents = yield* AgentV2.Service
-      yield* agents.update((editor) =>
+      yield* agents.transform((editor) =>
         editor.update(AgentV2.ID.make("reviewer"), (agent) => {
           agent.permissions.push({ action: "read", resource: "*", effect: "deny" })
         }),
@@ -139,7 +138,7 @@ describe("PermissionV2", () => {
 
       expect(yield* service.ask(assertion())).toMatchObject({ effect: "allow" })
       expect(yield* service.ask(assertion({ agent: AgentV2.ID.make("reviewer") }))).toMatchObject({ effect: "deny" })
-      yield* agents.update((editor) =>
+      yield* agents.transform((editor) =>
         editor.update(AgentV2.ID.make("reviewer"), (agent) => {
           agent.permissions = []
         }),
@@ -187,8 +186,7 @@ describe("PermissionV2", () => {
         .run()
         .pipe(Effect.orDie)
       const agents = yield* AgentV2.Service
-      const update = yield* agents.transform()
-      yield* update((editor) =>
+      yield* agents.transform((editor) =>
         editor.update(AgentV2.ID.make("build"), (agent) => {
           agent.permissions = [{ action: "todowrite", resource: "*", effect: "allow" }]
         }),
@@ -214,7 +212,7 @@ describe("PermissionV2", () => {
         .run()
         .pipe(Effect.orDie)
       const agents = yield* AgentV2.Service
-      yield* agents.update((editor) => {
+      yield* agents.transform((editor) => {
         editor.remove(AgentV2.ID.make("test"))
         editor.remove(AgentV2.ID.make("build"))
       })

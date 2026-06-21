@@ -17,7 +17,7 @@ export type AthenaData = Record<string, string>
 export class AthenaQueryError extends Schema.TaggedErrorClass<AthenaQueryError>()("AthenaQueryError", {
   message: Schema.String,
   queryExecutionId: Schema.optional(Schema.String),
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 export class AthenaQueryTimeoutError extends Schema.TaggedErrorClass<AthenaQueryTimeoutError>()(

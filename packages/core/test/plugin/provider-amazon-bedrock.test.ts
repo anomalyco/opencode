@@ -4,7 +4,7 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { AmazonBedrockPlugin } from "@opencode-ai/core/plugin/provider/amazon-bedrock"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { fakeSelectorSdk, it, model, provider, withEnv } from "./provider-helper"
+import { addPlugin, fakeSelectorSdk, it, model, provider, required, withEnv } from "./provider-helper"
 
 function bedrockBaseURL(sdk: unknown, modelID = "anthropic.claude-sonnet-4-5") {
   const language = (sdk as { languageModel: (id: string) => unknown }).languageModel(modelID)
@@ -30,9 +30,8 @@ describe("AmazonBedrockPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
-      yield* plugin.add(AmazonBedrockPlugin)
-      const transform = yield* catalog.transform()
-      yield* transform((catalog) => {
+      yield* addPlugin(plugin, AmazonBedrockPlugin)
+      yield* catalog.transform((catalog) => {
         const bedrock = provider("amazon-bedrock", {
           api: { type: "aisdk", package: "@ai-sdk/amazon-bedrock" },
           request: {
@@ -45,7 +44,7 @@ describe("AmazonBedrockPlugin", () => {
           item.request = bedrock.request
         })
       })
-      const result = yield* catalog.provider.get(ProviderV2.ID.amazonBedrock)
+      const result = required(yield* catalog.provider.get(ProviderV2.ID.amazonBedrock))
       expect(result.api).toEqual({
         type: "aisdk",
         package: "@ai-sdk/amazon-bedrock",
@@ -59,7 +58,7 @@ describe("AmazonBedrockPlugin", () => {
     withEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined, AWS_PROFILE: undefined, AWS_ACCESS_KEY_ID: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(AmazonBedrockPlugin)
+        yield* addPlugin(plugin, AmazonBedrockPlugin)
         const result = yield* plugin.trigger(
           "aisdk.sdk",
           {
@@ -84,7 +83,7 @@ describe("AmazonBedrockPlugin", () => {
     withEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined, AWS_PROFILE: undefined, AWS_ACCESS_KEY_ID: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(AmazonBedrockPlugin)
+        yield* addPlugin(plugin, AmazonBedrockPlugin)
         const result = yield* plugin.trigger(
           "aisdk.sdk",
           {
@@ -118,7 +117,7 @@ describe("AmazonBedrockPlugin", () => {
       () =>
         Effect.gen(function* () {
           const plugin = yield* PluginV2.Service
-          yield* plugin.add(AmazonBedrockPlugin)
+          yield* addPlugin(plugin, AmazonBedrockPlugin)
           const result = yield* plugin.trigger(
             "aisdk.sdk",
             {
@@ -138,7 +137,7 @@ describe("AmazonBedrockPlugin", () => {
     withEnv({ AWS_BEARER_TOKEN_BEDROCK: "token", AWS_REGION: "us-east-1" }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(AmazonBedrockPlugin)
+        yield* addPlugin(plugin, AmazonBedrockPlugin)
         const result = yield* plugin.trigger(
           "aisdk.sdk",
           {
@@ -157,7 +156,7 @@ describe("AmazonBedrockPlugin", () => {
     withEnv({ AWS_BEARER_TOKEN_BEDROCK: "token", AWS_REGION: "eu-west-1" }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(AmazonBedrockPlugin)
+        yield* addPlugin(plugin, AmazonBedrockPlugin)
         const result = yield* plugin.trigger(
           "aisdk.sdk",
           {
@@ -176,7 +175,7 @@ describe("AmazonBedrockPlugin", () => {
     withEnv({ AWS_BEARER_TOKEN_BEDROCK: "token", AWS_REGION: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(AmazonBedrockPlugin)
+        yield* addPlugin(plugin, AmazonBedrockPlugin)
         const result = yield* plugin.trigger(
           "aisdk.sdk",
           {
@@ -196,7 +195,7 @@ describe("AmazonBedrockPlugin", () => {
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const headers: Array<string | null> = []
-        yield* plugin.add(AmazonBedrockPlugin)
+        yield* addPlugin(plugin, AmazonBedrockPlugin)
         const result = yield* plugin.trigger(
           "aisdk.sdk",
           {
@@ -225,7 +224,7 @@ describe("AmazonBedrockPlugin", () => {
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const headers: Array<string | null> = []
-        yield* plugin.add(AmazonBedrockPlugin)
+        yield* addPlugin(plugin, AmazonBedrockPlugin)
         const result = yield* plugin.trigger(
           "aisdk.sdk",
           {
@@ -253,7 +252,7 @@ describe("AmazonBedrockPlugin", () => {
     withEnv({ AWS_BEARER_TOKEN_BEDROCK: undefined, AWS_PROFILE: undefined, AWS_ACCESS_KEY_ID: undefined }, () =>
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(AmazonBedrockPlugin)
+        yield* addPlugin(plugin, AmazonBedrockPlugin)
         const result = yield* plugin.trigger(
           "aisdk.sdk",
           {
@@ -282,7 +281,7 @@ describe("AmazonBedrockPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const calls: string[] = []
-      yield* plugin.add(AmazonBedrockPlugin)
+      yield* addPlugin(plugin, AmazonBedrockPlugin)
       yield* plugin.trigger(
         "aisdk.language",
         {
@@ -312,7 +311,7 @@ describe("AmazonBedrockPlugin", () => {
   it.effect("ignores other Bedrock provider subpaths", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(AmazonBedrockPlugin)
+      yield* addPlugin(plugin, AmazonBedrockPlugin)
       const result = yield* plugin.trigger(
         "aisdk.sdk",
         {
@@ -341,7 +340,7 @@ describe("AmazonBedrockPlugin", () => {
         Effect.gen(function* () {
           const plugin = yield* PluginV2.Service
           const headers: Array<string | null> = []
-          yield* plugin.add(AmazonBedrockPlugin)
+          yield* addPlugin(plugin, AmazonBedrockPlugin)
           const result = yield* plugin.trigger(
             "aisdk.sdk",
             {
@@ -372,7 +371,7 @@ describe("AmazonBedrockPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const calls: string[] = []
-      yield* plugin.add(AmazonBedrockPlugin)
+      yield* addPlugin(plugin, AmazonBedrockPlugin)
       yield* plugin.trigger(
         "aisdk.language",
         {
@@ -433,7 +432,7 @@ describe("AmazonBedrockPlugin", () => {
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const calls: string[] = []
-        yield* plugin.add(AmazonBedrockPlugin)
+        yield* addPlugin(plugin, AmazonBedrockPlugin)
         yield* plugin.trigger(
           "aisdk.language",
           {
@@ -518,7 +517,7 @@ describe("AmazonBedrockPlugin", () => {
           expected: "au.anthropic.claude-sonnet-4-5",
         },
       ]
-      yield* plugin.add(AmazonBedrockPlugin)
+      yield* addPlugin(plugin, AmazonBedrockPlugin)
       for (const item of cases) {
         yield* plugin.trigger(
           "aisdk.language",
@@ -538,7 +537,7 @@ describe("AmazonBedrockPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const calls: string[] = []
-      yield* plugin.add(AmazonBedrockPlugin)
+      yield* addPlugin(plugin, AmazonBedrockPlugin)
       const result = yield* plugin.trigger(
         "aisdk.language",
         {
