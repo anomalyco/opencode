@@ -51,8 +51,16 @@ import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { Evolution } from "@/evolution/index"
+import { Evolution, EvolutionBrain, EvolutionMemory, EvolutionDecisions, EvolutionProject } from "@/evolution/index"
+import { EvolutionDecisionEngine } from "@/evolution/decision/engine"
+import { ExecutionPipeline } from "@/evolution/execution/pipeline"
+import { AuditLedger } from "@/evolution/audit/ledger"
+import { AsyncAuditLogger } from "@/evolution/audit/async-logger"
+import { MetricsService } from "@/evolution/evolution/metrics"
+import { WorkerPool } from "@/evolution/orchestration/worker-pool"
+import { SystemContextBuiltIns } from "@opencode-ai/core/system-context/builtins"
 import { EvolutionContextLayer } from "@/evolution/context/register"
+SystemContextBuiltIns.registerExtra(EvolutionContextLayer.register)
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
   FSUtil.defaultLayer,
@@ -92,8 +100,24 @@ export const AppLayer = Layer.mergeAll(
   Command.defaultLayer,
   Truncate.defaultLayer,
   ToolRegistry.defaultLayer,
-  Evolution.defaultLayer,
-  EvolutionContextLayer.layer,
+  EvolutionDecisionEngine.defaultLayer.pipe(
+    Layer.provideMerge(AuditLedger.defaultLayer),
+    Layer.provideMerge(
+      Evolution.layer.pipe(
+        Layer.provideMerge(
+          EvolutionBrain.layer.pipe(
+            Layer.provideMerge(EvolutionMemory.layer.pipe(Layer.provideMerge(Config.defaultLayer), Layer.provideMerge(FSUtil.defaultLayer))),
+            Layer.provideMerge(EvolutionDecisions.layer.pipe(Layer.provideMerge(Config.defaultLayer), Layer.provideMerge(FSUtil.defaultLayer))),
+            Layer.provideMerge(EvolutionProject.layer.pipe(Layer.provideMerge(Config.defaultLayer), Layer.provideMerge(FSUtil.defaultLayer))),
+          ),
+        ),
+        Layer.provideMerge(MetricsService.defaultLayer),
+      ),
+    ),
+    Layer.provideMerge(AsyncAuditLogger.layer),
+    Layer.provideMerge(WorkerPool.layer),
+    Layer.provideMerge(ExecutionPipeline.layer),
+  ),
   Format.defaultLayer,
   Project.defaultLayer,
   Vcs.defaultLayer,

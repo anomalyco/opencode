@@ -1,0 +1,19 @@
+{
+  "id": "ADR-MQGLM3GF-BOD4",
+  "key": "self-approval-test",
+  "title": "Use Effect.gen for Composition",
+  "context": "We need a standard pattern for Effect composition across the codebase",
+  "proposedDecision": "All new Effect workflows must use Effect.gen(function* () { ... })",
+  "consequences": "Consistent pattern, easier code reviews",
+  "tags": [
+    "effect",
+    "architecture"
+  ],
+  "origin": {
+    "proposerId": "evolution"
+  },
+  "createdAt": 1781611712511,
+  "status": "REJECTED",
+  "validatedAt": 1781611712808,
+  "rejectedAt": 1781611712808
+}

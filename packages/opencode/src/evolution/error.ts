@@ -11,6 +11,17 @@ export class EvolutionStorageError extends Schema.TaggedErrorClass<EvolutionStor
   cause: Schema.optional(Schema.Defect),
 }) {}
 
+export class EvolutionMemoryLimitError extends Schema.TaggedErrorClass<EvolutionMemoryLimitError>()("EvolutionMemoryLimitError", {
+  message: Schema.String,
+  limit: Schema.optional(Schema.Int),
+  count: Schema.Int,
+}) {}
+
+export class InvariantViolationError {
+  readonly _tag = "InvariantViolationError"
+  constructor(readonly payload: { message: string; operation: string }) {}
+}
+
 export const toEvolutionStorageError = (
   e: FSUtil.Error,
   operation: StorageOperation,

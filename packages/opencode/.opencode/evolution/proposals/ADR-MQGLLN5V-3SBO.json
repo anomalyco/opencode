@@ -1,0 +1,20 @@
+{
+  "id": "ADR-MQGLLN5V-3SBO",
+  "key": "test-key-1",
+  "title": "Use Effect.gen for Composition",
+  "context": "We need a standard pattern for Effect composition across the codebase",
+  "proposedDecision": "All new Effect workflows must use Effect.gen(function* () { ... })",
+  "consequences": "Consistent pattern, easier code reviews",
+  "tags": [
+    "effect",
+    "architecture"
+  ],
+  "origin": {
+    "proposerId": "user-1",
+    "sessionId": "session-1"
+  },
+  "createdAt": 1781611691395,
+  "status": "REJECTED",
+  "validatedAt": 1781611691607,
+  "rejectedAt": 1781611691607
+}

@@ -52,7 +52,7 @@ function message(providerID: ProviderV2.ID, e: APICallError) {
       if (errMsg && typeof errMsg === "string") {
         return `${msg}: ${errMsg}`
       }
-    } catch {}
+    } catch (err) { console.error("[ef-ai] Error parsing error JSON body:", err) }
 
     // If responseBody is HTML (e.g. from a gateway or proxy error page),
     // provide a human-readable message instead of dumping raw markup

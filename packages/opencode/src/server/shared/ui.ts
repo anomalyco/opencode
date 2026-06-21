@@ -1,59 +1,55 @@
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Effect, Stream } from "effect"
-import { HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { Effect } from "effect"
+import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createHash } from "node:crypto"
-import { ProxyUtil } from "../proxy-util"
+import * as nodePath from "node:path"
 
 let embeddedUIPromise: Promise<Record<string, string> | null> | undefined
 
-export const UI_UPSTREAM = new URL("https://app.opencode.ai")
-
-export const csp = (hash = "") =>
-  `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src * data:`
-export const DEFAULT_CSP = csp()
-
-export function themePreloadHash(body: string) {
-  return body.match(/<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i)
-}
-
-export function cspForHtml(body: string) {
-  const match = themePreloadHash(body)
-  return csp(match ? createHash("sha256").update(match[2]).digest("base64") : "")
-}
-
-function requestBody(request: HttpServerRequest.HttpServerRequest) {
-  if (request.method === "GET" || request.method === "HEAD") return HttpBody.empty
-  const len = request.headers["content-length"]
-  return HttpBody.stream(request.stream, request.headers["content-type"], len === undefined ? undefined : Number(len))
-}
-
-function proxyResponseHeaders(headers: Record<string, string>) {
-  const result = new Headers(headers)
-  // FetchHttpClient exposes decoded response bodies, so forwarding upstream
-  // transfer metadata makes browsers decode already-decoded assets again.
-  result.delete("content-encoding")
-  result.delete("content-length")
-  result.delete("transfer-encoding")
-  return result
-}
-
-export function upstreamURL(path: string) {
-  return new URL(path, UI_UPSTREAM).toString()
-}
+const webUIModuleName = "opencode-web-ui.gen.ts"
 
 export function embeddedUI(disableEmbeddedWebUi: boolean) {
   if (disableEmbeddedWebUi) return Promise.resolve(null)
   return (embeddedUIPromise ??=
-    // @ts-expect-error - generated file at build time
-    import("opencode-web-ui.gen.ts").then((module) => module.default as Record<string, string>).catch(() => null))
+    Promise.race([
+      // @ts-expect-error - generated file at build time
+      import(webUIModuleName).then((module) => module.default as Record<string, string>),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 2000)),
+    ]).catch(() => null))
+}
+
+export function resolveWebRoot(): string | undefined {
+  const fromEnv = process.env.OPENCODE_WEB_ROOT
+  if (fromEnv) return fromEnv
+
+  try {
+    const binaryDir = nodePath.dirname(process.execPath)
+    const relativePath = nodePath.resolve(binaryDir, "..", "web-ui")
+    return relativePath
+  } catch {
+    return undefined
+  }
+}
+
+export const csp = (hash = "") =>
+  `default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; media-src 'self' data:; connect-src * data:`
+export const DEFAULT_CSP = csp()
+
+function themePreloadHash(body: string) {
+  return body.match(/<script\b(?![^>]*\bsrc\s*=)[^>]*\bid=(['"])oc-theme-preload-script\1[^>]*>([\s\S]*?)<\/script>/i)
+}
+
+function cspForHtml(body: string) {
+  const match = themePreloadHash(body)
+  return csp(match ? createHash("sha256").update(match[2]).digest("base64") : "")
 }
 
 function notFound() {
   return HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })
 }
 
-function embeddedUIResponse(file: string, body: Uint8Array) {
-  const mime = FSUtil.mimeType(file)
+function fileResponse(filePath: string, body: Uint8Array) {
+  const mime = FSUtil.mimeType(filePath)
   const headers = new Headers({ "content-type": mime })
   if (mime.startsWith("text/html")) {
     headers.set("content-security-policy", cspForHtml(new TextDecoder().decode(body)))
@@ -70,39 +66,60 @@ export function serveEmbeddedUIEffect(
   if (!file) return Effect.succeed(notFound())
 
   return fs.readFile(file).pipe(
-    Effect.map((body) => embeddedUIResponse(file, body)),
+    Effect.map((body) => fileResponse(file, body)),
     Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(notFound())),
   )
 }
 
+function serveFromDiskEffect(
+  requestPath: string,
+  webRoot: string,
+  fs: FSUtil.Interface,
+) {
+  const cleanPath = requestPath === "/" ? "index.html" : requestPath.replace(/^\//, "")
+  const filePath = nodePath.join(webRoot, cleanPath)
+
+  return fs.readFile(filePath).pipe(
+    Effect.map((body) => fileResponse(cleanPath, body)),
+    Effect.catchReason("PlatformError", "NotFound", () => {
+      if (requestPath.includes(".")) return Effect.succeed(notFound())
+      const indexPath = nodePath.join(webRoot, "index.html")
+      return fs.readFile(indexPath).pipe(
+        Effect.map((body) => fileResponse("index.html", body)),
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(notFound())),
+      )
+    }),
+  )
+}
+
+function placeHolderPage(requestPath: string) {
+  return HttpServerResponse.html(`<!doctype html>
+<html lang="en">
+<head><title>opencode-EF</title><meta charset="utf-8"></head>
+<body style="font-family:sans-serif;padding:2rem;background:#111;color:#eee">
+<h1>opencode-EF</h1>
+<p>Requested: <code>${requestPath}</code></p>
+<p>Web UI assets not available. Run with embedded UI or set a web root.</p>
+<hr>
+<pre>opencode-EF evolution-brain</pre>
+</body>
+</html>`)
+}
+
 export function serveUIEffect(
   request: HttpServerRequest.HttpServerRequest,
-  services: { fs: FSUtil.Interface; client: HttpClient.HttpClient; disableEmbeddedWebUi: boolean },
+  services: { fs: FSUtil.Interface; disableEmbeddedWebUi: boolean; webRoot?: string },
 ) {
   return Effect.gen(function* () {
-    const embeddedWebUI = yield* Effect.promise(() => embeddedUI(services.disableEmbeddedWebUi))
     const path = new URL(request.url, "http://localhost").pathname
 
-    if (embeddedWebUI) return yield* serveEmbeddedUIEffect(path, services.fs, embeddedWebUI)
-
-    const response = yield* services.client.execute(
-      HttpClientRequest.make(request.method)(upstreamURL(path), {
-        headers: ProxyUtil.headers(request.headers, { host: UI_UPSTREAM.host }),
-        body: requestBody(request),
-      }),
-    )
-    const headers = proxyResponseHeaders(response.headers)
-
-    if (response.headers["content-type"]?.includes("text/html")) {
-      const body = yield* response.text
-      headers.set("Content-Security-Policy", cspForHtml(body))
-      return HttpServerResponse.text(body, { status: response.status, headers })
+    if (services.webRoot) {
+      return yield* serveFromDiskEffect(path, services.webRoot, services.fs)
     }
 
-    headers.set("Content-Security-Policy", csp())
-    return HttpServerResponse.stream(response.stream.pipe(Stream.catchCause(() => Stream.empty)), {
-      status: response.status,
-      headers,
-    })
+    const embeddedWebUI = yield* Effect.promise(() => embeddedUI(services.disableEmbeddedWebUi))
+    if (embeddedWebUI) return yield* serveEmbeddedUIEffect(path, services.fs, embeddedWebUI)
+
+    return placeHolderPage(path)
   })
 }

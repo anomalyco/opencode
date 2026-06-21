@@ -8,10 +8,8 @@ import { ContextComposer, type EvolutionContext } from "./composer"
 // C-VERIFY-02: Only calls composer.provide(), formats output, graceful degradation.
 // C-VERIFY-03: No brain/* imports.
 
-export namespace SystemContextProvider {
-  export interface Interface {
-    readonly provide: () => Effect.Effect<string, never>
-  }
+export interface Interface {
+  readonly provide: () => Effect.Effect<string, never>
 }
 
 export function formatEvolutionContext(ctx: EvolutionContext): string {
@@ -26,7 +24,11 @@ export function formatEvolutionContext(ctx: EvolutionContext): string {
   if (ctx.memories.length > 0) {
     lines.push("\n## Evolution: Learned Patterns")
     for (const m of ctx.memories) {
-      lines.push(`- [${m.type}] ${m.content}`)
+      const tags = []
+      if (m.confidence !== undefined) tags.push(`c:${m.confidence.toFixed(2)}`)
+      if (m.source) tags.push(`src:${m.source}`)
+      const suffix = tags.length > 0 ? ` (${tags.join(", ")})` : ""
+      lines.push(`- [${m.type}] ${m.content}${suffix}`)
     }
   }
 
@@ -48,7 +50,7 @@ export function formatEvolutionContext(ctx: EvolutionContext): string {
 export const make = (
   evolution: Evolution.Interface,
   config: ConfigEvolution,
-): SystemContextProvider.Interface => {
+): Interface => {
   const composer = ContextComposer.make(evolution, config)
 
   return {
@@ -65,7 +67,7 @@ export const make = (
 
 export const fromConfig = (
   config: ConfigEvolution,
-): SystemContextProvider.Interface => ({
+): Interface => ({
   provide: () =>
     Effect.gen(function* () {
       const option = yield* Effect.serviceOption(Evolution.Service)

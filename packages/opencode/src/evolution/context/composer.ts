@@ -1,7 +1,12 @@
 import { Effect } from "effect"
 import type { ConfigEvolution } from "@/evolution/index"
 import type { Evolution } from "@/evolution/index"
-import { ContextBudget, type ContextBudgetError } from "./budget"
+import type { EvolutionMemory } from "../brain/memory"
+import type { EvolutionDecisions } from "../brain/decisions"
+import type { EvolutionProject } from "../brain/project"
+import { ContextBudget } from "./budget"
+import type { ContextBudgetError } from "./budget"
+import { EvolutionStorageError } from "@/evolution/error"
 import { ContextRetriever } from "./retriever"
 
 // ADR-004 contract — typed output boundary
@@ -14,6 +19,8 @@ export interface EvolutionContext {
   readonly memories: ReadonlyArray<{
     readonly content: string
     readonly type: string
+    readonly confidence?: number
+    readonly source?: string
   }>
   readonly decisions: ReadonlyArray<{
     readonly title: string
@@ -39,7 +46,7 @@ function truncateCount(oldCount: number, ratio: number): number {
 }
 
 export interface Interface {
-  readonly provide: () => Effect.Effect<EvolutionContext, ContextBudgetError>
+  readonly provide: () => Effect.Effect<EvolutionContext, ContextBudgetError | EvolutionStorageError>
 }
 
 export const make = (
@@ -47,7 +54,7 @@ export const make = (
   config: ConfigEvolution,
 ): Interface => {
   const budget = ContextBudget.make(config)
-  const retriever = ContextRetriever.make(evolution)
+  const retriever = ContextRetriever.make(evolution, config)
   const strategy = config.contextBudgetStrategy ?? "truncate"
 
   return {
@@ -102,7 +109,12 @@ export const make = (
             frameworks: raw.project.frameworks,
             structure: raw.project.structure,
           },
-          memories: mem.map(m => ({ content: m.content, type: m.type })),
+          memories: mem.map(m => ({
+            content: m.content,
+            type: m.type,
+            confidence: m.confidence,
+            source: m.source?.type,
+          })),
           decisions: decs.map(d => ({ title: d.title, decision: d.decision, status: d.status })),
           budget: {
             configured: limit,
@@ -116,7 +128,11 @@ export const make = (
 }
 
 function composeCtx(
-  raw: Awaited<ReturnType<ContextRetriever.Interface["retrieve"]>>,
+  raw: {
+    memory: EvolutionMemory.MemoryEntry[]
+    decisions: EvolutionDecisions.DecisionRecord[]
+    project: EvolutionProject.ProjectProfile
+  },
   total: number,
   limit: number,
   strategy: "truncate" | "strict",
@@ -127,7 +143,12 @@ function composeCtx(
       frameworks: raw.project.frameworks,
       structure: raw.project.structure,
     },
-    memories: raw.memory.map(m => ({ content: m.content, type: m.type })),
+    memories: raw.memory.map(m => ({
+      content: m.content,
+      type: m.type,
+      confidence: m.confidence,
+      source: m.source?.type,
+    })),
     decisions: raw.decisions.map(d => ({ title: d.title, decision: d.decision, status: d.status })),
     budget: { configured: limit, used: total, remaining: limit - total, strategy },
   }

@@ -2,7 +2,6 @@ import { Config as EffectConfig, Context, Effect, Layer } from "effect"
 import { HttpApiBuilder, OpenApi } from "effect/unstable/httpapi"
 import {
   FetchHttpClient,
-  HttpClient,
   HttpMiddleware,
   HttpRouter,
   HttpServer,
@@ -57,7 +56,7 @@ import { Vcs } from "@/project/vcs"
 import { Worktree } from "@/worktree"
 import { Workspace } from "@/control-plane/workspace"
 import { CorsConfig, isAllowedCorsOrigin, type CorsOptions } from "@/server/cors"
-import { serveUIEffect } from "@/server/shared/ui"
+import { resolveWebRoot, serveUIEffect } from "@/server/shared/ui"
 import { ServerAuth } from "@/server/auth"
 import { InstanceHttpApi, RootHttpApi } from "./api"
 import { Api } from "@opencode-ai/server/api"
@@ -87,7 +86,6 @@ import { ptyConnectHandlers, ptyHandlers } from "./handlers/pty"
 import { questionHandlers } from "./handlers/question"
 import { sessionHandlers } from "./handlers/session"
 import { syncHandlers } from "./handlers/sync"
-import { tuiHandlers } from "./handlers/tui"
 import { handlers } from "@opencode-ai/server/handlers"
 import { schemaErrorLayer as v2SchemaErrorLayer } from "@opencode-ai/server/middleware/schema-error"
 import { workspaceHandlers } from "./handlers/workspace"
@@ -151,7 +149,6 @@ const instanceApiRoutes = HttpApiBuilder.layer(InstanceHttpApi).pipe(
     providerHandlers,
     sessionHandlers,
     syncHandlers,
-    tuiHandlers,
     workspaceHandlers,
   ]),
 )
@@ -178,10 +175,10 @@ const docRoute = HttpRouter.use((router) => router.add("GET", "/doc", () => Effe
 const uiRoute = HttpRouter.use((router) =>
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
-    const client = yield* HttpClient.HttpClient
     const flags = yield* RuntimeFlags.Service
+    const webRoot = resolveWebRoot()
     yield* router.add("*", "/*", (request) =>
-      serveUIEffect(request, { fs, client, disableEmbeddedWebUi: flags.disableEmbeddedWebUi }),
+      serveUIEffect(request, { fs, disableEmbeddedWebUi: flags.disableEmbeddedWebUi, webRoot }),
     )
   }),
 ).pipe(Layer.provide(authOnlyRouterLayer))

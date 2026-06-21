@@ -1,0 +1,53 @@
+{"decisionId":"dec-1781853291012","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781853291015,"reason":"AUTO_EXECUTABLE — category CONFIG_THRESHOLD is in the approved low-risk list","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"dec-1781853656221","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781853656225,"reason":"AUTO_EXECUTABLE — category CONFIG_THRESHOLD is in the approved low-risk list","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"test","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781853949600,"reason":"test","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"dec-1781854108114","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781854108117,"reason":"AUTO_EXECUTABLE — category CONFIG_THRESHOLD is in the approved low-risk list","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"dec-1781854360441","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781854360442,"reason":"AUTO_EXECUTABLE — category CONFIG_THRESHOLD is in the approved low-risk list","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"dec-1781854809275","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781854809277,"reason":"AUTO_EXECUTABLE — category CONFIG_THRESHOLD is in the approved low-risk list","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"dec-1781856364728","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781856364729,"reason":"AUTO_EXECUTABLE — category CONFIG_THRESHOLD is in the approved low-risk list","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"test-1","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781859559361,"reason":"test","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"test-batch-0","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781859559713,"reason":"batch test 0","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-1","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781859559713,"reason":"batch test 1","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-2","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781859559713,"reason":"batch test 2","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-3","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781859559713,"reason":"batch test 3","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-4","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781859559713,"reason":"batch test 4","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-1","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781859782126,"reason":"test","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"test-batch-0","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781859782343,"reason":"batch test 0","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-1","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781859782343,"reason":"batch test 1","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-2","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781859782343,"reason":"batch test 2","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-3","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781859782343,"reason":"batch test 3","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-4","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781859782343,"reason":"batch test 4","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-1","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781860327096,"reason":"test","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"test-batch-0","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781860327205,"reason":"batch test 0","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-1","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781860327205,"reason":"batch test 1","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-2","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781860327205,"reason":"batch test 2","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-3","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781860327205,"reason":"batch test 3","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-4","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781860327205,"reason":"batch test 4","consensusOutcome":"VETO_HELD"}
+{"decisionId":"dec-1781860443408","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781860443409,"reason":"AUTO_EXECUTABLE — category CONFIG_THRESHOLD is in the approved low-risk list","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"test-1","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781860462666,"reason":"test","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"test-batch-0","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781860462677,"reason":"batch test 0","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-1","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781860462677,"reason":"batch test 1","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-2","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781860462677,"reason":"batch test 2","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-3","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781860462677,"reason":"batch test 3","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-4","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781860462677,"reason":"batch test 4","consensusOutcome":"VETO_HELD"}
+{"decisionId":"dec-1781860591506","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781860591507,"reason":"AUTO_EXECUTABLE — category CONFIG_THRESHOLD is in the approved low-risk list","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"test-1","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781860744233,"reason":"test","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"test-batch-0","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781860744365,"reason":"batch test 0","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-1","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781860744365,"reason":"batch test 1","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-2","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781860744365,"reason":"batch test 2","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-3","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781860744365,"reason":"batch test 3","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-4","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781860744365,"reason":"batch test 4","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-1","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781861850955,"reason":"test","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"test-batch-0","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781861851465,"reason":"batch test 0","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-1","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781861851466,"reason":"batch test 1","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-2","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781861851466,"reason":"batch test 2","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-3","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781861851466,"reason":"batch test 3","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-4","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781861851466,"reason":"batch test 4","consensusOutcome":"VETO_HELD"}
+{"decisionId":"dec-1781861998189","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781861998194,"reason":"AUTO_EXECUTABLE — category CONFIG_THRESHOLD is in the approved low-risk list","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"test-1","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781862070698,"reason":"test","consensusOutcome":"UNANIMOUS_APPROVED"}
+{"decisionId":"test-batch-0","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781862071008,"reason":"batch test 0","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-1","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781862071008,"reason":"batch test 1","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-2","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781862071008,"reason":"batch test 2","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-3","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781862071008,"reason":"batch test 3","consensusOutcome":"VETO_HELD"}
+{"decisionId":"test-batch-4","category":"CONFIG_BUDGET","outcome":"HELD_FOR_REVIEW","executor":"system","timestamp":1781862071008,"reason":"batch test 4","consensusOutcome":"VETO_HELD"}
+{"decisionId":"dec-1781862165600","category":"CONFIG_THRESHOLD","outcome":"AUTO_EXECUTED","executor":"system","timestamp":1781862165601,"reason":"AUTO_EXECUTABLE — category CONFIG_THRESHOLD is in the approved low-risk list","consensusOutcome":"UNANIMOUS_APPROVED"}

@@ -16,7 +16,7 @@ export function isDeprecatedPlugin(spec: string) {
 function parse(spec: string) {
   try {
     return npa(spec)
-  } catch {}
+  } catch (err) { console.error("[ef-ai] Error parsing plugin specifier:", err) }
 }
 
 export function parsePluginSpecifier(spec: string) {

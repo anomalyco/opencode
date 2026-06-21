@@ -17,12 +17,12 @@ import path from "path"
 import { pathToFileURL } from "url"
 import { Effect } from "effect"
 import { UI } from "../ui"
+import { stylize } from "../ansi"
 import { effectCmd } from "../effect-cmd"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
-import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
 type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
 
@@ -83,40 +83,18 @@ function formatRunError(error: unknown) {
   return FormatError(error) ?? FormatUnknownError(error)
 }
 
-async function tool(part: ToolPart) {
-  try {
-    const { toolInlineInfo } = await import("./run/tool")
-    const next = toolInlineInfo(part)
-    if (next.mode === "block") {
-      block(next, next.body)
-      return
-    }
-
-    inline(next)
-  } catch {
-    inline({
-      icon: "\u2699",
-      title: part.tool,
-    })
-  }
+async function tool(_part: ToolPart) {
+  inline({
+    icon: "\u2699",
+    title: _part.tool,
+  })
 }
 
 async function toolError(part: ToolPart) {
-  try {
-    const { toolInlineInfo } = await import("./run/tool")
-    const next = toolInlineInfo(part)
-    inline({
-      icon: "✗",
-      title: `${next.title} failed`,
-      ...(next.description && { description: next.description }),
-    })
-    return
-  } catch {
-    inline({
-      icon: "✗",
-      title: `${part.tool} failed`,
-    })
-  }
+  inline({
+    icon: "✗",
+    title: `${part.tool} failed`,
+  })
 }
 
 export const RunCommand = effectCmd({
@@ -253,14 +231,6 @@ export const RunCommand = effectCmd({
         UI.error(message)
         process.exit(1)
       }
-      const dieInteractive = (error: unknown): never => {
-        if (error instanceof Error && error.message === INTERACTIVE_INPUT_ERROR) {
-          die(error.message)
-        }
-
-        throw error
-      }
-
       let message = [...args.message, ...(args["--"] || [])]
         .map((arg) => (arg.includes(" ") ? `"${arg.replace(/"/g, '\\"')}"` : arg))
         .join(" ")
@@ -286,18 +256,6 @@ export const RunCommand = effectCmd({
         (!Number.isInteger(args["replay-limit"]) || args["replay-limit"] <= 0)
       ) {
         die("--replay-limit must be a positive integer")
-      }
-
-      if (args.interactive && !process.stdout.isTTY) {
-        die("--interactive requires a TTY stdout")
-      }
-
-      if (args.interactive) {
-        try {
-          resolveInteractiveStdin().cleanup?.()
-        } catch (error) {
-          dieInteractive(error)
-        }
       }
 
       const replay = args.replay || args["replay-limit"] !== undefined
@@ -700,7 +658,7 @@ export const RunCommand = effectCmd({
                 const line = `Thinking: ${text}`
                 if (process.stdout.isTTY) {
                   UI.empty()
-                  UI.println(`${UI.Style.TEXT_DIM}\u001b[3m${line}\u001b[0m${UI.Style.TEXT_NORMAL}`)
+                  UI.println(stylize(line, "TEXT_DIM", "ITALIC"))
                   UI.empty()
                   continue
                 }
@@ -807,64 +765,11 @@ export const RunCommand = effectCmd({
           return
         }
 
-        const model = pick(args.model)
-        const { runInteractiveMode } = await import("./run/runtime")
-        try {
-          await runInteractiveMode({
-            sdk: client,
-            directory: cwd,
-            sessionID,
-            sessionTitle: sess.title,
-            resume: Boolean(args.session || args.continue) && !args.fork,
-            replay,
-            replayLimit: args["replay-limit"],
-            agent,
-            model,
-            variant: args.variant,
-            files,
-            initialInput,
-            createSession: createFreshSession,
-            thinking,
-            backgroundSubagents: flags.experimentalBackgroundSubagents,
-            demo: args.demo,
-          })
-        } catch (error) {
-          dieInteractive(error)
-        }
         return
       }
 
-      if (args.interactive && !args.attach && !args.session && !args.continue) {
-        const model = pick(args.model)
-        const { runInteractiveLocalMode } = await import("./run/runtime")
-        const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-          const { Server } = await import("@/server/server")
-          const request = new Request(input, init)
-          return Server.Default().app.fetch(request)
-        }) as typeof globalThis.fetch
-
-        try {
-          return await runInteractiveLocalMode({
-            directory: directory ?? root,
-            fetch: fetchFn,
-            resolveAgent: localAgent,
-            session,
-            share,
-            createSession: createFreshSession,
-            agent: args.agent,
-            model,
-            variant: args.variant,
-            replay,
-            replayLimit: args["replay-limit"],
-            files,
-            initialInput,
-            thinking,
-            backgroundSubagents: flags.experimentalBackgroundSubagents,
-            demo: args.demo,
-          })
-        } catch (error) {
-          dieInteractive(error)
-        }
+      if (args.interactive) {
+        die("--interactive mode is not available in this build; TUI has been removed for rebuild")
       }
 
       if (args.attach) {

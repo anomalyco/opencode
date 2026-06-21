@@ -2,10 +2,10 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Exit, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { TestConfig } from "../fixture/config"
-import { EvolutionMemory } from "@/evolution/brain/memory"
-import { EvolutionDecisions } from "@/evolution/brain/decisions"
-import { EvolutionProject } from "@/evolution/brain/project"
-import { EvolutionBrain } from "@/evolution/brain"
+import { EvolutionMemory } from "../../src/evolution/brain/memory"
+import { EvolutionDecisions } from "../../src/evolution/brain/decisions"
+import { EvolutionProject } from "../../src/evolution/brain/project"
+import { EvolutionBrain } from "../../src/evolution/brain"
 import { Evolution } from "@/evolution/index"
 import { withTmpdirInstance } from "../fixture/fixture"
 
@@ -185,8 +185,17 @@ describe("EvolutionMemory", () => {
     }),
   )
 
-  // NOTE: setup (510 O(n) saves) takes ~45s, compact() ~67ms.
+// NOTE: setup (510 O(n) saves) takes ~45s, compact() ~67ms.
   // TD-001 scope should be extended: O(n²) cumulative write cost as memory grows.
+  // Compact test must disable the memory limit (maxMemoriesPerSession: 0) to write 510 entries.
+  const memoryLayerNoLimit = EvolutionMemory.layer.pipe(
+    Layer.provideMerge(Layer.mergeAll(
+      TestConfig.layer({
+        get: () => Effect.succeed({ evolution: { enabled: true, mode: "assist" as const, maxMemoriesPerSession: 0 } }),
+      }),
+      FSUtil.defaultLayer,
+    ))
+  )
   test("compact retains most recent 500 entries",
     () =>
       Effect.gen(function* () {
@@ -200,7 +209,7 @@ describe("EvolutionMemory", () => {
       }).pipe(
         withTmpdirInstance({ git: true }),
         Effect.scoped,
-        Effect.provide(memoryLayer),
+        Effect.provide(memoryLayerNoLimit),
         Effect.runPromise,
       ),
     120_000,

@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import type { Evolution } from "@/evolution/index"
 import { ContextRetriever } from "./retriever"
-import type { EvolutionMemory } from "@/evolution/brain/memory"
-import type { EvolutionDecisions } from "@/evolution/brain/decisions"
-import type { EvolutionProject } from "@/evolution/brain/project"
+import type { EvolutionMemory } from "../brain/memory"
+import type { EvolutionDecisions } from "../brain/decisions"
+import type { EvolutionProject } from "../brain/project"
 
 function mockEvolution(): Evolution.Interface {
   return {

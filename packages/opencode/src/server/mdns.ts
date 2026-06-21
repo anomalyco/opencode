@@ -26,7 +26,7 @@ export function publish(port: number, domain?: string) {
     if (bonjour) {
       try {
         bonjour.destroy()
-      } catch {}
+      } catch (err) { console.error("[ef-ai] Error destroying bonjour service:", err) }
     }
     bonjour = undefined
     currentPort = undefined
@@ -38,7 +38,7 @@ export function unpublish() {
     try {
       bonjour.unpublishAll()
       bonjour.destroy()
-    } catch {}
+    } catch (err) { console.error("[ef-ai] Error unpublishing bonjour service:", err) }
     bonjour = undefined
     currentPort = undefined
   }

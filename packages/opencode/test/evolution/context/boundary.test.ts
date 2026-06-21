@@ -5,7 +5,7 @@ import path from "path"
 const SRC = path.join(import.meta.dir, "../../../src")
 
 // D-01B: Expected public exports from context/index.ts
-const EXPECTED_EXPORTS = ["SystemContextProvider", "EvolutionContextLayer"]
+const EXPECTED_EXPORTS = ["SystemContextProvider", "EvolutionContextLayer", "ContextComposer", "formatEvolutionContext"]
 
 // D-01A: Only flag violations when the import source is evolution/context/internal-file
 const INTERNAL_FILES = [
@@ -75,8 +75,6 @@ describe("D-01C — Public Surface Audit", () => {
 
   test("no audited entry point exposes internal context types", async () => {
     const FORBIDDEN_INTERNALS = [
-      "EvolutionContext",
-      "ContextComposer",
       "ContextRetriever",
       "ContextBudget",
       "TokenEstimator",

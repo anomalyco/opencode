@@ -1,0 +1,106 @@
+{
+  "root": "C:\\Users\\fauzan\\Desktop\\OPENCODE ULTIMATE\\opencode-EF",
+  "name": "opencode-EF",
+  "vcs": "git",
+  "languages": [
+    "TypeScript"
+  ],
+  "frameworks": [],
+  "packages": [
+    {
+      "name": "@aws-sdk/client-s3",
+      "version": "3.933.0",
+      "type": "dependency"
+    },
+    {
+      "name": "@opencode-ai/plugin",
+      "version": "workspace:*",
+      "type": "dependency"
+    },
+    {
+      "name": "@opencode-ai/script",
+      "version": "workspace:*",
+      "type": "dependency"
+    },
+    {
+      "name": "@opencode-ai/sdk",
+      "version": "workspace:*",
+      "type": "dependency"
+    },
+    {
+      "name": "heap-snapshot-toolkit",
+      "version": "1.1.3",
+      "type": "dependency"
+    },
+    {
+      "name": "typescript",
+      "version": "catalog:",
+      "type": "dependency"
+    },
+    {
+      "name": "@actions/artifact",
+      "version": "5.0.1",
+      "type": "devDependency"
+    },
+    {
+      "name": "@tsconfig/bun",
+      "version": "catalog:",
+      "type": "devDependency"
+    },
+    {
+      "name": "@types/mime-types",
+      "version": "3.0.1",
+      "type": "devDependency"
+    },
+    {
+      "name": "@typescript/native-preview",
+      "version": "catalog:",
+      "type": "devDependency"
+    },
+    {
+      "name": "glob",
+      "version": "13.0.5",
+      "type": "devDependency"
+    },
+    {
+      "name": "husky",
+      "version": "9.1.7",
+      "type": "devDependency"
+    },
+    {
+      "name": "oxlint",
+      "version": "1.60.0",
+      "type": "devDependency"
+    },
+    {
+      "name": "oxlint-tsgolint",
+      "version": "0.21.0",
+      "type": "devDependency"
+    },
+    {
+      "name": "prettier",
+      "version": "3.6.2",
+      "type": "devDependency"
+    },
+    {
+      "name": "semver",
+      "version": "^7.6.0",
+      "type": "devDependency"
+    },
+    {
+      "name": "sst",
+      "version": "catalog:",
+      "type": "devDependency"
+    },
+    {
+      "name": "turbo",
+      "version": "2.8.13",
+      "type": "devDependency"
+    }
+  ],
+  "structure": "monorepo",
+  "hasDocker": false,
+  "hasTests": false,
+  "hasCI": true,
+  "detectedAt": 1781785005269
+}

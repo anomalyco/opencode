@@ -1,24 +1,39 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer, Context, Schema, Option } from "effect"
 import { Config } from "@/config/config"
+import { InfoEvolutionSchema } from "@opencode-ai/core/v1/config/config"
 import { EvolutionBrain } from "./brain"
 import { EvolutionProject } from "./brain/project"
 import { EvolutionMemory } from "./brain/memory"
 import { EvolutionDecisions } from "./brain/decisions"
 import { EvolutionStorageError } from "./error"
 
+export { EvolutionBrain } from "./brain"
+export { EvolutionMemory } from "./brain/memory"
+export { EvolutionDecisions } from "./brain/decisions"
+export { EvolutionProject } from "./brain/project"
+
 export const ConfigEvolution = Schema.Struct({
-  enabled: Schema.optional(Schema.Boolean).annotate({
-    description: "Enable Evolution Layer (default: false)",
+  ...InfoEvolutionSchema.fields,
+  validation: Schema.optional(Schema.Struct({
+    timeoutMs: Schema.optional(Schema.Int).annotate({
+      description: "Maximum time (ms) for Tier 2 validation before automatic REJECTED/VALIDATION_TIMEOUT (default: 5000)",
+    }),
+  })).annotate({
+    description: "Validation pipeline configuration",
   }),
-  mode: Schema.optional(Schema.Literals(["observe", "assist", "autonomous"])).annotate({
-    description: "Evolution mode: observe (read-only), assist (suggestions), autonomous (auto-execute)",
+  minCandidateConfidence: Schema.optional(Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 1 }))).annotate({
+    description: "Minimum confidence score (0.0–1.0) for a candidate to be considered. All below → BELOW_THRESHOLD (default: 0.3)",
   }),
-  contextBudget: Schema.optional(Schema.Int).annotate({
-    description: "Maximum tokens for Evolution context injection before truncation or error (default: 4096)",
+  reconciliationStrategy: Schema.optional(Schema.Literal("CONFIDENCE")).annotate({
+    description: "Reconciliation strategy: CONFIDENCE only in G1–G3 (default: CONFIDENCE)",
   }),
-  contextBudgetStrategy: Schema.optional(Schema.Literals(["truncate", "strict"])).annotate({
-    description: "Context budget strategy when budget exceeded: truncate (trim to fit) or strict (raise error) (default: truncate)",
+  retention: Schema.optional(Schema.Struct({
+    proposalDays: Schema.optional(Schema.Int).annotate({
+      description: "Days to retain REJECTED proposals (default: 90, 0 = never delete)",
+    }),
+  })).annotate({
+    description: "Retention policy for evolution data",
   }),
 })
 export type ConfigEvolution = Schema.Schema.Type<typeof ConfigEvolution>

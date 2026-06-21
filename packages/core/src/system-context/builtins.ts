@@ -6,6 +6,12 @@ import { SystemContext } from "./index"
 import { InstructionContext } from "../instruction-context"
 import { SystemContextRegistry } from "./registry"
 
+const extraRegistrations: Array<Effect.Effect<void, never, any>> = []
+
+export function registerExtra(effect: Effect.Effect<void, never, any>) {
+  extraRegistrations.push(effect)
+}
+
 const builtIns = Layer.effectDiscard(
   Effect.gen(function* () {
     const location = yield* Location.Service
@@ -37,6 +43,10 @@ const builtIns = Layer.effectDiscard(
     ])
 
     yield* registry.register({ key: SystemContext.Key.make("core/builtins"), load: Effect.succeed(context) })
+
+    for (const reg of extraRegistrations) {
+      yield* reg
+    }
   }),
 )
 

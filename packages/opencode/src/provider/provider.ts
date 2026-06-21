@@ -885,7 +885,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
                   delete body.max_tokens
                   init = { ...init, body: JSON.stringify(body) }
                 }
-              } catch {}
+              } catch (err) { console.error("[ef-ai] Error migrating body for cortex provider:", err) }
             }
 
             const response = await fetch(url, init)
@@ -903,7 +903,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
                     { status: 200, headers: new Headers({ "content-type": "application/json" }) },
                   )
                 }
-              } catch {}
+              } catch (err) { console.error("[ef-ai] Error parsing error response body:", err) }
             }
 
             // Cortex returns role:"" in streaming deltas; the AI SDK schema requires "assistant"
@@ -1540,7 +1540,7 @@ export const layer = Layer.effect(
                   providers[gitlab].models[modelID] = model
                 }
               }
-            } catch (e) {}
+            } catch (err) { console.error("[ef-ai] Error during GitLab models discovery:", err) }
           })
         }
 

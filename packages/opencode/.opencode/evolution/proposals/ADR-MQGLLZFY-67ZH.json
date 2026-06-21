@@ -1,0 +1,19 @@
+{
+  "id": "ADR-MQGLLZFY-67ZH",
+  "key": "test-key-2",
+  "title": "Adopt Prettier as Default Formatter",
+  "context": "Code formatting is inconsistent across packages",
+  "proposedDecision": "Use Prettier with standard config for all TypeScript files",
+  "consequences": "Consistent formatting, no more formatting debates in PRs",
+  "tags": [
+    "tooling"
+  ],
+  "origin": {
+    "proposerId": "user-1",
+    "sessionId": "session-2"
+  },
+  "createdAt": 1781611707310,
+  "status": "ACCEPTED",
+  "validatedAt": 1781611707574,
+  "acceptedAt": 1781611707574
+}

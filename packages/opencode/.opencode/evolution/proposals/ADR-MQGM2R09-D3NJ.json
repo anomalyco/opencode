@@ -1,0 +1,16 @@
+{
+  "id": "ADR-MQGM2R09-D3NJ",
+  "key": "debug-key",
+  "title": "Debug Test",
+  "context": "Debugging",
+  "proposedDecision": "Debug",
+  "consequences": "Debug",
+  "tags": [],
+  "origin": {
+    "proposerId": "user-1"
+  },
+  "createdAt": 1781612489529,
+  "status": "ACCEPTED",
+  "validatedAt": 1781612490090,
+  "acceptedAt": 1781612490090
+}

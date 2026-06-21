@@ -69,6 +69,10 @@ jobs:
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
 
+      - name: Run error registry lint
+        working-directory: packages/opencode
+        run: bun run lint:error-registry
+
       - name: Run HttpApi exerciser gates
         if: runner.os == 'Linux'
         working-directory: packages/opencode

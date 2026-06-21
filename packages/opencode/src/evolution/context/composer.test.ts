@@ -2,9 +2,9 @@ import { describe, expect, test } from "bun:test"
 import { Cause, Effect, Exit } from "effect"
 import type { Evolution } from "@/evolution/index"
 import { ContextComposer, type EvolutionContext } from "./composer"
-import type { EvolutionMemory } from "@/evolution/brain/memory"
-import type { EvolutionDecisions } from "@/evolution/brain/decisions"
-import type { EvolutionProject } from "@/evolution/brain/project"
+import type { EvolutionMemory } from "../brain/memory"
+import type { EvolutionDecisions } from "../brain/decisions"
+import type { EvolutionProject } from "../brain/project"
 
 // Each memory entry: 40 chars → ceil(40/4) = 10 tokens
 // Skeleton (1 mem + 1 dec + project) ≈ 10 + 9 + 5 = 24 tokens

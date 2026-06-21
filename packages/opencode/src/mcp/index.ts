@@ -24,7 +24,6 @@ import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
-import { TuiEvent } from "@/server/tui-event"
 import open from "open"
 import { Cause, Effect, Exit, Layer, Option, Context, Schema, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
@@ -262,25 +261,15 @@ export const layer = Layer.effect(
                   status: "needs_client_registration" as const,
                   error: "Server does not support dynamic client registration. Please provide clientId in config.",
                 }
-                return events
-                  .publish(TuiEvent.ToastShow, {
-                    title: "MCP Authentication Required",
-                    message: `Server "${key}" requires a pre-registered client ID. Add clientId to your config.`,
-                    variant: "warning",
-                    duration: 8000,
-                  })
-                  .pipe(Effect.ignore, Effect.as(undefined))
+                return Effect.sync(() => {
+                  console.error(`[mcp] Server "${key}" requires a pre-registered client ID. Add clientId to your config.`)
+                }).pipe(Effect.as(undefined))
               } else {
                 pendingOAuthTransports.set(key, transport)
                 lastStatus = { status: "needs_auth" as const }
-                return events
-                  .publish(TuiEvent.ToastShow, {
-                    title: "MCP Authentication Required",
-                    message: `Server "${key}" requires authentication. Run: opencode mcp auth ${key}`,
-                    variant: "warning",
-                    duration: 8000,
-                  })
-                  .pipe(Effect.ignore, Effect.as(undefined))
+                return Effect.sync(() => {
+                  console.error(`[mcp] Server "${key}" requires authentication. Run: opencode mcp auth ${key}`)
+                }).pipe(Effect.as(undefined))
               }
             }
 
@@ -480,7 +469,7 @@ export const layer = Layer.effect(
                     for (const dpid of pids) {
                       try {
                         process.kill(dpid, "SIGTERM")
-                      } catch {}
+                      } catch (err) { console.error("[ef-ai] Error killing MCP process:", err) }
                     }
                   }
                   yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)

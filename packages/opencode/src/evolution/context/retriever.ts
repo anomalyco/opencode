@@ -1,8 +1,9 @@
 import { Effect } from "effect"
-import type { Evolution } from "@/evolution/index"
-import type { EvolutionMemory } from "@/evolution/brain/memory"
-import type { EvolutionDecisions } from "@/evolution/brain/decisions"
-import type { EvolutionProject } from "@/evolution/brain/project"
+import type { ConfigEvolution, Evolution } from "@/evolution/index"
+import type { EvolutionMemory } from "../brain/memory"
+import { effectiveConfidence, isStale, DEFAULT_STALE_THRESHOLD_DAYS } from "../brain/memory"
+import type { EvolutionDecisions } from "../brain/decisions"
+import type { EvolutionProject } from "../brain/project"
 import { EvolutionStorageError } from "@/evolution/error"
 import { TokenEstimator } from "./token-estimator"
 import type { DomainUsage } from "./budget"
@@ -21,7 +22,7 @@ export interface Interface {
   }) => DomainUsage
 }
 
-export const make = (evolution: Evolution.Interface): Interface => ({
+export const make = (evolution: Evolution.Interface, config: ConfigEvolution): Interface => ({
   retrieve: () =>
     Effect.gen(function* () {
       const memSvc = evolution.memory()
@@ -34,7 +35,11 @@ export const make = (evolution: Evolution.Interface): Interface => ({
         prjSvc.profile(),
       ])
 
-      return { memory: memories, decisions, project }
+      const staleDays = config.staleThresholdDays ?? DEFAULT_STALE_THRESHOLD_DAYS
+      const active = memories.filter(m => staleDays === 0 || !isStale(m, Date.now(), staleDays))
+      const sorted = [...active].sort((a, b) => effectiveConfidence(b) - effectiveConfidence(a))
+
+      return { memory: sorted, decisions, project }
     }),
 
   estimate: (ctx) => ({

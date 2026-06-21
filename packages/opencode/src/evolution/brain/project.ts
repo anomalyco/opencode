@@ -127,7 +127,7 @@ export const layer = Layer.effect(
             }
           }
           if (Array.isArray(pkg.workspaces)) workspaces = pkg.workspaces
-        } catch { /* ignore parse errors */ }
+        } catch (err) { console.error("[ef-ai] Error parsing package.json:", err) }
       }
 
       const collectDirEntries = Effect.fn("EvolutionProject.collectDirEntries")(function* (dir: string) {

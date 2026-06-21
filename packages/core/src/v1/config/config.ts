@@ -17,6 +17,27 @@ import { ConfigProviderV1 } from "./provider"
 import { ConfigServerV1 } from "./server"
 import { ConfigSkillsV1 } from "./skills"
 
+export const InfoEvolutionSchema = Schema.Struct({
+  enabled: Schema.optional(Schema.Boolean).annotate({
+    description: "Enable Evolution Layer for AI-assisted development (default: false)",
+  }),
+  mode: Schema.optional(Schema.Literals(["observe", "assist", "autonomous"])).annotate({
+    description: "Evolution mode: observe (read-only), assist (suggestions), autonomous (auto-execute)",
+  }),
+  contextBudget: Schema.optional(NonNegativeInt).annotate({
+    description: "Maximum tokens for Evolution context injection before truncation or error (default: 4096)",
+  }),
+  contextBudgetStrategy: Schema.optional(Schema.Literals(["truncate", "strict"])).annotate({
+    description: "Context budget strategy when budget exceeded: truncate (trim to fit) or strict (raise error) (default: truncate)",
+  }),
+  maxMemoriesPerSession: Schema.optional(NonNegativeInt).annotate({
+    description: "Maximum memories per session (default: 50, 0 = unlimited)",
+  }),
+  staleThresholdDays: Schema.optional(NonNegativeInt).annotate({
+    description: "Days after last verification before a memory is considered stale and excluded from context (default: 90, 0 = never stale)",
+  }),
+})
+
 export type Layout = ConfigLayoutV1.Layout
 
 export const WellKnown = Schema.Struct({
@@ -163,22 +184,9 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
-  evolution: Schema.optional(
-    Schema.Struct({
-      enabled: Schema.optional(Schema.Boolean).annotate({
-        description: "Enable Evolution Layer for AI-assisted development (default: false)",
-      }),
-      mode: Schema.optional(Schema.Literals(["observe", "assist", "autonomous"])).annotate({
-        description: "Evolution mode: observe (read-only), assist (suggestions), autonomous (auto-execute)",
-      }),
-      contextBudget: Schema.optional(NonNegativeInt).annotate({
-        description: "Maximum tokens for Evolution context injection before truncation or error (default: 4096)",
-      }),
-      contextBudgetStrategy: Schema.optional(Schema.Literals(["truncate", "strict"])).annotate({
-        description: "Context budget strategy when budget exceeded: truncate (trim to fit) or strict (raise error) (default: truncate)",
-      }),
-    }),
-  ).annotate({ description: "Evolution Layer configuration — AI project memory, planning, and review" }),
+  evolution: Schema.optional(InfoEvolutionSchema).annotate({
+    description: "Evolution Layer configuration — AI project memory, planning, and review",
+  }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),

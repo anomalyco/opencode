@@ -2,7 +2,7 @@
 # Source of truth — bukan chat session
 # Versi ini adalah canonical. Chat session bisa hilang. Dokumen ini tidak boleh.
 
-Last updated: 2026-06-12
+Last updated: 2026-06-16 (P-11 forward reference: ADR-012 v2 ACCEPTED)
 
 ---
 
@@ -162,6 +162,37 @@ Biaya memperbaiki fondasi sekarang:
 
 Biaya memperbaiki fondasi di Phase 4-5:
   Mahal — semua layer di atasnya ikut rusak.
+
+---
+
+## P-11 — Evidence Gate (IMPLEMENTED Claim Requires Evidence)
+
+Diadopsi dari ARCH-NOTE-CP03-DOC-DRIFT. Setelah insiden extraLayers (dokumentasi mencatat desain sebagai "implementasi" tanpa source code), aturan ini menjadi governance wajib.
+
+Setiap klaim **IMPLEMENTED** harus memiliki:
+
+| # | Persyaratan | Contoh |
+|---|---|---|
+| 1 | **Source reference** | `packages/core/src/system-context/builtins.ts` |
+| 2 | **Code location** | Baris 11 (declaration), 47-49 (consumer) |
+| 3 | **Verification evidence** | Test output, runtime trace, atau audit log |
+| 4 | **Test evidence** | File test + jumlah assertion + hasil |
+
+Jika salah satu tidak ada, status harus menggunakan:
+
+- **PROPOSED** — desain ada, kode mungkin ada/mungkin belum
+- **PLANNED** — desain diterima, implementasi belum dimulai
+- **IN PROGRESS** — implementasi parsial, belum dapat diverifikasi
+
+Dokumentasi bukan pengganti evidence. Source code + test adalah sumber kebenaran utama.
+
+**Forward reference**: P-11 refined by **ADR-012 v2** (Evidence Lifecycle) di `DECISIONS.md`. ADR-012 v2 menambahkan:
+- Provenance verification (bukan format verification)
+- Evidence Lifecycle state machine (PROPOSED → IMPLEMENTING → IMPLEMENTED_UNVERIFIED → VERIFIED → ACCEPTED)
+- 5 artifact classes (Source, Test, Integration, Architecture, Governance)
+- Evidence Window (session-based, bukan per-claim rerun)
+
+Status ADR-012 v2: **ACCEPTED** (2026-06-16). P-11 dianggap sebagai subset dari ADR-012 v2.
 
 ---
 

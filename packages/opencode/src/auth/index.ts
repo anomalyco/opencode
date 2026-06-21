@@ -59,7 +59,7 @@ export const layer = Layer.effect(
       if (process.env.OPENCODE_AUTH_CONTENT) {
         try {
           return JSON.parse(process.env.OPENCODE_AUTH_CONTENT)
-        } catch (err) {}
+        } catch (err) { console.error("[ef-ai] Error parsing OPENCODE_AUTH_CONTENT:", err) }
       }
 
       const data = (yield* fsys.readJson(file).pipe(Effect.orElseSucceed(() => ({})))) as Record<string, unknown>

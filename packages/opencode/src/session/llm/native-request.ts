@@ -162,9 +162,9 @@ export const model = (input: Provider.Model | RequestInput, headers?: Record<str
       output: model.limit.output,
     },
   }
-  if (model.api.npm === "@ai-sdk/openai") return OpenAI.configure(options).responses(model.api.id)
+  if (model.api.npm === "@ai-sdk/openai") return OpenAI.configure(options).chat(model.api.id)
   if (model.api.npm === "@ai-sdk/azure")
-    return Azure.configure({ ...options, baseURL: requireBaseURL(model, url) }).responses(model.api.id)
+    return Azure.configure({ ...options, baseURL: requireBaseURL(model, url) }).chat(model.api.id)
   if (model.api.npm === "@ai-sdk/anthropic") return Anthropic.configure(options).model(model.api.id)
   if (model.api.npm === "@ai-sdk/google") return Google.configure(options).model(model.api.id)
   if (model.api.npm === "@ai-sdk/amazon-bedrock") return AmazonBedrock.configure(options).model(model.api.id)

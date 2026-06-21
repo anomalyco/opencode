@@ -1,0 +1,1 @@
+export { Committee } from "./committee"
