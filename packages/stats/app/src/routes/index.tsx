@@ -21,12 +21,12 @@ import {
   type TokenCostEntry,
   type UsagePoint,
 } from "@opencode-ai/stats-core/domain/home"
-import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import type { FeatureCollection, GeometryObject, GeoJsonProperties } from "geojson"
 import type { GeometryCollection, Topology } from "topojson-specification"
+import { runStatsEffect } from "../stats-runtime"
 import { findModelCatalogEntry, getModelCatalog, type ModelCatalog } from "./model-catalog"
 import {
   applyThemePreference,
@@ -109,7 +109,7 @@ const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a
 
 const getData = query(async () => {
   "use server"
-  return runtime.runPromise(getStatsHomeData())
+  return runStatsEffect(getStatsHomeData())
 }, "getStatsHomeData")
 
 export default function StatsHome() {

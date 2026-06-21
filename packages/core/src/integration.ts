@@ -1,7 +1,19 @@
 export * as Integration from "./integration"
 
-import { Cause, Clock, Context, Duration, Effect, Exit, Layer, Schedule, Schema, Scope, SynchronizedRef } from "effect"
-import { castDraft, enableMapSet, type Draft } from "immer"
+import {
+  Cause,
+  Clock,
+  Context,
+  Duration,
+  Effect,
+  Exit,
+  Layer,
+  Schedule,
+  Schema,
+  Scope,
+  SynchronizedRef,
+  Types,
+} from "effect"
 import { Credential } from "./credential"
 import { IntegrationSchema } from "./integration/schema"
 import { withStatics } from "./schema"
@@ -42,12 +54,14 @@ export const SelectPrompt = Schema.Struct({
   type: Schema.Literal("select"),
   key: Schema.String,
   message: Schema.String,
-  options: Schema.Array(
-    Schema.Struct({
-      label: Schema.String,
-      value: Schema.String,
-      hint: Schema.optional(Schema.String),
-    }),
+  options: Schema.mutable(
+    Schema.Array(
+      Schema.Struct({
+        label: Schema.String,
+        value: Schema.String,
+        hint: Schema.optional(Schema.String),
+      }),
+    ),
   ),
   when: Schema.optional(When),
 }).annotate({ identifier: "Integration.SelectPrompt" })
@@ -60,7 +74,7 @@ export const OAuthMethod = Schema.Struct({
   id: MethodID,
   type: Schema.Literal("oauth"),
   label: Schema.String,
-  prompts: Schema.optional(Schema.Array(Prompt)),
+  prompts: Schema.optional(Schema.mutable(Schema.Array(Prompt))),
 }).annotate({ identifier: "Integration.OAuthMethod" })
 export type OAuthMethod = typeof OAuthMethod.Type
 
@@ -72,7 +86,7 @@ export type KeyMethod = typeof KeyMethod.Type
 
 export const EnvMethod = Schema.Struct({
   type: Schema.Literal("env"),
-  names: Schema.Array(Schema.String),
+  names: Schema.mutable(Schema.Array(Schema.String)),
 }).annotate({ identifier: "Integration.EnvMethod" })
 export type EnvMethod = typeof EnvMethod.Type
 
@@ -82,8 +96,8 @@ export type Method = typeof Method.Type
 export class Info extends Schema.Class<Info>("Integration.Info")({
   id: ID,
   name: Schema.String,
-  methods: Schema.Array(Method),
-  connections: Schema.Array(IntegrationConnection.Info),
+  methods: Schema.mutable(Schema.Array(Method)),
+  connections: Schema.mutable(Schema.Array(IntegrationConnection.Info)),
 }) {}
 
 export type Inputs = Readonly<{ [key: string]: string }>
@@ -172,19 +186,19 @@ export type Ref = {
 }
 
 type Entry = {
-  ref: Ref
-  methods: Method[]
-  implementations: Map<MethodID, OAuthImplementation>
+  ref: Types.DeepMutable<Ref>
+  methods: Types.DeepMutable<Method>[]
+  implementations: Map<MethodID, Types.DeepMutable<OAuthImplementation>>
 }
 
 type Data = {
   integrations: Map<ID, Entry>
 }
 
-export type Editor = {
+export type Draft = {
   list: () => readonly Ref[]
   get: (id: ID) => Ref | undefined
-  update: (id: ID, update: (integration: Draft<Ref>) => void) => void
+  update: (id: ID, update: (integration: Types.DeepMutable<Ref>) => void) => void
   remove: (id: ID) => void
   method: {
     list: (integrationID: ID) => readonly Method[]
@@ -193,11 +207,8 @@ export type Editor = {
   }
 }
 
-export interface Interface {
+export interface Interface extends State.Transformable<Draft> {
   /** Registers a scoped transform over the integration registry. */
-  readonly transform: State.Interface<Data, Editor>["transform"]
-  /** Registers and immediately applies a scoped integration registry update. */
-  readonly update: State.Interface<Data, Editor>["update"]
   /** Returns one integration with its methods and current connections. */
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
   /** Returns all integrations with their methods and current connections. */
@@ -252,8 +263,6 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Integration") {}
 
-enableMapSet()
-
 const attemptLifetime = Duration.toMillis(Duration.minutes(10))
 const terminalRetention = Duration.toMillis(Duration.minutes(1))
 const scrubInterval = Duration.seconds(30)
@@ -284,15 +293,17 @@ export const locationLayer = Layer.effect(
     const events = yield* EventV2.Service
     const scope = yield* Scope.Scope
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
-    const state = State.create<Data, Editor>({
+    const state = State.create<Data, Draft>({
       initial: () => ({ integrations: new Map<ID, Entry>() }),
-      editor: (draft) => ({
+      draft: (draft) => ({
         list: () => Array.from(draft.integrations.values(), (entry) => entry.ref) as Ref[],
         get: (id) => draft.integrations.get(id)?.ref as Ref | undefined,
         update: (id, update) => {
-          const current =
-            draft.integrations.get(id) ??
-            castDraft({ ref: { id, name: id } as Ref, methods: [], implementations: new Map() })
+          const current = draft.integrations.get(id) ?? {
+            ref: { id, name: id },
+            methods: [],
+            implementations: new Map(),
+          }
           if (!draft.integrations.has(id)) draft.integrations.set(id, current)
           update(current.ref)
           current.ref.id = id
@@ -301,16 +312,14 @@ export const locationLayer = Layer.effect(
         method: {
           list: (integrationID) => (draft.integrations.get(integrationID)?.methods as Method[] | undefined) ?? [],
           update: (implementation) => {
-            const current =
-              draft.integrations.get(implementation.integrationID) ??
-              castDraft({
-                ref: {
-                  id: implementation.integrationID,
-                  name: implementation.integrationID,
-                } as Ref,
-                methods: [],
-                implementations: new Map<MethodID, OAuthImplementation>(),
-              })
+            const current = draft.integrations.get(implementation.integrationID) ?? {
+              ref: {
+                id: implementation.integrationID,
+                name: implementation.integrationID,
+              },
+              methods: [],
+              implementations: new Map<MethodID, Types.DeepMutable<OAuthImplementation>>(),
+            }
             if (!draft.integrations.has(implementation.integrationID)) {
               draft.integrations.set(implementation.integrationID, current)
             }
@@ -319,10 +328,13 @@ export const locationLayer = Layer.effect(
               if (method.type !== "oauth" || implementation.method.type !== "oauth") return true
               return method.id === implementation.method.id
             })
-            if (index === -1) current.methods.push(castDraft(implementation.method))
-            else current.methods[index] = castDraft(implementation.method)
-            if (isOAuthImplementation(implementation)) {
-              current.implementations.set(implementation.method.id, castDraft(implementation))
+            if (index === -1) current.methods.push(implementation.method as Types.DeepMutable<Method>)
+            else current.methods[index] = implementation.method as Types.DeepMutable<Method>
+            if (implementation.method.type === "oauth") {
+              current.implementations.set(
+                implementation.method.id,
+                implementation as Types.DeepMutable<OAuthImplementation>,
+              )
             }
           },
           remove: (integrationID, method) => {
@@ -434,7 +446,7 @@ export const locationLayer = Layer.effect(
 
     return Service.of({
       transform: state.transform,
-      update: state.update,
+      rebuild: state.rebuild,
       get: Effect.fn("Integration.get")(function* (id) {
         const entry = state.get().integrations.get(id)
         if (!entry) return undefined

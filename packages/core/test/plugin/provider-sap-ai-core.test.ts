@@ -1,10 +1,17 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { Npm } from "@opencode-ai/core/npm"
 import { SapAICorePlugin } from "@opencode-ai/core/plugin/provider/sap-ai-core"
 import { fixtureProvider, it, model, npmLayer, withEnv } from "./provider-helper"
+import { host } from "./host"
 
-const pluginWithNpm = { id: SapAICorePlugin.id, effect: SapAICorePlugin.effect.pipe(Effect.provide(npmLayer)) }
+const pluginWithNpm = {
+  id: SapAICorePlugin.id,
+  effect: Effect.gen(function* () {
+    yield* SapAICorePlugin.effect(host({ npm: yield* Npm.Service }))
+  }).pipe(Effect.provide(npmLayer)),
+}
 
 describe("SapAICorePlugin", () => {
   it.effect("copies serviceKey option into AICORE_SERVICE_KEY but keeps SDK options to deployment metadata", () =>
