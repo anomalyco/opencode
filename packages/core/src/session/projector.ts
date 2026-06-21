@@ -351,8 +351,7 @@ export const layer = Layer.effectDiscard(
           .run()
           .pipe(Effect.orDie)
         yield* run(db, event)
-        if (event.durable === undefined)
-          return yield* Effect.die("Durable Session event is missing aggregate sequence")
+        if (event.durable === undefined) return yield* Effect.die("Durable Session event is missing aggregate sequence")
         yield* SessionContextEpoch.requestReplacement(db, event.data.sessionID, event.durable.seq)
       }),
     )
@@ -367,8 +366,7 @@ export const layer = Layer.effectDiscard(
           .pipe(Effect.orDie)
         if (existing) return yield* Effect.die(new PromptAlreadyProjected())
         yield* run(db, event)
-        if (event.durable === undefined)
-          return yield* Effect.die("Durable Session event is missing aggregate sequence")
+        if (event.durable === undefined) return yield* Effect.die("Durable Session event is missing aggregate sequence")
         yield* SessionInput.projectLegacyPrompted(db, {
           id: messageID,
           sessionID: event.data.sessionID,
@@ -381,8 +379,7 @@ export const layer = Layer.effectDiscard(
     )
     yield* events.project(SessionEvent.PromptLifecycle.Admitted, (event) =>
       Effect.gen(function* () {
-        if (event.durable === undefined)
-          return yield* Effect.die("Durable Session event is missing aggregate sequence")
+        if (event.durable === undefined) return yield* Effect.die("Durable Session event is missing aggregate sequence")
         yield* SessionInput.projectAdmitted(db, {
           admittedSeq: event.durable.seq,
           id: event.data.messageID,
@@ -395,8 +392,7 @@ export const layer = Layer.effectDiscard(
     )
     yield* events.project(SessionEvent.PromptLifecycle.Promoted, (event) =>
       Effect.gen(function* () {
-        if (event.durable === undefined)
-          return yield* Effect.die("Durable Session event is missing aggregate sequence")
+        if (event.durable === undefined) return yield* Effect.die("Durable Session event is missing aggregate sequence")
         yield* insertMessage(
           db,
           event,

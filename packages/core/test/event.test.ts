@@ -399,9 +399,7 @@ describe("EventV2", () => {
       const events = yield* EventV2.Service
       const aggregateID = EventV2.ID.create()
       yield* events.publish(SyncMessage, { id: aggregateID, text: "zero" })
-      const fiber = yield* events
-        .durable({ aggregateID })
-        .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* events.durable({ aggregateID }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
 
       yield* events.publish(SyncMessage, { id: aggregateID, text: "one" })
 
@@ -433,9 +431,7 @@ describe("EventV2", () => {
       yield* Effect.gen(function* () {
         const events = yield* EventV2.Service
         const aggregateID = EventV2.ID.create()
-        const fiber = yield* events
-          .durable({ aggregateID })
-          .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+        const fiber = yield* events.durable({ aggregateID }).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
         yield* Deferred.await(readStarted)
 
         pause = false
@@ -464,10 +460,7 @@ describe("EventV2", () => {
       }
 
       expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual(
-        Array.from({ length: count }, (_, index) => [
-          index,
-          { id: aggregateID, text: String(index) },
-        ]),
+        Array.from({ length: count }, (_, index) => [index, { id: aggregateID, text: String(index) }]),
       )
     }),
   )
@@ -476,9 +469,7 @@ describe("EventV2", () => {
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const aggregateID = EventV2.ID.create()
-      const fiber = yield* events
-        .durable({ aggregateID })
-        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* events.durable({ aggregateID }).pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       yield* events.publish(Message, { text: "live only" })
