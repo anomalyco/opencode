@@ -33,7 +33,6 @@ let readResult: FileSystem.Content | ReadToolFileSystem.TextPage = {
   mime: "text/plain",
 }
 let readFailure: ReadToolFileSystem.ReadError | undefined
-let readDefect: unknown
 let configEntries: Config.Entry[] = []
 const reader = Layer.succeed(
   ReadToolFileSystem.Service,
@@ -41,7 +40,6 @@ const reader = Layer.succeed(
     inspect: () => (resolveFailure === undefined ? Effect.succeed(resolvedType) : Effect.die(resolveFailure)),
     read: (input, _resource, page = {}) => {
       readCalls.push({ input, page })
-      if (readDefect !== undefined) return Effect.die(readDefect)
       if (readFailure !== undefined) return Effect.fail(readFailure)
       return Effect.succeed(readResult)
     },
@@ -121,7 +119,6 @@ describe("ReadTool", () => {
       mime: "text/plain",
     }
     readFailure = undefined
-    readDefect = undefined
     configEntries = []
   })
 
@@ -440,7 +437,7 @@ describe("ReadTool", () => {
 
   it.effect("preserves unexpected filesystem defects", () =>
     Effect.gen(function* () {
-      readDefect = new Error("unexpected")
+      resolveFailure = new Error("unexpected")
       const registry = yield* ToolRegistry.Service
 
       expect(

@@ -150,11 +150,13 @@ const binary = (resource: string, bytes: Uint8Array) => {
   return nonPrintable / bytes.length > 0.3
 }
 const decodeUtf8 = (resource: string, decoder: TextDecoder, bytes?: Uint8Array) =>
-  Effect.sync(() => decoder.decode(bytes, bytes === undefined ? undefined : { stream: true })).pipe(
-    Effect.catchDefect((error) =>
-      error instanceof TypeError ? Effect.fail(new MalformedUtf8Error({ resource })) : Effect.die(error),
-    ),
-  )
+  Effect.try({
+    try: () => decoder.decode(bytes, { stream: bytes !== undefined }),
+    catch: (error) => {
+      if (error instanceof TypeError) return new MalformedUtf8Error({ resource })
+      throw error
+    },
+  })
 const decodeChunk = (resource: string, decoder: TextDecoder, bytes: Uint8Array) =>
   bytes.includes(0) ? Effect.fail(new BinaryFileError({ resource })) : decodeUtf8(resource, decoder, bytes)
 
@@ -206,10 +208,11 @@ export const read = Effect.fn("ReadTool.read")(function* (
           mime,
         }
       }
-      if (startsWith(first, [0x25, 0x50, 0x44, 0x46]) || binary(resource, first))
+      if (startsWith(first, [0x25, 0x50, 0x44, 0x46]) || extensions.has(path.extname(resource).toLowerCase()))
         return yield* Effect.fail(new BinaryFileError({ resource }))
       const paged = info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
       if (!paged) {
+        if (binary(resource, first)) return yield* Effect.fail(new BinaryFileError({ resource }))
         const decoder = new TextDecoder("utf-8", { fatal: true })
         const text = [yield* decodeUtf8(resource, decoder, first)]
         while (true) {
@@ -234,8 +237,6 @@ export const read = Effect.fn("ReadTool.read")(function* (
       let discard = false
       let line = 1
       let bytes = 0
-      let found = false
-      let truncated = false
       let next: number | undefined
       const append = (input: string) => {
         if (line < offset) {
@@ -243,16 +244,13 @@ export const read = Effect.fn("ReadTool.read")(function* (
           return true
         }
         if (lines.length >= limit || bytes >= MAX_READ_BYTES) {
-          truncated = true
-          next ??= line++
+          next = line
           return false
         }
-        found = true
         const text = input.length > MAX_LINE_LENGTH ? input.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : input
         const size = Buffer.byteLength(text, "utf-8") + (lines.length > 0 ? 1 : 0)
         if (bytes + size > MAX_READ_BYTES) {
-          truncated = true
-          next ??= line++
+          next = line
           return false
         }
         lines.push(text)
@@ -282,24 +280,40 @@ export const read = Effect.fn("ReadTool.read")(function* (
         }
         return true
       }
-      let done = !consume(yield* decodeUtf8(resource, decoder, first))
+      const consumeChunk = Effect.fnUntraced(function* (chunk: Uint8Array) {
+        let start = 0
+        while (start < chunk.length) {
+          if (lines.length >= limit || bytes >= MAX_READ_BYTES) {
+            next = line
+            return false
+          }
+          const newline = chunk.indexOf(10, start)
+          const end = newline === -1 ? chunk.length : newline + 1
+          const segment = chunk.subarray(start, end)
+          if (binary(resource, segment)) return yield* Effect.fail(new BinaryFileError({ resource }))
+          if (!consume(yield* decodeUtf8(resource, decoder, segment))) return false
+          start = end
+        }
+        return true
+      })
+      let done = !(yield* consumeChunk(first))
       while (!done) {
         const chunk = yield* file.readAlloc(64 * 1024)
         if (Option.isNone(chunk)) break
-        done = !consume(yield* decodeChunk(resource, decoder, chunk.value))
+        done = !(yield* consumeChunk(chunk.value))
       }
       if (!done) {
         const tail = yield* decodeUtf8(resource, decoder)
         if (!discard) pending += tail
         if (pending) append(pending.endsWith("\r") ? pending.slice(0, -1) : pending)
       }
-      if (!found && offset !== 1) return yield* Effect.fail(new OffsetOutOfRangeError({ offset }))
+      if (lines.length === 0 && offset !== 1) return yield* Effect.fail(new OffsetOutOfRangeError({ offset }))
       return new TextPage({
         type: "text-page",
         content: lines.join("\n"),
         mime: FSUtil.mimeType(real),
         offset,
-        truncated,
+        truncated: next !== undefined,
         ...(next === undefined ? {} : { next }),
       })
     }),
