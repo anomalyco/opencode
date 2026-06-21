@@ -46,8 +46,7 @@ import { LSP } from "@/lsp/lsp"
 import { Instruction } from "../session/instruction"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { EventV2Bridge } from "@/event-v2-bridge"
-import { InstanceLayer } from "@/project/instance-layer"
-import { InstanceStore } from "@/project/instance-store"
+import { ConfigReload } from "@/config/reload"
 import { Agent } from "../agent/agent"
 import { Skill } from "../skill"
 import { Permission } from "@/permission"
@@ -337,7 +336,7 @@ export const defaultLayer = Layer.suspend(() =>
       Layer.provide(Instruction.defaultLayer),
       Layer.provide(FSUtil.defaultLayer),
       Layer.provide(EventV2Bridge.defaultLayer),
-      Layer.provide(InstanceLayer.layer),
+      Layer.provide(ConfigReload.defaultLayer),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(Format.defaultLayer),
       Layer.provide(CrossSpawnSpawner.defaultLayer),
@@ -436,7 +435,7 @@ export const node = LayerNode.make(layer.pipe(Layer.provide(Ripgrep.defaultLayer
   Instruction.node,
   FSUtil.node,
   EventV2Bridge.node,
-  InstanceStore.node,
+  ConfigReload.node,
   httpClient,
   CrossSpawnSpawner.node,
   Format.node,

@@ -9,6 +9,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { Auth } from "../../src/auth"
 import { Config } from "../../src/config/config"
+import { ConfigReload } from "../../src/config/reload"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Installation } from "../../src/installation"
 import { InstanceStore } from "../../src/project/instance-store"
@@ -45,6 +46,7 @@ const apiLayer = HttpRouter.serve(
   Layer.provideMerge(NodeHttpServer.layerTest),
   Layer.provide(Layer.mock(Auth.Service)({})),
   Layer.provide(Layer.mock(Config.Service)({})),
+  Layer.provide(ConfigReload.layer),
   Layer.provide(EventV2Bridge.defaultLayer),
   Layer.provide(FetchHttpClient.layer),
   Layer.provide(Layer.mock(Installation.Service)({})),

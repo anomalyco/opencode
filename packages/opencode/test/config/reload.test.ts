@@ -44,29 +44,51 @@ function withWorkspace<A, E, R>(workspaceID: WorkspaceV2.ID, effect: Effect.Effe
   return effect.pipe(Effect.provideService(WorkspaceRef, workspaceID))
 }
 
+function withReload<A, E, R>(ctx: InstanceContext, use: (reload: ConfigReload.Interface) => Effect.Effect<A, E, R>) {
+  return Effect.gen(function* () {
+    const reload = yield* ConfigReload.Service
+    return yield* withInstance(ctx, use(reload))
+  })
+}
+
+function withWorkspaceReload<A, E, R>(
+  ctx: InstanceContext,
+  workspaceID: WorkspaceV2.ID,
+  use: (reload: ConfigReload.Interface) => Effect.Effect<A, E, R>,
+) {
+  return Effect.gen(function* () {
+    const reload = yield* ConfigReload.Service
+    return yield* withInstance(ctx, withWorkspace(workspaceID, use(reload)))
+  })
+}
+
 function testLayer(events: PublishedEvent[], reloads: ReloadCall[]) {
-  return Layer.mergeAll(
-    Layer.mock(EventV2Bridge.Service)({
-      publish: (definition, data) =>
-        Effect.sync(() => {
-          events.push({ type: definition.type, data })
-          return {
-            id: EventV2.ID.create(),
-            type: definition.type,
-            data,
-          } as EventV2.Payload<typeof definition>
+  return ConfigReload.layer.pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        Layer.mock(EventV2Bridge.Service)({
+          publish: (definition, data) =>
+            Effect.sync(() => {
+              events.push({ type: definition.type, data })
+              return {
+                id: EventV2.ID.create(),
+                type: definition.type,
+                data,
+              } as EventV2.Payload<typeof definition>
+            }),
+          subscribe: () => Stream.empty,
+          all: () => Stream.empty,
+          listen: () => Effect.succeed(Effect.void),
         }),
-      subscribe: () => Stream.empty,
-      all: () => Stream.empty,
-      listen: () => Effect.succeed(Effect.void),
-    }),
-    Layer.mock(InstanceStore.Service)({
-      reload: (input) =>
-        Effect.sync(() => {
-          reloads.push({ directory: input.directory, worktree: input.worktree })
-          return instance(input.directory)
+        Layer.mock(InstanceStore.Service)({
+          reload: (input) =>
+            Effect.sync(() => {
+              reloads.push({ directory: input.directory, worktree: input.worktree })
+              return instance(input.directory)
+            }),
         }),
-    }),
+      ),
+    ),
   )
 }
 
@@ -84,15 +106,15 @@ describe("ConfigReload", () => {
 
       // User intent: a long-running chat in one project must not make `/reload`
       // appear queued or stuck in an unrelated TUI window.
-      yield* withInstance(alpha, ConfigReload.start("session-alpha"))
-      const result = yield* withInstance(beta, ConfigReload.request())
+      yield* withReload(alpha, (reload) => reload.start("session-alpha"))
+      const result = yield* withReload(beta, (reload) => reload.request())
 
       expect(result.immediate).toBe(true)
       expect(result.input.directory).toBe(beta.directory)
       expect(result.bootstrapCycle).toBe(1)
       expect(events.map((event) => event.type)).toEqual(["config.reload.pending", "config.reload.executing"])
-      expect(yield* withInstance(alpha, ConfigReload.getBootstrapCycle())).toBe(0)
-      expect(yield* withInstance(beta, ConfigReload.getBootstrapCycle())).toBe(1)
+      expect(yield* withReload(alpha, (reload) => reload.getBootstrapCycle())).toBe(0)
+      expect(yield* withReload(beta, (reload) => reload.getBootstrapCycle())).toBe(1)
     }),
   )
 
@@ -105,14 +127,14 @@ describe("ConfigReload", () => {
 
       // User intent: a late bootstrap acknowledgement from one TUI must not
       // dismiss the reload overlay or unblock reload state in another TUI.
-      yield* withInstance(alpha, ConfigReload.request())
-      yield* withInstance(beta, ConfigReload.request())
+      yield* withReload(alpha, (reload) => reload.request())
+      yield* withReload(beta, (reload) => reload.request())
 
-      expect(yield* withInstance(alpha, ConfigReload.getBootstrapCycle())).toBe(1)
-      expect(yield* withInstance(beta, ConfigReload.getBootstrapCycle())).toBe(1)
-      yield* withInstance(alpha, ConfigReload.releaseBlocker("tui-bootstrap"))
+      expect(yield* withReload(alpha, (reload) => reload.getBootstrapCycle())).toBe(1)
+      expect(yield* withReload(beta, (reload) => reload.getBootstrapCycle())).toBe(1)
+      yield* withReload(alpha, (reload) => reload.releaseBlocker("tui-bootstrap"))
       expect(events.at(-1)?.type).toBe("config.reload.done")
-      expect(yield* withInstance(beta, ConfigReload.getBootstrapCycle())).toBe(1)
+      expect(yield* withReload(beta, (reload) => reload.getBootstrapCycle())).toBe(1)
     }),
   )
 
@@ -126,10 +148,10 @@ describe("ConfigReload", () => {
       // User intent: the TUI may reconnect after reload through a lifecycle event
       // that does not include workspace metadata. A valid bootstrap completion for
       // the same project and cycle must still release the visible reload overlay.
-      const result = yield* withInstance(ctx, withWorkspace(workspaceID, ConfigReload.request()))
+      const result = yield* withWorkspaceReload(ctx, workspaceID, (reload) => reload.request())
       expect(result.bootstrapCycle).toBe(1)
 
-      const accepted = yield* withInstance(ctx, ConfigReload.completeBootstrap(1))
+      const accepted = yield* withReload(ctx, (reload) => reload.completeBootstrap(1))
 
       expect(accepted).toBe(true)
       expect(events.at(-1)).toEqual({ type: "config.reload.done", data: {} })
@@ -144,15 +166,15 @@ describe("ConfigReload", () => {
 
       // User intent: hammering `/reload` during the reload overlay should not
       // briefly say the app is ready and then immediately tear it down again.
-      yield* withInstance(ctx, ConfigReload.request())
-      yield* withInstance(ctx, ConfigReload.request())
+      yield* withReload(ctx, (reload) => reload.request())
+      yield* withReload(ctx, (reload) => reload.request())
 
       expect(events.map((event) => event.type)).toEqual([
         "config.reload.pending",
         "config.reload.executing",
         "config.reload.pending",
       ])
-      yield* withInstance(ctx, ConfigReload.releaseBlocker("tui-bootstrap"))
+      yield* withReload(ctx, (reload) => reload.releaseBlocker("tui-bootstrap"))
 
       expect(reloads).toEqual([{ directory: ctx.directory, worktree: ctx.worktree }])
       expect(events.map((event) => event.type)).toEqual([
@@ -162,7 +184,7 @@ describe("ConfigReload", () => {
         "config.reload.pending",
         "config.reload.executing",
       ])
-      yield* withInstance(ctx, ConfigReload.releaseBlocker("tui-bootstrap"))
+      yield* withReload(ctx, (reload) => reload.releaseBlocker("tui-bootstrap"))
       expect(events.at(-1)?.type).toBe("config.reload.done")
       expect(events.filter((event) => event.type === "config.reload.done")).toHaveLength(1)
     }),
@@ -178,42 +200,42 @@ describe("ConfigReload", () => {
       // should wait for every active session, remain queued when only one settles,
       // coalesce repeated reload requests, avoid an early "ready" signal during
       // bootstrap, and finish without creating a synthetic continuation prompt.
-      yield* withInstance(ctx, ConfigReload.start("session-a"))
-      yield* withInstance(ctx, ConfigReload.start("session-b"))
+      yield* withReload(ctx, (reload) => reload.start("session-a"))
+      yield* withReload(ctx, (reload) => reload.start("session-b"))
 
-      const first = yield* withInstance(ctx, ConfigReload.request())
-      const second = yield* withInstance(ctx, ConfigReload.request())
+      const first = yield* withReload(ctx, (reload) => reload.request())
+      const second = yield* withReload(ctx, (reload) => reload.request())
 
       expect(first.immediate).toBe(false)
       expect(second.immediate).toBe(false)
       expect(reloads).toEqual([])
       expect(events.filter((event) => event.type === "config.reload.executing")).toEqual([])
 
-      yield* withInstance(ctx, ConfigReload.finish("session-a"))
+      yield* withReload(ctx, (reload) => reload.finish("session-a"))
 
       expect(reloads).toEqual([])
       expect(events.filter((event) => event.type === "config.reload.done")).toEqual([])
-      expect(yield* withInstance(ctx, ConfigReload.getBootstrapCycle())).toBe(0)
+      expect(yield* withReload(ctx, (reload) => reload.getBootstrapCycle())).toBe(0)
 
-      yield* withInstance(ctx, ConfigReload.finish("session-b"))
+      yield* withReload(ctx, (reload) => reload.finish("session-b"))
 
       expect(reloads).toEqual([{ directory: ctx.directory, worktree: ctx.worktree }])
       expect(events.at(-1)?.type).toBe("config.reload.executing")
-      expect(yield* withInstance(ctx, ConfigReload.getBootstrapCycle())).toBe(1)
+      expect(yield* withReload(ctx, (reload) => reload.getBootstrapCycle())).toBe(1)
 
-      const queuedDuringBootstrap = yield* withInstance(ctx, ConfigReload.request())
+      const queuedDuringBootstrap = yield* withReload(ctx, (reload) => reload.request())
       expect(queuedDuringBootstrap.immediate).toBe(false)
 
-      yield* withInstance(ctx, ConfigReload.releaseBlocker("tui-bootstrap"))
+      yield* withReload(ctx, (reload) => reload.releaseBlocker("tui-bootstrap"))
 
       expect(reloads).toEqual([
         { directory: ctx.directory, worktree: ctx.worktree },
         { directory: ctx.directory, worktree: ctx.worktree },
       ])
       expect(events.filter((event) => event.type === "config.reload.done")).toEqual([])
-      expect(yield* withInstance(ctx, ConfigReload.getBootstrapCycle())).toBe(2)
+      expect(yield* withReload(ctx, (reload) => reload.getBootstrapCycle())).toBe(2)
 
-      yield* withInstance(ctx, ConfigReload.releaseBlocker("tui-bootstrap"))
+      yield* withReload(ctx, (reload) => reload.releaseBlocker("tui-bootstrap"))
 
       expect(events.filter((event) => event.type === "config.reload.done")).toEqual([
         { type: "config.reload.done", data: {} },
@@ -230,24 +252,24 @@ describe("ConfigReload", () => {
       // User intent: after `/reload` says it is queued, starting another chat in
       // the same TUI must extend the wait. The reload must not begin just because
       // the session that was active at queue time finished.
-      yield* withInstance(ctx, ConfigReload.start("session-before-reload"))
-      const queued = yield* withInstance(ctx, ConfigReload.request())
-      yield* withInstance(ctx, ConfigReload.start("session-after-reload"))
+      yield* withReload(ctx, (reload) => reload.start("session-before-reload"))
+      const queued = yield* withReload(ctx, (reload) => reload.request())
+      yield* withReload(ctx, (reload) => reload.start("session-after-reload"))
 
       expect(queued.immediate).toBe(false)
       expect(reloads).toEqual([])
 
-      yield* withInstance(ctx, ConfigReload.finish("session-before-reload"))
+      yield* withReload(ctx, (reload) => reload.finish("session-before-reload"))
 
       expect(reloads).toEqual([])
       expect(events.filter((event) => event.type === "config.reload.done")).toEqual([])
-      expect(yield* withInstance(ctx, ConfigReload.getBootstrapCycle())).toBe(0)
+      expect(yield* withReload(ctx, (reload) => reload.getBootstrapCycle())).toBe(0)
 
-      yield* withInstance(ctx, ConfigReload.finish("session-after-reload"))
+      yield* withReload(ctx, (reload) => reload.finish("session-after-reload"))
 
       expect(reloads).toEqual([{ directory: ctx.directory, worktree: ctx.worktree }])
       expect(events.at(-1)?.type).toBe("config.reload.executing")
-      expect(yield* withInstance(ctx, ConfigReload.getBootstrapCycle())).toBe(1)
+      expect(yield* withReload(ctx, (reload) => reload.getBootstrapCycle())).toBe(1)
     }),
   )
 
@@ -259,20 +281,20 @@ describe("ConfigReload", () => {
 
       // User intent: a non-TUI client that cannot rely on the event stream still
       // needs a way to learn when a queued reload starts and which cycle to ack.
-      yield* withInstance(ctx, ConfigReload.start("session-before-reload"))
-      const queued = yield* withInstance(ctx, ConfigReload.request())
+      yield* withReload(ctx, (reload) => reload.start("session-before-reload"))
+      const queued = yield* withReload(ctx, (reload) => reload.request())
 
       expect(queued.immediate).toBe(false)
       expect(queued.bootstrapCycle).toBeUndefined()
-      expect(yield* withInstance(ctx, ConfigReload.status())).toEqual({
+      expect(yield* withReload(ctx, (reload) => reload.status())).toEqual({
         pending: true,
         executing: false,
         bootstrapCycle: undefined,
       })
 
-      yield* withInstance(ctx, ConfigReload.finish("session-before-reload"))
+      yield* withReload(ctx, (reload) => reload.finish("session-before-reload"))
 
-      expect(yield* withInstance(ctx, ConfigReload.status())).toEqual({
+      expect(yield* withReload(ctx, (reload) => reload.status())).toEqual({
         pending: false,
         executing: true,
         bootstrapCycle: 1,
@@ -288,8 +310,8 @@ describe("ConfigReload", () => {
 
       // User intent: reloading configuration must not create an artificial
       // user message like "continue where you left off" in session history.
-      yield* withInstance(ctx, ConfigReload.request())
-      yield* withInstance(ctx, ConfigReload.releaseBlocker("tui-bootstrap"))
+      yield* withReload(ctx, (reload) => reload.request())
+      yield* withReload(ctx, (reload) => reload.releaseBlocker("tui-bootstrap"))
 
       const done = events.find((event) => event.type === "config.reload.done")
       expect(done?.data).toEqual({})

@@ -14,6 +14,7 @@ import { Agent as AgentSvc } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { Command } from "../../src/command"
 import { Config } from "@/config/config"
+import { ConfigReload } from "@/config/reload"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "../../src/mcp"
 import { Permission } from "../../src/permission"
@@ -154,7 +155,8 @@ const lsp = Layer.succeed(
 
 const status = SessionStatus.layer.pipe(Layer.provideMerge(EventV2Bridge.defaultLayer))
 const instanceStore = Layer.mock(InstanceStore.Service)({})
-const run = SessionRunState.layer.pipe(Layer.provide(status))
+const configReload = ConfigReload.layer.pipe(Layer.provide(Layer.mergeAll(EventV2Bridge.defaultLayer, instanceStore)))
+const run = SessionRunState.layer.pipe(Layer.provide(status), Layer.provide(configReload))
 const infra = Layer.mergeAll(NodeFileSystem.layer, CrossSpawnSpawner.defaultLayer)
 
 const processorCreateStarted: Array<() => void> = []
@@ -185,6 +187,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     Database.defaultLayer,
     EventV2Bridge.defaultLayer,
     instanceStore,
+    configReload,
   ).pipe(Layer.provideMerge(infra))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))

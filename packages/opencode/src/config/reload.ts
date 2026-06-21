@@ -1,9 +1,11 @@
 export * as ConfigReload from "./reload"
 
 import { EventV2 } from "@opencode-ai/core/event"
-import { Effect, Schema } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Context, Effect, Layer, Schema } from "effect"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstanceState } from "@/effect/instance-state"
+import { InstanceLayer } from "@/project/instance-layer"
 import { InstanceStore } from "@/project/instance-store"
 
 export const Event = {
@@ -43,6 +45,22 @@ export type LocationInput = {
   workspaceID?: string
 }
 
+export interface Interface {
+  readonly isPending: () => Effect.Effect<boolean>
+  readonly start: (sessionID: string) => Effect.Effect<void>
+  readonly finish: (sessionID: string) => Effect.Effect<void>
+  readonly getBootstrapCycle: () => Effect.Effect<number>
+  readonly status: () => Effect.Effect<Status>
+  readonly statusForLocation: (input: LocationInput) => Effect.Effect<Status>
+  readonly releaseBlocker: (blockerID: string) => Effect.Effect<void>
+  readonly completeBootstrap: (cycle: number) => Effect.Effect<boolean>
+  readonly completeBootstrapForLocation: (input: LocationInput & { cycle: number }) => Effect.Effect<boolean>
+  readonly request: () => Effect.Effect<RequestResult>
+  readonly check: () => Effect.Effect<void>
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/ConfigReload") {}
+
 type State = {
   pending: boolean
   reloadInFlight: boolean
@@ -52,95 +70,119 @@ type State = {
   blockers: Set<string>
 }
 
-const states = new Map<string, State>()
+export const layer = Layer.effect(
+  Service,
+  Effect.gen(function* () {
+    const events = yield* EventV2Bridge.Service
+    const store = yield* InstanceStore.Service
+    const states = new Map<string, State>()
 
-export function isPending() {
-  return [...states.values()].some((state) => state.pending)
-}
-
-export const start = Effect.fn("ConfigReload.start")(function* (sessionID: string) {
-  const state = yield* currentState()
-  state.active.add(sessionID)
-  yield* Effect.logDebug("config reload waiting for all sessions to finish", { sessionID })
-})
-
-export const finish = Effect.fn("ConfigReload.finish")(function* (sessionID: string) {
-  const state = yield* currentState()
-  state.active.delete(sessionID)
-  yield* Effect.logDebug("config reload session finished current turn", { sessionID })
-  yield* continueOrDone(state)
-})
-
-export const getBootstrapCycle = Effect.fn("ConfigReload.getBootstrapCycle")(function* () {
-  return (yield* currentState()).bootstrapCycle
-})
-
-export const status = Effect.fn("ConfigReload.status")(function* () {
-  const state = yield* currentState()
-  return stateStatus(state)
-})
-
-export const statusForLocation = Effect.fn("ConfigReload.statusForLocation")(function* (input: LocationInput) {
-  const state = findStateForLocation(input)
-  if (!state) return { pending: false, executing: false } satisfies Status
-  return stateStatus(state)
-})
-
-export const releaseBlocker = Effect.fn("ConfigReload.releaseBlocker")(function* (blockerID: string) {
-  const state = yield* currentState()
-  state.blockers.delete(blockerID)
-  yield* Effect.logDebug("config reload blocker released", { blockerID })
-  yield* continueOrDone(state)
-})
-
-export const completeBootstrap = Effect.fn("ConfigReload.completeBootstrap")(function* (cycle: number) {
-  const current = yield* currentInput()
-  const state = findStateForCycle(current, cycle)
-  if (!state) return false
-  state.blockers.delete("tui-bootstrap")
-  yield* Effect.logDebug("config reload bootstrap completed", { cycle })
-  yield* continueOrDone(state)
-  return true
-})
-
-export const completeBootstrapForLocation = Effect.fn("ConfigReload.completeBootstrapForLocation")(function* (input: LocationInput & { cycle: number }) {
-  const state = findStateForLocation(input, input.cycle)
-  if (!state) return false
-  state.blockers.delete("tui-bootstrap")
-  yield* Effect.logDebug("config reload bootstrap completed", { cycle: input.cycle })
-  yield* continueOrDone(state)
-  return true
-})
-
-export const request = Effect.fn("ConfigReload.request")(function* () {
-  const current = yield* currentInput()
-  const state = getState(current.key)
-  state.reloadInput = current.input
-  if (isBlocked(state)) {
-    state.pending = true
-    yield* Effect.logInfo("config reload queued")
-    yield* publish(Event.Pending, { pending: true })
-    return { immediate: false, input: current.input } satisfies RequestResult
-  }
-  yield* Effect.logInfo("config reload executing immediately")
-  const execution = yield* prepareExecution(state, current.input)
-  return { immediate: true, input: current.input, bootstrapCycle: execution.bootstrapCycle } satisfies RequestResult
-})
-
-export const check = Effect.fn("ConfigReload.check")(function* () {
-  const current = yield* currentInput()
-  const state = getState(current.key)
-  if (!state.pending) return
-  if (isBlocked(state)) {
-    yield* Effect.logDebug("config reload waiting for sessions and blockers to finish", {
-      active: [...state.active],
-      blockers: [...state.blockers],
+    const isPending = Effect.fn("ConfigReload.isPending")(function* () {
+      return [...states.values()].some((state) => state.pending)
     })
-    return
-  }
-  yield* Effect.logInfo("config reload executing deferred request")
-  yield* executePending(state, current.input)
-})
+
+    const start = Effect.fn("ConfigReload.start")(function* (sessionID: string) {
+      const state = yield* currentState(states)
+      state.active.add(sessionID)
+      yield* Effect.logDebug("config reload waiting for all sessions to finish", { sessionID })
+    })
+
+    const finish = Effect.fn("ConfigReload.finish")(function* (sessionID: string) {
+      const state = yield* currentState(states)
+      state.active.delete(sessionID)
+      yield* Effect.logDebug("config reload session finished current turn", { sessionID })
+      yield* continueOrDone(state, store, events)
+    })
+
+    const getBootstrapCycle = Effect.fn("ConfigReload.getBootstrapCycle")(function* () {
+      return (yield* currentState(states)).bootstrapCycle
+    })
+
+    const status = Effect.fn("ConfigReload.status")(function* () {
+      return stateStatus(yield* currentState(states))
+    })
+
+    const statusForLocation = Effect.fn("ConfigReload.statusForLocation")(function* (input: LocationInput) {
+      const state = findStateForLocation(states, input)
+      if (!state) return { pending: false, executing: false } satisfies Status
+      return stateStatus(state)
+    })
+
+    const releaseBlocker = Effect.fn("ConfigReload.releaseBlocker")(function* (blockerID: string) {
+      const state = yield* currentState(states)
+      state.blockers.delete(blockerID)
+      yield* Effect.logDebug("config reload blocker released", { blockerID })
+      yield* continueOrDone(state, store, events)
+    })
+
+    const completeBootstrap = Effect.fn("ConfigReload.completeBootstrap")(function* (cycle: number) {
+      const current = yield* currentInput()
+      const state = findStateForCycle(states, current, cycle)
+      if (!state) return false
+      state.blockers.delete("tui-bootstrap")
+      yield* Effect.logDebug("config reload bootstrap completed", { cycle })
+      yield* continueOrDone(state, store, events)
+      return true
+    })
+
+    const completeBootstrapForLocation = Effect.fn("ConfigReload.completeBootstrapForLocation")(function* (
+      input: LocationInput & { cycle: number },
+    ) {
+      const state = findStateForLocation(states, input, input.cycle)
+      if (!state) return false
+      state.blockers.delete("tui-bootstrap")
+      yield* Effect.logDebug("config reload bootstrap completed", { cycle: input.cycle })
+      yield* continueOrDone(state, store, events)
+      return true
+    })
+
+    const request = Effect.fn("ConfigReload.request")(function* () {
+      const current = yield* currentInput()
+      const state = getState(states, current.key)
+      state.reloadInput = current.input
+      if (isBlocked(state)) {
+        state.pending = true
+        yield* Effect.logInfo("config reload queued")
+        yield* publish(events, Event.Pending, { pending: true })
+        return { immediate: false, input: current.input } satisfies RequestResult
+      }
+      yield* Effect.logInfo("config reload executing immediately")
+      const execution = yield* prepareExecution(state, current.input, events)
+      return { immediate: true, input: current.input, bootstrapCycle: execution.bootstrapCycle } satisfies RequestResult
+    })
+
+    const check = Effect.fn("ConfigReload.check")(function* () {
+      const current = yield* currentInput()
+      const state = getState(states, current.key)
+      if (!state.pending) return
+      if (isBlocked(state)) {
+        yield* Effect.logDebug("config reload waiting for sessions and blockers to finish", {
+          active: [...state.active],
+          blockers: [...state.blockers],
+        })
+        return
+      }
+      yield* Effect.logInfo("config reload executing deferred request")
+      yield* executePending(state, current.input, store, events)
+    })
+
+    return Service.of({
+      isPending,
+      start,
+      finish,
+      getBootstrapCycle,
+      status,
+      statusForLocation,
+      releaseBlocker,
+      completeBootstrap,
+      completeBootstrapForLocation,
+      request,
+      check,
+    })
+  }),
+)
+
+export const defaultLayer = layer.pipe(Layer.provide(EventV2Bridge.defaultLayer), Layer.provide(InstanceLayer.layer))
 
 function isBlocked(state: State) {
   return state.active.size > 0 || state.blockers.size > 0
@@ -161,11 +203,11 @@ function currentInput() {
   })
 }
 
-function currentState() {
-  return Effect.map(currentInput(), (current) => getState(current.key))
+function currentState(states: Map<string, State>) {
+  return Effect.map(currentInput(), (current) => getState(states, current.key))
 }
 
-function getState(key: string) {
+function getState(states: Map<string, State>, key: string) {
   const existing = states.get(key)
   if (existing) return existing
   const state: State = {
@@ -179,14 +221,14 @@ function getState(key: string) {
   return state
 }
 
-function findStateForCycle(current: { key: string; input: InstanceStore.LoadInput }, cycle: number) {
+function findStateForCycle(states: Map<string, State>, current: { key: string; input: InstanceStore.LoadInput }, cycle: number) {
   const exact = states.get(current.key)
   if (exact?.bootstrapCycle === cycle) return exact
   const locationPrefix = `${current.input.directory}\0${current.input.worktree}\0`
   return [...states.entries()].find(([key, state]) => key.startsWith(locationPrefix) && state.bootstrapCycle === cycle)?.[1]
 }
 
-function findStateForLocation(input: LocationInput, cycle?: number) {
+function findStateForLocation(states: Map<string, State>, input: LocationInput, cycle?: number) {
   const locationPrefix = `${input.directory}\0`
   const workspaceSuffix = input.workspaceID ? `\0${input.workspaceID}` : undefined
   return [...states.entries()].find(([key, state]) => {
@@ -210,7 +252,7 @@ function startBlocker(state: State, blockerID: string) {
   if (blockerID === "tui-bootstrap") state.bootstrapCycle++
 }
 
-function prepareExecution(state: State, input: InstanceStore.LoadInput) {
+function prepareExecution(state: State, input: InstanceStore.LoadInput, events: EventV2.Interface) {
   return Effect.gen(function* () {
     state.pending = false
     state.active.clear()
@@ -218,37 +260,48 @@ function prepareExecution(state: State, input: InstanceStore.LoadInput) {
     startBlocker(state, "tui-bootstrap")
     state.reloadInFlight = true
     state.reloadInput = input
-    yield* publish(Event.Pending, { pending: false })
-    yield* publish(Event.Executing, { executing: true, bootstrapCycle: state.bootstrapCycle })
+    yield* publish(events, Event.Pending, { pending: false })
+    yield* publish(events, Event.Executing, { executing: true, bootstrapCycle: state.bootstrapCycle })
     return { input, bootstrapCycle: state.bootstrapCycle }
   })
 }
 
-function executePending(state: State, fallbackInput: InstanceStore.LoadInput) {
+function executePending(
+  state: State,
+  fallbackInput: InstanceStore.LoadInput,
+  store: InstanceStore.Interface,
+  events: EventV2.Interface,
+) {
   return Effect.gen(function* () {
-    const execution = yield* prepareExecution(state, state.reloadInput ?? fallbackInput)
+    const execution = yield* prepareExecution(state, state.reloadInput ?? fallbackInput, events)
     // InstanceStore forks the new boot into its own scope before disposing the old
     // instance. This effect may be interrupted by disposal, so no logic follows it.
-    yield* InstanceStore.Service.use((store) => store.reload(execution.input)).pipe(Effect.ignore)
+    yield* store.reload(execution.input).pipe(Effect.ignore)
   })
 }
 
-function continueOrDone(state: State) {
+function continueOrDone(state: State, store: InstanceStore.Interface, events: EventV2.Interface) {
   return Effect.gen(function* () {
     if (isBlocked(state)) return
     if (state.pending) {
       if (!state.reloadInput) return
       yield* Effect.logInfo("config reload executing deferred request")
-      yield* executePending(state, state.reloadInput)
+      yield* executePending(state, state.reloadInput, store, events)
       return
     }
     if (!state.reloadInFlight) return
     state.reloadInFlight = false
     yield* Effect.logInfo("config reload completed")
-    yield* publish(Event.Done, {})
+    yield* publish(events, Event.Done, {})
   })
 }
 
-function publish<Definition extends EventV2.Definition>(definition: Definition, data: EventV2.Data<Definition>) {
-  return EventV2Bridge.Service.use((events) => events.publish(definition, data)).pipe(Effect.asVoid)
+function publish<Definition extends EventV2.Definition>(
+  events: EventV2.Interface,
+  definition: Definition,
+  data: EventV2.Data<Definition>,
+) {
+  return events.publish(definition, data).pipe(Effect.asVoid)
 }
+
+export const node = LayerNode.make(layer, [EventV2Bridge.node, InstanceStore.node])
