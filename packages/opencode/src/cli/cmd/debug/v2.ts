@@ -23,10 +23,7 @@ export const V2Command = effectCmd({
         small: Object.fromEntries(
           yield* Effect.all(
             all.map((provider) =>
-              Effect.map(
-                catalog.model.small(provider.id),
-                (model) => [provider.id, model?.id] as const,
-              ),
+              Effect.map(catalog.model.small(provider.id), (model) => [provider.id, model?.id] as const),
             ),
             { concurrency: "unbounded" },
           ),

@@ -118,7 +118,9 @@ describe("OpenAIPlugin", () => {
         catalog.model.update(item.id, ModelV2.ID.make("gpt-5-chat-latest"), () => {})
       })
       expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5"))).enabled).toBe(true)
-      expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5-chat-latest"))).enabled).toBe(false)
+      expect(
+        required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5-chat-latest"))).enabled,
+      ).toBe(false)
     }),
   )
 
@@ -133,7 +135,8 @@ describe("OpenAIPlugin", () => {
         catalog.model.update(item.id, ModelV2.ID.make("gpt-5-chat-latest"), () => {})
       })
       expect(
-        required(yield* catalog.model.get(ProviderV2.ID.make("custom-openai"), ModelV2.ID.make("gpt-5-chat-latest"))).enabled,
+        required(yield* catalog.model.get(ProviderV2.ID.make("custom-openai"), ModelV2.ID.make("gpt-5-chat-latest")))
+          .enabled,
       ).toBe(true)
     }),
   )

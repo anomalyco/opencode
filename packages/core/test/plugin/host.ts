@@ -255,7 +255,9 @@ function method(value: Integration.Method) {
   }
 }
 
-function internalMethod(value: IntegrationOAuthMethod | IntegrationKeyMethod | IntegrationEnvMethod): Integration.Method {
+function internalMethod(
+  value: IntegrationOAuthMethod | IntegrationKeyMethod | IntegrationEnvMethod,
+): Integration.Method {
   if (value.type === "env") return value
   if (value.type === "key") return value
   return {

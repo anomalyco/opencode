@@ -22,9 +22,7 @@ const locationLayer = Layer.succeed(
 
 const pluginWithIntegrations = (catalog: Catalog.Interface, integrations: Integration.Interface) => ({
   ...OpencodePlugin,
-  effect: OpencodePlugin.effect(
-    host({ catalog: catalogHost(catalog), integration: integrationHost(integrations) }),
-  ),
+  effect: OpencodePlugin.effect(host({ catalog: catalogHost(catalog), integration: integrationHost(integrations) })),
 })
 
 describe("OpencodePlugin", () => {
@@ -83,7 +81,9 @@ describe("OpencodePlugin", () => {
           })
         })
         expect(required(yield* catalog.provider.get(ProviderV2.ID.opencode)).request.body.apiKey).toBe("public")
-        expect(required(yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("output-only"))).enabled).toBe(true)
+        expect(required(yield* catalog.model.get(ProviderV2.ID.opencode, ModelV2.ID.make("output-only"))).enabled).toBe(
+          true,
+        )
       }),
     ),
   )

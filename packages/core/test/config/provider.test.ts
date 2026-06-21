@@ -61,9 +61,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
         ...ConfigProviderPlugin.Plugin,
         effect: ConfigProviderPlugin.Plugin.effect(
           host({ catalog: catalogHost(catalog), integration: integrationHost(integrations) }),
-        ).pipe(
-          Effect.provideService(Config.Service, config),
-        ),
+        ).pipe(Effect.provideService(Config.Service, config)),
       })
 
       const model = required(yield* catalog.model.get(providerID, modelID))
@@ -122,9 +120,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
         ...ConfigProviderPlugin.Plugin,
         effect: ConfigProviderPlugin.Plugin.effect(
           host({ catalog: catalogHost(catalog), integration: integrationHost(integrations) }),
-        ).pipe(
-          Effect.provideService(Config.Service, config),
-        ),
+        ).pipe(Effect.provideService(Config.Service, config)),
       })
 
       const model = required(yield* catalog.model.get(providerID, modelID))
@@ -225,9 +221,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
           ...ConfigProviderPlugin.Plugin,
           effect: ConfigProviderPlugin.Plugin.effect(
             host({ catalog: catalogHost(catalog), integration: integrationHost(integrations) }),
-          ).pipe(
-            Effect.provideService(Config.Service, config),
-          ),
+          ).pipe(Effect.provideService(Config.Service, config)),
         })
 
         const provider = required(yield* catalog.provider.get(providerID))

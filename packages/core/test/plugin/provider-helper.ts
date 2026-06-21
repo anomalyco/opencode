@@ -90,7 +90,7 @@ export function addPlugin(plugin: PluginV2.Interface, definition: Plugin<any>) {
     const npm = yield* Effect.serviceOption(Npm.Service)
     const effect =
       typeof definition.effect === "function"
-          ? definition.effect(
+        ? definition.effect(
             host({
               aisdk: aisdkHost(plugin),
               ...(Option.isSome(catalog) ? { catalog: catalogHost(catalog.value) } : {}),

@@ -38,8 +38,7 @@ export const Native = Schema.Struct({
 export const Api = Schema.Union([AISDK, Native]).pipe(Schema.toTaggedUnion("type"))
 export type Api = typeof Api.Type
 export type MutableApi<T extends Api = Api> = T extends Api
-  ? Omit<Types.DeepMutable<T>, "settings"> &
-      (undefined extends T["settings"] ? { settings?: any } : { settings: any })
+  ? Omit<Types.DeepMutable<T>, "settings"> & (undefined extends T["settings"] ? { settings?: any } : { settings: any })
   : never
 
 export const Request = Schema.Struct({

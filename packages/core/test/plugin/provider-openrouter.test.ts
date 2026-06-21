@@ -92,12 +92,15 @@ describe("OpenRouterPlugin", () => {
       })
 
       expect(
-        required(yield* catalog.model.get(ProviderV2.ID.make("openrouter"), ModelV2.ID.make("openai/gpt-5-chat"))).enabled,
+        required(yield* catalog.model.get(ProviderV2.ID.make("openrouter"), ModelV2.ID.make("openai/gpt-5-chat")))
+          .enabled,
       ).toBe(false)
       expect(
         required(yield* catalog.model.get(ProviderV2.ID.make("openrouter"), ModelV2.ID.make("openai/gpt-5"))).enabled,
       ).toBe(true)
-      expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("openai/gpt-5-chat"))).enabled).toBe(true)
+      expect(
+        required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("openai/gpt-5-chat"))).enabled,
+      ).toBe(true)
     }),
   )
 
@@ -111,8 +114,9 @@ describe("OpenRouterPlugin", () => {
         catalog.model.update(ProviderV2.ID.make("custom-openrouter"), ModelV2.ID.make("gpt-5-chat-latest"), () => {})
       })
       expect(
-        required(yield* catalog.model.get(ProviderV2.ID.make("custom-openrouter"), ModelV2.ID.make("gpt-5-chat-latest")))
-          .enabled,
+        required(
+          yield* catalog.model.get(ProviderV2.ID.make("custom-openrouter"), ModelV2.ID.make("gpt-5-chat-latest")),
+        ).enabled,
       ).toBe(true)
     }),
   )

@@ -35,7 +35,9 @@ describe("AnthropicPlugin", () => {
       const catalog = yield* Catalog.Service
       yield* addPlugin(plugin, AnthropicPlugin)
       yield* catalog.transform((catalog) => catalog.provider.update(provider("openai").id, () => {}))
-      expect(required(yield* catalog.provider.get(ProviderV2.ID.openai)).request.headers["anthropic-beta"]).toBeUndefined()
+      expect(
+        required(yield* catalog.provider.get(ProviderV2.ID.openai)).request.headers["anthropic-beta"],
+      ).toBeUndefined()
     }),
   )
 

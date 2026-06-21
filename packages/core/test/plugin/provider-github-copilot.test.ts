@@ -157,7 +157,8 @@ describe("GithubCopilotPlugin", () => {
         catalog.model.update(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-5-chat-latest"), () => {})
       })
       expect(
-        required(yield* catalog.model.get(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-5-chat-latest"))).enabled,
+        required(yield* catalog.model.get(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-5-chat-latest")))
+          .enabled,
       ).toBe(false)
     }),
   )
@@ -172,7 +173,8 @@ describe("GithubCopilotPlugin", () => {
         catalog.model.update(ProviderV2.ID.make("custom-copilot"), ModelV2.ID.make("gpt-5-chat-latest"), () => {})
       })
       expect(
-        required(yield* catalog.model.get(ProviderV2.ID.make("custom-copilot"), ModelV2.ID.make("gpt-5-chat-latest"))).enabled,
+        required(yield* catalog.model.get(ProviderV2.ID.make("custom-copilot"), ModelV2.ID.make("gpt-5-chat-latest")))
+          .enabled,
       ).toBe(true)
     }),
   )
