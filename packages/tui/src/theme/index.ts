@@ -90,6 +90,7 @@ export type Theme = {
   _hasSelectedListItemText: boolean
   transparent: boolean
 }
+export type ThemeTransparency = "auto" | "on" | "off"
 type ThemeColor = Exclude<keyof Theme, "thinkingOpacity" | "_hasSelectedListItemText" | "transparent">
 export type SyntaxStyleOverrides = Record<string, { italic?: boolean }>
 
@@ -239,7 +240,7 @@ export function upsertTheme(name: string, theme: unknown) {
   return true
 }
 
-export function resolveTheme(theme: ThemeJson, mode: "dark" | "light", transparent: boolean = false) {
+export function resolveTheme(theme: ThemeJson, mode: "dark" | "light", transparency: ThemeTransparency = "auto") {
   const defs = theme.defs ?? {}
   function resolveColor(c: ColorValue, chain: string[] = []): RGBA {
     if (c instanceof RGBA) return c
@@ -292,17 +293,18 @@ export function resolveTheme(theme: ThemeJson, mode: "dark" | "light", transpare
   // Handle thinkingOpacity - optional with default of 0.6
   const thinkingOpacity = theme.theme.thinkingOpacity ?? 0.6
 
-  if (transparent) {
-    resolved.background = RGBA.fromInts(0, 0, 0, 0)
-    // NOTE: Could alternatively apply an alpha channel to the theme's base background color
-    // instead of forcing full transparency, allowing for adjustable opacity levels
+  if (transparency === "on" && resolved.background) {
+    resolved.background = RGBA.fromValues(resolved.background.r, resolved.background.g, resolved.background.b, 0)
+  }
+  if (transparency === "off" && resolved.background && resolved.background.a < 1) {
+    resolved.background = RGBA.fromValues(resolved.background.r, resolved.background.g, resolved.background.b, 1)
   }
 
   return {
     ...resolved,
     _hasSelectedListItemText: hasSelectedListItemText,
     thinkingOpacity,
-    transparent,
+    transparent: resolved.background !== undefined && resolved.background.a < 1,
   } as Theme
 }
 
