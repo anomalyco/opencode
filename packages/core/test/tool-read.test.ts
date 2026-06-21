@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect } from "bun:test"
-import { Effect, Exit, Layer } from "effect"
+import { Effect, Exit, Layer, PlatformError } from "effect"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigAttachments } from "@opencode-ai/core/config/attachments"
 import { FileSystem } from "@opencode-ai/core/filesystem"
@@ -19,6 +19,7 @@ import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/to
 
 const assertions: PermissionV2.AssertInput[] = []
 const missingPath = "__missing_read_target__.txt"
+const missingAbsolutePath = `${process.cwd()}/${missingPath}`
 const readCalls: {
   input: AbsolutePath
   page: ReadToolFileSystem.PageInput
@@ -75,7 +76,17 @@ const testFileSystem = Layer.effect(
     Effect.succeed(
       FSUtil.Service.of({
         ...fs,
-        realPath: (path) => (path.endsWith(missingPath) ? fs.realPath(path) : Effect.succeed(path)),
+        realPath: (path) =>
+          path === missingAbsolutePath
+            ? Effect.fail(
+                PlatformError.systemError({
+                  _tag: "NotFound",
+                  module: "FileSystem",
+                  method: "realPath",
+                  pathOrDescriptor: path,
+                }),
+              )
+            : Effect.succeed(path),
       }),
     ),
   ),
