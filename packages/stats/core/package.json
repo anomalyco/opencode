@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/stats-core",
-  "version": "1.17.8",
+  "version": "1.17.9",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -17,6 +17,8 @@
   },
   "scripts": {
     "db:generate": "drizzle-kit generate --config=drizzle.config.ts",
+    "db:check-unique-users": "bun src/ensure-unique-users.ts --check",
+    "db:ensure-unique-users": "bun src/ensure-unique-users.ts",
     "db:migrate": "bun src/migrate.ts",
     "db:push": "drizzle-kit push --config=drizzle.config.ts",
     "db:studio": "drizzle-kit studio --config=drizzle.config.ts",

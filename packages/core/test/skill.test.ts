@@ -59,8 +59,7 @@ describe("SkillV2", () => {
           })
 
           const skill = yield* SkillV2.Service
-          const register = yield* skill.transform()
-          yield* register((editor) => {
+          yield* skill.transform((editor) => {
             editor.source({ type: "directory", path: AbsolutePath.make(first) })
             editor.source({ type: "directory", path: AbsolutePath.make(first) })
             editor.source({ type: "directory", path: AbsolutePath.make(second) })
@@ -108,15 +107,14 @@ describe("SkillV2", () => {
           urls.set("https://example.test/skills/", [AbsolutePath.make(tmp.path)])
 
           const agents = yield* AgentV2.Service
-          yield* agents.update((editor) =>
+          yield* agents.transform((editor) =>
             editor.update(AgentV2.ID.make("reviewer"), (agent) => {
               agent.permissions.push({ action: "skill", resource: "deploy", effect: "deny" })
             }),
           )
 
           const skill = yield* SkillV2.Service
-          const register = yield* skill.transform()
-          yield* register((editor) => editor.source({ type: "url", url: "https://example.test/skills/" }))
+          yield* skill.transform((editor) => editor.source({ type: "url", url: "https://example.test/skills/" }))
 
           expect((yield* skill.list()).map((item) => item.name)).toEqual(["deploy"])
           expect((yield* skill.list()).map((item) => item.name)).toEqual(["deploy"])

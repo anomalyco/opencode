@@ -202,6 +202,6 @@ export class LLMError extends Schema.TaggedErrorClass<LLMError>()("LLM.Error", {
  */
 export class ToolFailure extends Schema.TaggedErrorClass<ToolFailure>()("LLM.ToolFailure", {
   message: Schema.String,
-  error: Schema.optional(Schema.Defect),
+  error: Schema.optional(Schema.Defect()),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}

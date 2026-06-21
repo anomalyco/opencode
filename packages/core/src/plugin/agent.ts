@@ -1,12 +1,11 @@
 export * as AgentPlugin from "./agent"
 
 import path from "path"
+import { define } from "@opencode-ai/plugin/v2/effect"
 import { Effect } from "effect"
 import { AgentV2 } from "../agent"
 import { Global } from "../global"
-import { Location } from "../location"
 import { PermissionV2 } from "../permission"
-import { PluginV2 } from "../plugin"
 
 const TRUNCATION_GLOB = path.join(Global.Path.data, "tool-output", "*")
 const BUILD_SYSTEM =
@@ -97,12 +96,10 @@ Rules:
 - If the conversation ends with an unanswered question to the user, preserve that exact question
 - If the conversation ends with an imperative statement or request to the user (e.g. "Now please run the command and paste the console output"), always include that exact request in the summary`
 
-export const Plugin = PluginV2.define({
-  id: PluginV2.ID.make("agent"),
-  effect: Effect.gen(function* () {
-    const agent = yield* AgentV2.Service
-    const location = yield* Location.Service
-    const worktree = location.directory
+export const Plugin = define({
+  id: "agent",
+  effect: Effect.fn(function* (ctx) {
+    const worktree = ctx.location.directory
     const whitelistedDirs = [TRUNCATION_GLOB, path.join(Global.Path.tmp, "*")]
     const readonlyExternalDirectory: PermissionV2.Ruleset = [
       { action: "external_directory", resource: "*", effect: "ask" },
@@ -122,8 +119,8 @@ export const Plugin = PluginV2.define({
       { action: "read", resource: "*.env.example", effect: "allow" },
     ]
 
-    yield* agent.update((editor) => {
-      editor.update(AgentV2.defaultID, (item) => {
+    yield* ctx.agent.transform((draft) => {
+      draft.update(AgentV2.defaultID, (item) => {
         item.description = "The default agent. Executes tools based on configured permissions."
         item.system ??= BUILD_SYSTEM
         item.mode = "primary"
@@ -135,7 +132,7 @@ export const Plugin = PluginV2.define({
         )
       })
 
-      editor.update(AgentV2.ID.make("plan"), (item) => {
+      draft.update(AgentV2.ID.make("plan"), (item) => {
         item.description = "Plan mode. Disallows all edit tools."
         item.mode = "primary"
         item.permissions.push(
@@ -154,14 +151,14 @@ export const Plugin = PluginV2.define({
         )
       })
 
-      editor.update(AgentV2.ID.make("general"), (item) => {
+      draft.update(AgentV2.ID.make("general"), (item) => {
         item.description =
           "General-purpose agent for researching complex questions and executing multi-step tasks. Use this agent to execute multiple units of work in parallel."
         item.mode = "subagent"
         item.permissions.push(...PermissionV2.merge(defaults, [{ action: "todowrite", resource: "*", effect: "deny" }]))
       })
 
-      editor.update(AgentV2.ID.make("explore"), (item) => {
+      draft.update(AgentV2.ID.make("explore"), (item) => {
         item.description =
           'Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.'
         item.system = PROMPT_EXPLORE
@@ -182,21 +179,21 @@ export const Plugin = PluginV2.define({
         )
       })
 
-      editor.update(AgentV2.ID.make("compaction"), (item) => {
+      draft.update(AgentV2.ID.make("compaction"), (item) => {
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_COMPACTION
         item.permissions.push(...PermissionV2.merge(defaults, [{ action: "*", resource: "*", effect: "deny" }]))
       })
 
-      editor.update(AgentV2.ID.make("title"), (item) => {
+      draft.update(AgentV2.ID.make("title"), (item) => {
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_TITLE
         item.permissions.push(...PermissionV2.merge(defaults, [{ action: "*", resource: "*", effect: "deny" }]))
       })
 
-      editor.update(AgentV2.ID.make("summary"), (item) => {
+      draft.update(AgentV2.ID.make("summary"), (item) => {
         item.mode = "primary"
         item.hidden = true
         item.system = PROMPT_SUMMARY
