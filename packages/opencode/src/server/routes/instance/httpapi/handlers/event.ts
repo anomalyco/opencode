@@ -39,23 +39,23 @@ function eventResponse(events: EventV2.Interface) {
       ),
       Stream.map((event) => ({ id: event.id, type: event.type, properties: event.data })),
     )
-    const disposed = Stream.callback<{ id: string; type: string; properties: unknown }>((queue) => {
-      const listener = (event: {
-        directory?: string
-        payload: { id?: string; type?: string; properties?: unknown }
-      }) => {
-        if (event.directory !== instance.directory || event.payload.type !== "server.instance.disposed") return
-        Queue.offerUnsafe(queue, {
-          id: event.payload.id ?? eventID(),
-          type: "server.instance.disposed",
-          properties: event.payload.properties ?? {},
-        })
-      }
-      return Effect.acquireRelease(
-        Effect.sync(() => GlobalBus.on("event", listener)),
-        () => Effect.sync(() => GlobalBus.off("event", listener)),
-      )
-    })
+    const disposedQueue = yield* Queue.unbounded<{ id: string; type: string; properties: unknown }>()
+    const disposedListener = (event: {
+      directory?: string
+      payload: { id?: string; type?: string; properties?: unknown }
+    }) => {
+      if (event.directory !== instance.directory || event.payload.type !== "server.instance.disposed") return
+      Queue.offerUnsafe(disposedQueue, {
+        id: event.payload.id ?? eventID(),
+        type: "server.instance.disposed",
+        properties: event.payload.properties ?? {},
+      })
+    }
+    yield* Effect.acquireRelease(
+      Effect.sync(() => GlobalBus.on("event", disposedListener)),
+      () => Effect.sync(() => GlobalBus.off("event", disposedListener)),
+    )
+    const disposed = Stream.fromQueue(disposedQueue)
     const output = stream.pipe(
       Stream.merge(disposed, { haltStrategy: "left" }),
       Stream.takeUntil((event) => event.type === "server.instance.disposed"),
@@ -72,7 +72,13 @@ function eventResponse(events: EventV2.Interface) {
         Stream.map(eventData),
         Stream.pipeThroughChannel(Sse.encode()),
         Stream.encodeText,
-        Stream.ensuring(Effect.logInfo("event disconnected")),
+        Stream.ensuring(
+          Effect.gen(function* () {
+            yield* Effect.logInfo("event disconnected")
+            yield* Queue.shutdown(disposedQueue).pipe(Effect.ignore)
+            yield* Queue.shutdown(queue).pipe(Effect.ignore)
+          }),
+        ),
       ),
       {
         contentType: "text/event-stream",
