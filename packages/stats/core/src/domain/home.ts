@@ -144,7 +144,11 @@ type RawRow = Record<string, unknown>
 export function getStatsHomeData(): Effect.Effect<StatsHomeData, StatsDataError> {
   return Effect.tryPromise({
     try: async () => {
-      const [modelRows, providerRows, geoRows] = await Promise.all([listModelDaily(), listProviderDaily(), listGeoDaily()])
+      const [modelRows, providerRows, geoRows] = await Promise.all([
+        listModelDaily(),
+        listProviderDaily(),
+        listGeoDaily(),
+      ])
       return buildStatsHomeData(modelRows, providerRows, geoRows)
     },
     catch: (cause) => new StatsDataError(cause),
@@ -183,10 +187,12 @@ export function getStatsLabData(provider: string): Effect.Effect<StatsLabData | 
 }
 
 async function listModelDaily(): Promise<ModelStatMetric[]> {
-  return (await queryRows(`select period_key, updated_at, tier, provider, model, sessions, unique_users, input_tokens,
+  return (
+    await queryRows(`select period_key, updated_at, tier, provider, model, sessions, unique_users, input_tokens,
     output_tokens, reasoning_tokens, cache_read_tokens, total_tokens, input_cost_microcents, output_cost_microcents,
     total_cost_microcents from model_stat where grain = 'day' and client = 'all' and source = 'all'
-    and tier in ('Go', 'go') order by period_key`)).map((row) => ({
+    and tier in ('Go', 'go') order by period_key`)
+  ).map((row) => ({
     periodKey: stringValue(row.period_key),
     updatedAt: dateValue(row.updated_at),
     tier: stringValue(row.tier),
@@ -206,16 +212,16 @@ async function listModelDaily(): Promise<ModelStatMetric[]> {
 }
 
 async function listProviderDaily(): Promise<ProviderStatMetric[]> {
-  return (await queryRows(`select period_key, updated_at, tier, provider, total_tokens from provider_stat
-    where grain = 'day' and client = 'all' and source = 'all' and tier in ('Go', 'go') order by period_key`)).map(
-    (row) => ({
-      periodKey: stringValue(row.period_key),
-      updatedAt: dateValue(row.updated_at),
-      tier: stringValue(row.tier),
-      provider: stringValue(row.provider),
-      totalTokens: numberValue(row.total_tokens),
-    }),
-  )
+  return (
+    await queryRows(`select period_key, updated_at, tier, provider, total_tokens from provider_stat
+    where grain = 'day' and client = 'all' and source = 'all' and tier in ('Go', 'go') order by period_key`)
+  ).map((row) => ({
+    periodKey: stringValue(row.period_key),
+    updatedAt: dateValue(row.updated_at),
+    tier: stringValue(row.tier),
+    provider: stringValue(row.provider),
+    totalTokens: numberValue(row.total_tokens),
+  }))
 }
 
 async function listGeoDaily(opts?: { provider?: string; model?: string }): Promise<GeoStatMetric[]> {
@@ -226,11 +232,13 @@ async function listGeoDaily(opts?: { provider?: string; model?: string }): Promi
         ? "and model = ?"
         : "and provider = 'all' and model = 'all'"
   const params = opts?.model && opts.provider ? [opts.provider, opts.model] : opts?.model ? [opts.model] : []
-  return (await queryRows(
-    `select period_key, updated_at, tier, provider, model, country, continent, total_tokens from geo_stat
+  return (
+    await queryRows(
+      `select period_key, updated_at, tier, provider, model, country, continent, total_tokens from geo_stat
     where grain = 'day' and client = 'all' and source = 'all' and tier in ('Go', 'go') ${scope} order by period_key`,
-    params,
-  )).map((row) => ({
+      params,
+    )
+  ).map((row) => ({
     periodKey: stringValue(row.period_key),
     updatedAt: dateValue(row.updated_at),
     tier: stringValue(row.tier),
