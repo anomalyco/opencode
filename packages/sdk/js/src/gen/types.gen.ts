@@ -1204,6 +1204,10 @@ export type Config = {
       enabled: boolean
     }
     /**
+     * Follow new output by sticking the conversation viewport to the bottom. When the user scrolls up, follow pauses until they return to the bottom (default: true)
+     */
+    auto_scroll?: boolean
+    /**
      * Control diff rendering style: 'auto' adapts to terminal width, 'stacked' always shows single column
      */
     diff_style?: "auto" | "stacked"

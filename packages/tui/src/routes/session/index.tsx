@@ -267,6 +267,7 @@ export function Session() {
   const providers = createMemo(() => Model.index(sync.data.provider))
 
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+  const autoScroll = createMemo(() => tuiConfig.auto_scroll ?? true)
   const toast = useToast()
   const sdk = useSDK()
   const editor = useEditorContext()
@@ -1173,7 +1174,7 @@ export function Session() {
                     foregroundColor: theme.border,
                   },
                 }}
-                stickyScroll={true}
+                stickyScroll={autoScroll()}
                 stickyStart="bottom"
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}

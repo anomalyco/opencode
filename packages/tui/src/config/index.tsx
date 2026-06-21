@@ -61,6 +61,10 @@ export const Info = Schema.Struct({
   prompt: Schema.optional(Prompt),
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
+  auto_scroll: Schema.optional(Schema.Boolean).annotate({
+    description:
+      "Follow new output by sticking the conversation viewport to the bottom. When the user scrolls up, follow pauses until they return to the bottom (default: true)",
+  }),
   diff_style: Schema.optional(DiffStyle),
   mouse: Schema.optional(Schema.Boolean).annotate({ description: "Enable or disable mouse capture (default: true)" }),
 })

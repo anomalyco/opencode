@@ -14,6 +14,7 @@ const decodeTheme = Schema.decodeUnknownOption(Schema.String)
 const decodeRecord = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Unknown))
 const decodeScrollSpeed = Schema.decodeUnknownOption(TuiConfig.ScrollSpeed)
 const decodeScrollAcceleration = Schema.decodeUnknownOption(TuiConfig.ScrollAcceleration)
+const decodeAutoScroll = Schema.decodeUnknownOption(Schema.Boolean)
 const decodeDiffStyle = Schema.decodeUnknownOption(TuiConfig.DiffStyle)
 
 interface MigrateInput {
@@ -71,17 +72,20 @@ function normalizeTui(data: Record<string, unknown>):
   | {
       scroll_speed: number | undefined
       scroll_acceleration: { enabled: boolean } | undefined
+      auto_scroll: boolean | undefined
       diff_style: "auto" | "stacked" | undefined
     }
   | undefined {
   const parsed = {
     scroll_speed: Option.getOrUndefined(decodeScrollSpeed(data.scroll_speed)),
     scroll_acceleration: Option.getOrUndefined(decodeScrollAcceleration(data.scroll_acceleration)),
+    auto_scroll: Option.getOrUndefined(decodeAutoScroll(data.auto_scroll)),
     diff_style: Option.getOrUndefined(decodeDiffStyle(data.diff_style)),
   }
   return parsed.scroll_speed === undefined &&
     parsed.diff_style === undefined &&
-    parsed.scroll_acceleration === undefined
+    parsed.scroll_acceleration === undefined &&
+    parsed.auto_scroll === undefined
     ? undefined
     : parsed
 }

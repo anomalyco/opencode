@@ -368,6 +368,7 @@ You can customize TUI behavior through `tui.json` (or `tui.jsonc`).
   "scroll_acceleration": {
     "enabled": false
   },
+  "auto_scroll": true,
   "diff_style": "auto",
   "mouse": true,
   "attention": {
@@ -394,6 +395,7 @@ This is separate from `opencode.json`, which configures server/runtime behavior.
 - `leader_timeout` - Controls how long OpenCode waits after the leader key. Defaults to `2000`.
 - `scroll_acceleration.enabled` - Enable macOS-style scroll acceleration for smooth, natural scrolling. When enabled, scroll speed increases with rapid scrolling gestures and stays precise for slower movements. **This setting takes precedence over `scroll_speed` and overrides it when enabled.**
 - `scroll_speed` - Controls how fast the TUI scrolls when using scroll commands (minimum: `0.001`, supports decimal values). Defaults to `3`. **Note: This is ignored if `scroll_acceleration.enabled` is set to `true`.**
+- `auto_scroll` - Follow new output by sticking the conversation viewport to the bottom (default: `true`). Set to `false` to disable auto-follow so the viewport stays where you left it while messages stream in.
 - `diff_style` - Controls diff rendering. `"auto"` adapts to terminal width, `"stacked"` always shows a single-column layout.
 - `mouse` - Enable or disable mouse capture in the TUI (default: `true`). When disabled, the terminal's native mouse selection/scrolling behavior is preserved.
 - `attention` - Configures TUI desktop notifications and sounds. Disabled by default.
