@@ -704,7 +704,7 @@ describe("SessionRunnerLLM", () => {
       yield* events.publish(SessionEvent.Moved, {
         sessionID,
         timestamp: DateTime.makeUnsafe(1),
-        location: { directory: AbsolutePath.make("/moved") },
+        location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
       })
       expect(
         yield* db
@@ -762,7 +762,7 @@ describe("SessionRunnerLLM", () => {
           .publish(SessionEvent.Moved, {
             sessionID,
             timestamp: DateTime.makeUnsafe(1),
-            location: { directory: AbsolutePath.make("/moved") },
+            location: Location.Ref.make({ directory: AbsolutePath.make("/moved") }),
           })
           .pipe(Effect.asVoid)
       })
@@ -1461,6 +1461,7 @@ describe("SessionRunnerLLM", () => {
       })
 
       requests.length = 0
+      executions.length = 0
       responses = [
         fragmentFixture("text", "text-summary-2", ["## Goal\n- Preserve the updated task"]).completeEvents,
         fragmentFixture("text", "text-final-2", ["Continued again"]).completeEvents,
@@ -3177,7 +3178,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("fails after the bounded number of local tool continuation steps", () =>
+  it.effect("continues past 25 local tool steps when the agent has no step limit", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -3188,62 +3189,10 @@ describe("SessionRunnerLLM", () => {
       executions.length = 0
       streamGate = undefined
       streamStarted = undefined
-      responses = Array.from({ length: 25 }, (_, index) => [
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.toolCall({ id: `call-echo-${index}`, name: "echo", input: { text: `${index}` } }),
-        LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
-        LLMEvent.finish({ reason: "tool-calls" }),
-      ])
-
-      const failure = yield* session.resume(sessionID).pipe(Effect.flip)
-
-      expect(failure).toMatchObject({ _tag: "SessionRunner.StepLimitExceededError", sessionID, limit: 25 })
-      expect(requests).toHaveLength(25)
-      expect(executions).toHaveLength(25)
-    }),
-  )
-
-  it.effect("does not restart a capped tool loop for a coalesced stale wake", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      const coordinator = yield* SessionRunCoordinator.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Loop forever" }), resume: false })
-
-      requests.length = 0
-      responses = Array.from({ length: 25 }, (_, index) => [
-        LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.toolCall({ id: `call-capped-${index}`, name: "echo", input: { text: `${index}` } }),
-        LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
-        LLMEvent.finish({ reason: "tool-calls" }),
-      ])
-      streamGate = yield* Deferred.make<void>()
-      streamStarted = yield* Deferred.make<void>()
-
-      const run = yield* session.resume(sessionID).pipe(Effect.forkChild)
-      yield* Deferred.await(streamStarted)
-      yield* coordinator.wake(sessionID)
-      yield* Deferred.succeed(streamGate, undefined)
-      expect(yield* Fiber.join(run).pipe(Effect.flip)).toMatchObject({ _tag: "SessionRunner.StepLimitExceededError" })
-      streamGate = undefined
-      streamStarted = undefined
-      yield* Effect.yieldNow
-
-      expect(requests).toHaveLength(25)
-    }),
-  )
-
-  it.effect("accepts a terminal response on the final bounded provider turn", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Finish at the limit" }), resume: false })
-
-      requests.length = 0
       responses = [
-        ...Array.from({ length: 24 }, (_, index) => [
+        ...Array.from({ length: 25 }, (_, index) => [
           LLMEvent.stepStart({ index: 0 }),
-          LLMEvent.toolCall({ id: `call-terminal-${index}`, name: "echo", input: { text: `${index}` } }),
+          LLMEvent.toolCall({ id: `call-echo-${index}`, name: "echo", input: { text: `${index}` } }),
           LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
           LLMEvent.finish({ reason: "tool-calls" }),
         ]),
@@ -3256,7 +3205,56 @@ describe("SessionRunnerLLM", () => {
 
       yield* session.resume(sessionID)
 
-      expect(requests).toHaveLength(25)
+      expect(requests).toHaveLength(26)
+      expect(executions).toHaveLength(25)
+    }),
+  )
+
+  it.effect("forces a text response on an agent's configured final step", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const agents = yield* AgentV2.Service
+      yield* agents.update((editor) =>
+        editor.update(AgentV2.ID.make("build"), (agent) => {
+          agent.steps = 2
+        }),
+      )
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Finish at the limit" }), resume: false })
+
+      requests.length = 0
+      executions.length = 0
+      responses = [
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-terminal", name: "echo", input: { text: "done" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+        [
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.toolCall({ id: "call-forbidden", name: "echo", input: { text: "forbidden" } }),
+          LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+          LLMEvent.finish({ reason: "tool-calls" }),
+        ],
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(requests[0]?.toolChoice).toBeUndefined()
+      expect(requests[1]?.toolChoice).toMatchObject({ type: "none" })
+      expect(requests[1]?.tools).toEqual([])
+      expect(requests[1]?.messages.at(-1)).toMatchObject({
+        role: "assistant",
+        content: [{ type: "text", text: expect.stringContaining("MAXIMUM STEPS REACHED") }],
+      })
+      expect(executions).toEqual(["done"])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Finish at the limit" },
+        { type: "assistant", content: [{ type: "tool", id: "call-terminal", state: { status: "completed" } }] },
+        { type: "assistant", content: [{ type: "tool", id: "call-forbidden", state: { status: "error" } }] },
+      ])
     }),
   )
 
