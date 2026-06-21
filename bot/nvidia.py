@@ -2,7 +2,10 @@
 NVIDIA GPU utilities for getting GPU information.
 """
 import asyncio
+import json
+import os
 import re
+import subprocess
 from dataclasses import dataclass, field
 from typing import List, Optional
 
@@ -19,6 +22,8 @@ class GPUInfo:
     power_cap: int  # Watts
     memory_used: int  # MiB
     memory_total: int  # MiB
+    vram_temp: int = 0  # Celsius, VRAM temperature from gputemps
+    junction_temp: int = 0  # Celsius, junction temperature from gputemps
 
     @property
     def memory_percent(self) -> int:
@@ -170,6 +175,66 @@ def parse_nvidia_smi(raw_output: bytes) -> NvidiaInfo:
     )
 
 
+async def run_gputemps(
+    path: str = "~/projects/cpp/gpu-mem-temp/gputemps",
+    use_sudo: bool = True,
+) -> dict:
+    """
+    Execute gputemps and return parsed JSON.
+
+    Args:
+        path: Path to gputemps executable
+        use_sudo: Prepend sudo -n (requires passwordless sudo)
+
+    Returns:
+        Parsed JSON dict
+
+    Raises:
+        FileNotFoundError: If gputemps not found
+        subprocess.SubprocessError: On other errors
+    """
+    expanded_path = os.path.expanduser(path) if path.startswith("~") else path
+    cmd = ["sudo", "-n", expanded_path] if use_sudo else [expanded_path]
+    try:
+        process = await asyncio.create_subprocess_exec(
+            *cmd, "--once", "--json",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _stderr = await asyncio.wait_for(process.communicate(), timeout=10)
+
+        if process.returncode != 0:
+            raise subprocess.SubprocessError(
+                f"gputemps returned non-zero exit code: {process.returncode}",
+            )
+
+        return json.loads(stdout)
+    except FileNotFoundError:
+        raise FileNotFoundError("gputemps not found")
+
+
+def merge_vram_temps(info: NvidiaInfo, gputemps_data: Optional[dict]) -> None:
+    """
+    Merge VRAM temperatures from gputemps into NvidiaInfo.
+
+    Args:
+        info: Parsed NvidiaInfo structure (modified in-place)
+        gputemps_data: Parsed JSON from gputemps, or None
+    """
+    if not gputemps_data:
+        return
+
+    gpu_temps = {}
+    for g in gputemps_data.get("gpus", []):
+        idx = g["index"]
+        gpu_temps[idx] = g
+    for gpu in info.gpus:
+        temps = gpu_temps.get(gpu.id)
+        if temps:
+            gpu.vram_temp = temps.get("vram", 0)
+            gpu.junction_temp = temps.get("junction", 0)
+
+
 def format_for_vk(info: NvidiaInfo) -> str:
     """
     Format NvidiaInfo as concise text suitable for VK message.
@@ -196,6 +261,13 @@ def format_for_vk(info: NvidiaInfo) -> str:
             f"{gpu.power_usage}W/{gpu.power_cap}W  "
             f"{gpu.memory_used}/{gpu.memory_total}MiB ({gpu.memory_percent}%)"
         )
+        if gpu.junction_temp or gpu.vram_temp:
+            temps = []
+            if gpu.junction_temp:
+                temps.append(f"Junction: {gpu.junction_temp}C")
+            if gpu.vram_temp:
+                temps.append(f"VRAM: {gpu.vram_temp}C")
+            lines.append(f"  {'  '.join(temps)}")
 
     return "\n".join(lines)
 
@@ -243,14 +315,18 @@ async def get_gpu_simple_message(timeout: int = 30) -> tuple[Optional[str], Opti
         return None, f"Error: {str(e)[:2000]}"
 
 
-async def get_gpu_info_vk_message(timeout: int = 30) -> tuple[Optional[str], Optional[str]]:
+async def get_gpu_info_vk_message(
+    timeout: int = 30,
+    gputemps_path: str = "~/projects/cpp/gpu-mem-temp/gputemps",
+) -> tuple[Optional[str], Optional[str]]:
     """
     Get GPU information and format as VK message.
 
-    Convenience function that runs nvidia-smi, parses, and formats output.
+    Runs nvidia-smi and gputemps, merges VRAM temperatures, and formats output.
 
     Args:
         timeout: Timeout in seconds
+        gputemps_path: Path to gputemps executable
 
     Returns:
         Tuple of (message_text, error_text) - one will be None
@@ -258,6 +334,14 @@ async def get_gpu_info_vk_message(timeout: int = 30) -> tuple[Optional[str], Opt
     try:
         raw_output = await run_nvidia_smi(timeout=timeout)
         info = parse_nvidia_smi(raw_output)
+
+        gputemps_data = None
+        try:
+            gputemps_data = await run_gputemps(path=gputemps_path)
+        except (FileNotFoundError, subprocess.SubprocessError, json.JSONDecodeError):
+            pass
+
+        merge_vram_temps(info, gputemps_data)
         message = format_for_vk(info)
         return message, None
     except FileNotFoundError:
