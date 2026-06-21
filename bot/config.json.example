@@ -26,6 +26,7 @@
     }
   },
   "default_model": "qwen3.6-claude",
+  "shutdown": "/home/grishberg/shutdown-pc.sh",
   "mcp_servers": {
     "ya-disk-uploader": {
       "type": "local",

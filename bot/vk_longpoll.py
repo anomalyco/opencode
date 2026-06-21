@@ -22,6 +22,7 @@ from config import (
     LONGPOLL_WAIT,
     OPENCODE_URL,
     SCRIPT_DIR,
+    SHUTDOWN_SCRIPT,
     SUBAGENT_PREFIX,
     THINKING_PEER_ID,
     getCwd,
@@ -676,6 +677,9 @@ class VKLongPoll:
         if cmd == "/sysmon":
             await self._handle_sysmon_command(user_id)
             return
+
+        if cmd == "/shutdown":
+            await self._handle_shutdown_command(user_id)
             return
 
         if cmd == "/clean_attaches":
@@ -1079,6 +1083,20 @@ class VKLongPoll:
             await self.vk.send_message(user_id, message)
         else:
             await self.vk.send_message(user_id, error)
+
+    async def _handle_shutdown_command(self, user_id: int):
+        """Обрабатывает команду /shutdown"""
+        if not SHUTDOWN_SCRIPT:
+            await self.vk.send_message(user_id, "❌ shutdown не определен в конфиге")
+            return
+
+        await self.vk.send_message(user_id, "shutdown pc...")
+        process = await asyncio.create_subprocess_exec(
+            "sudo", SHUTDOWN_SCRIPT,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        await asyncio.wait_for(process.communicate(), timeout=30)
 
     async def _handle_sysmon_command(self, user_id: int):
         """Обрабатывает команду /sysmon - показывает статус системы через sysmon сервер"""

@@ -79,6 +79,7 @@ MCP_SERVERS = CONFIG.get("mcp_servers", {})
 SUBAGENT_PREFIX = CONFIG.get("subagent_prefix", "[subagent] ")
 OPENCODE_APP_NAME = CONFIG.get("opencode-app-name")
 ALLOWED_FOLDERS = CONFIG.get("allowed_folders", ["/tmp"])
+SHUTDOWN_SCRIPT = CONFIG.get("shutdown")
 
 if not VK_TOKEN:
     raise ValueError("VK_TOKEN is required in config file")
@@ -156,6 +157,7 @@ def switch_config(config_name: str) -> bool:
     current_module.SUBAGENT_PREFIX = new_config.get("subagent_prefix", "[subagent] ")
     current_module.OPENCODE_APP_NAME = new_config.get("opencode-app-name")
     current_module.ALLOWED_FOLDERS = new_config.get("allowed_folders", ["/tmp"])
+    current_module.SHUTDOWN_SCRIPT = new_config.get("shutdown")
     current_module.OPENCODE_BIN = Path(new_config["opencode_bin_path"])
     if not current_module.OPENCODE_BIN.is_absolute():
         current_module.OPENCODE_BIN = (SCRIPT_DIR / current_module.OPENCODE_BIN).resolve()
