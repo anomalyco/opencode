@@ -305,14 +305,7 @@ export const layer = Layer.effect(
           const llmFailure = failure instanceof LLMError ? failure : undefined
           if (llmFailure && !publisher.hasProviderError()) {
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
-            yield* withPublication(
-              events.publish(SessionEvent.Step.Failed, {
-                sessionID: session.id,
-                timestamp: yield* DateTime.now,
-                assistantMessageID: yield* publisher.startAssistant(),
-                error: { type: "unknown", message: llmFailure.reason.message },
-              }),
-            )
+            yield* withPublication(publisher.failAssistant(llmFailure.reason.message))
           }
           if (stream._tag === "Failure" && Cause.hasInterrupts(stream.cause)) yield* FiberSet.clear(toolFibers)
           const settled = yield* restore(awaitToolFibers(toolFibers)).pipe(Effect.exit)
@@ -327,6 +320,8 @@ export const layer = Layer.effect(
           ) {
             yield* FiberSet.clear(toolFibers)
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
+            if (publisher.hasActiveAssistant())
+              yield* withPublication(publisher.failAssistant("Provider turn interrupted"))
           }
           if (settled._tag === "Failure" && !Cause.hasInterrupts(settled.cause)) {
             const failure = Cause.squash(settled.cause)
