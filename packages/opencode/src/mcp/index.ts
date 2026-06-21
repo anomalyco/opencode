@@ -28,7 +28,7 @@ import { McpAuth } from "./auth"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import { TuiEvent } from "@/server/tui-event"
-import open from "open"
+import { openUrl } from "../util/browser"
 import { Cause, Effect, Exit, Layer, Option, Context, Schema, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
@@ -520,9 +520,7 @@ export const layer = Layer.effect(
                   if (typeof pid === "number") {
                     const pids = yield* descendants(pid)
                     for (const dpid of pids) {
-                      try {
-                        process.kill(dpid, "SIGTERM")
-                      } catch {}
+                      yield* Effect.try(() => process.kill(dpid, "SIGTERM")).pipe(Effect.ignore)
                     }
                   }
                   yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
@@ -835,7 +833,7 @@ export const layer = Layer.effect(
 
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)
 
-      yield* Effect.tryPromise(() => open(result.authorizationUrl)).pipe(
+      yield* Effect.tryPromise(() => openUrl(result.authorizationUrl)).pipe(
         Effect.flatMap((subprocess) =>
           Effect.callback<void, Error>((resume) => {
             const timer = setTimeout(() => resume(Effect.void), 500)

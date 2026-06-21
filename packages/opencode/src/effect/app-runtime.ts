@@ -37,6 +37,7 @@ import { McpAuth } from "@/mcp/auth"
 import { Command } from "@/command"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
+import { HotReload } from "@/hot-reload"
 import { Format } from "@/format"
 import { InstanceLayer } from "@/project/instance-layer"
 import { Project } from "@/project/project"
@@ -51,6 +52,17 @@ import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import { BackgroundJob } from "@/background/job"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { UserProfile } from "@opencode-ai/core/personal/profile"
+import { Notes } from "@opencode-ai/core/personal/notes"
+import { Reminder } from "@opencode-ai/core/personal/reminder"
+import { Calendar } from "@opencode-ai/core/personal/calendar"
+import { Weather } from "@opencode-ai/core/personal/weather"
+import { System } from "@opencode-ai/core/personal/system"
+import { Email } from "@opencode-ai/core/personal/email"
+import { API } from "@opencode-ai/core/personal/api"
+import { Knowledge } from "@opencode-ai/core/personal/knowledge"
+import { Workflow } from "@opencode-ai/core/personal/workflow"
+import { Watcher } from "@opencode-ai/core/personal/watcher"
 
 export const AppLayer = Layer.mergeAll(
   Npm.defaultLayer,
@@ -99,6 +111,18 @@ export const AppLayer = Layer.mergeAll(
   Installation.defaultLayer,
   ShareNext.defaultLayer,
   SessionShare.defaultLayer,
+  UserProfile.defaultLayer,
+  Notes.defaultLayer,
+  Reminder.defaultLayer,
+  Calendar.defaultLayer,
+  Weather.defaultLayer,
+  System.defaultLayer,
+  Email.defaultLayer,
+  API.defaultLayer,
+  Knowledge.defaultLayer,
+  Workflow.defaultLayer,
+  Watcher.defaultLayer,
+  HotReload.defaultLayer,
 ).pipe(
   Layer.provideMerge(Ripgrep.defaultLayer),
   Layer.provideMerge(InstanceLayer.layer),

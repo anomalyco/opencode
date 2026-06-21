@@ -83,7 +83,7 @@ export const layer = Layer.effect(
     const locationRoot = yield* fs.realPath(location.directory)
 
     function notFound<A>(effect: Effect.Effect<A, FSUtil.Error>) {
-      return effect.pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+      return effect.pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void))
     }
 
     const resolvePath = Effect.fnUntraced(function* (absolute: string) {

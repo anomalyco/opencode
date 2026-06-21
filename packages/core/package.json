@@ -115,12 +115,13 @@
     "mime-types": "3.0.2",
     "minimatch": "10.2.5",
     "npm-package-arg": "13.0.2",
-    "semver": "^7.6.3",
+    "semver": "catalog:",
     "turndown": "7.2.0",
     "venice-ai-sdk-provider": "2.0.2",
     "which": "6.0.1",
     "xdg-basedir": "5.1.0",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "@huggingface/transformers": "4.2.0"
   },
   "overrides": {
     "drizzle-orm": "catalog:"

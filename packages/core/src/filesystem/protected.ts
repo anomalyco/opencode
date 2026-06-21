@@ -47,6 +47,7 @@ export function paths(): string[] {
       ...DARWIN_ROOT,
     ]
   if (process.platform === "win32") return WIN32_HOME.map((name) => path.join(home, name))
+  if (process.platform === "linux") return ["/data/data"]
   return []
 }
 

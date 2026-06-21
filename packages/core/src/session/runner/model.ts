@@ -16,6 +16,11 @@ import { ModelRequest } from "../../model-request"
 import { PluginBoot } from "../../plugin/boot"
 import { ProviderV2 } from "../../provider"
 import { SessionSchema } from "../schema"
+import { Config } from "../../config"
+import { SessionStore } from "../store"
+import { SessionMessage } from "../message"
+
+import { MessageDecodeError } from "../error"
 
 export class ModelNotSelectedError extends Schema.TaggedErrorClass<ModelNotSelectedError>()(
   "SessionRunnerModel.ModelNotSelectedError",
@@ -38,6 +43,7 @@ export type Error =
   | Catalog.ModelNotFoundError
   | ModelNotSelectedError
   | UnsupportedApiError
+  | MessageDecodeError
 
 export interface Interface {
   readonly resolve: (session: SessionSchema.Info) => Effect.Effect<Model, Error>
@@ -145,18 +151,42 @@ export const locationLayer = Layer.effect(
     const credentials = yield* Credential.Service
     const integrations = yield* Integration.Service
     const boot = yield* PluginBoot.Service
+    const configService = yield* Config.Service
+    const store = yield* SessionStore.Service
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session) {
         // Location plugins populate and filter the catalog asynchronously during layer startup.
         yield* boot.wait()
-        const selected = session.model
-          ? yield* catalog.model.get(session.model.providerID, session.model.id)
+
+        let targetModelRef = session.model
+
+        const configEntries = yield* configService.entries()
+        const profile = Config.latest(configEntries, "personal_profile")
+        const adaptiveRouting = profile?.adaptive_routing
+
+        if (adaptiveRouting?.enabled) {
+          const messages = yield* store.context(session.id)
+          const userMessages = messages.filter((m): m is SessionMessage.User => m.type === "user")
+          const lastUserMessage = userMessages[userMessages.length - 1]
+          const text = lastUserMessage?.text ?? ""
+
+          const wordCount = text.split(/\s+/).filter(Boolean).length
+          const isComplex = wordCount > 150 || /refactor|architecture|optimize/i.test(text)
+
+          const chosenModelRef = isComplex ? adaptiveRouting.complex_model : adaptiveRouting.fast_model
+          if (chosenModelRef) {
+            targetModelRef = chosenModelRef
+          }
+        }
+
+        const selected = targetModelRef
+          ? yield* catalog.model.get(targetModelRef.providerID, targetModelRef.id)
           : (Option.getOrUndefined((yield* catalog.model.default()).pipe(Option.filter(supported))) ??
             (yield* catalog.model.available()).find(supported))
         if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
         const connection = yield* integrations.connection.forIntegration(Integration.ID.make(selected.providerID))
         return yield* fromCatalogModel(
-          withVariant(selected, session.model?.variant),
+          withVariant(selected, targetModelRef?.variant),
           connection,
           connection?.type === "credential" ? yield* credentials.get(connection.id) : undefined,
         )

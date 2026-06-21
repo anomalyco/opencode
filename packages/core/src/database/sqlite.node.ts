@@ -57,15 +57,13 @@ const make = (options: Config) =>
       Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
         const statement = native.prepare(query)
         statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
-        try {
-          return Effect.succeed(statement.all(...(params as SQLInputValue[])) as Array<Record<string, unknown>>)
-        } catch (cause) {
-          return Effect.fail(
+        return Effect.try({
+          try: () => statement.all(...(params as SQLInputValue[])) as Array<Record<string, unknown>>,
+          catch: (cause) =>
             new SqlError({
               reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
             }),
-          )
-        }
+        })
       })
 
     const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
@@ -73,17 +71,14 @@ const make = (options: Config) =>
         const statement = native.prepare(query)
         statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
         statement.setReturnArrays(true)
-        try {
-          return Effect.succeed(
+        return Effect.try({
+          try: () =>
             statement.all(...(params as SQLInputValue[])) as unknown as ReadonlyArray<ReadonlyArray<unknown>>,
-          )
-        } catch (cause) {
-          return Effect.fail(
+          catch: (cause) =>
             new SqlError({
               reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
             }),
-          )
-        }
+        })
       })
 
     const connection = identity<SqliteConnection>({

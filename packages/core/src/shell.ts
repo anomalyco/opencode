@@ -108,7 +108,7 @@ function win() {
 async function unix() {
   const text = await readFile("/etc/shells", "utf8").catch(() => "")
   if (text) return Array.from(new Set(text.split("\n").filter((line) => line.trim() && !line.startsWith("#"))))
-  return ["/bin/bash", "/bin/zsh", "/bin/sh"]
+  return ["bash", "zsh", "dash", "fish", "sh"].map((s) => which(s)).filter((s): s is string => Boolean(s))
 }
 
 function select(file: string | undefined, opts?: { acceptable?: boolean }) {

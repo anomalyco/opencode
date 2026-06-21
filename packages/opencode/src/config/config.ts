@@ -542,11 +542,17 @@ export const layer = Layer.effect(
         }
 
         if (Flag.OPENCODE_PERMISSION) {
-          try {
-            result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
-          } catch (err) {
-            yield* Effect.logWarning("OPENCODE_PERMISSION contains invalid JSON, skipping", { err })
-          }
+          yield* Effect.try({
+            try: () => JSON.parse(Flag.OPENCODE_PERMISSION),
+            catch: (err) => err as Error,
+          }).pipe(
+            Effect.andThen((parsed) => {
+              result.permission = mergeDeep(result.permission ?? {}, parsed)
+            }),
+            Effect.catchAll((err) =>
+              Effect.logWarning("OPENCODE_PERMISSION contains invalid JSON, skipping", { err })
+            ),
+          )
         }
 
         if (result.tools) {
@@ -563,11 +569,12 @@ export const layer = Layer.effect(
         }
 
         if (!result.username) {
-          try {
-            result.username = os.userInfo().username || "user"
-          } catch (err) {
-            yield* Effect.logWarning("failed to read system username, using fallback", { err })
+          const name = Option.try(() => os.userInfo().username)
+          if (Option.isSome(name)) {
+            result.username = name.value || "user"
+          } else {
             result.username = "user"
+            yield* Effect.logWarning("failed to read system username, using fallback")
           }
         }
 

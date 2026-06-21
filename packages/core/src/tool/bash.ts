@@ -2,8 +2,9 @@ export * as BashTool from "./bash"
 
 import path from "path"
 import { ToolFailure } from "@opencode-ai/llm"
-import { Duration, Effect, Layer, Schema } from "effect"
+import { Duration, Effect, Layer, Schema, DateTime, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
+import type { PlatformError } from "effect/PlatformError"
 import { Config } from "../config"
 import { FSUtil } from "../fs-util"
 import { LocationMutation } from "../location-mutation"
@@ -12,6 +13,8 @@ import { PermissionV2 } from "../permission"
 import { PositiveInt } from "../schema"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
+import { EventV2 } from "../event"
+import { SessionEvent } from "../session/event"
 
 export const name = "bash"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
@@ -112,6 +115,7 @@ export const layer = Layer.effectDiscard(
     const appProcess = yield* AppProcess.Service
     const config = yield* Config.Service
     const permission = yield* PermissionV2.Service
+    const events = yield* EventV2.Service
 
     yield* tools
       .register({
@@ -164,18 +168,105 @@ export const layer = Layer.effectDiscard(
                 forceKillAfter: Duration.seconds(3),
               })
               const timeout = input.timeout ?? DEFAULT_TIMEOUT_MS
-              const result = yield* appProcess
-                .run(command, {
-                  timeout: Duration.millis(timeout),
-                  maxOutputBytes: MAX_CAPTURE_BYTES,
-                  maxErrorBytes: MAX_CAPTURE_BYTES,
+
+              const publishProgress = (text: string) =>
+                Effect.gen(function* () {
+                  const now = yield* DateTime.now
+                  yield* events.publish(SessionEvent.Tool.Progress, {
+                    timestamp: now,
+                    sessionID: context.sessionID,
+                    assistantMessageID: context.assistantMessageID,
+                    callID: context.toolCallID,
+                    structured: {},
+                    content: [{ type: "text", text }],
+                  })
                 })
-                .pipe(
-                  Effect.catchTag("AppProcessError", (error) =>
-                    isTimeout(error) ? Effect.succeed(undefined) : Effect.fail(error),
-                  ),
-                )
-              if (!result) {
+
+              yield* publishProgress(`🏃‍♂️ [Bash] Executando comando: "${input.command}"`)
+
+              let stdoutBuffer = Buffer.alloc(0)
+              let stderrBuffer = Buffer.alloc(0)
+              let stdoutTruncated = false
+              let stderrTruncated = false
+
+              const runResult = yield* Effect.scoped(
+                Effect.gen(function* () {
+                  const handle = yield* appProcess.spawn(command)
+
+                  const stdoutLineStream = handle.stdout.pipe(
+                    Stream.tap((chunk) =>
+                      Effect.sync(() => {
+                        const limit = MAX_CAPTURE_BYTES
+                        if (stdoutBuffer.length + chunk.length > limit) {
+                          stdoutTruncated = true
+                          if (stdoutBuffer.length < limit) {
+                            stdoutBuffer = Buffer.concat([stdoutBuffer, chunk.slice(0, limit - stdoutBuffer.length)])
+                          }
+                        } else {
+                          stdoutBuffer = Buffer.concat([stdoutBuffer, chunk])
+                        }
+                      })
+                    ),
+                    Stream.decodeText,
+                    Stream.splitLines,
+                    Stream.filter((line) => line.length > 0),
+                    Stream.tap((line) => publishProgress(`🟢 [Bash Output]: ${line}`))
+                  )
+
+                  const stderrLineStream = handle.stderr.pipe(
+                    Stream.tap((chunk) =>
+                      Effect.sync(() => {
+                        const limit = MAX_CAPTURE_BYTES
+                        if (stderrBuffer.length + chunk.length > limit) {
+                          stderrTruncated = true
+                          if (stderrBuffer.length < limit) {
+                            stderrBuffer = Buffer.concat([stderrBuffer, chunk.slice(0, limit - stderrBuffer.length)])
+                          }
+                        } else {
+                          stderrBuffer = Buffer.concat([stderrBuffer, chunk])
+                        }
+                      })
+                    ),
+                    Stream.decodeText,
+                    Stream.splitLines,
+                    Stream.filter((line) => line.length > 0),
+                    Stream.tap((line) => publishProgress(`🔴 [Bash Error]: ${line}`))
+                  )
+
+                  return yield* Effect.timeoutOrElse(
+                    Effect.all(
+                      [
+                        Stream.runDrain(stdoutLineStream),
+                        Stream.runDrain(stderrLineStream),
+                        handle.exitCode,
+                      ],
+                      { concurrency: "unbounded" }
+                    ),
+                    {
+                      duration: Duration.millis(timeout),
+                      orElse: () => Effect.fail(new Error("Timed out")),
+                    }
+                  )
+                })
+              ).pipe(
+                Effect.catch((err) => {
+                  if (err instanceof Error && err.message === "Timed out") {
+                    return Effect.void
+                  }
+                  if (
+                    err &&
+                    typeof err === "object" &&
+                    "cause" in err &&
+                    err.cause instanceof Error &&
+                    err.cause.message === "Timed out"
+                  ) {
+                    return Effect.void
+                  }
+                  return Effect.fail(err)
+                })
+              )
+
+              if (!runResult) {
                 return {
                   command: input.command,
                   cwd: target.canonical,
@@ -186,17 +277,23 @@ export const layer = Layer.effectDiscard(
                 }
               }
 
-              const compact = compactOutput(result.stdout.toString("utf8"), result.stderr.toString("utf8"))
-              const notice = captureNotice(result.stdoutTruncated, result.stderrTruncated)
+              const exitCode = runResult[2]
+              const outStr = stdoutBuffer.toString("utf8")
+              const errStr = stderrBuffer.toString("utf8")
+              const compact = compactOutput(outStr, errStr)
+              const notice = captureNotice(stdoutTruncated, stderrTruncated)
+
+              yield* publishProgress(`✅ [Bash] Comando finalizado com código de saída ${exitCode}.`)
+
               return {
                 command: input.command,
                 cwd: target.canonical,
-                exitCode: result.exitCode,
+                exitCode,
                 output: notice ? `${compact}\n\n${notice}` : compact,
-                truncated: result.stdoutTruncated || result.stderrTruncated,
+                truncated: stdoutTruncated || stderrTruncated,
                 ...(warnings.length ? { warnings } : {}),
-                ...(result.stdoutTruncated ? { stdoutTruncated: true } : {}),
-                ...(result.stderrTruncated ? { stderrTruncated: true } : {}),
+                ...(stdoutTruncated ? { stdoutTruncated: true } : {}),
+                ...(stderrTruncated ? { stderrTruncated: true } : {}),
               }
             }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to execute command: ${input.command}` }))),
         }),

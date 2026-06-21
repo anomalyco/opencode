@@ -107,7 +107,7 @@ export const layer = Layer.effect(
           .glob("{*.md,**/SKILL.md}", { cwd: directory, absolute: true, include: "file", symlink: true, dot: true })
           .pipe(Effect.catch(() => Effect.succeed([] as string[])))
         for (const filepath of files.toSorted()) {
-          const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+          const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.catch(() => Effect.void))
           if (!content) continue
           const markdown = ConfigMarkdown.parseOption(content)
           if (!markdown) continue

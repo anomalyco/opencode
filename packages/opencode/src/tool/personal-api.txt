@@ -1,0 +1,1 @@
+Faz requisições HTTP para APIs externas (REST, GraphQL). Gerencia conexões salvas com autenticação.

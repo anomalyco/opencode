@@ -427,7 +427,7 @@ export const layer = Layer.effect(
                 if (failed) return
               }
 
-              try {
+              yield* Effect.sync(() => {
                 const event = evt as { directory?: string; project?: string; payload: unknown }
                 GlobalBus.emit("event", {
                   directory: event.directory,
@@ -435,12 +435,12 @@ export const layer = Layer.effect(
                   workspace: space.id,
                   payload: event.payload,
                 })
-              } catch (error) {
-                yield* Effect.logWarning("failed to emit global event", {
+              }).pipe(Effect.catchAllCause((error) =>
+                Effect.logWarning("failed to emit global event", {
                   workspaceID: space.id,
-                  error: errorData(error),
+                  error: String(error),
                 })
-              }
+              ))
             }),
           )
 

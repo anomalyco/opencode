@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { $ } from "bun"
+import { execSync } from "child_process"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
@@ -98,9 +98,11 @@ async function drizzle(temporary: string, output: string, name?: string) {
 export default { ...config, out: ${JSON.stringify(output)} }
 `,
   )
-  await $`bun drizzle-kit generate --config ${config} ${name ? ["--name", name] : []}`.cwd(
-    path.join(root, "packages/core"),
-  )
+  const cmd = `node /data/data/com.termux/files/home/.zero/src/node_modules/.bun/drizzle-kit@1.0.0-rc.2/node_modules/drizzle-kit/bin.cjs generate --config ${config} ${name ? `--name ${name}` : ""}`
+  execSync(cmd, {
+    cwd: path.join(root, "packages/core"),
+    stdio: "inherit",
+  })
 }
 
 async function generatedMigrations(directory: string) {

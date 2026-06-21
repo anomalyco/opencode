@@ -1,0 +1,1 @@
+Cria e executa workflows automatizados com múltiplas etapas. Ideal para automatizar processos repetitivos.

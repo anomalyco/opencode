@@ -16,6 +16,18 @@ import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
 import { SkillTool } from "./skill"
+import { PersonalProfileTool as personal_profile } from "./personal-profile"
+import { PersonalNotesTool as personal_notes } from "./personal-notes"
+import { PersonalReminderTool as personal_reminder } from "./personal-reminder"
+import { PersonalCalendarTool as personal_calendar } from "./personal-calendar"
+import { PersonalWeatherTool as personal_weather } from "./personal-weather"
+import { PersonalSystemTool as personal_system } from "./personal-system"
+import { PersonalEmailTool as personal_email } from "./personal-email"
+import { PersonalApiTool as personal_api } from "./personal-api"
+import { PersonalKnowledgeTool as personal_knowledge } from "./personal-knowledge"
+import { PersonalWorkflowTool as personal_workflow } from "./personal-workflow"
+import { PersonalClipboardTool as personal_clipboard } from "./personal-clipboard"
+import { PersonalWatcherTool as personal_watcher } from "./personal-watcher"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
 import { type ToolContext as PluginToolContext, type ToolDefinition } from "@opencode-ai/plugin"
@@ -76,6 +88,7 @@ export interface Interface {
     modelID: ModelV2.ID
     agent: Agent.Info
   }) => Effect.Effect<Tool.Def[]>
+  readonly invalidate: Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ToolRegistry") {}
@@ -106,6 +119,19 @@ export const layer = Layer.effect(
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
+
+    const p_profile = yield* personal_profile
+    const p_notes = yield* personal_notes
+    const p_reminder = yield* personal_reminder
+    const p_calendar = yield* personal_calendar
+    const p_weather = yield* personal_weather
+    const p_system = yield* personal_system
+    const p_email = yield* personal_email
+    const p_api = yield* personal_api
+    const p_knowledge = yield* personal_knowledge
+    const p_workflow = yield* personal_workflow
+    const p_clipboard = yield* personal_clipboard
+    const p_watcher = yield* personal_watcher
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -140,7 +166,7 @@ export const layer = Layer.effect(
                   directory: ctx.directory,
                   worktree: ctx.worktree,
                 }
-                const result = yield* Effect.promise(() => def.execute(args as any, pluginCtx))
+                const result = yield* Effect.promise(() => def.execute(args as Record<string, unknown>, pluginCtx))
                 const output = typeof result === "string" ? result : result.output
                 const metadata = typeof result === "string" ? {} : (result.metadata ?? {})
                 const attachments = typeof result === "string" ? undefined : result.attachments
@@ -212,6 +238,18 @@ export const layer = Layer.effect(
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
           plan: Tool.init(plan),
+          personal_profile: Tool.init(p_profile),
+          personal_notes: Tool.init(p_notes),
+          personal_reminder: Tool.init(p_reminder),
+          personal_calendar: Tool.init(p_calendar),
+          personal_weather: Tool.init(p_weather),
+          personal_system: Tool.init(p_system),
+          personal_email: Tool.init(p_email),
+          personal_api: Tool.init(p_api),
+          personal_knowledge: Tool.init(p_knowledge),
+          personal_workflow: Tool.init(p_workflow),
+          personal_clipboard: Tool.init(p_clipboard),
+          personal_watcher: Tool.init(p_watcher),
         })
 
         return {
@@ -231,6 +269,18 @@ export const layer = Layer.effect(
             tool.search,
             tool.skill,
             tool.patch,
+            tool.personal_profile,
+            tool.personal_notes,
+            tool.personal_reminder,
+            tool.personal_calendar,
+            tool.personal_weather,
+            tool.personal_system,
+            tool.personal_email,
+            tool.personal_api,
+            tool.personal_knowledge,
+            tool.personal_workflow,
+            tool.personal_clipboard,
+            tool.personal_watcher,
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
             ...(flags.experimentalPlanMode && flags.client === "cli" ? [tool.plan] : []),
           ],
@@ -306,12 +356,16 @@ export const layer = Layer.effect(
       )
     })
 
+    const invalidate: Interface["invalidate"] = Effect.fn("ToolRegistry.invalidate")(function* () {
+      yield* InstanceState.invalidate(state)
+    })
+
     const named: Interface["named"] = Effect.fn("ToolRegistry.named")(function* () {
       const s = yield* InstanceState.get(state)
       return { task: s.task, read: s.read }
     })
 
-    return Service.of({ ids, all, named, tools })
+    return Service.of({ ids, all, named, tools, invalidate })
   }),
 )
 

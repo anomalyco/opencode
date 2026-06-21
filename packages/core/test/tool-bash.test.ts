@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import { realpathSync } from "node:fs"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Config } from "@opencode-ai/core/config"
@@ -14,10 +14,29 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { BashTool } from "@opencode-ai/core/tool/bash"
 import { ToolRegistry } from "@opencode-ai/core/tool/registry"
+import { EventV2 } from "@opencode-ai/core/event"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
+
+const eventMock = Layer.succeed(
+  EventV2.Service,
+  EventV2.Service.of({
+    publish: () => Effect.succeed({} as any),
+    subscribe: () => Stream.empty,
+    all: () => Stream.empty,
+    aggregateEvents: () => Stream.empty,
+    sync: () => Effect.succeed(Effect.void),
+    listen: () => Effect.succeed(Effect.void),
+    beforeCommit: () => Effect.void,
+    project: () => Effect.void,
+    replay: () => Effect.void,
+    replayAll: () => Effect.void,
+    remove: () => Effect.void,
+    claim: () => Effect.void,
+  })
+)
 
 const sessionID = SessionV2.ID.make("ses_bash_tool_test")
 const assertions: PermissionV2.AssertInput[] = []
@@ -65,6 +84,35 @@ const appProcess = Layer.succeed(
         runs.push({ command: command.command, cwd: command.options.cwd, shell: command.options.shell, options })
         return runFailure ? Effect.fail(runFailure) : Effect.succeed(result)
       }),
+    spawn: (command: ChildProcess.Command) =>
+      Effect.suspend(() => {
+        if (command._tag !== "StandardCommand") throw new Error("expected standard command")
+        runs.push({
+          command: command.command,
+          cwd: command.options.cwd,
+          shell: command.options.shell,
+          options: {
+            maxOutputBytes: 1024 * 1024,
+            maxErrorBytes: 1024 * 1024,
+          }
+        })
+        const exitCodeEffect = runFailure ? Effect.fail(runFailure) : Effect.succeed(result.exitCode ?? 0)
+        return Effect.succeed({
+          stdout: Stream.fromIterable([
+            result.stdoutTruncated ? Buffer.alloc(1024 * 1024 + 10) : result.stdout
+          ]),
+          stderr: Stream.fromIterable([
+            result.stderrTruncated ? Buffer.alloc(1024 * 1024 + 10) : result.stderr
+          ]),
+          exitCode: exitCodeEffect,
+          stdin: {
+            write: () => Effect.void,
+            close: () => Effect.void,
+          } as any,
+          pid: 12345,
+          kill: () => Effect.succeed(true),
+        } as any)
+      }),
   } as unknown as AppProcess.Interface),
 )
 const config = Layer.succeed(
@@ -109,6 +157,7 @@ const withTool = <A, E, R>(
     Layer.provide(filesystem),
     Layer.provide(processLayer),
     Layer.provide(config),
+    Layer.provide(eventMock),
   )
   return Effect.gen(function* () {
     return yield* body(yield* ToolRegistry.Service)

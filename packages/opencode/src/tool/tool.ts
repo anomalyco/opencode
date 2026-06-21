@@ -9,11 +9,8 @@ import * as Truncate from "./truncate"
 import { Agent } from "@/agent/agent"
 
 interface Metadata {
-  [key: string]: any
+  [key: string]: unknown
 }
-
-// TODO: remove this hack
-export type DynamicDescription = (agent: Agent.Info) => Effect.Effect<string>
 
 /**
  * Raised when the LLM calls a tool with arguments that fail the parameter

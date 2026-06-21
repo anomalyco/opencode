@@ -56,7 +56,7 @@ export namespace FSUtil {
       const readFileStringSafe = Effect.fn("FileSystem.readFileStringSafe")(function* (path: string) {
         return yield* fs
           .readFileString(path)
-          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void))
       })
 
       const isDir = Effect.fn("FileSystem.isDir")(function* (path: string) {
@@ -134,7 +134,7 @@ export namespace FSUtil {
         let current = start
         while (true) {
           const search = join(current, target)
-          if (yield* fs.exists(search)) result.push(search)
+          if (yield* existsSafe(search)) result.push(search)
           if (stop === current) break
           const parent = dirname(current)
           if (parent === current) break
@@ -149,7 +149,7 @@ export namespace FSUtil {
         while (true) {
           for (const target of options.targets) {
             const search = join(current, target)
-            if (yield* fs.exists(search)) result.push(search)
+            if (yield* existsSafe(search)) result.push(search)
           }
           if (options.stop === current) break
           const parent = dirname(current)

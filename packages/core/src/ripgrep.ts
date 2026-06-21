@@ -111,12 +111,10 @@ export const layer = Layer.effect(
           const handle = yield* process.spawn(
             ChildProcess.make(yield* binary.filepath, input.args, { cwd: input.cwd, extendEnv: true, stdin: "ignore" }),
           )
-          const stderrFiber = yield* collectStream(handle.stderr, ERROR_BYTES).pipe(
-            Effect.map((output) => output.buffer.toString("utf8")),
-            Effect.forkScoped,
-          )
+          const stderrOutput = yield* collectStream(handle.stderr, ERROR_BYTES)
+          const stderrFiber = yield* Effect.forkScoped(Effect.succeed(stderrOutput.buffer.toString("utf8")))
           let observed = 0
-          const rows = yield* Stream.decodeText(handle.stdout).pipe(
+          const collected = yield* Stream.decodeText(handle.stdout).pipe(
             Stream.splitLines,
             Stream.filter((line) => line.length > 0),
             Stream.mapEffect(input.parse),
@@ -127,8 +125,8 @@ export const layer = Layer.effect(
             }),
             Stream.take(input.limit + 1),
             Stream.runCollect,
-            Effect.map((chunk) => [...chunk]),
           )
+          const rows = [...collected]
           const truncated = rows.length > input.limit
           if (truncated) return { items: rows.slice(0, input.limit), truncated, partial: false }
 
@@ -155,132 +153,131 @@ export const layer = Layer.effect(
 
     return Service.of({
       glob: (input) =>
-        run<string>({
-          cwd: input.cwd,
-          limit: input.limit,
-          signal: input.signal,
-          args: [
-            "--no-config",
-            "--files",
-            ...(input.hidden ? ["--hidden"] : []),
-            ...(input.follow ? ["--follow"] : []),
-            `--glob=${input.pattern}`,
-            "--glob=!**/.git/**",
-            ".",
-          ],
-          parse: (line) =>
-            Effect.succeed(
-              line
-                .replace(/^(?:\.[\\/])+/u, "")
-                .replace(/^[\\/]+/u, "")
-                .replaceAll("\\", "/"),
-            ),
+        Effect.gen(function* () {
+          const result = yield* run<string>({
+            cwd: input.cwd,
+            limit: input.limit,
+            signal: input.signal,
+            args: [
+              "--no-config",
+              "--files",
+              ...(input.hidden ? ["--hidden"] : []),
+              ...(input.follow ? ["--follow"] : []),
+              `--glob=${input.pattern}`,
+              "--glob=!**/.git/**",
+              ".",
+            ],
+            parse: (line) =>
+              Effect.succeed(
+                line
+                  .replace(/^(?:\.[\\/])+/u, "")
+                  .replace(/^[\\/]+/u, "")
+                  .replaceAll("\\", "/"),
+              ),
+          })
+          return result.items.map((relative) => {
+            const absolute = path.resolve(input.cwd, relative)
+            return new Entry({
+              path: RelativePath.make(relative),
+              type: "file",
+              mime: FSUtil.mimeType(absolute),
+            })
+          })
         }).pipe(
-          Effect.map((result) =>
-            result.items.map((relative) => {
-              const absolute = path.resolve(input.cwd, relative)
-              return new Entry({
-                path: RelativePath.make(relative),
-                type: "file",
-                mime: FSUtil.mimeType(absolute),
-              })
-            }),
-          ),
           Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
         ),
       find: (input) =>
-        run<Entry>({
-          cwd: input.cwd,
-          limit: input.limit,
-          signal: input.signal,
-          args: [
-            "--no-config",
-            "--files",
-            ...(input.hidden ? ["--hidden"] : []),
-            ...(input.follow ? ["--follow"] : []),
-            ...(input.pattern === "*" ? [] : [`--glob=${input.pattern}`]),
-            "--glob=!**/.git/**",
-            ".",
-          ],
-          parse: (line) => {
-            const relative = line
-              .replace(/^(?:\.[\\/])+/u, "")
-              .replace(/^[\\/]+/u, "")
-              .replaceAll("\\", "/")
-            return Effect.succeed(
-              new Entry({
-                path: RelativePath.make(relative),
-                type: "file",
-                mime: FSUtil.mimeType(path.resolve(input.cwd, relative)),
-              }),
-            )
-          },
-          onItem: input.onEntry,
-        }).pipe(
-          Effect.map((result) => result.items),
-          Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
-        ),
-      grep: (input) =>
-        run<RawMatchData>({
-          ...input,
-          args: [
-            "--no-config",
-            "--json",
-            "--hidden",
-            "--no-messages",
-            ...(input.include ? [`--glob=${input.include}`] : []),
-            "--glob=!**/.git/**",
-            "--",
-            input.pattern,
-            input.file ?? ".",
-          ],
-          parse: (line) =>
-            (Buffer.byteLength(line, "utf8") > MAX_RECORD_BYTES
-              ? Effect.fail(failure(`Ripgrep JSON record exceeded ${MAX_RECORD_BYTES} bytes`))
-              : Effect.try({
-                  try: () => JSON.parse(line) as unknown,
-                  catch: (cause) => failure("Invalid ripgrep JSON output", cause),
-                })
-            ).pipe(
-              Effect.flatMap((json) => {
-                if (!json || typeof json !== "object" || !("type" in json) || json.type !== "match")
-                  return Effect.succeed(undefined)
-                return Schema.decodeUnknownEffect(RawMatch)(json).pipe(
-                  Effect.map((match) => ({
-                    ...match.data,
-                    path: { text: match.data.path.text.replace(/^\.[\\/]/, "") },
-                    submatches: match.data.submatches.slice(0, MAX_SUBMATCHES),
-                  })),
-                  Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),
-                )
-              }),
-            ),
-        }).pipe(
-          Effect.map((result) =>
-            result.items.map((match) => {
-              const relative = match.path.text
+        Effect.gen(function* () {
+          const result = yield* run<Entry>({
+            cwd: input.cwd,
+            limit: input.limit,
+            signal: input.signal,
+            args: [
+              "--no-config",
+              "--files",
+              ...(input.hidden ? ["--hidden"] : []),
+              ...(input.follow ? ["--follow"] : []),
+              ...(input.pattern === "*" ? [] : [`--glob=${input.pattern}`]),
+              "--glob=!**/.git/**",
+              ".",
+            ],
+            parse: (line) => {
+              const relative = line
                 .replace(/^(?:\.[\\/])+/u, "")
                 .replace(/^[\\/]+/u, "")
                 .replaceAll("\\", "/")
-              const absolute = path.resolve(input.cwd, relative)
-              return new Match({
-                entry: new Entry({
+              return Effect.succeed(
+                new Entry({
                   path: RelativePath.make(relative),
                   type: "file",
-                  mime: FSUtil.mimeType(absolute),
+                  mime: FSUtil.mimeType(path.resolve(input.cwd, relative)),
                 }),
-                line: match.line_number,
-                offset: match.absolute_offset,
-                text: match.lines.text.length > 2_000 ? match.lines.text.slice(0, 2_000) + "..." : match.lines.text,
-                submatches: match.submatches.map((submatch) => ({
-                  text: submatch.match.text,
-                  start: submatch.start,
-                  end: submatch.end,
-                })),
-              })
-            }),
-          ),
+              )
+            },
+            onItem: input.onEntry,
+          })
+          return result.items
+        }).pipe(
+          Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
         ),
+      grep: (input) =>
+        Effect.gen(function* () {
+          const result = yield* run<RawMatchData>({
+            ...input,
+            args: [
+              "--no-config",
+              "--json",
+              "--hidden",
+              "--no-messages",
+              ...(input.include ? [`--glob=${input.include}`] : []),
+              "--glob=!**/.git/**",
+              "--",
+              input.pattern,
+              input.file ?? ".",
+            ],
+            parse: (line) =>
+              Effect.gen(function* () {
+                const parsed = yield* (Buffer.byteLength(line, "utf8") > MAX_RECORD_BYTES
+                  ? Effect.fail(failure(`Ripgrep JSON record exceeded ${MAX_RECORD_BYTES} bytes`))
+                  : Effect.try({
+                      try: () => JSON.parse(line) as unknown,
+                      catch: (cause) => failure("Invalid ripgrep JSON output", cause),
+                    }))
+                if (!parsed || typeof parsed !== "object" || !("type" in parsed) || parsed.type !== "match")
+                  return undefined
+                const match = yield* Schema.decodeUnknownEffect(RawMatch)(parsed).pipe(
+                  Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),
+                )
+                return {
+                  ...match.data,
+                  path: { text: match.data.path.text.replace(/^\.[\\/]/, "") },
+                  submatches: match.data.submatches.slice(0, MAX_SUBMATCHES),
+                }
+              }),
+          })
+          return result.items.map((match) => {
+            const relative = match.path.text
+              .replace(/^(?:\.[\\/])+/u, "")
+              .replace(/^[\\/]+/u, "")
+              .replaceAll("\\", "/")
+            const absolute = path.resolve(input.cwd, relative)
+            return new Match({
+              entry: new Entry({
+                path: RelativePath.make(relative),
+                type: "file",
+                mime: FSUtil.mimeType(absolute),
+              }),
+              line: match.line_number,
+              offset: match.absolute_offset,
+              text: match.lines.text.length > 2_000 ? match.lines.text.slice(0, 2_000) + "..." : match.lines.text,
+              submatches: match.submatches.map((submatch) => ({
+                text: submatch.match.text,
+                start: submatch.start,
+                end: submatch.end,
+              })),
+            })
+          })
+        }),
     })
   }),
 )

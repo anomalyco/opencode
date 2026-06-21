@@ -148,7 +148,7 @@ export const layer = Layer.effect(
     const lockKey = `models-dev:${filepath}`
 
     const fresh = Effect.fnUntraced(function* () {
-      const stat = yield* fs.stat(filepath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+      const stat = yield* fs.stat(filepath).pipe(Effect.catch(() => Effect.void))
       if (!stat) return false
       const mtime = Option.getOrElse(stat.mtime, () => new Date(0)).getTime()
       return Date.now() - mtime < Duration.toMillis(ttl)
@@ -172,7 +172,7 @@ export const layer = Layer.effect(
         ) {
           return fs.remove(filepath, { force: true }).pipe(Effect.ignore, Effect.as(undefined))
         }
-        return Effect.succeed(undefined)
+        return Effect.void
       }),
       Effect.map((v) => v as Record<string, Provider> | undefined),
     )

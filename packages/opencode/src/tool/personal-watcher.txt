@@ -1,0 +1,1 @@
+Gerencia watchers que monitoram arquivos, processos, URLs e comandos em segundo plano. Ações: list (listar watchers), create (criar watcher com nome, tipo [file|process|url|command|system], alvo, condição opcional e ação opcional), delete (remover watcher por ID), check (verificar manualmente todos os watchers).

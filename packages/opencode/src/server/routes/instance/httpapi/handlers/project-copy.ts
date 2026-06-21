@@ -25,7 +25,7 @@ export const projectCopyHandlers = HttpApiBuilder.group(InstanceHttpApi, "projec
     const generateName = Effect.fn("ProjectCopyHttpApi.generateName")(function* (context: string | undefined) {
       const text = context?.trim()
       if (!text) return Slug.create()
-      const fallback = yield* provider.defaultModel().pipe(Effect.catch(() => Effect.succeed(undefined)))
+      const fallback = yield* provider.defaultModel().pipe(Effect.catch(() => Effect.void))
       if (!fallback) return Slug.create()
       const model =
         (yield* provider.getSmallModel(fallback.providerID)) ??

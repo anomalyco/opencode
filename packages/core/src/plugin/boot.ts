@@ -23,7 +23,7 @@ import { CommandPlugin } from "./command"
 import { SkillPlugin } from "./skill"
 import { ConfigProviderPlugin } from "../config/plugin/provider"
 import { ModelsDevPlugin } from "./models-dev"
-import { ProviderPlugins } from "./provider"
+import { loadAllProviders } from "./provider"
 import { SkillV2 } from "../skill"
 import { Reference } from "../reference"
 
@@ -101,7 +101,8 @@ export const layer = Layer.effect(
       yield* add(AgentPlugin.Plugin)
       yield* add(CommandPlugin.Plugin)
       yield* add(SkillPlugin.Plugin)
-      for (const item of ProviderPlugins) {
+      const providers = yield* loadAllProviders()
+      for (const item of providers) {
         yield* add(item)
       }
       yield* add(ModelsDevPlugin)

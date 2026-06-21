@@ -203,7 +203,7 @@ function fake(
     get message() {
       return msg
     },
-    updateToolCall: Effect.fn("TestSessionProcessor.updateToolCall")(() => Effect.succeed(undefined)),
+    updateToolCall: Effect.fn("TestSessionProcessor.updateToolCall")(() => Effect.void),
     completeToolCall: Effect.fn("TestSessionProcessor.completeToolCall")(() => Effect.void),
     process: Effect.fn("TestSessionProcessor.process")(() => Effect.succeed(result)),
   } satisfies SessionProcessorModule.SessionProcessor.Handle
@@ -1538,18 +1538,25 @@ describe("session.compaction.process", () => {
 })
 
 describe("util.token.estimate", () => {
-  test("estimates tokens from text (4 chars per token)", () => {
+  test("estimates tokens from text (chars/2.8 default ratio)", () => {
     const text = "x".repeat(4000)
-    expect(Token.estimate(text)).toBe(1000)
+    expect(Token.estimate(text)).toBe(1429)
   })
 
   test("estimates tokens from larger text", () => {
     const text = "y".repeat(20_000)
-    expect(Token.estimate(text)).toBe(5000)
+    expect(Token.estimate(text)).toBe(7143)
   })
 
   test("returns 0 for empty string", () => {
     expect(Token.estimate("")).toBe(0)
+  })
+
+  test("accepts model hint for model-specific ratio", () => {
+    const text = "x".repeat(4000)
+    expect(Token.estimate(text, { model: "gpt-4o" })).toBe(1429)
+    expect(Token.estimate(text, { model: "claude-sonnet-4" })).toBe(1481)
+    expect(Token.estimate(text, { model: "deepseek-v3" })).toBe(1600)
   })
 })
 

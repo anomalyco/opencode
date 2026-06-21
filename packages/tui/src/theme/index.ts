@@ -343,7 +343,10 @@ function ansiToRgba(code: number): RGBA {
   return RGBA.fromInts(0, 0, 0)
 }
 
-export function tint(base: RGBA, overlay: RGBA, alpha: number): RGBA {
+export function tint(base: RGBA | undefined, overlay: RGBA | undefined, alpha: number): RGBA {
+  if (!base && !overlay) return RGBA.fromInts(0, 0, 0)
+  if (!base) return overlay!
+  if (!overlay) return base
   const r = base.r + (overlay.r - base.r) * alpha
   const g = base.g + (overlay.g - base.g) * alpha
   const b = base.b + (overlay.b - base.b) * alpha

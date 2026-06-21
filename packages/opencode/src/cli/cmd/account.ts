@@ -5,9 +5,9 @@ import { Account } from "@/account/account"
 import { AccountID, OrgID, PollExpired, type PollResult, type AccountError } from "@/account/schema"
 import { effectCmd } from "../effect-cmd"
 import * as Prompt from "../effect/prompt"
-import open from "open"
+import { openUrl } from "../../util/browser"
 
-const openBrowser = (url: string) => Effect.promise(() => open(url).catch(() => undefined))
+const openBrowser = (url: string) => Effect.promise(() => openUrl(url).catch(() => undefined))
 
 const println = (msg: string) => Effect.sync(() => UI.println(msg))
 

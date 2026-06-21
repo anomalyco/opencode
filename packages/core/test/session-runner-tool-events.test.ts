@@ -32,7 +32,7 @@ const capture = () => {
     beforeCommit: () => Effect.void,
     project: () => Effect.void,
     replay: () => Effect.void,
-    replayAll: () => Effect.succeed(undefined),
+    replayAll: () => Effect.void,
     remove: () => Effect.void,
     claim: () => Effect.void,
   })

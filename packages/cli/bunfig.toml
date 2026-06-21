@@ -1,1 +1,1 @@
-preload = ["@opentui/solid/preload"]
+preload = ["./node_modules/@opentui/solid/scripts/preload.ts"]

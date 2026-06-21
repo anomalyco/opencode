@@ -14,6 +14,13 @@ import { TodoWriteTool } from "./todowrite"
 import { WebFetchTool } from "./webfetch"
 import { WebSearchTool } from "./websearch"
 import { WriteTool } from "./write"
+import { MemoryTool } from "./memory"
+import { ScheduleTool } from "./schedule"
+import { SubagentTool } from "./subagent"
+import { AutofixTool } from "./autofix"
+import { TermuxTool } from "./termux"
+import { CodeIndexTool } from "./codeindex"
+import { SwarmTool } from "./swarm"
 
 /**
  * Composes only the shipped Location-scoped built-in tool transforms.
@@ -41,4 +48,11 @@ export const locationLayer = Layer.mergeAll(
   WebFetchTool.layer,
   WebSearchTool.layer.pipe(Layer.provide(WebSearchTool.defaultConfigLayer)),
   WriteTool.layer,
+  MemoryTool.layer,
+  ScheduleTool.layer,
+  SubagentTool.layer,
+  AutofixTool.layer,
+  TermuxTool.layer,
+  CodeIndexTool.layer,
+  SwarmTool.layer,
 )

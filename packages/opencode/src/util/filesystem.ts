@@ -10,7 +10,11 @@ import { fileURLToPath } from "url"
 
 // Fast sync version for metadata checks
 export async function exists(p: string): Promise<boolean> {
-  return existsSync(p)
+  try {
+    return existsSync(p)
+  } catch {
+    return false
+  }
 }
 
 export async function isDir(p: string): Promise<boolean> {

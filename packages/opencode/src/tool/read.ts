@@ -243,7 +243,7 @@ export const ReadTool = Tool.define<
       const stat = yield* fs.stat(filepath).pipe(
         Effect.catchIf(
           (err) => "reason" in err && err.reason._tag === "NotFound",
-          () => Effect.succeed(undefined),
+          () => Effect.void,
         ),
       )
 

@@ -1,13 +1,18 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, beforeAll } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { PluginV2 } from "@opencode-ai/core/plugin"
-import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
+import { loadAllProviders, type ProviderPlugin } from "@opencode-ai/core/plugin/provider"
 import { ZenmuxPlugin } from "@opencode-ai/core/plugin/provider/zenmux"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { expectPluginRegistered, it, provider } from "./provider-helper"
 
 describe("ZenmuxPlugin", () => {
+  let ProviderPlugins: ReadonlyArray<ProviderPlugin> = []
+  beforeAll(async () => {
+    ProviderPlugins = await Effect.runPromise(loadAllProviders())
+  })
+
   it.effect("is registered so legacy referer headers can be applied", () =>
     Effect.sync(() =>
       expectPluginRegistered(

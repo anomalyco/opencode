@@ -26,10 +26,12 @@ export const layer = Layer.effect(
     const set = Effect.fn("Env.set")(function* (key: string, value: string) {
       const env = yield* InstanceState.get(state)
       env[key] = value
+      process.env[key] = value
     })
     const remove = Effect.fn("Env.remove")(function* (key: string) {
       const env = yield* InstanceState.get(state)
       delete env[key]
+      delete process.env[key]
     })
 
     return Service.of({ get, all, set, remove })

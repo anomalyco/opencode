@@ -47,6 +47,9 @@ import * as SessionRunnerLLM from "./session/runner/llm"
 import { SessionRunnerModel } from "./session/runner/model"
 import { SystemContextBuiltIns } from "./system-context/builtins"
 import { FetchHttpClient } from "effect/unstable/http"
+import { layer as MemoryLayer } from "./memory/service"
+import { layer as ScheduleLayer } from "./schedule/service"
+import { layer as CodeIndexLayer } from "./memory/index-service"
 
 export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("@opencode/example/LocationServiceMap", {
   lookup: (ref: Location.Ref) => {
@@ -87,6 +90,7 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     const referenceGuidance = ReferenceGuidance.locationLayer.pipe(Layer.provide(services))
     const todos = SessionTodo.layer.pipe(Layer.provide(services))
     const questions = QuestionV2.locationLayer.pipe(Layer.provide(services))
+    const model = SessionRunnerModel.locationLayer.pipe(Layer.provide(services))
     const builtInTools = BuiltInTools.locationLayer.pipe(
       Layer.provide(services),
       Layer.provide(mutation),
@@ -94,8 +98,8 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
       Layer.provide(todos),
       Layer.provide(questions),
       Layer.provide(image),
+      Layer.provide(model),
     )
-    const model = SessionRunnerModel.locationLayer.pipe(Layer.provide(services))
     const runner = SessionRunnerLLM.defaultLayer.pipe(
       Layer.provide(services),
       Layer.provide(model),
@@ -143,5 +147,8 @@ export class LocationServiceMap extends LayerMap.Service<LocationServiceMap>()("
     FetchHttpClient.layer,
     ToolOutputStore.defaultCleanupLayer,
     ApplicationTools.layer,
+    MemoryLayer.pipe(Layer.provide(Database.defaultLayer)),
+    ScheduleLayer.pipe(Layer.provide(Database.defaultLayer)),
+    CodeIndexLayer.pipe(Layer.provide(Database.defaultLayer)),
   ],
 }) {}

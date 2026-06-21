@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import * as path from "path"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Bom from "../util/bom"
@@ -578,14 +578,12 @@ export const maybeParseApplyPatchVerified = Effect.fn("Patch.maybeParseApplyPatc
 ) {
   // Detect implicit patch invocation (raw patch without apply_patch command)
   if (argv.length === 1) {
-    try {
-      parsePatch(argv[0])
+    const parsed = Option.try(() => parsePatch(argv[0]))
+    if (Option.isSome(parsed)) {
       return {
         type: MaybeApplyPatchVerified.CorrectnessError,
         error: new Error(ApplyPatchError.ImplicitInvocation),
       } satisfies MaybeApplyPatchVerifiedResult
-    } catch {
-      // Not a patch, continue
     }
   }
 
@@ -614,7 +612,7 @@ export const maybeParseApplyPatchVerified = Effect.fn("Patch.maybeParseApplyPatc
 
           case "delete": {
             const deletePath = path.resolve(effectiveCwd, hunk.path)
-            const content = yield* fs.readFileString(deletePath).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            const content = yield* fs.readFileString(deletePath).pipe(Effect.catch(() => Effect.void))
             if (content === undefined) {
               return {
                 type: MaybeApplyPatchVerified.CorrectnessError,
@@ -643,20 +641,19 @@ export const maybeParseApplyPatchVerified = Effect.fn("Patch.maybeParseApplyPatc
                 error: originalText,
               } satisfies MaybeApplyPatchVerifiedResult
             }
-            try {
-              const fileUpdate = deriveNewContentsFromChunks(updatePath, hunk.chunks, originalText)
-              changes.set(resolvedPath, {
-                type: "update",
-                unified_diff: fileUpdate.unified_diff,
-                move_path: hunk.move_path ? path.resolve(effectiveCwd, hunk.move_path) : undefined,
-                new_content: fileUpdate.content,
-              })
-            } catch (error) {
+            const fileUpdate = Option.try(() => deriveNewContentsFromChunks(updatePath, hunk.chunks, originalText))
+            if (Option.isNone(fileUpdate)) {
               return {
                 type: MaybeApplyPatchVerified.CorrectnessError,
-                error: error as Error,
+                error: new Error(`Failed to derive new contents for ${updatePath}`),
               } satisfies MaybeApplyPatchVerifiedResult
             }
+            changes.set(resolvedPath, {
+              type: "update",
+              unified_diff: fileUpdate.value.unified_diff,
+              move_path: hunk.move_path ? path.resolve(effectiveCwd, hunk.move_path) : undefined,
+              new_content: fileUpdate.value.content,
+            })
             break
           }
         }

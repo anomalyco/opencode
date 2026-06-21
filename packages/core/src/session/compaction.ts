@@ -10,6 +10,9 @@ import { SessionSchema } from "./schema"
 import { Token } from "../util/token"
 
 const DEFAULT_BUFFER = 20_000
+const MIN_BUFFER = 5_000
+const MAX_BUFFER = 40_000
+const ADAPTIVE_BUFFER_RATIO = 0.15
 const DEFAULT_KEEP_TOKENS = 8_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
 const SUMMARY_OUTPUT_TOKENS = 4_096
@@ -76,7 +79,14 @@ type Input = {
   readonly request: LLMRequest
 }
 
-const estimate = (value: unknown) => Token.estimate(JSON.stringify(value))
+const computeBuffer = (model?: Model) => {
+  const context = model?.route.defaults.limits?.context
+  if (context && context > 0) return Math.max(MIN_BUFFER, Math.min(MAX_BUFFER, Math.round(context * ADAPTIVE_BUFFER_RATIO)))
+  return DEFAULT_BUFFER
+}
+
+const estimate = (value: unknown, model?: Model) =>
+  Token.estimate(JSON.stringify(value), { model: model?.id })
 
 const truncate = (value: string) =>
   value.length <= TOOL_OUTPUT_MAX_CHARS ? value : `${value.slice(0, TOOL_OUTPUT_MAX_CHARS)}\n[truncated]`
@@ -114,20 +124,6 @@ const serialize = (message: SessionMessage.Message) => {
   if (message.type === "synthetic") return `[Synthetic context]: ${message.text}`
   if (message.type === "shell") return `[Shell]: ${message.command}\n${truncate(message.output)}`
   return ""
-}
-
-const settings = (documents: readonly Config.Entry[]) => {
-  const configured = documents
-    .filter((entry): entry is Config.Document => entry.type === "document")
-    .flatMap((entry) => (entry.info.compaction ? [entry.info.compaction] : []))
-  return configured.reduce<Settings>(
-    (result, current) => ({
-      auto: current.auto ?? result.auto,
-      buffer: current.buffer ?? result.buffer,
-      tokens: current.keep?.tokens ?? result.tokens,
-    }),
-    { auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS },
-  )
 }
 
 const select = (
@@ -186,7 +182,7 @@ export const make = (dependencies: Dependencies) => {
       context: [previousSummary?.type === "compaction" ? previousSummary.recent : "", selected.head].filter(Boolean),
     })
     const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
-    if (Token.estimate(summaryPrompt) > context - summaryOutput) return false
+    if (Token.estimate(summaryPrompt, { model: input.model.id }) > context - summaryOutput) return false
     const messageID = SessionMessage.ID.create()
     yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
       sessionID: input.sessionID,
@@ -232,10 +228,9 @@ export const make = (dependencies: Dependencies) => {
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
-    if (
-      estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
-      context - Math.max(output, config.buffer)
-    )
+    const effectiveBuffer = config.buffer !== DEFAULT_BUFFER ? config.buffer : computeBuffer(input.model)
+    const budget = context - Math.max(output, effectiveBuffer)
+    if (estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }, input.model) <= budget)
       return false
     return yield* compactAfterOverflow(input)
   })
@@ -243,4 +238,18 @@ export const make = (dependencies: Dependencies) => {
     compactIfNeeded,
     compactAfterOverflow,
   }
+}
+
+function settings(documents: readonly Config.Entry[]) {
+  const configured = documents
+    .filter((entry): entry is Config.Document => entry.type === "document")
+    .flatMap((entry) => (entry.info.compaction ? [entry.info.compaction] : []))
+  return configured.reduce<Settings>(
+    (result, current) => ({
+      auto: current.auto ?? result.auto,
+      buffer: current.buffer ?? result.buffer,
+      tokens: current.keep?.tokens ?? result.tokens,
+    }),
+    { auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS },
+  )
 }

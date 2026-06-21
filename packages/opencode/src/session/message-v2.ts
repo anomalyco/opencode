@@ -133,7 +133,7 @@ function hydrate(db: Database.Interface["db"], rows: (typeof MessageTable.$infer
   })
 }
 
-function providerMeta(metadata: Record<string, any> | undefined) {
+function providerMeta(metadata: Record<string, unknown> | undefined) {
   if (!metadata) return undefined
   const { providerExecuted: _, ...rest } = metadata
   return Object.keys(rest).length > 0 ? rest : undefined
@@ -736,7 +736,9 @@ export function fromError(
             },
           ).toObject()
         }
-      } catch {}
+      } catch (inner) {
+        console.error("stream error parsing failed", inner)
+      }
       return new NamedError.Unknown({ message: JSON.stringify(e) }, { cause: e }).toObject()
   }
 }

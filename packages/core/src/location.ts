@@ -7,7 +7,7 @@ export * as Location from "./location"
 
 export class Ref extends Schema.Class<Ref>("Location.Ref")({
   directory: AbsolutePath,
-  workspaceID: Schema.optional(WorkspaceV2.ID).pipe(Schema.withConstructorDefault(Effect.succeed(undefined))),
+  workspaceID: Schema.optional(WorkspaceV2.ID).pipe(Schema.withConstructorDefault(Effect.void)),
 }) {}
 
 export class Info extends Schema.Class<Info>("Location.Info")({

@@ -1,6 +1,6 @@
 export * as Reference from "./reference"
 
-import { Context, Effect, Layer, Schema, Scope } from "effect"
+import { Context, Effect, Layer, Option, Schema, Scope } from "effect"
 import { castDraft } from "immer"
 import { Global } from "./global"
 import { EventV2 } from "./event"
@@ -91,12 +91,8 @@ export const layer = Layer.effect(
             }
             const repository = Repository.parse(source.repository)
             if (!repository || !Repository.isRemote(repository)) continue
-            if (source.branch) {
-              try {
-                Repository.validateBranch(source.branch)
-              } catch {
-                continue
-              }
+            if (source.branch && Option.isNone(Option.try(() => Repository.validateBranch(source.branch)))) {
+              continue
             }
             const target = Repository.cachePath(global.repos, repository)
             if (seen.has(target) && seen.get(target) !== source.branch) continue

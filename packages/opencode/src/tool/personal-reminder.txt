@@ -1,0 +1,1 @@
+Cria e gerencia lembretes pessoais. Pode definir lembretes com data/hora, prioridade e categoria.

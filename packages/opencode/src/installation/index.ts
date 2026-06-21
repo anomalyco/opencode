@@ -14,7 +14,7 @@ import semver from "semver"
 import { InstallationChannel, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { NpmConfig } from "@opencode-ai/core/npm-config"
 
-export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "unknown"
+export type Method = "curl" | "npm" | "yarn" | "pnpm" | "bun" | "brew" | "scoop" | "choco" | "pkg" | "unknown"
 
 export type ReleaseType = "patch" | "minor" | "major"
 
@@ -196,6 +196,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
           { name: "brew", command: () => text(["brew", "list", "--formula", "opencode"]) },
           { name: "scoop", command: () => text(["scoop", "list", "opencode"]) },
           { name: "choco", command: () => text(["choco", "list", "--limit-output", "opencode"]) },
+          { name: "pkg", command: () => text(["dpkg", "-l", "opencode"]) },
         ]
 
         checks.sort((a, b) => {
@@ -209,7 +210,7 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
         for (const check of checks) {
           const output = yield* check.command()
           const installedName =
-            check.name === "brew" || check.name === "choco" || check.name === "scoop" ? "opencode" : "opencode-ai"
+            check.name === "brew" || check.name === "choco" || check.name === "scoop" || check.name === "pkg" ? "opencode" : "opencode-ai"
           if (output.includes(installedName)) {
             return check.name
           }
@@ -311,6 +312,8 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient | AppProce
             upgradeResult = yield* run(["brew", "upgrade", formula], { env })
             break
           }
+          case "pkg":
+            upgradeResult = yield* run(["pkg", "upgrade", "opencode", "-y"])
           case "choco":
             upgradeResult = yield* run(["choco", "upgrade", "opencode", `--version=${target}`, "-y"])
             break

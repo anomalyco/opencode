@@ -10,7 +10,7 @@ import pkg from "../package.json"
 import { modelsData } from "./generate"
 
 const dir = path.resolve(import.meta.dirname, "..")
-const binary = "lildax"
+const binary = "zero"
 process.chdir(dir)
 
 await rm("dist", { recursive: true, force: true })
@@ -19,6 +19,7 @@ const singleFlag = process.argv.includes("--single")
 const baselineFlag = process.argv.includes("--baseline")
 const skipInstall = process.argv.includes("--skip-install")
 const sourcemapsFlag = process.argv.includes("--sourcemaps")
+const noCompileFlag = process.argv.includes("--no-compile")
 const plugin = createSolidTransformPlugin()
 
 const allTargets: {
@@ -55,6 +56,22 @@ const localParserWorker = path.resolve(dir, "node_modules/@opentui/core/parser.w
 const rootParserWorker = path.resolve(dir, "../../node_modules/@opentui/core/parser.worker.js")
 const parserWorker = fs.realpathSync(fs.existsSync(localParserWorker) ? localParserWorker : rootParserWorker)
 
+// Ensure @opentui/core platform-specific packages are available for the resolver.
+// These are optionalDependencies, so they might not be installed. We need to install them.
+const platformPackages = [
+  "@opentui/core-linux-arm64",
+  "@opentui/core-linux-arm64-musl",
+]
+if (!skipInstall) {
+  for (const pkg of platformPackages) {
+    try {
+      await $`bun install --os="*" --cpu="*" ${pkg}@${pkg.dependencies?.["@opentui/core"] || "0.3.4"}`
+    } catch (e) {
+      console.warn(`Warning: Failed to install ${pkg}: ${e}`)
+    }
+  }
+}
+
 for (const item of targets) {
   const target = [
     binary,
@@ -66,26 +83,44 @@ for (const item of targets) {
     .filter(Boolean)
     .join("-")
   const name = target.replace(binary, "cli")
-  console.log(`building ${name}`)
+  console.log("building " + name)
+  
+  let buildOutputOptions;
+  if (noCompileFlag) {
+    buildOutputOptions = {
+      outdir: `./dist/${name}`,
+      target: "bun",
+    };
+  } else {
+    buildOutputOptions = {
+      compile: {
+        autoloadBunfig: false,
+        autoloadDotenv: false,
+        autoloadTsconfig: true,
+        autoloadPackageJson: true,
+        target: target.replace(binary, "bun") as Bun.Build.CompileTarget,
+        outfile: `./dist/${name}/bin/${binary}`,
+        execArgv: [`--user-agent=${binary}/${Script.version}`, "--use-system-ca", "--"],
+        windows: {},
+      },
+    };
+  }
+
   const result = await Bun.build({
-    entrypoints: ["./src/index.ts", parserWorker],
+    entrypoints: ["./src/index.ts", ...(noCompileFlag ? [] : [parserWorker])],
     tsconfig: "./tsconfig.json",
     plugins: [plugin],
-    external: ["node-gyp"],
+    external: [
+      "node-gyp",
+      // Platform-specific native bindings for @opentui/core.
+      // These are optionalDependencies and should be resolved through @opentui/core.
+      // We do not externalize them to allow Bun to resolve them via the main package.
+    ],
     format: "esm",
     minify: true,
     sourcemap: sourcemapsFlag ? "linked" : "none",
-    splitting: true,
-    compile: {
-      autoloadBunfig: false,
-      autoloadDotenv: false,
-      autoloadTsconfig: true,
-      autoloadPackageJson: true,
-      target: target.replace(binary, "bun") as Bun.Build.CompileTarget,
-      outfile: `./dist/${name}/bin/${binary}`,
-      execArgv: [`--user-agent=${binary}/${Script.version}`, "--use-system-ca", "--"],
-      windows: {},
-    },
+    splitting: !noCompileFlag,
+    ...buildOutputOptions, // Spread the conditionally defined options
     define: {
       OPENCODE_VERSION: `'${Script.version}'`,
       OPENCODE_CLI_NAME: `'${binary}'`,

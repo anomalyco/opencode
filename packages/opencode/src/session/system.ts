@@ -12,6 +12,7 @@ import PROMPT_KIMI from "./prompt/kimi.txt"
 
 import PROMPT_CODEX from "./prompt/codex.txt"
 import PROMPT_TRINITY from "./prompt/trinity.txt"
+import PROMPT_ZERO from "./prompt/zero-assistant.txt"
 import type { Provider } from "@/provider/provider"
 import type { Agent } from "@/agent/agent"
 import { Permission } from "@/permission"
@@ -21,6 +22,7 @@ import { Location } from "@opencode-ai/core/location"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { Reference } from "@opencode-ai/core/reference"
+import { UserProfile } from "@opencode-ai/core/personal/profile"
 
 export function provider(model: Provider.Model) {
   if (model.api.id.includes("gpt-4") || model.api.id.includes("o1") || model.api.id.includes("o3"))
@@ -31,11 +33,11 @@ export function provider(model: Provider.Model) {
     }
     return [PROMPT_GPT]
   }
-  if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI]
-  if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC]
+  if (model.api.id.includes("gemini-")) return [PROMPT_GEMINI, PROMPT_ZERO]
+  if (model.api.id.includes("claude")) return [PROMPT_ANTHROPIC, PROMPT_ZERO]
   if (model.api.id.toLowerCase().includes("trinity")) return [PROMPT_TRINITY]
   if (model.api.id.toLowerCase().includes("kimi")) return [PROMPT_KIMI]
-  return [PROMPT_DEFAULT]
+  return [PROMPT_DEFAULT, PROMPT_ZERO]
 }
 
 export interface Interface {
@@ -58,7 +60,17 @@ export const layer = Layer.effect(
           yield* (yield* PluginBoot.Service).wait()
           return (yield* (yield* Reference.Service).list()).filter((reference) => reference.description !== undefined)
         }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
+        // Try to inject user profile facts into the system prompt
+        let profileFacts: string | undefined
+        yield* Effect.gen(function* () {
+          const userProfile = yield* UserProfile
+          const facts = yield* userProfile.getFacts().pipe(Effect.withSpan("SystemPrompt.profileFacts"))
+          if (facts.length > 0) {
+            profileFacts = `<user_profile>\n  ${facts.map((f: string) => `<fact>${f}</fact>`).join("\n  ")}\n</user_profile>`
+          }
+        }).pipe(Effect.catchAllCause((cause) => Effect.logError("failed to fetch user profile facts", { cause })))
         return [
+          profileFacts,
           [
             `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
             `Here is some useful information about the environment you are running in:`,
@@ -108,7 +120,11 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(Skill.defaultLayer), Layer.provide(LocationServiceMap.layer))
+export const defaultLayer = layer.pipe(
+  Layer.provide(Skill.defaultLayer),
+  Layer.provide(LocationServiceMap.layer),
+  Layer.provide(UserProfile.defaultLayer),
+)
 
 const locationServiceMapNode = LayerNode.make(LocationServiceMap.layer, [])
 

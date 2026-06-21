@@ -105,7 +105,8 @@ function randomIndex(count: number) {
   return Math.floor(Math.random() * count)
 }
 
-function fadeColor(color: RGBA, alpha: number) {
+function fadeColor(color: RGBA | undefined, alpha: number) {
+  if (!color) return undefined
   return RGBA.fromValues(color.r, color.g, color.b, color.a * alpha)
 }
 

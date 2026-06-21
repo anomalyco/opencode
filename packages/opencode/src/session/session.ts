@@ -208,7 +208,7 @@ const Model = Schema.Struct({
   variant: optionalOmitUndefined(Schema.String),
 })
 
-export const Metadata = Schema.Record(Schema.String, Schema.Any)
+export const Metadata = Schema.Record(Schema.String, Schema.Unknown)
 
 export const Info = Schema.Struct({
   id: SessionID,
@@ -381,6 +381,9 @@ export function plan(input: { slug: string; time: { created: number } }, instanc
   return path.join(base, [input.time.created, input.slug].join("-") + ".md")
 }
 
+const metaGet = (metadata: ProviderMetadata | undefined, key: string): Record<string, unknown> | undefined =>
+  metadata?.[key] as Record<string, unknown> | undefined
+
 export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?: ProviderMetadata }) => {
   const safe = (value: number) => {
     if (!Number.isFinite(value)) return 0
@@ -394,14 +397,10 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   const cacheWriteInputTokens = safe(
     Number(
       input.usage.cacheWriteInputTokens ??
-        input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
-        // google-vertex-anthropic returns metadata under "vertex" key
-        // (AnthropicMessagesLanguageModel custom provider key from 'vertex.anthropic.messages')
-        input.metadata?.["vertex"]?.["cacheCreationInputTokens"] ??
-        // @ts-expect-error
-        input.metadata?.["bedrock"]?.["usage"]?.["cacheWriteInputTokens"] ??
-        // @ts-expect-error
-        input.metadata?.["venice"]?.["usage"]?.["cacheCreationInputTokens"] ??
+        metaGet(input.metadata, "anthropic")?.["cacheCreationInputTokens"] ??
+        metaGet(input.metadata, "vertex")?.["cacheCreationInputTokens"] ??
+        metaGet(metaGet(input.metadata, "bedrock"), "usage")?.["cacheWriteInputTokens"] ??
+        metaGet(metaGet(input.metadata, "venice"), "usage")?.["cacheCreationInputTokens"] ??
         0,
     ),
   )
@@ -647,7 +646,7 @@ export const layer: Layer.Layer<
 
     const remove: Interface["remove"] = Effect.fnUntraced(function* (sessionID: SessionID) {
       const session = yield* get(sessionID)
-      try {
+      yield* Effect.gen(function* () {
         // `remove` needs to work in all cases, such as broken sessions that
         // run cleanup without instance state.
         const hasInstance = yield* InstanceState.directory.pipe(
@@ -663,9 +662,7 @@ export const layer: Layer.Layer<
 
         yield* events.publish(SessionV1.Event.Deleted, { sessionID, info: session })
         yield* events.remove(sessionID)
-      } catch (error) {
-        yield* Effect.logError("failed to remove session", { sessionID, error })
-      }
+      }).pipe(Effect.catchAllCause((cause) => Effect.logError("failed to remove session", { sessionID, cause })))
     })
 
     const updateMessage = <T extends SessionV1.Info>(msg: T): Effect.Effect<T> =>
@@ -850,8 +847,12 @@ export const layer: Layer.Layer<
     })
 
     const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
-      void sessionID
-      return [] as Snapshot.FileDiff[]
+      const msg = yield* findMessage(
+        sessionID,
+        (m) => m.info.role === "user" && (m.info.summary?.diffs?.length ?? 0) > 0,
+      )
+      if (msg._tag === "None") return [] as Snapshot.FileDiff[]
+      return msg.value.info.summary!.diffs!
     })
 
     const messages: Interface["messages"] = Effect.fn("Session.messages")(function* (input) {

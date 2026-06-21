@@ -140,5 +140,3 @@ class ExitManager {
 
 // Export singleton instance
 export const ExitHandler = new ExitManager()
-
-export * as ExitHandler from "./exit-handler"

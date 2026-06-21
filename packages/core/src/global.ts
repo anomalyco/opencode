@@ -7,6 +7,20 @@ import { Flock } from "./util/flock"
 import { Flag } from "./flag/flag"
 import { LayerNode } from "./effect/layer-node"
 
+export function isTermux(): boolean {
+  return process.env.PREFIX?.startsWith("/data/data/com.termux") ?? false
+}
+
+export function libc(): "glibc" | "musl" | "bionic" {
+  if (isTermux()) return "bionic"
+  try {
+    const ldd = require("child_process").execFileSync("ldd", ["--version"], { stdio: "pipe" })
+    return ldd.toString().toLowerCase().includes("musl") ? "musl" : "glibc"
+  } catch {
+    return "glibc"
+  }
+}
+
 const app = "opencode"
 const data = path.join(xdgData!, app)
 const cache = path.join(xdgCache!, app)

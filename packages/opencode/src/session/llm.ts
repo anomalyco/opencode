@@ -141,8 +141,8 @@ const live: Layer.Layer<
               metadata: typeof result === "object" ? result?.metadata : undefined,
               title: typeof result === "object" ? result?.title : undefined,
             }
-          } catch (e: any) {
-            return { result: "", error: e.message ?? String(e) }
+          } catch (e) {
+            return { result: "", error: e instanceof Error ? e.message : String(e) }
           }
         }
 
@@ -197,7 +197,8 @@ const live: Layer.Layer<
             for (const name of uniqueNames) approvedToolsForSession.add(name)
             workflowModel.sessionPreapprovedTools = [...(workflowModel.sessionPreapprovedTools ?? []), ...uniqueNames]
             return { approved: true }
-          } catch {
+          } catch (e) {
+            console.error("approval handler failed", e)
             return { approved: false }
           } finally {
             if (unsub) await bridge.promise(unsub)
@@ -329,12 +330,7 @@ const live: Layer.Layer<
                 specificationVersion: "v3" as const,
                 async transformParams(args) {
                   if (args.type === "stream") {
-                    // @ts-expect-error
-                    args.params.prompt = ProviderTransform.message(
-                      args.params.prompt,
-                      input.model,
-                      prepared.messageTransformOptions,
-                    )
+                    args.params = { ...args.params, prompt: ProviderTransform.message(args.params.prompt, input.model, prepared.messageTransformOptions) }
                   }
                   return args.params
                 },

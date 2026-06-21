@@ -18,7 +18,7 @@ import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
-import { Effect, Layer, Context, Schema, Types } from "effect"
+import { Effect, Layer, Context, Schema, Types, Option } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
@@ -296,17 +296,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const awsAccessKeyId = env["AWS_ACCESS_KEY_ID"]
       const configApiKey = providerConfig?.options?.apiKey
 
-      // TODO: Using process.env directly because Env.set only updates a process.env shallow copy,
-      // until the scope of the Env API is clarified (test only or runtime?)
-      const awsBearerToken = iife(() => {
-        const envToken = process.env.AWS_BEARER_TOKEN_BEDROCK
-        if (envToken) return envToken
-        if (auth?.type === "api") {
-          process.env.AWS_BEARER_TOKEN_BEDROCK = auth.key
-          return auth.key
-        }
-        return undefined
-      })
+      const awsBearerToken = process.env.AWS_BEARER_TOKEN_BEDROCK ?? (auth?.type === "api" ? auth.key : undefined)
+      if (auth?.type === "api" && !process.env.AWS_BEARER_TOKEN_BEDROCK) {
+        yield* Env.Service.set("AWS_BEARER_TOKEN_BEDROCK", auth.key)
+      }
 
       const awsWebIdentityTokenFile = env["AWS_WEB_IDENTITY_TOKEN_FILE"]
 
@@ -556,17 +549,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
     }),
     "sap-ai-core": Effect.fnUntraced(function* () {
       const auth = yield* dep.auth("sap-ai-core")
-      // TODO: Using process.env directly because Env.set only updates a shallow copy (not process.env),
-      // until the scope of the Env API is clarified (test only or runtime?)
-      const envServiceKey = iife(() => {
-        const envAICoreServiceKey = process.env.AICORE_SERVICE_KEY
-        if (envAICoreServiceKey) return envAICoreServiceKey
-        if (auth?.type === "api") {
-          process.env.AICORE_SERVICE_KEY = auth.key
-          return auth.key
-        }
-        return undefined
-      })
+      const envServiceKey = process.env.AICORE_SERVICE_KEY ?? (auth?.type === "api" ? auth.key : undefined)
+      if (auth?.type === "api" && !process.env.AICORE_SERVICE_KEY) {
+        yield* Env.Service.set("AICORE_SERVICE_KEY", auth.key)
+      }
       const deploymentId = process.env.AICORE_DEPLOYMENT_ID
       const resourceGroup = process.env.AICORE_RESOURCE_GROUP
 
@@ -791,14 +777,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
       const { createAiGateway } = yield* Effect.promise(() => import("ai-gateway-provider"))
       const { createUnified } = yield* Effect.promise(() => import("ai-gateway-provider/providers/unified"))
 
-      const metadata = iife(() => {
-        if (input.options?.metadata) return input.options.metadata
-        try {
-          return JSON.parse(input.options?.headers?.["cf-aig-metadata"])
-        } catch {
-          return undefined
-        }
-      })
+      const metadata = input.options?.metadata || Option.try(() => JSON.parse(input.options?.headers?.["cf-aig-metadata"])).pipe(Option.getOrElse(() => undefined))
       const opts = {
         metadata,
         cacheTtl: input.options?.cacheTtl,
@@ -1025,10 +1004,10 @@ export const Model = Schema.Struct({
   cost: ProviderCost,
   limit: ProviderLimit,
   status: ModelStatus,
-  options: Schema.Record(Schema.String, Schema.Any),
+  options: Schema.Record(Schema.String, Schema.Unknown),
   headers: Schema.Record(Schema.String, Schema.String),
   release_date: Schema.String,
-  variants: optionalOmitUndefined(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
+  variants: optionalOmitUndefined(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown))),
 }).annotate({ identifier: "Model" })
 export type Model = Types.DeepMutable<Schema.Schema.Type<typeof Model>>
 
@@ -1038,7 +1017,7 @@ export const Info = Schema.Struct({
   source: Schema.Literals(["env", "config", "custom", "api"]),
   env: Schema.Array(Schema.String),
   key: optionalOmitUndefined(Schema.String),
-  options: Schema.Record(Schema.String, Schema.Any),
+  options: Schema.Record(Schema.String, Schema.Unknown),
   models: Schema.Record(Schema.String, Model),
 }).annotate({ identifier: "Provider" })
 export type Info = Types.DeepMutable<Schema.Schema.Type<typeof Info>>
@@ -1059,13 +1038,11 @@ export const ConfigProvidersResult = Schema.Struct({
 export type ConfigProvidersResult = Types.DeepMutable<Schema.Schema.Type<typeof ConfigProvidersResult>>
 
 export function toPublicInfo(provider: Info): Info {
-  return JSON.parse(
-    JSON.stringify(provider, (_, value) => {
-      if (typeof value === "function" || typeof value === "symbol" || value === undefined) return undefined
-      if (typeof value === "bigint") return value.toString()
-      return value
-    }),
-  )
+  try {
+    return structuredClone(provider)
+  } catch {
+    return JSON.parse(JSON.stringify(provider))
+  }
 }
 
 export function defaultModelIDs<T extends { models: Record<string, { id: string }> }>(providers: Record<string, T>) {
@@ -1553,7 +1530,9 @@ export const layer = Layer.effect(
                   providers[gitlab].models[modelID] = model
                 }
               }
-            } catch (e) {}
+            } catch (e) {
+              console.error("gitlab model discovery failed", e)
+            }
           })
         }
 
@@ -1830,7 +1809,7 @@ export const layer = Layer.effect(
       if (cfg.small_model) {
         const parsed = parseModel(cfg.small_model)
         return yield* getModel(parsed.providerID, parsed.modelID).pipe(
-          Effect.catchTag("ProviderModelNotFoundError", () => Effect.succeed(undefined)),
+          Effect.catchTag("ProviderModelNotFoundError", () => Effect.void),
         )
       }
 

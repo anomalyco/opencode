@@ -192,7 +192,7 @@ export const layer = Layer.effect(
       model: Provider.Model
     }) {
       const msgs = yield* MessageV2.toModelMessagesEffect(input.messages, input.model)
-      return Token.estimate(JSON.stringify(msgs))
+      return Token.estimate(JSON.stringify(msgs), { model: input.model.id })
     })
 
     const select = Effect.fn("SessionCompaction.select")(function* (input: {
@@ -257,7 +257,7 @@ export const layer = Layer.effect(
 
       const msgs = yield* session
         .messages({ sessionID: input.sessionID })
-        .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)))
+        .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.void))
       if (!msgs) return
 
       let total = 0

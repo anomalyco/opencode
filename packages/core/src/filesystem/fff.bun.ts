@@ -13,7 +13,7 @@ import {
 } from "@ff-labs/fff-bun"
 
 declare global {
-  const FFF_LIBC: "gnu" | "musl"
+  const FFF_LIBC: "gnu" | "musl" | "bionic"
 }
 
 export type Result<T> = { ok: true; value: T } | { ok: false; error: string }

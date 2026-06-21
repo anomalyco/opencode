@@ -42,7 +42,7 @@ export const layer = Layer.effect(
     const decodeRegistration = Schema.decodeUnknownEffect(Schema.fromJsonString(Registration))
 
     const password = Effect.fn("cli.daemon.password")(function* (value?: string) {
-      const existing = yield* fs.readFileString(passwordFile).pipe(Effect.catch(() => Effect.succeed(undefined)))
+      const existing = yield* fs.readFileString(passwordFile).pipe(Effect.catch(() => Effect.void))
       if (value === undefined && existing) return existing
 
       // Keep one private credential across server restarts so discovered clients

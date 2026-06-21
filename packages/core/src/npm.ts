@@ -114,13 +114,7 @@ export const layer = Layer.effect(
 
     const add = Effect.fn("Npm.add")(function* (pkg: string) {
       const dir = directory(pkg)
-      const name = (() => {
-        try {
-          return npa(pkg).name ?? pkg
-        } catch {
-          return pkg
-        }
-      })()
+      const name = Option.try(() => npa(pkg).name ?? pkg).pipe(Option.getOrElse(() => pkg))
 
       if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
         return resolveEntryPoint(name, path.join(dir, "node_modules", name))

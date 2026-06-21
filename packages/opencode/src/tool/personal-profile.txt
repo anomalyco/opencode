@@ -1,0 +1,1 @@
+Gerencia seu perfil pessoal, preferências e fatos sobre você. Use 'get' para ler, 'update' para modificar, 'add_fact' para adicionar uma informação permanente sobre você.

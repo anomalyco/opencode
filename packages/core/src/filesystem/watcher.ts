@@ -30,15 +30,17 @@ export const Event = {
 }
 
 const watcher = lazy((): typeof import("@parcel/watcher") | undefined => {
-  try {
-    const libc = typeof OPENCODE_LIBC === "undefined" ? undefined : OPENCODE_LIBC
-    const binding = require(
-      `@parcel/watcher-${process.platform}-${process.arch}${process.platform === "linux" ? `-${libc || "glibc"}` : ""}`,
-    )
-    return createWrapper(binding) as typeof import("@parcel/watcher")
-  } catch {
-    return
+  const tryBinding = (libc?: string): typeof import("@parcel/watcher") | undefined => {
+    try {
+      const suffix = process.platform === "linux" ? `-${libc || "glibc"}` : ""
+      const binding = require(`@parcel/watcher-${process.platform}-${process.arch}${suffix}`)
+      return createWrapper(binding) as typeof import("@parcel/watcher")
+    } catch {
+      return undefined
+    }
   }
+  const libc = typeof OPENCODE_LIBC === "undefined" ? undefined : OPENCODE_LIBC
+  return tryBinding(libc) ?? tryBinding("glibc") ?? tryBinding("musl") ?? undefined
 })
 
 function getBackend() {

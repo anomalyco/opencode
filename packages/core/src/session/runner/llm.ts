@@ -33,6 +33,8 @@ import { type RunError, Service, StepLimitExceededError } from "./index"
 import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
+import { SemanticCacheTable } from "../../memory/sql"
+import { getEmbedding, cosineSimilarity } from "../../memory/service"
 
 /**
  * Runs one durable coding-agent Session until it settles.
@@ -242,7 +244,69 @@ export const layer = Layer.effect(
       let overflowFailure: ProviderErrorEvent | undefined
       if (!(yield* SessionContextEpoch.current(db, session.id, agent.id, system.revision)))
         return yield* Effect.die(rebuildPreparedTurn())
-      const providerStream = llm.stream(request).pipe(
+      let cachedEvents: LLMEvent[] | undefined = undefined
+      let isCacheHit = false
+      let promptEmbedding: number[] = []
+      const emittedEvents: LLMEvent[] = []
+
+      // Obtém o texto da última mensagem do usuário
+      const lastUserMessage = request.messages
+        .filter((msg) => msg.role === "user")
+        .map((msg) => {
+          if (typeof msg.content === "string") return msg.content
+          if (Array.isArray(msg.content)) {
+            return msg.content.map((part) => (part.type === "text" ? part.text : "")).join(" ")
+          }
+          return ""
+        })
+        .pop() ?? ""
+
+      if (lastUserMessage.length > 0) {
+        promptEmbedding = yield* Effect.promise(() => getEmbedding(lastUserMessage))
+        
+        // Busca todos os registros do cache
+        const cacheRows = yield* db.select().from(SemanticCacheTable).all().pipe(Effect.orDie)
+        
+        let bestMatch: typeof cacheRows[0] | undefined = undefined
+        let bestScore = 0
+
+        for (const row of cacheRows) {
+          const rowEmbedding = Option.getOrElse(
+            Option.try(() => JSON.parse(row.prompt_embedding) as number[]),
+            () => [],
+          )
+          
+          if (rowEmbedding.length === promptEmbedding.length) {
+            const score = cosineSimilarity(promptEmbedding, rowEmbedding)
+            if (score > bestScore) {
+              bestScore = score
+              bestMatch = row
+            }
+          }
+        }
+
+        // Se a similaridade for superior a 0.95, temos um HIT
+        if (bestMatch && bestScore >= 0.95) {
+          const parsed = Option.try(() => JSON.parse(bestMatch.response) as LLMEvent[])
+          if (Option.isSome(parsed)) {
+            cachedEvents = parsed.value
+            isCacheHit = true
+            yield* Effect.logInfo(`🧠 [Semantic Cache] HIT! Similaridade de ${bestScore.toFixed(4)} com o prompt: "${bestMatch.prompt}"`)
+          }
+        }
+      }
+
+      const baseStream = isCacheHit && cachedEvents
+        ? Stream.fromIterable(cachedEvents)
+        : llm.stream(request).pipe(
+            Stream.tap((event) =>
+              Effect.sync(() => {
+                emittedEvents.push(event)
+              })
+            )
+          )
+
+      const providerStream = baseStream.pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return
@@ -280,7 +344,29 @@ export const layer = Layer.effect(
             ).pipe(FiberSet.run(toolFibers))
           }),
         ),
-        Effect.ensuring(withPublication(publisher.flush())),
+        Effect.ensuring(
+          Effect.gen(function* () {
+            yield* withPublication(publisher.flush())
+            
+            // Salva no cache semântico após sucesso da stream real
+            if (!isCacheHit && lastUserMessage.length > 0 && emittedEvents.length > 0 && !publisher.hasProviderError() && !overflowFailure) {
+              const randId = yield* Effect.sync(() => Math.random().toString(36).substring(2))
+              const id = "sem_" + randId
+              const now = Date.now()
+              const row = {
+                id,
+                prompt: lastUserMessage,
+                prompt_embedding: JSON.stringify(promptEmbedding),
+                response: JSON.stringify(emittedEvents),
+                metadata: JSON.stringify({ bestScore: 1.0 }),
+                time_created: now,
+                time_updated: now,
+              }
+              yield* db.insert(SemanticCacheTable).values(row).pipe(Effect.orDie)
+              yield* Effect.logInfo(`🧠 [Semantic Cache] Salvo novo prompt no cache.`)
+            }
+          })
+        ),
       )
 
       return yield* Effect.uninterruptibleMask((restore) =>

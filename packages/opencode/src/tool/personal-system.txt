@@ -1,0 +1,1 @@
+Obtém informações do sistema (SO, memória, CPU, bateria) ou envia notificações do sistema.

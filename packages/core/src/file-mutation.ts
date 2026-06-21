@@ -110,7 +110,7 @@ export const layer = Layer.effect(
           const next = splitBom(input.content)
           const current = yield* fs
             .readFile(input.target.canonical)
-            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+            .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.void))
           yield* fs.writeWithDirs(
             input.target.canonical,
             joinBom(next.text, Boolean(current && hasUtf8Bom(current)) || next.bom),

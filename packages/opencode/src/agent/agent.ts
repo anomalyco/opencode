@@ -14,6 +14,7 @@ import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
 import PROMPT_TITLE from "./prompt/title.txt"
+import PROMPT_ZERO from "../session/prompt/zero-assistant.txt"
 import { Permission } from "@/permission"
 import { mergeDeep, pipe, sortBy, values } from "remeda"
 import { Global } from "@opencode-ai/core/global"
@@ -136,6 +137,23 @@ export const layer = Layer.effect(
         const user = Permission.fromConfig(cfg.permission ?? {})
 
         const agents: Record<string, Info> = {
+          zero: {
+            name: "zero",
+            description: "ZERO — Assistente pessoal autônomo, inteligente e adaptável. Interpreta linguagem natural sem comandos pré-definidos.",
+            options: {},
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                question: "allow",
+                plan_enter: "allow",
+              }),
+              user,
+            ),
+            mode: "primary",
+            native: true,
+            prompt: PROMPT_ZERO,
+            color: "cyan",
+          },
           build: {
             name: "build",
             description: "The default agent. Executes tools based on configured permissions.",
@@ -379,9 +397,8 @@ export const layer = Layer.effect(
         yield* plugin.trigger("experimental.chat.system.transform", { model: resolved }, { system })
         const existing = yield* InstanceState.useEffect(state, (s) => s.list())
 
-        // TODO: clean this up so provider specific logic doesnt bleed over
         const authInfo = yield* auth.get(model.providerID).pipe(Effect.orDie)
-        const isOpenaiOauth = model.providerID === "openai" && authInfo?.type === "oauth"
+        const useSystemRole = ProviderTransform.supportsSystemRole(model.providerID, authInfo?.type)
 
         const params = {
           experimental_telemetry: {
@@ -393,7 +410,7 @@ export const layer = Layer.effect(
           },
           temperature: 0.3,
           messages: [
-            ...(isOpenaiOauth
+            ...(!useSystemRole
               ? []
               : system.map(
                   (item): ModelMessage => ({
@@ -413,7 +430,7 @@ export const layer = Layer.effect(
           ),
         } satisfies Parameters<typeof generateObject>[0]
 
-        if (isOpenaiOauth) {
+        if (!useSystemRole) {
           return yield* Effect.promise(async () => {
             const result = streamObject({
               ...params,

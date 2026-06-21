@@ -70,9 +70,8 @@ export const layer = Layer.effectDiscard(
       return files.filter((file): file is File => file !== undefined)
     })
 
-    yield* registry.register({
-      key,
-      load: observe().pipe(
+    const cached = yield* Effect.cached(
+      observe().pipe(
         Effect.map((files) =>
           files === SystemContext.unavailable
             ? source(files)
@@ -83,7 +82,8 @@ export const layer = Layer.effectDiscard(
         Effect.catch(() => Effect.succeed(source(SystemContext.unavailable))),
         Effect.catchDefect(() => Effect.succeed(source(SystemContext.unavailable))),
       ),
-    })
+    )
+    yield* registry.register({ key, load: cached })
   }),
 )
 

@@ -1,0 +1,1 @@
+Envia e-mails usando configuração SMTP. Pode também gerenciar a configuração SMTP salva.

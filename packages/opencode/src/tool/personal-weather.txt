@@ -1,0 +1,1 @@
+Consulta o clima atual ou previsão do tempo para uma localização.

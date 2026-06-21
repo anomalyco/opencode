@@ -1,0 +1,1 @@
+Gerencia eventos de calendário. Crie, visualize ou modifique compromissos e eventos.

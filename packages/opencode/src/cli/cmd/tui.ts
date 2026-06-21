@@ -126,7 +126,8 @@ export const TuiThreadCommand = cmd({
       }
       const cwd = Filesystem.resolve(process.cwd())
 
-      const worker = new Worker(file)
+      const workerPath = typeof file === "string" ? file : fileURLToPath(file)
+      const worker = new Worker(workerPath)
       const client = Rpc.client<typeof rpc>(worker)
       const reload = () => {
         client.call("reload", undefined).catch(() => {})
@@ -142,7 +143,10 @@ export const TuiThreadCommand = cmd({
         worker.terminate()
       }
 
-      const prompt = await input(args.prompt)
+      let prompt = await input(args.prompt)
+      if (!prompt) {
+        prompt = "Olá! Fui iniciado no modo de auto-melhoria proativo. Analise o código fonte do ZERO (do qual você faz parte). Identifique oportunidades de otimização, melhorias, correções ou novas features interessantes. Proponha um plano e faça-me perguntas de forma interativa sobre o que e como você deve melhorar, mantendo-se sempre ativo e proativo."
+      }
       const config = await TuiConfig.get()
 
       const network = resolveNetworkOptionsNoConfig(args)

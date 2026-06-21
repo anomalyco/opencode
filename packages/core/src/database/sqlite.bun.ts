@@ -58,15 +58,13 @@ const make = (options: Config) =>
         const statement = native.query(query)
         // @ts-ignore bun-types missing safeIntegers method, fixed in https://github.com/oven-sh/bun/pull/26627
         statement.safeIntegers(Context.get(fiber.context, Client.SafeIntegers))
-        try {
-          return Effect.succeed((statement.all(...(params as any)) ?? []) as Array<Record<string, unknown>>)
-        } catch (cause) {
-          return Effect.fail(
+        return Effect.try({
+          try: () => (statement.all(...(params as any)) ?? []) as Array<Record<string, unknown>>,
+          catch: (cause) =>
             new SqlError({
               reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
             }),
-          )
-        }
+        })
       })
 
     const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
@@ -74,15 +72,13 @@ const make = (options: Config) =>
         const statement = native.query(query)
         // @ts-ignore bun-types missing safeIntegers method, fixed in https://github.com/oven-sh/bun/pull/26627
         statement.safeIntegers(Context.get(fiber.context, Client.SafeIntegers))
-        try {
-          return Effect.succeed((statement.values(...(params as any)) ?? []) as Array<unknown[]>)
-        } catch (cause) {
-          return Effect.fail(
+        return Effect.try({
+          try: () => (statement.values(...(params as any)) ?? []) as Array<unknown[]>,
+          catch: (cause) =>
             new SqlError({
               reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
             }),
-          )
-        }
+        })
       })
 
     const connection = identity<SqliteConnection>({

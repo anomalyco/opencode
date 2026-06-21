@@ -60,6 +60,9 @@ export async function read() {
   }
 
   if (platform() === "linux") {
+    const termux = await command("termux-clipboard-get").catch(() => Buffer.alloc(0))
+    if (termux.length) return { data: termux.toString("utf8"), mime: "text/plain" }
+
     const wayland = await command("wl-paste", ["-t", "image/png"]).catch(() => Buffer.alloc(0))
     if (wayland.length) return { data: wayland.toString("base64"), mime: "image/png" }
     const x11 = await command("xclip", ["-selection", "clipboard", "-t", "image/png", "-o"]).catch(() =>
@@ -79,6 +82,7 @@ export function copyCommand(
   has: (name: string) => boolean,
 ): string[] | undefined {
   if (os === "darwin" && has("osascript")) return ["osascript"]
+  if (os === "linux" && has("termux-clipboard-set")) return ["termux-clipboard-set"]
   if (os === "linux" && wayland && has("wl-copy")) return ["wl-copy"]
   if (os === "linux" && has("xclip")) return ["xclip", "-selection", "clipboard"]
   if (os === "linux" && has("xsel")) return ["xsel", "--clipboard", "--input"]

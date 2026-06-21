@@ -165,7 +165,7 @@ describe("InstructionContext", () => {
             FSUtil.Service.of({
               ...fs,
               up: () => Effect.succeed([file]),
-              readFileStringSafe: () => Effect.succeed(undefined),
+              readFileStringSafe: () => Effect.void,
             }),
           ),
         ),

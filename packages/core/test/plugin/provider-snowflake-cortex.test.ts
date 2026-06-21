@@ -1,11 +1,16 @@
-import { describe, expect, it as bun_it } from "bun:test"
+import { describe, expect, beforeAll, it as bun_it } from "bun:test"
 import { Effect } from "effect"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { SnowflakeCortexPlugin, cortexFetch } from "@opencode-ai/core/plugin/provider/snowflake-cortex"
-import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
+import { loadAllProviders, type ProviderPlugin } from "@opencode-ai/core/plugin/provider"
 import { expectPluginRegistered, it, model, withEnv } from "./provider-helper"
 
 describe("SnowflakeCortexPlugin", () => {
+  let ProviderPlugins: ReadonlyArray<ProviderPlugin> = []
+  beforeAll(async () => {
+    ProviderPlugins = await Effect.runPromise(loadAllProviders())
+  })
+
   it.effect("is registered in ProviderPlugins before OpenAICompatiblePlugin", () =>
     Effect.sync(() => {
       expectPluginRegistered(
