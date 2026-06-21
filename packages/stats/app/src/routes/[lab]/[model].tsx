@@ -330,7 +330,7 @@ function CatalogDatum(props: { label: string; value: string }) {
 function ModelOverview(props: { data: StatsModelData | null }) {
   return (
     <section data-section="model-panel">
-      <SectionTitle title="Overview" description="Recent OpenCode Go tokens, sessions, and market position." />
+      <SectionTitle title="Overview" description="Recent OpenCode Go tokens, unique users, and market position." />
       <Show
         when={props.data}
         fallback={
@@ -340,6 +340,11 @@ function ModelOverview(props: { data: StatsModelData | null }) {
         {(data) => (
           <div data-component="model-metric-grid">
             <MetricCard label="Tokens" value={formatTokens(data().totals.tokens)} detail="last two months" />
+            <MetricCard
+              label="Unique Users"
+              value={formatUsers(data().totals.uniqueUsers)}
+              detail="last two months"
+            />
             <MetricCard label="Sessions" value={formatInteger(data().totals.sessions)} detail="completed sessions" />
             <MetricCard
               label="Token Share"

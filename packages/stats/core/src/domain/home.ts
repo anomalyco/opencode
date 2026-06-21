@@ -54,6 +54,7 @@ export type StatsModelData = {
   tokenChange: number
   totals: {
     sessions: number
+    uniqueUsers: number
     tokens: number
     cost: number
     tokensPerSession: number
@@ -381,6 +382,7 @@ function buildStatsModelData(
     tokenChange: percentChange(current.totalTokens, previous.totalTokens),
     totals: {
       sessions: current.sessions,
+      uniqueUsers: current.uniqueUsers,
       tokens: current.totalTokens,
       cost: round(microcentsToDollars(current.totalCostMicrocents), 2),
       tokensPerSession: current.sessions > 0 ? Math.round(current.totalTokens / current.sessions) : 0,
