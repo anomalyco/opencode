@@ -448,6 +448,47 @@ it.live(
   }),
 )
 
+it.live(
+  "tracks scoped changes when instance directory is a git subdirectory",
+  Effect.gen(function* () {
+    const dir = yield* scopedGitTmpdir()
+    const subdir = path.join(dir, "src")
+    yield* mkdirp(subdir)
+    yield* write(`${dir}/root.txt`, "root initial")
+    yield* write(`${subdir}/date.txt`, "subdir initial")
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${dir}/root.txt`, "root changed")
+      yield* write(`${subdir}/date.txt`, "subdir changed")
+      const patch = yield* snapshot.patch(before!)
+      expect(patch.files).toContain(fwd(dir, "src", "date.txt"))
+      expect(patch.files).not.toContain(fwd(dir, "root.txt"))
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
+it.live(
+  "subdirectory snapshots respect worktree-root ignore rules",
+  Effect.gen(function* () {
+    const dir = yield* scopedGitTmpdir()
+    const subdir = path.join(dir, "src")
+    yield* mkdirp(subdir)
+    yield* write(`${dir}/.gitignore`, "src/ignored.txt\n")
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const before = yield* snapshot.track()
+      expect(before).toBeTruthy()
+      yield* write(`${subdir}/ignored.txt`, "ignored")
+      yield* write(`${subdir}/visible.txt`, "visible")
+      const patch = yield* snapshot.patch(before!)
+      expect(patch.files).toContain(fwd(dir, "src", "visible.txt"))
+      expect(patch.files).not.toContain(fwd(dir, "src", "ignored.txt"))
+    }).pipe(provideInstance(subdir))
+  }),
+)
+
 it.instance(
   "gitignore changes",
   withTrackedSnapshot(({ tmp, snapshot, before }) =>
