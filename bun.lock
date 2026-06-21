@@ -276,6 +276,7 @@
         "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
         "@opencode-ai/effect-sqlite-node": "workspace:*",
         "@opencode-ai/llm": "workspace:*",
+        "@opencode-ai/plugin": "workspace:*",
         "@openrouter/ai-sdk-provider": "2.9.0",
         "@opentelemetry/api": "1.9.0",
         "@opentelemetry/context-async-hooks": "2.6.1",
@@ -625,6 +626,7 @@
       "name": "@opencode-ai/plugin",
       "version": "1.17.9",
       "dependencies": {
+        "@ai-sdk/provider": "3.0.8",
         "@opencode-ai/sdk": "workspace:*",
         "effect": "catalog:",
         "zod": "catalog:",

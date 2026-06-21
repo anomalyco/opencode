@@ -2,7 +2,7 @@ import { describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { CloudflareAIGatewayPlugin } from "@opencode-ai/core/plugin/provider/cloudflare-ai-gateway"
-import { it, model, withEnv } from "./provider-helper"
+import { addPlugin, it, model, withEnv } from "./provider-helper"
 
 const aiGatewayCalls: Record<string, unknown>[] = []
 const unifiedCalls: string[] = []
@@ -78,7 +78,7 @@ describe("CloudflareAIGatewayPlugin", () => {
       () =>
         Effect.gen(function* () {
           const plugin = yield* PluginV2.Service
-          yield* plugin.add(CloudflareAIGatewayPlugin)
+          yield* addPlugin(plugin, CloudflareAIGatewayPlugin)
           const result = yield* plugin.trigger(
             "aisdk.sdk",
             {
@@ -98,7 +98,7 @@ describe("CloudflareAIGatewayPlugin", () => {
       Effect.gen(function* () {
         resetCalls()
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(CloudflareAIGatewayPlugin)
+        yield* addPlugin(plugin, CloudflareAIGatewayPlugin)
 
         yield* plugin.trigger(
           "aisdk.sdk",
@@ -142,7 +142,7 @@ describe("CloudflareAIGatewayPlugin", () => {
       Effect.gen(function* () {
         resetCalls()
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(CloudflareAIGatewayPlugin)
+        yield* addPlugin(plugin, CloudflareAIGatewayPlugin)
 
         yield* plugin.trigger(
           "aisdk.sdk",
@@ -171,7 +171,7 @@ describe("CloudflareAIGatewayPlugin", () => {
       Effect.gen(function* () {
         resetCalls()
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(CloudflareAIGatewayPlugin)
+        yield* addPlugin(plugin, CloudflareAIGatewayPlugin)
 
         yield* plugin.trigger(
           "aisdk.sdk",
@@ -208,7 +208,7 @@ describe("CloudflareAIGatewayPlugin", () => {
         Effect.gen(function* () {
           resetCalls()
           const plugin = yield* PluginV2.Service
-          yield* plugin.add(CloudflareAIGatewayPlugin)
+          yield* addPlugin(plugin, CloudflareAIGatewayPlugin)
 
           yield* plugin.trigger(
             "aisdk.sdk",
@@ -239,7 +239,7 @@ describe("CloudflareAIGatewayPlugin", () => {
       Effect.gen(function* () {
         resetCalls()
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(CloudflareAIGatewayPlugin)
+        yield* addPlugin(plugin, CloudflareAIGatewayPlugin)
 
         yield* plugin.trigger(
           "aisdk.sdk",
@@ -261,7 +261,7 @@ describe("CloudflareAIGatewayPlugin", () => {
       Effect.gen(function* () {
         resetCalls()
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(CloudflareAIGatewayPlugin)
+        yield* addPlugin(plugin, CloudflareAIGatewayPlugin)
 
         const result = yield* plugin.trigger(
           "aisdk.sdk",
@@ -284,7 +284,7 @@ describe("CloudflareAIGatewayPlugin", () => {
       Effect.gen(function* () {
         resetCalls()
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(CloudflareAIGatewayPlugin)
+        yield* addPlugin(plugin, CloudflareAIGatewayPlugin)
 
         const result = yield* plugin.trigger(
           "aisdk.sdk",
@@ -313,7 +313,7 @@ describe("CloudflareAIGatewayPlugin", () => {
         Effect.gen(function* () {
           resetCalls()
           const plugin = yield* PluginV2.Service
-          yield* plugin.add(CloudflareAIGatewayPlugin)
+          yield* addPlugin(plugin, CloudflareAIGatewayPlugin)
 
           const result = yield* plugin.trigger(
             "aisdk.sdk",
@@ -336,7 +336,7 @@ describe("CloudflareAIGatewayPlugin", () => {
       Effect.gen(function* () {
         resetCalls()
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(CloudflareAIGatewayPlugin)
+        yield* addPlugin(plugin, CloudflareAIGatewayPlugin)
 
         const result = yield* plugin.trigger(
           "aisdk.sdk",
@@ -364,7 +364,7 @@ describe("CloudflareAIGatewayPlugin", () => {
       Effect.gen(function* () {
         resetCalls()
         const plugin = yield* PluginV2.Service
-        yield* plugin.add(CloudflareAIGatewayPlugin)
+        yield* addPlugin(plugin, CloudflareAIGatewayPlugin)
 
         const result = yield* plugin.trigger(
           "aisdk.sdk",

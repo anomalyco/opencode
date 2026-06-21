@@ -819,7 +819,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const agent = yield* AgentV2.Service
-      yield* agent.update((editor) =>
+      yield* agent.transform((editor) =>
         editor.update(AgentV2.ID.make("build"), (agent) => {
           agent.system = "Build agent instructions"
           agent.mode = "primary"
@@ -840,7 +840,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const agent = yield* AgentV2.Service
-      yield* agent.update((editor) => {
+      yield* agent.transform((editor) => {
         editor.update(AgentV2.ID.make("build"), (agent) => {
           agent.system = "Build agent instructions"
           agent.mode = "primary"
@@ -868,7 +868,7 @@ describe("SessionRunnerLLM", () => {
       yield* setup
       const { db } = yield* Database.Service
       const agent = yield* AgentV2.Service
-      yield* agent.update((editor) =>
+      yield* agent.transform((editor) =>
         editor.update(AgentV2.ID.make("reviewer"), (agent) => {
           agent.system = "Reviewer instructions"
           agent.mode = "primary"
@@ -3214,7 +3214,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const agents = yield* AgentV2.Service
-      yield* agents.update((editor) =>
+      yield* agents.transform((editor) =>
         editor.update(AgentV2.ID.make("build"), (agent) => {
           agent.steps = 2
         }),

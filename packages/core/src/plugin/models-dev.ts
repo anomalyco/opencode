@@ -1,16 +1,13 @@
-import { DateTime, Effect, Scope, Stream } from "effect"
-import { Catalog } from "../catalog"
-import { Integration } from "../integration"
-import { EventV2 } from "../event"
+import { define } from "@opencode-ai/plugin/v2/effect"
+import { Effect, Stream } from "effect"
 import { ModelV2 } from "../model"
 import { ModelRequest } from "../model-request"
 import { ModelsDev } from "../models-dev"
-import { PluginV2 } from "../plugin"
 import { ProviderV2 } from "../provider"
 
 function released(date: string) {
   const time = Date.parse(date)
-  return DateTime.makeUnsafe(Number.isFinite(time) ? time : 0)
+  return Number.isFinite(time) ? time : 0
 }
 
 function cost(input: ModelsDev.Model["cost"]) {
@@ -51,22 +48,16 @@ function variants(model: ModelsDev.Model, packageName?: string) {
   })
 }
 
-export const ModelsDevPlugin = PluginV2.define({
-  id: PluginV2.ID.make("models-dev"),
-  effect: Effect.gen(function* () {
-    const catalog = yield* Catalog.Service
-    const integrations = yield* Integration.Service
+export const ModelsDevPlugin = define({
+  id: "models-dev",
+  effect: Effect.fn(function* (ctx) {
     const modelsDev = yield* ModelsDev.Service
-    const events = yield* EventV2.Service
-    const scope = yield* Scope.Scope
-    const transform = yield* catalog.transform()
-    const integrationTransform = yield* integrations.transform()
-    const refresh = Effect.fn("ModelsDevPlugin.refresh")(function* () {
-      const data = yield* modelsDev.get()
-      yield* integrationTransform((integrations) => {
+    yield* ctx.integration.transform(
+      Effect.fn(function* (integrations) {
+        const data = yield* modelsDev.get()
         for (const item of Object.values(data)) {
           if (item.env.length === 0) continue
-          const integrationID = Integration.ID.make(item.id)
+          const integrationID = item.id
           integrations.update(integrationID, (integration) => (integration.name = item.name))
           integrations.method.update({
             integrationID,
@@ -77,8 +68,11 @@ export const ModelsDevPlugin = PluginV2.define({
             method: { type: "env", names: [...item.env] },
           })
         }
-      })
-      yield* transform((catalog) => {
+      }),
+    )
+    yield* ctx.catalog.transform(
+      Effect.fn(function* (catalog) {
+        const data = yield* modelsDev.get()
         for (const item of Object.values(data)) {
           const providerID = ProviderV2.ID.make(item.id)
           catalog.provider.update(providerID, (provider) => {
@@ -132,11 +126,10 @@ export const ModelsDevPlugin = PluginV2.define({
             })
           }
         }
-      })
-    })
-    yield* refresh()
-    yield* events.subscribe(ModelsDev.Event.Refreshed).pipe(
-      Stream.runForEach(() => refresh()),
+      }),
+    )
+    yield* ctx.event.subscribe("models-dev.refreshed").pipe(
+      Stream.runForEach(() => ctx.integration.rebuild().pipe(Effect.andThen(ctx.catalog.rebuild()))),
       Effect.forkScoped({ startImmediately: true }),
     )
   }),
