@@ -32,9 +32,9 @@ export const ReloadTool = Tool.define(
             title: result.immediate ? "Configuration reload started" : "Configuration reload queued",
             output: result.immediate
               ? "Reload started. Wait for the reload to finish before continuing."
-              : "Reload queued. Wait for the reload to finish before continuing.",
+              : "Reload will start after active sessions finish.",
             metadata: { queued: !result.immediate },
-            stopSession: true,
+            stopAfterToolResult: true,
           }
         }).pipe(reload),
     }

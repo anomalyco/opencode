@@ -757,7 +757,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             .reload({ workspace: project.workspace.current() })
             .then((result) => {
               toast.show({
-                message: result.data?.immediate ? "Reloading configuration" : "Reload queued until sessions are idle",
+                message: result.data?.immediate
+                  ? "Reloading configuration"
+                  : "Reload will start after active sessions finish",
                 variant: "info",
               })
               dialog.clear()

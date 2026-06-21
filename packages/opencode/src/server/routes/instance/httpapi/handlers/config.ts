@@ -44,7 +44,7 @@ export const configHandlers = HttpApiBuilder.group(InstanceHttpApi, "config", (h
 
     const bootstrapComplete = Effect.fn("ConfigHttpApi.bootstrapComplete")(function* (ctx) {
       if (ctx.query.cycle !== (yield* reloadState(ConfigReload.getBootstrapCycle()))) return { success: false }
-      yield* reloadState(ConfigReload.finishBlocker("tui-bootstrap"))
+      yield* reloadState(ConfigReload.releaseBlocker("tui-bootstrap"))
       return { success: true }
     })
 

@@ -353,7 +353,7 @@ export const layer = Layer.effect(
         title: string
         metadata: Record<string, any>
         output: string
-        stopSession?: boolean
+        stopAfterToolResult?: boolean
         attachments?: SessionV1.FilePart[]
       } => {
         if (isRecord(value.result.value) && typeof value.result.value.output === "string") {
@@ -361,7 +361,7 @@ export const layer = Layer.effect(
             title: typeof value.result.value.title === "string" ? value.result.value.title : value.name,
             metadata: isRecord(value.result.value.metadata) ? value.result.value.metadata : {},
             output: value.result.value.output,
-            stopSession: value.result.value.stopSession === true,
+            stopAfterToolResult: value.result.value.stopAfterToolResult === true,
             attachments: Array.isArray(value.result.value.attachments)
               ? value.result.value.attachments.filter(isFilePart)
               : undefined,
@@ -650,7 +650,7 @@ export const layer = Layer.effect(
                 })
             }
             yield* completeToolCall(value.id, output)
-            if (output.stopSession) ctx.blocked = true
+            if (output.stopAfterToolResult) ctx.blocked = true
             return
           }
 

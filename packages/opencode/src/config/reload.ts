@@ -49,13 +49,13 @@ export function isPending() {
 export const start = Effect.fn("ConfigReload.start")(function* (sessionID: string) {
   const state = yield* currentState()
   state.active.add(sessionID)
-  yield* Effect.logDebug("config reload session started", { sessionID })
+  yield* Effect.logDebug("config reload waiting for all sessions to finish", { sessionID })
 })
 
 export const finish = Effect.fn("ConfigReload.finish")(function* (sessionID: string) {
   const state = yield* currentState()
   state.active.delete(sessionID)
-  yield* Effect.logDebug("config reload session finished", { sessionID })
+  yield* Effect.logDebug("config reload session finished current turn", { sessionID })
   yield* continueOrDone(state)
 })
 
@@ -63,10 +63,10 @@ export const getBootstrapCycle = Effect.fn("ConfigReload.getBootstrapCycle")(fun
   return (yield* currentState()).bootstrapCycle
 })
 
-export const finishBlocker = Effect.fn("ConfigReload.finishBlocker")(function* (blockerID: string) {
+export const releaseBlocker = Effect.fn("ConfigReload.releaseBlocker")(function* (blockerID: string) {
   const state = yield* currentState()
   state.blockers.delete(blockerID)
-  yield* Effect.logDebug("config reload blocker finished", { blockerID })
+  yield* Effect.logDebug("config reload blocker released", { blockerID })
   yield* continueOrDone(state)
 })
 
@@ -90,7 +90,10 @@ export const check = Effect.fn("ConfigReload.check")(function* () {
   const state = getState(current.key)
   if (!state.pending) return
   if (isBlocked(state)) {
-    yield* Effect.logDebug("config reload still blocked", { active: [...state.active], blockers: [...state.blockers] })
+    yield* Effect.logDebug("config reload waiting for sessions and blockers to finish", {
+      active: [...state.active],
+      blockers: [...state.blockers],
+    })
     return
   }
   yield* Effect.logInfo("config reload executing deferred request")
