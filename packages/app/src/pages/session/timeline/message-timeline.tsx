@@ -221,13 +221,29 @@ function TimelineDiffSummaryRow(props: { diffs: SummaryDiff[] }) {
   )
 }
 
+const MAX_TIMELINE_DIFF_CHANGED_LINES = 500
+
 function TimelineDiffView(props: { diff: SummaryDiff }) {
   const fileComponent = useFileComponent()
   const view = normalize(props.diff)
+  const [forceRender, setForceRender] = createSignal(false)
+  const tooLarge = createMemo(() => {
+    if (forceRender()) return false
+    return (props.diff.additions + props.diff.deletions) > MAX_TIMELINE_DIFF_CHANGED_LINES
+  })
 
   return (
     <div data-slot="session-turn-diff-view" data-scrollable>
-      <Dynamic component={fileComponent} mode="diff" virtualize={false} fileDiff={view.fileDiff} />
+      <Show when={!tooLarge()} fallback={
+        <div data-slot="session-turn-diff-large" class="flex flex-col items-center gap-2 py-6 text-center">
+          <span class="text-13-regular text-text-weak">
+            Diff too large ({props.diff.additions + props.diff.deletions} changes, max {MAX_TIMELINE_DIFF_CHANGED_LINES.toLocaleString()})
+          </span>
+          <Button variant="secondary" size="small" onClick={() => setForceRender(true)}>Render Anyway</Button>
+        </div>
+      }>
+        <Dynamic component={fileComponent} mode="diff" virtualize={false} fileDiff={view.fileDiff} />
+      </Show>
     </div>
   )
 }
