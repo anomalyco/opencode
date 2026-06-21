@@ -191,22 +191,48 @@ function run(db: DatabaseService, event: SessionEvent.Event) {
   })
 }
 
-function insertMessage(db: DatabaseService, event: SessionEvent.Event, message: SessionMessage.Message) {
-  if (event.seq === undefined) return Effect.die("Synchronized Session event is missing aggregate sequence")
-  const encoded = encodeMessage(message)
-  const { id, type, ...data } = encoded
+// True when the parent session row still exists. Every session-scoped child
+// table (message, session_message, session_input, ...) has a cascade FK to
+// session.id checked at COMMIT. A session removal commits in its own
+// transaction and cascade-deletes the session row; a later child-write event
+// from an in-flight turn would then fail that FK and crash the fiber via
+// Effect.orDie. Projections read committed state, so checking presence here is
+// correct regardless of why the row is missing, and is replay-safe.
+function sessionPresent(db: DatabaseService, sessionID: (typeof SessionTable.$inferSelect)["id"]) {
   return db
-    .insert(SessionMessageTable)
-    .values({
-      id: SessionMessage.ID.make(id),
-      session_id: event.data.sessionID,
-      type,
-      seq: event.seq,
-      time_created: DateTime.toEpochMillis(message.time.created),
-      data,
-    })
-    .run()
-    .pipe(Effect.orDie)
+    .select({ id: SessionTable.id })
+    .from(SessionTable)
+    .where(eq(SessionTable.id, sessionID))
+    .get()
+    .pipe(
+      Effect.orDie,
+      Effect.map((row) => row !== undefined),
+    )
+}
+
+function insertMessage(db: DatabaseService, event: SessionEvent.Event, message: SessionMessage.Message) {
+  return Effect.gen(function* () {
+    if (event.seq === undefined) return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
+    const encoded = encodeMessage(message)
+    const { id, type, ...data } = encoded
+    const sessionID = event.data.sessionID
+    if (!(yield* sessionPresent(db, sessionID))) {
+      yield* Effect.logWarning("skipping orphan session_message; parent session absent", { id, sessionID })
+      return
+    }
+    yield* db
+      .insert(SessionMessageTable)
+      .values({
+        id: SessionMessage.ID.make(id),
+        session_id: sessionID,
+        type,
+        seq: event.seq,
+        time_created: DateTime.toEpochMillis(message.time.created),
+        data,
+      })
+      .run()
+      .pipe(Effect.orDie)
+  })
 }
 
 export const layer = Layer.effectDiscard(
@@ -271,13 +297,7 @@ export const layer = Layer.effectDiscard(
         // late MessageUpdated from an in-flight turn is still in the commit
         // funnel. Skip the orphan write instead of failing the message ->
         // session FK at COMMIT (mirrors the orphan-part guard below).
-        const parent = yield* db
-          .select({ id: SessionTable.id })
-          .from(SessionTable)
-          .where(eq(SessionTable.id, sessionID))
-          .get()
-          .pipe(Effect.orDie)
-        if (!parent) {
+        if (!(yield* sessionPresent(db, sessionID))) {
           yield* Effect.logWarning("skipping orphan message; parent session absent", { id, sessionID })
           return
         }
@@ -391,6 +411,16 @@ export const layer = Layer.effectDiscard(
           .get()
           .pipe(Effect.orDie)
         if (existing) return yield* Effect.die(new PromptAlreadyProjected())
+        // session_input.session_id is a cascade FK to session.id. If the session
+        // was removed while this prompt was in flight, skip rather than crash on
+        // the FK at COMMIT (mirrors the message/part orphan guards).
+        if (!(yield* sessionPresent(db, event.data.sessionID))) {
+          yield* Effect.logWarning("skipping orphan prompt; parent session absent", {
+            messageID,
+            sessionID: event.data.sessionID,
+          })
+          return
+        }
         yield* run(db, event)
         if (event.seq === undefined)
           return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
@@ -408,6 +438,15 @@ export const layer = Layer.effectDiscard(
       Effect.gen(function* () {
         if (event.seq === undefined)
           return yield* Effect.die("Synchronized Session event is missing aggregate sequence")
+        // session_input.session_id is a cascade FK to session.id; skip the
+        // admitted insert if the session was removed mid-flight.
+        if (!(yield* sessionPresent(db, event.data.sessionID))) {
+          yield* Effect.logWarning("skipping orphan admitted prompt; parent session absent", {
+            messageID: event.data.messageID,
+            sessionID: event.data.sessionID,
+          })
+          return
+        }
         yield* SessionInput.projectAdmitted(db, {
           admittedSeq: event.seq,
           id: event.data.messageID,

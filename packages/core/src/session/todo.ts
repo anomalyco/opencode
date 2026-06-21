@@ -5,7 +5,7 @@ import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
 import { SessionSchema } from "./schema"
-import { TodoTable } from "./sql"
+import { SessionTable, TodoTable } from "./sql"
 
 export const Info = Schema.Struct({
   content: Schema.String.annotate({ description: "Brief description of the task" }),
@@ -46,11 +46,23 @@ export const layer = Layer.effect(
       readonly sessionID: SessionSchema.ID
       readonly todos: ReadonlyArray<Info>
     }) {
-      yield* db
+      const wrote = yield* db
         .transaction((tx) =>
           Effect.gen(function* () {
+            // todo.session_id is a cascade FK to session.id. If the session was
+            // removed concurrently, the INSERT below would fail the FK at COMMIT
+            // and crash via orDie. Skip when the parent session is gone.
+            const session = yield* tx
+              .select({ id: SessionTable.id })
+              .from(SessionTable)
+              .where(eq(SessionTable.id, input.sessionID))
+              .get()
+            if (!session) {
+              yield* Effect.logWarning("skipping todo update; parent session absent", { sessionID: input.sessionID })
+              return false
+            }
             yield* tx.delete(TodoTable).where(eq(TodoTable.session_id, input.sessionID)).run()
-            if (input.todos.length === 0) return
+            if (input.todos.length === 0) return true
             yield* tx
               .insert(TodoTable)
               .values(
@@ -63,9 +75,11 @@ export const layer = Layer.effect(
                 })),
               )
               .run()
+            return true
           }),
         )
         .pipe(Effect.orDie)
+      if (!wrote) return
       yield* events.publish(Event.Updated, input)
     })
 
