@@ -685,3 +685,58 @@ describe("SessionProjector orphan-part tolerance", () => {
     }),
   )
 })
+
+describe("SessionProjector orphan-message tolerance", () => {
+  const it = testEffect(Layer.mergeAll(database, events, projector))
+  const sessionID = SessionV2.ID.make("ses_orphan_msg_test")
+  const messageID = SessionV1.MessageID.make("msg_orphan_session")
+
+  it.effect("does not throw and does not insert message when parent session is gone", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      // Create a session row, then delete it to simulate a removal cascade.
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "orphan-msg-test",
+          directory: "/project",
+          title: "orphan msg test",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
+
+      const evts = yield* EventV2.Service
+
+      // Late MessageUpdated arrives after the parent session was deleted.
+      const exit = yield* evts
+        .publish(SessionV1.Event.MessageUpdated, {
+          sessionID,
+          info: {
+            id: messageID,
+            sessionID,
+            role: "user",
+            time: { created: 0 },
+            agent: "orchestrator",
+            model: { providerID: ProviderV2.ID.make("homelab"), modelID: ModelV2.ID.make("test/model") },
+          } as SessionV1.User,
+        })
+        .pipe(Effect.exit)
+
+      // Must not defect.
+      expect(exit._tag).toBe("Success")
+
+      // Message row must NOT exist in MessageTable.
+      const row = yield* db.select().from(MessageTable).where(eq(MessageTable.id, messageID)).get().pipe(Effect.orDie)
+      expect(row).toBeUndefined()
+    }),
+  )
+})

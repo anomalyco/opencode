@@ -267,6 +267,20 @@ export const layer = Layer.effectDiscard(
         const id = event.data.info.id
         const sessionID = event.data.info.sessionID
         const data = messageData(event.data.info)
+        // A session removal can cascade-delete the parent session row while a
+        // late MessageUpdated from an in-flight turn is still in the commit
+        // funnel. Skip the orphan write instead of failing the message ->
+        // session FK at COMMIT (mirrors the orphan-part guard below).
+        const parent = yield* db
+          .select({ id: SessionTable.id })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        if (!parent) {
+          yield* Effect.logWarning("skipping orphan message; parent session absent", { id, sessionID })
+          return
+        }
         yield* db
           .insert(MessageTable)
           .values({ id, session_id: sessionID, time_created, data })
