@@ -26,6 +26,7 @@ import {
   type ModelCatalogCost,
   type ModelCatalogEntry,
 } from "../model-catalog"
+import { statsRuntime } from "../../stats-runtime"
 import {
   applyThemePreference,
   Footer,
@@ -95,7 +96,6 @@ const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a
 
 const getModelData = query(async (lab: string, model: string) => {
   "use server"
-  const { statsRuntime } = await import("../../stats-runtime")
   return statsRuntime.runPromise(getStatsModelData(model, lab))
 }, "getStatsModelData")
 

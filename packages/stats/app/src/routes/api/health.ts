@@ -1,8 +1,8 @@
 import { AppConfig } from "@opencode-ai/stats-core/config"
 import { Effect } from "effect"
+import { statsRuntime } from "../../stats-runtime"
 
 export async function GET() {
-  const { statsRuntime } = await import("../../stats-runtime")
   return Response.json(
     await statsRuntime.runPromise(
       Effect.gen(function* () {
