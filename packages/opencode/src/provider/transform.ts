@@ -133,10 +133,10 @@ function normalizeMessages(
   msgs = msgs
     .map((msg) => {
       if (msg.role !== "assistant") return msg
-      if (typeof msg.content === "string") return msg.content.trim().length > 0 ? msg : undefined
+      if (typeof msg.content === "string") return msg.content !== "" ? msg : undefined
       if (!Array.isArray(msg.content)) return msg
       const content = msg.content.filter((part) => {
-        if (part.type === "text") return part.text.trim().length > 0
+        if (part.type === "text") return part.text !== ""
         if (part.type !== "reasoning") return true
         return (
           part.text.trim().length > 0 ||

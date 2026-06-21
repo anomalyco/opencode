@@ -108,16 +108,17 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("removes empty assistant parts while preserving tool calls", () =>
+  it.effect("preserves opaque OpenAI-compatible reasoning continuation", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
         LLM.request({
           model,
           messages: [
-            Message.assistant([
-              { type: "text", text: "" },
-              ToolCallPart.make({ id: "call_1", name: "read", input: { path: "README.md" } }),
-            ]),
+            Message.make({
+              role: "assistant",
+              content: [],
+              native: { openaiCompatible: { reasoning_content: "opaque reasoning" } },
+            }),
           ],
         }),
       )
@@ -125,11 +126,9 @@ describe("OpenAI Chat route", () => {
       expect(prepared.body.messages).toEqual([
         {
           role: "assistant",
-          content: "",
-          reasoning_content: undefined,
-          tool_calls: [
-            { id: "call_1", type: "function", function: { name: "read", arguments: '{"path":"README.md"}' } },
-          ],
+          content: null,
+          reasoning_content: "opaque reasoning",
+          tool_calls: undefined,
         },
       ])
     }),

@@ -988,7 +988,7 @@ describe("session.message-v2.toModelMessage", () => {
     expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
-  test("includes aborted assistant messages only when they have meaningful output", async () => {
+  test("preserves aborted assistant partial output", async () => {
     const assistantID1 = "m-assistant-1"
     const assistantID2 = "m-assistant-2"
 
@@ -1045,7 +1045,7 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("filters aborted assistant messages with only empty text", async () => {
+  test("preserves empty aborted assistant turns until the provider boundary", async () => {
     const assistantID = "m-assistant"
     const input: SessionV1.WithParts[] = [
       {
@@ -1064,7 +1064,10 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
+    const messages = await MessageV2.toModelMessages(input, model)
+
+    expect(messages).toStrictEqual([{ role: "assistant", content: [{ type: "text", text: "" }] }])
+    expect(ProviderTransform.message(messages, model, {})).toStrictEqual([])
   })
 
   test("preserves aborted assistant messages with signed reasoning", async () => {
@@ -1353,6 +1356,7 @@ describe("session.message-v2.toModelMessage", () => {
     expect(result).toHaveLength(2)
     expect((result[0].content as any[]).find((p) => p.type === "text").text).toBe(" ")
     expect((result[1].content as any[]).find((p) => p.type === "text").text).toBe("the answer")
+    expect(ProviderTransform.message(result, model, {})).toEqual(result)
   })
 
   test("leaves empty text alone when reasoning signature is under 'bedrock' namespace", async () => {

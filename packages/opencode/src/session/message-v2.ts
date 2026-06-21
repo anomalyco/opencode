@@ -260,14 +260,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         return part.metadata?.anthropic?.signature != null
       })
 
-      if (msg.info.error) {
-        const hasOutput = msg.parts.some((part) => {
-          if (part.type === "text") return part.text.trim().length > 0
-          if (part.type === "reasoning") return part.text.trim().length > 0 || hasSignedReasoning
-          return part.type === "tool"
-        })
-        if (!(AbortedError.isInstance(msg.info.error) && hasOutput)) continue
-      }
+      if (msg.info.error && !AbortedError.isInstance(msg.info.error)) continue
       const assistantMessage: UIMessage = {
         id: msg.info.id,
         role: "assistant",

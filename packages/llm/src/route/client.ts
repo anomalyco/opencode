@@ -173,15 +173,38 @@ const resolveRequestOptions = (request: LLMRequest) =>
     http: mergeHttpOptions(request.model.route.defaults.http, request.http),
   })
 
+const meaningfulAssistantPart = (part: Message["content"][number]) => {
+  if (part.type === "text") return part.text !== ""
+  if (part.type !== "reasoning") return true
+  return (
+    part.text.trim().length > 0 ||
+    part.encrypted !== undefined ||
+    (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
+  )
+}
+
 const omitEmptyAssistantMessages = (request: LLMRequest) => {
+  let changed = false
   const messages = request.messages.flatMap((message) => {
     if (message.role !== "assistant") return [message]
-    const content = message.content.filter(Message.isMeaningfulAssistantPart)
-    if (content.length === 0) return []
+    const content = message.content.filter(meaningfulAssistantPart)
+    if (content.length === 0 && (!message.native || Object.keys(message.native).length === 0)) {
+      changed = true
+      return []
+    }
     if (content.length === message.content.length) return [message]
-    return [Message.make({ ...message, content })]
+    changed = true
+    return [
+      Message.make({
+        id: message.id,
+        role: message.role,
+        content,
+        metadata: message.metadata,
+        native: message.native,
+      }),
+    ]
   })
-  if (messages.length === request.messages.length) return request
+  if (!changed) return request
   return LLMRequest.update(request, { messages })
 }
 
