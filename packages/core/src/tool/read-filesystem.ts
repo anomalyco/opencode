@@ -47,7 +47,7 @@ export class OffsetOutOfRangeError extends Error {
 export class PathKindError extends Error {
   constructor(
     readonly resource: string,
-    readonly expected: "a file" | "a directory" | "a file or directory",
+    readonly expected: "a file" | "a file or directory",
   ) {
     super(`Path is not ${expected}: ${resource}`)
     this.name = "PathKindError"
@@ -144,12 +144,14 @@ const binary = (resource: string, bytes: Uint8Array) => {
   }
   return nonPrintable / bytes.length > 0.3
 }
-const decodeUtf8 = (resource: string, decoder: TextDecoder, bytes?: Uint8Array, stream = false) =>
-  Effect.sync(() => decoder.decode(bytes, stream ? { stream: true } : undefined)).pipe(
+const decodeUtf8 = (resource: string, decoder: TextDecoder, bytes?: Uint8Array) =>
+  Effect.sync(() => decoder.decode(bytes, bytes === undefined ? undefined : { stream: true })).pipe(
     Effect.catchDefect((error) =>
       error instanceof TypeError ? Effect.fail(new MalformedUtf8Error(resource)) : Effect.die(error),
     ),
   )
+const decodeChunk = (resource: string, decoder: TextDecoder, bytes: Uint8Array) =>
+  bytes.includes(0) ? Effect.fail(new BinaryFileError(resource)) : decodeUtf8(resource, decoder, bytes)
 
 export const inspect = Effect.fn("ReadTool.inspect")(function* (fs: FSUtil.Interface, input: string) {
   const info = yield* fs.stat(input)
@@ -204,12 +206,11 @@ export const read = Effect.fn("ReadTool.read")(function* (
       const paged = info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
       if (!paged) {
         const decoder = new TextDecoder("utf-8", { fatal: true })
-        const text = [yield* decodeUtf8(resource, decoder, first, true)]
+        const text = [yield* decodeUtf8(resource, decoder, first)]
         while (true) {
           const chunk = yield* file.readAlloc(64 * 1024)
           if (Option.isNone(chunk)) break
-          if (chunk.value.includes(0)) return yield* Effect.fail(new BinaryFileError(resource))
-          text.push(yield* decodeUtf8(resource, decoder, chunk.value, true))
+          text.push(yield* decodeChunk(resource, decoder, chunk.value))
         }
         text.push(yield* decodeUtf8(resource, decoder))
         return {
@@ -234,12 +235,12 @@ export const read = Effect.fn("ReadTool.read")(function* (
       const append = (input: string) => {
         if (line < offset) {
           line++
-          return
+          return true
         }
         if (lines.length >= limit || bytes >= MAX_READ_BYTES) {
           truncated = true
           next ??= line++
-          return
+          return false
         }
         found = true
         const text = input.length > MAX_LINE_LENGTH ? input.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : input
@@ -247,11 +248,12 @@ export const read = Effect.fn("ReadTool.read")(function* (
         if (bytes + size > MAX_READ_BYTES) {
           truncated = true
           next ??= line++
-          return
+          return false
         }
         lines.push(text)
         bytes += size
         line++
+        return true
       }
       const consume = (input: string) => {
         let text = input
@@ -271,20 +273,21 @@ export const read = Effect.fn("ReadTool.read")(function* (
           pending = ""
           discard = false
           text = text.slice(index + 1)
-          append(current.endsWith("\r") ? current.slice(0, -1) : current)
+          if (!append(current.endsWith("\r") ? current.slice(0, -1) : current)) return false
         }
+        return true
       }
-      if (first.includes(0)) return yield* Effect.fail(new BinaryFileError(resource))
-      consume(yield* decodeUtf8(resource, decoder, first, true))
-      while (true) {
+      let done = !consume(yield* decodeUtf8(resource, decoder, first))
+      while (!done) {
         const chunk = yield* file.readAlloc(64 * 1024)
         if (Option.isNone(chunk)) break
-        if (chunk.value.includes(0)) return yield* Effect.fail(new BinaryFileError(resource))
-        consume(yield* decodeUtf8(resource, decoder, chunk.value, true))
+        done = !consume(yield* decodeChunk(resource, decoder, chunk.value))
       }
-      const tail = yield* decodeUtf8(resource, decoder)
-      if (!discard) pending += tail
-      if (pending) append(pending.endsWith("\r") ? pending.slice(0, -1) : pending)
+      if (!done) {
+        const tail = yield* decodeUtf8(resource, decoder)
+        if (!discard) pending += tail
+        if (pending) append(pending.endsWith("\r") ? pending.slice(0, -1) : pending)
+      }
       if (!found && offset !== 1) return yield* Effect.fail(new OffsetOutOfRangeError(offset))
       return new TextPage({
         type: "text-page",

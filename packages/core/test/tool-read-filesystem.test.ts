@@ -83,15 +83,31 @@ describe("ReadToolFileSystem", () => {
     }),
   )
 
+  it.effect("stops reading after the requested page is complete", () =>
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const files = yield* FileSystem.FileSystem
+      const directory = yield* files.makeTempDirectoryScoped()
+      const file = path.join(directory, "paged.txt")
+      const content = new Uint8Array(64 * 1024 + 1).fill(97)
+      content.set(new TextEncoder().encode("one\ntwo\n"))
+      content[64 * 1024] = 0x80
+      yield* files.writeFile(file, content)
+
+      const result = yield* ReadToolFileSystem.read(fs, file, "paged.txt", { limit: 1 })
+
+      expect(result).toMatchObject({ type: "text-page", content: "one", truncated: true, next: 2 })
+    }),
+  )
+
   it.effect("preserves the media ingestion limit message", () =>
     Effect.gen(function* () {
       const fs = yield* FSUtil.Service
       const files = yield* FileSystem.FileSystem
       const directory = yield* files.makeTempDirectoryScoped()
       const file = path.join(directory, "oversized.png")
-      const content = new Uint8Array(ReadToolFileSystem.MAX_MEDIA_INGEST_BYTES + 1)
-      content.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-      yield* files.writeFile(file, content)
+      yield* files.writeFile(file, Uint8Array.of(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a))
+      yield* files.truncate(file, ReadToolFileSystem.MAX_MEDIA_INGEST_BYTES + 1)
 
       const error = yield* ReadToolFileSystem.read(fs, file, "oversized.png").pipe(Effect.flip)
 
