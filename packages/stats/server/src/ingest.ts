@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer"
 import { FirehoseClient, PutRecordBatchCommand } from "@aws-sdk/client-firehose"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Layer } from "effect"
 import * as Context from "effect/Context"
 import { Resource } from "sst/resource"
 
@@ -12,11 +12,16 @@ type IngestEvent = Record<string, unknown>
 type LakeRoute = { database: string; table: string }
 type FirehoseRecord = { Data: Uint8Array }
 
-export class IngestError extends Schema.TaggedErrorClass<IngestError>()("IngestError", {
-  message: Schema.String,
-  failed: Schema.Number,
-  cause: Schema.optional(Schema.Defect()),
-}) {}
+export class IngestError extends Error {
+  readonly _tag = "IngestError"
+  readonly failed: number
+
+  constructor(input: { message: string; failed: number; cause?: unknown }) {
+    super(input.message, { cause: input.cause })
+    this.name = "IngestError"
+    this.failed = input.failed
+  }
+}
 
 export declare namespace Ingest {
   export interface Service {
@@ -37,10 +42,12 @@ export class Ingest extends Context.Service<Ingest, Ingest.Service>()("@opencode
           yield* Effect.logWarning(
             `lake ingest rejected ${JSON.stringify({ records: counts.records, unsupported: counts.unsupported })}`,
           )
-          return yield* new IngestError({
-            message: "Unsupported lake event type",
-            failed: counts.unsupported,
-          })
+          return yield* Effect.fail(
+            new IngestError({
+              message: "Unsupported lake event type",
+              failed: counts.unsupported,
+            }),
+          )
         }
         if (counts.records === 0) return { records: 0 }
 
@@ -66,7 +73,7 @@ export class Ingest extends Context.Service<Ingest, Ingest.Service>()("@opencode
 
         if (failed > 0) {
           yield* Effect.logWarning(`lake ingest incomplete ${JSON.stringify({ records: counts.records, failed })}`)
-          return yield* new IngestError({ message: "Failed to ingest all lake records", failed })
+          return yield* Effect.fail(new IngestError({ message: "Failed to ingest all lake records", failed }))
         }
 
         yield* Effect.logInfo(`lake ingest complete ${JSON.stringify({ records: counts.records, batches })}`)
