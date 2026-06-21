@@ -255,15 +255,18 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     if (msg.info.role === "assistant") {
       const differentModel = `${model.providerID}/${model.id}` !== `${msg.info.providerID}/${msg.info.modelID}`
       const media: Array<{ mime: string; url: string; filename?: string }> = []
+      const hasSignedReasoning = msg.parts.some((part) => {
+        if (part.type !== "reasoning") return false
+        return part.metadata?.anthropic?.signature != null
+      })
 
-      if (
-        msg.info.error &&
-        !(
-          AbortedError.isInstance(msg.info.error) &&
-          msg.parts.some((part) => part.type !== "step-start" && part.type !== "reasoning")
-        )
-      ) {
-        continue
+      if (msg.info.error) {
+        const hasOutput = msg.parts.some((part) => {
+          if (part.type === "text") return part.text.trim().length > 0
+          if (part.type === "reasoning") return part.text.trim().length > 0 || hasSignedReasoning
+          return part.type === "tool"
+        })
+        if (!(AbortedError.isInstance(msg.info.error) && hasOutput)) continue
       }
       const assistantMessage: UIMessage = {
         id: msg.info.id,
@@ -281,10 +284,6 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
       // here is the only safe replay point we have.
       // Use a single space so the separator survives replay without changing
       // the neighboring signed reasoning blocks.
-      const hasSignedReasoning = msg.parts.some((part) => {
-        if (part.type !== "reasoning") return false
-        return part.metadata?.anthropic?.signature != null
-      })
       for (const part of msg.parts) {
         if (part.type === "text") {
           const text = part.text === "" && hasSignedReasoning ? " " : part.text

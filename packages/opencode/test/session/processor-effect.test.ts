@@ -899,9 +899,13 @@ it.live("session.processor effect tests record aborted errors and idle state", (
           expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
         }
         expect(handle.message.error?.name).toBe("MessageAbortedError")
+        expect(handle.message.finish).toBe("error")
+        expect(handle.message.time.completed).toBeNumber()
         expect(stored.info.role).toBe("assistant")
         if (stored.info.role === "assistant") {
           expect(stored.info.error?.name).toBe("MessageAbortedError")
+          expect(stored.info.finish).toBe("error")
+          expect(stored.info.time.completed).toBeNumber()
         }
         expect(state).toMatchObject({ type: "idle" })
         expect(errs).toContain("MessageAbortedError")
@@ -957,9 +961,13 @@ it.live("session.processor effect tests mark interruptions aborted without manua
 
         expect(Exit.isFailure(exit)).toBe(true)
         expect(handle.message.error?.name).toBe("MessageAbortedError")
+        expect(handle.message.finish).toBe("error")
+        expect(handle.message.time.completed).toBeNumber()
         expect(stored.info.role).toBe("assistant")
         if (stored.info.role === "assistant") {
           expect(stored.info.error?.name).toBe("MessageAbortedError")
+          expect(stored.info.finish).toBe("error")
+          expect(stored.info.time.completed).toBeNumber()
         }
         expect(state).toMatchObject({ type: "idle" })
       }),

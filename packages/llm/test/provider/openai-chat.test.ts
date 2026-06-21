@@ -92,6 +92,49 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("omits empty assistant turns before protocol serialization", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [Message.user("Before"), Message.assistant(""), Message.user("After")],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: "Before" },
+        { role: "user", content: "After" },
+      ])
+    }),
+  )
+
+  it.effect("removes empty assistant parts while preserving tool calls", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              { type: "text", text: "" },
+              ToolCallPart.make({ id: "call_1", name: "read", input: { path: "README.md" } }),
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: "",
+          reasoning_content: undefined,
+          tool_calls: [
+            { id: "call_1", type: "function", function: { name: "read", arguments: '{"path":"README.md"}' } },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("maps OpenAI provider options to Chat options", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(

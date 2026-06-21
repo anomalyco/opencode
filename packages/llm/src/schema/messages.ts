@@ -212,6 +212,16 @@ export namespace Message {
 
   export const text = (value: string): ContentPart => ({ type: "text", text: value })
 
+  export const isMeaningfulAssistantPart = (part: ContentPart) => {
+    if (part.type === "text") return part.text.trim().length > 0
+    if (part.type !== "reasoning") return true
+    return (
+      part.text.trim().length > 0 ||
+      part.encrypted !== undefined ||
+      (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
+    )
+  }
+
   export const content = (input: ContentInput) =>
     typeof input === "string" ? [text(input)] : Array.isArray(input) ? [...input] : [input]
 

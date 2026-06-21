@@ -988,7 +988,7 @@ describe("session.message-v2.toModelMessage", () => {
     expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
-  test("includes aborted assistant messages only when they have non-step-start/reasoning content", async () => {
+  test("includes aborted assistant messages only when they have meaningful output", async () => {
     const assistantID1 = "m-assistant-1"
     const assistantID2 = "m-assistant-2"
 
@@ -1036,6 +1036,67 @@ describe("session.message-v2.toModelMessage", () => {
         content: [
           { type: "reasoning", text: "thinking", providerOptions: undefined },
           { type: "text", text: "partial answer" },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "reasoning", text: "thinking", providerOptions: undefined }],
+      },
+    ])
+  })
+
+  test("filters aborted assistant messages with only empty text", async () => {
+    const assistantID = "m-assistant"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(
+          assistantID,
+          "m-parent",
+          new SessionV1.AbortedError({ message: "aborted" }).toObject() as SessionV1.Assistant["error"],
+        ),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "text",
+            text: "",
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
+  })
+
+  test("preserves aborted assistant messages with signed reasoning", async () => {
+    const assistantID = "m-assistant"
+    const input: SessionV1.WithParts[] = [
+      {
+        info: assistantInfo(
+          assistantID,
+          "m-parent",
+          new SessionV1.AbortedError({ message: "aborted" }).toObject() as SessionV1.Assistant["error"],
+        ),
+        parts: [
+          {
+            ...basePart(assistantID, "a1"),
+            type: "reasoning",
+            text: "",
+            time: { start: 0 },
+            metadata: { anthropic: { signature: "sig_1" } },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "",
+            providerOptions: { anthropic: { signature: "sig_1" } },
+          },
         ],
       },
     ])

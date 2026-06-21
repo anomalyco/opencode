@@ -2018,7 +2018,7 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     expect(result[1].content[0]).toEqual({ type: "text", text: "Answer" })
   })
 
-  test("does not filter for non-anthropic providers", () => {
+  test("filters empty assistant content for non-anthropic providers", () => {
     const openaiModel = {
       ...anthropicModel,
       providerID: "openai",
@@ -2039,9 +2039,32 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
 
     const result = ProviderTransform.message(msgs, openaiModel, {})
 
-    expect(result).toHaveLength(2)
-    expect(result[0].content).toBe("")
-    expect(result[1].content).toHaveLength(1)
+    expect(result).toStrictEqual([])
+  })
+
+  test("preserves metadata-only reasoning for non-anthropic providers", () => {
+    const openaiModel = {
+      ...anthropicModel,
+      providerID: "openai",
+      api: { id: "gpt-5", url: "https://api.openai.com", npm: "@ai-sdk/openai" },
+    }
+    const reasoning = {
+      type: "reasoning",
+      text: "",
+      providerOptions: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted" } },
+    } as const
+
+    expect(
+      ProviderTransform.message([{ role: "assistant", content: [reasoning] }], openaiModel, {})[0]?.content,
+    ).toContainEqual(
+      expect.objectContaining({
+        type: "reasoning",
+        text: "",
+        providerOptions: expect.objectContaining({
+          openai: expect.objectContaining({ reasoningEncryptedContent: "encrypted" }),
+        }),
+      }),
+    )
   })
 
   test("leaves valid anthropic assistant tool ordering unchanged", () => {

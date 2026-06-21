@@ -16,6 +16,7 @@ import {
   HttpOptions,
   LLMRequest,
   LLMResponse,
+  Message,
   Model,
   ModelLimits,
   LLMError as LLMErrorClass,
@@ -171,6 +172,18 @@ const resolveRequestOptions = (request: LLMRequest) =>
     providerOptions: mergeProviderOptions(request.model.route.defaults.providerOptions, request.providerOptions),
     http: mergeHttpOptions(request.model.route.defaults.http, request.http),
   })
+
+const omitEmptyAssistantMessages = (request: LLMRequest) => {
+  const messages = request.messages.flatMap((message) => {
+    if (message.role !== "assistant") return [message]
+    const content = message.content.filter(Message.isMeaningfulAssistantPart)
+    if (content.length === 0) return []
+    if (content.length === message.content.length) return [message]
+    return [Message.make({ ...message, content })]
+  })
+  if (messages.length === request.messages.length) return request
+  return LLMRequest.update(request, { messages })
+}
 
 export interface MakeInput<Body, Frame, Event, State> {
   /** Route id used in diagnostics and prepared request metadata. */
@@ -335,7 +348,7 @@ export function make<Body, Prepared, Frame, Event, State>(
 // validated provider body plus transport-private prepared data, but does not
 // execute transport.
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
-  const resolved = applyCachePolicy(resolveRequestOptions(request))
+  const resolved = applyCachePolicy(omitEmptyAssistantMessages(resolveRequestOptions(request)))
   const route = resolved.model.route
 
   const body = yield* route.body

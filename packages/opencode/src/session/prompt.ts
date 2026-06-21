@@ -1259,6 +1259,7 @@ export const layer = Layer.effect(
               providerID: msg.providerID,
               aborted: true,
             })
+            msg.finish = "error"
             msg.time.completed = Date.now()
             yield* sessions.updateMessage(msg)
           })

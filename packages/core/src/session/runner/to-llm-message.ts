@@ -70,24 +70,34 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
 const assistant = (message: SessionMessage.Assistant, model: Model) => {
   const sameModel =
     String(message.model.providerID) === String(model.provider) && String(message.model.id) === String(model.id)
-  const content = message.content.flatMap((item): ContentPart[] => {
-    if (item.type === "text") return [{ type: "text", text: item.text }]
-    if (item.type === "reasoning")
-      return sameModel
-        ? [{ type: "reasoning", text: item.text, providerMetadata: item.providerMetadata }]
-        : item.text.length > 0
-          ? [{ type: "text", text: item.text }]
-          : []
-    const call = toolCall(item, sameModel ? item.provider?.metadata : undefined)
-    const result = toolResult(item, sameModel ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined)
-    return item.provider?.executed === true && result ? [call, result] : [call]
-  })
+  const content = message.content
+    .flatMap((item): ContentPart[] => {
+      if (item.type === "text") return [{ type: "text", text: item.text }]
+      if (item.type === "reasoning")
+        return sameModel
+          ? [{ type: "reasoning", text: item.text, providerMetadata: item.providerMetadata }]
+          : item.text.trim().length > 0
+            ? [{ type: "text", text: item.text }]
+            : []
+      const call = toolCall(item, sameModel ? item.provider?.metadata : undefined)
+      const result = toolResult(
+        item,
+        sameModel ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined,
+      )
+      return item.provider?.executed === true && result ? [call, result] : [call]
+    })
+    .filter(Message.isMeaningfulAssistantPart)
   const results = message.content
     .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.provider?.executed !== true)
     .map((item) => toolResult(item, sameModel ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined))
     .filter((message) => message !== undefined)
     .map(Message.tool)
-  return [Message.make({ id: message.id, role: "assistant", content, metadata: message.metadata }), ...results]
+  return [
+    ...(content.length > 0
+      ? [Message.make({ id: message.id, role: "assistant", content, metadata: message.metadata })]
+      : []),
+    ...results,
+  ]
 }
 
 function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] {

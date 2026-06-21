@@ -66,6 +66,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   const timestamp = DateTime.now
   let assistantMessageID: SessionMessage.ID | undefined
   let providerFailed = false
+  let assistantSettled = false
 
   const startAssistant = Effect.fnUntraced(function* () {
     if (assistantMessageID !== undefined) return assistantMessageID
@@ -154,6 +155,18 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     yield* text.flush()
     yield* reasoning.flush()
     yield* toolInput.flush()
+  })
+
+  const failAssistant = Effect.fnUntraced(function* (error: string) {
+    if (assistantSettled) return
+    yield* flushFragments()
+    assistantSettled = true
+    yield* events.publish(SessionEvent.Step.Failed, {
+      sessionID: input.sessionID,
+      timestamp: yield* timestamp,
+      assistantMessageID: yield* startAssistant(),
+      error: { type: "unknown", message: error },
+    })
   })
 
   const startToolInput = Effect.fnUntraced(function* (event: { readonly id: string; readonly name: string }) {
@@ -375,6 +388,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       }
       case "step-finish":
         yield* flush()
+        assistantSettled = true
         yield* events.publish(SessionEvent.Step.Ended, {
           sessionID: input.sessionID,
           timestamp: yield* timestamp,
@@ -388,13 +402,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
         return
       case "provider-error":
         providerFailed = true
-        yield* flush()
-        yield* events.publish(SessionEvent.Step.Failed, {
-          sessionID: input.sessionID,
-          timestamp: yield* timestamp,
-          assistantMessageID: yield* startAssistant(),
-          error: { type: "unknown", message: event.message },
-        })
+        yield* failAssistant(event.message)
         return
     }
   })
@@ -402,6 +410,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   return {
     publish,
     flush,
+    failAssistant,
     failUnsettledTools,
     hasAssistantStarted: () => assistantMessageID !== undefined,
     hasProviderError: () => providerFailed,

@@ -129,62 +129,25 @@ function normalizeMessages(
     }
   })
 
-  // Anthropic rejects messages with empty content - filter out empty string messages
-  // and remove empty text/reasoning parts from array content
-  if (model.api.npm === "@ai-sdk/anthropic") {
-    msgs = msgs
-      .map((msg) => {
-        if (typeof msg.content === "string") {
-          if (msg.content === "") return undefined
-          return msg
-        }
-        if (!Array.isArray(msg.content)) return msg
-        const filtered = msg.content.filter((part) => {
-          if (part.type === "text") {
-            return part.text !== ""
-          }
-          if (part.type === "reasoning") {
-            return (
-              part.text.trim().length > 0 ||
-              part.providerOptions?.anthropic?.signature != null ||
-              part.providerOptions?.anthropic?.redactedData != null
-            )
-          }
-          return true
-        })
-        if (filtered.length === 0) return undefined
-        return { ...msg, content: filtered }
+  // Empty assistant turns carry no history and are rejected by several provider APIs.
+  msgs = msgs
+    .map((msg) => {
+      if (msg.role !== "assistant") return msg
+      if (typeof msg.content === "string") return msg.content.trim().length > 0 ? msg : undefined
+      if (!Array.isArray(msg.content)) return msg
+      const content = msg.content.filter((part) => {
+        if (part.type === "text") return part.text.trim().length > 0
+        if (part.type !== "reasoning") return true
+        return (
+          part.text.trim().length > 0 ||
+          (part.providerOptions !== undefined && Object.keys(part.providerOptions).length > 0)
+        )
       })
-      .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
-  }
-
-  // Bedrock specific transforms
-  if (model.api.npm === "@ai-sdk/amazon-bedrock") {
-    msgs = msgs
-      .map((msg) => {
-        if (typeof msg.content === "string") {
-          if (msg.content === "") return undefined
-          return msg
-        }
-        if (!Array.isArray(msg.content)) return msg
-        const filtered = msg.content.filter((part) => {
-          if (part.type === "text") {
-            return part.text !== ""
-          }
-          if (part.type === "reasoning") {
-            return (
-              part.text.trim().length > 0 ||
-              part.providerOptions?.bedrock?.signature != null ||
-              part.providerOptions?.bedrock?.redactedData != null
-            )
-          }
-          return true
-        })
-        if (filtered.length === 0) return undefined
-        return { ...msg, content: filtered }
-      })
-      .filter((msg): msg is ModelMessage => msg !== undefined && msg.content !== "")
-  }
+      if (content.length === 0) return undefined
+      if (content.length === msg.content.length) return msg
+      return { ...msg, content }
+    })
+    .filter((msg): msg is ModelMessage => msg !== undefined)
 
   if (model.api.id.includes("claude")) {
     const scrub = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, "_")

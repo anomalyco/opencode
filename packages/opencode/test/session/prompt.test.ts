@@ -1082,7 +1082,7 @@ raceNoLLMServer.instance(
       expect(firstInterrupted?.info.role).toBe("assistant")
       expect(firstInterrupted?.parts).toHaveLength(0)
       if (firstInterrupted?.info.role === "assistant") {
-        expect(firstInterrupted.info.finish).toBeUndefined()
+        expect(firstInterrupted.info.finish).toBe("error")
         expect(firstInterrupted.info.time.completed).toBeNumber()
         expect(firstInterrupted.info.error?.name).toBe("MessageAbortedError")
       }
