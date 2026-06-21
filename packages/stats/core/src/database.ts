@@ -45,14 +45,14 @@ export class DrizzleClient extends Context.Service<DrizzleClient, Drizzle>()("@o
 }
 
 export class DatabaseError extends Schema.TaggedErrorClass<DatabaseError>()("DatabaseError", {
-  cause: Schema.Defect,
+  cause: Schema.Defect(),
 }) {}
 
 export const catchDbError = Effect.mapError((cause) => DatabaseError.make({ cause }))
 
 export class MigrationError extends Schema.TaggedErrorClass<MigrationError>()("MigrationError", {
   message: Schema.String,
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 export const migrate = Effect.fn("Database.migrate")(function* () {
