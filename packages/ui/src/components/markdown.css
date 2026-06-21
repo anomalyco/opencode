@@ -22,18 +22,42 @@
     margin-bottom: 0;
   }
 
-  /* Headings: Same size, distinguished by color and spacing */
-  h1,
-  h2,
-  h3,
+  /* Headings: scaled sizes with distinct color for visual hierarchy */
+  h1 {
+    font-size: 20px; /* --font-size-x-large */
+    font-weight: 600;
+    color: var(--markdown-heading, var(--text-strong));
+    margin-top: 16px;
+    margin-bottom: 8px;
+    line-height: var(--line-height-large);
+  }
+
+  h2 {
+    font-size: 16px; /* --font-size-large */
+    font-weight: 600;
+    color: var(--markdown-heading, var(--text-strong));
+    margin-top: 16px;
+    margin-bottom: 8px;
+    line-height: var(--line-height-large);
+  }
+
+  h3 {
+    font-size: 14px; /* --font-size-base */
+    font-weight: 700;
+    color: var(--markdown-heading, var(--text-strong));
+    margin-top: 12px;
+    margin-bottom: 6px;
+    line-height: var(--line-height-large);
+  }
+
   h4,
   h5,
   h6 {
-    font-size: 14px;
-    color: var(--text-strong);
-    font-weight: var(--font-weight-medium);
-    margin-top: 0px;
-    margin-bottom: 24px;
+    font-size: 14px; /* --font-size-base */
+    font-weight: 600;
+    color: var(--markdown-heading, var(--text-strong));
+    margin-top: 8px;
+    margin-bottom: 4px;
     line-height: var(--line-height-large);
   }
 
