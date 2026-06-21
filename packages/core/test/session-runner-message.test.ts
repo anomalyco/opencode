@@ -14,7 +14,7 @@ const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
 const model = Model.make({ id: "model", provider: "provider", route: OpenAIChat.route })
 
 describe("toLLMMessages", () => {
-  test("preserves projected assistant turns for request compilation", () => {
+  test("omits empty projected assistant turns", () => {
     const assistant = (value: string, content: SessionMessage.Assistant["content"]) =>
       new SessionMessage.Assistant({
         id: id(value),
@@ -41,7 +41,7 @@ describe("toLLMMessages", () => {
       model,
     )
 
-    expect(messages.map((message) => message.id)).toEqual([id("empty"), id("empty-text"), id("text"), id("reasoning")])
+    expect(messages.map((message) => message.id)).toEqual([id("text"), id("reasoning")])
   })
 
   test("maps every top-level V2 Session message type", () => {

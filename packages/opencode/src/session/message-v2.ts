@@ -378,6 +378,14 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           })
         }
       }
+      assistantMessage.parts = assistantMessage.parts.filter((part) => {
+        if (part.type === "text") return part.text !== ""
+        if (part.type !== "reasoning") return true
+        return (
+          part.text.trim().length > 0 ||
+          (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
+        )
+      })
       if (assistantMessage.parts.length > 0) {
         result.push(assistantMessage)
         // Inject pending media as a user message for providers that don't support

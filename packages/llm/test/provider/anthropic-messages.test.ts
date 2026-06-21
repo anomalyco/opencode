@@ -57,30 +57,6 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("removes empty assistant parts while preserving tool calls", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(
-        LLM.request({
-          model,
-          messages: [
-            Message.assistant([
-              { type: "text", text: "" },
-              ToolCallPart.make({ id: "call_1", name: "read", input: { path: "README.md" } }),
-            ]),
-          ],
-          cache: "none",
-        }),
-      )
-
-      expect(prepared.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: [{ type: "tool_use", id: "call_1", name: "read", input: { path: "README.md" } }],
-        },
-      ])
-    }),
-  )
-
   it.effect("lowers chronological system updates natively for Claude Opus 4.8 with cache hints", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<AnthropicMessages.AnthropicMessagesBody>(

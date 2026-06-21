@@ -1045,7 +1045,7 @@ describe("session.message-v2.toModelMessage", () => {
     ])
   })
 
-  test("preserves empty aborted assistant turns until the provider boundary", async () => {
+  test("omits empty aborted assistant turns", async () => {
     const assistantID = "m-assistant"
     const input: SessionV1.WithParts[] = [
       {
@@ -1064,10 +1064,7 @@ describe("session.message-v2.toModelMessage", () => {
       },
     ]
 
-    const messages = await MessageV2.toModelMessages(input, model)
-
-    expect(messages).toStrictEqual([{ role: "assistant", content: [{ type: "text", text: "" }] }])
-    expect(ProviderTransform.message(messages, model, {})).toStrictEqual([])
+    expect(await MessageV2.toModelMessages(input, model)).toStrictEqual([])
   })
 
   test("preserves aborted assistant messages with signed reasoning", async () => {
@@ -1359,7 +1356,7 @@ describe("session.message-v2.toModelMessage", () => {
     expect(ProviderTransform.message(result, model, {})).toEqual(result)
   })
 
-  test("leaves empty text alone when reasoning signature is under 'bedrock' namespace", async () => {
+  test("removes empty text when reasoning signature is under 'bedrock' namespace", async () => {
     // Bedrock signed reasoning is preserved as reasoning metadata, but unlike the
     // direct Anthropic path we do not preserve empty text separators for Bedrock.
     const assistantID = "m-assistant-bedrock"
@@ -1383,10 +1380,10 @@ describe("session.message-v2.toModelMessage", () => {
 
     expect(result).toHaveLength(1)
     const texts = (result[0].content as any[]).filter((p) => p.type === "text")
-    expect(texts.map((t) => t.text)).toStrictEqual(["", "answer"])
+    expect(texts.map((t) => t.text)).toStrictEqual(["answer"])
   })
 
-  test("leaves empty text alone when reasoning has no Anthropic signature", async () => {
+  test("removes empty text when reasoning has no Anthropic signature", async () => {
     // Non-Anthropic providers' reasoning doesn't position-validate, so empty text
     // should be filtered normally rather than substituted.
     const assistantID = "m-assistant-unsigned"
@@ -1405,10 +1402,10 @@ describe("session.message-v2.toModelMessage", () => {
 
     expect(result).toHaveLength(1)
     const texts = (result[0].content as any[]).filter((p) => p.type === "text")
-    expect(texts.map((t) => t.text)).toStrictEqual(["", "answer"])
+    expect(texts.map((t) => t.text)).toStrictEqual(["answer"])
   })
 
-  test("leaves empty text alone in assistant messages without reasoning", async () => {
+  test("removes empty text in assistant messages without reasoning", async () => {
     const assistantID = "m-assistant-no-reasoning"
     const input: SessionV1.WithParts[] = [
       {
@@ -1424,7 +1421,7 @@ describe("session.message-v2.toModelMessage", () => {
 
     expect(result).toHaveLength(1)
     const texts = (result[0].content as any[]).filter((p) => p.type === "text")
-    expect(texts.map((t) => t.text)).toStrictEqual(["", "hello"])
+    expect(texts.map((t) => t.text)).toStrictEqual(["hello"])
   })
 })
 

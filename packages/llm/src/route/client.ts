@@ -16,7 +16,6 @@ import {
   HttpOptions,
   LLMRequest,
   LLMResponse,
-  Message,
   Model,
   ModelLimits,
   LLMError as LLMErrorClass,
@@ -172,41 +171,6 @@ const resolveRequestOptions = (request: LLMRequest) =>
     providerOptions: mergeProviderOptions(request.model.route.defaults.providerOptions, request.providerOptions),
     http: mergeHttpOptions(request.model.route.defaults.http, request.http),
   })
-
-const meaningfulAssistantPart = (part: Message["content"][number]) => {
-  if (part.type === "text") return part.text !== ""
-  if (part.type !== "reasoning") return true
-  return (
-    part.text.trim().length > 0 ||
-    part.encrypted !== undefined ||
-    (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
-  )
-}
-
-const omitEmptyAssistantMessages = (request: LLMRequest) => {
-  let changed = false
-  const messages = request.messages.flatMap((message) => {
-    if (message.role !== "assistant") return [message]
-    const content = message.content.filter(meaningfulAssistantPart)
-    if (content.length === 0 && (!message.native || Object.keys(message.native).length === 0)) {
-      changed = true
-      return []
-    }
-    if (content.length === message.content.length) return [message]
-    changed = true
-    return [
-      Message.make({
-        id: message.id,
-        role: message.role,
-        content,
-        metadata: message.metadata,
-        native: message.native,
-      }),
-    ]
-  })
-  if (!changed) return request
-  return LLMRequest.update(request, { messages })
-}
 
 export interface MakeInput<Body, Frame, Event, State> {
   /** Route id used in diagnostics and prepared request metadata. */
@@ -371,7 +335,7 @@ export function make<Body, Prepared, Frame, Event, State>(
 // validated provider body plus transport-private prepared data, but does not
 // execute transport.
 const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest) {
-  const resolved = applyCachePolicy(omitEmptyAssistantMessages(resolveRequestOptions(request)))
+  const resolved = applyCachePolicy(resolveRequestOptions(request))
   const route = resolved.model.route
 
   const body = yield* route.body

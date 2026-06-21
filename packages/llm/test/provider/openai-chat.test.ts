@@ -92,48 +92,6 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("omits empty assistant turns before protocol serialization", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
-        LLM.request({
-          model,
-          messages: [Message.user("Before"), Message.assistant(""), Message.user("After")],
-        }),
-      )
-
-      expect(prepared.body.messages).toEqual([
-        { role: "user", content: "Before" },
-        { role: "user", content: "After" },
-      ])
-    }),
-  )
-
-  it.effect("preserves opaque OpenAI-compatible reasoning continuation", () =>
-    Effect.gen(function* () {
-      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
-        LLM.request({
-          model,
-          messages: [
-            Message.make({
-              role: "assistant",
-              content: [],
-              native: { openaiCompatible: { reasoning_content: "opaque reasoning" } },
-            }),
-          ],
-        }),
-      )
-
-      expect(prepared.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: null,
-          reasoning_content: "opaque reasoning",
-          tool_calls: undefined,
-        },
-      ])
-    }),
-  )
-
   it.effect("maps OpenAI provider options to Chat options", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(

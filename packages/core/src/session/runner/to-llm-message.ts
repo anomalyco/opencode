@@ -87,7 +87,21 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
     .map((item) => toolResult(item, sameModel ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined))
     .filter((message) => message !== undefined)
     .map(Message.tool)
-  return [Message.make({ id: message.id, role: "assistant", content, metadata: message.metadata }), ...results]
+  const meaningful = content.filter((part) => {
+    if (part.type === "text") return part.text !== ""
+    if (part.type !== "reasoning") return true
+    return (
+      part.text.trim().length > 0 ||
+      part.encrypted !== undefined ||
+      (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
+    )
+  })
+  return [
+    ...(meaningful.length > 0
+      ? [Message.make({ id: message.id, role: "assistant", content: meaningful, metadata: message.metadata })]
+      : []),
+    ...results,
+  ]
 }
 
 function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] {
