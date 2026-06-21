@@ -405,7 +405,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
   const stopping = createMemo(() => working() && blank())
   const queueModeLabel = createMemo(() => {
-    if (!props.shouldQueue?.(store.editID ?? undefined)) return null
+    if (!props.shouldQueue) return null
     const mode = settings.general.followup()
     return language.t(`settings.general.row.followup.option.${mode === "waitingSteer" ? "wrap" : mode === "queue" ? "queue" : "steer"}` as const)
   })
