@@ -67,6 +67,16 @@ const TeamCancelResponse = Schema.Struct({
   cancelled: Schema.Number,
 }).annotate({ identifier: "TeamCancelResponse" })
 
+const TeamApprovePlanResponse = Schema.Struct({
+  ok: Schema.Boolean,
+  approved: Schema.Boolean,
+}).annotate({ identifier: "TeamApprovePlanResponse" })
+
+const TeamShutdownResponse = Schema.Struct({
+  ok: Schema.Boolean,
+  status: TeamMemberStatus,
+}).annotate({ identifier: "TeamShutdownResponse" })
+
 const TeamOkResponse = Schema.Struct({
   ok: Schema.Boolean,
 }).annotate({ identifier: "TeamOkResponse" })
@@ -78,6 +88,19 @@ export const TeamDelegatePayload = Schema.Struct({
 export const TeamCancelPayload = Schema.Struct({
   member: Schema.optional(Schema.String),
 })
+
+export const TeamApprovePlanPayload = Schema.Struct({
+  member: Schema.String,
+  approved: Schema.Boolean,
+  feedback: Schema.optional(Schema.String),
+})
+
+export const TeamShutdownPayload = Schema.Struct({
+  member: Schema.String,
+  reason: Schema.optional(Schema.String),
+})
+
+export const TeamCleanupPayload = Schema.Struct({})
 
 export const TeamMessagePayload = Schema.Struct({
   agent: Schema.optional(Schema.String),
@@ -100,6 +123,9 @@ export const TeamPaths = {
   bySession: "/team/by-session/:sessionID",
   delegate: "/team/:teamName/delegate",
   cancel: "/team/:teamName/cancel",
+  approvePlan: "/team/:teamName/approve-plan",
+  shutdown: "/team/:teamName/shutdown",
+  cleanup: "/team/:teamName/cleanup",
   message: "/session/:sessionID/team-message",
 } as const
 
@@ -177,6 +203,45 @@ export const TeamApi = HttpApi.make("team").add(
           identifier: "team.cancel",
           summary: "Cancel teammate work",
           description: "Cancel one teammate or all active teammates in a team.",
+        }),
+      ),
+      HttpApiEndpoint.post("approvePlan", TeamPaths.approvePlan, {
+        params: { teamName: Schema.String },
+        query: WorkspaceRoutingQuery,
+        payload: TeamApprovePlanPayload,
+        success: described(TeamApprovePlanResponse, "Plan approval updated"),
+        error: TeamApiError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "team.approvePlan",
+          summary: "Approve or reject teammate plan",
+          description: "Approve or reject a teammate's pending plan and update their write permissions.",
+        }),
+      ),
+      HttpApiEndpoint.post("shutdown", TeamPaths.shutdown, {
+        params: { teamName: Schema.String },
+        query: WorkspaceRoutingQuery,
+        payload: TeamShutdownPayload,
+        success: described(TeamShutdownResponse, "Shutdown requested"),
+        error: TeamApiError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "team.shutdown",
+          summary: "Request teammate shutdown",
+          description: "Ask a teammate to summarize and shut down gracefully.",
+        }),
+      ),
+      HttpApiEndpoint.post("cleanup", TeamPaths.cleanup, {
+        params: { teamName: Schema.String },
+        query: WorkspaceRoutingQuery,
+        payload: TeamCleanupPayload,
+        success: described(TeamOkResponse, "Team cleaned up"),
+        error: TeamApiError,
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "team.cleanup",
+          summary: "Clean up team",
+          description: "Remove team resources after all teammates have shut down.",
         }),
       ),
       HttpApiEndpoint.post("message", TeamPaths.message, {

@@ -58,6 +58,21 @@ test("resolves host-neutral defaults", () => {
   expect(config.keybinds.has("session.list")).toBe(true)
 })
 
+test("resolves team workflow keybind defaults", () => {
+  const config = resolve({}, { terminalSuspend: true })
+
+  expect(config.keybinds.get("team.overview")?.[0]?.key).toBe("<leader>w")
+  expect(config.keybinds.get("team.next")?.[0]?.key).toBe("<leader>j")
+  expect(config.keybinds.get("team.previous")?.[0]?.key).toBe("<leader>k")
+  expect(config.keybinds.get("team.lead")?.[0]?.key).toBe("l")
+  expect(config.keybinds.get("team.delegate.toggle")?.[0]?.key).toBe("<leader>d")
+  expect(config.keybinds.get("team.approve_plan")?.[0]?.key).toBe("a")
+  expect(config.keybinds.get("team.reject_plan")?.[0]?.key).toBe("r")
+  expect(config.keybinds.get("team.shutdown")?.[0]?.key).toBe("x")
+  expect(config.keybinds.get("team.cleanup")?.[0]?.key).toBe("shift+x")
+  expect(config.keybinds.get("team.cancel")?.[0]?.key).toBe("c")
+})
+
 test("resolves overrides without mutating input", () => {
   const input: TuiConfigInfo = {
     theme: "custom",

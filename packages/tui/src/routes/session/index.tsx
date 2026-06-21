@@ -144,6 +144,7 @@ const sessionBindingCommands = [
   "session.tree",
   "session.child.next",
   "session.child.previous",
+  "team.overview",
   "team.next",
   "team.previous",
   "team.lead",

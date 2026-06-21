@@ -6,8 +6,21 @@ import { useRouteData } from "../context/route"
 import { useRoute } from "../context/route"
 import { useSDK } from "../context/sdk"
 import { useDialog } from "../ui/dialog"
+import { useToast } from "../ui/toast"
 
 type TeamMemberStatus = "ready" | "busy" | "shutdown_requested" | "shutdown" | "error"
+type TeamExecutionStatus =
+  | "idle"
+  | "starting"
+  | "running"
+  | "cancel_requested"
+  | "cancelling"
+  | "cancelled"
+  | "completing"
+  | "completed"
+  | "failed"
+  | "timed_out"
+type TeamPlanApproval = "none" | "pending" | "approved" | "rejected"
 
 type TeamResponse = {
   team: {
@@ -18,6 +31,9 @@ type TeamResponse = {
       sessionID: string
       agent: string
       status: TeamMemberStatus
+      execution_status?: TeamExecutionStatus
+      model?: string
+      planApproval?: TeamPlanApproval
     }>
   }
   role: "lead" | "member"
@@ -82,6 +98,7 @@ function statusColor(status: string, theme: Theme) {
 
 export function DialogTeam() {
   const dialog = useDialog()
+  const toast = useToast()
   const { theme } = useTheme()
   const sync = useSync()
   const route = useRouteData("session")
@@ -89,34 +106,55 @@ export function DialogTeam() {
   const sdk = useSDK()
 
   const teamInfo = createMemo(() => sync.data.team[route.sessionID])
+  const isLead = createMemo(() => teamInfo()?.role === "lead")
+
+  const applyTeamResponse = (data: TeamResponse | null) => {
+    if (!data) return
+    sync.set("team", route.sessionID, {
+      teamName: data.team.name,
+      role: data.role,
+      memberName: data.memberName,
+      delegate: data.team.delegate,
+      members: data.team.members ?? [],
+      tasks: data.tasks ?? [],
+    })
+  }
+
+  const refreshTeam = () =>
+    fetch(`${sdk.url}/team/by-session/${route.sessionID}`)
+      .then((r: Response) => r.json())
+      .then((data: TeamResponse | null) => applyTeamResponse(data))
+      .catch(() => {})
 
   onMount(() => {
     dialog.setSize("large")
-    fetch(`${sdk.url}/team/by-session/${route.sessionID}`)
-      .then((r: Response) => r.json())
-      .then((data: TeamResponse | null) => {
-        if (!data) return
-        sync.set("team", route.sessionID, {
-          teamName: data.team.name,
-          role: data.role,
-          memberName: data.memberName,
-          delegate: data.team.delegate,
-          members: data.team.members ?? [],
-          tasks: data.tasks ?? [],
-        })
-      })
-      .catch(() => {})
+    void refreshTeam()
   })
 
   const options = createMemo((): DialogSelectOption<string>[] => {
     const info = teamInfo()
     if (!info) return []
 
+    const teamOption: DialogSelectOption<string> = {
+      title: "Team controls",
+      value: `team:${info.teamName}`,
+      category: "Team",
+      footer: [info.role, info.delegate ? "delegate mode" : null].filter(Boolean).join(" | "),
+      gutter: <text fg={theme.primary}>#</text>,
+    }
+
     const memberOptions: DialogSelectOption<string>[] = info.members.map((m) => ({
       title: `${m.name} (@${m.agent})`,
       value: `member:${m.sessionID}`,
       category: "Teammates",
-      footer: `Status: ${m.status}`,
+      footer: [
+        `status: ${m.status}`,
+        m.execution_status ? `run: ${m.execution_status}` : null,
+        m.planApproval && m.planApproval !== "none" ? `plan: ${m.planApproval}` : null,
+        m.model ? `model: ${m.model}` : null,
+      ]
+        .filter(Boolean)
+        .join(" | "),
       gutter: <text fg={statusColor(m.status, theme)}>{statusIcon(m.status)}</text>,
     }))
 
@@ -135,8 +173,54 @@ export function DialogTeam() {
       disabled: t.status === "completed" || t.status === "cancelled",
     }))
 
-    return [...memberOptions, ...taskOptions]
+    return [teamOption, ...memberOptions, ...taskOptions]
   })
+
+  const selectedMember = (option: DialogSelectOption<string> | undefined) => {
+    if (!option) return
+    const [type, id] = option.value.split(":", 2)
+    if (type !== "member" || !id) return
+    return teamInfo()?.members.find((member) => member.sessionID === id)
+  }
+
+  const postTeam = (path: string, body: unknown, message: string, refresh = true, afterSuccess?: () => void) =>
+    fetch(`${sdk.url}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    })
+      .then((response) => {
+        if (!response.ok) {
+          toast.show({ message: `${message} failed`, variant: "error" })
+          return
+        }
+        toast.show({ message, variant: "success" })
+        afterSuccess?.()
+        if (refresh) void refreshTeam()
+      })
+      .catch(() => {
+        toast.show({ message: `${message} failed`, variant: "error" })
+      })
+
+  const memberPlanNeedsReview = (option: DialogSelectOption<string> | undefined) => {
+    const member = selectedMember(option)
+    return isLead() && (member?.planApproval === "pending" || member?.planApproval === "rejected")
+  }
+
+  const memberCanCancel = (option: DialogSelectOption<string> | undefined) => {
+    const member = selectedMember(option)
+    return isLead() && (member?.status === "busy" || member?.status === "shutdown_requested")
+  }
+
+  const memberCanShutdown = (option: DialogSelectOption<string> | undefined) => {
+    const member = selectedMember(option)
+    return isLead() && !!member && member.status !== "shutdown"
+  }
+
+  const canCleanup = () => {
+    const info = teamInfo()
+    return isLead() && !!info && info.members.every((member) => member.status === "shutdown")
+  }
 
   const handleSelect = (option: DialogSelectOption<string>) => {
     const [type, id] = option.value.split(":", 2)
@@ -170,6 +254,7 @@ export function DialogTeam() {
           {
             command: "team.lead",
             title: "go to lead",
+            disabled: () => !teamInfo(),
             onTrigger: () => {
               const info = teamInfo()
               if (!info) return
@@ -180,6 +265,97 @@ export function DialogTeam() {
                   return
                 }
               }
+            },
+          },
+          {
+            command: "team.delegate.toggle",
+            title: "toggle delegate",
+            disabled: () => !isLead(),
+            onTrigger: () => {
+              const info = teamInfo()
+              if (!info) return
+              void postTeam(
+                `/team/${encodeURIComponent(info.teamName)}/delegate`,
+                { enabled: !info.delegate },
+                "Delegate mode updated",
+              )
+            },
+          },
+          {
+            command: "team.approve_plan",
+            title: "approve plan",
+            disabled: (option) => !memberPlanNeedsReview(option),
+            onTrigger: (option) => {
+              const info = teamInfo()
+              const member = selectedMember(option)
+              if (!info || !member) return
+              void postTeam(
+                `/team/${encodeURIComponent(info.teamName)}/approve-plan`,
+                { member: member.name, approved: true },
+                `Approved @${member.name}`,
+              )
+            },
+          },
+          {
+            command: "team.reject_plan",
+            title: "reject plan",
+            disabled: (option) => !memberPlanNeedsReview(option),
+            onTrigger: (option) => {
+              const info = teamInfo()
+              const member = selectedMember(option)
+              if (!info || !member) return
+              void postTeam(
+                `/team/${encodeURIComponent(info.teamName)}/approve-plan`,
+                { member: member.name, approved: false },
+                `Rejected @${member.name}`,
+              )
+            },
+          },
+          {
+            command: "team.cancel",
+            title: "cancel work",
+            disabled: (option) => !memberCanCancel(option),
+            onTrigger: (option) => {
+              const info = teamInfo()
+              const member = selectedMember(option)
+              if (!info || !member) return
+              void postTeam(
+                `/team/${encodeURIComponent(info.teamName)}/cancel`,
+                { member: member.name },
+                `Cancelled @${member.name}`,
+              )
+            },
+          },
+          {
+            command: "team.shutdown",
+            title: "shutdown",
+            disabled: (option) => !memberCanShutdown(option),
+            onTrigger: (option) => {
+              const info = teamInfo()
+              const member = selectedMember(option)
+              if (!info || !member) return
+              void postTeam(
+                `/team/${encodeURIComponent(info.teamName)}/shutdown`,
+                { member: member.name },
+                `Shutdown requested for @${member.name}`,
+              )
+            },
+          },
+          {
+            command: "team.cleanup",
+            title: "cleanup",
+            side: "right",
+            disabled: () => !canCleanup(),
+            onTrigger: () => {
+              const info = teamInfo()
+              if (!info) return
+              void postTeam(
+                `/team/${encodeURIComponent(info.teamName)}/cleanup`,
+                {},
+                `Cleaned up ${info.teamName}`,
+                false,
+                () => dialog.clear(),
+              )
             },
           },
         ]}

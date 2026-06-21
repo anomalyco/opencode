@@ -316,6 +316,17 @@ export const {
             }
             break
           }
+          case "team.plan.approval": {
+            const teamName = raw.properties.teamName as string
+            const memberName = raw.properties.memberName as string
+            const approved = raw.properties.approved as boolean
+            for (const [sid, entry] of Object.entries(store.team)) {
+              if (entry.teamName !== teamName) continue
+              const idx = entry.members.findIndex((member) => member.name === memberName)
+              if (idx >= 0) setStore("team", sid, "members", idx, "planApproval", approved ? "approved" : "rejected")
+            }
+            break
+          }
           case "team.cleaned": {
             const teamName = raw.properties.teamName as string
             setStore(

@@ -589,6 +589,12 @@ export namespace Team {
         text: input.feedback
           ? `Your plan has been APPROVED. You now have full write access. Feedback: ${input.feedback}`
           : "Your plan has been APPROVED. You now have full write access. Proceed with implementation.",
+      }).catch((err: unknown) => {
+        log.warn("failed to notify teammate of plan approval", {
+          teamName: input.teamName,
+          memberName: input.memberName,
+          error: err instanceof Error ? err.message : String(err),
+        })
       })
     } else {
       await setMemberPlanApproval(input.teamName, input.memberName, "rejected")
@@ -597,6 +603,12 @@ export namespace Team {
         from: "lead",
         to: input.memberName,
         text: `Your plan has been REJECTED. Please revise and resubmit. Feedback: ${input.feedback ?? "No specific feedback provided."}`,
+      }).catch((err: unknown) => {
+        log.warn("failed to notify teammate of plan rejection", {
+          teamName: input.teamName,
+          memberName: input.memberName,
+          error: err instanceof Error ? err.message : String(err),
+        })
       })
     }
 

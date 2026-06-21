@@ -320,6 +320,98 @@ describe("Team REST API routes", () => {
     })
   })
 
+  describe("team control routes", () => {
+    test("approves pending teammate plans and unlocks plan approval permissions", async () => {
+      await Instance.provide({
+        directory: projectRoot,
+        init: async () => {
+          Env.set("ANTHROPIC_API_KEY", "test-key")
+        },
+        fn: async () => {
+          const name = uniqueName("rt-approve")
+          const leadSession = await Session.create({})
+          const memberSession = await Session.create({
+            parentID: leadSession.id,
+            permission: [
+              { permission: "edit", pattern: "*:plan-approval", action: "deny" },
+              { permission: "write", pattern: "*:plan-approval", action: "deny" },
+            ],
+          })
+          await Team.create({ name, leadSessionID: leadSession.id })
+          await Team.addMember(name, {
+            name: "reviewer",
+            sessionID: memberSession.id,
+            agent: "build",
+            status: "ready",
+            planApproval: "pending",
+          })
+
+          const response = await Server.App().request(`/team/${name}/approve-plan`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ member: "reviewer", approved: true, feedback: "Looks good" }),
+          })
+          expect(response.status).toBe(200)
+          expect(await response.json()).toEqual({ ok: true, approved: true })
+
+          const team = await Team.get(name)
+          expect(team?.members.find((m) => m.name === "reviewer")?.planApproval).toBe("approved")
+          const updated = await Session.get(memberSession.id)
+          expect(updated.permission?.filter((r) => r.pattern === "*:plan-approval")).toEqual([])
+
+          await Team.setMemberStatus(name, "reviewer", "shutdown")
+          await Team.cleanup(name)
+        },
+      })
+    })
+
+    test("requests teammate shutdown and blocks cleanup until all members are shutdown", async () => {
+      await Instance.provide({
+        directory: projectRoot,
+        init: async () => {
+          Env.set("ANTHROPIC_API_KEY", "test-key")
+        },
+        fn: async () => {
+          const name = uniqueName("rt-shutdown")
+          const leadSession = await Session.create({})
+          const memberSession = await Session.create({ parentID: leadSession.id })
+          await Team.create({ name, leadSessionID: leadSession.id })
+          await Team.addMember(name, {
+            name: "worker",
+            sessionID: memberSession.id,
+            agent: "build",
+            status: "ready",
+          })
+
+          const cleanupBlocked = await Server.App().request(`/team/${name}/cleanup`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          })
+          expect(cleanupBlocked.status).toBe(400)
+
+          const shutdown = await Server.App().request(`/team/${name}/shutdown`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ member: "worker", reason: "No more work" }),
+          })
+          expect(shutdown.status).toBe(200)
+          expect(await shutdown.json()).toEqual({ ok: true, status: "shutdown" })
+          expect((await Team.get(name))?.members.find((m) => m.name === "worker")?.status).toBe("shutdown")
+
+          const cleanup = await Server.App().request(`/team/${name}/cleanup`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({}),
+          })
+          expect(cleanup.status).toBe(200)
+          expect(await cleanup.json()).toEqual({ ok: true })
+          expect(await Team.get(name)).toBeUndefined()
+        },
+      })
+    })
+  })
+
   // ---------- Integration: full lifecycle via routes ----------
   describe("full lifecycle", () => {
     test("create team, add tasks, add member, query by-session, verify cleanup", async () => {

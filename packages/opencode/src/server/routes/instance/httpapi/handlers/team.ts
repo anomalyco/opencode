@@ -10,7 +10,14 @@ import { Session } from "@/session/session"
 import { Team, TeamTasks, WRITE_TOOLS } from "@/team"
 import { TeamMessaging } from "@/team/messaging"
 import { InstanceHttpApi } from "../api"
-import { TeamApiError, TeamCancelPayload, TeamDelegatePayload, TeamMessagePayload } from "../groups/team"
+import {
+  TeamApiError,
+  TeamApprovePlanPayload,
+  TeamCancelPayload,
+  TeamDelegatePayload,
+  TeamMessagePayload,
+  TeamShutdownPayload,
+} from "../groups/team"
 
 function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error)
@@ -98,6 +105,72 @@ export const teamHandlers = HttpApiBuilder.group(InstanceHttpApi, "team", (handl
       return { ok: true, cancelled }
     })
 
+    const approvePlan = Effect.fn("TeamHttpApi.approvePlan")(function* (ctx: {
+      params: { teamName: string }
+      payload: typeof TeamApprovePlanPayload.Type
+    }) {
+      yield* runLegacyTeam(async () => {
+        const team = await Team.get(ctx.params.teamName)
+        if (!team) throw new Error(`Team "${ctx.params.teamName}" not found`)
+        const member = team.members.find((item) => item.name === ctx.payload.member)
+        if (!member) throw new Error(`Teammate "${ctx.payload.member}" not found`)
+        if (member.planApproval !== "pending" && member.planApproval !== "rejected") {
+          throw new Error(
+            `Teammate "${ctx.payload.member}" is not awaiting plan approval (current: ${member.planApproval ?? "none"})`,
+          )
+        }
+        await Team.approvePlan({
+          teamName: ctx.params.teamName,
+          memberName: ctx.payload.member,
+          approved: ctx.payload.approved,
+          feedback: ctx.payload.feedback,
+        })
+      })
+      return { ok: true, approved: ctx.payload.approved }
+    })
+
+    const shutdown = Effect.fn("TeamHttpApi.shutdown")(function* (ctx: {
+      params: { teamName: string }
+      payload: typeof TeamShutdownPayload.Type
+    }) {
+      const status = yield* runLegacyTeam(async () => {
+        const team = await Team.get(ctx.params.teamName)
+        if (!team) throw new Error(`Team "${ctx.params.teamName}" not found`)
+        const member = team.members.find((item) => item.name === ctx.payload.member)
+        if (!member) throw new Error(`Teammate "${ctx.payload.member}" not found`)
+        if (member.status === "shutdown") return "shutdown" as const
+
+        await Team.transitionMemberStatus(ctx.params.teamName, ctx.payload.member, "shutdown_requested")
+        const sent = await TeamMessaging.send({
+          teamName: ctx.params.teamName,
+          from: "lead",
+          to: ctx.payload.member,
+          text: [
+            `SHUTDOWN REQUEST: ${ctx.payload.reason ?? "The lead has requested you shut down."}`,
+            "",
+            "Please wrap up your current work:",
+            "1. Summarize your findings and send them to the lead.",
+            "2. Stop working after sending your summary.",
+          ].join("\n"),
+        }).then(
+          () => true,
+          () => false,
+        )
+        if (!sent) {
+          await Team.transitionMemberStatus(ctx.params.teamName, ctx.payload.member, "shutdown", { force: true })
+          return "shutdown" as const
+        }
+        if (member.status === "busy") await Team.cancelMember(ctx.params.teamName, ctx.payload.member)
+        return "shutdown_requested" as const
+      })
+      return { ok: true, status }
+    })
+
+    const cleanup = Effect.fn("TeamHttpApi.cleanup")(function* (ctx: { params: { teamName: string } }) {
+      yield* runLegacyTeam(() => Team.cleanup(ctx.params.teamName))
+      return { ok: true }
+    })
+
     const message = Effect.fn("TeamHttpApi.message")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof TeamMessagePayload.Type
@@ -122,6 +195,9 @@ export const teamHandlers = HttpApiBuilder.group(InstanceHttpApi, "team", (handl
       .handle("bySession", bySession)
       .handle("delegate", delegate)
       .handle("cancel", cancel)
+      .handle("approvePlan", approvePlan)
+      .handle("shutdown", shutdown)
+      .handle("cleanup", cleanup)
       .handle("message", message)
   }),
 )
