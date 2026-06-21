@@ -1,11 +1,12 @@
 import { describe, expect } from "bun:test"
 import { ConfigReload } from "@/config/reload"
-import { InstanceRef } from "@/effect/instance-ref"
+import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import type { InstanceContext } from "@/project/instance-context"
 import { InstanceStore } from "@/project/instance-store"
 import { EventV2 } from "@opencode-ai/core/event"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Effect, Layer, Stream } from "effect"
 import { testEffect } from "../lib/effect"
 
@@ -37,6 +38,10 @@ function instance(directory: string): InstanceContext {
 
 function withInstance<A, E, R>(ctx: InstanceContext, effect: Effect.Effect<A, E, R>) {
   return effect.pipe(Effect.provideService(InstanceRef, ctx))
+}
+
+function withWorkspace<A, E, R>(workspaceID: WorkspaceV2.ID, effect: Effect.Effect<A, E, R>) {
+  return effect.pipe(Effect.provideService(WorkspaceRef, workspaceID))
 }
 
 function testLayer(events: PublishedEvent[], reloads: ReloadCall[]) {
@@ -84,6 +89,7 @@ describe("ConfigReload", () => {
 
       expect(result.immediate).toBe(true)
       expect(result.input.directory).toBe(beta.directory)
+      expect(result.bootstrapCycle).toBe(1)
       expect(events.map((event) => event.type)).toEqual(["config.reload.pending", "config.reload.executing"])
       expect(yield* withInstance(alpha, ConfigReload.getBootstrapCycle())).toBe(0)
       expect(yield* withInstance(beta, ConfigReload.getBootstrapCycle())).toBe(1)
@@ -107,6 +113,26 @@ describe("ConfigReload", () => {
       yield* withInstance(alpha, ConfigReload.releaseBlocker("tui-bootstrap"))
       expect(events.at(-1)?.type).toBe("config.reload.done")
       expect(yield* withInstance(beta, ConfigReload.getBootstrapCycle())).toBe(1)
+    }),
+  )
+
+  it.effect("accepts bootstrap completion when the reconnect event omits workspace metadata", () =>
+    Effect.gen(function* () {
+      events.length = 0
+      reloads.length = 0
+      const ctx = instance("/tmp/reload-missing-workspace-metadata")
+      const workspaceID = WorkspaceV2.ID.ascending("wrk_reload_missing_metadata")
+
+      // User intent: the TUI may reconnect after reload through a lifecycle event
+      // that does not include workspace metadata. A valid bootstrap completion for
+      // the same project and cycle must still release the visible reload overlay.
+      const result = yield* withInstance(ctx, withWorkspace(workspaceID, ConfigReload.request()))
+      expect(result.bootstrapCycle).toBe(1)
+
+      const accepted = yield* withInstance(ctx, ConfigReload.completeBootstrap(1))
+
+      expect(accepted).toBe(true)
+      expect(events.at(-1)).toEqual({ type: "config.reload.done", data: {} })
     }),
   )
 
@@ -222,6 +248,35 @@ describe("ConfigReload", () => {
       expect(reloads).toEqual([{ directory: ctx.directory, worktree: ctx.worktree }])
       expect(events.at(-1)?.type).toBe("config.reload.executing")
       expect(yield* withInstance(ctx, ConfigReload.getBootstrapCycle())).toBe(1)
+    }),
+  )
+
+  it.effect("exposes reload status for clients that poll instead of listening to events", () =>
+    Effect.gen(function* () {
+      events.length = 0
+      reloads.length = 0
+      const ctx = instance("/tmp/reload-status")
+
+      // User intent: a non-TUI client that cannot rely on the event stream still
+      // needs a way to learn when a queued reload starts and which cycle to ack.
+      yield* withInstance(ctx, ConfigReload.start("session-before-reload"))
+      const queued = yield* withInstance(ctx, ConfigReload.request())
+
+      expect(queued.immediate).toBe(false)
+      expect(queued.bootstrapCycle).toBeUndefined()
+      expect(yield* withInstance(ctx, ConfigReload.status())).toEqual({
+        pending: true,
+        executing: false,
+        bootstrapCycle: undefined,
+      })
+
+      yield* withInstance(ctx, ConfigReload.finish("session-before-reload"))
+
+      expect(yield* withInstance(ctx, ConfigReload.status())).toEqual({
+        pending: false,
+        executing: true,
+        bootstrapCycle: 1,
+      })
     }),
   )
 

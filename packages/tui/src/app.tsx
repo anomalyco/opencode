@@ -756,6 +756,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           await sdk.client.config
             .reload({ workspace: project.workspace.current() })
             .then((result) => {
+              if (result.data?.immediate) sync.reload.start({ bootstrapCycle: result.data.bootstrapCycle })
               toast.show({
                 message: result.data?.immediate
                   ? "Reloading configuration"

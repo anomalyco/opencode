@@ -17,7 +17,7 @@ export const Event = {
     type: "config.reload.executing",
     schema: {
       executing: Schema.Boolean,
-      bootstrapCycle: Schema.optional(Schema.Number),
+      bootstrapCycle: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
     },
   }),
   Done: EventV2.define({
@@ -29,6 +29,18 @@ export const Event = {
 export type RequestResult = {
   immediate: boolean
   input: InstanceStore.LoadInput
+  bootstrapCycle?: number
+}
+
+export type Status = {
+  pending: boolean
+  executing: boolean
+  bootstrapCycle?: number
+}
+
+export type LocationInput = {
+  directory: string
+  workspaceID?: string
 }
 
 type State = {
@@ -63,11 +75,41 @@ export const getBootstrapCycle = Effect.fn("ConfigReload.getBootstrapCycle")(fun
   return (yield* currentState()).bootstrapCycle
 })
 
+export const status = Effect.fn("ConfigReload.status")(function* () {
+  const state = yield* currentState()
+  return stateStatus(state)
+})
+
+export const statusForLocation = Effect.fn("ConfigReload.statusForLocation")(function* (input: LocationInput) {
+  const state = findStateForLocation(input)
+  if (!state) return { pending: false, executing: false } satisfies Status
+  return stateStatus(state)
+})
+
 export const releaseBlocker = Effect.fn("ConfigReload.releaseBlocker")(function* (blockerID: string) {
   const state = yield* currentState()
   state.blockers.delete(blockerID)
   yield* Effect.logDebug("config reload blocker released", { blockerID })
   yield* continueOrDone(state)
+})
+
+export const completeBootstrap = Effect.fn("ConfigReload.completeBootstrap")(function* (cycle: number) {
+  const current = yield* currentInput()
+  const state = findStateForCycle(current, cycle)
+  if (!state) return false
+  state.blockers.delete("tui-bootstrap")
+  yield* Effect.logDebug("config reload bootstrap completed", { cycle })
+  yield* continueOrDone(state)
+  return true
+})
+
+export const completeBootstrapForLocation = Effect.fn("ConfigReload.completeBootstrapForLocation")(function* (input: LocationInput & { cycle: number }) {
+  const state = findStateForLocation(input, input.cycle)
+  if (!state) return false
+  state.blockers.delete("tui-bootstrap")
+  yield* Effect.logDebug("config reload bootstrap completed", { cycle: input.cycle })
+  yield* continueOrDone(state)
+  return true
 })
 
 export const request = Effect.fn("ConfigReload.request")(function* () {
@@ -81,8 +123,8 @@ export const request = Effect.fn("ConfigReload.request")(function* () {
     return { immediate: false, input: current.input } satisfies RequestResult
   }
   yield* Effect.logInfo("config reload executing immediately")
-  yield* prepareExecution(state, current.input)
-  return { immediate: true, input: current.input } satisfies RequestResult
+  const execution = yield* prepareExecution(state, current.input)
+  return { immediate: true, input: current.input, bootstrapCycle: execution.bootstrapCycle } satisfies RequestResult
 })
 
 export const check = Effect.fn("ConfigReload.check")(function* () {
@@ -97,10 +139,7 @@ export const check = Effect.fn("ConfigReload.check")(function* () {
     return
   }
   yield* Effect.logInfo("config reload executing deferred request")
-  const execution = yield* prepareExecution(state, state.reloadInput ?? current.input)
-  // InstanceStore forks the new boot into its own scope before disposing the old
-  // instance. This effect may be interrupted by disposal, so no logic follows it.
-  yield* InstanceStore.Service.use((store) => store.reload(execution.input)).pipe(Effect.ignore)
+  yield* executePending(state, current.input)
 })
 
 function isBlocked(state: State) {
@@ -140,6 +179,32 @@ function getState(key: string) {
   return state
 }
 
+function findStateForCycle(current: { key: string; input: InstanceStore.LoadInput }, cycle: number) {
+  const exact = states.get(current.key)
+  if (exact?.bootstrapCycle === cycle) return exact
+  const locationPrefix = `${current.input.directory}\0${current.input.worktree}\0`
+  return [...states.entries()].find(([key, state]) => key.startsWith(locationPrefix) && state.bootstrapCycle === cycle)?.[1]
+}
+
+function findStateForLocation(input: LocationInput, cycle?: number) {
+  const locationPrefix = `${input.directory}\0`
+  const workspaceSuffix = input.workspaceID ? `\0${input.workspaceID}` : undefined
+  return [...states.entries()].find(([key, state]) => {
+    if (!key.startsWith(locationPrefix)) return false
+    if (workspaceSuffix && !key.endsWith(workspaceSuffix)) return false
+    if (cycle !== undefined) return state.bootstrapCycle === cycle
+    return true
+  })?.[1]
+}
+
+function stateStatus(state: State) {
+  return {
+    pending: state.pending,
+    executing: state.reloadInFlight,
+    bootstrapCycle: state.bootstrapCycle > 0 ? state.bootstrapCycle : undefined,
+  } satisfies Status
+}
+
 function startBlocker(state: State, blockerID: string) {
   state.blockers.add(blockerID)
   if (blockerID === "tui-bootstrap") state.bootstrapCycle++
@@ -159,11 +224,22 @@ function prepareExecution(state: State, input: InstanceStore.LoadInput) {
   })
 }
 
+function executePending(state: State, fallbackInput: InstanceStore.LoadInput) {
+  return Effect.gen(function* () {
+    const execution = yield* prepareExecution(state, state.reloadInput ?? fallbackInput)
+    // InstanceStore forks the new boot into its own scope before disposing the old
+    // instance. This effect may be interrupted by disposal, so no logic follows it.
+    yield* InstanceStore.Service.use((store) => store.reload(execution.input)).pipe(Effect.ignore)
+  })
+}
+
 function continueOrDone(state: State) {
   return Effect.gen(function* () {
     if (isBlocked(state)) return
     if (state.pending) {
-      yield* check()
+      if (!state.reloadInput) return
+      yield* Effect.logInfo("config reload executing deferred request")
+      yield* executePending(state, state.reloadInput)
       return
     }
     if (!state.reloadInFlight) return

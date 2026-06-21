@@ -135,6 +135,7 @@ export const {
       vcs: VcsInfo | undefined
       reloadPending: boolean
       reloading: boolean
+      reloadResult: "success" | "uncertain" | undefined
     }>({
       provider_next: {
         all: [],
@@ -167,6 +168,7 @@ export const {
       vcs: undefined,
       reloadPending: false,
       reloading: false,
+      reloadResult: undefined,
     })
 
     const event = useEvent()
@@ -203,6 +205,7 @@ export const {
     }
 
     async function completeBootstrap(input: { workspace: string | undefined; cycle: number }) {
+      if (input.cycle <= 0) return
       const result = await Promise.race([
         sdk.client.config.bootstrapComplete({
           workspace: input.workspace,
@@ -214,17 +217,27 @@ export const {
       ])
       if (!result) {
         console.warn("tui bootstrap completion timed out", { cycle: input.cycle })
+        if (!isActiveReloadCycle(input.cycle)) return
         clearReloadOverlayFallback()
         batch(() => {
           setStore("reloadPending", false)
           setStore("reloading", false)
+          setStore("reloadResult", "uncertain")
         })
         return
       }
       if (!result.data?.success) {
         console.warn("tui bootstrap completion rejected", { cycle: input.cycle })
+        if (!isActiveReloadCycle(input.cycle)) return
+        clearReloadOverlayFallback()
+        batch(() => {
+          setStore("reloadPending", false)
+          setStore("reloading", false)
+          setStore("reloadResult", "uncertain")
+        })
         return
       }
+      if (!isActiveReloadCycle(input.cycle)) return
 
       // The server also emits config.reload.done. This local clear is a safety
       // net for missed SSE delivery after the server already accepted bootstrap.
@@ -232,6 +245,7 @@ export const {
       batch(() => {
         setStore("reloadPending", false)
         setStore("reloading", false)
+        setStore("reloadResult", "success")
       })
     }
 
@@ -244,7 +258,7 @@ export const {
     function scheduleReloadOverlayFallback(cycle: number) {
       clearReloadOverlayFallback()
       reloadOverlayFallback = setTimeout(() => {
-        if (!store.reloading || bootstrapCycle !== cycle) return
+        if (!isActiveReloadCycle(cycle)) return
         console.warn("tui reload overlay released by fallback", { cycle })
         void completeBootstrap({ workspace: project.workspace.current(), cycle }).catch((error) => {
           console.warn("tui bootstrap completion failed", {
@@ -254,9 +268,34 @@ export const {
           batch(() => {
             setStore("reloadPending", false)
             setStore("reloading", false)
+            setStore("reloadResult", "uncertain")
           })
         })
       }, RELOAD_OVERLAY_FALLBACK_TIMEOUT)
+    }
+
+    function isActiveReloadCycle(cycle: number) {
+      return store.reloading && bootstrapCycle === cycle
+    }
+
+    function isCurrentReloadEvent(metadata: { directory: string; workspace: string | undefined }) {
+      const directory = project.instance.directory()
+      if (directory && metadata.directory && metadata.directory !== directory) return false
+      const workspace = project.workspace.current()
+      if (workspace && metadata.workspace && metadata.workspace !== workspace) return false
+      return true
+    }
+
+    function startReload(input: { bootstrapCycle?: number }) {
+      if (typeof input.bootstrapCycle !== "number") return
+      bootstrapCycle = input.bootstrapCycle
+      bootstrappedReloadCycle = 0
+      batch(() => {
+        setStore("reloadPending", false)
+        setStore("reloading", true)
+        setStore("reloadResult", undefined)
+      })
+      scheduleReloadOverlayFallback(input.bootstrapCycle)
     }
 
     function bootstrapReloadOnce() {
@@ -266,21 +305,28 @@ export const {
       void bootstrap({ fatal: false, cycle: bootstrapCycle })
     }
 
-    event.subscribe((event, { workspace }) => {
+    event.subscribe((event, { directory, workspace }) => {
       switch (event.type) {
         case "server.connected":
+          if (!isCurrentReloadEvent({ directory, workspace })) break
           if (store.reloading) bootstrapReloadOnce()
           break
         case "server.instance.disposed":
+          if (!isCurrentReloadEvent({ directory, workspace })) break
           if (store.reloading) bootstrapReloadOnce()
           else void bootstrap()
           break
         case "config.reload.pending":
+          if (!isCurrentReloadEvent({ directory, workspace })) break
           setStore("reloadPending", event.properties.pending)
           break
         case "config.reload.executing":
+          if (!isCurrentReloadEvent({ directory, workspace })) break
           if (typeof event.properties.bootstrapCycle === "number") bootstrapCycle = event.properties.bootstrapCycle
-          if (event.properties.executing && bootstrapCycle > 0) scheduleReloadOverlayFallback(bootstrapCycle)
+          if (event.properties.executing && bootstrapCycle > 0) {
+            setStore("reloadResult", undefined)
+            scheduleReloadOverlayFallback(bootstrapCycle)
+          }
           if (!event.properties.executing) clearReloadOverlayFallback()
           batch(() => {
             setStore("reloadPending", false)
@@ -288,11 +334,13 @@ export const {
           })
           break
         case "config.reload.done":
+          if (!isCurrentReloadEvent({ directory, workspace })) break
           clearReloadOverlayFallback()
           bootstrappedReloadCycle = 0
           batch(() => {
             setStore("reloadPending", false)
             setStore("reloading", false)
+            setStore("reloadResult", "success")
           })
           break
         case "permission.replied": {
@@ -684,6 +732,12 @@ export const {
                 cycle,
                 error: error instanceof Error ? error.message : String(error),
               })
+              if (!isActiveReloadCycle(cycle)) return
+              batch(() => {
+                setStore("reloadPending", false)
+                setStore("reloading", false)
+                setStore("reloadResult", "uncertain")
+              })
             })
             .finally(() => {
               setStore("status", "complete")
@@ -694,6 +748,12 @@ export const {
             console.warn("tui bootstrap completion failed", {
               cycle,
               error: error instanceof Error ? error.message : String(error),
+            })
+            if (!isActiveReloadCycle(cycle)) return
+            batch(() => {
+              setStore("reloadPending", false)
+              setStore("reloading", false)
+              setStore("reloadResult", "uncertain")
             })
           })
           console.error("tui bootstrap failed", {
@@ -716,6 +776,9 @@ export const {
     const result = {
       data: store,
       set: setStore,
+      reload: {
+        start: startReload,
+      },
       get status() {
         return store.status
       },

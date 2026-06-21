@@ -200,6 +200,10 @@ export function DialogProvider(props: ParentProps) {
     }
     if (!wasReloading) return
     wasReloading = false
+    if (sync.data.reloadResult === "uncertain") {
+      toast.show({ message: "Reload status uncertain; check config before continuing", variant: "warning" })
+      return
+    }
     toast.show({ message: "Reloaded configuration", variant: "success" })
   })
 

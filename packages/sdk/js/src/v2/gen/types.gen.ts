@@ -107,6 +107,13 @@ export type QuestionRejected = {
   requestID: string
 }
 
+export type InvalidRequestError = {
+  _tag: "InvalidRequestError"
+  message: string
+  kind?: string
+  field?: string
+}
+
 export type OAuth = {
   type: "oauth"
   refresh: string
@@ -134,13 +141,6 @@ export type Auth = OAuth | ApiAuth | WellKnownAuth
 
 export type EffectHttpApiErrorBadRequest = {
   _tag: "BadRequest"
-}
-
-export type InvalidRequestError = {
-  _tag: "InvalidRequestError"
-  message: string
-  kind?: string
-  field?: string
 }
 
 export type MoveSessionError = {
@@ -1536,7 +1536,7 @@ export type GlobalEvent = {
         type: "config.reload.executing"
         properties: {
           executing: boolean
-          bootstrapCycle?: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+          bootstrapCycle?: number
         }
       }
     | {
@@ -5067,7 +5067,7 @@ export type EventConfigReloadExecuting = {
   type: "config.reload.executing"
   properties: {
     executing: boolean
-    bootstrapCycle?: number | "NaN" | "Infinity" | "-Infinity"
+    bootstrapCycle?: number
   }
 }
 
@@ -5202,6 +5202,69 @@ export type BadRequestError = {
     kind?: "Params" | "Headers" | "Query" | "Body" | "Payload"
   }
 }
+
+export type ConfigReloadStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/config/reload/status"
+}
+
+export type ConfigReloadStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ConfigReloadStatusError = ConfigReloadStatusErrors[keyof ConfigReloadStatusErrors]
+
+export type ConfigReloadStatusResponses = {
+  /**
+   * Configuration reload status
+   */
+  200: {
+    pending: boolean
+    executing: boolean
+    bootstrapCycle?: number
+  }
+}
+
+export type ConfigReloadStatusResponse = ConfigReloadStatusResponses[keyof ConfigReloadStatusResponses]
+
+export type ConfigBootstrapCompleteData = {
+  body?: never
+  path?: never
+  query: {
+    directory?: string
+    workspace?: string
+    cycle: string
+  }
+  url: "/config/bootstrap-complete"
+}
+
+export type ConfigBootstrapCompleteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ConfigBootstrapCompleteError = ConfigBootstrapCompleteErrors[keyof ConfigBootstrapCompleteErrors]
+
+export type ConfigBootstrapCompleteResponses = {
+  /**
+   * Bootstrap completion result
+   */
+  200: {
+    success: boolean
+  }
+}
+
+export type ConfigBootstrapCompleteResponse = ConfigBootstrapCompleteResponses[keyof ConfigBootstrapCompleteResponses]
 
 export type AuthRemoveData = {
   body?: never
@@ -5629,41 +5692,11 @@ export type ConfigReloadResponses = {
   200: {
     success: boolean
     immediate: boolean
+    bootstrapCycle?: number
   }
 }
 
 export type ConfigReloadResponse = ConfigReloadResponses[keyof ConfigReloadResponses]
-
-export type ConfigBootstrapCompleteData = {
-  body?: never
-  path?: never
-  query: {
-    directory?: string
-    workspace?: string
-    cycle: string
-  }
-  url: "/config/bootstrap-complete"
-}
-
-export type ConfigBootstrapCompleteErrors = {
-  /**
-   * Bad request
-   */
-  400: BadRequestError
-}
-
-export type ConfigBootstrapCompleteError = ConfigBootstrapCompleteErrors[keyof ConfigBootstrapCompleteErrors]
-
-export type ConfigBootstrapCompleteResponses = {
-  /**
-   * Bootstrap completion result
-   */
-  200: {
-    success: boolean
-  }
-}
-
-export type ConfigBootstrapCompleteResponse = ConfigBootstrapCompleteResponses[keyof ConfigBootstrapCompleteResponses]
 
 export type ExperimentalCapabilitiesGetData = {
   body?: never

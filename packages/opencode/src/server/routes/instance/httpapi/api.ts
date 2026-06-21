@@ -3,7 +3,7 @@ import { HttpApi } from "effect/unstable/httpapi"
 import { EventV2 } from "@opencode-ai/core/event"
 import { InstanceDisposed } from "@/server/event"
 import { Question } from "@/question"
-import { ConfigApi } from "./groups/config"
+import { ConfigApi, ConfigLifecycleApi } from "./groups/config"
 import { ControlApi } from "./groups/control"
 import { ControlPlaneApi } from "./groups/control-plane"
 import { EventApi } from "./groups/event"
@@ -42,6 +42,7 @@ const EventSchema = Schema.Union([
 ]).annotate({ identifier: "Event" })
 
 export const RootHttpApi = HttpApi.make("opencode-root")
+  .addHttpApi(ConfigLifecycleApi)
   .addHttpApi(ControlApi)
   .addHttpApi(ControlPlaneApi)
   .addHttpApi(GlobalApi)

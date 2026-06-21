@@ -519,11 +519,17 @@ describe("HttpApi workspace routing middleware", () => {
         HttpClientRequest.setHeader("x-opencode-directory", headerDir),
         HttpClient.execute,
       )
+      const encodedHeaderResponse = yield* HttpClientRequest.get("/probe").pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", encodeURIComponent(headerDir)),
+        HttpClient.execute,
+      )
 
       expect(queryResponse.status).toBe(200)
       expect(yield* queryResponse.json).toEqual({ directory: queryDir, workspaceID: null })
       expect(headerResponse.status).toBe(200)
       expect(yield* headerResponse.json).toEqual({ directory: headerDir, workspaceID: null })
+      expect(encodedHeaderResponse.status).toBe(200)
+      expect(yield* encodedHeaderResponse.json).toEqual({ directory: headerDir, workspaceID: null })
     }),
   )
 
