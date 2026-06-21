@@ -18,6 +18,7 @@ import { testEffect } from "./lib/effect"
 import { toolIdentity, executeTool, settleTool, toolDefinitions } from "./lib/tool"
 
 const assertions: PermissionV2.AssertInput[] = []
+const missingPath = "__missing_read_target__.txt"
 const readCalls: {
   input: AbsolutePath
   page: ReadToolFileSystem.PageInput
@@ -70,7 +71,14 @@ const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => 
 const image = Image.layer.pipe(Layer.provide(config))
 const testFileSystem = Layer.effect(
   FSUtil.Service,
-  FSUtil.Service.use((fs) => Effect.succeed(FSUtil.Service.of({ ...fs, realPath: (path) => Effect.succeed(path) }))),
+  FSUtil.Service.use((fs) =>
+    Effect.succeed(
+      FSUtil.Service.of({
+        ...fs,
+        realPath: (path) => (path.endsWith(missingPath) ? fs.realPath(path) : Effect.succeed(path)),
+      }),
+    ),
+  ),
 ).pipe(Layer.provide(FSUtil.defaultLayer))
 const infrastructure = Layer.mergeAll(
   testFileSystem,
@@ -449,6 +457,22 @@ describe("ReadTool", () => {
           call: { type: "tool-call", id: "call-read", name: "read", input: { path: "README.md" } },
         }),
       ).toEqual({ type: "error", value: "Unable to read README.md" })
+      expect(readCalls).toEqual([])
+    }),
+  )
+
+  it.effect("returns missing paths as model-visible tool failures", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-missing-path", name: "read", input: { path: missingPath } },
+        }),
+      ).toEqual({ type: "error", value: `Unable to read ${missingPath}` })
+      expect(assertions).toEqual([])
       expect(readCalls).toEqual([])
     }),
   )

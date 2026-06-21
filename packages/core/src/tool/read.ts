@@ -57,8 +57,8 @@ export const layer = Layer.effectDiscard(
               const selected = path.isAbsolute(input.path) ? path.dirname(absolute) : location.directory
               if (!path.isAbsolute(input.path) && !FSUtil.contains(location.directory, absolute))
                 return yield* Effect.die(new Error("Path escapes the allowed read root"))
-              const real = yield* fs.realPath(absolute).pipe(Effect.orDie)
-              const root = yield* fs.realPath(selected).pipe(Effect.orDie)
+              const real = yield* fs.realPath(absolute)
+              const root = yield* fs.realPath(selected)
               if (!FSUtil.contains(root, real))
                 return yield* Effect.die(new Error("Path escapes the allowed read root"))
               const resource = path.relative(root, real).replaceAll("\\", "/") || "."
