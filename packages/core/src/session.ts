@@ -124,8 +124,8 @@ export interface Interface {
   ) => Effect.Effect<SessionMessage.Message[], NotFoundError | MessageDecodeError>
   readonly events: (input: {
     sessionID: SessionSchema.ID
-    after?: EventV2.Cursor
-  }) => Stream.Stream<EventV2.CursorEvent<SessionEvent.DurableEvent>, NotFoundError>
+    after?: number
+  }) => Stream.Stream<SessionEvent.DurableEvent, NotFoundError>
   readonly switchAgent: (input: {
     sessionID: SessionSchema.ID
     agent: string
@@ -339,11 +339,9 @@ export const layer = Layer.effect(
         Stream.unwrap(
           result
             .get(input.sessionID)
-            .pipe(Effect.as(events.aggregateEvents({ aggregateID: input.sessionID, after: input.after }))),
+            .pipe(Effect.as(events.durable({ aggregateID: input.sessionID, after: input.after }))),
         ).pipe(
-          Stream.filter((event): event is EventV2.CursorEvent<SessionEvent.DurableEvent> =>
-            isDurableSessionEvent(event.event),
-          ),
+          Stream.filter((event): event is SessionEvent.DurableEvent => isDurableSessionEvent(event)),
         ),
       prompt: Effect.fn("V2Session.prompt")((input) =>
         Effect.uninterruptible(
@@ -413,9 +411,9 @@ export const layer = Layer.effect(
               sessionID,
               timestamp: yield* DateTime.now,
             })
-            if (event.seq === undefined)
+            if (event.durable === undefined)
               return yield* Effect.die("Interrupt request event is missing aggregate sequence")
-            yield* execution.interrupt(sessionID, event.seq)
+            yield* execution.interrupt(sessionID, event.durable.seq)
           }),
         ),
       ),

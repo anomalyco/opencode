@@ -30,7 +30,7 @@ const Message = EventV2.define({
 
 const SyncMessage = EventV2.define({
   type: "test.sync",
-  sync: {
+  durable: {
     version: 1,
     aggregate: "id",
   },
@@ -42,7 +42,7 @@ const SyncMessage = EventV2.define({
 
 const SyncSent = EventV2.define({
   type: "test.sent",
-  sync: {
+  durable: {
     version: 1,
     aggregate: "messageID",
   },
@@ -61,7 +61,7 @@ const GlobalMessage = EventV2.define({
 
 const VersionedMessage = EventV2.define({
   type: "test.versioned",
-  sync: {
+  durable: {
     version: 2,
     aggregate: "id",
   },
@@ -73,7 +73,7 @@ const VersionedMessage = EventV2.define({
 
 const SyncTimestamp = EventV2.define({
   type: "test.timestamp",
-  sync: {
+  durable: {
     version: 1,
     aggregate: "id",
   },
@@ -132,7 +132,7 @@ describe("EventV2", () => {
       const event = yield* events.publish(VersionedMessage, { id: "one", text: "hello" })
 
       expect(event.type).toBe("test.versioned")
-      expect(event.version).toBe(2)
+      expect(event.durable?.version).toBe(2)
     }),
   )
 
@@ -146,12 +146,12 @@ describe("EventV2", () => {
     Effect.sync(() => {
       const latest = EventV2.define({
         type: "test.out-of-order",
-        sync: { version: 2, aggregate: "id" },
+        durable: { version: 2, aggregate: "id" },
         schema: { id: Schema.String },
       })
       EventV2.define({
         type: "test.out-of-order",
-        sync: { version: 1, aggregate: "id" },
+        durable: { version: 1, aggregate: "id" },
         schema: { id: Schema.String },
       })
 
@@ -190,7 +190,7 @@ describe("EventV2", () => {
     }),
   )
 
-  it.effect("commits local operational state inside a new synchronized event transaction", () =>
+  it.effect("commits local operational state inside a new durable event transaction", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const received = new Array<string>()
@@ -207,7 +207,7 @@ describe("EventV2", () => {
     }),
   )
 
-  it.effect("rolls back the synchronized event and projector when the local commit fails", () =>
+  it.effect("rolls back the durable event and projector when the local commit fails", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const { db } = yield* Database.Service
@@ -236,7 +236,7 @@ describe("EventV2", () => {
       const events = yield* EventV2.Service
       const exit = yield* events.publish(Message, { text: "hello" }, { commit: () => Effect.void }).pipe(Effect.exit)
 
-      expect(String(exit)).toContain("Local commit hooks require a synchronized event")
+      expect(String(exit)).toContain("Local commit hooks require a durable event")
     }),
   )
 
@@ -290,7 +290,6 @@ describe("EventV2", () => {
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const received = new Array<string>()
-      yield* events.sync(() => Effect.die("sync defect"))
       yield* events.listen(() => {
         throw new Error("listener defect")
       })
@@ -303,7 +302,7 @@ describe("EventV2", () => {
       const event = yield* events.publish(SyncMessage, { id: "one", text: "hello" })
 
       expect(received).toEqual([SyncMessage.type])
-      expect(event.seq).toBeNumber()
+      expect(event.durable?.seq).toBeNumber()
     }),
   )
 
@@ -336,49 +335,7 @@ describe("EventV2", () => {
     }),
   )
 
-  it.effect("does not synchronize live-only events", () =>
-    Effect.gen(function* () {
-      const events = yield* EventV2.Service
-      const synchronized = new Array<string>()
-      const unsubscribe = yield* events.sync((event) =>
-        Effect.sync(() => {
-          synchronized.push(event.type)
-        }),
-      )
-      yield* Effect.addFinalizer(() => unsubscribe)
-
-      yield* events.publish(Message, { text: "live only" })
-      yield* events.publish(SyncMessage, { id: "one", text: "durable" })
-
-      expect(synchronized).toEqual([SyncMessage.type])
-    }),
-  )
-
-  it.effect("synchronizes only after the durable event commits", () =>
-    Effect.gen(function* () {
-      const events = yield* EventV2.Service
-      const { db } = yield* Database.Service
-      const synchronized = new Array<boolean>()
-      yield* events.sync((event) =>
-        db
-          .select({ id: EventTable.id })
-          .from(EventTable)
-          .where(eq(EventTable.id, event.id))
-          .get()
-          .pipe(
-            Effect.orDie,
-            Effect.map((row) => synchronized.push(row !== undefined)),
-            Effect.asVoid,
-          ),
-      )
-
-      yield* events.publish(SyncMessage, { id: EventV2.ID.create(), text: "durable" })
-
-      expect(synchronized).toEqual([true])
-    }),
-  )
-
-  it.effect("inserts sync event rows on publish", () =>
+  it.effect("inserts durable event rows on publish", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const { db } = yield* Database.Service
@@ -398,7 +355,7 @@ describe("EventV2", () => {
     }),
   )
 
-  it.effect("increments sync event seq per aggregate", () =>
+  it.effect("increments durable event seq per aggregate", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const { db } = yield* Database.Service
@@ -417,22 +374,22 @@ describe("EventV2", () => {
     }),
   )
 
-  it.effect("replays durable aggregate events after a cursor and tails new events", () =>
+  it.effect("replays durable aggregate events after a sequence and tails new events", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const aggregateID = EventV2.ID.create()
       yield* events.publish(SyncMessage, { id: aggregateID, text: "zero" })
       yield* events.publish(SyncMessage, { id: aggregateID, text: "one" })
       const fiber = yield* events
-        .aggregateEvents({ aggregateID, after: EventV2.Cursor.make(0) })
+        .durable({ aggregateID, after: 0 })
         .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       yield* events.publish(SyncMessage, { id: aggregateID, text: "two" })
 
-      expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.cursor, event.event.data])).toEqual([
-        [EventV2.Cursor.make(1), { id: aggregateID, text: "one" }],
-        [EventV2.Cursor.make(2), { id: aggregateID, text: "two" }],
+      expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual([
+        [1, { id: aggregateID, text: "one" }],
+        [2, { id: aggregateID, text: "two" }],
       ])
     }),
   )
@@ -443,19 +400,19 @@ describe("EventV2", () => {
       const aggregateID = EventV2.ID.create()
       yield* events.publish(SyncMessage, { id: aggregateID, text: "zero" })
       const fiber = yield* events
-        .aggregateEvents({ aggregateID })
+        .durable({ aggregateID })
         .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
 
       yield* events.publish(SyncMessage, { id: aggregateID, text: "one" })
 
       expect(
         Array.from(yield* Fiber.join(fiber)).map((event) => [
-          event.cursor,
-          (event.event.data as { text: string }).text,
+          event.durable?.seq,
+          (event.data as { text: string }).text,
         ]),
       ).toEqual([
-        [EventV2.Cursor.make(0), "zero"],
-        [EventV2.Cursor.make(1), "one"],
+        [0, "zero"],
+        [1, "one"],
       ])
     }),
   )
@@ -477,7 +434,7 @@ describe("EventV2", () => {
         const events = yield* EventV2.Service
         const aggregateID = EventV2.ID.create()
         const fiber = yield* events
-          .aggregateEvents({ aggregateID })
+          .durable({ aggregateID })
           .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
         yield* Deferred.await(readStarted)
 
@@ -485,8 +442,8 @@ describe("EventV2", () => {
         yield* events.publish(SyncMessage, { id: aggregateID, text: "during handoff" })
         yield* Deferred.succeed(continueRead, undefined)
 
-        expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.cursor, event.event.data])).toEqual([
-          [EventV2.Cursor.make(0), { id: aggregateID, text: "during handoff" }],
+        expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual([
+          [0, { id: aggregateID, text: "during handoff" }],
         ])
       }).pipe(Effect.provide(Layer.mergeAll(database, eventLayer)))
     }),
@@ -498,7 +455,7 @@ describe("EventV2", () => {
       const aggregateID = EventV2.ID.create()
       const count = 64
       const fiber = yield* events
-        .aggregateEvents({ aggregateID })
+        .durable({ aggregateID })
         .pipe(Stream.take(count), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
@@ -506,9 +463,9 @@ describe("EventV2", () => {
         yield* events.publish(SyncMessage, { id: aggregateID, text: String(index) })
       }
 
-      expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.cursor, event.event.data])).toEqual(
+      expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual(
         Array.from({ length: count }, (_, index) => [
-          EventV2.Cursor.make(index),
+          index,
           { id: aggregateID, text: String(index) },
         ]),
       )
@@ -520,14 +477,14 @@ describe("EventV2", () => {
       const events = yield* EventV2.Service
       const aggregateID = EventV2.ID.create()
       const fiber = yield* events
-        .aggregateEvents({ aggregateID })
+        .durable({ aggregateID })
         .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       yield* events.publish(Message, { text: "live only" })
       yield* events.publish(SyncMessage, { id: aggregateID, text: "durable" })
 
-      expect(Array.from(yield* Fiber.join(fiber)).map((event) => event.event.type)).toEqual([SyncMessage.type])
+      expect(Array.from(yield* Fiber.join(fiber)).map((event) => event.type)).toEqual([SyncMessage.type])
     }),
   )
 
@@ -550,7 +507,7 @@ describe("EventV2", () => {
     }),
   )
 
-  it.effect("replays sync events through projectors", () =>
+  it.effect("replays durable events through projectors", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const received = new Array<EventV2.Payload>()
@@ -706,7 +663,7 @@ describe("EventV2", () => {
         })
         .pipe(Effect.exit)
 
-      expect(String(exit)).toContain("Unknown sync event type")
+      expect(String(exit)).toContain("Unknown durable event type")
     }),
   )
 
@@ -843,7 +800,7 @@ describe("EventV2", () => {
       const replayed = {
         id: published.id,
         type: EventV2.versionedType(SyncMessage.type, 1),
-        seq: published.seq!,
+        seq: published.durable!.seq,
         aggregateID,
         data: published.data,
       }
@@ -988,7 +945,7 @@ describe("EventV2", () => {
       yield* events.replay(replayed, { publish: true })
       yield* events.replay(replayed, { publish: true })
 
-      expect(received).toMatchObject([{ id: replayed.id, seq: 0, data: replayed.data }])
+      expect(received).toMatchObject([{ id: replayed.id, durable: { seq: 0, version: 1 }, data: replayed.data }])
     }),
   )
 
@@ -1110,7 +1067,7 @@ describe("EventV2", () => {
     }),
   )
 
-  it.effect("remove clears sync event sequence", () =>
+  it.effect("remove clears durable event sequence", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
       const received = new Array<EventV2.Payload>()

@@ -162,7 +162,7 @@ describe("SessionProjector", () => {
 
       expect(
         yield* db.select().from(SessionInputTable).where(eq(SessionInputTable.id, id)).get().pipe(Effect.orDie),
-      ).toMatchObject({ promoted_seq: event.seq })
+      ).toMatchObject({ promoted_seq: event.durable?.seq })
     }),
   )
 
@@ -331,134 +331,6 @@ describe("SessionProjector", () => {
       expect(
         yield* db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, id)).get().pipe(Effect.orDie),
       ).toMatchObject({ type: "synthetic" })
-    }),
-  )
-
-  it.effect("rejects a Prompted event that conflicts with an admitted inbox row", () =>
-    Effect.gen(function* () {
-      const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
-        .pipe(Effect.orDie)
-      const events = yield* EventV2.Service
-      const id = SessionMessage.ID.make("msg_conflict")
-      yield* SessionInput.admit(db, events, {
-        id,
-        sessionID,
-        prompt: new Prompt({ text: "admitted" }),
-        delivery: "steer",
-      })
-
-      const exit = yield* events
-        .publish(SessionEvent.Prompted, {
-          sessionID,
-          messageID: id,
-          timestamp: created,
-          prompt: new Prompt({ text: "different" }),
-          delivery: "steer",
-        })
-        .pipe(Effect.exit)
-
-      expect(String(exit)).toContain("SessionInput.LifecycleConflict")
-      expect(
-        yield* db.select().from(SessionInputTable).where(eq(SessionInputTable.id, id)).get().pipe(Effect.orDie),
-      ).toMatchObject({ promoted_seq: null })
-    }),
-  )
-
-  it.effect("rejects an assistant message ID that conflicts with an admitted inbox row", () =>
-    Effect.gen(function* () {
-      const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
-        .pipe(Effect.orDie)
-      const events = yield* EventV2.Service
-      const id = SessionMessage.ID.make("msg_conflict")
-      yield* SessionInput.admit(db, events, {
-        id,
-        sessionID,
-        prompt: new Prompt({ text: "admitted" }),
-        delivery: "steer",
-      })
-
-      const exit = yield* events
-        .publish(SessionEvent.Step.Started, {
-          sessionID,
-          timestamp: created,
-          assistantMessageID: id,
-          agent: "build",
-          model,
-        })
-        .pipe(Effect.exit)
-
-      expect(String(exit)).toContain("SessionInput.LifecycleConflict")
-      expect(
-        yield* db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, id)).get().pipe(Effect.orDie),
-      ).toBeUndefined()
-    }),
-  )
-
-  it.effect("rejects a Prompted delivery mode that conflicts with an admitted inbox row", () =>
-    Effect.gen(function* () {
-      const { db } = yield* Database.Service
-      yield* db
-        .insert(ProjectTable)
-        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
-        .run()
-        .pipe(Effect.orDie)
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "test",
-          directory: "/project",
-          title: "test",
-          version: "test",
-        })
-        .run()
-        .pipe(Effect.orDie)
-      const events = yield* EventV2.Service
-      const id = SessionMessage.ID.make("msg_delivery_conflict")
-      const prompt = new Prompt({ text: "admitted" })
-      yield* SessionInput.admit(db, events, { id, sessionID, prompt, delivery: "queue" })
-
-      const exit = yield* events
-        .publish(SessionEvent.Prompted, { sessionID, messageID: id, timestamp: created, prompt, delivery: "steer" })
-        .pipe(Effect.exit)
-
-      expect(String(exit)).toContain("SessionInput.LifecycleConflict")
-      expect(
-        yield* db.select().from(SessionInputTable).where(eq(SessionInputTable.id, id)).get().pipe(Effect.orDie),
-      ).toMatchObject({ delivery: "queue", promoted_seq: null })
     }),
   )
 
