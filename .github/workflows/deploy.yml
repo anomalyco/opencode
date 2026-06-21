@@ -102,7 +102,14 @@ jobs:
           echo "::add-mask::$PLANETSCALE_PASSWORD"
           bun run --cwd packages/stats/core db:ensure-unique-users
 
-          deploy_response="$(pscale deploy-request create "$database" "$branch" --org "$organization" --deploy-to production --format json)"
+          if deploy_response="$(pscale deploy-request create "$database" "$branch" --org "$organization" --into production --format json 2>/tmp/deploy-request-error)"; then
+            :
+          elif deploy_response="$(pscale deploy-request create "$database" "$branch" --org "$organization" --deploy-to production --format json 2>>/tmp/deploy-request-error)"; then
+            :
+          else
+            cat /tmp/deploy-request-error
+            exit 1
+          fi
           deploy_number="$(echo "$deploy_response" | jq -r '.number')"
 
           if [ -z "$deploy_number" ] || [ "$deploy_number" = "null" ]; then
