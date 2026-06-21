@@ -103,6 +103,13 @@ const getCurrentUrl = () => {
   let basePath = window.__OPENCODE_BASE_PATH__ || import.meta.env.VITE_OPENCODE_SERVER_BASE_URL || ""
   if (basePath && !basePath.startsWith("/")) basePath = "/" + basePath
   basePath = basePath.replace(/\/+$/, "")
+  // When no explicit base path is configured, check whether a <base href> tag was injected
+  // by an upstream reverse proxy (e.g., jupyter-server-proxy for JupyterHub). If document.baseURI
+  // diverges from the origin root, the proxy mount point is the correct API base.
+  if (!basePath) {
+    const baseUriPath = new URL(document.baseURI).pathname.replace(/\/+$/, "")
+    if (baseUriPath && baseUriPath !== "/") basePath = baseUriPath
+  }
   if (location.hostname.includes("opencode.ai")) return "http://localhost:4096"
   if (import.meta.env.DEV)
     return `http://${import.meta.env.VITE_OPENCODE_SERVER_HOST ?? "localhost"}:${import.meta.env.VITE_OPENCODE_SERVER_PORT ?? "4096"}${basePath}`
