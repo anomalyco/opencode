@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { beforeEach, describe, expect, test } from "bun:test"
 import { Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { PermissionV2 } from "@opencode-ai/core/permission"
@@ -68,6 +68,11 @@ const assertions: PermissionV2.AssertInput[] = []
 let responseBody = payload("search results")
 let makeResponse = () => new Response(responseBody, { status: 200 })
 let config: WebSearchTool.Config = { enableExa: false, enableParallel: false }
+
+beforeEach(() => {
+  responseBody = payload("search results")
+  makeResponse = () => new Response(responseBody, { status: 200 })
+})
 
 const http = Layer.succeed(
   HttpClient.HttpClient,

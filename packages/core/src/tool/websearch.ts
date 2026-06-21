@@ -1,7 +1,7 @@
 export * as WebSearchTool from "./websearch"
 
 import { ToolFailure } from "@opencode-ai/llm"
-import { Context, Duration, Effect, Layer, Schema, Stream } from "effect"
+import { Context, Duration, Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { truthy } from "../flag/flag"
 import { InstallationVersion } from "../installation/version"
@@ -9,6 +9,7 @@ import { PositiveInt } from "../schema"
 import { PermissionV2 } from "../permission"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
+import { collectBoundedResponseBody } from "./http-body"
 import { checksum } from "../util/encode"
 
 export const name = "websearch"
@@ -164,18 +165,12 @@ const callMcp = <F extends Schema.Struct.Fields>(
     )
     return yield* Effect.gen(function* () {
       const response = yield* HttpClient.filterStatusOk(http).execute(request)
-      const chunks: Uint8Array[] = []
-      let size = 0
-      yield* Stream.runForEach(response.stream, (chunk) =>
-        Effect.gen(function* () {
-          size += chunk.byteLength
-          if (size > MAX_RESPONSE_BYTES)
-            return yield* Effect.fail(new Error(`${tool} response exceeded ${MAX_RESPONSE_BYTES} bytes`))
-          chunks.push(chunk)
-          return undefined
-        }),
+      const body = yield* collectBoundedResponseBody(
+        response,
+        MAX_RESPONSE_BYTES,
+        () => new Error(`${tool} response exceeded ${MAX_RESPONSE_BYTES} bytes`),
       )
-      return yield* parseResponse(Buffer.concat(chunks, size).toString("utf8"))
+      return yield* parseResponse(body.toString("utf8"))
     }).pipe(
       Effect.timeoutOrElse({
         duration: Duration.seconds(25),

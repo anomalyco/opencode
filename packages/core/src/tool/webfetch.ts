@@ -1,11 +1,12 @@
 export * as WebFetchTool from "./webfetch"
 
 import { ToolFailure } from "@opencode-ai/llm"
-import { Duration, Effect, Layer, Schema, Stream } from "effect"
+import { Duration, Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Parser } from "htmlparser2"
 import TurndownService from "turndown"
 import { PermissionV2 } from "../permission"
+import { collectBoundedResponseBody } from "./http-body"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
 
@@ -86,24 +87,11 @@ const execute = (http: HttpClient.HttpClient, url: string, format: Format, userA
   http.execute(request(url, format, userAgent)).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk))
 
 const collectBody = (response: HttpClientResponse.HttpClientResponse) =>
-  Effect.gen(function* () {
-    const contentLength = response.headers["content-length"]
-    if (contentLength && Number.parseInt(contentLength, 10) > MAX_RESPONSE_BYTES) {
-      return yield* Effect.fail(new Error(`Response too large (exceeds ${MAX_RESPONSE_BYTES} byte limit)`))
-    }
-    const chunks: Uint8Array[] = []
-    let size = 0
-    yield* Stream.runForEach(response.stream, (chunk) =>
-      Effect.gen(function* () {
-        size += chunk.byteLength
-        if (size > MAX_RESPONSE_BYTES)
-          return yield* Effect.fail(new Error(`Response too large (exceeds ${MAX_RESPONSE_BYTES} byte limit)`))
-        chunks.push(chunk)
-        return undefined
-      }),
-    )
-    return Buffer.concat(chunks, size)
-  })
+  collectBoundedResponseBody(
+    response,
+    MAX_RESPONSE_BYTES,
+    () => new Error(`Response too large (exceeds ${MAX_RESPONSE_BYTES} byte limit)`),
+  )
 
 const mimeFrom = (contentType: string) => contentType.split(";", 1)[0]?.trim().toLowerCase() ?? ""
 const isImageAttachment = (mime: string) =>
