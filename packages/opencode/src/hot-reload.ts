@@ -12,7 +12,7 @@
  *    watcher (e.g. @parcel/watcher) detects a change.
  */
 
-import { Context, Duration, Effect, Layer, Schedule, Scope } from "effect"
+import { Context, Duration, Effect, Fiber, Layer, Schedule, Scope } from "effect"
 import { Config } from "@/config/config"
 import { Skill } from "@/skill"
 import { ToolRegistry } from "@/tool/registry"
@@ -141,7 +141,7 @@ export const layer: Layer.Layer<Service, never, Config.Service | Skill.Service |
       const tools = yield* ToolRegistry.Service
       const fsys = yield* FSUtil.Service
 
-      let fiber: Fiber.RuntimeFiber<void> | undefined
+      let fiber: Fiber.Fiber<void> | undefined
       let snapshots: Snapshot[] = []
 
       const refreshSnapshots = Effect.fn("HotReload.refreshSnapshots")(function* () {
