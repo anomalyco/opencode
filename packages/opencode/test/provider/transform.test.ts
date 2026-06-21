@@ -2067,6 +2067,23 @@ describe("ProviderTransform.message - anthropic empty content filtering", () => 
     )
   })
 
+  test("preserves migrated providerMetadata-only reasoning", () => {
+    const openaiModel = {
+      ...anthropicModel,
+      providerID: "openai",
+      api: { id: "gpt-5", url: "https://api.openai.com", npm: "@ai-sdk/openai" },
+    }
+    const reasoning = {
+      type: "reasoning",
+      text: "",
+      providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "encrypted" } },
+    } as const
+
+    expect(
+      ProviderTransform.message([{ role: "assistant", content: [reasoning] }], openaiModel, {})[0]?.content,
+    ).toContainEqual(expect.objectContaining(reasoning))
+  })
+
   test("leaves valid anthropic assistant tool ordering unchanged", () => {
     const msgs = [
       {

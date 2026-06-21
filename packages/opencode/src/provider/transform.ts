@@ -140,7 +140,11 @@ function normalizeMessages(
         if (part.type !== "reasoning") return true
         return (
           part.text.trim().length > 0 ||
-          (part.providerOptions !== undefined && Object.keys(part.providerOptions).length > 0)
+          (part.providerOptions !== undefined && Object.keys(part.providerOptions).length > 0) ||
+          ("providerMetadata" in part &&
+            typeof part.providerMetadata === "object" &&
+            part.providerMetadata !== null &&
+            Object.keys(part.providerMetadata).length > 0)
         )
       })
       if (content.length === 0) return undefined
