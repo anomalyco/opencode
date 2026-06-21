@@ -6,17 +6,14 @@ const checkOnly = process.argv.includes("--check")
 
 const client = new Client({ url: databaseUrl() })
 
-const missing = await tables.reduce<Promise<(typeof tables)[number][]>>(
-  async (promise, table) => {
-    const result = await promise
-    if (await hasUniqueUsersColumn(table)) {
-      console.log(`unique_users column already exists on ${table}`)
-      return result
-    }
-    return [...result, table]
-  },
-  Promise.resolve([]),
-)
+const missing = await tables.reduce<Promise<(typeof tables)[number][]>>(async (promise, table) => {
+  const result = await promise
+  if (await hasUniqueUsersColumn(table)) {
+    console.log(`unique_users column already exists on ${table}`)
+    return result
+  }
+  return [...result, table]
+}, Promise.resolve([]))
 
 if (missing.length === 0) {
   console.log("unique_users columns complete")
@@ -28,10 +25,7 @@ if (checkOnly) {
   process.exit(1)
 }
 
-await missing.reduce(
-  (promise, table) => promise.then(() => addUniqueUsersColumn(table)),
-  Promise.resolve(),
-)
+await missing.reduce((promise, table) => promise.then(() => addUniqueUsersColumn(table)), Promise.resolve())
 
 function databaseUrl() {
   if (
