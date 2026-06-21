@@ -606,7 +606,7 @@ export function Prompt(props: PromptProps) {
       },
       {
         title: "Move session",
-        desc: "Move the session to another project directory",
+        desc: "Move to another project dir",
         name: "session.move",
         category: "Session",
         slashName: "move",
@@ -1282,7 +1282,15 @@ export function Prompt(props: PromptProps) {
         })
       } else if (isBusy) {
         const { followupMode: _, ...cleanPayload } = payload
-        sdk.client.session.promptAsync(cleanPayload).catch(() => {})
+        sdk.client.session
+          .promptAsync(cleanPayload, { throwOnError: true })
+          .catch((error) => {
+            toast.show({
+              title: "Failed to steer prompt",
+              message: errorMessage(error),
+              variant: "error",
+            })
+          })
         toast.show({
           message: "Steering...",
           variant: "info",
@@ -1290,8 +1298,17 @@ export function Prompt(props: PromptProps) {
         })
       } else {
         const { followupMode: _, ...cleanPayload } = payload
-        sdk.client.session.prompt(cleanPayload).catch(() => {})
+        sdk.client.session
+          .prompt(cleanPayload, { throwOnError: true })
+          .catch((error) => {
+            toast.show({
+              title: "Failed to send prompt",
+              message: errorMessage(error),
+              variant: "error",
+            })
+          })
       }
+      if (editorParts.length > 0) editor.markSelectionSent()
     }
     history.append({
       ...store.prompt,

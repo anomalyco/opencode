@@ -784,7 +784,6 @@ function DiffViewer(props: { api: TuiPluginApi }) {
                 <Panel flexGrow={1} minHeight={0} border="none">
                   <Separator axis="x" start={showFileTree() ? "edge-out" : undefined} />
                   <scrollbox
-                    id="diff-viewer-patches"
                     ref={(element: ScrollBoxRenderable) => (scroll = element)}
                     flexGrow={1}
                     minHeight={0}
@@ -824,7 +823,6 @@ function DiffViewer(props: { api: TuiPluginApi }) {
                               {(patch) => (
                                 <box border={patchLeftBorder()} borderColor={theme().border}>
                                   <diff
-                                    id={`diff-viewer-patch-${entry.fileIndex}`}
                                     ref={(element: DiffRenderable) => diffNodeByFileIndex.set(entry.fileIndex, element)}
                                     diff={patch()}
                                     view={view()}

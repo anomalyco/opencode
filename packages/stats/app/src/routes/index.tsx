@@ -5,7 +5,7 @@ import { geoEquirectangular, geoPath } from "d3-geo"
 import { scaleSqrt } from "d3-scale"
 import countryCodesSource from "i18n-iso-countries/codes.json?raw"
 import { feature, mesh } from "topojson-client"
-import countriesTopologySource from "world-atlas/countries-110m.json?raw"
+import countriesTopologySource from "world-atlas/countries-50m.json?raw"
 import ibmPlexMonoRegularLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Regular-Latin1.woff2?url"
 import ibmPlexMonoMediumLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Medium-Latin1.woff2?url"
 import ibmPlexMonoSemiBoldLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-SemiBold-Latin1.woff2?url"
@@ -27,6 +27,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, 
 import { getRequestEvent } from "solid-js/web"
 import type { FeatureCollection, GeometryObject, GeoJsonProperties } from "geojson"
 import type { GeometryCollection, Topology } from "topojson-specification"
+import { findModelCatalogEntry, getModelCatalog, type ModelCatalog } from "./model-catalog"
 import {
   applyThemePreference,
   Footer,
@@ -48,8 +49,9 @@ const rangeLabels: Record<UsageRange, string> = {
   "1M": "1 Month",
   "2M": "2 Months",
 }
-const statsHomeTitle = "OpenCode Data"
-const statsHomeDescription = "OpenCode usage data, market share, token cost, and session cost."
+const statsHomeTitle = "AI Model Usage Rankings | OpenCode Data"
+const statsHomeDescription =
+  "Explore OpenCode Go usage across AI models, including token volume, rankings, market share, token pricing, session cost, cache ratio, and geo breakdowns."
 const statsHomeFallbackUrl = "https://opencode.ai/data/"
 const statsUnfurlPath = "banner.jpg"
 const statsUnfurlAlt = "OpenCode Data wordmark on a dark patterned background"
@@ -101,6 +103,7 @@ const worldPath = geoPath(worldProjection)
 const worldCountryPaths = worldCountries.features.map((country) => ({
   id: String(country.id ?? "").padStart(3, "0"),
   path: worldPath(country) ?? "",
+  marker: geoCountryMarker(country),
 }))
 const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a, b) => a !== b)) ?? ""
 
@@ -118,6 +121,7 @@ export default function StatsHome() {
   )
   const statsUnfurlUrl = new URL(statsUnfurlPath, statsHomeUrl).toString()
   const data = createAsync(() => getData())
+  const catalog = createAsync(() => getModelCatalog())
   const githubStars = createAsync(() => getGitHubStars())
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const updateThemePreference = (preference: ThemePreference) => {
@@ -168,7 +172,7 @@ export default function StatsHome() {
                 <Hero updatedAt={stats().updatedAt} />
                 <TopModelsSection data={stats().usage} leaderboard={stats().leaderboard} />
                 <SessionCostSection data={stats().sessionCost} />
-                <TokenCostSection data={stats().tokenCost} />
+                <TokenCostSection data={stats().tokenCost} catalog={catalog() ?? null} />
                 <CacheRatioSection data={stats().cacheRatio} />
                 <MarketShareSection data={stats().market} />
                 <GeoBreakdownSection data={stats().country} />
@@ -807,10 +811,8 @@ function stackedTopModelsSegments(point: UsagePoint, order: Map<string, number>)
 }
 
 function getTopModelsSegmentOrder(data: UsagePoint[]) {
-  return getRankOrder(
-    data.flatMap((point) =>
-      point.segments.map((segment, index) => ({ key: segment.model, value: segment.value, index })),
-    ),
+  return new Map(
+    data.find((point) => point.segments.length > 0)?.segments.map((segment, index) => [segment.model, index]) ?? [],
   )
 }
 
@@ -868,9 +870,7 @@ function Leaderboard(props: {
   onActiveModelChange: (model: string | undefined) => void
 }) {
   const featured = createMemo(() => props.data.slice(0, 3))
-  const columns = createMemo(() =>
-    [0, 1, 2].map((index) => props.data.slice(3 + index * 5, 8 + index * 5)).filter((column) => column.length > 0),
-  )
+  const compact = createMemo(() => props.data.slice(3))
 
   return (
     <div id="leaderboard" data-component="leaderboard" role="list" aria-label="Model token leaderboard">
@@ -888,20 +888,14 @@ function Leaderboard(props: {
       </div>
       <div data-slot="leaderboard-pattern" aria-hidden="true" />
       <div data-slot="leaderboard-compact">
-        <For each={columns()}>
-          {(column) => (
-            <div data-slot="leaderboard-column">
-              <For each={column}>
-                {(entry) => (
-                  <LeaderboardCard
-                    entry={entry}
-                    size="compact"
-                    active={props.activeModel === entry.model}
-                    onActiveModelChange={props.onActiveModelChange}
-                  />
-                )}
-              </For>
-            </div>
+        <For each={compact()}>
+          {(entry) => (
+            <LeaderboardCard
+              entry={entry}
+              size="compact"
+              active={props.activeModel === entry.model}
+              onActiveModelChange={props.onActiveModelChange}
+            />
           )}
         </For>
       </div>
@@ -1293,6 +1287,7 @@ function GeoWorldMap(props: {
             return (
               <path
                 d={country.path}
+                data-country-id={country.id}
                 data-has-data={entry() ? "true" : undefined}
                 data-active={entry()?.country === props.activeCountry ? "true" : undefined}
                 style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
@@ -1308,6 +1303,37 @@ function GeoWorldMap(props: {
                   props.onActiveCountryChange(item.country)
                 }}
               />
+            )
+          }}
+        </For>
+      </g>
+      <g data-slot="geo-country-markers">
+        <For each={worldCountryPaths}>
+          {(country) => {
+            const entry = () => props.countryById.get(country.id)
+            return (
+              <Show when={country.marker && entry() ? country.marker : undefined}>
+                {(marker) => (
+                  <circle
+                    cx={marker().x}
+                    cy={marker().y}
+                    r={entry()?.country === props.activeCountry ? 3.4 : 2.4}
+                    data-active={entry()?.country === props.activeCountry ? "true" : undefined}
+                    style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
+                    aria-hidden="true"
+                    onPointerEnter={() => {
+                      const item = entry()
+                      if (!item) return
+                      props.onActiveCountryChange(item.country)
+                    }}
+                    onClick={() => {
+                      const item = entry()
+                      if (!item) return
+                      props.onActiveCountryChange(item.country)
+                    }}
+                  />
+                )}
+              </Show>
             )
           }}
         </For>
@@ -1356,6 +1382,14 @@ function GeoCountryList(props: {
 
 function countryNumericId(country: string) {
   return countryNumericIds.get(country.toUpperCase())?.padStart(3, "0")
+}
+
+function geoCountryMarker(country: (typeof worldCountries.features)[number]) {
+  const bounds = worldPath.bounds(country)
+  const [x, y] = worldPath.centroid(country)
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined
+  if (bounds[1][0] - bounds[0][0] >= 3 && bounds[1][1] - bounds[0][1] >= 3) return undefined
+  return { x, y }
 }
 
 function formatCountryName(country: string) {
@@ -1454,10 +1488,10 @@ function marketDateParts(label: string) {
   return { start: start ?? label, end: end ?? start ?? label }
 }
 
-function TokenCostSection(props: { data: StatsHomeData["tokenCost"] }) {
+function TokenCostSection(props: { data: StatsHomeData["tokenCost"]; catalog: ModelCatalog | null }) {
   const [product, setProduct] = createSignal<TokenProduct>("Go")
   const [activeIndex, setActiveIndex] = createSignal(2)
-  const data = createMemo(() => props.data[product()])
+  const data = createMemo(() => priceTokenCostFromCatalog(props.data[product()], props.catalog))
   const visible = createMemo(() => data().slice(0, 13))
   const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(visible().length - 1, 0)))
 
@@ -1642,7 +1676,7 @@ function formatRatio(value: number) {
 }
 
 function formatDollars(value: number) {
-  return `$${value.toFixed(2)}`
+  return `$${value.toFixed(value > 0 && value < 0.01 ? 4 : 2)}`
 }
 
 function MetricBar(props: { value: number; max: number; active: boolean }) {
@@ -1758,6 +1792,29 @@ function LiveIndicator() {
 function formatTokenCount(value: number) {
   if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}M`
   return `${Math.round(value / 1_000)}K`
+}
+
+function priceTokenCostFromCatalog(data: TokenCostEntry[], catalog: ModelCatalog | null) {
+  if (!catalog) return data
+  return data
+    .flatMap((item) => {
+      const cost = catalogModelCost(catalog, item.model)
+      if (!cost) return []
+      return [
+        {
+          ...item,
+          total: cost.output,
+          input: cost.input,
+          output: cost.output,
+          cached: cost.cacheRead ?? cost.input,
+        },
+      ]
+    })
+    .toSorted((a, b) => a.total - b.total || a.model.localeCompare(b.model))
+}
+
+function catalogModelCost(catalog: ModelCatalog, model: string) {
+  return findModelCatalogEntry(catalog, model)?.cost
 }
 
 function formatSessionCost(value: number) {
