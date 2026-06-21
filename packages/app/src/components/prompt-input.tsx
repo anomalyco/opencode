@@ -204,6 +204,8 @@ const EXAMPLES = [
   "prompt.example.25",
 ] as const
 
+const RTL_RE = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/
+
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
 
@@ -385,13 +387,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (store.mode === "shell") return 0
     return prompt.context.items().filter((item) => !!item.comment?.trim()).length
   })
-  const blank = createMemo(() => {
-    const text = prompt
+  const promptText = createMemo(() =>
+    prompt
       .current()
       .map((part) => ("content" in part ? part.content : ""))
-      .join("")
-    return text.trim().length === 0 && imageAttachments().length === 0 && commentCount() === 0
-  })
+      .join(""),
+  )
+  const promptIsRtl = createMemo(() => store.mode === "normal" && RTL_RE.test(promptText()))
+  const promptDirection = createMemo(() => (promptIsRtl() ? "rtl" : "ltr"))
+  const promptTextStyle = createMemo<JSX.CSSProperties>(() => ({
+    direction: promptDirection(),
+    "text-align": promptIsRtl() ? "right" : "left",
+  }))
+  const blank = createMemo(() => promptText().trim().length === 0 && imageAttachments().length === 0 && commentCount() === 0)
   const stopping = createMemo(() => working() && blank())
   const tip = () => {
     if (stopping()) {
@@ -1568,6 +1576,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     role="textbox"
                     aria-multiline="true"
                     aria-label={designPlaceholder()}
+                    dir={promptDirection()}
                     contenteditable="true"
                     autocapitalize={store.mode === "normal" ? "sentences" : "off"}
                     autocorrect={store.mode === "normal" ? "on" : "off"}
@@ -1588,11 +1597,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                       "[&_[data-type=agent]]:text-syntax-type": true,
                       "font-mono!": store.mode === "shell",
                     }}
+                    style={promptTextStyle()}
                   />
                   <div
                     data-component={newSession() ? "session-new-design-text" : "session-composer-text"}
                     class="absolute top-0 inset-x-0 px-4 pt-4 pointer-events-none whitespace-nowrap truncate leading-5 text-[13px] font-[440] text-v2-text-text-faint [font-family:Inter,var(--font-family-sans)]"
                     classList={{ "font-mono!": store.mode === "shell", hidden: prompt.dirty() }}
+                    style={promptTextStyle()}
                   >
                     {designPlaceholder()}
                   </div>
@@ -1747,6 +1758,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   role="textbox"
                   aria-multiline="true"
                   aria-label={placeholder()}
+                  dir={promptDirection()}
                   contenteditable="true"
                   autocapitalize={store.mode === "normal" ? "sentences" : "off"}
                   autocorrect={store.mode === "normal" ? "on" : "off"}
@@ -1767,12 +1779,12 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     "[&_[data-type=agent]]:text-syntax-type": true,
                     "font-mono!": store.mode === "shell",
                   }}
-                  style={{ "padding-bottom": space }}
+                  style={{ "padding-bottom": space, ...promptTextStyle() }}
                 />
                 <div
                   class="absolute top-0 inset-x-0 pl-3 pr-2 pt-2 text-14-regular text-text-weak pointer-events-none whitespace-nowrap truncate"
                   classList={{ "font-mono!": store.mode === "shell" }}
-                  style={{ "padding-bottom": space, display: prompt.dirty() ? "none" : undefined }}
+                  style={{ "padding-bottom": space, display: prompt.dirty() ? "none" : undefined, ...promptTextStyle() }}
                 >
                   {placeholder()}
                 </div>
