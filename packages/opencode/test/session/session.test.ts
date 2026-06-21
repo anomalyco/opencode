@@ -246,3 +246,27 @@ describe("Session", () => {
     }),
   )
 })
+
+describe("session.setShare", () => {
+  it.instance("clears the share url on unshare and keeps it cleared after later patches", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const created = yield* Effect.acquireRelease(session.create({ title: "shared" }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+
+      yield* session.setShare({ sessionID: created.id, share: { url: "https://opencode.ai/s/abc123" } })
+      const shared = yield* session.get(created.id)
+      expect(shared.share?.url).toBe("https://opencode.ai/s/abc123")
+
+      yield* session.setShare({ sessionID: created.id, share: undefined })
+      const unshared = yield* session.get(created.id)
+      expect(unshared.share).toBeUndefined()
+
+      // a later unrelated patch must not bring back a stale share url from the persisted row
+      yield* session.setTitle({ sessionID: created.id, title: "after unshare" })
+      const afterPatch = yield* session.get(created.id)
+      expect(afterPatch.share).toBeUndefined()
+    }),
+  )
+})
