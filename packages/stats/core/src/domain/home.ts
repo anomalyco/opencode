@@ -130,26 +130,28 @@ type ModelAggregate = {
   totalCostMicrocents: number
 }
 
-export const getStatsHomeData: () => Effect.Effect<
+export function getStatsHomeData(): Effect.Effect<
   StatsHomeData,
   DatabaseError,
   ModelStatRepo | ProviderStatRepo | GeoStatRepo
-> = Effect.fn("StatsHome.getData")(function* () {
-  const modelStats = yield* ModelStatRepo
-  const providerStats = yield* ProviderStatRepo
-  const geoStats = yield* GeoStatRepo
-  const [modelRows, providerRows, geoRows] = yield* Effect.all(
-    [modelStats.listDaily(), providerStats.listDaily(), geoStats.listDaily()],
-    { concurrency: "unbounded" },
-  )
-  return buildStatsHomeData(modelRows, providerRows, geoRows)
-})
+> {
+  return Effect.gen(function* () {
+    const modelStats = yield* ModelStatRepo
+    const providerStats = yield* ProviderStatRepo
+    const geoStats = yield* GeoStatRepo
+    const [modelRows, providerRows, geoRows] = yield* Effect.all(
+      [modelStats.listDaily(), providerStats.listDaily(), geoStats.listDaily()],
+      { concurrency: "unbounded" },
+    )
+    return buildStatsHomeData(modelRows, providerRows, geoRows)
+  })
+}
 
-export const getStatsModelData: (
+export function getStatsModelData(
   model: string,
   provider?: string,
-) => Effect.Effect<StatsModelData | null, DatabaseError, ModelStatRepo | GeoStatRepo> = Effect.fn("StatsModel.getData")(
-  function* (model, provider) {
+): Effect.Effect<StatsModelData | null, DatabaseError, ModelStatRepo | GeoStatRepo> {
+  return Effect.gen(function* () {
     const modelStats = yield* ModelStatRepo
     const geoStats = yield* GeoStatRepo
     const modelRows = yield* modelStats.listDaily()
@@ -165,14 +167,15 @@ export const getStatsModelData: (
       }),
       provider,
     )
-  },
-)
+  })
+}
 
-export const getStatsLabData: (provider: string) => Effect.Effect<StatsLabData | null, DatabaseError, ModelStatRepo> =
-  Effect.fn("StatsLab.getData")(function* (provider) {
+export function getStatsLabData(provider: string): Effect.Effect<StatsLabData | null, DatabaseError, ModelStatRepo> {
+  return Effect.gen(function* () {
     const modelStats = yield* ModelStatRepo
     return buildStatsLabData(provider, yield* modelStats.listDaily())
   })
+}
 
 function buildStatsHomeData(
   modelRows: ModelStatMetric[],
