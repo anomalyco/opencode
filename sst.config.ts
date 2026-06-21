@@ -29,6 +29,18 @@ export default $config({
   },
   async run() {
     const stage = await import("./infra/stage.js")
+
+    if ($app.stage === "voice-staging") {
+      await import("./infra/app.js")
+      const voice = await import("./infra/voice.js")
+      return {
+        AppUrl: voice.appUrl,
+        OpencodeServerUrl: voice.opencodeServer.url,
+        VoiceSidecarUrl: voice.voiceSidecar.url,
+        AwsStage: stage.awsStage,
+      }
+    }
+
     await import("./infra/app.js")
     const lake = stage.deployAws ? await import("./infra/lake.js") : undefined
     const stats = stage.deployAws ? await import("./infra/stats.js") : undefined

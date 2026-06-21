@@ -1,0 +1,38 @@
+# OpenCode server for hosted voice (deploy from repo root).
+#   fly apps create opencode-voice-server
+#   fly volumes create tenants --size 10 --region iad -a opencode-voice-server
+#   fly secrets set OPENCODE_SERVER_PASSWORD=… XAI_API_KEY=… -a opencode-voice-server
+#   fly deploy . --config packages/opencode/fly.toml
+
+app = "opencode-voice-server"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile.server"
+
+[env]
+  OPENCODE_PORT = "4096"
+  OPENCODE_CORS_ORIGINS = "https://opencode-voice-ui.fly.dev,http://localhost:3000,http://127.0.0.1:3000"
+
+[http_service]
+  internal_port = 4096
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "90s"
+    interval = "30s"
+    method = "GET"
+    path = "/global/health"
+    timeout = "5s"
+
+[[vm]]
+  memory = "2gb"
+  cpu_kind = "shared"
+  cpus = 1
+
+[[mounts]]
+  source = "tenants"
+  destination = "/tenants"

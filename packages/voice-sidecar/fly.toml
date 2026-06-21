@@ -1,0 +1,36 @@
+# Voice sidecar for hosted voice (deploy from this directory).
+#   fly apps create opencode-voice-sidecar
+#   fly secrets set XAI_API_KEY=… OPENCODE_SERVER_PASSWORD=… VOICE_SIDECAR_TOKEN=… -a opencode-voice-sidecar
+#   fly secrets set VOICE_CORS_ORIGINS=https://opencode-voice-ui.fly.dev -a opencode-voice-sidecar
+#   fly secrets set OPENCODE_SERVER_URL=https://opencode-voice-server.fly.dev -a opencode-voice-sidecar
+#   fly deploy . --config fly.toml
+
+app = "opencode-voice-sidecar"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8765"
+  OPENCODE_MODEL_PROVIDER = "opencode"
+  OPENCODE_MODEL_ID = "big-pickle"
+
+[http_service]
+  internal_port = 8765
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "20s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+[[vm]]
+  memory = "1gb"
+  cpu_kind = "shared"
+  cpus = 1

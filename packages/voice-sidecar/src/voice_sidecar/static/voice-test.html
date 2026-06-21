@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>opencode voice test</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+      button { margin-right: 0.5rem; }
+      #log { white-space: pre-wrap; background: #111; color: #eee; padding: 1rem; border-radius: 8px; min-height: 240px; }
+      .status { font-weight: 600; margin: 1rem 0; }
+    </style>
+  </head>
+  <body>
+    <h1>Voice sidecar test</h1>
+    <p>Sidecar: <code id="sidecar"></code></p>
+    <div class="status" id="status">idle</div>
+    <button id="start">Start session</button>
+    <button id="mic" disabled>Enable mic</button>
+    <button id="stop" disabled>Stop mic</button>
+    <div id="log"></div>
+    <script>
+      const sidecar = location.origin;
+      document.getElementById("sidecar").textContent = sidecar;
+      const logEl = document.getElementById("log");
+      const statusEl = document.getElementById("status");
+      let ws = null;
+      let streamUrl = null;
+      let audioContext = null;
+      let processor = null;
+      let source = null;
+      let mediaStream = null;
+      let running = false;
+      let sendAudio = false;
+      let currentAudio = null;
+      let ttsQueue = [];
+      let ttsPlaying = false;
+
+      function log(line) {
+        logEl.textContent += line + "\n";
+        logEl.scrollTop = logEl.scrollHeight;
+      }
+
+      function setStatus(text) {
+        statusEl.textContent = text;
+      }
+
+      function setMicSend(enabled) {
+        sendAudio = enabled;
+      }
+
+      function stopTts() {
+        if (!currentAudio) return;
+        currentAudio.pause();
+        currentAudio = null;
+      }
+
+      function cancelTts() {
+        ttsQueue = [];
+        stopTts();
+        ttsPlaying = false;
+      }
+
+      function maybeBargeIn(text, speechFinal) {
+        if (!ttsPlaying && statusEl.textContent !== "speaking") return;
+        if (!text.trim() && !speechFinal) return;
+        cancelTts();
+        if (running) setMicSend(true);
+      }
+
+      function playTtsBlob(blob) {
+        ttsQueue.push(blob);
+        if (ttsPlaying) return;
+        ttsPlaying = true;
+        const next = () => {
+          const item = ttsQueue.shift();
+          if (!item) {
+            ttsPlaying = false;
+            return;
+          }
+          stopTts();
+          const url = URL.createObjectURL(item);
+          const audio = new Audio(url);
+          currentAudio = audio;
+          audio.onended = () => {
+            URL.revokeObjectURL(url);
+            currentAudio = null;
+            next();
+          };
+          audio.onerror = () => {
+            URL.revokeObjectURL(url);
+            currentAudio = null;
+            next();
+          };
+          audio.play();
+        };
+        next();
+      }
+
+      function downsampleTo16k(input, inputRate) {
+        const ratio = inputRate / 16000;
+        const outLen = Math.floor(input.length / ratio);
+        const out = new Int16Array(outLen);
+        for (let i = 0; i < outLen; i++) {
+          const idx = Math.floor(i * ratio);
+          const s = Math.max(-1, Math.min(1, input[idx]));
+          out[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        }
+        return out;
+      }
+
+      async function startSession() {
+        const directory = prompt("Workspace directory", "/Users/nivedita/git/opencode");
+        if (!directory) return;
+        const res = await fetch(sidecar + "/voice/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ directory, agent: "build" }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          log("session error: " + JSON.stringify(data));
+          return;
+        }
+        streamUrl = data.stream;
+        log("session " + data.id);
+        log("opencode " + data.opencode.sessionID);
+        ws = new WebSocket(streamUrl);
+        ws.binaryType = "arraybuffer";
+        ws.onopen = () => log("stream connected");
+        ws.onclose = () => { log("stream closed"); setStatus("disconnected"); };
+        ws.onerror = () => log("stream error");
+        ws.onmessage = (event) => {
+          if (typeof event.data !== "string") return;
+          const msg = JSON.parse(event.data);
+          if (msg.type === "status") {
+            setStatus(msg.state);
+            if (msg.state === "listening") setMicSend(running);
+            if (msg.state === "working" || msg.state === "transcribing") {
+              setMicSend(false);
+              cancelTts();
+            }
+          }
+          if (msg.type === "transcript") {
+            maybeBargeIn(msg.text, msg.speechFinal);
+            log((msg.speechFinal ? "🗣 " : "· ") + msg.text);
+          }
+          if (msg.type === "reply") log("🤖 " + msg.text);
+          if (msg.type === "tts" && msg.encoding === "base64") {
+            const bytes = Uint8Array.from(atob(msg.data), (c) => c.charCodeAt(0));
+            playTtsBlob(new Blob([bytes], { type: "audio/mpeg" }));
+          }
+          if (msg.type === "error") log("error: " + msg.message);
+          if (msg.type === "ready") log("ready · " + msg.sampleRate + " Hz pcm16");
+        };
+        document.getElementById("mic").disabled = false;
+      }
+
+      async function startMic() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+          log("connect a session first");
+          return;
+        }
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          audio: { echoCancellation: true, noiseSuppression: true },
+        });
+        audioContext = new AudioContext();
+        if (audioContext.state === "suspended") await audioContext.resume();
+        source = audioContext.createMediaStreamSource(mediaStream);
+        processor = audioContext.createScriptProcessor(4096, 1, 1);
+        processor.onaudioprocess = (event) => {
+          if (!running || !sendAudio || ws.readyState !== WebSocket.OPEN) return;
+          const input = event.inputBuffer.getChannelData(0);
+          const pcm = downsampleTo16k(input, audioContext.sampleRate);
+          ws.send(pcm.buffer);
+        };
+        source.connect(processor);
+        processor.connect(audioContext.destination);
+        running = true;
+        setMicSend(statusEl.textContent === "listening");
+        document.getElementById("mic").disabled = true;
+        document.getElementById("stop").disabled = false;
+        log("mic on · sending=" + sendAudio);
+      }
+
+      function stopMic() {
+        running = false;
+        if (processor) processor.disconnect();
+        if (source) source.disconnect();
+        if (audioContext) audioContext.close();
+        if (mediaStream) mediaStream.getTracks().forEach((t) => t.stop());
+        document.getElementById("mic").disabled = false;
+        document.getElementById("stop").disabled = true;
+        log("mic off");
+      }
+
+      document.getElementById("start").onclick = startSession;
+      document.getElementById("mic").onclick = startMic;
+      document.getElementById("stop").onclick = stopMic;
+    </script>
+  </body>
+</html>

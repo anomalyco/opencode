@@ -1,0 +1,5 @@
+.venv
+.voice-dev
+__pycache__
+*.pyc
+.git

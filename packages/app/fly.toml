@@ -1,0 +1,35 @@
+# Web UI for hosted voice (deploy from repo root).
+#   fly apps create opencode-voice-ui
+#   fly deploy . --config packages/app/fly.toml
+#
+# Update [build.args] if your server/sidecar app names differ.
+
+app = "opencode-voice-ui"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+  [build.args]
+    VITE_OPENCODE_SERVER_URL = "https://opencode-voice-server.fly.dev"
+    VITE_VOICE_SIDECAR_URL = "https://opencode-voice-sidecar.fly.dev"
+    OPENCODE_CHANNEL = "beta"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/"
+    timeout = "5s"
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1

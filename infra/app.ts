@@ -59,6 +59,15 @@ new sst.cloudflare.x.Astro("Web", {
   },
 })
 
+const webAppBuildEnv = (() => {
+  if ($app.stage !== "voice-staging") return {}
+  return {
+    VITE_OPENCODE_SERVER_URL: `https://server.${domain}`,
+    VITE_VOICE_SIDECAR_URL: `https://voice.${domain}`,
+    OPENCODE_CHANNEL: "beta",
+  }
+})()
+
 new sst.cloudflare.StaticSite("WebApp", {
   domain: "app." + domain,
   path: "packages/app",
@@ -66,4 +75,5 @@ new sst.cloudflare.StaticSite("WebApp", {
     command: "bun turbo build",
     output: "./dist",
   },
+  environment: webAppBuildEnv,
 })

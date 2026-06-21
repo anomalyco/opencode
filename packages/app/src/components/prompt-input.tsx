@@ -32,6 +32,7 @@ import {
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
+import { useServerSDK } from "@/context/server-sdk"
 import { useSync } from "@/context/sync"
 import { useComments } from "@/context/comments"
 import { Button } from "@opencode-ai/ui/button"
@@ -67,6 +68,8 @@ import { PromptContextItems } from "./prompt-input/context-items"
 import { PromptImageAttachments } from "./prompt-input/image-attachments"
 import { PromptDragOverlay } from "./prompt-input/drag-overlay"
 import { promptPlaceholder } from "./prompt-input/placeholder"
+import { createVoiceComposerState, voiceComposerBorderClass, voiceSidecarBaseUrl } from "./prompt-input/voice"
+import { PromptVoiceComposer } from "./prompt-input/voice-composer"
 import { showToast } from "@/utils/toast"
 import { ImagePreview } from "@opencode-ai/ui/image-preview"
 import { pathKey } from "@/utils/path-key"
@@ -206,6 +209,7 @@ const EXAMPLES = [
 
 export const PromptInput: Component<PromptInputProps> = (props) => {
   const sdk = useSDK()
+  const serverSDK = useServerSDK()
 
   const sync = useSync()
   const files = useFile()
@@ -342,6 +346,24 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   })
   const info = createMemo(() => (props.controls.session.id ? sync().session.get(props.controls.session.id) : undefined))
   const working = createMemo(() => sync().data.session_working(props.controls.session.id ?? ""))
+  const voice = createVoiceComposerState({
+    working,
+    connect: {
+      sidecarUrl: voiceSidecarBaseUrl,
+      opencodeUrl: () => serverSDK().url,
+      directory: () => sdk().directory,
+      sessionID: () => props.controls.session.id,
+      agent: () => props.controls.agents.current,
+      onError: (message) => {
+        showToast({
+          title: message.startsWith("prompt.")
+            ? language.t(message as "prompt.voice.error.noSession")
+            : message,
+          variant: "error",
+        })
+      },
+    },
+  })
   const imageAttachments = createMemo(() =>
     prompt.current().filter((part): part is ImageAttachmentPart => part.type === "image"),
   )
@@ -1519,6 +1541,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               classList={{
                 "group/prompt-input min-h-[96px] w-full rounded-xl bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]": true,
                 "border-icon-info-active border-dashed": store.draggingType !== null,
+                [voiceComposerBorderClass(voice.display())]: voice.display() !== "off",
                 [props.class ?? ""]: !!props.class,
               }}
             >
@@ -1597,6 +1620,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     {designPlaceholder()}
                   </div>
                 </div>
+                <Show when={store.mode === "normal"}>
+                  <div class="pointer-events-none absolute bottom-1 right-3 z-[1]">
+                    <PromptVoiceComposer
+                      design
+                      display={voice.display}
+                      showDisclosure={() => voice.store.showDisclosure}
+                      onToggle={voice.toggle}
+                      onDismissDisclosure={voice.dismissDisclosure}
+                      t={(key) => language.t(key as Parameters<typeof language.t>[0])}
+                    />
+                  </div>
+                </Show>
               </div>
               <div class="flex h-11 items-center px-2">
                 <div class="flex min-w-0 flex-1 items-center gap-0">
@@ -1692,6 +1727,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               "group/prompt-input": true,
               "focus-within:shadow-xs-border": true,
               "border-icon-info-active border-dashed": store.draggingType !== null,
+              [voiceComposerBorderClass(voice.display())]: voice.display() !== "off",
               [props.class ?? ""]: !!props.class,
             }}
           >
@@ -1727,7 +1763,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
               onMouseDown={(e) => {
                 const target = e.target
                 if (!(target instanceof HTMLElement)) return
-                if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"]')) {
+                if (target.closest('[data-action="prompt-attach"], [data-action="prompt-submit"], [data-action="prompt-voice"]')) {
                   return
                 }
                 editorRef?.focus()
@@ -1803,6 +1839,15 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 />
 
                 <div class="flex items-center gap-1 pointer-events-auto">
+                  <Show when={store.mode === "normal"}>
+                    <PromptVoiceComposer
+                      display={voice.display}
+                      showDisclosure={() => voice.store.showDisclosure}
+                      onToggle={voice.toggle}
+                      onDismissDisclosure={voice.dismissDisclosure}
+                      t={(key) => language.t(key as Parameters<typeof language.t>[0])}
+                    />
+                  </Show>
                   <Tooltip placement="top" inactive={!working() && blank()} value={tip()}>
                     <IconButton
                       data-action="prompt-submit"
