@@ -380,6 +380,7 @@ describe("prompt submit worktree selection", () => {
     let cleared = false
     
     const submit = createPromptSubmit({
+      prompt,
       info: () => ({ id: "session-1" }),
       imageAttachments: () => [],
       commentCount: () => 0,

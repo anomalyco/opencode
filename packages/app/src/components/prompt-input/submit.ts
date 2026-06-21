@@ -459,7 +459,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       // If we shouldn't queue but the agent is busy, we cannot submit.
       // This happens if the queue is full (e.g. max 1 message in steer/wrap mode).
       // We must block the submission entirely.
-      const status = sync.data.session_status?.[session.id]?.type ?? "idle"
+      const status = sync().data.session_status?.[session.id]?.type ?? "idle"
       const isBusy = status !== "idle"
       if (isBusy) {
         return

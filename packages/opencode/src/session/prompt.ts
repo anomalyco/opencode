@@ -1365,11 +1365,13 @@ export const layer = Layer.effect(
             const interrupt = yield* state.getInterrupt(sessionID)
             if (interrupt === "waitingSteer") {
               yield* state.clearInterrupt(sessionID)
-              return "break" as const
+              yield* status.set(sessionID, { type: "busy" })
+              return "continue" as const
             }
             if (interrupt === "haltingSteer") {
               yield* state.clearInterrupt(sessionID)
-              return "break" as const
+              yield* status.set(sessionID, { type: "busy" })
+              return "continue" as const
             }
 
             if (result === "stop") return "break" as const
