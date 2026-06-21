@@ -5,8 +5,8 @@ const BOM_CODE = 0xfeff
 const BOM = String.fromCharCode(BOM_CODE)
 
 export function split(text: string) {
-  if (text.charCodeAt(0) !== BOM_CODE) return { bom: false, text }
-  return { bom: true, text: text.slice(1) }
+  const stripped = text.replace(/^\uFEFF+/, "")
+  return { bom: stripped.length !== text.length, text: stripped }
 }
 
 export function join(text: string, bom: boolean) {
