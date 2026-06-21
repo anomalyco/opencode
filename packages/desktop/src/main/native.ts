@@ -417,8 +417,6 @@ export async function bundledCliPath() {
   const candidates = [
     join(process.resourcesPath, "sidecars", cliName()),
     join(app.getAppPath(), "resources", "sidecars", cliName()),
-    join(app.getAppPath(), "src-tauri", "sidecars", cliName()),
-    join(process.cwd(), "src-tauri", "sidecars", cliName()),
     join(process.cwd(), "resources", "sidecars", cliName()),
     join(process.cwd(), "..", "opencode", "dist", distName(), "bin", process.platform === "win32" ? "opencode.exe" : "opencode"),
   ]

@@ -3,7 +3,7 @@ import { getCurrentSidecar, windowsify, copyBinaryToSidecarFolder } from "./util
 
 await $`bun ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`
 
-const RUST_TARGET = Bun.env.TAURI_ENV_TARGET_TRIPLE
+const RUST_TARGET = Bun.env.RUST_TARGET
 
 const sidecarConfig = getCurrentSidecar(RUST_TARGET)
 const rustTarget = RUST_TARGET ?? sidecarConfig.rustTarget
