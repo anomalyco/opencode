@@ -50,6 +50,31 @@ const brokenPluginLayer = Layer.succeed(
   }),
 )
 
+let observedToolDefinitionDescription: string | undefined
+const observingPluginLayer = Layer.succeed(
+  Plugin.Service,
+  Plugin.Service.of({
+    init: () => Effect.void,
+    trigger: ((_name: unknown, input: unknown, output: unknown) => {
+      if (
+        _name === "tool.definition" &&
+        typeof input === "object" &&
+        input !== null &&
+        "toolID" in input &&
+        input.toolID === "bash" &&
+        typeof output === "object" &&
+        output !== null &&
+        "description" in output &&
+        typeof output.description === "string"
+      ) {
+        observedToolDefinitionDescription = output.description
+      }
+      return Effect.succeed(output)
+    }) as Plugin.Interface["trigger"],
+    list: () => Effect.succeed([]),
+  }),
+)
+
 const root = LayerNode.group([ToolRegistry.node, Agent.node])
 const replacements = [
   [Config.node, configLayer],
@@ -94,6 +119,9 @@ const withEmptyCodeMode = testEffect(
   ]),
 )
 const withBrokenPlugin = testEffect(LayerNode.compile(root, [...replacements, [Plugin.node, brokenPluginLayer]]))
+const withObservingPlugin = testEffect(
+  LayerNode.compile(root, [...replacements, [Plugin.node, observingPluginLayer]]),
+)
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -118,6 +146,53 @@ describe("tool.registry", () => {
       expect(shell?.description).toContain("Use Read")
       expect(shell?.description).not.toContain("Use Edit")
       expect(shell?.description).not.toContain("Use Write")
+    }),
+  )
+
+  it.instance("removes permission-denied shell tool hints for non-GPT models", () =>
+    Effect.gen(function* () {
+      const registry = yield* ToolRegistry.Service
+      const agent = yield* Agent.Service
+      const build = yield* agent.get("build")
+      if (!build) throw new Error("build agent not found")
+
+      const shell = (yield* registry.tools({
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("claude-sonnet-4"),
+        agent: {
+          ...build,
+          permission: [...build.permission, { permission: "edit", pattern: "*", action: "deny" }],
+        },
+      })).find((tool) => tool.id === "bash")
+
+      expect(shell?.description).toContain("Use Glob")
+      expect(shell?.description).toContain("Use Grep")
+      expect(shell?.description).toContain("Use Read")
+      expect(shell?.description).not.toContain("Use Edit")
+      expect(shell?.description).not.toContain("Use Write")
+    }),
+  )
+
+  withObservingPlugin.instance("filters unavailable tool hints before tool.definition plugins observe them", () =>
+    Effect.gen(function* () {
+      observedToolDefinitionDescription = undefined
+      const registry = yield* ToolRegistry.Service
+      const agent = yield* Agent.Service
+      const build = yield* agent.get("build")
+      if (!build) throw new Error("build agent not found")
+
+      yield* registry.tools({
+        providerID: ProviderV2.ID.opencode,
+        modelID: ModelV2.ID.make("claude-sonnet-4"),
+        agent: {
+          ...build,
+          permission: [...build.permission, { permission: "edit", pattern: "*", action: "deny" }],
+        },
+      })
+
+      expect(observedToolDefinitionDescription).toBeDefined()
+      expect(observedToolDefinitionDescription).not.toContain("Use Edit")
+      expect(observedToolDefinitionDescription).not.toContain("Use Write")
     }),
   )
 

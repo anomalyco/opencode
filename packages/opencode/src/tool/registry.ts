@@ -301,13 +301,17 @@ const layer = Layer.effect(
         ? yield* describeCodeMode(input)
         : undefined
       const visible = filtered.filter((tool) => tool.id !== "execute" || codeModeDescription)
-      const available = new Set(visible.map((tool) => tool.id))
+      const disabled = Permission.disabled(
+        visible.map((tool) => tool.id),
+        input.agent.permission,
+      )
+      const available = new Set(visible.map((tool) => tool.id).filter((id) => !disabled.has(id)))
 
       return yield* Effect.forEach(
         visible,
         Effect.fnUntraced(function* (tool: Tool.Def) {
           const output = {
-            description: tool.description,
+            description: describeAvailableTools(tool.id, tool.description, available),
             parameters: tool.parameters,
             jsonSchema: tool.jsonSchema,
           }
