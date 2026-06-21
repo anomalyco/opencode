@@ -36,7 +36,7 @@ const model = (api: Api, variants: ModelV2.Info["variants"] = []) =>
       options: { store: false, serviceTier: "priority" },
     },
     variants,
-    time: { released: DateTime.makeUnsafe(0) },
+    time: { released: 0 },
     cost: [],
     status: "active",
     enabled: true,

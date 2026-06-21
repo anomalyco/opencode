@@ -6,7 +6,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { GooglePlugin } from "@opencode-ai/core/plugin/provider/google"
 import { testEffect } from "../lib/effect"
-import { it, model } from "./provider-helper"
+import { addPlugin, it, model } from "./provider-helper"
 
 const itWithAISDK = testEffect(
   AISDK.layer.pipe(Layer.provideMerge(PluginV2.locationLayer.pipe(Layer.provide(EventV2.defaultLayer)))),
@@ -16,7 +16,7 @@ describe("GooglePlugin", () => {
   it.effect("creates a Google Generative AI SDK for @ai-sdk/google using the provider ID as SDK name", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(GooglePlugin)
+      yield* addPlugin(plugin, GooglePlugin)
       const result = yield* plugin.trigger(
         "aisdk.sdk",
         {
@@ -34,7 +34,7 @@ describe("GooglePlugin", () => {
   it.effect("ignores non-Google SDK packages", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(GooglePlugin)
+      yield* addPlugin(plugin, GooglePlugin)
       const result = yield* plugin.trigger(
         "aisdk.sdk",
         { model: model("google", "gemini"), package: "@ai-sdk/google-vertex", options: { name: "google" } },
@@ -48,7 +48,7 @@ describe("GooglePlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const aisdk = yield* AISDK.Service
-      yield* plugin.add(GooglePlugin)
+      yield* addPlugin(plugin, GooglePlugin)
       const language = yield* aisdk.language(
         model("custom-google", "alias", {
           api: {

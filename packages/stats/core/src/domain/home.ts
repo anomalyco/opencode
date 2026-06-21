@@ -1,8 +1,9 @@
+import { Client } from "@planetscale/database"
 import { Effect } from "effect"
-import { DatabaseError } from "../database"
-import { GeoStatRepo, type GeoStatMetric } from "./geo"
-import { ModelStatRepo, type ModelStatMetric } from "./model"
-import { ProviderStatRepo, type ProviderStatMetric } from "./provider"
+import { Resource } from "sst/resource"
+import type { GeoStatMetric } from "./geo"
+import type { ModelStatMetric } from "./model"
+import type { ProviderStatMetric } from "./provider"
 
 export type UsageProduct = "All Users" | "Zen" | "Go" | "Enterprise"
 export type TokenProduct = "Zen" | "Go" | "Enterprise"
@@ -91,6 +92,14 @@ export type StatsHomeData = {
   country: Record<UsageRange, CountryEntry[]>
 }
 
+export class StatsDataError extends Error {
+  override name = "StatsDataError"
+
+  constructor(readonly cause: unknown) {
+    super("Failed to load stats data")
+  }
+}
+
 const DAY_MS = 86_400_000
 const TOKEN_SCALE = 1_000_000
 const DOLLARS_PER_MICROCENT = 1 / 100_000_000
@@ -130,49 +139,136 @@ type ModelAggregate = {
   totalCostMicrocents: number
 }
 
-export const getStatsHomeData: () => Effect.Effect<
-  StatsHomeData,
-  DatabaseError,
-  ModelStatRepo | ProviderStatRepo | GeoStatRepo
-> = Effect.fn("StatsHome.getData")(function* () {
-  const modelStats = yield* ModelStatRepo
-  const providerStats = yield* ProviderStatRepo
-  const geoStats = yield* GeoStatRepo
-  const [modelRows, providerRows, geoRows] = yield* Effect.all(
-    [modelStats.listDaily(), providerStats.listDaily(), geoStats.listDaily()],
-    { concurrency: "unbounded" },
-  )
-  return buildStatsHomeData(modelRows, providerRows, geoRows)
-})
+type RawRow = Record<string, unknown>
 
-export const getStatsModelData: (
+export function getStatsHomeData(): Effect.Effect<StatsHomeData, StatsDataError> {
+  return Effect.tryPromise({
+    try: async () => {
+      const [modelRows, providerRows, geoRows] = await Promise.all([
+        listModelDaily(),
+        listProviderDaily(),
+        listGeoDaily(),
+      ])
+      return buildStatsHomeData(modelRows, providerRows, geoRows)
+    },
+    catch: (cause) => new StatsDataError(cause),
+  })
+}
+
+export function getStatsModelData(
   model: string,
   provider?: string,
-) => Effect.Effect<StatsModelData | null, DatabaseError, ModelStatRepo | GeoStatRepo> = Effect.fn("StatsModel.getData")(
-  function* (model, provider) {
-    const modelStats = yield* ModelStatRepo
-    const geoStats = yield* GeoStatRepo
-    const modelRows = yield* modelStats.listDaily()
-    const normalized = modelRows.flatMap(normalizeStatRow)
-    const resolvedModel = resolveModelName(model, normalized, provider)
-    if (!resolvedModel) return null
-    return buildStatsModelData(
-      resolvedModel,
-      modelRows,
-      yield* geoStats.listDaily({
-        model: resolvedModel,
-        provider: resolveModelProvider(resolvedModel, normalized, provider),
-      }),
-      provider,
-    )
-  },
-)
-
-export const getStatsLabData: (provider: string) => Effect.Effect<StatsLabData | null, DatabaseError, ModelStatRepo> =
-  Effect.fn("StatsLab.getData")(function* (provider) {
-    const modelStats = yield* ModelStatRepo
-    return buildStatsLabData(provider, yield* modelStats.listDaily())
+): Effect.Effect<StatsModelData | null, StatsDataError> {
+  return Effect.tryPromise({
+    try: async () => {
+      const modelRows = await listModelDaily()
+      const normalized = modelRows.flatMap(normalizeStatRow)
+      const resolvedModel = resolveModelName(model, normalized, provider)
+      if (!resolvedModel) return null
+      return buildStatsModelData(
+        resolvedModel,
+        modelRows,
+        await listGeoDaily({
+          model: resolvedModel,
+          provider: resolveModelProvider(resolvedModel, normalized, provider),
+        }),
+        provider,
+      )
+    },
+    catch: (cause) => new StatsDataError(cause),
   })
+}
+
+export function getStatsLabData(provider: string): Effect.Effect<StatsLabData | null, StatsDataError> {
+  return Effect.tryPromise({
+    try: async () => buildStatsLabData(provider, await listModelDaily()),
+    catch: (cause) => new StatsDataError(cause),
+  })
+}
+
+async function listModelDaily(): Promise<ModelStatMetric[]> {
+  return (
+    await queryRows(`select period_key, updated_at, tier, provider, model, sessions, unique_users, input_tokens,
+    output_tokens, reasoning_tokens, cache_read_tokens, total_tokens, input_cost_microcents, output_cost_microcents,
+    total_cost_microcents from model_stat where grain = 'day' and client = 'all' and source = 'all'
+    and tier in ('Go', 'go') order by period_key`)
+  ).map((row) => ({
+    periodKey: stringValue(row.period_key),
+    updatedAt: dateValue(row.updated_at),
+    tier: stringValue(row.tier),
+    provider: stringValue(row.provider),
+    model: stringValue(row.model),
+    sessions: numberValue(row.sessions),
+    uniqueUsers: numberValue(row.unique_users),
+    inputTokens: numberValue(row.input_tokens),
+    outputTokens: numberValue(row.output_tokens),
+    reasoningTokens: numberValue(row.reasoning_tokens),
+    cacheReadTokens: numberValue(row.cache_read_tokens),
+    totalTokens: numberValue(row.total_tokens),
+    inputCostMicrocents: numberValue(row.input_cost_microcents),
+    outputCostMicrocents: numberValue(row.output_cost_microcents),
+    totalCostMicrocents: numberValue(row.total_cost_microcents),
+  }))
+}
+
+async function listProviderDaily(): Promise<ProviderStatMetric[]> {
+  return (
+    await queryRows(`select period_key, updated_at, tier, provider, total_tokens from provider_stat
+    where grain = 'day' and client = 'all' and source = 'all' and tier in ('Go', 'go') order by period_key`)
+  ).map((row) => ({
+    periodKey: stringValue(row.period_key),
+    updatedAt: dateValue(row.updated_at),
+    tier: stringValue(row.tier),
+    provider: stringValue(row.provider),
+    totalTokens: numberValue(row.total_tokens),
+  }))
+}
+
+async function listGeoDaily(opts?: { provider?: string; model?: string }): Promise<GeoStatMetric[]> {
+  const scope =
+    opts?.model && opts.provider
+      ? "and provider = ? and model = ?"
+      : opts?.model
+        ? "and model = ?"
+        : "and provider = 'all' and model = 'all'"
+  const params = opts?.model && opts.provider ? [opts.provider, opts.model] : opts?.model ? [opts.model] : []
+  return (
+    await queryRows(
+      `select period_key, updated_at, tier, provider, model, country, continent, total_tokens from geo_stat
+    where grain = 'day' and client = 'all' and source = 'all' and tier in ('Go', 'go') ${scope} order by period_key`,
+      params,
+    )
+  ).map((row) => ({
+    periodKey: stringValue(row.period_key),
+    updatedAt: dateValue(row.updated_at),
+    tier: stringValue(row.tier),
+    provider: stringValue(row.provider),
+    model: stringValue(row.model),
+    country: stringValue(row.country),
+    continent: stringValue(row.continent),
+    totalTokens: numberValue(row.total_tokens),
+  }))
+}
+
+async function queryRows(query: string, params: string[] = []) {
+  return (await new Client({ url: databaseUrl() }).execute(query, params)).rows as RawRow[]
+}
+
+function databaseUrl() {
+  return process.env.DATABASE_URL ?? Resource.StatsDatabase.url
+}
+
+function stringValue(value: unknown) {
+  return value == null ? "" : String(value)
+}
+
+function numberValue(value: unknown) {
+  return Number(value ?? 0)
+}
+
+function dateValue(value: unknown) {
+  return value instanceof Date ? value : new Date(stringValue(value))
+}
 
 function buildStatsHomeData(
   modelRows: ModelStatMetric[],

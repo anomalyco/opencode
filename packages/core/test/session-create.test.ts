@@ -220,8 +220,8 @@ describe("SessionV2.create", () => {
       expect(
         Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(2), Stream.runCollect)),
       ).toMatchObject([
-        { cursor: 1, event: { type: "session.next.prompt.admitted", data: { prompt: { text: "Hello" } } } },
-        { cursor: 2, event: { type: "session.next.prompt.promoted" } },
+        { durable: { seq: 1 }, type: "session.next.prompt.admitted", data: { prompt: { text: "Hello" } } },
+        { durable: { seq: 2 }, type: "session.next.prompt.promoted" },
       ])
     }),
   )
@@ -355,7 +355,7 @@ describe("SessionV2.create", () => {
       expect(yield* session.get(created.id)).toMatchObject({ model })
       expect(
         Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(1), Stream.runCollect)),
-      ).toMatchObject([{ event: { type: "session.next.model.switched", data: { model } } }])
+      ).toMatchObject([{ type: "session.next.model.switched", data: { model } }])
     }),
   )
 

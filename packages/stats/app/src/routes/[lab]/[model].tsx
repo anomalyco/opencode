@@ -14,7 +14,6 @@ import {
   type StatsModelData,
   type UsageRange,
 } from "@opencode-ai/stats-core/domain/home"
-import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
@@ -27,6 +26,7 @@ import {
   type ModelCatalogCost,
   type ModelCatalogEntry,
 } from "../model-catalog"
+import { runStatsEffect } from "../../stats-runtime"
 import {
   applyThemePreference,
   Footer,
@@ -96,7 +96,7 @@ const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a
 
 const getModelData = query(async (lab: string, model: string) => {
   "use server"
-  return runtime.runPromise(getStatsModelData(model, lab))
+  return runStatsEffect(getStatsModelData(model, lab))
 }, "getStatsModelData")
 
 export default function StatsModel() {

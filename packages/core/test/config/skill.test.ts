@@ -9,6 +9,7 @@ import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SkillV2 } from "@opencode-ai/core/skill"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
+import { host } from "../plugin/host"
 
 const it = testEffect(Layer.empty)
 const decode = Schema.decodeUnknownSync(Config.Info)
@@ -18,16 +19,33 @@ describe("ConfigSkillPlugin.Plugin", () => {
     Effect.gen(function* () {
       const directory = AbsolutePath.make("/repo/packages/app")
       const sources: SkillV2.Source[] = []
-      const transform = Effect.fnUntraced(function* () {
-        return Effect.fnUntraced(function* (update: (editor: SkillV2.Editor) => void) {
-          update({
-            source: (source) => sources.push(source),
-            list: () => sources,
-          })
+      const transform = Effect.fnUntraced(function* (update: (draft: SkillV2.Draft) => void | Effect.Effect<void>) {
+        const result = update({
+          source: (source) => {
+            sources.push(source)
+          },
+          list: () => sources,
         })
+        if (Effect.isEffect(result)) yield* result
+        const dispose = Effect.sync(() => {
+          sources.length = 0
+        })
+        yield* Effect.addFinalizer(() => dispose)
+        return { dispose }
       })
 
-      yield* ConfigSkillPlugin.Plugin.effect.pipe(
+      yield* ConfigSkillPlugin.Plugin.effect(
+        host({
+          location: location({ directory }),
+          path: { ...host().path, home: "/home/test" },
+          skill: SkillV2.Service.of({
+            transform,
+            rebuild: () => Effect.void,
+            sources: () => Effect.succeed(sources),
+            list: () => Effect.succeed([]),
+          }),
+        }),
+      ).pipe(
         Effect.provideService(
           Config.Service,
           Config.Service.of({
@@ -41,16 +59,6 @@ describe("ConfigSkillPlugin.Plugin", () => {
                   }),
                 }),
               ]),
-          }),
-        ),
-        Effect.provideService(Global.Service, Global.Service.of(Global.make({ home: "/home/test" }))),
-        Effect.provideService(Location.Service, Location.Service.of(location({ directory }))),
-        Effect.provideService(
-          SkillV2.Service,
-          SkillV2.Service.of({
-            transform,
-            sources: () => Effect.succeed(sources),
-            list: () => Effect.succeed([]),
           }),
         ),
       )

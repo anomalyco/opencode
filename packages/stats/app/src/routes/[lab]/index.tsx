@@ -6,7 +6,6 @@ import {
   type ModelUsagePoint,
   type StatsLabData,
 } from "@opencode-ai/stats-core/domain/home"
-import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
@@ -17,6 +16,7 @@ import {
   type ModelCatalogEntry,
   type ModelCatalogLab,
 } from "../model-catalog"
+import { runStatsEffect } from "../../stats-runtime"
 import {
   applyThemePreference,
   Footer,
@@ -46,7 +46,7 @@ const labFooterLinks: readonly HeaderLink[] = [
 
 const getLabData = query(async (lab: string) => {
   "use server"
-  return runtime.runPromise(getStatsLabData(lab))
+  return runStatsEffect(getStatsLabData(lab))
 }, "getStatsLabData")
 
 export default function StatsLab() {
