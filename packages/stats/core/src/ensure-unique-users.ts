@@ -5,10 +5,7 @@ const tables = ["geo_stat", "model_stat", "provider_stat"] as const
 
 const client = new Client({ url: Resource.StatsDatabase.url })
 
-await tables.reduce(
-  (promise, table) => promise.then(() => ensureUniqueUsersColumn(table)),
-  Promise.resolve(),
-)
+await tables.reduce((promise, table) => promise.then(() => ensureUniqueUsersColumn(table)), Promise.resolve())
 
 async function ensureUniqueUsersColumn(table: (typeof tables)[number]) {
   const result = await client.execute<{ column_name: string }>(
