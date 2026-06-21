@@ -26,7 +26,7 @@ import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, 
 import { getRequestEvent } from "solid-js/web"
 import type { FeatureCollection, GeometryObject, GeoJsonProperties } from "geojson"
 import type { GeometryCollection, Topology } from "topojson-specification"
-import { statsRuntime } from "../stats-runtime"
+import { runStatsEffect } from "../stats-runtime"
 import { findModelCatalogEntry, getModelCatalog, type ModelCatalog } from "./model-catalog"
 import {
   applyThemePreference,
@@ -109,7 +109,7 @@ const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a
 
 const getData = query(async () => {
   "use server"
-  return statsRuntime.runPromise(getStatsHomeData())
+  return runStatsEffect(getStatsHomeData())
 }, "getStatsHomeData")
 
 export default function StatsHome() {

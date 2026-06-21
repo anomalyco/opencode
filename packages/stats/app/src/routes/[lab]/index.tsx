@@ -16,7 +16,7 @@ import {
   type ModelCatalogEntry,
   type ModelCatalogLab,
 } from "../model-catalog"
-import { statsRuntime } from "../../stats-runtime"
+import { runStatsEffect } from "../../stats-runtime"
 import {
   applyThemePreference,
   Footer,
@@ -46,7 +46,7 @@ const labFooterLinks: readonly HeaderLink[] = [
 
 const getLabData = query(async (lab: string) => {
   "use server"
-  return statsRuntime.runPromise(getStatsLabData(lab))
+  return runStatsEffect(getStatsLabData(lab))
 }, "getStatsLabData")
 
 export default function StatsLab() {
