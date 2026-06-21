@@ -547,6 +547,8 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
       { type: "user", text: prompt },
       {
         type: "assistant",
+        finish: "error",
+        error: { type: "unknown", message: "Provider turn interrupted" },
         content: [
           kind === "tool input"
             ? { type: "tool", id: fragmentID(kind, "interrupted"), state: { status: "error" } }
