@@ -68,7 +68,7 @@ export type RunTheme = {
   block: RunBlockTheme
 }
 
-type ThemeColor = Exclude<keyof TuiThemeCurrent, "thinkingOpacity">
+type ThemeColor = Exclude<keyof TuiThemeCurrent, "thinkingOpacity" | "_hasSelectedListItemText" | "transparent">
 type HexColor = `#${string}`
 type RefName = string
 type Variant = {
@@ -87,6 +87,7 @@ type ThemeJson = {
 
 type SharedSyntaxTheme = TuiThemeCurrent & {
   _hasSelectedListItemText: boolean
+  transparent: boolean
 }
 
 export const transparent = RGBA.fromValues(0, 0, 0, 0)
@@ -675,6 +676,7 @@ export async function resolveRunTheme(renderer: CliRenderer): Promise<RunTheme> 
     const syntaxTheme: SharedSyntaxTheme = {
       ...scrollbackTheme,
       _hasSelectedListItemText: true,
+      transparent: false,
     }
     const syntax = shared.generateSyntax(syntaxTheme)
     return map(
