@@ -340,11 +340,7 @@ function ModelOverview(props: { data: StatsModelData | null }) {
         {(data) => (
           <div data-component="model-metric-grid">
             <MetricCard label="Tokens" value={formatTokens(data().totals.tokens)} detail="last two months" />
-            <MetricCard
-              label="Unique Users"
-              value={formatUsers(data().totals.uniqueUsers)}
-              detail="last two months"
-            />
+            <MetricCard label="Unique Users" value={formatUsers(data().totals.uniqueUsers)} detail="last two months" />
             <MetricCard label="Sessions" value={formatInteger(data().totals.sessions)} detail="completed sessions" />
             <MetricCard
               label="Token Share"
