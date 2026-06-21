@@ -276,7 +276,10 @@ function chatInputs(inputs: Record<string, unknown>[]): Record<string, unknown>[
 const assertSystemPromptIsIdenticalAcrossTurns = Effect.fn(
   "test.assertSystemPromptIsIdenticalAcrossTurns",
 )(function* (opts: {
-  setupDir: (dir: string) => Effect.Effect<void, Error, FSUtil.Service>
+  // Receives both the tmpdir path and the LLM server URL so setupDir can
+  // write an opencode.json that includes the provider config alongside any
+  // custom instructions.
+  setupDir: (dir: string, llmUrl: string) => Effect.Effect<void, Error, FSUtil.Service>
   mutateBetweenTurns: Effect.Effect<void, Error, FSUtil.Service | TestInstance>
 }) {
   const { directory: dir } = yield* TestInstance
@@ -285,11 +288,7 @@ const assertSystemPromptIsIdenticalAcrossTurns = Effect.fn(
   const sessions = yield* Session.Service
   const config = yield* Config.Service
 
-  yield* writeText(
-    path.join(dir, "opencode.json"),
-    JSON.stringify({ $schema: "https://opencode.ai/config.json", ...providerCfg(llm.url) }),
-  )
-  yield* opts.setupDir(dir)
+  yield* opts.setupDir(dir, llm.url)
   yield* config.get()
 
   const chat = yield* sessions.create({ title: "Immutable System Prompt Test" })
@@ -331,14 +330,17 @@ it.instance(
   "system prompt instructions do not change when AGENTS.md is updated mid-session",
   () =>
     assertSystemPromptIsIdenticalAcrossTurns({
-      setupDir: (dir) =>
-        writeText(path.join(dir, "AGENTS.md"), "# Session Rules\n\nSEMICOLON_POLICY: always use semicolons"),
+      setupDir: (dir, llmUrl) =>
+        Effect.gen(function* () {
+          yield* writeText(
+            path.join(dir, "opencode.json"),
+            JSON.stringify({ $schema: "https://opencode.ai/config.json", ...providerCfg(llmUrl) }),
+          )
+          yield* writeText(path.join(dir, "AGENTS.md"), "# Session Rules\n\nSEMICOLON_POLICY: always use semicolons")
+        }),
       mutateBetweenTurns: Effect.gen(function* () {
         const { directory: dir } = yield* TestInstance
-        yield* writeText(
-          path.join(dir, "AGENTS.md"),
-          "# Session Rules\n\nSEMICOLON_POLICY: never use semicolons",
-        )
+        yield* writeText(path.join(dir, "AGENTS.md"), "# Session Rules\n\nSEMICOLON_POLICY: never use semicolons")
       }),
     }),
   { config: {} },
@@ -354,14 +356,14 @@ it.instance(
   "system prompt instructions do not change when a custom instruction file is updated mid-session",
   () =>
     assertSystemPromptIsIdenticalAcrossTurns({
-      setupDir: (dir) =>
+      setupDir: (dir, llmUrl) =>
         Effect.gen(function* () {
           yield* writeText(path.join(dir, "custom-rules.md"), "CUSTOM_POLICY: always lint before commit")
-          // Override opencode.json after the base one was written to include the custom instructions path
           yield* writeText(
             path.join(dir, "opencode.json"),
             JSON.stringify({
               $schema: "https://opencode.ai/config.json",
+              ...providerCfg(llmUrl),
               instructions: [path.join(dir, "custom-rules.md")],
             }),
           )
