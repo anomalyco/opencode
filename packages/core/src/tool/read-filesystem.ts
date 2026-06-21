@@ -13,44 +13,49 @@ export const MAX_MEDIA_INGEST_BYTES = 20 * 1024 * 1024
 const MAX_LINE_LENGTH = 2_000
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 
-export class BinaryFileError extends Error {
-  constructor(readonly resource: string) {
-    super(`Cannot read binary file: ${resource}`)
-    this.name = "BinaryFileError"
+export class BinaryFileError extends Schema.TaggedErrorClass<BinaryFileError>()("ReadTool.BinaryFileError", {
+  resource: Schema.String,
+}) {
+  override get message() {
+    return `Cannot read binary file: ${this.resource}`
   }
 }
 
-export class MediaIngestLimitError extends Error {
-  constructor(
-    readonly resource: string,
-    readonly maximumBytes: number,
-  ) {
-    super(`Media exceeds ${maximumBytes} byte ingestion limit: ${resource}`)
-    this.name = "MediaIngestLimitError"
+export class MediaIngestLimitError extends Schema.TaggedErrorClass<MediaIngestLimitError>()(
+  "ReadTool.MediaIngestLimitError",
+  {
+    resource: Schema.String,
+    maximumBytes: Schema.Number,
+  },
+) {
+  override get message() {
+    return `Media exceeds ${this.maximumBytes} byte ingestion limit: ${this.resource}`
   }
 }
 
-export class MalformedUtf8Error extends Error {
-  constructor(readonly resource: string) {
-    super(`File is not valid UTF-8: ${resource}`)
-    this.name = "MalformedUtf8Error"
+export class MalformedUtf8Error extends Schema.TaggedErrorClass<MalformedUtf8Error>()("ReadTool.MalformedUtf8Error", {
+  resource: Schema.String,
+}) {
+  override get message() {
+    return `File is not valid UTF-8: ${this.resource}`
   }
 }
 
-export class OffsetOutOfRangeError extends Error {
-  constructor(readonly offset: number) {
-    super(`Offset ${offset} is out of range`)
-    this.name = "OffsetOutOfRangeError"
+export class OffsetOutOfRangeError extends Schema.TaggedErrorClass<OffsetOutOfRangeError>()(
+  "ReadTool.OffsetOutOfRangeError",
+  { offset: Schema.Number },
+) {
+  override get message() {
+    return `Offset ${this.offset} is out of range`
   }
 }
 
-export class PathKindError extends Error {
-  constructor(
-    readonly resource: string,
-    readonly expected: "a file" | "a file or directory",
-  ) {
-    super(`Path is not ${expected}: ${resource}`)
-    this.name = "PathKindError"
+export class PathKindError extends Schema.TaggedErrorClass<PathKindError>()("ReadTool.PathKindError", {
+  resource: Schema.String,
+  expected: Schema.Literals(["a file", "a file or directory"]),
+}) {
+  override get message() {
+    return `Path is not ${this.expected}: ${this.resource}`
   }
 }
 
@@ -147,16 +152,16 @@ const binary = (resource: string, bytes: Uint8Array) => {
 const decodeUtf8 = (resource: string, decoder: TextDecoder, bytes?: Uint8Array) =>
   Effect.sync(() => decoder.decode(bytes, bytes === undefined ? undefined : { stream: true })).pipe(
     Effect.catchDefect((error) =>
-      error instanceof TypeError ? Effect.fail(new MalformedUtf8Error(resource)) : Effect.die(error),
+      error instanceof TypeError ? Effect.fail(new MalformedUtf8Error({ resource })) : Effect.die(error),
     ),
   )
 const decodeChunk = (resource: string, decoder: TextDecoder, bytes: Uint8Array) =>
-  bytes.includes(0) ? Effect.fail(new BinaryFileError(resource)) : decodeUtf8(resource, decoder, bytes)
+  bytes.includes(0) ? Effect.fail(new BinaryFileError({ resource })) : decodeUtf8(resource, decoder, bytes)
 
 export const inspect = Effect.fn("ReadTool.inspect")(function* (fs: FSUtil.Interface, input: string) {
   const info = yield* fs.stat(input)
   const type = info.type === "File" ? "file" : info.type === "Directory" ? "directory" : undefined
-  if (!type) return yield* Effect.fail(new PathKindError(input, "a file or directory"))
+  if (!type) return yield* Effect.fail(new PathKindError({ resource: input, expected: "a file or directory" }))
   return type
 })
 
@@ -171,7 +176,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
     Effect.gen(function* () {
       const file = yield* fs.open(real, { flag: "r" })
       const info = yield* file.stat
-      if (info.type !== "File") return yield* Effect.fail(new PathKindError(resource, "a file"))
+      if (info.type !== "File") return yield* Effect.fail(new PathKindError({ resource, expected: "a file" }))
       const first = Option.getOrElse(
         yield* file.readAlloc(Math.min(64 * 1024, Number(info.size) || 4 * 1024)),
         () => new Uint8Array(),
@@ -179,7 +184,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
       const mime = imageMime(first)
       if (mime) {
         if (info.size > MAX_MEDIA_INGEST_BYTES)
-          return yield* Effect.fail(new MediaIngestLimitError(resource, MAX_MEDIA_INGEST_BYTES))
+          return yield* Effect.fail(new MediaIngestLimitError({ resource, maximumBytes: MAX_MEDIA_INGEST_BYTES }))
         const chunks = [first]
         let total = first.length
         while (total <= MAX_MEDIA_INGEST_BYTES) {
@@ -189,7 +194,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
           total += chunk.value.length
         }
         if (total > MAX_MEDIA_INGEST_BYTES)
-          return yield* Effect.fail(new MediaIngestLimitError(resource, MAX_MEDIA_INGEST_BYTES))
+          return yield* Effect.fail(new MediaIngestLimitError({ resource, maximumBytes: MAX_MEDIA_INGEST_BYTES }))
         return {
           uri: pathToFileURL(real).href,
           name: path.basename(real),
@@ -202,7 +207,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
         }
       }
       if (startsWith(first, [0x25, 0x50, 0x44, 0x46]) || binary(resource, first))
-        return yield* Effect.fail(new BinaryFileError(resource))
+        return yield* Effect.fail(new BinaryFileError({ resource }))
       const paged = info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
       if (!paged) {
         const decoder = new TextDecoder("utf-8", { fatal: true })
@@ -288,7 +293,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
         if (!discard) pending += tail
         if (pending) append(pending.endsWith("\r") ? pending.slice(0, -1) : pending)
       }
-      if (!found && offset !== 1) return yield* Effect.fail(new OffsetOutOfRangeError(offset))
+      if (!found && offset !== 1) return yield* Effect.fail(new OffsetOutOfRangeError({ offset }))
       return new TextPage({
         type: "text-page",
         content: lines.join("\n"),

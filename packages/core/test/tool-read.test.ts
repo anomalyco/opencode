@@ -417,7 +417,7 @@ describe("ReadTool", () => {
 
   it.effect("returns expected filesystem failures to the model", () =>
     Effect.gen(function* () {
-      readFailure = new ReadToolFileSystem.BinaryFileError("archive.dat")
+      readFailure = new ReadToolFileSystem.BinaryFileError({ resource: "archive.dat" })
       const registry = yield* ToolRegistry.Service
 
       expect(
