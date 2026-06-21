@@ -112,10 +112,10 @@ function TaskRowsFixture() {
       <InlineToolRow icon="✱" complete={true} pending="">
         Grep "Task" (2 matches)
       </InlineToolRow>
-      <InlineToolRow icon="⠙" complete={true} pending="">
+      <InlineToolRow icon="⠙" complete={true} pending="" separate={true}>
         Explore Task — Inspect active task spacing
       </InlineToolRow>
-      <InlineToolRow icon="✓" complete={true} pending="">
+      <InlineToolRow icon="✓" complete={true} pending="" separate={true}>
         {"General Task — Confirm completed task spacing\n↳ 1 toolcall · 501ms"}
       </InlineToolRow>
       <InlineToolRow icon="→" complete={true} pending="">
@@ -134,7 +134,7 @@ function LoadedReadBeforeTaskFixture() {
       <box paddingLeft={3}>
         <text paddingLeft={3}>↳ Loaded src/cli/cmd/tui/routes/session/tools.tsx</text>
       </box>
-      <InlineToolRow icon="✓" complete={true} pending="">
+      <InlineToolRow icon="✓" complete={true} pending="" separate={true}>
         {"Explore Task — Inspect active task spacing\n↳ 1 toolcall · 501ms"}
       </InlineToolRow>
     </box>
@@ -312,7 +312,7 @@ describe("TUI inline tool wrapping", () => {
     expect(await renderFrame(() => <TaskRowsFixture />, { width: 72, height: 10 })).toMatchSnapshot()
   })
 
-  test("does not treat task rows differently from other inline rows", async () => {
+  test("separates a task row from a preceding inline detail", async () => {
     expect(await renderFrame(() => <LoadedReadBeforeTaskFixture />, { width: 72, height: 8 })).toMatchSnapshot()
   })
 
