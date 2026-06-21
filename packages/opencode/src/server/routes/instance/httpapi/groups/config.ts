@@ -22,7 +22,7 @@ export const ConfigReloadResponse = Schema.Struct({
 })
 export const ConfigBootstrapCompleteQuery = Schema.Struct({
   ...WorkspaceRoutingQueryFields,
-  cycle: Schema.optional(Schema.NumberFromString),
+  cycle: Schema.NumberFromString,
 })
 export const ConfigBootstrapCompleteResponse = Schema.Struct({
   success: Schema.Boolean,

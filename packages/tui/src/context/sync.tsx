@@ -190,19 +190,6 @@ export const {
             setStore("reloadPending", false)
             setStore("reloading", false)
           })
-          if (event.properties.resumeSessionID) {
-            void sdk.client.session
-              .prompt({
-                sessionID: event.properties.resumeSessionID,
-                parts: [
-                  {
-                    type: "text",
-                    text: "Configuration has been reloaded successfully. Continue where you left off.",
-                  },
-                ],
-              })
-              .catch(() => {})
-          }
           break
         case "permission.replied": {
           const requests = store.permission[event.properties.sessionID]
@@ -533,7 +520,6 @@ export const {
           })
         })
         .then(() => {
-          void sdk.client.config.bootstrapComplete({ workspace, cycle: String(cycle) }).catch(() => {})
           if (store.status !== "complete") setStore("status", "partial")
           // non-blocking
           void Promise.all([
@@ -553,6 +539,7 @@ export const {
             sdk.client.vcs.get({ workspace }).then((x) => setStore("vcs", reconcile(x.data))),
             project.workspace.sync(),
           ]).then(() => {
+            void sdk.client.config.bootstrapComplete({ workspace, cycle: String(cycle) }).catch(() => {})
             setStore("status", "complete")
           })
         })

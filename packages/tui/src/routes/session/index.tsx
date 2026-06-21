@@ -113,7 +113,6 @@ function goUpsellKeys(action: RetryAction) {
 }
 
 const sessionBindingCommands = [
-  "app.reload",
   "session.share",
   "session.rename",
   "session.timeline",
@@ -452,31 +451,6 @@ export function Session() {
   }
 
   const sessionCommandList = createMemo(() => [
-    {
-      title: "Reload configuration",
-      value: "app.reload",
-      category: "App",
-      slash: {
-        name: "reload",
-      },
-      run: async () => {
-        await sdk.client.config
-          .reload({ workspace: project.workspace.current() })
-          .then((res) => {
-            toast.show({
-              message: res.data?.immediate ? "Reloading configuration" : "Reload queued until sessions are idle",
-              variant: "info",
-            })
-          })
-          .catch((error) => {
-            toast.show({
-              message: error instanceof Error ? error.message : "Failed to reload configuration",
-              variant: "error",
-            })
-          })
-        dialog.clear()
-      },
-    },
     {
       title: session()?.share?.url ? "Copy share link" : "Share session",
       value: "session.share",

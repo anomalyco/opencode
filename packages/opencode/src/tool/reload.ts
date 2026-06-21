@@ -26,13 +26,13 @@ export const ReloadTool = Tool.define(
             metadata: {},
           })
 
-          const result = yield* ConfigReload.request({ resumeSessionID: ctx.sessionID })
+          const result = yield* ConfigReload.request()
 
           return {
             title: result.immediate ? "Configuration reload started" : "Configuration reload queued",
             output: result.immediate
-              ? "Reload started. The session will stop now and resume automatically after reload."
-              : "Reload queued. The session will stop now and resume automatically after reload.",
+              ? "Reload started. Wait for the reload to finish before continuing."
+              : "Reload queued. Wait for the reload to finish before continuing.",
             metadata: { queued: !result.immediate },
             stopSession: true,
           }

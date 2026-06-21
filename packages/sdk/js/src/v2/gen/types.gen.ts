@@ -1543,7 +1543,7 @@ export type GlobalEvent = {
         id: string
         type: "config.reload.done"
         properties: {
-          resumeSessionID?: string
+          [key: string]: unknown
         }
       }
     | {
@@ -5075,7 +5075,7 @@ export type EventConfigReloadDone = {
   id: string
   type: "config.reload.done"
   properties: {
-    resumeSessionID?: string
+    [key: string]: unknown
   }
 }
 
@@ -5637,10 +5637,10 @@ export type ConfigReloadResponse = ConfigReloadResponses[keyof ConfigReloadRespo
 export type ConfigBootstrapCompleteData = {
   body?: never
   path?: never
-  query?: {
+  query: {
     directory?: string
     workspace?: string
-    cycle?: string
+    cycle: string
   }
   url: "/config/bootstrap-complete"
 }

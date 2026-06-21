@@ -1524,10 +1524,10 @@ export class Config2 extends HeyApiClient {
    * Release the reload blocker after the TUI has bootstrapped against the new instance.
    */
   public bootstrapComplete<ThrowOnError extends boolean = false>(
-    parameters?: {
+    parameters: {
       directory?: string
       workspace?: string
-      cycle?: string
+      cycle: string
     },
     options?: Options<never, ThrowOnError>,
   ) {

@@ -22,9 +22,7 @@ export const Event = {
   }),
   Done: EventV2.define({
     type: "config.reload.done",
-    schema: {
-      resumeSessionID: Schema.optional(Schema.String),
-    },
+    schema: {},
   }),
 }
 
@@ -33,112 +31,142 @@ export type RequestResult = {
   input: InstanceStore.LoadInput
 }
 
-let pending = false
-let resumeSessionID: string | undefined
-let reloadInFlight = false
-let doneResumeSessionID: string | undefined
-let reloadInput: InstanceStore.LoadInput | undefined
-let bootstrapCycle = 0
-const active = new Set<string>()
-const blockers = new Set<string>()
+type State = {
+  pending: boolean
+  reloadInFlight: boolean
+  reloadInput?: InstanceStore.LoadInput
+  bootstrapCycle: number
+  active: Set<string>
+  blockers: Set<string>
+}
+
+const states = new Map<string, State>()
 
 export function isPending() {
-  return pending
+  return [...states.values()].some((state) => state.pending)
 }
 
 export const start = Effect.fn("ConfigReload.start")(function* (sessionID: string) {
-  active.add(sessionID)
+  const state = yield* currentState()
+  state.active.add(sessionID)
   yield* Effect.logDebug("config reload session started", { sessionID })
 })
 
 export const finish = Effect.fn("ConfigReload.finish")(function* (sessionID: string) {
-  active.delete(sessionID)
+  const state = yield* currentState()
+  state.active.delete(sessionID)
   yield* Effect.logDebug("config reload session finished", { sessionID })
-  yield* doneWhenUnblocked()
+  yield* continueOrDone(state)
 })
 
-export function getBootstrapCycle() {
-  return bootstrapCycle
-}
+export const getBootstrapCycle = Effect.fn("ConfigReload.getBootstrapCycle")(function* () {
+  return (yield* currentState()).bootstrapCycle
+})
 
 export const finishBlocker = Effect.fn("ConfigReload.finishBlocker")(function* (blockerID: string) {
-  blockers.delete(blockerID)
+  const state = yield* currentState()
+  state.blockers.delete(blockerID)
   yield* Effect.logDebug("config reload blocker finished", { blockerID })
-  yield* doneWhenUnblocked()
-  if (!pending || isBlocked()) return
-  yield* check()
+  yield* continueOrDone(state)
 })
 
-export const request = Effect.fn("ConfigReload.request")(function* (options?: { resumeSessionID?: string }) {
-  const input = yield* currentInput()
-  reloadInput = input
-  if (options?.resumeSessionID) resumeSessionID = options.resumeSessionID
-  if (isBlocked()) {
-    pending = true
-    yield* Effect.logInfo("config reload queued", { resumeSessionID })
+export const request = Effect.fn("ConfigReload.request")(function* () {
+  const current = yield* currentInput()
+  const state = getState(current.key)
+  state.reloadInput = current.input
+  if (isBlocked(state)) {
+    state.pending = true
+    yield* Effect.logInfo("config reload queued")
     yield* publish(Event.Pending, { pending: true })
-    return { immediate: false, input } satisfies RequestResult
+    return { immediate: false, input: current.input } satisfies RequestResult
   }
   yield* Effect.logInfo("config reload executing immediately")
-  yield* prepareExecution(input)
-  return { immediate: true, input } satisfies RequestResult
+  yield* prepareExecution(state, current.input)
+  return { immediate: true, input: current.input } satisfies RequestResult
 })
 
 export const check = Effect.fn("ConfigReload.check")(function* () {
-  if (!pending) return
-  if (isBlocked()) {
-    yield* Effect.logDebug("config reload still blocked", { active: [...active], blockers: [...blockers] })
+  const current = yield* currentInput()
+  const state = getState(current.key)
+  if (!state.pending) return
+  if (isBlocked(state)) {
+    yield* Effect.logDebug("config reload still blocked", { active: [...state.active], blockers: [...state.blockers] })
     return
   }
   yield* Effect.logInfo("config reload executing deferred request")
-  const execution = yield* prepareExecution(reloadInput ?? (yield* currentInput()))
+  const execution = yield* prepareExecution(state, state.reloadInput ?? current.input)
   // InstanceStore forks the new boot into its own scope before disposing the old
   // instance. This effect may be interrupted by disposal, so no logic follows it.
   yield* InstanceStore.Service.use((store) => store.reload(execution.input)).pipe(Effect.ignore)
 })
 
-function isBlocked() {
-  return active.size > 0 || blockers.size > 0
+function isBlocked(state: State) {
+  return state.active.size > 0 || state.blockers.size > 0
 }
 
 function currentInput() {
-  return Effect.map(InstanceState.context, (ctx) => ({
-    directory: ctx.directory,
-    worktree: ctx.worktree,
-    project: ctx.project,
-  }))
-}
-
-function startBlocker(blockerID: string) {
-  blockers.add(blockerID)
-  if (blockerID === "tui-bootstrap") bootstrapCycle++
-}
-
-function prepareExecution(input: InstanceStore.LoadInput) {
   return Effect.gen(function* () {
-    pending = false
-    const sid = resumeSessionID
-    resumeSessionID = undefined
-    active.clear()
-    blockers.clear()
-    startBlocker("tui-bootstrap")
-    reloadInFlight = true
-    doneResumeSessionID = sid
-    reloadInput = input
-    yield* publish(Event.Pending, { pending: false })
-    yield* publish(Event.Executing, { executing: true, bootstrapCycle })
-    return { input, resumeSessionID: sid, bootstrapCycle }
+    const ctx = yield* InstanceState.context
+    const workspaceID = yield* InstanceState.workspaceID
+    return {
+      key: `${ctx.directory}\0${ctx.worktree}\0${workspaceID ?? ""}`,
+      input: {
+        directory: ctx.directory,
+        worktree: ctx.worktree,
+        project: ctx.project,
+      },
+    }
   })
 }
 
-function doneWhenUnblocked() {
+function currentState() {
+  return Effect.map(currentInput(), (current) => getState(current.key))
+}
+
+function getState(key: string) {
+  const existing = states.get(key)
+  if (existing) return existing
+  const state: State = {
+    pending: false,
+    reloadInFlight: false,
+    bootstrapCycle: 0,
+    active: new Set(),
+    blockers: new Set(),
+  }
+  states.set(key, state)
+  return state
+}
+
+function startBlocker(state: State, blockerID: string) {
+  state.blockers.add(blockerID)
+  if (blockerID === "tui-bootstrap") state.bootstrapCycle++
+}
+
+function prepareExecution(state: State, input: InstanceStore.LoadInput) {
   return Effect.gen(function* () {
-    if (!reloadInFlight || isBlocked()) return
-    reloadInFlight = false
-    const sid = doneResumeSessionID
-    doneResumeSessionID = undefined
-    yield* Effect.logInfo("config reload completed", { resumeSessionID: sid })
-    yield* publish(Event.Done, { resumeSessionID: sid })
+    state.pending = false
+    state.active.clear()
+    state.blockers.clear()
+    startBlocker(state, "tui-bootstrap")
+    state.reloadInFlight = true
+    state.reloadInput = input
+    yield* publish(Event.Pending, { pending: false })
+    yield* publish(Event.Executing, { executing: true, bootstrapCycle: state.bootstrapCycle })
+    return { input, bootstrapCycle: state.bootstrapCycle }
+  })
+}
+
+function continueOrDone(state: State) {
+  return Effect.gen(function* () {
+    if (isBlocked(state)) return
+    if (state.pending) {
+      yield* check()
+      return
+    }
+    if (!state.reloadInFlight) return
+    state.reloadInFlight = false
+    yield* Effect.logInfo("config reload completed")
+    yield* publish(Event.Done, {})
   })
 }
 
