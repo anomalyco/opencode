@@ -6,12 +6,15 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { OpenAIPlugin } from "@opencode-ai/core/plugin/provider/openai"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { fakeSelectorSdk, it, model, provider } from "./provider-helper"
+import { fakeSelectorSdk, it, model, provider, required } from "./provider-helper"
+import { host, integrationHost } from "./host"
 
 function add(plugin: PluginV2.Interface, integrations: Integration.Interface) {
   return plugin.add({
-    ...OpenAIPlugin,
-    effect: OpenAIPlugin.effect.pipe(Effect.provideService(Integration.Service, integrations)),
+    id: OpenAIPlugin.id,
+    effect: OpenAIPlugin.effect(host({ integration: integrationHost(integrations) })).pipe(
+      Effect.provideService(Integration.Service, integrations),
+    ),
   })
 }
 
@@ -106,8 +109,7 @@ describe("OpenAIPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* add(plugin, yield* Integration.Service)
-      const transform = yield* catalog.transform()
-      yield* transform((catalog) => {
+      yield* catalog.transform((catalog) => {
         const item = provider("openai", { api: { type: "aisdk", package: "@ai-sdk/openai" } })
         catalog.provider.update(item.id, (draft) => {
           draft.api = item.api
@@ -115,8 +117,10 @@ describe("OpenAIPlugin", () => {
         catalog.model.update(item.id, ModelV2.ID.make("gpt-5"), () => {})
         catalog.model.update(item.id, ModelV2.ID.make("gpt-5-chat-latest"), () => {})
       })
-      expect((yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5"))).enabled).toBe(true)
-      expect((yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5-chat-latest"))).enabled).toBe(false)
+      expect(required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5"))).enabled).toBe(true)
+      expect(
+        required(yield* catalog.model.get(ProviderV2.ID.openai, ModelV2.ID.make("gpt-5-chat-latest"))).enabled,
+      ).toBe(false)
     }),
   )
 
@@ -125,14 +129,14 @@ describe("OpenAIPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* add(plugin, yield* Integration.Service)
-      const transform = yield* catalog.transform()
-      yield* transform((catalog) => {
+      yield* catalog.transform((catalog) => {
         const item = provider("custom-openai")
         catalog.provider.update(item.id, () => {})
         catalog.model.update(item.id, ModelV2.ID.make("gpt-5-chat-latest"), () => {})
       })
       expect(
-        (yield* catalog.model.get(ProviderV2.ID.make("custom-openai"), ModelV2.ID.make("gpt-5-chat-latest"))).enabled,
+        required(yield* catalog.model.get(ProviderV2.ID.make("custom-openai"), ModelV2.ID.make("gpt-5-chat-latest")))
+          .enabled,
       ).toBe(true)
     }),
   )

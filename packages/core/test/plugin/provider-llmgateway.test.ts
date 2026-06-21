@@ -6,14 +6,18 @@ import { PluginV2 } from "@opencode-ai/core/plugin"
 import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
 import { LLMGatewayPlugin } from "@opencode-ai/core/plugin/provider/llmgateway"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { expectPluginRegistered, it, provider } from "./provider-helper"
+import { expectPluginRegistered, it, provider, required } from "./provider-helper"
+import { catalogHost, host, integrationHost } from "./host"
 
 describe("LLMGatewayPlugin", () => {
   const add = Effect.fnUntraced(function* (plugin: PluginV2.Interface) {
     const integrations = yield* Integration.Service
+    const catalog = yield* Catalog.Service
     yield* plugin.add({
       ...LLMGatewayPlugin,
-      effect: LLMGatewayPlugin.effect.pipe(Effect.provideService(Integration.Service, integrations)),
+      effect: LLMGatewayPlugin.effect(
+        host({ catalog: catalogHost(catalog), integration: integrationHost(integrations) }),
+      ),
     })
   })
 
@@ -30,14 +34,12 @@ describe("LLMGatewayPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
-      yield* add(plugin)
       const integrations = yield* Integration.Service
-      yield* integrations.update((editor) => {
+      yield* integrations.transform((editor) => {
         editor.update(Integration.ID.make("llmgateway"), () => {})
         editor.update(Integration.ID.make("openrouter"), () => {})
       })
-      const transform = yield* catalog.transform()
-      yield* transform((catalog) => {
+      yield* catalog.transform((catalog) => {
         const llmgateway = provider("llmgateway", {
           api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.llmgateway.io/v1" },
           request: { headers: { Existing: "value" }, body: {} },
@@ -48,13 +50,14 @@ describe("LLMGatewayPlugin", () => {
         })
         catalog.provider.update(ProviderV2.ID.openrouter, () => {})
       })
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("llmgateway"))).request.headers).toEqual({
+      yield* add(plugin)
+      expect(required(yield* catalog.provider.get(ProviderV2.ID.make("llmgateway"))).request.headers).toEqual({
         Existing: "value",
         "HTTP-Referer": "https://opencode.ai/",
         "X-Title": "opencode",
         "X-Source": "opencode",
       })
-      expect((yield* catalog.provider.get(ProviderV2.ID.openrouter)).request.headers).toEqual({})
+      expect(required(yield* catalog.provider.get(ProviderV2.ID.openrouter)).request.headers).toEqual({})
     }),
   )
 
@@ -63,8 +66,7 @@ describe("LLMGatewayPlugin", () => {
       const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       yield* add(plugin)
-      const transform = yield* catalog.transform()
-      yield* transform((catalog) => {
+      yield* catalog.transform((catalog) => {
         const item = provider("llmgateway", {
           api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.llmgateway.io/v1" },
         })
@@ -73,8 +75,8 @@ describe("LLMGatewayPlugin", () => {
         })
       })
 
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("llmgateway"))).disabled).toBeUndefined()
-      expect((yield* catalog.provider.get(ProviderV2.ID.make("llmgateway"))).request.headers).toEqual({})
+      expect(required(yield* catalog.provider.get(ProviderV2.ID.make("llmgateway"))).disabled).toBeUndefined()
+      expect(required(yield* catalog.provider.get(ProviderV2.ID.make("llmgateway"))).request.headers).toEqual({})
     }),
   )
 })

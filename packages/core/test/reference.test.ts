@@ -17,7 +17,6 @@ describe("Reference", () => {
     Effect.gen(function* () {
       const references = yield* Reference.Service
       const scope = yield* Scope.make()
-      const update = yield* references.transform().pipe(Effect.provideService(Scope.Scope, scope))
       const path = AbsolutePath.make("/docs")
       const source = new Reference.LocalSource({
         type: "local",
@@ -25,7 +24,7 @@ describe("Reference", () => {
         description: "Use for API documentation",
         hidden: true,
       })
-      yield* update((editor) => editor.add("docs", source))
+      yield* references.transform((editor) => editor.add("docs", source)).pipe(Scope.provide(scope))
 
       expect(yield* references.list()).toEqual([
         new Reference.Info({ name: "docs", path, description: "Use for API documentation", hidden: true, source }),
@@ -44,10 +43,9 @@ describe("Reference", () => {
   it.effect("derives Git paths without exposing cache operations", () =>
     Effect.gen(function* () {
       const references = yield* Reference.Service
-      const update = yield* references.transform()
       const repository = Repository.parseRemote("owner/repo")
       const source = new Reference.GitSource({ type: "git", repository: "owner/repo", branch: "main" })
-      yield* update((editor) => editor.add("sdk", source))
+      yield* references.transform((editor) => editor.add("sdk", source))
 
       expect(yield* references.list()).toEqual([
         new Reference.Info({
@@ -68,14 +66,13 @@ describe("Reference", () => {
   it.effect("preserves configured Git descriptions", () =>
     Effect.gen(function* () {
       const references = yield* Reference.Service
-      const update = yield* references.transform()
       const repository = Repository.parseRemote("owner/repo")
       const source = new Reference.GitSource({
         type: "git",
         repository: "owner/repo",
         description: "Use for SDK implementation details",
       })
-      yield* update((editor) => editor.add("sdk", source))
+      yield* references.transform((editor) => editor.add("sdk", source))
 
       expect(yield* references.list()).toEqual([
         new Reference.Info({

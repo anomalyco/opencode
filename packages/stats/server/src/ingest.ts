@@ -15,7 +15,7 @@ type FirehoseRecord = { Data: Uint8Array }
 export class IngestError extends Schema.TaggedErrorClass<IngestError>()("IngestError", {
   message: Schema.String,
   failed: Schema.Number,
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 export declare namespace Ingest {
