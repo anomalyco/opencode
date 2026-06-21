@@ -1562,7 +1562,10 @@ export function Prompt(props: PromptProps) {
               <box flexDirection="column" paddingBottom={1} gap={1}>
                 <For each={queuedDrafts()}>
                   {(draft, i) => {
-                    const text = draft.parts.filter((p: any) => p.type === "text" && !p.synthetic).map((p: any) => p.text).join("\n")
+                    const text = (draft.parts as Array<{ type: string; text?: string; synthetic?: boolean }>)
+                      .filter((p) => p.type === "text" && !p.synthetic)
+                      .map((p) => p.text ?? "")
+                      .join("\n")
                     const preview = text.length > 60 ? text.slice(0, 60).replace(/\n/g, " ") + "..." : text.replace(/\n/g, " ")
                     const mode = draft.followupMode ?? "queue"
                     const prefix = mode === "haltingSteer" ? "Halt and steer:" : mode === "waitingSteer" ? "Wait and steer:" : `[${i() + 1}] Queued:`
