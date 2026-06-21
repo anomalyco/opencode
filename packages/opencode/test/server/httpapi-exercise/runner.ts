@@ -1,14 +1,18 @@
 import { Flag } from "@opencode-ai/core/flag/flag"
-import { Cause, Duration, Effect } from "effect"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { Cause, Duration, Effect, Layer, Scope } from "effect"
 import { TestLLMServer } from "../../lib/llm-server"
 import type { Config } from "../../../src/config/config"
-import { ModelID, ProviderID } from "../../../src/provider/schema"
+
 import type { MessageV2 } from "../../../src/session/message-v2"
 import { MessageID, PartID } from "../../../src/session/schema"
-import { call, callAuthProbe } from "./backend"
+import { call, callAuthProbe, disposeApps } from "./backend"
 import { original } from "./environment"
 import { runtime } from "./runtime"
 import type { ActiveScenario, Options, ProjectOptions, Result, Scenario, ScenarioContext, SeededContext } from "./types"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 export function runScenario(options: Options) {
   return (scenario: Scenario) => {
@@ -85,18 +89,20 @@ function withContext<A, E>(
       Effect.gen(function* () {
         yield* trace(options, scenario, `${label} runtime start`)
         const modules = yield* Effect.promise(() => runtime())
+        const scope = yield* Scope.Scope
+        const app = yield* Layer.buildWithMemoMap(modules.AppLayer, modules.memoMap, scope)
         yield* trace(options, scenario, `${label} runtime done`)
         const path = context.dir?.path
         const instance = path
           ? yield* trace(options, scenario, `${label} instance load start`).pipe(
               Effect.andThen(
                 modules.InstanceStore.Service.use((store) => store.load({ directory: path })).pipe(
-                  Effect.provide(modules.AppLayer),
+                  Effect.provide(app),
                   Effect.catchCause((cause) =>
                     Effect.sleep("100 millis").pipe(
                       Effect.andThen(
                         modules.InstanceStore.Service.use((store) => store.load({ directory: path })).pipe(
-                          Effect.provide(modules.AppLayer),
+                          Effect.provide(app),
                         ),
                       ),
                       Effect.catchCause(() => Effect.failCause(cause)),
@@ -108,7 +114,7 @@ function withContext<A, E>(
             )
           : undefined
         const run = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-          effect.pipe(Effect.provideService(modules.InstanceRef, instance), Effect.provide(modules.AppLayer))
+          effect.pipe(Effect.provideService(modules.InstanceRef, instance), Effect.provide(app))
         const directory = () => {
           if (!context.dir?.path) throw new Error("scenario needs a project directory")
           return context.dir.path
@@ -140,18 +146,18 @@ function withContext<A, E>(
             }),
           message: (sessionID, input) =>
             Effect.gen(function* () {
-              const info: MessageV2.User = {
+              const info: SessionV1.User = {
                 id: MessageID.ascending(),
                 sessionID,
                 role: "user",
                 time: { created: Date.now() },
                 agent: "build",
                 model: {
-                  providerID: ProviderID.opencode,
-                  modelID: ModelID.make("test"),
+                  providerID: ProviderV2.ID.opencode,
+                  modelID: ModelV2.ID.make("test"),
                 },
               }
-              const part: MessageV2.TextPart = {
+              const part: SessionV1.TextPart = {
                 id: PartID.ascending(),
                 sessionID,
                 messageID: info.id,
@@ -201,7 +207,7 @@ function trace(options: Options, scenario: ActiveScenario, phase: string) {
 function projectOptions(
   project: ProjectOptions,
   llmUrl: string | undefined,
-): { git?: boolean; config?: Partial<Config.Info> } {
+): { git?: boolean; config?: Partial<ConfigV1.Info> } {
   if (!project.llm || !llmUrl) return { git: project.git, config: project.config }
   const fake = fakeLlmConfig(llmUrl)
   return {
@@ -217,7 +223,7 @@ function projectOptions(
   }
 }
 
-function fakeLlmConfig(url: string): Partial<Config.Info> {
+function fakeLlmConfig(url: string): Partial<ConfigV1.Info> {
   return {
     model: "test/test-model",
     small_model: "test/test-model",
@@ -254,6 +260,7 @@ const resetState = Effect.promise(async () => {
   const modules = await runtime()
   Flag.OPENCODE_SERVER_PASSWORD = original.OPENCODE_SERVER_PASSWORD
   Flag.OPENCODE_SERVER_USERNAME = original.OPENCODE_SERVER_USERNAME
+  await disposeApps()
   await modules.disposeAllInstances()
   await modules.resetDatabase()
   await Bun.sleep(25)

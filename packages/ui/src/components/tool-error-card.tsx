@@ -12,6 +12,8 @@ export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "c
   error: string
   title?: string
   defaultOpen?: boolean
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
   subtitle?: string
   href?: string
 }
@@ -22,9 +24,22 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     open: props.defaultOpen ?? false,
     copied: false,
   })
-  const open = () => state.open
+  const open = () => props.open ?? state.open
   const copied = () => state.copied
-  const [split, rest] = splitProps(props, ["tool", "error", "title", "defaultOpen", "subtitle", "href"])
+  const [split, rest] = splitProps(props, [
+    "tool",
+    "error",
+    "title",
+    "defaultOpen",
+    "open",
+    "onOpenChange",
+    "subtitle",
+    "href",
+  ])
+  const setOpen = (value: boolean) => {
+    if (props.open === undefined) setState("open", value)
+    props.onOpenChange?.(value)
+  }
   const name = createMemo(() => {
     if (split.title) return split.title
     const map: Record<string, string> = {
@@ -77,12 +92,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
 
   return (
     <Card {...rest} data-kind="tool-error-card" data-open={open() ? "true" : "false"} variant="error">
-      <Collapsible
-        class="tool-collapsible"
-        data-open={open() ? "true" : "false"}
-        open={open()}
-        onOpenChange={(value) => setState("open", value)}
-      >
+      <Collapsible class="tool-collapsible" data-open={open() ? "true" : "false"} open={open()} onOpenChange={setOpen}>
         <Collapsible.Trigger>
           <div data-component="tool-trigger">
             <div data-slot="basic-tool-tool-trigger-content">

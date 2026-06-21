@@ -1,5 +1,6 @@
 import path from "path"
 import { fileURLToPath } from "url"
+import { Schema } from "effect"
 import { Global } from "@opencode-ai/core/global"
 
 type BaseReference = {
@@ -22,6 +23,43 @@ export type FileReference = BaseReference & {
 }
 
 export type Reference = RemoteReference | FileReference
+
+export class InvalidRepositoryReferenceError extends Schema.TaggedErrorClass<InvalidRepositoryReferenceError>()(
+  "RepositoryInvalidReferenceError",
+  {
+    repository: Schema.String,
+    message: Schema.String,
+  },
+) {}
+
+export class UnsupportedLocalRepositoryError extends Schema.TaggedErrorClass<UnsupportedLocalRepositoryError>()(
+  "RepositoryUnsupportedLocalRepositoryError",
+  {
+    repository: Schema.String,
+    message: Schema.String,
+  },
+) {}
+
+export class InvalidRepositoryBranchError extends Schema.TaggedErrorClass<InvalidRepositoryBranchError>()(
+  "RepositoryInvalidBranchError",
+  {
+    branch: Schema.String,
+    message: Schema.String,
+  },
+) {}
+
+export type RepositoryError =
+  | InvalidRepositoryReferenceError
+  | UnsupportedLocalRepositoryError
+  | InvalidRepositoryBranchError
+
+export function isRepositoryError(error: unknown): error is RepositoryError {
+  return (
+    error instanceof InvalidRepositoryReferenceError ||
+    error instanceof UnsupportedLocalRepositoryError ||
+    error instanceof InvalidRepositoryBranchError
+  )
+}
 
 function normalizeRepositoryInput(input: string) {
   return input
@@ -147,16 +185,28 @@ export function isRemoteRepositoryReference(reference: Reference): reference is 
 
 export function parseRemoteRepositoryReference(input: string) {
   const reference = parseRepositoryReference(input)
-  if (!reference) throw new Error("Repository must be a git URL, host/path reference, or GitHub owner/repo shorthand")
-  if (!isRemoteRepositoryReference(reference)) throw new Error("Local file repositories are not supported")
+  if (!reference) {
+    throw new InvalidRepositoryReferenceError({
+      repository: input,
+      message: "Repository must be a git URL, host/path reference, or GitHub owner/repo shorthand",
+    })
+  }
+  if (!isRemoteRepositoryReference(reference)) {
+    throw new UnsupportedLocalRepositoryError({
+      repository: input,
+      message: "Local file repositories are not supported",
+    })
+  }
   return reference
 }
 
 export function validateRepositoryBranch(branch: string) {
   if (!/^[A-Za-z0-9/_.-]+$/.test(branch) || branch.startsWith("-") || branch.includes("..")) {
-    throw new Error(
-      "Branch must contain only alphanumeric characters, /, _, ., and -, and cannot start with - or contain ..",
-    )
+    throw new InvalidRepositoryBranchError({
+      branch,
+      message:
+        "Branch must contain only alphanumeric characters, /, _, ., and -, and cannot start with - or contain ..",
+    })
   }
 }
 

@@ -4,8 +4,9 @@ import { randomUUID } from "crypto"
 import { Context, Effect, Function, Layer, Option, Schedule, Schema } from "effect"
 import type { FileSystem, Scope } from "effect"
 import type { PlatformError } from "effect/PlatformError"
-import { AppFileSystem } from "../filesystem"
+import { FSUtil } from "../fs-util"
 import { Global } from "../global"
+import { LayerNode } from "../effect/layer-node"
 import { Hash } from "./hash"
 
 export namespace EffectFlock {
@@ -23,7 +24,7 @@ export namespace EffectFlock {
 
   class ReleaseError extends Schema.TaggedErrorClass<ReleaseError>()("ReleaseError", {
     detail: Schema.String,
-    cause: Schema.optional(Schema.Defect),
+    cause: Schema.optional(Schema.Defect()),
   }) {
     override get message() {
       return this.detail
@@ -93,11 +94,11 @@ export namespace EffectFlock {
 
   const isPathGone = (e: PlatformError) => e.reason._tag === "NotFound" || e.reason._tag === "Unknown"
 
-  export const layer: Layer.Layer<Service, never, Global.Service | AppFileSystem.Service> = Layer.effect(
+  export const layer: Layer.Layer<Service, never, Global.Service | FSUtil.Service> = Layer.effect(
     Service,
     Effect.gen(function* () {
       const global = yield* Global.Service
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const lockRoot = path.join(global.state, "locks")
       const hostname = os.hostname()
       const ensuredDirs = new Set<string>()
@@ -279,5 +280,6 @@ export namespace EffectFlock {
     }),
   )
 
-  export const defaultLayer = layer.pipe(Layer.provide(AppFileSystem.defaultLayer), Layer.provide(Global.layer))
+  export const defaultLayer = layer.pipe(Layer.provide(FSUtil.defaultLayer), Layer.provide(Global.layer))
+  export const node = LayerNode.make(layer, [Global.node, FSUtil.node])
 }

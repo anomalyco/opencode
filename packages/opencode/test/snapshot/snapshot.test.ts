@@ -1,20 +1,29 @@
 import { afterEach, expect } from "bun:test"
 import { $ } from "bun"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import fs from "fs/promises"
 import path from "path"
 import { Effect, Fiber, Layer } from "effect"
 import { Snapshot } from "../../src/snapshot"
-import { disposeAllInstances, provideInstance, TestInstance, tmpdirScoped } from "../fixture/fixture"
+import {
+  disposeAllInstances,
+  provideInstance,
+  testInstanceStoreLayer,
+  TestInstance,
+  tmpdirScoped,
+} from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(Snapshot.defaultLayer, AppFileSystem.defaultLayer))
+const it = testEffect(Layer.mergeAll(Snapshot.defaultLayer, FSUtil.defaultLayer, testInstanceStoreLayer))
 
 // Git always outputs /-separated paths internally. Snapshot.patch() joins them
 // with path.join (which produces \ on Windows) then normalizes back to /.
 // This helper does the same for expected values so assertions match cross-platform.
 const fwd = (...parts: string[]) => path.join(...parts).replaceAll("\\", "/")
+const SNAPSHOT_BATCH_BOUNDARY = 100
+const OVER_BATCH_COUNT = SNAPSHOT_BATCH_BOUNDARY + 1
+const MIXED_BATCH_GROUP_COUNT = Math.ceil(OVER_BATCH_COUNT / 4)
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -28,12 +37,12 @@ const exec = (cwd: string, command: string[]) =>
   })
 
 const write = (file: string, content: string | Uint8Array) =>
-  AppFileSystem.Service.use((fs) => fs.writeWithDirs(file, content))
-const readText = (file: string) => AppFileSystem.Service.use((fs) => fs.readFileString(file))
-const exists = (file: string) => AppFileSystem.Service.use((fs) => fs.existsSafe(file))
-const mkdirp = (dir: string) => AppFileSystem.Service.use((fs) => fs.ensureDir(dir))
+  FSUtil.Service.use((fs) => fs.writeWithDirs(file, content))
+const readText = (file: string) => FSUtil.Service.use((fs) => fs.readFileString(file))
+const exists = (file: string) => FSUtil.Service.use((fs) => fs.existsSafe(file))
+const mkdirp = (dir: string) => FSUtil.Service.use((fs) => fs.ensureDir(dir))
 const rm = (file: string) =>
-  AppFileSystem.Service.use((fs) => fs.remove(file, { recursive: true, force: true }).pipe(Effect.ignore))
+  FSUtil.Service.use((fs) => fs.remove(file, { recursive: true, force: true }).pipe(Effect.ignore))
 
 const initialize = Effect.fn("SnapshotTest.initialize")(function* (dir: string) {
   const unique = Math.random().toString(36).slice(2)
@@ -41,8 +50,6 @@ const initialize = Effect.fn("SnapshotTest.initialize")(function* (dir: string) 
   const bContent = `B${unique}`
   yield* write(`${dir}/a.txt`, aContent)
   yield* write(`${dir}/b.txt`, bContent)
-  yield* exec(dir, ["git", "add", "."])
-  yield* exec(dir, ["git", "commit", "-m", "init"])
   return { aContent, bContent }
 })
 
@@ -802,7 +809,7 @@ it.instance(
   Effect.gen(function* () {
     const tmp = yield* bootstrap()
     const snapshot = yield* Snapshot.Service
-    const ids = Array.from({ length: 60 }, (_, i) => i.toString().padStart(3, "0"))
+    const ids = Array.from({ length: MIXED_BATCH_GROUP_COUNT }, (_, i) => i.toString().padStart(3, "0"))
     const mod = ids.map((id) => fwd(tmp.path, "mix", `${id}-mod.txt`))
     const del = ids.map((id) => fwd(tmp.path, "mix", `${id}-del.txt`))
     const add = ids.map((id) => fwd(tmp.path, "mix", `${id}-add.txt`))
@@ -862,7 +869,7 @@ it.instance(
   Effect.gen(function* () {
     const tmp = yield* bootstrap()
     const snapshot = yield* Snapshot.Service
-    const ids = Array.from({ length: 140 }, (_, i) => i.toString().padStart(3, "0"))
+    const ids = Array.from({ length: OVER_BATCH_COUNT }, (_, i) => i.toString().padStart(3, "0"))
     yield* mkdirp(`${tmp.path}/order`)
     yield* Effect.all(
       ids.map((id) => write(`${tmp.path}/order/${id}.txt`, `before-${id}`)),
@@ -1090,8 +1097,8 @@ it.instance(
   Effect.gen(function* () {
     const tmp = yield* bootstrap()
     const snapshot = yield* Snapshot.Service
-    const base = Array.from({ length: 140 }, (_, i) => fwd(tmp.path, "batch", `${i}.txt`))
-    const fresh = Array.from({ length: 140 }, (_, i) => fwd(tmp.path, "fresh", `${i}.txt`))
+    const base = Array.from({ length: OVER_BATCH_COUNT }, (_, i) => fwd(tmp.path, "batch", `${i}.txt`))
+    const fresh = [fwd(tmp.path, "fresh", "0.txt")]
     yield* mkdirp(`${tmp.path}/batch`)
     yield* mkdirp(`${tmp.path}/fresh`)
     yield* Effect.all(

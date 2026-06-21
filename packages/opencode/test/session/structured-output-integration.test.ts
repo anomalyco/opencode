@@ -1,16 +1,17 @@
 import { describe, expect, test } from "bun:test"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Effect, Layer } from "effect"
 import { Session } from "@/session/session"
 import { SessionPrompt } from "../../src/session/prompt"
-import * as Log from "@opencode-ai/core/util/log"
 import { MessageV2 } from "../../src/session/message-v2"
 import { testEffect } from "../lib/effect"
 
-void Log.init({ print: false })
-
 // Skip tests if no API key is available
 const hasApiKey = !!process.env.ANTHROPIC_API_KEY
-const it = testEffect(Layer.mergeAll(SessionPrompt.defaultLayer, Session.defaultLayer))
+const it = testEffect(
+  Layer.mergeAll(SessionPrompt.defaultLayer, Session.defaultLayer).pipe(Layer.provide(Ripgrep.defaultLayer)),
+)
 const live = hasApiKey ? it.instance : it.instance.skip
 
 describe("StructuredOutput Integration", () => {
@@ -218,7 +219,7 @@ describe("StructuredOutput Integration", () => {
   )
 
   test("unit test: StructuredOutputError is properly structured", () => {
-    const error = new MessageV2.StructuredOutputError({
+    const error = new SessionV1.StructuredOutputError({
       message: "Failed to produce valid structured output after 3 attempts",
       retries: 3,
     })

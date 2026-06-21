@@ -14,6 +14,7 @@ import { Terminal } from "@/components/terminal"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
 import { useLayout } from "@/context/layout"
+import { useSettings } from "@/context/settings"
 import { useTerminal } from "@/context/terminal"
 import { terminalTabLabel } from "@/pages/session/terminal-label"
 import { createSizing, focusTerminalById } from "@/pages/session/helpers"
@@ -26,7 +27,8 @@ export function TerminalPanel() {
   const terminal = useTerminal()
   const language = useLanguage()
   const command = useCommand()
-  const { params, view } = useSessionLayout()
+  const settings = useSettings()
+  const { params, workspaceKey, view } = useSessionLayout()
 
   const opened = createMemo(() => view().terminal.opened())
   const size = createSizing()
@@ -126,7 +128,7 @@ export function TerminalPanel() {
     language.locale()
 
     setTerminalHandoff(
-      dir,
+      workspaceKey(),
       terminal.all().map((pty) =>
         terminalTabLabel({
           title: pty.title,
@@ -140,7 +142,7 @@ export function TerminalPanel() {
   const handoff = createMemo(() => {
     const dir = params.dir
     if (!dir) return []
-    return getTerminalHandoff(dir) ?? []
+    return getTerminalHandoff(workspaceKey()) ?? []
   })
 
   const all = terminal.all
@@ -198,35 +200,38 @@ export function TerminalPanel() {
       aria-label={language.t("terminal.title")}
       aria-hidden={!opened()}
       inert={!opened()}
-      class="relative w-full shrink-0 overflow-hidden bg-background-stronger"
+      class="relative w-full shrink-0 bg-background-stronger"
       classList={{
-        "border-t border-border-weak-base": opened(),
         "transition-[height] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[height] motion-reduce:transition-none":
           !size.active(),
       }}
       style={{ height: opened() ? `${pane()}px` : "0px" }}
     >
+      <div class="hidden md:block" onPointerDown={() => size.start()}>
+        <ResizeHandle
+          classList={{
+            "-top-1": settings.general.newLayoutDesigns(),
+          }}
+          direction="vertical"
+          size={pane()}
+          min={100}
+          max={max()}
+          collapseThreshold={50}
+          onResize={(next) => {
+            size.touch()
+            layout.terminal.resize(next)
+          }}
+          onCollapse={close}
+        />
+      </div>
       <div
-        class="absolute inset-x-0 top-0 flex flex-col"
+        class="absolute inset-x-0 top-0 flex flex-col overflow-hidden"
         classList={{
+          "border-t border-border-weak-base": opened(),
           "pointer-events-none": !opened(),
         }}
         style={{ height: `${pane()}px` }}
       >
-        <div class="hidden md:block" onPointerDown={() => size.start()}>
-          <ResizeHandle
-            direction="vertical"
-            size={pane()}
-            min={100}
-            max={max()}
-            collapseThreshold={50}
-            onResize={(next) => {
-              size.touch()
-              layout.terminal.resize(next)
-            }}
-            onCollapse={close}
-          />
-        </div>
         <Show
           when={terminal.ready()}
           fallback={

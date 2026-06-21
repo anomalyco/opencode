@@ -4,16 +4,18 @@ import path from "path"
 import npa from "npm-package-arg"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
-import { AppFileSystem } from "./filesystem"
+import { FSUtil } from "./fs-util"
 import { Global } from "./global"
 import { EffectFlock } from "./util/effect-flock"
+import { LayerNode } from "./effect/layer-node"
+import { filesystem } from "./effect/layer-node-platform"
 import { makeRuntime } from "./effect/runtime"
 import { NpmConfig } from "./npm-config"
 
 export class InstallFailedError extends Schema.TaggedErrorClass<InstallFailedError>()("NpmInstallFailedError", {
   add: Schema.Array(Schema.String).pipe(Schema.optional),
   dir: Schema.String,
-  cause: Schema.optional(Schema.Defect),
+  cause: Schema.optional(Schema.Defect()),
 }) {}
 
 export interface EntryPoint {
@@ -70,7 +72,7 @@ interface ArboristTree {
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const afs = yield* AppFileSystem.Service
+    const afs = yield* FSUtil.Service
     const global = yield* Global.Service
     const fs = yield* FileSystem.FileSystem
     const flock = yield* EffectFlock.Service
@@ -246,10 +248,11 @@ export const layer = Layer.effect(
 
 export const defaultLayer = layer.pipe(
   Layer.provide(EffectFlock.layer),
-  Layer.provide(AppFileSystem.layer),
+  Layer.provide(FSUtil.layer),
   Layer.provide(Global.layer),
   Layer.provide(NodeFileSystem.layer),
 )
+export const node = LayerNode.make(layer, [FSUtil.node, Global.node, filesystem, EffectFlock.node])
 
 const { runPromise } = makeRuntime(Service, defaultLayer)
 
