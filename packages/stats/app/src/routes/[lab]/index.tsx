@@ -6,7 +6,6 @@ import {
   type ModelUsagePoint,
   type StatsLabData,
 } from "@opencode-ai/stats-core/domain/home"
-import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
@@ -46,7 +45,8 @@ const labFooterLinks: readonly HeaderLink[] = [
 
 const getLabData = query(async (lab: string) => {
   "use server"
-  return runtime.runPromise(getStatsLabData(lab))
+  const { statsRuntime } = await import("../../stats-runtime")
+  return statsRuntime.runPromise(getStatsLabData(lab))
 }, "getStatsLabData")
 
 export default function StatsLab() {

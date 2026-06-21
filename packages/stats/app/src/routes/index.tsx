@@ -21,7 +21,6 @@ import {
   type TokenCostEntry,
   type UsagePoint,
 } from "@opencode-ai/stats-core/domain/home"
-import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
@@ -109,7 +108,8 @@ const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a
 
 const getData = query(async () => {
   "use server"
-  return runtime.runPromise(getStatsHomeData())
+  const { statsRuntime } = await import("../stats-runtime")
+  return statsRuntime.runPromise(getStatsHomeData())
 }, "getStatsHomeData")
 
 export default function StatsHome() {
