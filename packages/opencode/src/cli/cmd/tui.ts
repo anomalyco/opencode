@@ -18,8 +18,6 @@ declare global {
   const OPENCODE_WORKER_PATH: string
 }
 
-type RpcClient = ReturnType<typeof Rpc.client<typeof rpc>>
-
 type WorkerFile = string | URL
 type WorkerManager = ReturnType<typeof createWorkerManager>
 
