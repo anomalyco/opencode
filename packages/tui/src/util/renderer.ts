@@ -12,7 +12,8 @@ function resetTerminalModes() {
       "\x1b[?1004l" +  // Focus event tracking
       "\x1b[?1006l" +  // SGR extended mouse mode
       "\x1b[?2004l" +  // Bracketed paste mode
-      "\x1b[>1u" +     // Kitty keyboard protocol
+      "\x1b[<u" +     // Kitty keyboard protocol (pop)
+      "\x1b[>4;0m" + // modifyOtherKeys reset
       "\x1b[?25h" +    // Show cursor
       "\x1b[0 q" +     // Default cursor shape
       "\x1b[0m",       // Reset SGR attributes
