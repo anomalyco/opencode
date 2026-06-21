@@ -34,7 +34,7 @@ let readResult: FileSystem.Content | ReadToolFileSystem.TextPage = {
   encoding: "utf8",
   mime: "text/plain",
 }
-let readFailure: unknown
+let readFailure: ReadToolFileSystem.ReadError | undefined
 let configEntries: Config.Entry[] = []
 const reader = Layer.succeed(
   ReadToolFileSystem.Service,
@@ -42,7 +42,7 @@ const reader = Layer.succeed(
     inspect: () => (resolveFailure === undefined ? Effect.succeed(resolvedType) : Effect.die(resolveFailure)),
     read: (input, _resource, page = {}) => {
       readCalls.push({ input, page })
-      if (readFailure !== undefined) return Effect.die(readFailure)
+      if (readFailure !== undefined) return Effect.fail(readFailure)
       return Effect.succeed(readResult)
     },
     list: (_path, input = {}) =>
@@ -431,9 +431,32 @@ describe("ReadTool", () => {
     }),
   )
 
+  it.effect("returns expected filesystem failures to the model", () =>
+    Effect.gen(function* () {
+      readFailure = new ReadToolFileSystem.BinaryFileError({ resource: "archive.dat" })
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: "call-binary",
+            name: "read",
+            input: { path: "archive.dat", offset: 2, limit: 1 },
+          },
+        }),
+      ).toEqual({ type: "error", value: "Cannot read binary file: archive.dat" })
+      expect(readCalls).toEqual([
+        { input: AbsolutePath.make(`${process.cwd()}/archive.dat`), page: { offset: 2, limit: 1 } },
+      ])
+    }),
+  )
+
   it.effect("preserves unexpected filesystem defects", () =>
     Effect.gen(function* () {
-      readFailure = new ReadToolFileSystem.BinaryFileError("archive.dat")
+      resolveFailure = new Error("unexpected")
       const registry = yield* ToolRegistry.Service
 
       expect(
@@ -441,18 +464,10 @@ describe("ReadTool", () => {
           yield* executeTool(registry, {
             sessionID,
             ...toolIdentity,
-            call: {
-              type: "tool-call",
-              id: "call-binary",
-              name: "read",
-              input: { path: "archive.dat", offset: 2, limit: 1 },
-            },
+            call: { type: "tool-call", id: "call-defect", name: "read", input: { path: "README.md" } },
           }).pipe(Effect.exit),
         ),
       ).toBe(true)
-      expect(readCalls).toEqual([
-        { input: AbsolutePath.make(`${process.cwd()}/archive.dat`), page: { offset: 2, limit: 1 } },
-      ])
     }),
   )
 
