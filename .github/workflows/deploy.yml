@@ -47,10 +47,75 @@ jobs:
           VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
           VITE_SENTRY_RELEASE: web@${{ github.sha }}
 
-      - run: bun sst shell --stage=${{ github.ref_name }} -- bun run --cwd packages/stats/core db:ensure-unique-users
+      - if: github.ref_name != 'production'
+        run: bun sst shell --stage=${{ github.ref_name }} -- bun run --cwd packages/stats/core db:ensure-unique-users
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           PLANETSCALE_SERVICE_TOKEN_NAME: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_NAME }}
+          PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
+          STRIPE_SECRET_KEY: ${{ github.ref_name == 'production' && secrets.STRIPE_SECRET_KEY_PROD || secrets.STRIPE_SECRET_KEY_DEV }}
+          HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          SENTRY_ORG: ${{ vars.SENTRY_ORG }}
+          SENTRY_PROJECT: ${{ vars.WEB_SENTRY_PROJECT }}
+          SENTRY_RELEASE: web@${{ github.sha }}
+          VITE_SENTRY_DSN: ${{ vars.WEB_SENTRY_DSN }}
+          VITE_SENTRY_RELEASE: web@${{ github.sha }}
+
+      - if: github.ref_name == 'production'
+        uses: planetscale/setup-pscale-action@v1
+
+      - if: github.ref_name == 'production'
+        run: |
+          set -euo pipefail
+
+          database="opencode-stats"
+          organization="anomalyco"
+          branch="unique-users-${GITHUB_SHA::12}"
+          password_id=""
+
+          cleanup() {
+            if [ -n "$password_id" ]; then
+              pscale password delete "$database" "$branch" "$password_id" --org "$organization" --force >/dev/null 2>&1 || true
+            fi
+            pscale branch delete "$database" "$branch" --org "$organization" --force >/dev/null 2>&1 || true
+          }
+
+          trap cleanup EXIT
+
+          if bun sst shell --stage=production -- bun run --cwd packages/stats/core db:check-unique-users; then
+            echo "unique_users columns already exist in production"
+            exit 0
+          fi
+
+          pscale branch delete "$database" "$branch" --org "$organization" --force >/dev/null 2>&1 || true
+          pscale branch create "$database" "$branch" --org "$organization" --from production --wait
+
+          response="$(pscale password create "$database" "$branch" "unique-users-${GITHUB_RUN_ID}" --org "$organization" --format json)"
+          password_id="$(echo "$response" | jq -r '.id')"
+
+          export PLANETSCALE_HOST="$(echo "$response" | jq -r '.access_host_url')"
+          export PLANETSCALE_USERNAME="$(echo "$response" | jq -r '.username')"
+          export PLANETSCALE_PASSWORD="$(echo "$response" | jq -r '.plain_text')"
+          export PLANETSCALE_DATABASE="$database"
+
+          echo "::add-mask::$PLANETSCALE_PASSWORD"
+          bun run --cwd packages/stats/core db:ensure-unique-users
+
+          deploy_response="$(pscale deploy-request create "$database" "$branch" --org "$organization" --deploy-to production --format json)"
+          deploy_number="$(echo "$deploy_response" | jq -r '.number')"
+
+          if [ -z "$deploy_number" ] || [ "$deploy_number" = "null" ]; then
+            echo "Could not read deploy request number"
+            exit 1
+          fi
+
+          pscale deploy-request review "$database" "$deploy_number" --org "$organization" --approve || true
+          pscale deploy-request deploy "$database" "$deploy_number" --org "$organization"
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          PLANETSCALE_SERVICE_TOKEN_NAME: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_NAME }}
+          PLANETSCALE_SERVICE_TOKEN_ID: ${{ secrets.PLANETSCALE_SERVICE_TOKEN_NAME }}
           PLANETSCALE_SERVICE_TOKEN: ${{ secrets.PLANETSCALE_SERVICE_TOKEN }}
           STRIPE_SECRET_KEY: ${{ github.ref_name == 'production' && secrets.STRIPE_SECRET_KEY_PROD || secrets.STRIPE_SECRET_KEY_DEV }}
           HONEYCOMB_API_KEY: ${{ secrets.HONEYCOMB_API_KEY }}
