@@ -1,9 +1,10 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { type Accessor, batch, createMemo } from "solid-js"
+import { type Accessor, batch, createEffect, createMemo, on } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/utils/persist"
 import { pathKey } from "@/utils/path-key"
 import { ServerScope } from "@/utils/server-scope"
+import { createSdkForServer } from "@/utils/server"
 
 type StoredProject = { worktree: string; expanded: boolean }
 type StoredServer = string | ServerConnection.HttpBase | ServerConnection.Http
@@ -80,16 +81,20 @@ export function createServerProjects<T extends ServerProjectState>(input: {
   scope: Accessor<ServerScope>
   store: Store<T>
   setStore: SetStoreFunction<T>
+  onChange?: (scope: ServerScope, state: { projects: StoredProject[]; lastProject?: string }) => void
 }) {
   const setStore = input.setStore as unknown as SetStoreFunction<ServerProjectState>
   const current = () => input.store.projects[input.scope()] ?? []
   const currentClosed = () => input.store.recentlyClosed?.[input.scope()] ?? []
+  const changed = () =>
+    input.onChange?.(input.scope(), { projects: current(), lastProject: input.store.lastProject[input.scope()] })
   const remove = (directory: string) => {
     setStore(
       "projects",
       input.scope(),
       current().filter((project) => project.worktree !== directory),
     )
+    changed()
   }
   return {
     list: current,
@@ -108,6 +113,7 @@ export function createServerProjects<T extends ServerProjectState>(input: {
       }
       if (current().some((project) => project.worktree === directory)) return
       setStore("projects", scope, [{ worktree: directory, expanded: true }, ...current()])
+      changed()
     },
     // User-initiated close: removes the project and records it in recently closed.
     // Internal, non-user removals (e.g. sandbox/worktree normalization) should use remove().
@@ -122,11 +128,15 @@ export function createServerProjects<T extends ServerProjectState>(input: {
     },
     expand(directory: string) {
       const index = current().findIndex((project) => project.worktree === directory)
-      if (index !== -1) setStore("projects", input.scope(), index, "expanded", true)
+      if (index === -1) return
+      setStore("projects", input.scope(), index, "expanded", true)
+      changed()
     },
     collapse(directory: string) {
       const index = current().findIndex((project) => project.worktree === directory)
-      if (index !== -1) setStore("projects", input.scope(), index, "expanded", false)
+      if (index === -1) return
+      setStore("projects", input.scope(), index, "expanded", false)
+      changed()
     },
     move(directory: string, toIndex: number) {
       const fromIndex = current().findIndex((project) => project.worktree === directory)
@@ -135,12 +145,14 @@ export function createServerProjects<T extends ServerProjectState>(input: {
       const [item] = next.splice(fromIndex, 1)
       next.splice(toIndex, 0, item)
       setStore("projects", input.scope(), next)
+      changed()
     },
     last() {
       return input.store.lastProject[input.scope()]
     },
     touch(directory: string) {
       setStore("lastProject", input.scope(), directory)
+      changed()
     },
   }
 }
@@ -252,6 +264,16 @@ export function nextServerAfterRemoval(
   return next ? ServerConnection.key(next) : fallback
 }
 
+function sidebarProjectPersistence(input: { conn: ServerConnection.Any | undefined; scope: ServerScope }) {
+  if (!input.conn || input.conn.type !== "http") return
+  const client = createSdkForServer({ server: input.conn.http, throwOnError: true }).project
+  return {
+    load: () => client.sidebar().then((response) => response.data),
+    save: (state: { projects: StoredProject[]; lastProject?: string }) =>
+      client.updateSidebar({ projectSidebarState: state }).catch(() => undefined),
+  }
+}
+
 export const { use: useServer, provider: ServerProvider } = createSimpleContext({
   name: "Server",
   gate: true,
@@ -318,12 +340,17 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
     )
 
     const scope = (key = state.active) => ServerScope.fromServerKey(key, props.canonicalLocalServer)
-    const projects = createServerProjects({ scope, store, setStore })
+    const saveSidebar = (targetScope: ServerScope, state: { projects: StoredProject[]; lastProject?: string }) => {
+      const conn = allServers().find((server) => scope(ServerConnection.key(server)) === targetScope)
+      return sidebarProjectPersistence({ conn, scope: targetScope })?.save(state)
+    }
+
+    const projects = createServerProjects({ scope, store, setStore, onChange: saveSidebar })
     const projectStores = new Map<ServerConnection.Key, ReturnType<typeof createServerProjects>>()
     const projectsForServer = (key: ServerConnection.Key) => {
       const existing = projectStores.get(key)
       if (existing) return existing
-      const next = createServerProjects({ scope: () => scope(key), store, setStore })
+      const next = createServerProjects({ scope: () => scope(key), store, setStore, onChange: saveSidebar })
       projectStores.set(key, next)
       return next
     }
@@ -331,6 +358,27 @@ export const { use: useServer, provider: ServerProvider } = createSimpleContext(
       () => allServers().find((s) => ServerConnection.key(s) === state.active) ?? allServers()[0],
     )
     const isLocal = createMemo(() => ServerConnection.local(current()))
+    createEffect(
+      on(
+        () => current(),
+        (conn) => {
+          if (!conn) return
+          const persistence = sidebarProjectPersistence({ conn, scope: scope(ServerConnection.key(conn)) })
+          if (!persistence) return
+          const key = ServerConnection.key(conn)
+          persistence
+            .load()
+            .then((state) => {
+              if (!state) return
+              if (ServerConnection.key(current() ?? conn) !== key) return
+              setStore("projects", scope(key), state.projects)
+              if (state.lastProject) setStore("lastProject", scope(key), state.lastProject)
+            })
+            .catch(() => undefined)
+        },
+        { defer: false },
+      ),
+    )
 
     return {
       ready: isReady,

@@ -100,18 +100,47 @@ describe("createServerProjects", () => {
     createRoot((dispose) => {
       const [scope] = createSignal(ServerScope.local)
       const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
-      const active = createServerProjects({ scope, store, setStore })
-      const remote = createServerProjects({ scope: () => "https://debian.example" as ServerScope, store, setStore })
+      const changes: Array<{
+        scope: ServerScope
+        projects: Array<{ worktree: string; expanded: boolean }>
+        lastProject?: string
+      }> = []
+      const onChange = (
+        scope: ServerScope,
+        state: { projects: Array<{ worktree: string; expanded: boolean }>; lastProject?: string },
+      ) => {
+        changes.push({ scope, projects: [...state.projects], lastProject: state.lastProject })
+      }
+      const active = createServerProjects({ scope, store, setStore, onChange })
+      const remote = createServerProjects({
+        scope: () => "https://debian.example" as ServerScope,
+        store,
+        setStore,
+        onChange,
+      })
 
       remote.open("/repo")
       expect(remote.list()).toEqual([{ worktree: "/repo", expanded: true }])
       expect(active.list()).toEqual([])
 
-      const adopted = createServerProjects({ scope: () => "https://debian.example" as ServerScope, store, setStore })
+      const adopted = createServerProjects({
+        scope: () => "https://debian.example" as ServerScope,
+        store,
+        setStore,
+        onChange,
+      })
       expect(adopted.list()).toEqual([{ worktree: "/repo", expanded: true }])
 
       adopted.close("/repo")
       expect(remote.list()).toEqual([])
+      expect(changes).toEqual([
+        {
+          scope: "https://debian.example" as ServerScope,
+          projects: [{ worktree: "/repo", expanded: true }],
+          lastProject: undefined,
+        },
+        { scope: "https://debian.example" as ServerScope, projects: [], lastProject: undefined },
+      ])
       dispose()
     })
   })

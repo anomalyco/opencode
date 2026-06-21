@@ -2428,6 +2428,16 @@ export type Project = {
   sandboxes: Array<string>
 }
 
+export type ProjectSidebarProject = {
+  worktree: string
+  expanded: boolean
+}
+
+export type ProjectSidebarState = {
+  projects: Array<ProjectSidebarProject>
+  lastProject?: string
+}
+
 export type ProjectNotFoundError = {
   _tag: "ProjectNotFoundError"
   projectID: string
@@ -8753,6 +8763,62 @@ export type ProjectCurrentResponses = {
 }
 
 export type ProjectCurrentResponse = ProjectCurrentResponses[keyof ProjectCurrentResponses]
+
+export type ProjectSidebarData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/sidebar"
+}
+
+export type ProjectSidebarErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProjectSidebarError = ProjectSidebarErrors[keyof ProjectSidebarErrors]
+
+export type ProjectSidebarResponses = {
+  /**
+   * Persisted web sidebar project state
+   */
+  200: ProjectSidebarState
+}
+
+export type ProjectSidebarResponse = ProjectSidebarResponses[keyof ProjectSidebarResponses]
+
+export type ProjectUpdateSidebarData = {
+  body?: ProjectSidebarState
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/sidebar"
+}
+
+export type ProjectUpdateSidebarErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type ProjectUpdateSidebarError = ProjectUpdateSidebarErrors[keyof ProjectUpdateSidebarErrors]
+
+export type ProjectUpdateSidebarResponses = {
+  /**
+   * Persisted web sidebar project state
+   */
+  200: ProjectSidebarState
+}
+
+export type ProjectUpdateSidebarResponse = ProjectUpdateSidebarResponses[keyof ProjectUpdateSidebarResponses]
 
 export type ProjectInitGitData = {
   body?: never

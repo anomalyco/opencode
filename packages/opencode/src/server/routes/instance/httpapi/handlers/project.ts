@@ -1,16 +1,21 @@
 import * as InstanceState from "@/effect/instance-state"
 import { Project } from "@/project/project"
 import { ProjectV2 } from "@opencode-ai/core/project"
-import { Effect } from "effect"
+import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Global } from "@opencode-ai/core/global"
+import path from "path"
+import { Effect, Schema } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { ProjectNotFoundError } from "../errors"
 import { markInstanceForReload } from "../lifecycle"
+import { SidebarState } from "../groups/project"
 
 export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", (handlers) =>
   Effect.gen(function* () {
     const svc = yield* Project.Service
     const project = yield* ProjectV2.Service
+    const fs = yield* FSUtil.Service
 
     const list = Effect.fn("ProjectHttpApi.list")(function* () {
       return yield* svc.list()
@@ -18,6 +23,23 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
 
     const current = Effect.fn("ProjectHttpApi.current")(function* () {
       return (yield* InstanceState.context).project
+    })
+
+    const sidebarFile = path.join(Global.Path.state, "web-projects.json")
+    const emptySidebar = { projects: [] }
+
+    const sidebar = Effect.fn("ProjectHttpApi.sidebar")(function* () {
+      return yield* fs.readJson(sidebarFile).pipe(
+        Effect.flatMap(Schema.decodeUnknownEffect(SidebarState)),
+        Effect.catch(() => Effect.succeed(emptySidebar)),
+      )
+    })
+
+    const updateSidebar = Effect.fn("ProjectHttpApi.updateSidebar")(function* (ctx: {
+      payload: typeof SidebarState.Type
+    }) {
+      yield* fs.writeWithDirs(sidebarFile, JSON.stringify(ctx.payload, null, 2)).pipe(Effect.orDie)
+      return ctx.payload
     })
 
     const initGit = Effect.fn("ProjectHttpApi.initGit")(function* () {
@@ -56,6 +78,8 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
     return handlers
       .handle("list", list)
       .handle("current", current)
+      .handle("sidebar", sidebar)
+      .handle("updateSidebar", updateSidebar)
       .handle("initGit", initGit)
       .handle("update", update)
       .handle("directories", directories)

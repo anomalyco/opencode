@@ -140,8 +140,13 @@ import type {
   ProjectInitGitResponses,
   ProjectListErrors,
   ProjectListResponses,
+  ProjectSidebarErrors,
+  ProjectSidebarResponses,
+  ProjectSidebarState,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
+  ProjectUpdateSidebarErrors,
+  ProjectUpdateSidebarResponses,
   PromptInput,
   ProviderAuthErrors,
   ProviderAuthResponses,
@@ -2585,6 +2590,77 @@ export class Project extends HeyApiClient {
       url: "/project/current",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Get web sidebar projects
+   *
+   * Get the server-persisted web sidebar project list for this OpenCode server.
+   */
+  public sidebar<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<ProjectSidebarResponses, ProjectSidebarErrors, ThrowOnError>({
+      url: "/project/sidebar",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update web sidebar projects
+   *
+   * Persist the web sidebar project list on the OpenCode server so it is shared across browsers.
+   */
+  public updateSidebar<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      projectSidebarState?: ProjectSidebarState
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { key: "projectSidebarState", map: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).put<
+      ProjectUpdateSidebarResponses,
+      ProjectUpdateSidebarErrors,
+      ThrowOnError
+    >({
+      url: "/project/sidebar",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 

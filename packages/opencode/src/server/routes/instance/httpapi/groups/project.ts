@@ -14,6 +14,14 @@ const UpdatePayload = Schema.Struct({
   icon: Schema.optional(Project.Info.fields.icon),
   commands: Schema.optional(Project.Info.fields.commands),
 })
+const SidebarProject = Schema.Struct({
+  worktree: Schema.String,
+  expanded: Schema.Boolean,
+}).annotate({ identifier: "ProjectSidebarProject" })
+export const SidebarState = Schema.Struct({
+  projects: Schema.Array(SidebarProject),
+  lastProject: Schema.optional(Schema.String),
+}).annotate({ identifier: "ProjectSidebarState" })
 
 export const ProjectApi = HttpApi.make("project")
   .add(
@@ -37,6 +45,28 @@ export const ProjectApi = HttpApi.make("project")
             identifier: "project.current",
             summary: "Get current project",
             description: "Retrieve the currently active project that OpenCode is working with.",
+          }),
+        ),
+
+        HttpApiEndpoint.get("sidebar", `${root}/sidebar`, {
+          query: WorkspaceRoutingQuery,
+          success: described(SidebarState, "Persisted web sidebar project state"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.sidebar",
+            summary: "Get web sidebar projects",
+            description: "Get the server-persisted web sidebar project list for this OpenCode server.",
+          }),
+        ),
+        HttpApiEndpoint.put("updateSidebar", `${root}/sidebar`, {
+          query: WorkspaceRoutingQuery,
+          payload: SidebarState,
+          success: described(SidebarState, "Persisted web sidebar project state"),
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.updateSidebar",
+            summary: "Update web sidebar projects",
+            description: "Persist the web sidebar project list on the OpenCode server so it is shared across browsers.",
           }),
         ),
         HttpApiEndpoint.post("initGit", `${root}/git/init`, {

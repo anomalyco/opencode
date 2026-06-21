@@ -171,6 +171,34 @@ const scenarios: Scenario[] = [
     },
     "status",
   ),
+  http.protected.get("/project/sidebar", "project.sidebar").json(
+    200,
+    (body) => {
+      object(body)
+      array(body.projects)
+    },
+    "status",
+  ),
+  http.protected
+    .put("/project/sidebar", "project.updateSidebar")
+    .mutating()
+    .at((ctx) => ({
+      path: "/project/sidebar",
+      headers: ctx.headers(),
+      body: { projects: [{ worktree: ctx.directory, expanded: true }], lastProject: ctx.directory },
+    }))
+    .json(
+      200,
+      (body, ctx) => {
+        object(body)
+        array(body.projects)
+        const project = body.projects[0]
+        check(isRecord(project), "sidebar update should return a project object")
+        check(project.worktree === ctx.directory, "sidebar update should return persisted project")
+        check(body.lastProject === ctx.directory, "sidebar update should return persisted last project")
+      },
+      "status",
+    ),
   http.protected
     .patch("/project/{projectID}", "project.update")
     .mutating()
