@@ -81,10 +81,10 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
   type Queued = QueuedServerEvent
   const FLUSH_FRAME_MS = 16
   const STREAM_YIELD_MS = 8
+  const FLUSH_MAX_EVENTS = 100
   const RECONNECT_DELAY_MS = 250
 
   let queue: Queued[] = []
-  let buffer: Queued[] = []
   const coalesced = new Map<string, number>()
   const staleDeltas = new Set<string>()
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -105,11 +105,10 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
 
     if (queue.length === 0) return
 
-    const events = queue
+    const events = queue.length > FLUSH_MAX_EVENTS ? queue.slice(0, FLUSH_MAX_EVENTS) : queue
+    const remaining = queue.length > FLUSH_MAX_EVENTS ? queue.slice(FLUSH_MAX_EVENTS) : []
     const skip = staleDeltas.size > 0 ? new Set(staleDeltas) : undefined
-    queue = buffer
-    buffer = events
-    queue.length = 0
+    queue = remaining
     coalesced.clear()
     staleDeltas.clear()
 
@@ -118,8 +117,6 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     batch(() => {
       output.forEach((event) => emitter.emit(event.directory, event.payload))
     })
-
-    buffer.length = 0
   }
 
   const schedule = () => {
