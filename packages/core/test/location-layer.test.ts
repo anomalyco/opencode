@@ -140,13 +140,14 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  it.live("rejects an unavailable selected model when a Session run resolves it", () =>
+  it.live("rejects an unavailable selected model during location model resolution", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
       (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
     ).pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
           yield* Effect.promise(() =>
             fs.writeFile(
               path.join(dir.path, "opencode.json"),
@@ -174,13 +175,10 @@ describe("LocationServiceMap", () => {
                 cost: 0,
                 tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
                 time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
-                location: { directory: AbsolutePath.make(dir.path) },
+                location,
               }),
             ),
-          ).pipe(
-            Effect.provide(LocationServiceMap.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
-            Effect.flip,
-          )
+          ).pipe(Effect.provide(LocationServiceMap.get(location)), Effect.flip)
 
           expect(failure).toMatchObject({
             _tag: "SessionRunnerModel.ModelUnavailableError",

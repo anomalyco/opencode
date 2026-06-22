@@ -5,7 +5,7 @@ import * as AnthropicMessages from "@opencode-ai/llm/protocols/anthropic-message
 import * as OpenAICompatibleChat from "@opencode-ai/llm/protocols/openai-compatible-chat"
 import * as OpenAIResponses from "@opencode-ai/llm/protocols/openai-responses"
 import { Auth, type AnyRoute } from "@opencode-ai/llm/route"
-import { Context, Effect, Layer, Option, Schema } from "effect"
+import { Context, Effect, Layer, Schema } from "effect"
 import { produce } from "immer"
 import { Catalog } from "../../catalog"
 import { Credential } from "../../credential"
@@ -87,7 +87,10 @@ const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
   })
 }
 
-const withVariant = (model: ModelV2.Info, variantID: ModelV2.VariantID | undefined) => {
+const withVariant = (
+  model: ModelV2.Info,
+  variantID: ModelV2.VariantID | undefined,
+): Effect.Effect<ModelV2.Info, VariantUnavailableError> => {
   const id = variantID === "default" || variantID === undefined ? model.request.variant : variantID
   const variant = model.variants.find((item) => item.id === id)
   if (!variant && variantID !== undefined && variantID !== "default")
@@ -152,8 +155,15 @@ export const fromCatalogModel = (
   )
 }
 
-export const resolve = (session: SessionSchema.Info, model: ModelV2.Info) =>
-  withVariant(model, session.model?.variant).pipe(Effect.flatMap(fromCatalogModel))
+export const resolve = (
+  session: SessionSchema.Info,
+  model: ModelV2.Info,
+  connection?: IntegrationConnection.Info,
+  credential?: Credential.Info,
+) =>
+  withVariant(model, session.model?.variant).pipe(
+    Effect.flatMap((model) => fromCatalogModel(model, connection, credential)),
+  )
 
 export const supported = (model: ModelV2.Info) =>
   model.api.type === "aisdk" &&
@@ -188,9 +198,9 @@ export const locationLayer = Layer.effect(
           })
         if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
         const connection = yield* integrations.connection.forIntegration(Integration.ID.make(selected.providerID))
-        const configured = yield* withVariant(selected, session.model?.variant)
-        return yield* fromCatalogModel(
-          configured,
+        return yield* resolve(
+          session,
+          selected,
           connection,
           connection?.type === "credential" ? yield* credentials.get(connection.id) : undefined,
         )
