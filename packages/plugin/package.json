@@ -11,12 +11,14 @@
   "exports": {
     ".": "./src/index.ts",
     "./tool": "./src/tool.ts",
-    "./tui": "./src/tui.ts"
+    "./tui": "./src/tui.ts",
+    "./v2/effect": "./src/v2/effect/index.ts"
   },
   "files": [
     "dist"
   ],
   "dependencies": {
+    "@ai-sdk/provider": "3.0.8",
     "@opencode-ai/sdk": "workspace:*",
     "effect": "catalog:",
     "zod": "catalog:"

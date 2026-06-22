@@ -46,6 +46,7 @@ describe("SkillTool", () => {
           const boot = Layer.succeed(
             PluginBoot.Service,
             PluginBoot.Service.of({
+              add: () => Effect.void,
               wait: () =>
                 Effect.sync(() => {
                   bootWaited = true
@@ -69,7 +70,8 @@ describe("SkillTool", () => {
           const skills = Layer.succeed(
             SkillV2.Service,
             SkillV2.Service.of({
-              transform: () => Effect.die("unused"),
+              transform: (_transform) => Effect.die("unused"),
+              rebuild: () => Effect.die("unused"),
               sources: () => Effect.die("unused"),
               list: () => Effect.succeed(current),
             }),

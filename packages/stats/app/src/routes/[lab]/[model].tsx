@@ -14,7 +14,6 @@ import {
   type StatsModelData,
   type UsageRange,
 } from "@opencode-ai/stats-core/domain/home"
-import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
@@ -27,6 +26,7 @@ import {
   type ModelCatalogCost,
   type ModelCatalogEntry,
 } from "../model-catalog"
+import { runStatsEffect } from "../../stats-runtime"
 import {
   applyThemePreference,
   Footer,
@@ -96,7 +96,7 @@ const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a
 
 const getModelData = query(async (lab: string, model: string) => {
   "use server"
-  return runtime.runPromise(getStatsModelData(model, lab))
+  return runStatsEffect(getStatsModelData(model, lab))
 }, "getStatsModelData")
 
 export default function StatsModel() {
@@ -330,7 +330,7 @@ function CatalogDatum(props: { label: string; value: string }) {
 function ModelOverview(props: { data: StatsModelData | null }) {
   return (
     <section data-section="model-panel">
-      <SectionTitle title="Overview" description="Recent OpenCode Go tokens, sessions, and market position." />
+      <SectionTitle title="Overview" description="Recent OpenCode Go tokens, unique users, and market position." />
       <Show
         when={props.data}
         fallback={
@@ -340,6 +340,7 @@ function ModelOverview(props: { data: StatsModelData | null }) {
         {(data) => (
           <div data-component="model-metric-grid">
             <MetricCard label="Tokens" value={formatTokens(data().totals.tokens)} detail="last two months" />
+            <MetricCard label="Unique Users" value={formatUsers(data().totals.uniqueUsers)} detail="last two months" />
             <MetricCard label="Sessions" value={formatInteger(data().totals.sessions)} detail="completed sessions" />
             <MetricCard
               label="Token Share"

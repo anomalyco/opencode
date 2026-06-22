@@ -45,9 +45,9 @@ export const layer = Layer.effect(
           workspace: workspaceID,
           payload: { id: event.id, type: event.type, properties: event.data },
         })
-        const sync = EventV2.registry.get(event.type)?.sync
-        if (sync === undefined || event.seq === undefined || event.version === undefined) return
-        const aggregateID = (event.data as Record<string, unknown>)[sync.aggregate]
+        const durable = EventV2.registry.get(event.type)?.durable
+        if (durable === undefined || event.durable === undefined) return
+        const aggregateID = (event.data as Record<string, unknown>)[durable.aggregate]
         if (typeof aggregateID !== "string") return
         GlobalBus.emit("event", {
           directory: event.location?.directory ?? ctx?.directory,
@@ -57,8 +57,8 @@ export const layer = Layer.effect(
             type: "sync",
             syncEvent: {
               id: event.id,
-              type: EventV2.versionedType(event.type, event.version),
-              seq: event.seq,
+              type: EventV2.versionedType(event.type, event.durable.version),
+              seq: event.durable.seq,
               aggregateID,
               data: event.data,
             },

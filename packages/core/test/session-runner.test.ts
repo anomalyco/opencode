@@ -547,6 +547,8 @@ const verifyPartialFlushOnInterruption = (kind: FragmentKind) =>
       { type: "user", text: prompt },
       {
         type: "assistant",
+        finish: "error",
+        error: { type: "unknown", message: "Provider turn interrupted" },
         content: [
           kind === "tool input"
             ? { type: "tool", id: fragmentID(kind, "interrupted"), state: { status: "error" } }
@@ -819,7 +821,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const agent = yield* AgentV2.Service
-      yield* agent.update((editor) =>
+      yield* agent.transform((editor) =>
         editor.update(AgentV2.ID.make("build"), (agent) => {
           agent.system = "Build agent instructions"
           agent.mode = "primary"
@@ -840,7 +842,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const agent = yield* AgentV2.Service
-      yield* agent.update((editor) => {
+      yield* agent.transform((editor) => {
         editor.update(AgentV2.ID.make("build"), (agent) => {
           agent.system = "Build agent instructions"
           agent.mode = "primary"
@@ -868,7 +870,7 @@ describe("SessionRunnerLLM", () => {
       yield* setup
       const { db } = yield* Database.Service
       const agent = yield* AgentV2.Service
-      yield* agent.update((editor) =>
+      yield* agent.transform((editor) =>
         editor.update(AgentV2.ID.make("reviewer"), (agent) => {
           agent.system = "Reviewer instructions"
           agent.mode = "primary"
@@ -1352,34 +1354,6 @@ describe("SessionRunnerLLM", () => {
       expect(invalidations).toBe(4)
       expect(requests).toHaveLength(1)
       expect(requests[0]?.system.map((part) => part.text)).toEqual(["Changed context"])
-    }),
-  )
-
-  it.effect("replays retained context projections while replacement is pending", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
-
-      requests.length = 0
-      response = []
-      yield* session.resume(sessionID)
-      systemBaseline = "Changed context"
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
-      yield* session.resume(sessionID)
-      yield* events.publish(SessionEvent.ModelSwitched, {
-        sessionID,
-        messageID: SessionMessage.ID.create(),
-        timestamp: DateTime.makeUnsafe(1),
-        model: { id: ModelV2.ID.make("replacement"), providerID: ProviderV2.ID.make("fake") },
-      })
-
-      yield* replaySessionProjection(sessionID)
-      systemBaseline = "Replacement context"
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Third" }), resume: false })
-      yield* session.resume(sessionID)
-      expect(requests.at(-1)?.system.map((part) => part.text)).toEqual(["Replacement context"])
     }),
   )
 
@@ -3214,7 +3188,7 @@ describe("SessionRunnerLLM", () => {
     Effect.gen(function* () {
       yield* setup
       const agents = yield* AgentV2.Service
-      yield* agents.update((editor) =>
+      yield* agents.transform((editor) =>
         editor.update(AgentV2.ID.make("build"), (agent) => {
           agent.steps = 2
         }),

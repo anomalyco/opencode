@@ -4,7 +4,7 @@ import { Catalog } from "@opencode-ai/core/catalog"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { AzureCognitiveServicesPlugin } from "@opencode-ai/core/plugin/provider/azure"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { fakeSelectorSdk, it, model, provider, withEnv } from "./provider-helper"
+import { addPlugin, fakeSelectorSdk, it, model, provider, required, withEnv } from "./provider-helper"
 
 describe("AzureCognitiveServicesPlugin", () => {
   it.effect("maps the resource env var to the Azure SDK baseURL", () =>
@@ -12,14 +12,13 @@ describe("AzureCognitiveServicesPlugin", () => {
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
-        yield* plugin.add(AzureCognitiveServicesPlugin)
-        const transform = yield* catalog.transform()
-        yield* transform((catalog) => {
+        yield* addPlugin(plugin, AzureCognitiveServicesPlugin)
+        yield* catalog.transform((catalog) => {
           catalog.provider.update(ProviderV2.ID.make("azure-cognitive-services"), (item) => {
             item.api = { type: "aisdk", package: "@ai-sdk/openai-compatible" }
           })
         })
-        const result = yield* catalog.provider.get(ProviderV2.ID.make("azure-cognitive-services"))
+        const result = required(yield* catalog.provider.get(ProviderV2.ID.make("azure-cognitive-services")))
         expect(result.api).toEqual({
           type: "aisdk",
           package: "@ai-sdk/openai-compatible",
@@ -36,9 +35,8 @@ describe("AzureCognitiveServicesPlugin", () => {
       Effect.gen(function* () {
         const plugin = yield* PluginV2.Service
         const catalog = yield* Catalog.Service
-        yield* plugin.add(AzureCognitiveServicesPlugin)
-        const transform = yield* catalog.transform()
-        yield* transform((catalog) => {
+        yield* addPlugin(plugin, AzureCognitiveServicesPlugin)
+        yield* catalog.transform((catalog) => {
           const azure = provider("azure-cognitive-services", {
             api: { type: "aisdk", package: "@ai-sdk/openai-compatible" },
           })
@@ -50,8 +48,8 @@ describe("AzureCognitiveServicesPlugin", () => {
             item.api = openai.api
           })
         })
-        const azure = yield* catalog.provider.get(ProviderV2.ID.make("azure-cognitive-services"))
-        const openai = yield* catalog.provider.get(ProviderV2.ID.openai)
+        const azure = required(yield* catalog.provider.get(ProviderV2.ID.make("azure-cognitive-services")))
+        const openai = required(yield* catalog.provider.get(ProviderV2.ID.openai))
         expect(azure.request.body.baseURL).toBeUndefined()
         expect(azure.api).toEqual({ type: "aisdk", package: "@ai-sdk/openai-compatible" })
         expect(openai.request.body.baseURL).toBeUndefined()
@@ -64,7 +62,7 @@ describe("AzureCognitiveServicesPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const calls: string[] = []
-      yield* plugin.add(AzureCognitiveServicesPlugin)
+      yield* addPlugin(plugin, AzureCognitiveServicesPlugin)
       yield* plugin.trigger(
         "aisdk.language",
         {
@@ -82,7 +80,7 @@ describe("AzureCognitiveServicesPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const calls: string[] = []
-      yield* plugin.add(AzureCognitiveServicesPlugin)
+      yield* addPlugin(plugin, AzureCognitiveServicesPlugin)
       yield* plugin.trigger(
         "aisdk.language",
         { model: model("azure-cognitive-services", "deployment"), sdk: fakeSelectorSdk(calls), options: {} },
@@ -103,7 +101,7 @@ describe("AzureCognitiveServicesPlugin", () => {
       const plugin = yield* PluginV2.Service
       const calls: string[] = []
       const sdk = fakeSelectorSdk(calls)
-      yield* plugin.add(AzureCognitiveServicesPlugin)
+      yield* addPlugin(plugin, AzureCognitiveServicesPlugin)
       yield* plugin.trigger(
         "aisdk.language",
         {

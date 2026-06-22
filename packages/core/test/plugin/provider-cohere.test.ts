@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { CoherePlugin } from "@opencode-ai/core/plugin/provider/cohere"
-import { fakeSelectorSdk, it, model } from "./provider-helper"
+import { addPlugin, fakeSelectorSdk, it, model } from "./provider-helper"
 
 const cohereOptions: Record<string, any>[] = []
 
@@ -24,7 +24,7 @@ describe("CoherePlugin", () => {
   it.effect("creates a Cohere SDK only for @ai-sdk/cohere", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(CoherePlugin)
+      yield* addPlugin(plugin, CoherePlugin)
 
       const ignored = yield* plugin.trigger(
         "aisdk.sdk",
@@ -45,7 +45,7 @@ describe("CoherePlugin", () => {
   it.effect("uses the model provider ID as the bundled SDK name", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(CoherePlugin)
+      yield* addPlugin(plugin, CoherePlugin)
       const result = yield* plugin.trigger(
         "aisdk.sdk",
         {
@@ -70,7 +70,7 @@ describe("CoherePlugin", () => {
       const plugin = yield* PluginV2.Service
       const calls: string[] = []
       const sdk = fakeSelectorSdk(calls)
-      yield* plugin.add(CoherePlugin)
+      yield* addPlugin(plugin, CoherePlugin)
       const result = yield* plugin.trigger(
         "aisdk.language",
         { model: model("cohere", "alias", { api: { id: ModelV2.ID.make("command-r-plus") } }), sdk, options: {} },

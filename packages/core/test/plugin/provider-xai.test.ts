@@ -6,7 +6,7 @@ import { PluginV2 } from "@opencode-ai/core/plugin"
 import { XAIPlugin } from "@opencode-ai/core/plugin/provider/xai"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
-import { fakeSelectorSdk } from "./provider-helper"
+import { addPlugin, fakeSelectorSdk } from "./provider-helper"
 
 const it = testEffect(PluginV2.locationLayer.pipe(Layer.provide(EventV2.defaultLayer)))
 
@@ -23,7 +23,7 @@ describe("XAIPlugin", () => {
   it.effect("creates an xAI SDK only for @ai-sdk/xai", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(XAIPlugin)
+      yield* addPlugin(plugin, XAIPlugin)
 
       const ignored = yield* plugin.trigger(
         "aisdk.sdk",
@@ -43,20 +43,18 @@ describe("XAIPlugin", () => {
       const plugin = yield* PluginV2.Service
       const providers: string[] = []
 
-      yield* plugin.add(XAIPlugin)
-      yield* plugin.add(
-        PluginV2.define({
-          id: PluginV2.ID.make("xai-sdk-name-observer"),
-          effect: Effect.gen(function* () {
-            return {
-              "aisdk.sdk": Effect.fn(function* (evt) {
-                if (!evt.sdk) return
-                providers.push(evt.sdk.responses("grok-4").provider)
-              }),
-            }
-          }),
+      yield* addPlugin(plugin, XAIPlugin)
+      yield* plugin.add({
+        id: PluginV2.ID.make("xai-sdk-name-observer"),
+        effect: Effect.gen(function* () {
+          return {
+            "aisdk.sdk": Effect.fn(function* (evt) {
+              if (!evt.sdk) return
+              providers.push(evt.sdk.responses("grok-4").provider)
+            }),
+          }
         }),
-      )
+      })
 
       yield* plugin.trigger(
         "aisdk.sdk",
@@ -77,7 +75,7 @@ describe("XAIPlugin", () => {
       const plugin = yield* PluginV2.Service
       const calls: string[] = []
 
-      yield* plugin.add(XAIPlugin)
+      yield* addPlugin(plugin, XAIPlugin)
       const result = yield* plugin.trigger(
         "aisdk.language",
         {
@@ -98,7 +96,7 @@ describe("XAIPlugin", () => {
       const plugin = yield* PluginV2.Service
       const calls: string[] = []
 
-      yield* plugin.add(XAIPlugin)
+      yield* addPlugin(plugin, XAIPlugin)
       const result = yield* plugin.trigger(
         "aisdk.language",
         {

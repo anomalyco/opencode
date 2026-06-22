@@ -18,7 +18,7 @@ const plugins = PluginV2.layer.pipe(Layer.provide(events))
 function state() {
   return State.create({
     initial: () => ({ values: [] as string[] }),
-    editor: (draft) => ({
+    draft: (draft) => ({
       add: (value: string) => draft.values.push(value),
     }),
   })
@@ -34,8 +34,9 @@ describe("PluginV2", () => {
       yield* plugin.add({
         id: PluginV2.ID.make("scoped"),
         effect: Effect.gen(function* () {
-          const transform = yield* values.transform()
-          yield* transform((editor) => editor.add("scoped"))
+          yield* values.transform((editor) => {
+            editor.add("scoped")
+          })
         }),
       })
       expect(values.get().values).toEqual(["scoped"])
@@ -58,8 +59,9 @@ describe("PluginV2", () => {
         .add({
           id,
           effect: Effect.gen(function* () {
-            const transform = yield* values.transform()
-            yield* transform((editor) => editor.add("first"))
+            yield* values.transform((editor) => {
+              editor.add("first")
+            })
             yield* Deferred.succeed(firstStarted, undefined)
             yield* Deferred.await(releaseFirst)
           }),
@@ -71,8 +73,9 @@ describe("PluginV2", () => {
         .add({
           id,
           effect: Effect.gen(function* () {
-            const transform = yield* values.transform()
-            yield* transform((editor) => editor.add("second"))
+            yield* values.transform((editor) => {
+              editor.add("second")
+            })
           }),
         })
         .pipe(Effect.forkChild({ startImmediately: true }))

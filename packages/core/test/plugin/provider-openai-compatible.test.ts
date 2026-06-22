@@ -2,13 +2,13 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { PluginV2 } from "@opencode-ai/core/plugin"
 import { OpenAICompatiblePlugin } from "@opencode-ai/core/plugin/provider/openai-compatible"
-import { it, model } from "./provider-helper"
+import { addPlugin, it, model } from "./provider-helper"
 
 describe("OpenAICompatiblePlugin", () => {
   it.effect("preserves explicit includeUsage false and defaults it to true", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(OpenAICompatiblePlugin)
+      yield* addPlugin(plugin, OpenAICompatiblePlugin)
       const defaulted = yield* plugin.trigger(
         "aisdk.sdk",
         { model: model("custom", "model"), package: "@ai-sdk/openai-compatible", options: { name: "custom" } },
@@ -31,7 +31,7 @@ describe("OpenAICompatiblePlugin", () => {
   it.effect("defaults includeUsage for OpenAI-compatible package matches", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(OpenAICompatiblePlugin)
+      yield* addPlugin(plugin, OpenAICompatiblePlugin)
       const result = yield* plugin.trigger(
         "aisdk.sdk",
         {
@@ -49,7 +49,7 @@ describe("OpenAICompatiblePlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const observed: string[] = []
-      yield* plugin.add(OpenAICompatiblePlugin)
+      yield* addPlugin(plugin, OpenAICompatiblePlugin)
       yield* plugin.add({
         id: PluginV2.ID.make("inspector"),
         effect: Effect.succeed({
@@ -85,7 +85,7 @@ describe("OpenAICompatiblePlugin", () => {
             }),
         }),
       })
-      yield* plugin.add(OpenAICompatiblePlugin)
+      yield* addPlugin(plugin, OpenAICompatiblePlugin)
       const result = yield* plugin.trigger(
         "aisdk.sdk",
         {
