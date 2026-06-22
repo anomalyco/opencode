@@ -51,7 +51,7 @@ export type PluginEntry = {
   entry?: string
 }
 
-const INDEX_FILES = ["index.ts", "index.tsx", "index.js", "index.mjs", "index.cjs"]
+export const INDEX_FILES = ["index.ts", "index.tsx", "index.js", "index.mjs", "index.cjs"]
 
 export function pluginSource(spec: string): PluginSource {
   if (isPathPluginSpec(spec)) return "file"

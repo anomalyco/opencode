@@ -1,7 +1,7 @@
 import { Glob } from "@opencode-ai/core/util/glob"
 import { ConfigPluginV1 } from "@opencode-ai/core/v1/config/plugin"
 import { pathToFileURL } from "url"
-import { isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
+import { INDEX_FILES, isPathPluginSpec, parsePluginSpecifier, resolvePathPluginTarget } from "@/plugin/shared"
 import path from "path"
 
 export type Scope = "global" | "local"
@@ -26,6 +26,25 @@ export async function load(dir: string) {
   })) {
     plugins.push(pathToFileURL(item).href)
   }
+
+  // Discover plugin packages dropped as immediate subdirectories under plugin/ or plugins/.
+  // A subdirectory qualifies only when it looks like a plugin (a package.json or an index file), and we
+  // emit the directory URL so the loader resolves the real entrypoint via exports/main or the index file,
+  // matching how a directory plugin declared in config is resolved. The single `*` segment keeps this at
+  // depth one, so package internals like src/ or node_modules/ are never picked up as separate plugins.
+  const seen = new Set<string>()
+  for (const item of await Glob.scan(`{plugin,plugins}/*/{package.json,${INDEX_FILES.join(",")}}`, {
+    cwd: dir,
+    absolute: true,
+    dot: true,
+    symlink: true,
+  })) {
+    const url = pathToFileURL(path.dirname(item)).href
+    if (seen.has(url)) continue
+    seen.add(url)
+    plugins.push(url)
+  }
+
   return plugins
 }
 
