@@ -229,7 +229,7 @@ function DraftRoute() {
   return (
     <Show when={tabs.ready()}>
       <Show when={search.draftId} keyed fallback={<Navigate href="/" />}>
-        {(_) => <ResolvedDraftRoute />}
+        <ResolvedDraftRoute />
       </Show>
     </Show>
   )
