@@ -13,7 +13,6 @@ import {
   ServerConnection,
   useCommand,
   useWslServers,
-  devWslServers,
 } from "@opencode-ai/app"
 import type { UpdaterState } from "@opencode-ai/app/updater"
 import * as Sentry from "@sentry/solid"
@@ -131,7 +130,7 @@ const createPlatform = (): Platform => {
     }
   })()
 
-  const wslServersApi = os === "windows" ? window.api.wslServers : devWslServers({ os })
+  const wslServersApi = os === "windows" ? window.api.wslServers : undefined
 
   return {
     platform: "desktop",

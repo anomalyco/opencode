@@ -10,7 +10,6 @@ import { handleNotificationClick } from "@/utils/notification-click"
 import { authFromToken } from "@/utils/server"
 import pkg from "../package.json"
 import { ServerConnection } from "./context/server"
-import { devWslServers } from "./wsl/mock"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 
@@ -133,7 +132,6 @@ const platform: Platform = {
     return stored ? ServerConnection.Key.make(stored) : null
   },
   setDefaultServer: writeDefaultServerUrl,
-  wslServers: devWslServers(),
 }
 
 if (import.meta.env.VITE_SENTRY_DSN) {
