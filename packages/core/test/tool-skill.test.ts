@@ -59,7 +59,7 @@ describe("SkillTool", () => {
             SkillV2.Service,
             SkillV2.Service.of({
               transform: (_transform) => Effect.die("unused"),
-              rebuild: () => Effect.die("unused"),
+              reload: () => Effect.die("unused"),
               sources: () => Effect.die("unused"),
               list: () => Effect.succeed(current),
             }),

@@ -34,7 +34,7 @@ describe("PluginV2", () => {
       expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("first")
 
       description = "second"
-      yield* plugins.rebuild()
+      yield* plugins.reload()
       expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("second")
 
       yield* registration.dispose

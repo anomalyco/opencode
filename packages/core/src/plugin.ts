@@ -28,7 +28,7 @@ export const Event = {
 
 export interface Interface {
   readonly transform: State.Transform<PluginDraft>
-  readonly rebuild: State.Rebuild
+  readonly reload: State.Reload
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/Plugin") {}
@@ -102,7 +102,7 @@ export const layer = Layer.effect(
 
     const service = Service.of({
       transform: state.transform,
-      rebuild: state.rebuild,
+      reload: state.reload,
     })
     host = yield* PluginHost.make(service)
     return service

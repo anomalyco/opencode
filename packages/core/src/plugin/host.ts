@@ -25,7 +25,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
   return {
     options: {},
     agent: {
-      reload: agents.rebuild,
+      reload: agents.reload,
       transform: (callback) =>
         agents.transform((draft) =>
           callback({
@@ -66,7 +66,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         }),
     },
     catalog: {
-      reload: catalog.rebuild,
+      reload: catalog.reload,
       transform: (callback) =>
         catalog.transform((draft) =>
           callback({
@@ -92,11 +92,11 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         ),
     },
     command: {
-      reload: commands.rebuild,
+      reload: commands.reload,
       transform: commands.transform,
     },
     integration: {
-      reload: integration.rebuild,
+      reload: integration.reload,
       transform: (callback) =>
         integration.transform((draft) =>
           callback({
@@ -126,11 +126,11 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         ),
     },
     plugin: {
-      reload: plugin.rebuild,
+      reload: plugin.reload,
       transform: plugin.transform,
     },
     reference: {
-      reload: reference.rebuild,
+      reload: reference.reload,
       transform: (callback) =>
         reference.transform((draft) =>
           callback({
@@ -141,7 +141,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: PluginV2.Int
         ),
     },
     skill: {
-      reload: skill.rebuild,
+      reload: skill.reload,
       transform: (callback) =>
         skill.transform((draft) =>
           callback({

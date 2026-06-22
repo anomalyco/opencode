@@ -49,7 +49,7 @@ export function host(overrides: Overrides = {}): PluginContext {
 
 export function agentHost(agent: AgentV2.Interface): PluginContext["agent"] {
   return {
-    reload: agent.rebuild,
+    reload: agent.reload,
     transform: (callback) =>
       agent.transform((draft) =>
         callback({
@@ -73,7 +73,7 @@ export function agentHost(agent: AgentV2.Interface): PluginContext["agent"] {
 
 export function catalogHost(catalog: Catalog.Interface): PluginContext["catalog"] {
   return {
-    reload: catalog.rebuild,
+    reload: catalog.reload,
     transform: (callback) =>
       catalog.transform((draft) =>
         callback({
@@ -137,7 +137,7 @@ export function catalogHost(catalog: Catalog.Interface): PluginContext["catalog"
 
 export function integrationHost(integration: Integration.Interface): PluginContext["integration"] {
   return {
-    reload: integration.rebuild,
+    reload: integration.reload,
     transform: (callback) =>
       integration.transform((draft) =>
         callback({
