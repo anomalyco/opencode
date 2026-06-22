@@ -10383,7 +10383,7 @@
             }
           }
         },
-        "description": "Switch the agent used by subsequent session activity.",
+        "description": "Switch the agent used by subsequent provider turns.",
         "summary": "Switch session agent",
         "requestBody": {
           "content": {
@@ -10468,7 +10468,7 @@
             }
           }
         },
-        "description": "Switch the model used by subsequent session activity.",
+        "description": "Switch the model used by subsequent provider turns.",
         "summary": "Switch session model",
         "requestBody": {
           "content": {

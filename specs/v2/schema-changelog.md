@@ -138,7 +138,7 @@ Change:
 Reason:
 
 - Prompt admission and model-visible promotion must be separate durable operations.
-- Steering must promote at safe provider-turn boundaries while queued prompts remain separate FIFO activities.
+- Steering must promote at safe provider-turn boundaries while queued prompts remain pending in FIFO order until continuation would otherwise end.
 
 Compatibility:
 
