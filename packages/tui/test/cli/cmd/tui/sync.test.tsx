@@ -40,6 +40,44 @@ describe("tui sync", () => {
     }
   })
 
+  test("picker list can use global sessions without changing refresh scope", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(`${tmp.path}/kv.json`, "{}")
+    const { app, experimentalSession, kv, session, sync } = await mount(undefined, tmp.path)
+
+    try {
+      await sync.session.list({ search: "scoped", limit: 30, roots: true })
+
+      expect(session.at(-1)?.pathname).toBe("/session")
+      expect(session.at(-1)?.searchParams.get("search")).toBe("scoped")
+      expect(session.at(-1)?.searchParams.get("path")).toBe("packages/tui")
+      expect(session.at(-1)?.searchParams.get("roots")).toBe("true")
+
+      kv.set("session_list_global_enabled", true)
+      await sync.session.list({ search: "global", limit: 30, roots: true })
+
+      expect(experimentalSession.at(-1)?.pathname).toBe("/experimental/session")
+      expect(experimentalSession.at(-1)?.searchParams.get("directory")).toBe("")
+      expect(experimentalSession.at(-1)?.searchParams.get("search")).toBe("global")
+      expect(experimentalSession.at(-1)?.searchParams.get("roots")).toBe("true")
+
+      kv.set("session_list_global_enabled", false)
+      await sync.session.list({ search: "scoped-again", limit: 30, roots: true })
+
+      expect(session.at(-1)?.pathname).toBe("/session")
+      expect(session.at(-1)?.searchParams.get("search")).toBe("scoped-again")
+      expect(session.at(-1)?.searchParams.get("path")).toBe("packages/tui")
+      expect(session.at(-1)?.searchParams.get("roots")).toBe("true")
+
+      await sync.session.refresh()
+
+      expect(session.at(-1)?.pathname).toBe("/session")
+      expect(session.at(-1)?.searchParams.get("path")).toBe("packages/tui")
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
   test("vcs branch updates only apply for the active workspace", async () => {
     await using tmp = await tmpdir()
     await Bun.write(`${tmp.path}/kv.json`, "{}")

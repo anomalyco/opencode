@@ -3,6 +3,7 @@ import type {
   Agent,
   Provider,
   Session,
+  GlobalSession,
   Part,
   Config,
   Todo,
@@ -36,6 +37,14 @@ import { usePermission } from "./permission"
 const emptyConsoleState: ConsoleState = {
   consoleManagedProviders: [],
   switchableOrgCount: 0,
+}
+
+type PickerSession = Session | GlobalSession
+type PickerSessionListInput = {
+  start?: number
+  search?: string
+  limit?: number
+  roots?: boolean
 }
 
 function search<T>(items: T[], target: string, key: (item: T) => string) {
@@ -161,10 +170,28 @@ export const {
       }
     }
 
+    function globalSessionListEnabled() {
+      return kv.get("session_list_global_enabled", false)
+    }
+
+    function sortSessionsByID<T extends { id: string }>(sessions: T[]) {
+      return sessions.toSorted((a, b) => a.id.localeCompare(b.id))
+    }
+
     function listSessions() {
       return sdk.client.session
         .list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000, ...sessionListQuery() })
-        .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
+        .then((x) => sortSessionsByID(x.data ?? []))
+    }
+
+    function listPickerSessions(input: PickerSessionListInput = {}): Promise<PickerSession[]> {
+      if (globalSessionListEnabled()) {
+        return sdk.client.experimental.session
+          // directory="" blocks SDK directory injection while staying unfiltered on the server.
+          .list({ directory: "", ...input })
+          .then((x) => sortSessionsByID(x.data ?? []))
+      }
+      return sdk.client.session.list({ ...input, ...sessionListQuery() }).then((x) => sortSessionsByID(x.data ?? []))
     }
 
     event.subscribe((event, { directory, workspace }) => {
@@ -570,6 +597,12 @@ export const {
         },
         query() {
           return sessionListQuery()
+        },
+        globalListEnabled() {
+          return globalSessionListEnabled()
+        },
+        list(input?: PickerSessionListInput) {
+          return listPickerSessions(input)
         },
         async refresh() {
           const list = await listSessions()

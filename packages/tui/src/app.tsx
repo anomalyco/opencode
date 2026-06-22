@@ -91,6 +91,7 @@ registerOpencodeSpinner()
 
 const appGlobalBindingCommands = [
   "session.list",
+  "session.toggle.global_list",
   "session.new",
   "session.quick_switch.1",
   "session.quick_switch.2",
@@ -576,6 +577,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         slashAliases: ["resume", "continue"],
         run: () => {
           dialog.replace(() => <DialogSessionList />)
+        },
+      },
+      {
+        name: "session.toggle.global_list",
+        title: kv.get("session_list_global_enabled", false) ? "Hide global sessions" : "Show global sessions",
+        category: "Session",
+        run: () => {
+          kv.set("session_list_global_enabled", !kv.get("session_list_global_enabled", false))
+          dialog.clear()
         },
       },
       {

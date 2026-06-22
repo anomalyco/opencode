@@ -2,12 +2,12 @@
 import { testRender } from "@opentui/solid"
 import { onMount } from "solid-js"
 import { ArgsProvider } from "../../../../src/context/args"
+import { ExitProvider } from "../../../../src/context/exit"
 import { KVProvider, useKV } from "../../../../src/context/kv"
 import { ProjectProvider, useProject } from "../../../../src/context/project"
 import { SDKProvider } from "../../../../src/context/sdk"
 import { SyncProvider, useSync } from "../../../../src/context/sync"
 import { PermissionProvider } from "../../../../src/context/permission"
-import { ExitProvider } from "../../../../src/context/exit"
 import { createEventSource, createFetch, type FetchHandler, directory } from "../../../fixture/tui-sdk"
 import { TestTuiContexts } from "../../../fixture/tui-environment"
 export { createEventSource, createFetch, directory, eventSource, json, worktree } from "../../../fixture/tui-sdk"
@@ -66,5 +66,13 @@ export async function mount(override?: FetchHandler, state?: string) {
 
   await ready
   await wait(() => sync.status === "complete")
-  return { app, emit: events.emit, kv, project, sync, session: calls.session }
+  return {
+    app,
+    emit: events.emit,
+    kv,
+    project,
+    sync,
+    session: calls.session,
+    experimentalSession: calls.experimentalSession,
+  }
 }

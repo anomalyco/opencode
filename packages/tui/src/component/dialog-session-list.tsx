@@ -18,8 +18,10 @@ import { errorMessage } from "../util/error"
 import { DialogSessionDeleteFailed } from "./dialog-session-delete-failed"
 import { useCommandShortcut } from "../keymap"
 import { useEvent } from "../context/event"
+import type { GlobalSession, Session } from "@opencode-ai/sdk/v2"
 
 type SessionListFilter = { scope?: "project"; path?: string }
+type PickerSession = Session & { project?: GlobalSession["project"] }
 
 export function createDialogSessionListQuery(input: { search?: string; filter: SessionListFilter }) {
   const search = input.search?.trim()
@@ -31,13 +33,16 @@ export function createDialogSessionListQuery(input: { search?: string; filter: S
   }
 }
 
+type DialogSessionListQuery = ReturnType<typeof createDialogSessionListQuery>
+type DialogSessionListResult<T> = T[] | { data?: T[] }
+
 export function loadDialogSessionList<T>(input: {
   search?: string
   filter: SessionListFilter
-  list: (query: ReturnType<typeof createDialogSessionListQuery>) => Promise<{ data?: T[] }>
+  list: (query: DialogSessionListQuery) => Promise<DialogSessionListResult<T>>
 }) {
   return input.list(createDialogSessionListQuery(input)).then(
-    (result) => result.data,
+    (result) => (Array.isArray(result) ? result : result.data),
     () => undefined,
   )
 }
@@ -60,34 +65,55 @@ export function DialogSessionList() {
   const quickSwitch9 = useCommandShortcut("session.quick_switch.9")
 
   const [browseResults, { refetch: refetchBrowse }] = createResource(
-    () => sync.session.query(),
-    (filter) => loadDialogSessionList({ filter, list: (query) => sdk.client.session.list(query) }),
+    () => ({ global: sync.session.globalListEnabled(), filter: sync.session.query() }),
+    (input) => loadDialogSessionList<PickerSession>({ filter: input.filter, list: (query) => sync.session.list(query) }),
   )
   const [searchResults, { refetch }] = createResource(
-    () => ({ query: search(), filter: sync.session.query() }),
+    () => ({ query: search(), global: sync.session.globalListEnabled(), filter: sync.session.query() }),
     (input) => {
       if (!input.query) return undefined
-      return loadDialogSessionList({
+      return loadDialogSessionList<PickerSession>({
         search: input.query,
         filter: input.filter,
-        list: (query) => sdk.client.session.list(query),
+        list: (query) => sync.session.list(query),
       })
     },
   )
 
   const currentSessionID = createMemo(() => (route.data.type === "session" ? route.data.sessionID : undefined))
-  const sessions = createMemo(() => {
+  const sessions = createMemo<PickerSession[]>(() => {
     const result = searchResults() ?? browseResults() ?? sync.data.session
+    const filter = sync.session.query()
+    const matchesScope = (session: Session) => {
+      if (sync.session.globalListEnabled()) return true
+      if (filter.path !== undefined) {
+        if (!filter.path) return !project.data.project.id || session.projectID === project.data.project.id
+        if (!session.path) return false
+        return session.path === filter.path || session.path.startsWith(`${filter.path}/`)
+      }
+      if (filter.scope === "project") return !project.data.project.id || session.projectID === project.data.project.id
+      return session.directory === project.instance.directory()
+    }
+    const listed = result.filter((session) => sync.session.globalListEnabled() || !("project" in session) || matchesScope(session))
     const synced = new Map(sync.data.session.map((session) => [session.id, session]))
-    const ids = new Set(result.map((session) => session.id))
+    const ids = new Set(listed.map((session) => session.id))
     const extra = [currentSessionID(), ...local.session.pinned()].flatMap((id) => {
       if (!id || ids.has(id)) return []
       const session = synced.get(id)
+      if (!session || !matchesScope(session)) return []
       if (session) ids.add(id)
-      return session ? [session] : []
+      return [session]
     })
     const query = search().trim().toLowerCase()
-    return [...result.map((session) => synced.get(session.id) ?? session), ...extra]
+    return [
+      ...listed.map((session) => {
+        const syncedSession = synced.get(session.id)
+        if (!syncedSession) return session
+        const sessionProject = "project" in session ? session.project : undefined
+        return sessionProject ? { ...syncedSession, project: sessionProject } : syncedSession
+      }),
+      ...extra,
+    ]
       .filter((session) => !deleted().has(session.id))
       .filter((session) => !query || session.title.toLowerCase().includes(query))
   })
@@ -98,7 +124,7 @@ export function DialogSessionList() {
     }),
   )
 
-  function recover(session: NonNullable<ReturnType<typeof sessions>[number]>) {
+  function recover(session: PickerSession) {
     const workspace = project.workspace.get(session.workspaceID!)
     const list = () => dialog.replace(() => <DialogSessionList />)
     const warp = async (selection: WorkspaceSelection) => {
@@ -230,8 +256,15 @@ export function DialogSessionList() {
           ? x.directory.slice(0, -x.path.length).replace(/\/$/, "")
           : undefined
         : x.directory
-      const footer =
-        directory && directory !== project.data.project.mainDir ? Locale.truncate(path.basename(directory), 20) : ""
+      const projectLabel = x.project?.name ?? (x.project ? path.basename(x.project.worktree) : undefined)
+      const detail = x.directory
+      const footer = sync.session.globalListEnabled()
+        ? projectLabel
+          ? Locale.truncate(projectLabel, 20)
+          : Locale.truncate(path.basename(directory ?? x.directory), 20)
+        : directory && directory !== project.data.project.mainDir
+          ? Locale.truncate(path.basename(directory), 20)
+          : ""
 
       const isDeleting = toDelete() === x.id
       const status = sync.data.session_status?.[x.id]
@@ -248,6 +281,7 @@ export function DialogSessionList() {
         value: x.id,
         category,
         footer,
+        details: sync.session.globalListEnabled() && detail ? [detail] : undefined,
         gutter,
       }
     }
@@ -271,7 +305,7 @@ export function DialogSessionList() {
 
   return (
     <DialogSelect
-      title="Sessions"
+      title={sync.session.globalListEnabled() ? "Sessions (global)" : "Sessions"}
       options={options()}
       skipFilter={true}
       preserveSelection={true}
@@ -348,7 +382,9 @@ export function DialogSessionList() {
           command: "session.rename",
           title: "rename",
           onTrigger: async (option) => {
-            dialog.replace(() => <DialogSessionRename session={option.value} />)
+            dialog.replace(() => (
+              <DialogSessionRename session={option.value} title={sessions().find((item) => item.id === option.value)?.title} />
+            ))
           },
         },
       ]}

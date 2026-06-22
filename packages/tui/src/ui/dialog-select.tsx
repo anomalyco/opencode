@@ -206,7 +206,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
       if (!category) return acc
       return acc + (i > 0 ? 2 : 1)
     }, 0)
-    return flat().reduce((acc, option) => acc + 1 + (option.details?.length ?? 0), headers)
+    return flat().reduce((acc, option) => acc + 1 + (option.details?.length ?? 0) + (option.details?.length ? 1 : 0), headers)
   })
 
   const dimensions = useTerminalDimensions()
@@ -662,6 +662,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                             if (index === -1) return
                             moveTo(index)
                           }}
+                          paddingBottom={option.details?.length ? 1 : 0}
                         >
                           <box
                             flexDirection="row"

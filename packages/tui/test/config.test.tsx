@@ -71,13 +71,14 @@ test("resolves overrides without mutating input", () => {
       sound_pack: "custom.pack",
       sounds: { question: "/sounds/question.wav" },
     },
-    keybinds: { session_list: "ctrl+l" },
+    keybinds: { session_list: "ctrl+l", session_toggle_global_list: "ctrl+g" },
   }
   const config = resolve(input, { terminalSuspend: true })
 
   expect(config).toMatchObject({ theme: "custom", mouse: false, leader_timeout: 750, attention: input.attention })
   expect(config.keybinds.get("session.list")).toHaveLength(1)
-  expect(input.keybinds).toEqual({ session_list: "ctrl+l" })
+  expect(config.keybinds.get("session.toggle.global_list")?.[0]?.key).toBe("ctrl+g")
+  expect(input.keybinds).toEqual({ session_list: "ctrl+l", session_toggle_global_list: "ctrl+g" })
 })
 
 test("resolves a session move keybind", () => {
