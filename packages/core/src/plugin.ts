@@ -103,8 +103,16 @@ export const layer = Layer.effect(
       }
     }[keyof Hooks][] = []
     const events = yield* EventV2.Service
-    const scope = yield* Scope.Scope
     const locks = KeyedMutex.makeUnsafe<ID>()
+    const scope = yield* Scope.make()
+
+    // One registry-owned scope lets shutdown remove every plugin transform in one batch.
+    yield* Effect.addFinalizer((exit) =>
+      Effect.gen(function* () {
+        hooks = []
+        yield* State.batch(Scope.close(scope, exit))
+      }),
+    )
 
     const svc = Service.of({
       add: Effect.fn("Plugin.add")(function* (input) {
@@ -112,7 +120,7 @@ export const layer = Layer.effect(
         yield* locks.withLock(id)(
           Effect.gen(function* () {
             const existing = hooks.find((item) => item.id === id)
-            if (existing) yield* Scope.close(existing.scope, Exit.void).pipe(Effect.ignore)
+            if (existing) yield* State.batch(Scope.close(existing.scope, Exit.void)).pipe(Effect.ignore)
             const childScope = yield* Scope.fork(scope)
             const result = yield* input.effect.pipe(
               Scope.provide(childScope),
@@ -181,7 +189,7 @@ export const layer = Layer.effect(
           Effect.gen(function* () {
             const existing = hooks.find((item) => item.id === id)
             hooks = hooks.filter((item) => item.id !== id)
-            if (existing) yield* Scope.close(existing.scope, Exit.void).pipe(Effect.ignore)
+            if (existing) yield* State.batch(Scope.close(existing.scope, Exit.void)).pipe(Effect.ignore)
           }),
         )
       }),

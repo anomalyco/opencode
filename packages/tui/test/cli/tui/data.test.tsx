@@ -26,6 +26,7 @@ function emitEvent(events: ReturnType<typeof createEventSource>, payload: Event)
 }
 
 test("refreshes resources into reactive getters", async () => {
+  const events = createEventSource()
   const location = {
     directory,
     project: { id: "proj_test", directory },
@@ -49,8 +50,7 @@ test("refreshes resources into reactive getters", async () => {
         data: [{ id: "build", request: { headers: {}, body: {} }, mode: "primary", hidden: false, permissions: [] }],
       })
     return undefined
-  })
-  const events = createEventSource()
+  }, events)
   let data!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
@@ -119,7 +119,7 @@ test("refreshes integrations after integration updates", async () => {
               },
             ],
     })
-  })
+  }, events)
   let data!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
@@ -171,7 +171,7 @@ test("refreshes effective catalog data after catalog updates", async () => {
       requests.provider++
       return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })
     }
-  })
+  }, events)
 
   const app = await testRender(() => (
     <TestTuiContexts>
@@ -205,7 +205,7 @@ test("refreshes references after updates", async () => {
       location: { directory, project: { id: "proj_test", directory } },
       data: requests === 1 ? [] : [{ name: "docs", path: "/docs", source: { type: "local", path: "/docs" } }],
     })
-  })
+  }, events)
   let data!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
@@ -243,7 +243,7 @@ test("refreshes references after updates", async () => {
 
 test("settles pending tools when a live failure arrives", async () => {
   const events = createEventSource()
-  const calls = createFetch()
+  const calls = createFetch(undefined, events)
   let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
@@ -372,7 +372,7 @@ test("settles pending tools when a live failure arrives", async () => {
 
 test("renders admitted prompts only after promotion", async () => {
   const events = createEventSource()
-  const calls = createFetch()
+  const calls = createFetch(undefined, events)
   let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
@@ -436,7 +436,7 @@ test("renders admitted prompts only after promotion", async () => {
 
 test("renders a promoted prompt when admission was missed", async () => {
   const events = createEventSource()
-  const calls = createFetch()
+  const calls = createFetch(undefined, events)
   let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {
@@ -484,7 +484,7 @@ test("renders a promoted prompt when admission was missed", async () => {
 
 test("projects live context updates with their message ID", async () => {
   const events = createEventSource()
-  const calls = createFetch()
+  const calls = createFetch(undefined, events)
   let sync!: ReturnType<typeof useData>
   let ready!: () => void
   const mounted = new Promise<void>((resolve) => {

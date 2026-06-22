@@ -13138,35 +13138,15 @@
       "get": {
         "tags": ["events"],
         "operationId": "v2.event.subscribe",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "type": "object",
-              "properties": {
-                "directory": {
-                  "type": "string"
-                },
-                "workspace": {
-                  "type": "string"
-                }
-              },
-              "additionalProperties": false
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
+        "parameters": [],
         "security": [],
         "responses": {
           "200": {
-            "description": "Success",
+            "description": "Event stream",
             "content": {
               "text/event-stream": {
                 "schema": {
-                  "type": "string"
+                  "$ref": "#/components/schemas/V2Event"
                 }
               }
             }
@@ -13192,7 +13172,7 @@
             }
           }
         },
-        "description": "Subscribe to native event payloads for a location.",
+        "description": "Subscribe to native event payloads for the server.",
         "summary": "Subscribe to events",
         "x-codeSamples": [
           {
@@ -23081,6 +23061,271 @@
         "required": ["_tag", "providerID", "message"],
         "additionalProperties": false
       },
+      "V2Event": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/V2EventModels-devRefreshed"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventIntegrationUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventCatalogUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionCreated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionDeleted"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventMessageUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventMessageRemoved"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventMessagePartUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventMessagePartRemoved"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextAgentSwitched"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextModelSwitched"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextMoved"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextPrompted"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextPromptAdmitted"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextPromptPromoted"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextInterruptRequested"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextContextUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextSynthetic"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextShellStarted"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextShellEnded"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextStepStarted"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextStepEnded"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextStepFailed"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextTextStarted"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextTextDelta"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextTextEnded"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextReasoningStarted"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextReasoningDelta"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextReasoningEnded"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextToolInputStarted"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextToolInputDelta"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextToolInputEnded"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextToolCalled"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextToolProgress"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextToolSuccess"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextToolFailed"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextRetried"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextCompactionStarted"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextCompactionDelta"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionNextCompactionEnded"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventMessagePartDelta"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionDiff"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionError"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventInstallationUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventInstallationUpdate-available"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventFileEdited"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventPluginAdded"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventPermissionV2Asked"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventPermissionV2Replied"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventReferenceUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventProjectDirectoriesUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventFileWatcherUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventPtyCreated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventPtyUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventPtyExited"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventPtyDeleted"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventQuestionV2Asked"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventQuestionV2Replied"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventQuestionV2Rejected"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventTodoUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventLspUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventPermissionAsked"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventPermissionReplied"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventTuiPromptAppend"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventTuiCommandExecute"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventTuiToastShow"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventTuiSessionSelect"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventMcpToolsChanged"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventMcpBrowserOpenFailed"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventCommandExecuted"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventProjectUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionStatus"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionIdle"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventQuestionAsked"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventQuestionReplied"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventQuestionRejected"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventSessionCompacted"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventVcsBranchUpdated"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventWorkspaceReady"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventWorkspaceFailed"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventWorkspaceStatus"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventWorktreeReady"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventWorktreeFailed"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventServerConnected"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventGlobalDisposed"
+          },
+          {
+            "$ref": "#/components/schemas/V2EventServerConnected"
+          }
+        ]
+      },
       "ForbiddenError": {
         "type": "object",
         "properties": {
@@ -27664,6 +27909,4926 @@
           }
         },
         "required": ["name", "location", "content"],
+        "additionalProperties": false
+      },
+      "V2EventModels-devRefreshed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["models-dev.refreshed"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventIntegrationUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["integration.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventCatalogUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["catalog.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionCreated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.created"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "info": {
+                "$ref": "#/components/schemas/Session"
+              }
+            },
+            "required": ["sessionID", "info"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "info": {
+                "$ref": "#/components/schemas/Session"
+              }
+            },
+            "required": ["sessionID", "info"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionDeleted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.deleted"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "info": {
+                "$ref": "#/components/schemas/Session"
+              }
+            },
+            "required": ["sessionID", "info"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventMessageUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["message.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "info": {
+                "$ref": "#/components/schemas/Message"
+              }
+            },
+            "required": ["sessionID", "info"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventMessageRemoved": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["message.removed"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg"
+              }
+            },
+            "required": ["sessionID", "messageID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventMessagePartUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["message.part.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "part": {
+                "$ref": "#/components/schemas/Part"
+              },
+              "time": {
+                "type": "number"
+              }
+            },
+            "required": ["sessionID", "part", "time"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventMessagePartRemoved": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["message.part.removed"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg"
+              },
+              "partID": {
+                "type": "string",
+                "pattern": "^prt"
+              }
+            },
+            "required": ["sessionID", "messageID", "partID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextAgentSwitched": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.agent.switched"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "agent": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "agent"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextModelSwitched": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.model.switched"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "model": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "providerID": {
+                    "type": "string"
+                  },
+                  "variant": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "providerID"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "model"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextMoved": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.moved"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "location": {
+                "$ref": "#/components/schemas/LocationRef"
+              },
+              "subdirectory": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "location"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextPrompted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.prompted"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "prompt": {
+                "$ref": "#/components/schemas/Prompt"
+              },
+              "delivery": {
+                "type": "string",
+                "enum": ["steer", "queue"]
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextPromptAdmitted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.prompt.admitted"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "prompt": {
+                "$ref": "#/components/schemas/Prompt"
+              },
+              "delivery": {
+                "type": "string",
+                "enum": ["steer", "queue"]
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextPromptPromoted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.prompt.promoted"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "prompt": {
+                "$ref": "#/components/schemas/Prompt"
+              },
+              "timeCreated": {
+                "type": "number"
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "prompt", "timeCreated"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextInterruptRequested": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.interrupt.requested"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              }
+            },
+            "required": ["timestamp", "sessionID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextContextUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.context.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "text"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextSynthetic": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.synthetic"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "text"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextShellStarted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.shell.started"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "callID": {
+                "type": "string"
+              },
+              "command": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "callID", "command"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextShellEnded": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.shell.ended"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "callID": {
+                "type": "string"
+              },
+              "output": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "callID", "output"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextStepStarted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.step.started"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "agent": {
+                "type": "string"
+              },
+              "model": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "providerID": {
+                    "type": "string"
+                  },
+                  "variant": {
+                    "type": "string"
+                  }
+                },
+                "required": ["id", "providerID"],
+                "additionalProperties": false
+              },
+              "snapshot": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "agent", "model"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextStepEnded": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.step.ended"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "finish": {
+                "type": "string"
+              },
+              "cost": {
+                "type": "number"
+              },
+              "tokens": {
+                "type": "object",
+                "properties": {
+                  "input": {
+                    "type": "number"
+                  },
+                  "output": {
+                    "type": "number"
+                  },
+                  "reasoning": {
+                    "type": "number"
+                  },
+                  "cache": {
+                    "type": "object",
+                    "properties": {
+                      "read": {
+                        "type": "number"
+                      },
+                      "write": {
+                        "type": "number"
+                      }
+                    },
+                    "required": ["read", "write"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["input", "output", "reasoning", "cache"],
+                "additionalProperties": false
+              },
+              "snapshot": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "finish", "cost", "tokens"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextStepFailed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.step.failed"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "error": {
+                "$ref": "#/components/schemas/SessionErrorUnknown"
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "error"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextTextStarted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.text.started"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "textID": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "textID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextTextDelta": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.text.delta"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "textID": {
+                "type": "string"
+              },
+              "delta": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "textID", "delta"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextTextEnded": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.text.ended"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "textID": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "textID", "text"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextReasoningStarted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.reasoning.started"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "reasoningID": {
+                "type": "string"
+              },
+              "providerMetadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object"
+                }
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextReasoningDelta": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.reasoning.delta"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "reasoningID": {
+                "type": "string"
+              },
+              "delta": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID", "delta"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextReasoningEnded": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.reasoning.ended"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "reasoningID": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "providerMetadata": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object"
+                }
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "reasoningID", "text"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextToolInputStarted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.tool.input.started"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "callID": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "name"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextToolInputDelta": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.tool.input.delta"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "callID": {
+                "type": "string"
+              },
+              "delta": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "delta"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextToolInputEnded": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.tool.input.ended"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "callID": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "text"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextToolCalled": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.tool.called"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "callID": {
+                "type": "string"
+              },
+              "tool": {
+                "type": "string"
+              },
+              "input": {
+                "type": "object"
+              },
+              "provider": {
+                "type": "object",
+                "properties": {
+                  "executed": {
+                    "type": "boolean"
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": ["executed"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "tool", "input", "provider"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextToolProgress": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.tool.progress"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "callID": {
+                "type": "string"
+              },
+              "structured": {
+                "type": "object"
+              },
+              "content": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ToolTextContent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ToolFileContent"
+                    }
+                  ]
+                }
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "structured", "content"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextToolSuccess": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.tool.success"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "callID": {
+                "type": "string"
+              },
+              "structured": {
+                "type": "object"
+              },
+              "content": {
+                "type": "array",
+                "items": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ToolTextContent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ToolFileContent"
+                    }
+                  ]
+                }
+              },
+              "outputPaths": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "result": {},
+              "provider": {
+                "type": "object",
+                "properties": {
+                  "executed": {
+                    "type": "boolean"
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": ["executed"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "structured", "content", "provider"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextToolFailed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.tool.failed"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "assistantMessageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "callID": {
+                "type": "string"
+              },
+              "error": {
+                "$ref": "#/components/schemas/SessionErrorUnknown"
+              },
+              "result": {},
+              "provider": {
+                "type": "object",
+                "properties": {
+                  "executed": {
+                    "type": "boolean"
+                  },
+                  "metadata": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "required": ["executed"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["timestamp", "sessionID", "assistantMessageID", "callID", "error", "provider"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextRetried": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.retried"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "attempt": {
+                "type": "number"
+              },
+              "error": {
+                "$ref": "#/components/schemas/SessionNextRetry_error"
+              }
+            },
+            "required": ["timestamp", "sessionID", "attempt", "error"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextCompactionStarted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.compaction.started"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "reason": {
+                "type": "string",
+                "enum": ["auto", "manual"]
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "reason"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextCompactionDelta": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.compaction.delta"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "text"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextCompactionEnded": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.compaction.ended"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "reason": {
+                "type": "string",
+                "enum": ["auto", "manual"]
+              },
+              "text": {
+                "type": "string"
+              },
+              "recent": {
+                "type": "string"
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "reason", "text", "recent"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventMessagePartDelta": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["message.part.delta"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg"
+              },
+              "partID": {
+                "type": "string",
+                "pattern": "^prt"
+              },
+              "field": {
+                "type": "string"
+              },
+              "delta": {
+                "type": "string"
+              }
+            },
+            "required": ["sessionID", "messageID", "partID", "field", "delta"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionDiff": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.diff"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "diff": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SnapshotFileDiff"
+                }
+              }
+            },
+            "required": ["sessionID", "diff"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionError": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.error"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "error": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ProviderAuthError"
+                  },
+                  {
+                    "$ref": "#/components/schemas/UnknownError"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MessageOutputLengthError"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MessageAbortedError"
+                  },
+                  {
+                    "$ref": "#/components/schemas/StructuredOutputError"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ContextOverflowError"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ContentFilterError"
+                  },
+                  {
+                    "$ref": "#/components/schemas/APIError"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventInstallationUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["installation.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": ["version"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventInstallationUpdate-available": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["installation.update-available"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": ["version"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventFileEdited": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["file.edited"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              }
+            },
+            "required": ["file"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventPluginAdded": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["plugin.added"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": ["id"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventPermissionV2Asked": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["permission.v2.asked"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^per"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "action": {
+                "type": "string"
+              },
+              "resources": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "save": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "metadata": {
+                "type": "object"
+              },
+              "source": {
+                "$ref": "#/components/schemas/PermissionV2Source"
+              }
+            },
+            "required": ["id", "sessionID", "action", "resources"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventPermissionV2Replied": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["permission.v2.replied"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^per"
+              },
+              "reply": {
+                "$ref": "#/components/schemas/PermissionV2Reply"
+              }
+            },
+            "required": ["sessionID", "requestID", "reply"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventReferenceUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["reference.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventProjectDirectoriesUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["project.directories.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "projectID": {
+                "type": "string"
+              }
+            },
+            "required": ["projectID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventFileWatcherUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["file.watcher.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "file": {
+                "type": "string"
+              },
+              "event": {
+                "type": "string",
+                "enum": ["add", "change", "unlink"]
+              }
+            },
+            "required": ["file", "event"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventPtyCreated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["pty.created"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "info": {
+                "$ref": "#/components/schemas/Pty"
+              }
+            },
+            "required": ["info"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventPtyUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["pty.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "info": {
+                "$ref": "#/components/schemas/Pty"
+              }
+            },
+            "required": ["info"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventPtyExited": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["pty.exited"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^pty"
+              },
+              "exitCode": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": ["id", "exitCode"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventPtyDeleted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["pty.deleted"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^pty"
+              }
+            },
+            "required": ["id"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventQuestionV2Asked": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["question.v2.asked"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^que"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "questions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/QuestionV2Info"
+                },
+                "description": "Questions to ask"
+              },
+              "tool": {
+                "$ref": "#/components/schemas/QuestionV2Tool"
+              }
+            },
+            "required": ["id", "sessionID", "questions"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventQuestionV2Replied": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["question.v2.replied"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^que"
+              },
+              "answers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/QuestionV2Answer"
+                }
+              }
+            },
+            "required": ["sessionID", "requestID", "answers"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventQuestionV2Rejected": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["question.v2.rejected"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^que"
+              }
+            },
+            "required": ["sessionID", "requestID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventTodoUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["todo.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "todos": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Todo"
+                }
+              }
+            },
+            "required": ["sessionID", "todos"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventLspUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["lsp.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventPermissionAsked": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["permission.asked"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^per"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "permission": {
+                "type": "string"
+              },
+              "patterns": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "metadata": {
+                "type": "object"
+              },
+              "always": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "tool": {
+                "type": "object",
+                "properties": {
+                  "messageID": {
+                    "type": "string"
+                  },
+                  "callID": {
+                    "type": "string"
+                  }
+                },
+                "required": ["messageID", "callID"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["id", "sessionID", "permission", "patterns", "metadata", "always"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventPermissionReplied": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["permission.replied"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^per"
+              },
+              "reply": {
+                "type": "string",
+                "enum": ["once", "always", "reject"]
+              }
+            },
+            "required": ["sessionID", "requestID", "reply"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventTuiPromptAppend": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["tui.prompt.append"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["text"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventTuiCommandExecute": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["tui.command.execute"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "session.list",
+                      "session.new",
+                      "session.share",
+                      "session.interrupt",
+                      "session.compact",
+                      "session.page.up",
+                      "session.page.down",
+                      "session.line.up",
+                      "session.line.down",
+                      "session.half.page.up",
+                      "session.half.page.down",
+                      "session.first",
+                      "session.last",
+                      "prompt.clear",
+                      "prompt.submit",
+                      "agent.cycle"
+                    ]
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": ["command"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventTuiToastShow": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["tui.toast.show"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "variant": {
+                "type": "string",
+                "enum": ["info", "success", "warning", "error"]
+              },
+              "duration": {
+                "type": "integer",
+                "exclusiveMinimum": 0
+              }
+            },
+            "required": ["message", "variant"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventTuiSessionSelect": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["tui.session.select"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses",
+                "description": "Session ID to navigate to"
+              }
+            },
+            "required": ["sessionID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventMcpToolsChanged": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["mcp.tools.changed"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "server": {
+                "type": "string"
+              }
+            },
+            "required": ["server"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventMcpBrowserOpenFailed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["mcp.browser.open.failed"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "mcpName": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string"
+              }
+            },
+            "required": ["mcpName", "url"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventCommandExecuted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["command.executed"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "arguments": {
+                "type": "string"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg"
+              }
+            },
+            "required": ["name", "sessionID", "arguments", "messageID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventProjectUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["project.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "worktree": {
+                "type": "string"
+              },
+              "vcs": {
+                "type": "string",
+                "enum": ["git"]
+              },
+              "name": {
+                "type": "string"
+              },
+              "icon": {
+                "type": "object",
+                "properties": {
+                  "url": {
+                    "type": "string"
+                  },
+                  "override": {
+                    "type": "string"
+                  },
+                  "color": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "commands": {
+                "type": "object",
+                "properties": {
+                  "start": {
+                    "type": "string",
+                    "description": "Startup script to run when creating a new workspace (worktree)"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "time": {
+                "type": "object",
+                "properties": {
+                  "created": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "updated": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "initialized": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": ["created", "updated"],
+                "additionalProperties": false
+              },
+              "sandboxes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "required": ["id", "worktree", "time", "sandboxes"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionStatus": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.status"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "status": {
+                "$ref": "#/components/schemas/SessionStatus"
+              }
+            },
+            "required": ["sessionID", "status"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionIdle": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.idle"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              }
+            },
+            "required": ["sessionID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventQuestionAsked": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["question.asked"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^que"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "questions": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/QuestionInfo"
+                },
+                "description": "Questions to ask"
+              },
+              "tool": {
+                "$ref": "#/components/schemas/QuestionTool"
+              }
+            },
+            "required": ["id", "sessionID", "questions"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventQuestionReplied": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["question.replied"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^que"
+              },
+              "answers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/QuestionAnswer"
+                }
+              }
+            },
+            "required": ["sessionID", "requestID", "answers"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventQuestionRejected": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["question.rejected"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "requestID": {
+                "type": "string",
+                "pattern": "^que"
+              }
+            },
+            "required": ["sessionID", "requestID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionCompacted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.compacted"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              }
+            },
+            "required": ["sessionID"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventVcsBranchUpdated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["vcs.branch.updated"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "branch": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventWorkspaceReady": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["workspace.ready"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": ["name"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventWorkspaceFailed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["workspace.failed"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventWorkspaceStatus": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["workspace.status"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "workspaceID": {
+                "type": "string",
+                "pattern": "^wrk"
+              },
+              "status": {
+                "type": "string",
+                "enum": ["connected", "connecting", "disconnected", "error"]
+              }
+            },
+            "required": ["workspaceID", "status"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventWorktreeReady": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["worktree.ready"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "branch": {
+                "type": "string"
+              }
+            },
+            "required": ["name"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventWorktreeFailed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["worktree.failed"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string"
+              }
+            },
+            "required": ["message"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventServerConnected": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["server.connected"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventGlobalDisposed": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["global.disposed"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["id", "type", "data"],
         "additionalProperties": false
       },
       "QuestionV2Request": {
