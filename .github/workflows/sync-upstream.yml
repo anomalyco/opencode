@@ -25,10 +25,15 @@ jobs:
           git remote add upstream https://github.com/anomalyco/opencode.git
           git fetch upstream
           git checkout dev
-          # 直接将 dev 重置到上游 dev（完全同步，无冲突可能）
-          git reset --hard upstream/dev
-          # 强制推送到你的 fork
-          git push origin dev --force
+          git merge upstream/dev --no-edit
+
+          # 检查是否有更新
+          if git diff --quiet HEAD@{1}; then
+            echo "No updates from upstream"
+          else
+            echo "Updates found, pushing to origin"
+            git push origin dev
+          fi
 
           
 
