@@ -189,6 +189,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (Array.isArray(value.favorite)) setModelStore("favorite", value.favorite)
           if (typeof value.variant === "object" && value.variant !== null)
             setModelStore("variant", value.variant as Record<string, string | undefined>)
+          if (typeof value.imageModel === "object" && value.imageModel !== null)
+            setModelStore("imageModel", value.imageModel as { providerID: string; modelID: string })
         })
         .catch(() => {})
         .finally(() => {
@@ -280,12 +282,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         imageModel: {
           current() {
             const im = modelStore.imageModel
-            if (im && isModelValid(im)) return im
-            return undefined
+            if (!im) return undefined
+            if (im.providerID === "__disabled__") return im
+            return im
           },
           parsed: createMemo(() => {
             const im = modelStore.imageModel
             if (!im) return undefined
+            if (im.providerID === "__disabled__") return { provider: "Disabled", model: "Image preprocessing off" }
             const provider = sync.data.provider.find((x) => x.id === im.providerID)
             const info = provider?.models[im.modelID]
             return {
@@ -303,6 +307,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               return
             }
             setModelStore("imageModel", model)
+            save()
+          },
+          setDisabled() {
+            setModelStore("imageModel", { providerID: "__disabled__", modelID: "__disabled__" })
             save()
           },
           clear() {

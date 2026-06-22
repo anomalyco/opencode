@@ -10,6 +10,8 @@ function supportsImages(model: { capabilities?: { input?: { image?: boolean } } 
   return !!model.capabilities?.input?.image
 }
 
+const DISABLED_VALUE = { providerID: "__disabled__", modelID: "__disabled__" } as const
+
 export function DialogImageModel() {
   const local = useLocal()
   const sync = useSync()
@@ -56,6 +58,7 @@ export function DialogImageModel() {
   const currentLabel = createMemo(() => {
     const im = local.model.imageModel.current()
     if (!im) return "Auto"
+    if (im.providerID === "__disabled__") return "Disabled"
     const provider = sync.data.provider.find((x: any) => x.id === im.providerID)
     const info = provider?.models[im.modelID]
     return info?.name ?? im.modelID
@@ -71,6 +74,16 @@ export function DialogImageModel() {
           category: "Default",
           onSelect() {
             local.model.imageModel.clear()
+            dialog.clear()
+          },
+        },
+        {
+          value: DISABLED_VALUE,
+          title: "Disabled",
+          description: "Disable image preprocessing entirely",
+          category: "Default",
+          onSelect() {
+            local.model.imageModel.setDisabled()
             dialog.clear()
           },
         },

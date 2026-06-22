@@ -1085,6 +1085,7 @@ export function Prompt(props: PromptProps) {
       })
     } else {
       move.startSubmit()
+      const imageModel = local.model.imageModel.current()
       sdk.client.session
         .prompt(
           {
@@ -1092,6 +1093,7 @@ export function Prompt(props: PromptProps) {
             ...selectedModel,
             agent: agent.name,
             model: selectedModel,
+            imageModel,
             variant,
             parts: [
               ...editorParts,
@@ -1459,7 +1461,15 @@ export function Prompt(props: PromptProps) {
                               </span>
                             </text>
                           </Show>
-                          <Show when={!local.model.parsed().supportsImages && local.model.imageModel.parsed()}>
+                          <Show
+                            when={
+                              !local.model.parsed().supportsImages &&
+                              local.model.imageModel.parsed() &&
+                              local.model.imageModel.parsed()!.provider !== "Disabled"
+                                ? local.model.imageModel.parsed()
+                                : undefined
+                            }
+                          >
                             {(parsed) => (
                               <>
                                 <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>

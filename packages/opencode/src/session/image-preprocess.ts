@@ -45,6 +45,11 @@ export const preprocessImages = Effect.fn("ImagePreprocess.preprocessImages")(
       partTypes: message.parts.map((p) => p.type),
     })
 
+    if (explicitImageModel?.providerID === "__disabled__" && explicitImageModel?.modelID === "__disabled__") {
+      yield* Effect.logInfo("image preprocessing is disabled by user, skipping")
+      return message
+    }
+
     if (message.info.role !== "user") return message
     const userModel = message.info.model
     if (!userModel) {
