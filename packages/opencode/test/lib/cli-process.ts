@@ -237,8 +237,8 @@ export function withCliFixture<A, E>(
       )
       return {
         exitCode: result.exitCode,
-        stdout: result.stdout.toString(),
-        stderr: result.stderr.toString(),
+        stdout: normalizeLines(result.stdout.toString()),
+        stderr: normalizeLines(result.stderr.toString()),
         durationMs: Date.now() - start,
       }
     })
@@ -299,8 +299,8 @@ export function withCliFixture<A, E>(
         interrupt: () => proc.kill("SIGINT"),
         result: Effect.promise(async () => ({
           exitCode: await proc.exited,
-          stdout: await stdout,
-          stderr: await stderr,
+          stdout: normalizeLines(await stdout),
+          stderr: normalizeLines(await stderr),
           durationMs: Date.now() - start,
         })),
       } satisfies RunHandle
@@ -477,6 +477,10 @@ function parseJsonEvents(stdout: string): Array<Record<string, unknown>> {
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .map((line) => JSON.parse(line) as Record<string, unknown>)
+}
+
+function normalizeLines(value: string) {
+  return value.replaceAll("\r\n", "\n")
 }
 
 // Convenience for the common assertion pattern. Dumps stderr/stdout when
