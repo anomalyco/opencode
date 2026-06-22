@@ -1,5 +1,12 @@
 # V2 Schema Changelog
 
+## 2026-06-22: Make Session Interruption Process-Local
+
+- Remove the unprojected `session.next.interrupt.requested.1` event from the experimental durable Session event union and generated SDK.
+- Register prompt wakes inline after durable admission instead of forking delivery, so ordinary process-local ordering determines whether work precedes or follows interruption.
+- Keep durable inbox rows unchanged by interruption; a later wake or explicit resume can process them.
+- No stored projection requires migration. Existing experimental interrupt events retain a private decoder, remain inert historical rows, and are no longer emitted or exposed by the current replay union.
+
 ## 2026-06-05: Execute Automatic Session Compaction
 
 - Trigger automatic compaction before provider turns using the complete estimated request and absolute model-aware headroom.

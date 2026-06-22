@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Layer } from "effect"
 import { LocationServiceMap } from "../../location-layer"
 import { SessionRunCoordinator } from "../run-coordinator"
 import { SessionRunner } from "../runner"
@@ -14,14 +14,16 @@ export const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const locations = yield* LocationServiceMap
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, void, SessionRunner.RunError>({
-      drain: Effect.fnUntraced(function* (sessionID: SessionSchema.ID, mode) {
+      drain: Effect.fnUntraced(function* (sessionID: SessionSchema.ID, options) {
         const session = yield* store.get(sessionID)
         if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
-        return yield* SessionRunner.Service.use((runner) => runner.run({ sessionID, force: mode === "run" })).pipe(
+        return yield* SessionRunner.Service.use((runner) => runner.run({ sessionID, force: options.force })).pipe(
           Effect.provide(locations.get(session.location)),
+          Effect.tapCause((cause) =>
+            Cause.hasInterruptsOnly(cause) ? Effect.void : logFailure("Failed to drain Session", sessionID, cause),
+          ),
         )
       }),
-      onFailure: (sessionID, cause) => logFailure("Failed to drain Session", sessionID, cause),
     })
 
     return SessionExecution.Service.of({

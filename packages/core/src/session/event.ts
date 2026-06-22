@@ -118,12 +118,13 @@ export namespace PromptLifecycle {
   export type Promoted = typeof Promoted.Type
 }
 
-export const InterruptRequested = EventV2.define({
+// Retain decoding for rows emitted by earlier experimental builds without exposing a current event contract.
+EventV2.define({
   type: "session.next.interrupt.requested",
+  legacy: true,
   ...options,
   schema: Base,
 })
-export type InterruptRequested = typeof InterruptRequested.Type
 
 export const ContextUpdated = EventV2.define({
   type: "session.next.context.updated",
@@ -475,7 +476,6 @@ const DurableDefinitions = [
   Prompted,
   PromptLifecycle.Admitted,
   PromptLifecycle.Promoted,
-  InterruptRequested,
   ContextUpdated,
   Synthetic,
   Shell.Started,
