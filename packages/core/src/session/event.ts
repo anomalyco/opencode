@@ -438,7 +438,7 @@ export namespace Compaction {
 
   export const Ended = EventV2.define({
     type: "session.next.compaction.ended",
-    durable: { aggregate: "sessionID", version: 2 },
+    ...options,
     schema: {
       ...Base,
       messageID: SessionMessageID.ID,

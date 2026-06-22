@@ -1,8 +1,8 @@
 # V2 Schema Changelog
 
-## 2026-06-22: Remove Unpublished Compaction Event Compatibility
+## 2026-06-22: Reset Unpublished Compaction Event
 
-- Remove the unpublished `session.next.compaction.ended.1` decoder and support only the current `.2` checkpoint payload.
+- Replace the unpublished `session.next.compaction.ended.1` payload with the current checkpoint payload and remove its legacy decoder.
 - Reset experimental events, sequences, Session inputs, projected Session messages, Context Epochs, synchronized workspace rows, and Session workspace links.
 - Preserve canonical V1 `session`, `message`, and `part` rows.
 
@@ -17,7 +17,7 @@
 - Preserve the existing structured summary contract and update prior summaries with newly compacted history.
 - Store token-bounded recent history as plain serialized text inside the checkpoint instead of replaying provider-native messages.
 - Keep compaction starts durable and progress deltas live-only; activate history cutover only from a durable completed summary.
-- Version the completed event as `session.next.compaction.ended.2` rather than changing the existing synchronized v1 payload in place.
+- Store the completed event with the current checkpoint payload containing stable message identity, reason, summary, and recent context.
 - Reload the replacement Context Epoch and continue the original pending turn after compaction.
 - Preserve full durable history; compaction changes only the active model representation.
 - Defer provider-overflow recovery, explicit manual compaction, and deterministic old tool-result pruning.

@@ -14,7 +14,6 @@ import sessionMessageProjectionOrderMigration from "@opencode-ai/core/database/m
 import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migration/20260604172448_event_sourced_session_input"
 import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
-import resetV2SessionStateMigration from "@opencode-ai/core/database/migration/20260622170816_reset_v2_session_state"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -223,61 +222,6 @@ describe("DatabaseMigration", () => {
           expect.objectContaining({ name: "session_input_session_promoted_seq_idx", unique: 1 }),
           expect.objectContaining({ name: "session_input_session_admitted_seq_idx", unique: 1 }),
         ])
-      }),
-    )
-  })
-
-  test("resets incompatible V2 Session state without deleting canonical history", async () => {
-    await run(
-      Effect.gen(function* () {
-        const db = yield* makeDb
-        yield* DatabaseMigration.apply(db)
-        yield* db.run(
-          sql`INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) VALUES ('project', '/tmp/project', 1, 1, '[]')`,
-        )
-        yield* db.run(
-          sql`INSERT INTO workspace (id, type, project_id, time_used) VALUES ('workspace', 'local', 'project', 1)`,
-        )
-        yield* db.run(
-          sql`INSERT INTO session (id, project_id, workspace_id, slug, directory, title, version, time_created, time_updated) VALUES ('session', 'project', 'workspace', 'session', '/tmp/project', 'Session', 'test', 1, 1)`,
-        )
-        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('session', 0)`)
-        yield* db.run(
-          sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('event', 'session', 0, 'session.next.compaction.ended.1', '{}')`,
-        )
-        yield* db.run(
-          sql`INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES ('projected', 'session', 'compaction', 0, 1, 1, '{}')`,
-        )
-        yield* db.run(
-          sql`INSERT INTO session_input (id, session_id, prompt, delivery, admitted_seq, time_created) VALUES ('input', 'session', '{}', 'steer', 0, 1)`,
-        )
-        yield* db.run(
-          sql`INSERT INTO session_context_epoch (session_id, baseline, snapshot, baseline_seq) VALUES ('session', 'baseline', '{}', 0)`,
-        )
-        yield* db.run(sql`DELETE FROM migration WHERE id = ${resetV2SessionStateMigration.id}`)
-
-        yield* DatabaseMigration.applyOnly(db, [resetV2SessionStateMigration])
-
-        expect(
-          yield* db.get(sql`
-            SELECT
-              (SELECT workspace_id FROM session WHERE id = 'session') AS workspaceID,
-              (SELECT COUNT(*) FROM workspace) AS workspaces,
-              (SELECT COUNT(*) FROM event_sequence) AS eventSequences,
-              (SELECT COUNT(*) FROM event) AS events,
-              (SELECT COUNT(*) FROM session_message) AS sessionMessages,
-              (SELECT COUNT(*) FROM session_input) AS sessionInputs,
-              (SELECT COUNT(*) FROM session_context_epoch) AS contextEpochs
-          `),
-        ).toEqual({
-          workspaceID: null,
-          workspaces: 0,
-          eventSequences: 0,
-          events: 0,
-          sessionMessages: 0,
-          sessionInputs: 0,
-          contextEpochs: 0,
-        })
       }),
     )
   })

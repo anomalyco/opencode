@@ -3637,7 +3637,7 @@ export type SyncEventSessionNextCompactionEnded = {
   type: "sync"
   id: string
   syncEvent: {
-    type: "session.next.compaction.ended.2"
+    type: "session.next.compaction.ended.1"
     id: string
     seq: number
     aggregateID: string
