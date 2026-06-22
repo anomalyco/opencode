@@ -19,6 +19,11 @@ export const ID = Schema.String.check(Schema.isStartsWith("evt_")).pipe(
 )
 export type ID = typeof ID.Type
 
+type ServiceFreeSchema = Schema.Top & {
+  readonly DecodingServices: never
+  readonly EncodingServices: never
+}
+
 export type Definition<Type extends string = string, DataSchema extends Schema.Top = Schema.Top> = {
   readonly type: Type
   readonly durable?: {
@@ -75,10 +80,10 @@ export function versionedType(type: string, version: number) {
   return `${type}.${version}`
 }
 
-export const registry = new Map<string, Definition>()
-const durableRegistry = new Map<string, Definition>()
+export const registry = new Map<string, Definition<string, ServiceFreeSchema>>()
+const durableRegistry = new Map<string, Definition<string, ServiceFreeSchema>>()
 
-export function define<const Type extends string, Fields extends Schema.Struct.Fields>(input: {
+export function define<const Type extends string, Fields extends Record<PropertyKey, ServiceFreeSchema>>(input: {
   readonly type: Type
   readonly durable?: {
     readonly version: number
