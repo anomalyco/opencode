@@ -1,4 +1,4 @@
-name: test
+name: "[disabled] test"
 
 on:
   push:
@@ -22,6 +22,7 @@ env:
 
 jobs:
   unit:
+    if: false
     name: unit (${{ matrix.settings.name }})
     strategy:
       fail-fast: false
@@ -75,6 +76,7 @@ jobs:
         run: bun run test:httpapi
 
   e2e:
+    if: false
     name: e2e (${{ matrix.settings.name }})
     strategy:
       fail-fast: false

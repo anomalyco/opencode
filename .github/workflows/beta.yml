@@ -1,4 +1,4 @@
-name: beta
+name: "[disabled] beta"
 
 on:
   workflow_dispatch:
@@ -7,6 +7,7 @@ on:
 
 jobs:
   sync:
+    if: false
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write

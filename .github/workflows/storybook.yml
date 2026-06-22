@@ -1,4 +1,4 @@
-name: storybook
+name: "[disabled] storybook"
 
 on:
   push:
@@ -25,6 +25,7 @@ concurrency:
 
 jobs:
   build:
+    if: false
     name: storybook build
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:

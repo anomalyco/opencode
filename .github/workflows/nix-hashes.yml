@@ -1,4 +1,4 @@
-name: nix-hashes
+name: "[disabled] nix-hashes"
 
 permissions:
   contents: write
@@ -25,6 +25,7 @@ jobs:
   # Native runners required: bun install cross-compilation flags (--os/--cpu)
   # do not produce byte-identical node_modules as native installs.
   compute-hash:
+    if: false
     strategy:
       fail-fast: false
       matrix:
@@ -90,7 +91,8 @@ jobs:
 
   update-hashes:
     needs: compute-hash
-    if: github.event_name != 'pull_request'
+    # if: github.event_name != 'pull_request'
+    if: false
     runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:

@@ -1,4 +1,4 @@
-name: close-prs
+name: "[disabled] close-prs"
 
 on:
   schedule:
@@ -17,6 +17,7 @@ on:
 
 jobs:
   close:
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 240
     permissions:

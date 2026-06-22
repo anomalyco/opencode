@@ -1,4 +1,4 @@
-name: review
+name: "[disabled] review"
 
 on:
   issue_comment:
@@ -6,10 +6,11 @@ on:
 
 jobs:
   check-guidelines:
-    if: |
-      github.event.issue.pull_request &&
-      startsWith(github.event.comment.body, '/review') &&
-      contains(fromJson('["OWNER","MEMBER"]'), github.event.comment.author_association)
+    # if: |
+    #   github.event.issue.pull_request &&
+    #   startsWith(github.event.comment.body, '/review') &&
+    #   contains(fromJson('["OWNER","MEMBER"]'), github.event.comment.author_association)
+    if: false
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read

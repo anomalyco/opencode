@@ -1,4 +1,4 @@
-name: compliance-close
+name: "[disabled] compliance-close"
 
 on:
   schedule:
@@ -13,6 +13,7 @@ permissions:
 
 jobs:
   close-non-compliant:
+    if: false
     runs-on: ubuntu-latest
     steps:
       - name: Close non-compliant issues and PRs after 2 hours

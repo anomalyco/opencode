@@ -1,4 +1,4 @@
-name: docs-locale-sync
+name: "[disabled] docs-locale-sync"
 
 on:
   push:

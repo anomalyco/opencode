@@ -1,4 +1,4 @@
-name: containers
+name: "[disabled] containers"
 
 on:
   push:
@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   build:
+    if: false
     runs-on: blacksmith-4vcpu-ubuntu-2404
     env:
       REGISTRY: ghcr.io/${{ github.repository_owner }}

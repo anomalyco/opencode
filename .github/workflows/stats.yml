@@ -1,4 +1,4 @@
-name: stats
+name: "[disabled] stats"
 
 on:
   schedule:
@@ -9,7 +9,8 @@ concurrency: ${{ github.workflow }}-${{ github.ref }}
 
 jobs:
   stats:
-    if: github.repository == 'anomalyco/opencode'
+    # if: github.repository == 'anomalyco/opencode'
+    if: false
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: write

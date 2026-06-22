@@ -1,4 +1,4 @@
-name: typecheck
+name: "[disabled] typecheck"
 
 on:
   push:
@@ -9,6 +9,7 @@ on:
 
 jobs:
   typecheck:
+    if: false
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - name: Checkout repository

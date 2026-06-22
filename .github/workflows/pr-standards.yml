@@ -1,4 +1,4 @@
-name: pr-standards
+name: "[disabled] pr-standards"
 
 on:
   pull_request_target:
@@ -6,6 +6,7 @@ on:
 
 jobs:
   check-standards:
+    if: false
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -153,6 +154,7 @@ jobs:
             console.log('PR meets all standards');
 
   check-compliance:
+    if: false
     runs-on: ubuntu-latest
     permissions:
       contents: read

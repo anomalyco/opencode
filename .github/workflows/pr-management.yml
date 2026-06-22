@@ -1,4 +1,4 @@
-name: pr-management
+name: "[disabled] pr-management"
 
 on:
   pull_request_target:
@@ -6,6 +6,7 @@ on:
 
 jobs:
   check-duplicates:
+    if: false
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
@@ -72,6 +73,7 @@ jobs:
           fi
 
   add-contributor-label:
+    if: false
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write

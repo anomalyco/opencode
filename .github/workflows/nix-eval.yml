@@ -1,4 +1,4 @@
-name: nix-eval
+name: "[disabled] nix-eval"
 
 on:
   push:
@@ -16,6 +16,7 @@ permissions:
 
 jobs:
   nix-eval:
+    if: false
     runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:

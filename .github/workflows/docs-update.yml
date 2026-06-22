@@ -1,4 +1,4 @@
-name: docs-update
+name: "[disabled] docs-update"
 
 on:
   schedule:
@@ -10,7 +10,8 @@ env:
 
 jobs:
   update-docs:
-    if: github.repository == 'sst/opencode'
+    # if: github.repository == 'sst/opencode'
+    if: false
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       id-token: write

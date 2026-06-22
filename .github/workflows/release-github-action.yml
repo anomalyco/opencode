@@ -1,4 +1,4 @@
-name: release-github-action
+name: "[disabled] release-github-action"
 
 on:
   push:
@@ -14,6 +14,7 @@ permissions:
 
 jobs:
   release:
+    if: false
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
