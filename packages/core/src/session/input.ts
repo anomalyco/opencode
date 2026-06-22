@@ -154,17 +154,17 @@ export const projectPrompted = Effect.fn("SessionInput.projectPrompted")(functio
   if (updated) {
     const stored = fromRow(updated)
     if (!matchesProjection(stored, input)) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
-    return toMessage(stored)
+    return
   }
 
   const stored = yield* find(db, input.id)
   if (stored) {
     if (!matchesProjection(stored, input) || stored.promotedSeq !== input.promotedSeq)
       return yield* Effect.die(new LifecycleConflict({ id: input.id }))
-    return toMessage(stored)
+    return
   }
 
-  const inserted = yield* db
+  yield* db
     .insert(SessionInputTable)
     .values({
       id: input.id,
@@ -175,10 +175,8 @@ export const projectPrompted = Effect.fn("SessionInput.projectPrompted")(functio
       promoted_seq: input.promotedSeq,
       time_created: DateTime.toEpochMillis(input.timeCreated),
     })
-    .returning()
-    .get()
+    .run()
     .pipe(Effect.orDie)
-  return toMessage(fromRow(inserted))
 })
 
 export const hasPending = Effect.fn("SessionInput.hasPending")(function* (
@@ -300,13 +298,3 @@ export const promoteNextQueued = Effect.fn("SessionInput.promoteNextQueued")(fun
     .pipe(Effect.orDie)
   return row === undefined ? false : yield* publish(db, events, sessionID, [row]).pipe(Effect.as(true))
 })
-
-const toMessage = (input: Admitted) =>
-  new SessionMessage.User({
-    id: input.id,
-    type: "user",
-    text: input.prompt.text,
-    files: input.prompt.files,
-    agents: input.prompt.agents,
-    time: { created: input.timeCreated },
-  })
