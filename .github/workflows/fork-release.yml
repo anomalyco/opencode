@@ -69,36 +69,36 @@ jobs:
           set -euo pipefail
           OC_DIST="packages/opencode/dist"
           CLI_DIST="packages/cli/dist"
+          STAGE_DIR="fork-release-assets"
           package_dir() {
-            local dir="$1"
+            local dir="${1%/}"
             local name
             name="$(basename "$dir")"
             local out_dir
-            out_dir="$(cd "${dir%/*}" && pwd)"
+            out_dir="$(cd "$(dirname "$dir")" && pwd)"
             if [[ "$name" == *linux* ]]; then
               tar -czf "${out_dir}/${name}.tar.gz" -C "$dir/bin" .
             else
               (cd "$dir/bin" && zip -qr "${out_dir}/${name}.zip" .)
             fi
           }
-          for dir in "$OC_DIST"/opencode-*/; do
-            [[ -d "$dir/bin" ]] || continue
+          for dir in "$OC_DIST"/opencode-*/ "$CLI_DIST"/cli-*/; do
+            [[ -d "${dir}bin" ]] || continue
             package_dir "$dir"
           done
-          for dir in "$CLI_DIST"/cli-*/; do
-            [[ -d "$dir/bin" ]] || continue
-            package_dir "$dir"
-          done
-          mkdir -p fork-release-assets
-          shopt -s nullglob
-          cp "$OC_DIST"/*.{zip,tar.gz} fork-release-assets/
-          cp "$CLI_DIST"/*.{zip,tar.gz} fork-release-assets/
-          shopt -u nullglob
-          if ! find fork-release-assets -maxdepth 1 -type f | grep -q .; then
-            echo "No archives staged for upload"
+          rm -rf "$STAGE_DIR"
+          mkdir -p "$STAGE_DIR"
+          count=0
+          while IFS= read -r -d '' archive; do
+            cp -f "$archive" "$STAGE_DIR/"
+            count=$((count + 1))
+          done < <(find "$OC_DIST" "$CLI_DIST" -maxdepth 1 -type f \( -name '*.zip' -o -name '*.tar.gz' \) -print0 | sort -z)
+          if (( count == 0 )); then
+            echo "No archives staged for upload" >&2
+            find "$OC_DIST" "$CLI_DIST" -maxdepth 2 -type f 2>/dev/null | head -50 || true
             exit 1
           fi
-          ls -lh fork-release-assets/
+          ls -lh "$STAGE_DIR/"
 
       - name: Upload CLI dist
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
