@@ -1,16 +1,20 @@
-// /lp専用レイアウト。
+// /lp 専用レイアウト。
 //
-// ルートレイアウト (app/layout.tsx) とglobals.cssは既存サービスサイト
-// 向けのダークテーマ (terminal / scanline / neon glow) を全体に適用して
-// いる。だが、このLPのターゲットはセキュリティに敏感な意思決定者で、
-// ダークでハッカー然とした見た目はむしろ「怪しい・胡散臭い」と受け取られ
-// 入力をためらわせる。そこで /lp配下だけを白基調のクリーンコーポレート
-// に上書きする。固定の白レイヤーでbody背景 (ダーク + グリッド) を覆い、
-// オーバースクロール時にもダークが覗かないようにしている。
+// ルートレイアウト (app/layout.tsx) と globals.css は既存サービスサイト
+// 向けのダークテーマを全体に適用しているため、/lp 配下だけを新デザイン
+// （白基調 / slate + 赤アクセント / IBM Plex Sans JP）に上書きする。固定の
+// 白レイヤーで body 背景を覆い、オーバースクロール時もダークが覗かないように
+// している。フォントはルートレイアウトの Google Fonts link で読み込み済み。
+
+const FONT_STACK =
+  '"IBM Plex Sans JP", "Hiragino Kaku Gothic ProN", "Noto Sans JP", system-ui, sans-serif'
 
 export default function LpLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="lp-scope relative min-h-screen bg-white text-slate-900 antialiased">
+    <div
+      className="lp-scope relative min-h-screen bg-white text-slate-900 antialiased"
+      style={{ fontFamily: FONT_STACK }}
+    >
       <div aria-hidden className="fixed inset-0 -z-10 bg-white" />
       {children}
     </div>

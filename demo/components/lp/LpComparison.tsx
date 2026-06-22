@@ -1,118 +1,66 @@
-"use client"
+// SecureCode.dc.html の 05/比較。ネイビーヘッダー＋SC列は accent-soft。
 
-import { motion } from "framer-motion"
+const HANKEN = '"Hanken Grotesk", sans-serif'
 
-// 既存SectionComparisonの論点 (信頼で守るか / 仕組みで守るか) を、LP用に
-// 凝縮した比較表。稟議・社内説明にそのまま使える粒度。白基調。
-
-type Mark = "○" | "◎" | "—"
-
-const ROWS: { feature: string; generic: [Mark, string]; sc: [Mark, string] }[] = [
-  {
-    feature: "入力コードが社外に漏れない",
-    generic: ["○", "規約・契約で担保"],
-    sc: ["◎", "秘密計算環境で隔離"],
-  },
-  {
-    feature: "学習に使われない",
-    generic: ["○", "オプトアウト契約"],
-    sc: ["◎", "そもそも平文が出ない"],
-  },
-  {
-    feature: "安全性を自社で検証できる",
-    generic: ["—", "—"],
-    sc: ["◎", "リモートアテステーション"],
-  },
-  {
-    feature: "AIの権限を組織で統制",
-    generic: ["○", "個人設定に依存"],
-    sc: ["◎", "管理者ポリシーで一元強制"],
-  },
-]
+const ROWS = [
+  { feature: "入力が社外に漏洩しない", generic: "規約・契約で担保", sc: "TEE で物理隔離" },
+  { feature: "実行環境を検証できる", generic: "—", sc: "リモートアテステーション" },
+  { feature: "外部アクセス先の制限", generic: "個別設定に依存", sc: "管理者ポリシーで一元強制" },
+  { feature: "操作ごとの柔軟な権限設定", generic: "個別設定に依存", sc: "管理者ポリシーで一元強制" },
+] as const
 
 export function LpComparison() {
   return (
-    <section className="relative mx-auto max-w-5xl px-6 py-20 md:py-28">
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: "-80px" }}
-        transition={{ duration: 0.5 }}
-        className="mb-8"
-      >
-        <span className="text-sm font-semibold text-blue-700">既存のAIツールとの違い</span>
-        <h2 className="mt-3 text-balance text-2xl font-bold tracking-tight text-slate-900 md:text-3xl">
-          一般的なAIコーディングと、何が違うのか。
-        </h2>
-      </motion.div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        whileInView={{ opacity: 1, y: 0 }}
-        viewport={{ once: true, margin: "-60px" }}
-        transition={{ duration: 0.55 }}
-        className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
-      >
-        <div className="grid grid-cols-[1.6fr_1fr_1.2fr] border-b border-slate-200 bg-slate-50 px-4 py-3 text-xs font-semibold text-slate-500 md:px-6">
-          <span>観点</span>
-          <span className="text-center">一般的なAIツール</span>
-          <span className="text-center text-blue-700">セキュアコード</span>
-        </div>
-        {ROWS.map((row) => (
-          <div
-            key={row.feature}
-            className="grid grid-cols-[1.6fr_1fr_1.2fr] items-center border-b border-slate-100 px-4 py-3.5 text-sm last:border-b-0 md:px-6"
-          >
-            <span className="font-medium text-slate-800">{row.feature}</span>
-            <Cell mark={row.generic[0]} note={row.generic[1]} />
-            <Cell mark={row.sc[0]} note={row.sc[1]} highlight />
+    <section id="compare" className="border-t border-slate-100 bg-[#fafbfc]">
+      <div className="mx-auto max-w-[1100px] px-5 py-20 md:px-8 md:py-24">
+        <div className="max-w-[760px]">
+          <div className="text-[13px] font-bold uppercase tracking-[0.14em] text-brand-600" style={{ fontFamily: HANKEN }}>
+            05 / 比較
           </div>
-        ))}
-      </motion.div>
+          <h2 className="mt-4 text-balance text-[1.6rem] font-bold leading-[1.38] tracking-tight text-slate-900 md:text-4xl">
+            「信頼」で守るのか「仕組み」で守るのか。
+          </h2>
+          <p className="mt-5 text-[15px] leading-[1.9] text-slate-600 md:text-[16.5px]">
+            一般的なエージェントの安全性は、最終的に運用元への信頼に依存します。セキュアコードは
+            同じ観点を、信頼ではなく物理的な隔離と組織ポリシーで担保します。
+          </p>
+        </div>
 
-      <div className="mt-4 flex flex-wrap justify-center gap-x-6 gap-y-1.5 text-center text-xs text-slate-500">
-        <span>
-          <span className="font-medium text-slate-600">○</span> 人（規約・契約）への信頼で担保
-        </span>
-        <span>
-          <span className="font-bold text-blue-700">◎</span> 仕組み（秘密計算環境・統制）で機械的に担保
-        </span>
-        <span>
-          <span className="text-slate-400">—</span> 非対応・対象外
-        </span>
+        <div className="mt-10 overflow-hidden rounded-2xl border border-slate-200 bg-white">
+          <div className="grid grid-cols-[1.4fr_1fr_1.2fr] bg-[#153658] text-white">
+            <div className="px-4 py-4 text-[13px] font-semibold md:px-6 md:text-sm">観点</div>
+            <div className="border-l border-slate-700 px-3 py-4 text-center text-[13px] font-semibold text-slate-300 md:px-5 md:text-sm">
+              一般的なエージェント
+            </div>
+            <div className="border-l border-slate-700 bg-brand-600 px-3 py-4 text-center text-[13px] font-bold md:px-5 md:text-sm">
+              Acompany セキュアコード
+            </div>
+          </div>
+          {ROWS.map((row) => (
+            <div key={row.feature} className="grid grid-cols-[1.4fr_1fr_1.2fr] border-b border-slate-100 last:border-b-0">
+              <div className="px-4 py-4 text-[13px] font-semibold text-slate-900 md:px-6 md:py-5 md:text-[15px]">
+                {row.feature}
+              </div>
+              <div className="border-l border-slate-100 px-3 py-4 text-[13px] text-slate-500 md:px-5 md:py-5 md:text-[15px]">
+                {row.generic === "—" ? (
+                  <span className="text-slate-400">—</span>
+                ) : (
+                  <>
+                    <span className="font-bold text-slate-400">○</span> {row.generic}
+                  </>
+                )}
+              </div>
+              <div className="border-l border-slate-100 bg-brand-50 px-3 py-4 text-[13px] text-slate-800 md:px-5 md:py-5 md:text-[15px]">
+                <span className="font-bold text-brand-600">◎</span> {row.sc}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        <p className="mt-5 text-center text-[13px] leading-[1.8] text-slate-400">
+          ◎ 仕組み（TEE・設定ファイル・管理者統制）で機械的に担保　／　○ 人（規約・契約・個別運用）を信頼することで担保　／　— 非対応・対象外
+        </p>
       </div>
-
-      <p className="mt-5 text-center text-xs leading-relaxed text-slate-400">
-        ※ 一部の機能は現在も鋭意開発中です。提供時期・仕様は変わる可能性があり、
-        現時点でご利用いただける範囲はお問い合わせください。
-      </p>
     </section>
-  )
-}
-
-function Cell({
-  mark,
-  note,
-  highlight = false,
-}: {
-  mark: Mark
-  note: string
-  highlight?: boolean
-}) {
-  const color =
-    mark === "◎"
-      ? highlight
-        ? "text-blue-700"
-        : "text-slate-500"
-      : mark === "○"
-        ? "text-slate-500"
-        : "text-slate-300"
-  return (
-    <div className={`text-center ${highlight ? "rounded-lg bg-blue-50/60 py-1" : ""}`}>
-      <div className={`text-lg font-bold ${color}`}>{mark}</div>
-      {note && note !== "—" && (
-        <div className="mt-0.5 text-[11px] text-slate-500">{note}</div>
-      )}
-    </div>
   )
 }

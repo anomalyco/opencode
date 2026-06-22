@@ -1,22 +1,24 @@
 import type { Metadata } from "next"
+import { LpNav } from "@/components/lp/LpNav"
 import { LpHero } from "@/components/lp/LpHero"
 import { LpCredibility } from "@/components/lp/LpCredibility"
+import { LpProduct } from "@/components/lp/LpProduct"
 import { LpPain } from "@/components/lp/LpPain"
-import { LpSolution } from "@/components/lp/LpSolution"
-import { LpMidCta } from "@/components/lp/LpMidCta"
+import { LpProtection } from "@/components/lp/LpProtection"
+import { LpHarness } from "@/components/lp/LpHarness"
 import { LpComparison } from "@/components/lp/LpComparison"
+import { LpSecureChat } from "@/components/lp/LpSecureChat"
 import { LpFaq } from "@/components/lp/LpFaq"
 import { LpContact } from "@/components/lp/LpContact"
-import { LpStickyCta } from "@/components/lp/LpStickyCta"
+import { LpWaitlistBand } from "@/components/lp/LpWaitlistBand"
 import { LpFooter } from "@/components/lp/LpFooter"
 
-const TITLE = "機密コードを守りながらAI開発を始める — Acompanyセキュアコード"
+const TITLE = "機密コードを外に出さずにAIコーディングを — Acompanyセキュアコード"
 const DESCRIPTION =
-  "機密ソースコードを社外に露出させずに、AIコーディング支援を導入できます。隔離された秘密計算環境（TEE）の中だけでコードを処理し、提供元のAcompanyにも、インフラ事業者・モデル提供者にも中身を見せません。株式会社Acompanyが開発・運営するConfidential AI Suiteの製品。"
+  "「セキュリティ上、生成AIは使えない」を終わらせる。TEEによる物理隔離と組織ポリシーで、機密ソースコードを守ったままAI開発を解禁します。株式会社Acompanyが開発・運営するConfidential AI Suiteの製品。"
 
-// 広告 (X) 着地専用ページ。検索インデックスには載せず、広告のリンク
-// からのみ到達させる。既存サービスサイト (/) とは別物として、申込み
-// (β版メール登録 / 商談問い合わせ) への到達率に振り切った構成にする。
+// 広告 (X) 着地専用ページ。検索インデックスには載せず、広告のリンクからのみ
+// 到達させる。既存サービスサイト (/) とは別物として申込導線に振り切る。
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
@@ -41,35 +43,26 @@ export const metadata: Metadata = {
 export default function LpPage() {
   return (
     <>
-      {/* 最小ヘッダー: 離脱を誘う遷移リンクは置かず、ブランドと申込導線だけ */}
-      <header className="fixed inset-x-0 top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-3">
-          <a href="#top" className="flex items-center gap-2 text-sm font-bold tracking-tight text-slate-900">
-            <span className="inline-block size-2 rounded-full bg-blue-600" />
-            Acompanyセキュアコード
-          </a>
-          <a
-            href="#apply"
-            className="rounded-lg border border-slate-300 px-4 py-1.5 text-xs font-medium text-slate-700 transition hover:border-blue-400 hover:text-blue-700"
-          >
-            お問い合わせ
-          </a>
-        </div>
-      </header>
-
-      <main className="relative pb-24">
+      <LpNav />
+      <main className="relative">
         <LpHero />
         <LpCredibility />
+        <LpProduct />
+        <LpWaitlistBand />
         <LpPain />
-        <LpSolution />
-        <LpMidCta />
+        <LpWaitlistBand />
+        <LpProtection />
+        <LpWaitlistBand />
+        <LpHarness />
+        <LpWaitlistBand />
         <LpComparison />
+        <LpWaitlistBand />
+        <LpSecureChat />
+        <LpWaitlistBand />
         <LpFaq />
         <LpContact />
       </main>
-
       <LpFooter />
-      <LpStickyCta />
     </>
   )
 }

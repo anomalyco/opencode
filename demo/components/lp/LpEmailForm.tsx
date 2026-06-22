@@ -130,12 +130,12 @@ export function LpEmailForm({
           placeholder="your@company.com"
           aria-label="メールアドレス"
           aria-invalid={!!emailError}
-          className={`w-full flex-1 rounded-lg border bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 ${emailError ? "border-red-400" : "border-slate-300"}`}
+          className={`w-full flex-1 rounded-lg border bg-white px-4 py-3 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 ${emailError ? "border-red-400" : "border-slate-300"}`}
         />
         <button
           type="submit"
           disabled={status === "submitting"}
-          className="rounded-lg bg-blue-700 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 sm:shrink-0"
+          className="rounded-lg bg-brand-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60 sm:shrink-0"
         >
           {status === "submitting" ? "送信中..." : cta}
         </button>
@@ -155,7 +155,7 @@ export function LpEmailForm({
           href={PRIVACY_POLICY_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-slate-600 underline underline-offset-2 hover:text-blue-700"
+          className="text-slate-600 underline underline-offset-2 hover:text-brand-600"
         >
           プライバシーポリシー
         </a>

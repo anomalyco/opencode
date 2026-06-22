@@ -1,51 +1,51 @@
-// 信頼シグナルの帯。広告から来た初見の訪問者に「これは実在する会社の
-// まっとうな製品だ」と最初に伝える。誇大な実績を並べるのではなく、事実
-// （運営会社・製品ラインナップ・姉妹製品）を淡々と提示して安心させる。
+// SecureCode.dc.html の Credibility 帯（3カラム）を忠実に再現。
+
+const ITEMS = [
+  {
+    title: "Confidential Computingの専門企業",
+    body: (
+      <>Privacy Tech／Confidential Computing を専門に手がける Acompany が開発。</>
+    ),
+  },
+  {
+    title: "Confidential AI Suite",
+    body: <>機密を守ったまま生成 AI を使う製品群。その第 2 弾がセキュアコード。</>,
+  },
+  {
+    title: "姉妹製品の実績",
+    body: (
+      <>
+        同様のセキュリティコンセプトを持った AI チャットアプリ「
+        <a
+          href="https://service.acompany.tech/cas/secure-chat/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-brand-600 underline underline-offset-2"
+        >
+          セキュアチャット
+        </a>
+        」を提供中。
+      </>
+    ),
+  },
+] as const
 
 export function LpCredibility() {
   return (
-    <section className="border-y border-slate-200 bg-slate-50">
-      <div className="mx-auto max-w-5xl px-6 py-8">
-        <p className="text-center text-xs font-medium tracking-wider text-slate-400">
-          株式会社Acompanyが開発・運営するConfidential AI Suiteの製品です
+    <section className="border-y border-slate-100 bg-[#f5f7fa]">
+      <div className="mx-auto max-w-[1080px] px-5 py-8 md:px-8 md:py-9">
+        <p className="text-center text-xs font-semibold tracking-[0.14em] text-slate-400">
+          株式会社 Acompany が開発・運営する Confidential AI Suite の製品です
         </p>
-        <div className="mt-5 grid gap-4 text-center sm:grid-cols-3">
-          <Item
-            title="秘密計算の専門企業"
-            body="プライバシーテック / 秘密計算を専門に手がけるAcompanyが開発"
-          />
-          <Item
-            title="Confidential AI Suite"
-            body="機密を守ったまま生成AIを使う製品群。その第2弾がセキュアコード"
-          />
-          <Item
-            title="姉妹製品の実績"
-            body={
-              <>
-                社内向けチャット{" "}
-                <a
-                  href="https://service.acompany.tech/cas/secure-chat/"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-medium text-blue-700 underline underline-offset-2 hover:text-blue-900"
-                >
-                  セキュアチャット
-                </a>{" "}
-                を同じ思想で提供中
-              </>
-            }
-          />
+        <div className="mt-6 grid gap-6 sm:grid-cols-3">
+          {ITEMS.map((it) => (
+            <div key={it.title} className="text-center">
+              <div className="text-[15px] font-bold text-slate-900">{it.title}</div>
+              <p className="mt-1.5 text-[13px] leading-[1.7] text-slate-500">{it.body}</p>
+            </div>
+          ))}
         </div>
       </div>
     </section>
-  )
-}
-
-function Item({ title, body }: { title: string; body: React.ReactNode }) {
-  return (
-    <div className="flex flex-col items-center">
-      <span className="text-sm font-semibold text-slate-900">{title}</span>
-      <p className="mt-1 max-w-xs text-xs leading-relaxed text-slate-500">{body}</p>
-    </div>
   )
 }
