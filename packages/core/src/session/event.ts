@@ -118,14 +118,6 @@ export namespace PromptLifecycle {
   export type Promoted = typeof Promoted.Type
 }
 
-// Retain decoding for rows emitted by earlier experimental builds without exposing a current event contract.
-EventV2.define({
-  type: "session.next.interrupt.requested",
-  legacy: true,
-  ...options,
-  schema: Base,
-})
-
 export const ContextUpdated = EventV2.define({
   type: "session.next.context.updated",
   ...options,

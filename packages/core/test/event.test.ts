@@ -40,19 +40,6 @@ const SyncMessage = EventV2.define({
   },
 })
 
-EventV2.define({
-  type: "test.legacy-sync",
-  legacy: true,
-  durable: {
-    version: 1,
-    aggregate: "id",
-  },
-  schema: {
-    id: Schema.String,
-    text: Schema.String,
-  },
-})
-
 const SyncSent = EventV2.define({
   type: "test.sent",
   durable: {
@@ -384,41 +371,6 @@ describe("EventV2", () => {
         .pipe(Effect.orDie)
 
       expect(rows.map((row) => row.seq)).toEqual([0, 1])
-    }),
-  )
-
-  it.effect("commits retired durable events without exposing their definition", () =>
-    Effect.gen(function* () {
-      const events = yield* EventV2.Service
-      const { db } = yield* Database.Service
-      const aggregateID = EventV2.ID.create()
-
-      yield* events.replay({
-        id: EventV2.ID.create(),
-        type: "test.legacy-sync.1",
-        aggregateID,
-        seq: 0,
-        data: { id: aggregateID, text: "legacy" },
-      })
-      yield* events.replay({
-        id: EventV2.ID.create(),
-        type: "test.sync.1",
-        aggregateID,
-        seq: 1,
-        data: { id: aggregateID, text: "current" },
-      })
-
-      const rows = yield* db
-        .select({ seq: EventTable.seq, type: EventTable.type })
-        .from(EventTable)
-        .where(eq(EventTable.aggregate_id, aggregateID))
-        .all()
-        .pipe(Effect.orDie)
-      expect(rows).toEqual([
-        { seq: 0, type: "test.legacy-sync.1" },
-        { seq: 1, type: "test.sync.1" },
-      ])
-      expect(EventV2.definitions().some((definition) => definition.type === "test.legacy-sync")).toBeFalse()
     }),
   )
 

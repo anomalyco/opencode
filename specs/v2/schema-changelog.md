@@ -5,7 +5,7 @@
 - Remove the unprojected `session.next.interrupt.requested.1` event from the experimental durable Session event union and generated SDK.
 - Register prompt wakes inline after durable admission instead of forking delivery, so ordinary process-local ordering determines whether work precedes or follows interruption.
 - Keep durable inbox rows unchanged by interruption; a later wake or explicit resume can process them.
-- No stored projection requires migration. Existing experimental interrupt events retain a private decoder, remain inert historical rows, and are no longer emitted or exposed by the current replay union.
+- No canonical V1 data requires migration. Reset incompatible experimental V2 event history and derived projections when upgrading a database that contains the retired event.
 
 ## 2026-06-05: Execute Automatic Session Compaction
 

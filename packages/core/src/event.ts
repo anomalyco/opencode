@@ -71,8 +71,6 @@ const durableRegistry = new Map<string, Definition>()
 
 export function define<const Type extends string, Fields extends Schema.Struct.Fields>(input: {
   readonly type: Type
-  /** Retains decoding for a retired durable event without exposing it as a current definition. */
-  readonly legacy?: boolean
   readonly durable?: {
     readonly version: number
     readonly aggregate: string
@@ -94,15 +92,13 @@ export function define<const Type extends string, Fields extends Schema.Struct.F
     ...(input.durable === undefined ? {} : { durable: input.durable }),
     data: Data,
   })
-  if (input.legacy !== true) {
-    const existing = registry.get(input.type)
-    if (
-      input.durable === undefined ||
-      existing?.durable === undefined ||
-      input.durable.version >= existing.durable.version
-    ) {
-      registry.set(input.type, definition)
-    }
+  const existing = registry.get(input.type)
+  if (
+    input.durable === undefined ||
+    existing?.durable === undefined ||
+    input.durable.version >= existing.durable.version
+  ) {
+    registry.set(input.type, definition)
   }
   if (input.durable) durableRegistry.set(versionedType(input.type, input.durable.version), definition)
   return definition as Schema.Schema<Payload<Definition<Type, Schema.Struct<Fields>>>> &
@@ -186,7 +182,6 @@ export const layerWith = (options?: LayerOptions) =>
       )
 
       function commitDurableEvent(
-        definition: Definition,
         event: Payload,
         input?: {
           readonly seq: number
@@ -197,7 +192,8 @@ export const layerWith = (options?: LayerOptions) =>
         commit?: (seq: number) => Effect.Effect<void>,
       ) {
         return Effect.gen(function* () {
-          const durable = definition.durable
+          const definition = registry.get(event.type)
+          const durable = definition?.durable
           if (durable) {
             const aggregateID = (event.data as Record<string, unknown>)[durable.aggregate]
             if (typeof aggregateID !== "string") {
@@ -359,7 +355,7 @@ export const layerWith = (options?: LayerOptions) =>
               }),
             )
           if (definition?.durable) {
-            const committed = yield* commitDurableEvent(definition, event as Payload, undefined, commit)
+            const committed = yield* commitDurableEvent(event as Payload, undefined, commit)
             if (committed) {
               event = {
                 ...event,
@@ -438,7 +434,7 @@ export const layerWith = (options?: LayerOptions) =>
                 event.data,
               ),
             } as Payload
-            const committed = yield* commitDurableEvent(definition, payload, {
+            const committed = yield* commitDurableEvent(payload, {
               seq: event.seq,
               aggregateID: event.aggregateID,
               ownerID: options?.ownerID,
