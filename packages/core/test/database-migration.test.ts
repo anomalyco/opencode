@@ -231,36 +231,65 @@ describe("DatabaseMigration", () => {
     await run(
       Effect.gen(function* () {
         const db = yield* makeDb
-        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, workspace_id text)`)
-        yield* db.run(sql`CREATE TABLE workspace (id text PRIMARY KEY)`)
-        yield* db.run(sql`CREATE TABLE message (id text PRIMARY KEY)`)
-        yield* db.run(sql`CREATE TABLE part (id text PRIMARY KEY)`)
-        yield* db.run(sql`CREATE TABLE event_sequence (aggregate_id text PRIMARY KEY, seq integer NOT NULL)`)
-        yield* db.run(sql`CREATE TABLE event (id text PRIMARY KEY)`)
-        yield* db.run(sql`CREATE TABLE session_message (id text PRIMARY KEY)`)
-        yield* db.run(sql`CREATE TABLE session_input (id text PRIMARY KEY)`)
-        yield* db.run(sql`CREATE TABLE session_context_epoch (session_id text PRIMARY KEY)`)
-        yield* db.run(sql`INSERT INTO session VALUES ('session', 'workspace')`)
-        yield* db.run(sql`INSERT INTO workspace VALUES ('workspace')`)
-        yield* db.run(sql`INSERT INTO message VALUES ('message')`)
-        yield* db.run(sql`INSERT INTO part VALUES ('part')`)
-        yield* db.run(sql`INSERT INTO event_sequence VALUES ('session', 0)`)
-        yield* db.run(sql`INSERT INTO event VALUES ('event')`)
-        yield* db.run(sql`INSERT INTO session_message VALUES ('projected')`)
-        yield* db.run(sql`INSERT INTO session_input VALUES ('input')`)
-        yield* db.run(sql`INSERT INTO session_context_epoch VALUES ('session')`)
+        yield* DatabaseMigration.apply(db)
+        yield* db.run(
+          sql`INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) VALUES ('project', '/tmp/project', 1, 1, '[]')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO workspace (id, type, project_id, time_used) VALUES ('workspace', 'local', 'project', 1)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session (id, project_id, workspace_id, slug, directory, title, version, time_created, time_updated) VALUES ('session', 'project', 'workspace', 'session', '/tmp/project', 'Session', 'test', 1, 1)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES ('message', 'session', 1, 1, '{}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES ('part', 'message', 'session', 1, 1, '{}')`,
+        )
+        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('session', 0)`)
+        yield* db.run(
+          sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('event', 'session', 0, 'session.next.compaction.ended.1', '{}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES ('projected', 'session', 'compaction', 0, 1, 1, '{}')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_input (id, session_id, prompt, delivery, admitted_seq, time_created) VALUES ('input', 'session', '{}', 'steer', 0, 1)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_context_epoch (session_id, baseline, snapshot, baseline_seq) VALUES ('session', 'baseline', '{}', 0)`,
+        )
+        yield* db.run(sql`DELETE FROM migration WHERE id = ${resetV2SessionStateMigration.id}`)
 
         yield* DatabaseMigration.applyOnly(db, [resetV2SessionStateMigration])
 
-        expect(yield* db.all(sql`SELECT * FROM session`)).toEqual([{ id: "session", workspace_id: null }])
-        expect(yield* db.all(sql`SELECT * FROM message`)).toEqual([{ id: "message" }])
-        expect(yield* db.all(sql`SELECT * FROM part`)).toEqual([{ id: "part" }])
-        expect(yield* db.all(sql`SELECT * FROM workspace`)).toEqual([])
-        expect(yield* db.all(sql`SELECT * FROM event_sequence`)).toEqual([])
-        expect(yield* db.all(sql`SELECT * FROM event`)).toEqual([])
-        expect(yield* db.all(sql`SELECT * FROM session_message`)).toEqual([])
-        expect(yield* db.all(sql`SELECT * FROM session_input`)).toEqual([])
-        expect(yield* db.all(sql`SELECT * FROM session_context_epoch`)).toEqual([])
+        expect(
+          yield* db.get(sql`
+            SELECT
+              (SELECT workspace_id FROM session WHERE id = 'session') AS workspaceID,
+              (SELECT COUNT(*) FROM session) AS sessions,
+              (SELECT COUNT(*) FROM message) AS messages,
+              (SELECT COUNT(*) FROM part) AS parts,
+              (SELECT COUNT(*) FROM workspace) AS workspaces,
+              (SELECT COUNT(*) FROM event_sequence) AS eventSequences,
+              (SELECT COUNT(*) FROM event) AS events,
+              (SELECT COUNT(*) FROM session_message) AS sessionMessages,
+              (SELECT COUNT(*) FROM session_input) AS sessionInputs,
+              (SELECT COUNT(*) FROM session_context_epoch) AS contextEpochs
+          `),
+        ).toEqual({
+          workspaceID: null,
+          sessions: 1,
+          messages: 1,
+          parts: 1,
+          workspaces: 0,
+          eventSequences: 0,
+          events: 0,
+          sessionMessages: 0,
+          sessionInputs: 0,
+          contextEpochs: 0,
+        })
       }),
     )
   })
