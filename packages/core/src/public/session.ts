@@ -1,7 +1,6 @@
 export * as Session from "./session"
 
 import { Effect, Schema, Stream } from "effect"
-import { EventV2 } from "../event"
 import { ModelV2 } from "../model"
 import { SessionV2 } from "../session"
 import { MessageDecodeError } from "../session/error"
@@ -34,9 +33,7 @@ export type Delivery = SessionInput.Delivery
 export const ListInput = SessionV2.ListInput
 export type ListInput = SessionV2.ListInput
 
-export const EventCursor = EventV2.Cursor
-export type EventCursor = EventV2.Cursor
-export type Event = EventV2.CursorEvent<SessionEvent.DurableEvent>
+export type Event = SessionEvent.DurableEvent
 
 export const NotFoundError = SessionV2.NotFoundError
 export type NotFoundError = SessionV2.NotFoundError
@@ -99,7 +96,7 @@ export interface MessageInput {
 
 export interface EventsInput {
   readonly sessionID: ID
-  readonly after?: EventCursor
+  readonly after?: number
 }
 
 export interface Interface {

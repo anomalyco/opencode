@@ -11,6 +11,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
+import { host } from "../plugin/host"
 
 const it = testEffect(Layer.mergeAll(CommandV2.locationLayer, FSUtil.defaultLayer))
 const decode = Schema.decodeUnknownSync(Config.Info)
@@ -41,8 +42,7 @@ Review files`,
           })
 
           const command = yield* CommandV2.Service
-          yield* ConfigCommandPlugin.Plugin.effect.pipe(
-            Effect.provideService(CommandV2.Service, command),
+          yield* ConfigCommandPlugin.Plugin.effect(host({ command })).pipe(
             Effect.provideService(
               Config.Service,
               Config.Service.of({
