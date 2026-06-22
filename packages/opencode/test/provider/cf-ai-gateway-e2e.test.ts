@@ -16,7 +16,7 @@ import type * as Provider from "@/provider/provider"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 
-type Captured = { url: string; outerBody: unknown }
+type Captured = { url: string; outerBody: unknown; headers: Record<string, string> }
 type ProviderOptions = Record<string, Record<string, JSONValue>>
 
 const realFetch = globalThis.fetch
@@ -32,7 +32,11 @@ beforeEach(() => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
     if (url.startsWith("https://gateway.ai.cloudflare.com/")) {
       const bodyText = typeof init?.body === "string" ? init.body : ""
-      captured = { url, outerBody: bodyText ? JSON.parse(bodyText) : null }
+      captured = {
+        url,
+        outerBody: bodyText ? JSON.parse(bodyText) : null,
+        headers: Object.fromEntries(new Headers(init?.headers).entries()),
+      }
       return new Response(
         JSON.stringify({
           id: "chatcmpl-test",
@@ -88,9 +92,19 @@ function extractUpstreamQuery(body: unknown): Record<string, unknown> | undefine
   return isRecord(query) ? query : undefined
 }
 
-async function callThroughGateway(apiId: string, providerOptions: ProviderOptions) {
-  const aigateway = createAiGateway({ accountId: "test", gateway: "test", apiKey: "test" })
-  const unified = createUnified()
+// Each step descriptor also carries the `headers` forwarded to the upstream provider.
+function extractUpstreamHeaders(body: unknown): Record<string, unknown> | undefined {
+  if (!Array.isArray(body) || body.length === 0) return undefined
+  const first = body[0]
+  if (!isRecord(first)) return undefined
+  const headers = first.headers
+  return isRecord(headers) ? headers : undefined
+}
+
+async function callThroughGateway(apiId: string, providerOptions: ProviderOptions, gatewayToken = "test") {
+  const aigateway = createAiGateway({ accountId: "test", gateway: "test", apiKey: gatewayToken })
+  // Mirrors the runtime: only workers-ai sub-requests get the Cloudflare token as their apiKey.
+  const unified = createUnified(apiId.startsWith("workers-ai/") ? { apiKey: gatewayToken } : {})
   await generateText({ model: aigateway(unified(apiId)), prompt: "hi", providerOptions })
   return extractUpstreamQuery(captured?.outerBody)
 }
@@ -128,5 +142,19 @@ describe("cf-ai-gateway end-to-end (regression: #24432)", () => {
       "cloudflare-ai-gateway": { reasoningEffort: "high" },
     })
     expect(upstream?.reasoning_effort).toBeUndefined()
+  })
+
+  test("third-party models do NOT forward the Cloudflare token upstream (regression: #32052)", async () => {
+    await callThroughGateway("openai/gpt-5.4", {}, "cf-gateway-secret")
+
+    expect(captured?.headers["cf-aig-authorization"]).toBe("Bearer cf-gateway-secret")
+    expect(JSON.stringify(captured?.outerBody)).not.toContain("cf-gateway-secret")
+  })
+
+  test("workers-ai models DO forward the Cloudflare token upstream (regression: #32051)", async () => {
+    await callThroughGateway("workers-ai/@cf/google/gemma-4-26b-a4b-it", {}, "cf-gateway-secret")
+
+    expect(captured?.headers["cf-aig-authorization"]).toBe("Bearer cf-gateway-secret")
+    expect(extractUpstreamHeaders(captured?.outerBody)?.["authorization"]).toBe("Bearer cf-gateway-secret")
   })
 })
