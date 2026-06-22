@@ -13,10 +13,9 @@ description: securecode リポジトリで GitHub Pull Request を新規作成�
 
 - 必ず `-R acompany-develop/securecode` を明示する。省略すると upstream 側に PR が作られる事故が起きる (過去複数回発生)。
 - まず securecode 側、次に upstream 側で同じテーマの issue / PR が既に存在しないか確認する。**順序を間違えない**: 同一リポ内重複の解消が最優先。
-- 開発作業は **必ず git worktree で行う**。メインの作業ディレクトリ (`/Users/sotasakamoto/Develop/securecode`) では絶対にファイルを変更しない (`CLAUDE.local.md` 参照)。
 - 実装場所は `CLAUDE.md` の upstream-policy に従う。**upstream owned のソースは原則として触らない**。詳細は [3. 実装場所の判定](#3-実装場所の判定-upstream-policy) を厳密に守ること。
 - PR 作成前に `packages/opencode/src/securecode/skills/securecode-manual/*.md` の更新要否を確認し、PR 本文に明記する。
-- 一度作った PR の本文・タイトル・コメントを **編集しない**。訂正は新規コメントで追記し、過去の記述には取り消し線を引く ([[コメント追記ルール](#10-コメント追記ルール)] 参照)。
+- 一度作った PR の本文・タイトル・コメントを **編集しない**。訂正は新規コメントで追記し、過去の記述には取り消し線を引く ([[コメント追記ルール](#9-コメント追記ルール)] 参照)。
 
 ## 手順
 
@@ -107,22 +106,7 @@ upstream owned に触る PR を出す場合は、PR 本文に必ず以下を明�
 
 詳細・過去の判断例は `specs/upstream-policy.md` を参照。
 
-### 4. worktree で作業 (CLAUDE.local.md ルール)
-
-メインディレクトリでは絶対にファイルを変更しない。worktree を作って作業する。
-
-```bash
-# 1. メインで dev を最新化
-cd /Users/sotasakamoto/Develop/securecode
-git fetch origin && git checkout dev && git pull --ff-only origin dev
-
-# 2. 最新の dev から worktree を派生
-git worktree add /Users/sotasakamoto/Develop/securecode/.claude/worktrees/<branch-name> -b <branch-name> dev
-```
-
-ブランチ名は `feat/<topic>`, `fix/<topic>`, `chore/<topic>`, `docs/<topic>` のように conventional な prefix を付ける。
-
-### 5. gh-pr-compliance skill を読む
+### 4. gh-pr-compliance skill を読む
 
 PR 規約遵守の詳細チェックは `.opencode/skills/gh-pr-compliance/SKILL.md` が担当。create-pr の中から必ずそちらも参照すること。重複説明はしないので、以下の点をそちらで確認する:
 
@@ -131,7 +115,7 @@ PR 規約遵守の詳細チェックは `.opencode/skills/gh-pr-compliance/SKILL
 - linked issue の必須性
 - live PR の verify 手順
 
-### 6. PR テンプレートを埋める
+### 5. PR テンプレートを埋める
 
 `.github/pull_request_template.md` の section を **削除せず**、すべて埋める。該当なしの section は「該当なし」と明記する。
 
@@ -146,7 +130,7 @@ securecode の PR template の主要 section:
 
 > _このテンプレートに従わない場合、PR は自動的にRejectされます_ ← 自動 reject の対象になる。section の見出しを変えたり削ったりしない。
 
-### 7. securecode-manual の更新確認 (CLAUDE.md ルール)
+### 6. securecode-manual の更新確認 (CLAUDE.md ルール)
 
 PR を作成する前に、`packages/opencode/src/securecode/skills/securecode-manual/*.md` の以下の章を grep して、変更内容と矛盾していないか確認する。
 
@@ -166,7 +150,7 @@ PR 本文に **必ず** 以下のどちらかを明記する:
 
 「マニュアル更新を忘れる」と built-in skill としてバイナリに焼かれたままになり、ユーザーへ古い情報を案内し続ける事故になる。
 
-### 8. PR 作成コマンド
+### 7. PR 作成コマンド
 
 ```bash
 # まずブランチを remote に push
@@ -227,7 +211,7 @@ EOF
 - body は `--body-file` でヒアドキュメント経由を推奨。
 - title の prefix は `feat:` / `fix:` / `chore:` / `docs:` / `refactor:` 等の conventional 形式。
 
-### 9. live PR を verify
+### 8. live PR を verify
 
 PR 作成後、必ず実物を確認する。
 
@@ -247,7 +231,7 @@ gh pr checks <番号> -R acompany-develop/securecode
 
 bot が compliance 違反を指摘してきたら、**コメントを編集せず**、`gh pr edit` で title / body の該当部分を直し、新規コメントで「指摘 X を反映しました」と追記する。
 
-### 10. コメント追記ルール
+### 9. コメント追記ルール
 
 PR コメントを **編集してはいけない**。理由:
 
@@ -270,7 +254,6 @@ PR コメントを **編集してはいけない**。理由:
 - [ ] 該当があればユーザーに報告し、判断を仰いだ
 - [ ] **実装場所を upstream-policy に従って選んだ**: Step 1 (plugin) → Step 2 (securecode 固有) → Step 3 (upstream owned, 最終手段) の順で検討した
 - [ ] upstream owned に触る場合は、なぜ plugin / securecode 固有で実現できないかを PR 本文に明記した
-- [ ] worktree を作成してそこで作業した (メインリポを汚していない)
 - [ ] `.opencode/skills/gh-pr-compliance/SKILL.md` を読んだ
 - [ ] PR テンプレートの section を全部埋めた (該当なしは明記)
 - [ ] `securecode-manual` の該当章を grep し、PR 本文に `manual updated` / `manual: no change needed` を明記した
