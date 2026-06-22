@@ -11,7 +11,7 @@
 
 @font-face {
   font-family: "Inter";
-  src: url("/assets/Inter-Variable.woff2") format("truetype");
+  src: url("/assets/Inter.ttf") format("truetype");
   font-weight: 100 900;
   font-style: normal;
 }

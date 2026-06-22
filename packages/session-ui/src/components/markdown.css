@@ -1,6 +1,6 @@
 [data-component="markdown"] {
   --markdown-inline-code-path-color: var(--v2-blue-800);
-  --markdown-inline-code-bg-mix: 5%;
+  --markdown-inline-code-bg-mix: 10%;
 
   /* Reset & Base Typography */
   min-width: 0;
@@ -237,7 +237,8 @@
 
   :where(p, li, blockquote, a) > code[data-inline-code-kind="path"] {
     color: var(--markdown-inline-code-path-color);
-    font-weight: 500;
+    font-weight: var(--font-weight-custom);
+    /*font-family: Inter V;*/
   }
 
   :where(p, li, blockquote, a) > code[data-inline-code-kind="url"] {
@@ -284,7 +285,7 @@
 
 :root[data-color-scheme="dark"] [data-component="markdown"] {
   --markdown-inline-code-path-color: var(--v2-blue-400);
-  --markdown-inline-code-bg-mix: 10%;
+  /*--markdown-inline-code-bg-mix: 10%;*/
 }
 
 [data-component="markdown"] a.external-link:hover > code {
