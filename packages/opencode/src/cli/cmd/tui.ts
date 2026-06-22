@@ -146,6 +146,8 @@ export const TuiThreadCommand = cmd({
       const config = await TuiConfig.get()
 
       const network = resolveNetworkOptionsNoConfig(args)
+      const { url: serverUrl } = await client.call("server", network)
+
       const external =
         process.argv.includes("--port") ||
         process.argv.includes("--hostname") ||
@@ -156,7 +158,7 @@ export const TuiThreadCommand = cmd({
 
       const transport = external
         ? {
-            url: (await client.call("server", network)).url,
+            url: serverUrl,
             fetch: undefined,
             events: undefined,
           }
@@ -190,6 +192,7 @@ export const TuiThreadCommand = cmd({
         await Effect.runPromise(
           run({
             url: transport.url,
+            serverUrl,
             async onSnapshot() {
               const tui = writeHeapSnapshot("tui.heapsnapshot")
               const server = await client.call("snapshot", undefined)

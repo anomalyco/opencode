@@ -133,6 +133,7 @@ const appBindingCommands = [
 
 export type TuiInput = {
   url: string
+  serverUrl?: string
   args: Args
   config: TuiConfig.Resolved
   onSnapshot?: () => Promise<string[]>
@@ -287,6 +288,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                       <PluginRuntimeProvider value={pluginRuntime}>
                                         <SDKProvider
                                           url={input.url}
+                                          serverUrl={input.serverUrl}
                                           directory={input.directory}
                                           fetch={input.fetch}
                                           headers={input.headers}

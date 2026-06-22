@@ -24,6 +24,7 @@ from .sessions import store
 from .stream import require_xai_api_key
 from .stt import STTError
 from .tts import TTSError, default_tts
+from .tui_turn import ensure_opencode_reachable, run_tui_turn
 from .voice_stream import handle_voice_stream
 
 _STATIC_DIR = Path(__file__).resolve().parent / "static"
@@ -33,6 +34,12 @@ def _stream_url(request: Request, voice_id: str) -> str:
     base = str(request.base_url).rstrip("/")
     ws_base = base.replace("https://", "wss://").replace("http://", "ws://")
     return f"{ws_base}/voice/session/{voice_id}/stream"
+
+
+def _resolve_opencode_url(server: object | None) -> str:
+    if isinstance(server, str) and server and "opencode.internal" not in server:
+        return server
+    return discover_server()[0]
 
 
 async def health(_request: Request) -> JSONResponse:
@@ -84,6 +91,7 @@ async def voice_config(_request: Request) -> JSONResponse:
                 "config": "GET /voice/config",
                 "test": "GET /voice/test",
                 "session": "POST /voice/session",
+                "tui_turn": "POST /voice/tui/turn",
                 "stream": "WSS /voice/session/{id}/stream",
             },
             "auth": "stub — optional VOICE_SIDECAR_TOKEN (not enforced yet)",
@@ -107,7 +115,7 @@ async def create_voice_session(request: Request) -> JSONResponse:
         )
     directory = str(Path(directory).resolve())
 
-    opencode_url = body.get("server") or discover_server()[0]
+    opencode_url = _resolve_opencode_url(body.get("server"))
     agent = body.get("agent") or os.environ.get("OPENCODE_AGENT")
     session_id = body.get("sessionID") or body.get("session_id")
 
@@ -128,6 +136,47 @@ async def create_voice_session(request: Request) -> JSONResponse:
         agent=agent,
     )
     return JSONResponse(voice.to_dict(stream_url=_stream_url(request, voice.id)), status_code=201)
+
+
+async def tui_voice_turn(request: Request) -> JSONResponse:
+    try:
+        body = await request.json()
+    except json.JSONDecodeError:
+        return JSONResponse({"error": "request body must be JSON"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "request body must be a JSON object"}, status_code=400)
+
+    directory = body.get("directory") or os.environ.get("OPENCODE_DIRECTORY")
+    if not directory:
+        return JSONResponse(
+            {"error": "directory is required (JSON field or OPENCODE_DIRECTORY env)"},
+            status_code=400,
+        )
+    directory = str(Path(directory).resolve())
+
+    session_id = body.get("sessionID") or body.get("session_id")
+    if not session_id:
+        return JSONResponse({"error": "sessionID is required"}, status_code=400)
+
+    opencode_url = _resolve_opencode_url(body.get("server"))
+    agent = body.get("agent") or os.environ.get("OPENCODE_AGENT")
+
+    try:
+        await ensure_opencode_reachable(opencode_url, directory)
+        result = await run_tui_turn(
+            opencode_url=str(opencode_url),
+            directory=directory,
+            session_id=str(session_id),
+            agent=str(agent) if agent else None,
+        )
+    except OpencodeError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=502)
+    except STTError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=502)
+    except TTSError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=502)
+
+    return JSONResponse(result)
 
 
 async def get_voice_session(request: Request) -> JSONResponse:
@@ -158,6 +207,7 @@ def create_app() -> Starlette:
             Route("/voice/config", voice_config, methods=["GET"]),
             Route("/voice/test", voice_test_page, methods=["GET"]),
             Route("/voice/session", create_voice_session, methods=["POST"]),
+            Route("/voice/tui/turn", tui_voice_turn, methods=["POST"]),
             Route("/voice/session/{voice_id}", get_voice_session, methods=["GET"]),
             WebSocketRoute("/voice/session/{voice_id}/stream", voice_stream_ws),
         ],

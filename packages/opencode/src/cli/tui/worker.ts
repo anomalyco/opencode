@@ -45,7 +45,7 @@ export const rpc = {
     return result
   },
   async server(input: { port: number; hostname: string; mdns?: boolean; cors?: string[] }) {
-    if (server) await server.stop(true)
+    if (server) return { url: server.url.toString() }
     server = await Server.listen(input)
     return { url: server.url.toString() }
   },

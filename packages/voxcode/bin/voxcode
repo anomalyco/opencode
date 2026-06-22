@@ -1,0 +1,103 @@
+#!/usr/bin/env node
+
+const childProcess = require("child_process")
+const fs = require("fs")
+const path = require("path")
+const os = require("os")
+
+const forwardedSignals = ["SIGINT", "SIGTERM", "SIGHUP"]
+
+function run(target, args) {
+  const child = childProcess.spawn(target, args, {
+    stdio: "inherit",
+  })
+
+  child.on("error", (error) => {
+    console.error(error.message)
+    process.exit(1)
+  })
+
+  const forwarders = {}
+  for (const signal of forwardedSignals) {
+    forwarders[signal] = () => {
+      try {
+        child.kill(signal)
+      } catch {
+        // ignore
+      }
+    }
+    process.on(signal, forwarders[signal])
+  }
+
+  child.on("exit", (code, signal) => {
+    for (const forwardedSignal of forwardedSignals) {
+      process.removeListener(forwardedSignal, forwarders[forwardedSignal])
+    }
+
+    if (signal) {
+      process.kill(process.pid, signal)
+      return
+    }
+
+    process.exit(typeof code === "number" ? code : 0)
+  })
+}
+
+const envPath = process.env.VOXCODE_BIN_PATH
+
+const scriptPath = fs.realpathSync(__filename)
+const scriptDir = path.dirname(scriptPath)
+
+const cached = path.join(scriptDir, ".voxcode")
+
+const platformMap = {
+  darwin: "darwin",
+  linux: "linux",
+  win32: "windows",
+}
+const archMap = {
+  x64: "x64",
+  arm64: "arm64",
+  arm: "arm",
+}
+
+let platform = platformMap[os.platform()]
+if (!platform) {
+  platform = os.platform()
+}
+let arch = archMap[os.arch()]
+if (!arch) {
+  arch = os.arch()
+}
+const base = "voxcode-" + platform + "-" + arch
+const binary = platform === "windows" ? "voxcode.exe" : "voxcode"
+
+function findBinary(startDir) {
+  let current = startDir
+  for (;;) {
+    const modules = path.join(current, "node_modules")
+    if (fs.existsSync(modules)) {
+      const candidate = path.join(modules, base, "bin", binary)
+      if (fs.existsSync(candidate)) return candidate
+    }
+    const parent = path.dirname(current)
+    if (parent === current) {
+      return
+    }
+    current = parent
+  }
+}
+
+const devEntry = path.join(scriptDir, "..", "src", "index.ts")
+if (fs.existsSync(devEntry) && !envPath && !fs.existsSync(cached)) {
+  run(process.env.BUN ?? "bun", ["run", devEntry, ...process.argv.slice(2)])
+} else {
+  const resolved = envPath || (fs.existsSync(cached) ? cached : findBinary(scriptDir))
+  if (!resolved) {
+    console.error(
+      'voxcode binary not found. Run "bun run build" in packages/voxcode or use: bun run --cwd packages/voxcode dev',
+    )
+    process.exit(1)
+  }
+  run(resolved, process.argv.slice(2))
+}

@@ -38,6 +38,8 @@ import type {
   SessionStatus,
 } from "@opencode-ai/sdk/v2"
 import { useLocal } from "../../context/local"
+import { VoiceStatus } from "../../component/voice-status"
+import { createTuiVoice } from "../../voice/runtime"
 import { Locale } from "../../util/locale"
 import { webSearchProviderLabel } from "../../util/tool-display"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
@@ -140,6 +142,7 @@ const sessionBindingCommands = [
   "session.parent",
   "session.child.next",
   "session.child.previous",
+  "voice.toggle",
 ] as const
 
 const sessionGlobalBindingCommands = [
@@ -416,6 +419,24 @@ export function Session() {
   }
 
   const local = useLocal()
+
+  const voice = createTuiVoice({
+    opencodeUrl: () => sdk.url,
+    serverUrl: () => sdk.serverUrl,
+    directory: () => sdk.directory ?? project.instance.directory(),
+    sessionID: () => route.sessionID,
+    agent: () => local.agent.current()?.name,
+    enabled: () => visible() && !disabled(),
+    onError: (message) => {
+      toast.show({
+        message,
+        variant: "error",
+        duration: 5000,
+      })
+    },
+  })
+
+  onCleanup(() => voice.stop())
 
   function enterChild(sessionID: string) {
     navigate({
@@ -1106,6 +1127,21 @@ export function Session() {
 
   useBindings(() => ({
     mode: OPENCODE_BASE_MODE,
+    enabled: () => visible() && !disabled(),
+    commands: [
+      {
+        name: "voice.toggle",
+        title: "Toggle voice mode",
+        category: "Session",
+        namespace: "palette",
+        run: () => voice.toggle(),
+      },
+    ],
+    bindings: tuiConfig.keybinds.get("voice.toggle"),
+  }))
+
+  useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
     enabled: foregroundTasks().length > 0,
     priority: 1,
     bindings: tuiConfig.keybinds.get("session.background"),
@@ -1291,6 +1327,7 @@ export function Session() {
                   <SubagentFooter />
                 </Show>
                 <Show when={visible()}>
+                  <VoiceStatus phase={voice.phase} label={voice.label} />
                   <pluginRuntime.Slot
                     name="session_prompt"
                     mode="replace"

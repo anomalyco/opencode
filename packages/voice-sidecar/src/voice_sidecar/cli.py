@@ -101,7 +101,8 @@ def cmd_converse(args: argparse.Namespace) -> int:
     import asyncio
 
     from .opencode import OpencodeClient
-    from .stream import XaiStreamingSTT, mic_frames
+    from .listen import listen_once_terminal
+    from .stream import XaiStreamingSTT
 
     try:
         stt = XaiStreamingSTT(language=args.language, sample_rate=args.sample_rate)
@@ -111,61 +112,6 @@ def cmd_converse(args: argparse.Namespace) -> int:
     client = OpencodeClient(url=args.server)
     if client.directory.endswith("voice-sidecar"):
         _log(f"warning: workspace is {client.directory} — set OPENCODE_DIRECTORY to your repo")
-
-    async def listen_once() -> str | None:
-        for attempt in range(3):
-            if attempt:
-                await asyncio.sleep(0.5 * attempt)
-                _log(f"stt reconnect ({attempt + 1}/3)…")
-            stop = asyncio.Event()
-            captured: dict[str, str | None] = {"text": None}
-            pending: dict[str, str | None] = {"text": None}
-            finalize_task: asyncio.Task[None] | None = None
-            loop = asyncio.get_running_loop()
-
-            async def finalize_after(delay: float) -> None:
-                await asyncio.sleep(delay)
-                if stop.is_set() or not pending["text"]:
-                    return
-                captured["text"] = pending["text"]
-                print("\r\033[K", end="", file=sys.stderr, flush=True)
-                stop.set()
-
-            def on_event(event: dict) -> None:
-                nonlocal finalize_task
-                if event.get("type") != "transcript.partial":
-                    return
-                text = event.get("text", "")
-                if event.get("speech_final"):
-                    if finalize_task and not finalize_task.done():
-                        finalize_task.cancel()
-                    captured["text"] = text
-                    print("\r\033[K", end="", file=sys.stderr, flush=True)
-                    stop.set()
-                    return
-                tag = "▸" if event.get("is_final") else "·"
-                print(f"\r\033[K{tag} {text}", end="", file=sys.stderr, flush=True)
-                if event.get("is_final") and text.strip():
-                    pending["text"] = text
-                    if finalize_task and not finalize_task.done():
-                        finalize_task.cancel()
-                    finalize_task = loop.create_task(finalize_after(1.2))
-
-            try:
-                await stt.stream(mic_frames(args.sample_rate, args.device, stop), on_event)
-            except STTError as exc:
-                if attempt < 2:
-                    continue
-                _log(f"stt error: {exc}")
-                return None
-            if finalize_task and not finalize_task.done():
-                finalize_task.cancel()
-            text = captured["text"]
-            if not text:
-                return None
-            stripped = text.strip()
-            return stripped if stripped else None
-        return None
 
     async def go() -> None:
         try:
@@ -184,7 +130,11 @@ def cmd_converse(args: argparse.Namespace) -> int:
 
         while True:
             _log("listening…")
-            text = await listen_once()
+            try:
+                text = await listen_once_terminal(stt, sample_rate=args.sample_rate, device=args.device)
+            except STTError as exc:
+                _log(f"stt error: {exc}")
+                continue
             if not text:
                 _log("didn't catch that — try again")
                 continue

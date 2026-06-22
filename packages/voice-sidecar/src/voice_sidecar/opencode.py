@@ -36,6 +36,8 @@ def discover_server(url: str | None = None, password: str | None = None) -> tupl
     state = _state_dir()
 
     url = url or os.environ.get("OPENCODE_SERVER_URL")
+    if url and "opencode.internal" in url:
+        url = None
     if not url:
         server_file = state / "server.json"
         if server_file.exists():

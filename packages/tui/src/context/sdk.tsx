@@ -12,6 +12,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
   name: "SDK",
   init: (props: {
     url: string
+    serverUrl?: string
     directory?: string
     fetch?: typeof fetch
     headers?: RequestInit["headers"]
@@ -145,6 +146,7 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       directory: props.directory,
       event: emitter,
       fetch: props.fetch ?? fetch,
+      serverUrl: props.serverUrl,
       url: props.url,
     }
   },

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "voxcode",
+  "version": "0.0.0",
+  "description": "OpenCode with voice — local binary",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "bin": {
+    "voxcode": "./bin/voxcode"
+  },
+  "scripts": {
+    "dev": "bun run ./src/index.ts",
+    "build": "bun run ./script/build.ts",
+    "typecheck": "tsgo --noEmit"
+  },
+  "devDependencies": {
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:"
+  }
+}
