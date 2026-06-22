@@ -923,16 +923,6 @@
       "table": "session_context_epoch"
     },
     {
-      "type": "integer",
-      "notNull": true,
-      "autoincrement": false,
-      "default": "0",
-      "generated": null,
-      "name": "revision",
-      "entityType": "columns",
-      "table": "session_context_epoch"
-    },
-    {
       "type": "text",
       "notNull": false,
       "autoincrement": false,

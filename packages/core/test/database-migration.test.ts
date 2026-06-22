@@ -71,7 +71,7 @@ describe("DatabaseMigration", () => {
         ).toEqual({ name: "session_context_epoch" })
         expect(
           yield* db.get(
-            sql`SELECT name FROM pragma_table_info('session_context_epoch') WHERE name IN ('agent', 'replacement_seq')`,
+            sql`SELECT name FROM pragma_table_info('session_context_epoch') WHERE name IN ('agent', 'replacement_seq', 'revision')`,
           ),
         ).toBeUndefined()
         expect(yield* db.get(sql`SELECT count(*) as count FROM migration`)).toEqual({ count: migrations.length })

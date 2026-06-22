@@ -12,7 +12,7 @@ const decode = Schema.decodeUnknownEffect(SessionMessage.Message)
 
 export const latestCompaction = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
   return yield* db
-    .select()
+    .select({ seq: SessionMessageTable.seq })
     .from(SessionMessageTable)
     .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "compaction")))
     .orderBy(desc(SessionMessageTable.seq))

@@ -7,6 +7,7 @@ export default {
     return Effect.gen(function* () {
       yield* tx.run(`ALTER TABLE \`session_context_epoch\` DROP COLUMN \`agent\`;`)
       yield* tx.run(`ALTER TABLE \`session_context_epoch\` DROP COLUMN \`replacement_seq\`;`)
+      yield* tx.run(`ALTER TABLE \`session_context_epoch\` DROP COLUMN \`revision\`;`)
     })
   },
 } satisfies DatabaseMigration.Migration

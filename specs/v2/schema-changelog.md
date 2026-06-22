@@ -805,7 +805,7 @@ Compatibility:
 
 Affected schema:
 
-- Remove `session_context_epoch.agent` and `session_context_epoch.replacement_seq`.
+- Remove `session_context_epoch.agent`, `session_context_epoch.replacement_seq`, and `session_context_epoch.revision`.
 - No synchronized event, public HTTP API, or generated SDK schema changes.
 
 Change:
@@ -814,6 +814,7 @@ Change:
 - Preserve the immutable baseline and admit ordinary System Context changes as chronological `ContextUpdated` messages.
 - Rebuild the baseline directly after completed compaction instead of maintaining pending replacement state.
 - Preserve the old baseline and its effective chronological updates while a post-compaction baseline cannot be rendered completely.
+- Rely on the process-local Session execution lane instead of optimistic concurrency state between Context Epoch writers.
 
 Compatibility:
 
