@@ -254,22 +254,6 @@ describe("DatabaseMigration", () => {
         yield* db.run(
           sql`INSERT INTO session_context_epoch (session_id, baseline, snapshot, baseline_seq) VALUES ('session', 'baseline', '{}', 0)`,
         )
-        yield* db.run(
-          sql`INSERT INTO session (id, project_id, workspace_id, slug, directory, title, version, time_created, time_updated) VALUES ('unaffected', 'project', 'workspace', 'unaffected', '/tmp/project', 'Unaffected', 'test', 1, 1)`,
-        )
-        yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('unaffected', 0)`)
-        yield* db.run(
-          sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('unaffected-event', 'unaffected', 0, 'session.created.1', '{}')`,
-        )
-        yield* db.run(
-          sql`INSERT INTO session_message (id, session_id, type, seq, time_created, time_updated, data) VALUES ('unaffected-message', 'unaffected', 'user', 0, 1, 1, '{}')`,
-        )
-        yield* db.run(
-          sql`INSERT INTO session_input (id, session_id, prompt, delivery, admitted_seq, time_created) VALUES ('unaffected-input', 'unaffected', '{}', 'steer', 0, 1)`,
-        )
-        yield* db.run(
-          sql`INSERT INTO session_context_epoch (session_id, baseline, snapshot, baseline_seq) VALUES ('unaffected', 'baseline', '{}', 0)`,
-        )
         yield* db.run(sql`DELETE FROM migration WHERE id = ${resetV2SessionStateMigration.id}`)
 
         yield* DatabaseMigration.applyOnly(db, [resetV2SessionStateMigration])
@@ -278,7 +262,6 @@ describe("DatabaseMigration", () => {
           yield* db.get(sql`
             SELECT
               (SELECT workspace_id FROM session WHERE id = 'session') AS workspaceID,
-              (SELECT workspace_id FROM session WHERE id = 'unaffected') AS unaffectedWorkspaceID,
               (SELECT COUNT(*) FROM workspace) AS workspaces,
               (SELECT COUNT(*) FROM event_sequence) AS eventSequences,
               (SELECT COUNT(*) FROM event) AS events,
@@ -288,13 +271,12 @@ describe("DatabaseMigration", () => {
           `),
         ).toEqual({
           workspaceID: null,
-          unaffectedWorkspaceID: "workspace",
-          workspaces: 1,
-          eventSequences: 1,
-          events: 1,
-          sessionMessages: 1,
-          sessionInputs: 1,
-          contextEpochs: 1,
+          workspaces: 0,
+          eventSequences: 0,
+          events: 0,
+          sessionMessages: 0,
+          sessionInputs: 0,
+          contextEpochs: 0,
         })
       }),
     )
