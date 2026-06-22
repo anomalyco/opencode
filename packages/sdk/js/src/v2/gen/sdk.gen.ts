@@ -6243,22 +6243,12 @@ export class Event2 extends HeyApiClient {
   /**
    * Subscribe to events
    *
-   * Subscribe to native event payloads for a location.
+   * Subscribe to native event payloads for the server.
    */
-  public subscribe<ThrowOnError extends boolean = false>(
-    parameters?: {
-      location?: {
-        directory?: string
-        workspace?: string
-      }
-    },
-    options?: Options<never, ThrowOnError>,
-  ) {
-    const params = buildClientParams([parameters], [{ args: [{ in: "query", key: "location" }] }])
+  public subscribe<ThrowOnError extends boolean = false>(options?: Options<never, ThrowOnError>) {
     return (options?.client ?? this.client).sse.get<V2EventSubscribeResponses, V2EventSubscribeErrors, ThrowOnError>({
       url: "/api/event",
       ...options,
-      ...params,
     })
   }
 }

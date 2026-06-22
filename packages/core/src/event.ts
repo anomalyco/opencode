@@ -30,6 +30,15 @@ export type Definition<Type extends string = string, DataSchema extends Schema.T
 
 export type Data<D extends Definition> = Schema.Schema.Type<D["data"]>
 
+export const Payload = Schema.Struct({
+  id: ID,
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  type: Schema.String,
+  durable: Schema.optional(Schema.Struct({ aggregateID: Schema.String, seq: Schema.Int, version: Schema.Int })),
+  location: Schema.optional(Location.Ref),
+  data: Schema.Unknown,
+})
+
 export type Payload<D extends Definition = Definition> = {
   readonly id: ID
   readonly type: D["type"]
@@ -78,16 +87,13 @@ export function define<const Type extends string, Fields extends Schema.Struct.F
   readonly schema: Fields
 }): Schema.Schema<Payload<Definition<Type, Schema.Struct<Fields>>>> & Definition<Type, Schema.Struct<Fields>> {
   const Data = Schema.Struct(input.schema)
-  const Payload = Schema.Struct({
-    id: ID,
-    metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  const Event = Schema.Struct({
+    ...Payload.fields,
     type: Schema.Literal(input.type),
-    durable: Schema.optional(Schema.Struct({ aggregateID: Schema.String, seq: Schema.Number, version: Schema.Number })),
-    location: Schema.optional(Location.Ref),
     data: Data,
   }).annotate({ identifier: input.type })
 
-  const definition = Object.assign(Payload, {
+  const definition = Object.assign(Event, {
     type: input.type,
     ...(input.durable === undefined ? {} : { durable: input.durable }),
     data: Data,
