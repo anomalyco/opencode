@@ -21,7 +21,6 @@ type DatabaseService = Database.Interface["db"]
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Message)
 const encodeMessage = Schema.encodeSync(SessionMessage.Message)
 
-class PromptAlreadyProjected extends Error {}
 export class SessionAlreadyProjected extends Error {}
 
 type Usage = {
@@ -350,27 +349,19 @@ export const layer = Layer.effectDiscard(
     )
     yield* events.project(SessionEvent.Prompted, (event) =>
       Effect.gen(function* () {
-        const messageID = event.data.messageID
-        const existing = yield* db
-          .select({ id: SessionMessageTable.id })
-          .from(SessionMessageTable)
-          .where(eq(SessionMessageTable.id, messageID))
-          .get()
-          .pipe(Effect.orDie)
-        if (existing) return yield* Effect.die(new PromptAlreadyProjected())
-        yield* run(db, event)
         if (event.durable === undefined) return yield* Effect.die("Durable Session event is missing aggregate sequence")
-        yield* SessionInput.projectLegacyPrompted(db, {
-          id: messageID,
+        yield* SessionInput.projectPrompted(db, {
+          id: event.data.messageID,
           sessionID: event.data.sessionID,
           prompt: event.data.prompt,
           delivery: event.data.delivery,
           timeCreated: event.data.timestamp,
           promotedSeq: event.durable.seq,
         })
+        yield* run(db, event)
       }),
     )
-    yield* events.project(SessionEvent.PromptLifecycle.Admitted, (event) =>
+    yield* events.project(SessionEvent.PromptAdmitted, (event) =>
       Effect.gen(function* () {
         if (event.durable === undefined) return yield* Effect.die("Durable Session event is missing aggregate sequence")
         yield* SessionInput.projectAdmitted(db, {
@@ -381,22 +372,6 @@ export const layer = Layer.effectDiscard(
           delivery: event.data.delivery,
           timeCreated: event.data.timestamp,
         })
-      }),
-    )
-    yield* events.project(SessionEvent.PromptLifecycle.Promoted, (event) =>
-      Effect.gen(function* () {
-        if (event.durable === undefined) return yield* Effect.die("Durable Session event is missing aggregate sequence")
-        yield* insertMessage(
-          db,
-          event,
-          yield* SessionInput.projectPromoted(db, {
-            id: event.data.messageID,
-            sessionID: event.data.sessionID,
-            prompt: event.data.prompt,
-            timeCreated: event.data.timeCreated,
-            promotedSeq: event.durable.seq,
-          }),
-        )
       }),
     )
     yield* events.project(SessionEvent.ContextUpdated, (event) => run(db, event))

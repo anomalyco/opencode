@@ -1,5 +1,12 @@
 # V2 Schema Changelog
 
+## 2026-06-22: Simplify Session Input Promotion
+
+- Keep `session.next.prompt.admitted.1` as the durable, client-visible record of pending Session input.
+- Replace `session.next.prompt.promoted.1` with the existing `session.next.prompted.1` event when input becomes model-visible.
+- Preserve the prompt endpoint, admission receipt, idempotency, steer/queue ordering, and atomic user-message projection.
+- Reset experimental V2 events, projections, inputs, Context Epochs, and synchronized workspace state while preserving canonical V1 `session`, `message`, and `part` rows.
+
 ## 2026-06-22: Reset Unpublished Compaction Event
 
 - Replace the unpublished `session.next.compaction.ended.1` payload with the current checkpoint payload and remove its legacy decoder.

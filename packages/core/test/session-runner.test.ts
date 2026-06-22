@@ -2404,7 +2404,7 @@ describe("SessionRunnerLLM", () => {
       const events = yield* EventV2.Service
       const defect = new Error("fail after prompt promotion")
       let fail = true
-      yield* events.project(SessionEvent.PromptLifecycle.Promoted, () => (fail ? Effect.die(defect) : Effect.void))
+      yield* events.project(SessionEvent.Prompted, () => (fail ? Effect.die(defect) : Effect.void))
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Recover promoted input" }), resume: false })
 
       expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe(defect)
@@ -2429,9 +2429,7 @@ describe("SessionRunnerLLM", () => {
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
       yield* events.listen((event) =>
-        event.type === SessionEvent.PromptLifecycle.Promoted.type
-          ? Effect.die("fail after prompt promotion commits")
-          : Effect.void,
+        event.type === SessionEvent.Prompted.type ? Effect.die("fail after prompt promotion commits") : Effect.void,
       )
       yield* session.prompt({
         sessionID,

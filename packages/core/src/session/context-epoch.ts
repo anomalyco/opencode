@@ -64,7 +64,7 @@ const prepareOnce = Effect.fnUntraced(function* (
     return { baseline: stored.baseline, baselineSeq: stored.baseline_seq }
   }
   if (result._tag === "ReplacementReady") {
-    const baselineSeq = replacementSeq ?? (yield* SessionInput.latestSeq(db, sessionID))
+    const baselineSeq = replacementSeq ?? (yield* EventV2.latestSequence(db, sessionID))
     yield* replace(db, sessionID, baselineSeq, result.generation)
     return { baseline: result.generation.baseline, baselineSeq }
   }
@@ -124,7 +124,7 @@ const insert = Effect.fnUntraced(function* (
   sessionID: SessionSchema.ID,
   generation: SystemContext.Generation,
 ) {
-  const baselineSeq = yield* SessionInput.latestSeq(db, sessionID)
+  const baselineSeq = yield* EventV2.latestSequence(db, sessionID)
   yield* db
     .insert(SessionContextEpochTable)
     .values({

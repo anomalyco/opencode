@@ -176,7 +176,7 @@ export const layer = Layer.effect(
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
       let needsContinuation = false
       if (promotion) {
-        const cutoff = yield* SessionInput.latestSeq(db, session.id)
+        const cutoff = yield* EventV2.latestSequence(db, session.id)
         if (promotion === "steer") yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
         if (promotion === "queue") {
           yield* SessionInput.promoteNextQueued(db, events, session.id)
