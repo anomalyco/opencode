@@ -17,6 +17,29 @@ import { mergeDeep } from "remeda"
 
 const USER_AGENT = `opencode/${InstallationVersion}`
 
+function isDeepSeekModel(model: Provider.Model) {
+  return [model.id, model.api.id, model.providerID].some((value) => value.toLowerCase().includes("deepseek"))
+}
+
+function appendDeepSeekDateContext(messages: ModelMessage[], model: Provider.Model) {
+  if (!isDeepSeekModel(model)) return messages
+  const target = messages.at(-1)
+  if (!target || target.role !== "user") return messages
+  const date = { type: "text" as const, text: `Today's date: ${new Date().toDateString()}` }
+  // Keep the volatile date off the system prefix so DeepSeek cache reuse only
+  // changes at the trailing user turn boundary.
+  return [
+    ...messages.slice(0, -1),
+    {
+      ...target,
+      content:
+        typeof target.content === "string"
+          ? [{ type: "text" as const, text: target.content }, date]
+          : [...target.content, date],
+    },
+  ]
+}
+
 type PrepareInput = {
   readonly user: SessionV1.User
   readonly sessionID: string
@@ -110,6 +133,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
           ),
           ...input.messages,
         ]
+  const modelMessages = appendDeepSeekDateContext(messages, input.model)
 
   const params = yield* input.plugin.trigger(
     "chat.params",
@@ -170,7 +194,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
 
   return {
     system,
-    messages,
+    messages: modelMessages,
     tools: Object.fromEntries(Object.entries(tools).toSorted(([a], [b]) => a.localeCompare(b))),
     params,
     messageTransformOptions: options,

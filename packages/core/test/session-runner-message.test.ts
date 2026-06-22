@@ -12,6 +12,7 @@ import { DateTime } from "effect"
 const created = DateTime.makeUnsafe(0)
 const id = (value: string) => SessionMessage.ID.make(`msg_${value}`)
 const model = Model.make({ id: "model", provider: "provider", route: OpenAIChat.route })
+const deepSeekModel = Model.make({ id: "deepseek-chat", provider: "deepseek", route: OpenAIChat.route })
 
 describe("toLLMMessages", () => {
   test("omits empty assistant turns", () => {
@@ -136,6 +137,27 @@ Recent work
 </conversation-checkpoint>`,
         },
       ],
+    ])
+  })
+
+  test("appends the current date to the trailing user message for DeepSeek", () => {
+    const messages = toLLMMessages(
+      [
+        new SessionMessage.User({
+          id: id("deepseek-user"),
+          type: "user",
+          text: "What changed?",
+          time: { created },
+        }),
+      ],
+      deepSeekModel,
+    )
+
+    expect(messages).toHaveLength(1)
+    expect(messages[0]?.role).toBe("user")
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "What changed?" },
+      { type: "text", text: `Today's date: ${new Date().toDateString()}` },
     ])
   })
 

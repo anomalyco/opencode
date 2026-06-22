@@ -10,6 +10,28 @@ import {
 import { SessionMessage } from "../message"
 import type { FileAttachment } from "../prompt"
 
+function isDeepSeekModel(model: Model) {
+  return [model.id, model.provider].some((value) => String(value).toLowerCase().includes("deepseek"))
+}
+
+function appendDeepSeekDateContext(messages: Message[], model: Model) {
+  if (!isDeepSeekModel(model)) return messages
+  const target = messages.at(-1)
+  if (!target || target.role !== "user") return messages
+  // Keep the volatile date out of the system prefix so DeepSeek cache reuse
+  // is only affected at the trailing user turn boundary.
+  return [
+    ...messages.slice(0, -1),
+    Message.make({
+      id: target.id,
+      role: target.role,
+      content: [...target.content, Message.text(`Today's date: ${new Date().toDateString()}`)],
+      metadata: target.metadata,
+      native: target.native,
+    }),
+  ]
+}
+
 const media = (file: FileAttachment): ContentPart => ({
   type: "media",
   mediaType: file.mime,
@@ -155,4 +177,4 @@ ${message.recent}
 
 /** Translate projected V2 Session history into canonical @opencode-ai/llm context. */
 export const toLLMMessages = (messages: readonly SessionMessage.Message[], model: Model) =>
-  messages.flatMap((message) => toLLMMessage(message, model))
+  appendDeepSeekDateContext(messages.flatMap((message) => toLLMMessage(message, model)), model)
