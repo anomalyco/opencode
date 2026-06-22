@@ -23,6 +23,11 @@ export function parameterSchema(description: string) {
   return Schema.Struct({
     command: Schema.String.annotate({ description: "The command to execute" }),
     timeout: Schema.optional(PositiveInt).annotate({ description: "Optional timeout in milliseconds" }),
+    run_in_background: Schema.optional(Schema.Boolean).annotate({
+      description:
+        "Run the command asynchronously and return immediately with a background job id. You will be notified when it completes.",
+    }),
+    background: Schema.optional(Schema.Boolean).annotate({ description: "Alias for run_in_background." }),
     workdir: Schema.optional(Schema.String).annotate({
       description: `The working directory to run the command in. Defaults to the current directory. Use this instead of 'cd' commands.`,
     }),
@@ -103,6 +108,7 @@ function bashCommandSection(chain: string, limits: Limits, defaultTimeoutMs: num
 Usage notes:
   - The command argument is required.
   - You can specify an optional timeout in milliseconds. If not specified, commands will time out after ${defaultTimeoutMs}ms.
+  - Use \`run_in_background: true\` for long-running commands that can continue while you do other work. The tool returns a background job id and output path immediately, and you will be notified when the command completes. Do not poll or sleep while waiting for the notification.
   - It is very helpful if you write a clear, concise description of what this command does in 5-10 words.
   - If the output exceeds ${limits.maxLines} lines or ${limits.maxBytes} bytes, it will be truncated and the full output will be written to a file. You can use Read with offset/limit to read specific sections or Grep to search the full content. Do NOT use \`head\`, \`tail\`, or other truncation commands to limit output; the full output will already be captured to a file for more precise searching.
 
