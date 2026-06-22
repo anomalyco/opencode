@@ -447,7 +447,7 @@ export function AppInterface(props: {
                 <ServerShell>{routerProps.children}</ServerShell>
               </TabsProvider>
             )}
-            base={(window.__OPENCODE_BASE_PATH__ || import.meta.env.BASE_URL).replace(/\/$/, "") || undefined}
+            base={window.__OPENCODE_BASE_PATH__?.replace(/\/$/, "") || undefined}
           >
             <Route component={SelectedServerLayout}>
               <Route path="/" component={HomeRoute} />
