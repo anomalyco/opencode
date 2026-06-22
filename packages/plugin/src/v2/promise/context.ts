@@ -7,15 +7,16 @@ import type { IntegrationHooks } from "./integration.js"
 import type { PluginHooks } from "./plugin.js"
 import type { ReferenceHooks } from "./reference.js"
 import type { SkillHooks } from "./skill.js"
+import type { Reload } from "./registration.js"
 
 export interface PluginContext {
   readonly options: PluginOptions
-  readonly agent: AgentHooks & { readonly reload: () => Promise<void> }
+  readonly agent: AgentHooks & Reload
   readonly aisdk: AISDKHooks
-  readonly catalog: CatalogHooks & { readonly reload: () => Promise<void> }
-  readonly command: CommandHooks & { readonly reload: () => Promise<void> }
-  readonly integration: IntegrationHooks & { readonly reload: () => Promise<void> }
-  readonly plugin: PluginHooks & { readonly reload: () => Promise<void> }
-  readonly reference: ReferenceHooks & { readonly reload: () => Promise<void> }
-  readonly skill: SkillHooks & { readonly reload: () => Promise<void> }
+  readonly catalog: CatalogHooks & Reload
+  readonly command: CommandHooks & Reload
+  readonly integration: IntegrationHooks & Reload
+  readonly plugin: PluginHooks & Reload
+  readonly reference: ReferenceHooks & Reload
+  readonly skill: SkillHooks & Reload
 }
