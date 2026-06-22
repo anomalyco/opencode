@@ -28,7 +28,7 @@ export interface BoundResult {
 
 export class StorageError extends Schema.TaggedErrorClass<StorageError>()("ToolOutputStore.StorageError", {
   operation: Schema.Literals(["encode", "write"]),
-  cause: Schema.Defect,
+  cause: Schema.Defect(),
 }) {}
 
 export type Error = StorageError

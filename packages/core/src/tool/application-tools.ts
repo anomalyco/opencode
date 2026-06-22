@@ -1,7 +1,6 @@
 export * as ApplicationTools from "./application-tools"
 
 import { Context, Effect, Layer, Scope } from "effect"
-import { enableMapSet } from "immer"
 import { State } from "../state"
 import { Tool } from "./tool"
 
@@ -9,7 +8,7 @@ type Data = {
   readonly entries: Map<string, Entry>
 }
 
-type Editor = {
+type Draft = {
   readonly set: (name: string, entry: Entry) => void
 }
 
@@ -27,14 +26,12 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ApplicationTools") {}
 
-enableMapSet()
-
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const state = State.create<Data, Editor>({
+    const state = State.create<Data, Draft>({
       initial: () => ({ entries: new Map() }),
-      editor: (draft) => ({
+      draft: (draft) => ({
         set: (name, tool) => {
           draft.entries.set(name, tool)
         },
@@ -47,9 +44,8 @@ export const layer = Layer.effect(
         if (entries.length === 0) return
         yield* Effect.forEach(entries, ([name]) => Tool.validateName(name), { discard: true })
         const registrations = entries.map(([name, tool]) => [name, { identity: {}, tool }] as const)
-        const transform = yield* state.transform()
-        yield* transform((editor) => {
-          for (const [name, entry] of registrations) editor.set(name, entry)
+        yield* state.transform((draft) => {
+          for (const [name, entry] of registrations) draft.set(name, entry)
         })
       }),
       entries: () => state.get().entries,

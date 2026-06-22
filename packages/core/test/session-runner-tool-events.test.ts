@@ -19,17 +19,17 @@ const capture = () => {
       Effect.sync(() => {
         const event = { id: EventV2.ID.create(), type: definition.type, data } as EventV2.Payload<typeof definition>
         published.push({
-          type: definition.sync ? EventV2.versionedType(definition.type, definition.sync.version) : definition.type,
+          type: definition.durable
+            ? EventV2.versionedType(definition.type, definition.durable.version)
+            : definition.type,
           data,
         })
         return event
       }),
     subscribe: () => Stream.empty,
     all: () => Stream.empty,
-    aggregateEvents: () => Stream.empty,
-    sync: () => Effect.succeed(Effect.void),
+    durable: () => Stream.empty,
     listen: () => Effect.succeed(Effect.void),
-    beforeCommit: () => Effect.void,
     project: () => Effect.void,
     replay: () => Effect.void,
     replayAll: () => Effect.succeed(undefined),
