@@ -20,17 +20,6 @@ CREATE TABLE `issue` (
 	`time_updated` integer NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE `todo` ADD `id` text NOT NULL;--> statement-breakpoint
-ALTER TABLE `todo` ADD `parent_id` text;--> statement-breakpoint
-ALTER TABLE `todo` ADD `level` integer DEFAULT 0 NOT NULL;--> statement-breakpoint
-ALTER TABLE `todo` ADD `title` text DEFAULT '' NOT NULL;--> statement-breakpoint
-ALTER TABLE `todo` ADD `description` text DEFAULT '' NOT NULL;--> statement-breakpoint
-ALTER TABLE `todo` ADD `labels` text DEFAULT '[]' NOT NULL;--> statement-breakpoint
-ALTER TABLE `todo` ADD `due_date` text;--> statement-breakpoint
-ALTER TABLE `todo` ADD `team_id` text;--> statement-breakpoint
-ALTER TABLE `todo` ADD `project_id` text;--> statement-breakpoint
-ALTER TABLE `todo` ADD `assignee_id` text;--> statement-breakpoint
-ALTER TABLE `todo` ADD `linear_issue_id` text;--> statement-breakpoint
 PRAGMA foreign_keys=OFF;--> statement-breakpoint
 CREATE TABLE `__new_todo` (
 	`session_id` text NOT NULL,
@@ -55,7 +44,7 @@ CREATE TABLE `__new_todo` (
 	CONSTRAINT `fk_todo_session_id_session_id_fk` FOREIGN KEY (`session_id`) REFERENCES `session`(`id`) ON DELETE CASCADE
 );
 --> statement-breakpoint
-INSERT INTO `__new_todo`(`session_id`, `content`, `status`, `priority`, `position`, `time_created`, `time_updated`) SELECT `session_id`, `content`, `status`, `priority`, `position`, `time_created`, `time_updated` FROM `todo`;--> statement-breakpoint
+INSERT INTO `__new_todo`(`session_id`, `id`, `content`, `status`, `priority`, `position`, `time_created`, `time_updated`) SELECT `session_id`, lower(hex(randomblob(16))), `content`, `status`, `priority`, `position`, `time_created`, `time_updated` FROM `todo`;--> statement-breakpoint
 DROP TABLE `todo`;--> statement-breakpoint
 ALTER TABLE `__new_todo` RENAME TO `todo`;--> statement-breakpoint
 PRAGMA foreign_keys=ON;--> statement-breakpoint
