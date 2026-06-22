@@ -100,10 +100,7 @@ export const DialogEditTodo: Component<DialogEditTodoProps> = (props) => {
   }
 
   return (
-    <Dialog
-      title={props.mode === "create" ? "Create Todo" : "Edit Todo"}
-      class="w-full max-w-[560px] mx-auto"
-    >
+    <Dialog title={props.mode === "create" ? "Create Todo" : "Edit Todo"} class="w-full max-w-[560px] mx-auto">
       <form onSubmit={handleSubmit} class="flex flex-col gap-6 p-6 pt-0">
         <div class="flex flex-col gap-4">
           <TextField
@@ -140,12 +137,7 @@ export const DialogEditTodo: Component<DialogEditTodoProps> = (props) => {
               />
             </div>
 
-            <TextField
-              type="date"
-              label="Due Date"
-              value={store.due_date}
-              onChange={(v) => setStore("due_date", v)}
-            />
+            <TextField type="date" label="Due Date" value={store.due_date} onChange={(v) => setStore("due_date", v)} />
           </div>
 
           <TextField

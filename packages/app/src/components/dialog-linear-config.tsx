@@ -172,9 +172,7 @@ export function DialogLinearConfig(props: { onClose: () => void }) {
           <div class="flex items-center justify-between gap-3">
             <div class="flex flex-col gap-0.5">
               <span class="text-13-medium text-text-base">{language.t("dialog.linear.autoPush.label")}</span>
-              <span class="text-12-regular text-text-weak">
-                {language.t("dialog.linear.autoPush.description")}
-              </span>
+              <span class="text-12-regular text-text-weak">{language.t("dialog.linear.autoPush.description")}</span>
             </div>
             <Switch
               checked={store.autoPush}
@@ -192,12 +190,7 @@ export function DialogLinearConfig(props: { onClose: () => void }) {
           <Button type="button" variant="ghost" size="large" onClick={() => dialog.close()}>
             {language.t("common.cancel")}
           </Button>
-          <Button
-            type="submit"
-            variant="primary"
-            size="large"
-            disabled={saveMutation.isPending || !canSave()}
-          >
+          <Button type="submit" variant="primary" size="large" disabled={saveMutation.isPending || !canSave()}>
             {saveMutation.isPending ? language.t("common.saving") : language.t("common.save")}
           </Button>
         </div>

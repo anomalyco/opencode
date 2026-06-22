@@ -60,9 +60,7 @@ export function LinearSyncHistory() {
       <For each={syncEntries()}>
         {(entry) => (
           <div class="flex items-center gap-2 py-1.5 text-12-regular text-text-base border-t border-border-base first:border-t-0">
-            <span class="text-text-weak shrink-0">
-              {entry.type === "push" ? "↗" : "↙"} Linear
-            </span>
+            <span class="text-text-weak shrink-0">{entry.type === "push" ? "↗" : "↙"} Linear</span>
             <span class="truncate">
               {entry.count} item{entry.count !== 1 ? "s" : ""}
             </span>

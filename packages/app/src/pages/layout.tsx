@@ -87,6 +87,7 @@ import {
 } from "./layout/sidebar-workspace"
 import { ProjectDragOverlay, SortableProject, type ProjectSidebarContext } from "./layout/sidebar-project"
 import { SidebarContent } from "./layout/sidebar-shell"
+import { SidebarTodo } from "./layout/sidebar-todo"
 import { SidebarLinear } from "./layout/sidebar-linear"
 
 export default function Layout(props: ParentProps) {
@@ -2036,6 +2037,11 @@ export default function Layout(props: ParentProps) {
     })
     const projectId = createMemo(() => project()?.id ?? "")
     const worktree = createMemo(() => project()?.worktree ?? "")
+    // For the Linear sidebar we need the actual opened directory (the route's
+    // currentDir), not the worktree (which is the git root and may not match
+    // where the Linear config / todos are stored). Fall back to the worktree
+    // for the hover-preview case where there is no active route.
+    const linearDirectory = createMemo(() => currentDir() || worktree())
     const slug = createMemo(() => {
       const dir = worktree()
       if (!dir) return ""
@@ -2291,7 +2297,8 @@ export default function Layout(props: ParentProps) {
               </Show>
             </div>
 
-            <SidebarLinear directory={worktree} />
+            <SidebarTodo directory={linearDirectory} />
+            <SidebarLinear directory={linearDirectory} />
           </>
         </Show>
 
