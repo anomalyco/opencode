@@ -7,85 +7,100 @@ import {
   DEFAULT_ALLOWED_DOMAINS,
   buildSandboxConfig,
   loadUserConfig,
+  mergeUserConfigs,
   resolveInnerCommand,
   shellQuote,
   type UserConfig,
 } from "../../../../script/securecode-supervisor"
 
+// 部分指定の object から正規化済み `UserConfig` を作るテスト fixture helper。
+// 本番フローでは loadUserConfig が同等の normalize を行うが、ファイル経由を毎テストで
+// 行うのは重いので、ここで inline で `[]` 埋めしている (= loadUserConfig 内のロジックの
+// テスト用ミラー)。
+type PartialConfig = {
+  network?: { allowedDomains?: string[]; deniedDomains?: string[] }
+  filesystem?: { allowRead?: string[]; allowWrite?: string[]; denyRead?: string[]; denyWrite?: string[] }
+}
+function makeConfig(partial: PartialConfig = {}): UserConfig {
+  return {
+    network: {
+      allowedDomains: partial.network?.allowedDomains ?? [],
+      deniedDomains: partial.network?.deniedDomains ?? [],
+    },
+    filesystem: {
+      allowRead: partial.filesystem?.allowRead ?? [],
+      allowWrite: partial.filesystem?.allowWrite ?? [],
+      denyRead: partial.filesystem?.denyRead ?? [],
+      denyWrite: partial.filesystem?.denyWrite ?? [],
+    },
+  }
+}
+const cfgFor = (partial: PartialConfig = {}) => buildSandboxConfig(makeConfig(partial))
+
 describe("buildSandboxConfig", () => {
   test("デフォルト allowlist に CIA endpoint だけ入る", () => {
-    const cfg = buildSandboxConfig({})
-    expect(cfg.network.allowedDomains).toEqual(DEFAULT_ALLOWED_DOMAINS)
+    expect(cfgFor().network.allowedDomains).toEqual(DEFAULT_ALLOWED_DOMAINS)
   })
 
   test("user の allowedDomains は default の後ろに追加される (上書きではない)", () => {
-    const user: UserConfig = { network: { allowedDomains: ["example.com", "foo.org"] } }
-    const cfg = buildSandboxConfig(user)
+    const cfg = cfgFor({ network: { allowedDomains: ["example.com", "foo.org"] } })
     expect(cfg.network.allowedDomains).toEqual([...DEFAULT_ALLOWED_DOMAINS, "example.com", "foo.org"])
   })
 
   test("denyRead の先頭に CONFIG_PATH が必ず入る", () => {
-    const cfg = buildSandboxConfig({})
-    expect(cfg.filesystem.denyRead?.[0]).toBe(CONFIG_PATH)
+    expect(cfgFor().filesystem.denyRead?.[0]).toBe(CONFIG_PATH)
   })
 
   test("user の denyRead は CONFIG_PATH の後ろに追加される", () => {
-    const user: UserConfig = { filesystem: { denyRead: ["/secret"] } }
-    const cfg = buildSandboxConfig(user)
-    expect(cfg.filesystem.denyRead).toEqual([CONFIG_PATH, "/secret"])
+    expect(cfgFor({ filesystem: { denyRead: ["/secret"] } }).filesystem.denyRead).toEqual([CONFIG_PATH, "/secret"])
   })
 
   test("denyWrite の先頭に CONFIG_PATH が必ず入る", () => {
-    const cfg = buildSandboxConfig({})
-    expect(cfg.filesystem.denyWrite?.[0]).toBe(CONFIG_PATH)
+    expect(cfgFor().filesystem.denyWrite?.[0]).toBe(CONFIG_PATH)
   })
 
   test("user の denyWrite は CONFIG_PATH の後ろに追加される", () => {
-    const user: UserConfig = { filesystem: { denyWrite: ["/foo"] } }
-    const cfg = buildSandboxConfig(user)
-    expect(cfg.filesystem.denyWrite).toEqual([CONFIG_PATH, "/foo"])
+    expect(cfgFor({ filesystem: { denyWrite: ["/foo"] } }).filesystem.denyWrite).toEqual([CONFIG_PATH, "/foo"])
   })
 
   test("allowWrite 未指定なら ['/'] フォールバック", () => {
-    const cfg = buildSandboxConfig({})
-    expect(cfg.filesystem.allowWrite).toEqual(["/"])
+    expect(cfgFor().filesystem.allowWrite).toEqual(["/"])
   })
 
   test("allowWrite 指定があればそれを使う", () => {
-    const user: UserConfig = { filesystem: { allowWrite: ["/workspace"] } }
-    const cfg = buildSandboxConfig(user)
-    expect(cfg.filesystem.allowWrite).toEqual(["/workspace"])
+    expect(cfgFor({ filesystem: { allowWrite: ["/workspace"] } }).filesystem.allowWrite).toEqual(["/workspace"])
   })
 
   test("allowPty が true", () => {
-    expect(buildSandboxConfig({}).allowPty).toBe(true)
+    expect(cfgFor().allowPty).toBe(true)
   })
 
   test("network.allowLocalBinding が true", () => {
-    expect(buildSandboxConfig({}).network.allowLocalBinding).toBe(true)
+    expect(cfgFor().network.allowLocalBinding).toBe(true)
   })
 
   test("deniedDomains は user 指定値、未指定なら空配列", () => {
-    expect(buildSandboxConfig({}).network.deniedDomains).toEqual([])
-    expect(buildSandboxConfig({ network: { deniedDomains: ["evil.com"] } }).network.deniedDomains).toEqual([
-      "evil.com",
-    ])
+    expect(cfgFor().network.deniedDomains).toEqual([])
+    expect(cfgFor({ network: { deniedDomains: ["evil.com"] } }).network.deniedDomains).toEqual(["evil.com"])
   })
 })
 
 describe("loadUserConfig", () => {
-  test("config 不在時は空オブジェクトを返す", () => {
+  test("config 不在時は全フィールド空配列の正規化済み config を返す", () => {
     const cfg = loadUserConfig("/nonexistent/securecode-sandbox-phase0/sandbox.json")
-    expect(cfg).toEqual({})
+    expect(cfg.network.allowedDomains).toEqual([])
+    expect(cfg.filesystem.denyRead).toEqual([])
   })
 
-  test("正常な JSON を parse して返す", () => {
+  test("正常な JSON を parse して正規化済み config を返す (欠落キーは [] 埋め)", () => {
     const dir = mkdtempSync(join(tmpdir(), "securecode-test-"))
     const tmpPath = join(dir, "sandbox.json")
     writeFileSync(tmpPath, JSON.stringify({ network: { allowedDomains: ["foo.com"] } }))
     try {
       const cfg = loadUserConfig(tmpPath)
-      expect(cfg.network?.allowedDomains).toEqual(["foo.com"])
+      expect(cfg.network.allowedDomains).toEqual(["foo.com"])
+      expect(cfg.network.deniedDomains).toEqual([])
+      expect(cfg.filesystem.denyRead).toEqual([])
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }
@@ -141,6 +156,63 @@ describe("resolveInnerCommand", () => {
     const cmd = resolveInnerCommand(["it's a path"], { distBinPath: "/nonexistent/securecode-bin" })
     // POSIX shell 標準の close-escape-reopen 形式 ('\'') で囲まれる。
     expect(cmd).toContain("'it'\\''s a path'")
+  })
+})
+
+describe("mergeUserConfigs", () => {
+  test("空入力なら全フィールド空配列", () => {
+    const merged = mergeUserConfigs()
+    expect(merged.network.allowedDomains).toEqual([])
+    expect(merged.network.deniedDomains).toEqual([])
+    expect(merged.filesystem.allowRead).toEqual([])
+    expect(merged.filesystem.allowWrite).toEqual([])
+    expect(merged.filesystem.denyRead).toEqual([])
+    expect(merged.filesystem.denyWrite).toEqual([])
+  })
+
+  test("複数 config の allow / deny を concat する (入力順を維持)", () => {
+    const a = makeConfig({
+      network: { allowedDomains: ["a.com"], deniedDomains: ["evil.com"] },
+      filesystem: { denyRead: ["/asecret"] },
+    })
+    const b = makeConfig({
+      network: { allowedDomains: ["b.com"], deniedDomains: ["bad.org"] },
+      filesystem: { denyRead: ["/bsecret"] },
+    })
+    const merged = mergeUserConfigs(a, b)
+    expect(merged.network.allowedDomains).toEqual(["a.com", "b.com"])
+    expect(merged.network.deniedDomains).toEqual(["evil.com", "bad.org"])
+    expect(merged.filesystem.denyRead).toEqual(["/asecret", "/bsecret"])
+  })
+
+  test("重複は除去しない (sandbox-runtime に重複は無害)", () => {
+    const a = makeConfig({ network: { allowedDomains: ["dup.com"] } })
+    const b = makeConfig({ network: { allowedDomains: ["dup.com"] } })
+    expect(mergeUserConfigs(a, b).network.allowedDomains).toEqual(["dup.com", "dup.com"])
+  })
+
+  test("片方だけ値があれば反映される (per-directory で許可を追加できる)", () => {
+    const a = makeConfig({})
+    const b = makeConfig({ network: { allowedDomains: ["only.com"] } })
+    expect(mergeUserConfigs(a, b).network.allowedDomains).toEqual(["only.com"])
+  })
+})
+
+describe("buildSandboxConfig with project config", () => {
+  test("configPaths を渡すと全パスが denyRead / denyWrite の先頭に入る", () => {
+    const globalPath = "/home/user/.config/securecode/sandbox.json"
+    const projectPath = "/work/repo/.securecode/sandbox.json"
+    const cfg = buildSandboxConfig(makeConfig({ filesystem: { denyRead: ["/extra"], denyWrite: ["/extra"] } }), {
+      configPaths: [globalPath, projectPath],
+    })
+    expect(cfg.filesystem.denyRead).toEqual([globalPath, projectPath, "/extra"])
+    expect(cfg.filesystem.denyWrite).toEqual([globalPath, projectPath, "/extra"])
+  })
+
+  test("configPaths 未指定なら CONFIG_PATH のみが deny に入る", () => {
+    const cfg = buildSandboxConfig(makeConfig())
+    expect(cfg.filesystem.denyRead).toEqual([CONFIG_PATH])
+    expect(cfg.filesystem.denyWrite).toEqual([CONFIG_PATH])
   })
 })
 

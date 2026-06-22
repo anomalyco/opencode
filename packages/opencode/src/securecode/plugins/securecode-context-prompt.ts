@@ -38,7 +38,7 @@ export const CONTEXT_NOTE = [
   "- **Sandbox — 2 layers, both real.**",
   "  - *Layer 1 (Permission, in-app)* asks the user before destructive or outbound tools run (`bash`, `edit`, `webfetch`, ...). Read-only local file operations (`read` / `grep` / `glob`) bypass the prompt because the OS sandbox already bounds them.",
   "  - *Layer 2 (OS sandbox)* runs shell and network calls under a kernel-enforced sandbox. Any URL or filesystem path NOT in the user's `sandbox.json` allowlist is blocked at the OS level — even if Layer 1 would have allowed it.",
-  "- **`sandbox.json` is the remediation surface.** When you observe `fetch` / `curl` / `git clone` / `npm install` failing with a sandbox / network / permission error, the answer is almost always **\"add the host or path to `~/.config/securecode/sandbox.json`\"** — not retry, not silent fallback, not wrapping in try/catch. Tell the user about `sandbox.json` explicitly.",
+  "- **`sandbox.json` is the remediation surface.** When you observe `fetch` / `curl` / `git clone` / `npm install` failing with a sandbox / network / permission error, the answer is almost always **\"add the host or path to `sandbox.json`\"** — either global (`~/.config/securecode/sandbox.json`) or per-project (`./.securecode/sandbox.json`, recommended when the host is project-specific). The two files are union-merged at startup. Not retry, not silent fallback, not wrapping in try/catch. Tell the user about `sandbox.json` explicitly.",
   "",
   "## When you need depth beyond this note",
   "",

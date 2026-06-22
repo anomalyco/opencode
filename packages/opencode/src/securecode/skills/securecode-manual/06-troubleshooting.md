@@ -55,7 +55,7 @@ Acompany endpoint 側の一時的な不調か、ネットワーク経路の問�
 
 ### `npm install` / `git fetch` / `curl` が失敗
 
-サンドボックスが許可ドメイン外を遮断しているのが原因。`sandbox.json` で許可ドメインを追加（`05-sandbox.md` 参照）。
+サンドボックスが許可ドメイン外を遮断しているのが原因。global (`~/.config/securecode/sandbox.json`) か project (`./.securecode/sandbox.json`) のどちらかで許可ドメインを追加（`05-sandbox.md` 参照）。プロジェクト固有のホストなら project 側に書くのがおすすめ。
 
 ### 社内 proxy 経由でしか出られない
 

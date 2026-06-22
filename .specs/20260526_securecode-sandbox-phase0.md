@@ -16,6 +16,8 @@
 - sandbox-runtime が利用不可な環境では**起動拒否 (fail-closed)**。
 - **デフォルト allowlist は CIA endpoint (`conf-ai.acompany-az.com`) のみ**。GitHub / npm 等は含めない。
 - ユーザが許可ドメインを追加するための設定ファイルを `~/.config/securecode/sandbox.json` (JSON) として提供する。手編集 → SecureCode 再起動で反映。
+
+  > **Note (Issue #344 で拡張)**: 起動 cwd 直下の `./.securecode/sandbox.json` も読み込み、global と union (重複除去) で合成する形に拡張済み。詳細は `packages/opencode/src/securecode/skills/securecode-manual/05-sandbox.md` の「per-directory 設定」を参照。
 - 設定ファイルのスキーマは `network.allowedDomains` / `network.deniedDomains` / `filesystem.denyRead` / `filesystem.allowRead` / `filesystem.allowWrite` / `filesystem.denyWrite` を受け付ける。
 - **SecureCode (sandbox 内プロセス) が設定ファイルに一切触れないことを保証**する。`filesystem.denyRead` + `denyWrite` の両方で設定ファイルパスをファイル単位で deny。
 - 未許可ドメインへアクセスしようとした tool 呼び出しは**失敗として返す**(sandbox-runtime デフォルトの遮断挙動に委ねる)。許可を増やすにはユーザが手動で設定ファイルを編集して再起動する。
