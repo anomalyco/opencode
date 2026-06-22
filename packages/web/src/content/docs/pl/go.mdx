@@ -53,18 +53,17 @@ Tylko jeden członek na obszar roboczy (workspace) może zasubskrybować OpenCod
 
 Obecna lista modeli obejmuje:
 
-- **GLM-5**
+- **GLM-5.2**
 - **GLM-5.1**
-- **Kimi K2.5**
+- **Kimi K2.7 Code**
 - **Kimi K2.6**
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
-- **MiniMax M2.5**
-- **MiniMax M2.7**
 - **MiniMax M3**
-- **Qwen3.6 Plus**
-- **Qwen3.7 Plus**
+- **MiniMax M2.7**
 - **Qwen3.7 Max**
+- **Qwen3.7 Plus**
+- **Qwen3.6 Plus**
 - **DeepSeek V4 Pro**
 - **DeepSeek V4 Flash**
 
@@ -80,21 +79,20 @@ OpenCode Go zawiera następujące limity:
 - **Limit tygodniowy** — użycie o wartości 30 $
 - **Limit miesięczny** — użycie o wartości 60 $
 
-Limity są zdefiniowane w wartości w dolarach. Oznacza to, że rzeczywista liczba żądań zależy od używanego modelu. Tańsze modele, takie jak DeepSeek V4 Flash, pozwalają na więcej żądań, podczas gdy modele o wyższym koszcie, takie jak GLM-5.1, pozwalają na mniej.
+Limity są zdefiniowane w wartości w dolarach. Oznacza to, że rzeczywista liczba żądań zależy od używanego modelu. Tańsze modele, takie jak DeepSeek V4 Flash, pozwalają na więcej żądań, podczas gdy modele o wyższym koszcie, takie jak GLM-5.2, pozwalają na mniej.
 
 Poniższa tabela przedstawia szacunkową liczbę żądań na podstawie typowych wzorców korzystania z Go:
 
 | Model             | żądania na 5 godzin | żądania na tydzień | żądania na miesiąc |
 | ----------------- | ------------------- | ------------------ | ------------------ |
+| GLM-5.2           | 880                 | 2,150              | 4,300              |
 | GLM-5.1           | 880                 | 2,150              | 4,300              |
-| GLM-5             | 1,150               | 2,880              | 5,750              |
-| Kimi K2.5         | 1,850               | 4,630              | 9,250              |
 | Kimi K2.6         | 1,150               | 2,880              | 5,750              |
+| Kimi K2.7 Code    | 1,350               | 4,630              | 9,250              |
 | MiMo-V2.5         | 30,100              | 75,200             | 150,400            |
 | MiMo-V2.5-Pro     | 3,250               | 8,150              | 16,300             |
 | MiniMax M3        | 3,200               | 8,000              | 16,000             |
 | MiniMax M2.7      | 3,400               | 8,500              | 17,000             |
-| MiniMax M2.5      | 6,300               | 15,900             | 31,800             |
 | Qwen3.7 Max       | 950                 | 2,390              | 4,770              |
 | Qwen3.7 Plus      | 4,300               | 10,800             | 21,600             |
 | Qwen3.6 Plus      | 3,300               | 8,200              | 16,300             |
@@ -103,12 +101,12 @@ Poniższa tabela przedstawia szacunkową liczbę żądań na podstawie typowych 
 
 Szacunki te opierają się na zaobserwowanych średnich wzorcach żądań:
 
-- GLM-5/5.1 — 700 tokenów wejściowych, 52 000 w pamięci podręcznej, 150 tokenów wyjściowych na żądanie
-- Kimi K2.5/K2.6 — 870 tokenów wejściowych, 55 000 w pamięci podręcznej, 200 tokenów wyjściowych na żądanie
+- GLM-5.2/5.1 — 700 tokenów wejściowych, 52 000 w pamięci podręcznej, 150 tokenów wyjściowych na żądanie
+- Kimi K2.7/K2.6 — 870 tokenów wejściowych, 55 000 w pamięci podręcznej, 200 tokenów wyjściowych na żądanie
 - DeepSeek V4 Pro — 750 tokenów wejściowych, 82 000 w pamięci podręcznej, 290 tokenów wyjściowych na żądanie
 - DeepSeek V4 Flash — 790 tokenów wejściowych, 68 000 w pamięci podręcznej, 280 tokenów wyjściowych na żądanie
 - MiniMax M3 — 510 tokenów wejściowych, 56 000 w pamięci podręcznej, 190 tokenów wyjściowych na żądanie
-- MiniMax M2.7/M2.5 — 300 tokenów wejściowych, 55 000 w pamięci podręcznej, 125 tokenów wyjściowych na żądanie
+- MiniMax M2.7 — 300 tokenów wejściowych, 55 000 w pamięci podręcznej, 125 tokenów wyjściowych na żądanie
 - Qwen3.7 Max — 420 tokenów wejściowych, 66 000 w pamięci podręcznej, 200 tokenów wyjściowych na żądanie
 - Qwen3.7 Plus — 500 tokenów wejściowych, 57 000 w pamięci podręcznej, 190 tokenów wyjściowych na żądanie
 - Qwen3.6 Plus — 500 tokenów wejściowych, 57 000 w pamięci podręcznej, 190 tokenów wyjściowych na żądanie
@@ -119,10 +117,10 @@ Szacunki opierają się również na następujących cenach za 1M tokenów:
 
 | Model                        | Wejście | Wyjście | Odczyt z cache | Zapis do cache |
 | ---------------------------- | ------- | ------- | -------------- | -------------- |
+| GLM-5.2                      | $1.40   | $4.40   | $0.26          | -              |
 | GLM-5.1                      | $1.40   | $4.40   | $0.26          | -              |
-| GLM-5                        | $1.00   | $3.20   | $0.20          | -              |
+| Kimi K2.7 Code               | $0.95   | $4.00   | $0.19          | -              |
 | Kimi K2.6                    | $0.95   | $4.00   | $0.16          | -              |
-| Kimi K2.5                    | $0.60   | $3.00   | $0.10          | -              |
 | MiMo V2.5                    | $0.14   | $0.28   | $0.0028        | -              |
 | MiMo V2.5 Pro                | $1.74   | $3.48   | $0.0145        | -              |
 | MiniMax M3                   | $0.30   | $1.20   | $0.06          | -              |
@@ -158,9 +156,9 @@ Możesz również uzyskać dostęp do modeli Go za pośrednictwem następującyc
 
 | Model             | ID modelu         | Punkt końcowy                                    | Pakiet AI SDK               |
 | ----------------- | ----------------- | ------------------------------------------------ | --------------------------- |
+| GLM-5.2           | glm-5.2           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.1           | glm-5.1           | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| GLM-5             | glm-5             | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Kimi K2.5         | kimi-k2.5         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Kimi K2.7         | kimi-k2.7         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Kimi K2.6         | kimi-k2.6         | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Pro   | deepseek-v4-pro   | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash | deepseek-v4-flash | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -174,8 +172,8 @@ Możesz również uzyskać dostęp do modeli Go za pośrednictwem następującyc
 | Qwen3.6 Plus      | qwen3.6-plus      | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 
 [ID modelu](/docs/config/#models) w Twojej konfiguracji OpenCode
-używa formatu `opencode-go/<model-id>`. Na przykład dla Kimi K2.6 należy użyć
-`opencode-go/kimi-k2.6` w swojej konfiguracji.
+używa formatu `opencode-go/<model-id>`. Na przykład dla Kimi K2.7 Code należy użyć
+`opencode-go/kimi-k2.7-code` w swojej konfiguracji.
 
 ---
 

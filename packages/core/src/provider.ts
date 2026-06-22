@@ -1,8 +1,7 @@
 export * as ProviderV2 from "./provider"
 
 import { withStatics } from "./schema"
-import { Schema } from "effect"
-import { Credential } from "./credential"
+import { Schema, Types } from "effect"
 
 export const ID = Schema.String.pipe(
   Schema.brand("ProviderV2.ID"),
@@ -38,6 +37,9 @@ export const Native = Schema.Struct({
 
 export const Api = Schema.Union([AISDK, Native]).pipe(Schema.toTaggedUnion("type"))
 export type Api = typeof Api.Type
+export type MutableApi<T extends Api = Api> = T extends Api
+  ? Omit<Types.DeepMutable<T>, "settings"> & (undefined extends T["settings"] ? { settings?: any } : { settings: any })
+  : never
 
 export const Request = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String),
@@ -48,22 +50,7 @@ export type Request = typeof Request.Type
 export class Info extends Schema.Class<Info>("ProviderV2.Info")({
   id: ID,
   name: Schema.String,
-  enabled: Schema.Union([
-    Schema.Literal(false),
-    Schema.Struct({
-      via: Schema.Literal("env"),
-      name: Schema.String,
-    }),
-    Schema.Struct({
-      via: Schema.Literal("credential"),
-      credentialID: Credential.ID,
-    }),
-    Schema.Struct({
-      via: Schema.Literal("custom"),
-      data: Schema.Record(Schema.String, Schema.Any),
-    }),
-  ]),
-  env: Schema.String.pipe(Schema.Array),
+  disabled: Schema.Boolean.pipe(Schema.optional),
   api: Api,
   request: Request,
 }) {
@@ -71,8 +58,6 @@ export class Info extends Schema.Class<Info>("ProviderV2.Info")({
     return new Info({
       id: providerID,
       name: providerID,
-      enabled: false,
-      env: [],
       api: {
         type: "native",
         settings: {},
@@ -84,3 +69,5 @@ export class Info extends Schema.Class<Info>("ProviderV2.Info")({
     })
   }
 }
+
+export type MutableInfo = Omit<Types.DeepMutable<Info>, "api"> & { api: MutableApi }

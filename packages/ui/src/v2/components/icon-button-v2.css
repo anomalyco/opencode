@@ -137,6 +137,7 @@
 
 [data-component="icon-button-v2"][data-variant="ghost-muted"]:is(:active, [data-state="pressed"]):not(:disabled) {
   background-color: var(--v2-overlay-simple-overlay-pressed);
+  color: var(--v2-icon-icon-base);
 }
 
 [data-component="icon-button-v2"][data-variant="ghost-muted"]:is(:disabled, [data-state="disabled"]) {

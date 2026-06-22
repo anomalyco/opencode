@@ -317,9 +317,10 @@ export function Autocomplete(props: {
       const { lineRange, baseQuery } = extractLineRange(query ?? "")
 
       // Get files from SDK
-      const result = await sdk.client.find.files({
+      const result = await sdk.client.v2.fs.find({
         query: baseQuery,
-        workspace: project.workspace.current(),
+        limit: "20",
+        location: { workspace: project.workspace.current() },
       })
 
       const options: AutocompleteOption[] = []
@@ -329,15 +330,13 @@ export function Autocomplete(props: {
       if (!result.error && result.data) {
         const width = props.anchor().width - 4
         options.push(
-          ...result.data.map((item): AutocompleteOption => {
-            const { filename, url, part } = createFilePart(item, lineRange)
-
-            const isDir = item.endsWith("/")
+          ...result.data.data.map((item): AutocompleteOption => {
+            const { filename, url, part } = createFilePart(item.path, lineRange)
             return {
               display: Locale.truncateMiddle(filename, width),
               value: filename,
-              isDirectory: isDir,
-              path: item,
+              isDirectory: item.type === "directory",
+              path: item.path,
               onSelect: () => {
                 insertPart(filename, part)
               },
@@ -360,10 +359,10 @@ export function Autocomplete(props: {
     const width = props.anchor().width - 4
 
     for (const res of Object.values(sync.data.mcp_resource)) {
-      const text = `${res.name} (${res.uri})`
       options.push({
-        display: Locale.truncateMiddle(text, width),
-        value: text,
+        display: Locale.truncateMiddle(res.name, width),
+        // Match the name only; matching the URI caused unrelated fuzzy hits.
+        value: res.name,
         description: res.description,
         onSelect: () => {
           insertPart(res.name, {
@@ -390,15 +389,15 @@ export function Autocomplete(props: {
   })
 
   const agents = createMemo(() => {
-    return (data.location.agent.list() ?? [])
+    return sync.data.agent
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
       .map(
         (agent): AutocompleteOption => ({
-          display: "@" + agent.id,
+          display: "@" + agent.name,
           onSelect: () => {
-            insertPart(agent.id, {
+            insertPart(agent.name, {
               type: "agent",
-              name: agent.id,
+              name: agent.name,
               source: {
                 start: 0,
                 end: 0,
@@ -493,9 +492,11 @@ export function Autocomplete(props: {
       .go(removeLineRange(searchValue), nonFileOptions, {
         keys: [
           (obj) => removeLineRange((obj.value ?? obj.display).trimEnd()),
-          "description",
+          // Match description for slash commands only; for "@" it surfaced unrelated items.
+          ...(store.visible === "/" ? ["description" as const] : []),
           (obj) => obj.aliases?.join(" ") ?? "",
         ],
+        threshold: store.visible === "@" ? 0.5 : 0,
         limit: 10,
         scoreFn: (objResults) => {
           const displayResult = objResults[0]

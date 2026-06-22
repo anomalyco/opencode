@@ -11,6 +11,7 @@ import { Git } from "@opencode-ai/core/git"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Project } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -20,32 +21,39 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const database = Database.layerFromPath(":memory:")
-const events = EventV2.layer.pipe(Layer.provide(database))
-const projector = SessionProjector.layer.pipe(Layer.provide(database), Layer.provide(events))
 const project = Project.layer.pipe(
-  Layer.provide(database),
+  Layer.provide(Database.defaultLayer),
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Git.defaultLayer),
+  Layer.provide(ProjectDirectories.defaultLayer),
 )
-const store = SessionStore.layer.pipe(Layer.provide(database))
 const sessions = SessionV2.layer.pipe(
-  Layer.provide(database),
-  Layer.provide(events),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(EventV2.defaultLayer),
   Layer.provide(project),
-  Layer.provide(store),
+  Layer.provide(SessionStore.defaultLayer),
   Layer.provide(SessionExecution.noopLayer),
 )
 const layer = MoveSession.layer.pipe(
-  Layer.provide(database),
+  Layer.provide(Database.defaultLayer),
   Layer.provide(FSUtil.defaultLayer),
   Layer.provide(Git.defaultLayer),
-  Layer.provide(events),
+  Layer.provide(EventV2.defaultLayer),
   Layer.provide(project),
   Layer.provide(sessions),
 )
 const it = testEffect(
-  Layer.mergeAll(layer, database, events, project, projector, store, SessionExecution.noopLayer, sessions),
+  Layer.mergeAll(
+    layer,
+    Database.defaultLayer,
+    EventV2.defaultLayer,
+    ProjectDirectories.defaultLayer,
+    project,
+    SessionProjector.defaultLayer,
+    SessionStore.defaultLayer,
+    SessionExecution.noopLayer,
+    sessions,
+  ),
 )
 
 function abs(input: string) {

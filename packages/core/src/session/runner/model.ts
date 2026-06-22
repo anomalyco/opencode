@@ -8,6 +8,9 @@ import { Auth, type AnyRoute } from "@opencode-ai/llm/route"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { produce } from "immer"
 import { Catalog } from "../../catalog"
+import { Credential } from "../../credential"
+import { Integration } from "../../integration"
+import { IntegrationConnection } from "../../integration/connection"
 import { ModelV2 } from "../../model"
 import { ModelRequest } from "../../model-request"
 import { PluginBoot } from "../../plugin/boot"
@@ -30,11 +33,7 @@ export class UnsupportedApiError extends Schema.TaggedErrorClass<UnsupportedApiE
   },
 ) {}
 
-export type Error =
-  | Catalog.ProviderNotFoundError
-  | Catalog.ModelNotFoundError
-  | ModelNotSelectedError
-  | UnsupportedApiError
+export type Error = ModelNotSelectedError | UnsupportedApiError
 
 export interface Interface {
   readonly resolve: (session: SessionSchema.Info) => Effect.Effect<Model, Error>
@@ -45,10 +44,12 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 /** Test or embedding seam for supplying a model resolver directly. */
 export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Service, Service.of({ resolve }))
 
-const apiKey = (model: ModelV2.Info, provider?: ProviderV2.Info) => {
+const apiKey = (model: ModelV2.Info, connection?: IntegrationConnection.Info, credential?: Credential.Info) => {
+  if (credential?.value.type === "key") return Auth.value(credential.value.key)
+  if (credential?.value.type === "oauth") return Auth.value(credential.value.access)
   const value = model.request.body.apiKey ?? model.api.settings?.apiKey
   if (typeof value === "string") return Auth.value(value)
-  return provider?.enabled !== false && provider?.enabled.via === "env" ? Auth.config(provider.enabled.name) : undefined
+  return connection?.type === "env" ? Auth.config(connection.name) : undefined
 }
 
 const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
@@ -83,41 +84,48 @@ const apiName = (model: ModelV2.Info) =>
 
 export const fromCatalogModel = (
   model: ModelV2.Info,
-  provider?: ProviderV2.Info,
+  connection?: IntegrationConnection.Info,
+  credential?: Credential.Info,
 ): Effect.Effect<Model, UnsupportedApiError> => {
-  const key = apiKey(model, provider)
-  if (model.api.type === "aisdk" && model.api.package === "@ai-sdk/openai") {
+  const resolved =
+    credential?.value.metadata === undefined
+      ? model
+      : produce(model, (draft) => {
+          Object.assign(draft.request.body, credential.value.metadata)
+        })
+  const key = apiKey(resolved, connection, credential)
+  if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/openai") {
     return Effect.succeed(
-      withDefaults(model, OpenAIResponses.route)
+      withDefaults(resolved, OpenAIResponses.route)
         .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
-        .model({ id: model.api.id }),
+        .model({ id: resolved.api.id }),
     )
   }
-  if (model.api.type === "aisdk" && model.api.package === "@ai-sdk/anthropic") {
+  if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/anthropic") {
     return Effect.succeed(
-      withDefaults(model, AnthropicMessages.route)
+      withDefaults(resolved, AnthropicMessages.route)
         .with({ auth: key === undefined ? Auth.none : Auth.header("x-api-key", key) })
-        .model({ id: model.api.id }),
+        .model({ id: resolved.api.id }),
     )
   }
-  if (model.api.type === "aisdk" && model.api.package === "@ai-sdk/openai-compatible" && model.api.url) {
+  if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/openai-compatible" && resolved.api.url) {
     return Effect.succeed(
-      withDefaults(model, OpenAICompatibleChat.route)
+      withDefaults(resolved, OpenAICompatibleChat.route)
         .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
-        .model({ id: model.api.id }),
+        .model({ id: resolved.api.id }),
     )
   }
   return Effect.fail(
     new UnsupportedApiError({
-      providerID: model.providerID,
-      modelID: model.id,
-      api: apiName(model),
+      providerID: resolved.providerID,
+      modelID: resolved.id,
+      api: apiName(resolved),
     }),
   )
 }
 
-export const resolve = (session: SessionSchema.Info, model: ModelV2.Info, provider?: ProviderV2.Info) =>
-  fromCatalogModel(withVariant(model, session.model?.variant), provider)
+export const resolve = (session: SessionSchema.Info, model: ModelV2.Info) =>
+  fromCatalogModel(withVariant(model, session.model?.variant))
 
 export const supported = (model: ModelV2.Info) =>
   model.api.type === "aisdk" &&
@@ -130,17 +138,26 @@ export const locationLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const catalog = yield* Catalog.Service
+    const credentials = yield* Credential.Service
+    const integrations = yield* Integration.Service
     const boot = yield* PluginBoot.Service
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session) {
         // Location plugins populate and filter the catalog asynchronously during layer startup.
         yield* boot.wait()
+        const defaultModel = session.model ? undefined : yield* catalog.model.default()
         const selected = session.model
           ? yield* catalog.model.get(session.model.providerID, session.model.id)
-          : (Option.getOrUndefined((yield* catalog.model.default()).pipe(Option.filter(supported))) ??
-            (yield* catalog.model.available()).find(supported))
+          : defaultModel && supported(defaultModel)
+            ? defaultModel
+            : (yield* catalog.model.available()).find(supported)
         if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
-        return yield* resolve(session, selected, yield* catalog.provider.get(selected.providerID))
+        const connection = yield* integrations.connection.forIntegration(Integration.ID.make(selected.providerID))
+        return yield* fromCatalogModel(
+          withVariant(selected, session.model?.variant),
+          connection,
+          connection?.type === "credential" ? yield* credentials.get(connection.id) : undefined,
+        )
       }),
     })
   }),
