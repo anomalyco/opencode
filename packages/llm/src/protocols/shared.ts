@@ -188,8 +188,11 @@ export const parseToolInput = (route: string, name: string, raw: string) =>
   parseJson(route, raw || "{}", `Invalid JSON input for ${route} tool call ${name}`)
 
 export const IMAGE_MIMES = ["image/png", "image/jpeg", "image/gif", "image/webp"] as const
-export const MAX_MEDIA_ENCODED_BYTES = 8 * 1024 * 1024
-export const MAX_MEDIA_DECODED_BYTES = 6 * 1024 * 1024
+export const VIDEO_MIMES = ["video/mp4", "video/webm", "video/quicktime"] as const
+export const AUDIO_MIMES = ["audio/wav", "audio/mp3", "audio/aiff", "audio/aac", "audio/ogg", "audio/flac"] as const
+export const MEDIA_MIMES = [...IMAGE_MIMES, ...VIDEO_MIMES, ...AUDIO_MIMES] as const
+export const MAX_MEDIA_ENCODED_BYTES = 28 * 1024 * 1024
+export const MAX_MEDIA_DECODED_BYTES = 20 * 1024 * 1024
 
 const base64Pattern = /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/
 
