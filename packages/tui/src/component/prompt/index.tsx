@@ -386,7 +386,8 @@ export function Prompt(props: PromptProps) {
       },
       {
         title: "Interrupt session",
-        name: "session.interrupt",
+        name: "prompt.skills",
+      "session.interrupt",
         category: "Session",
         hidden: true,
         enabled: status().type !== "idle",
@@ -567,6 +568,7 @@ export function Prompt(props: PromptProps) {
       "prompt.stash",
       "prompt.stash.pop",
       "prompt.stash.list",
+      "prompt.skills",
       "session.interrupt",
       "workspace.set",
       "session.move",
