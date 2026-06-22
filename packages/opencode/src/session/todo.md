@@ -8,24 +8,24 @@ The todo system is the kernel task-management layer inside opencode. Todos are s
 
 Each todo item has 14 fields:
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `id` | `string` (optional) | Unique identifier, auto-generated via `crypto.randomUUID()` if omitted |
-| `parent_id` | `string \| null` (optional) | Parent todo ID for hierarchy; `null` = root-level |
-| `level` | `number` (0+) | Hierarchy depth: `0` = root (L1), `1` = child (L2), `2` = grandchild |
-| `title` | `string` (optional) | Short label; falls back to `content` if not set |
-| `content` | `string` | Brief description of the task |
-| `description` | `string` (default `""`) | Detailed markdown with `@file` and `/skill` references |
-| `status` | `string` | One of: `pending`, `in_progress`, `completed`, `cancelled`, `blocked` |
-| `priority` | `string` | One of: `none`, `low`, `medium`, `high`, `urgent` |
-| `labels` | `string[]` | Tags for categorization |
-| `due_date` | `string \| null` (optional) | ISO 8601 date |
-| `team_id` | `string \| null` (optional) | Team ID for Linear issue sync (synced from Linear) |
-| `project_id` | `string \| null` (optional) | Project ID for Linear issue sync (synced from Linear) |
-| `assignee_id` | `string \| null` (optional) | Assignee user ID for issue sync (synced from Linear) |
-| `linear_issue_id` | `string \| null` (optional) | Linked Linear issue ID for bidirectional sync (synced from Linear) |
+| Field             | Type                        | Description                                                            |
+| ----------------- | --------------------------- | ---------------------------------------------------------------------- |
+| `id`              | `string` (optional)         | Unique identifier, auto-generated via `crypto.randomUUID()` if omitted |
+| `parent_id`       | `string \| null` (optional) | Parent todo ID for hierarchy; `null` = root-level                      |
+| `level`           | `number` (0+)               | Hierarchy depth: `0` = root (L1), `1` = child (L2), `2` = grandchild   |
+| `title`           | `string` (optional)         | Short label; falls back to `content` if not set                        |
+| `content`         | `string`                    | Brief description of the task                                          |
+| `description`     | `string` (default `""`)     | Detailed markdown with `@file` and `/skill` references                 |
+| `status`          | `string`                    | One of: `pending`, `in_progress`, `completed`, `cancelled`, `blocked`  |
+| `priority`        | `string`                    | One of: `none`, `low`, `medium`, `high`, `urgent`                      |
+| `labels`          | `string[]`                  | Tags for categorization                                                |
+| `due_date`        | `string \| null` (optional) | ISO 8601 date                                                          |
+| `team_id`         | `string \| null` (optional) | Team ID for Linear issue sync (synced from Linear)                     |
+| `project_id`      | `string \| null` (optional) | Project ID for Linear issue sync (synced from Linear)                  |
+| `assignee_id`     | `string \| null` (optional) | Assignee user ID for issue sync (synced from Linear)                   |
+| `linear_issue_id` | `string \| null` (optional) | Linked Linear issue ID for bidirectional sync (synced from Linear)     |
 
-Fields marked "synced from Linear" are populated during pull operations. See [`linear/README.md`](../../linear/README.md) for sync details.
+Fields marked "synced from Linear" are populated during pull operations. See [`issue/README.md`](../../issue/README.md) for sync details.
 
 ## Hierarchy Model
 
@@ -51,17 +51,17 @@ The `getTree()` method returns L1 items with nested L2 children. Levels beyond 1
 
 `Todo.Service` exposes 9 methods. The 7 primary CRUD methods are listed first:
 
-| Method | Signature | Returns | Side Effects |
-|--------|-----------|---------|--------------|
-| `create` | `{ sessionID, todo }` | `Effect<Info>` | Inserts row, publishes `Todo.Created` + `Todo.Updated` |
-| `update` | `{ sessionID, id, patch }` | `Effect<Info>` | Partial update, publishes `Todo.Updated` |
-| `delete` | `{ sessionID, id }` | `Effect<void>` | Removes row, publishes `Todo.Deleted` + `Todo.Updated` |
-| `patchStatus` | `{ sessionID, id, status }` | `Effect<Info>` | Updates status only, publishes `Todo.Updated` |
-| `patchAssignee` | `{ sessionID, id, assigneeId }` | `Effect<Info>` | Updates assignee only, publishes `Todo.Updated` |
-| `reorder` | `{ sessionID, ids }` | `Effect<void>` | Sets position per id, publishes `Todo.Updated` |
-| `getTree` | `sessionID` | `Effect<TodoNode[]>` | Read-only, no events |
-| `get` | `sessionID` | `Effect<Info[]>` | Read-only, loads all todos ordered by position |
-| `replaceAll` | `{ sessionID, todos }` | `Effect<void>` | Transactional replace, publishes `Todo.Updated` |
+| Method          | Signature                       | Returns              | Side Effects                                           |
+| --------------- | ------------------------------- | -------------------- | ------------------------------------------------------ |
+| `create`        | `{ sessionID, todo }`           | `Effect<Info>`       | Inserts row, publishes `Todo.Created` + `Todo.Updated` |
+| `update`        | `{ sessionID, id, patch }`      | `Effect<Info>`       | Partial update, publishes `Todo.Updated`               |
+| `delete`        | `{ sessionID, id }`             | `Effect<void>`       | Removes row, publishes `Todo.Deleted` + `Todo.Updated` |
+| `patchStatus`   | `{ sessionID, id, status }`     | `Effect<Info>`       | Updates status only, publishes `Todo.Updated`          |
+| `patchAssignee` | `{ sessionID, id, assigneeId }` | `Effect<Info>`       | Updates assignee only, publishes `Todo.Updated`        |
+| `reorder`       | `{ sessionID, ids }`            | `Effect<void>`       | Sets position per id, publishes `Todo.Updated`         |
+| `getTree`       | `sessionID`                     | `Effect<TodoNode[]>` | Read-only, no events                                   |
+| `get`           | `sessionID`                     | `Effect<Info[]>`     | Read-only, loads all todos ordered by position         |
+| `replaceAll`    | `{ sessionID, todos }`          | `Effect<void>`       | Transactional replace, publishes `Todo.Updated`        |
 
 All mutations except `get` and `getTree` publish `Todo.Updated` with the full todo list for the session.
 
@@ -72,7 +72,10 @@ Four bus events are defined on `Todo.Event`:
 ### `Todo.Event.Created`
 
 ```ts
-{ sessionID: SessionID; todo: Todo.Info }
+{
+  sessionID: SessionID
+  todo: Todo.Info
+}
 ```
 
 Emitted once by `create()` after insertion. Carries the newly created todo.
@@ -88,7 +91,10 @@ Emitted by every mutation (`create`, `update`, `delete`, `patchStatus`, `patchAs
 ### `Todo.Event.Deleted`
 
 ```ts
-{ sessionID: SessionID; id: string }
+{
+  sessionID: SessionID
+  id: string
+}
 ```
 
 Emitted by `delete()` before the `Updated` event. Carries only the deleted todo ID.
@@ -96,7 +102,12 @@ Emitted by `delete()` before the `Updated` event. Carries only the deleted todo 
 ### `Todo.Event.Progressed`
 
 ```ts
-{ sessionID: SessionID; from: string | null; to: string; reason: "auto" | "manual" }
+{
+  sessionID: SessionID
+  from: string | null
+  to: string
+  reason: "auto" | "manual"
+}
 ```
 
 Emitted by the auto-progress engine when a todo transitions status. `from` is the previous status (null if starting from pending). `reason` is `"auto"` for engine-driven changes, `"manual"` for user-driven.
@@ -105,12 +116,12 @@ Emitted by the auto-progress engine when a todo transitions status. `from` is th
 
 `Config.linear()` returns `{ projectId?, teamId?, syncMode, autoPush }`. These map to Todo fields during sync:
 
-| Config Field | Todo Field | Direction |
-|--------------|-----------|-----------|
-| `projectId` | `project_id` | push/pull |
-| `teamId` | `team_id` | push/pull |
-| `syncMode` | n/a | Controls when sync runs (manual/auto-push/auto-pull/bidirectional) |
-| `autoPush` | n/a | If true, push on todo creation |
+| Config Field | Todo Field   | Direction                                                          |
+| ------------ | ------------ | ------------------------------------------------------------------ |
+| `projectId`  | `project_id` | push/pull                                                          |
+| `teamId`     | `team_id`    | push/pull                                                          |
+| `syncMode`   | n/a          | Controls when sync runs (manual/auto-push/auto-pull/bidirectional) |
+| `autoPush`   | n/a          | If true, push on todo creation                                     |
 
 During `SyncPush.push()`, `teamId` and `projectId` are sent to Linear as `teamId` and `projectId` on the issue. During `SyncPull.pull()`, these fields are read back from Linear issues into `team_id` and `project_id`.
 
@@ -173,7 +184,7 @@ yield* todo.replaceAll({ sessionID, todos: [...] })
 **New way (partial patch):**
 
 ```ts
-yield* todo.update({ sessionID, id: "todo-1", patch: { status: "completed" } })
+yield * todo.update({ sessionID, id: "todo-1", patch: { status: "completed" } })
 ```
 
 ## Examples
@@ -213,17 +224,18 @@ const program = Effect.gen(function* () {
 ### Partially update a todo status
 
 ```ts
-yield* svc.update({
-  sessionID,
-  id: "todo-1",
-  patch: { status: "in_progress" },
-})
+yield *
+  svc.update({
+    sessionID,
+    id: "todo-1",
+    patch: { status: "in_progress" },
+  })
 ```
 
 ### Get hierarchical tree
 
 ```ts
-const tree = yield* svc.getTree(sessionID)
+const tree = yield * svc.getTree(sessionID)
 for (const node of tree) {
   console.log(node.content, node.children.length)
 }
@@ -232,7 +244,7 @@ for (const node of tree) {
 ### Reorder todos
 
 ```ts
-yield* svc.reorder({ sessionID, ids: ["todo-3", "todo-1", "todo-2"] })
+yield * svc.reorder({ sessionID, ids: ["todo-3", "todo-1", "todo-2"] })
 ```
 
 ### Subscribe to todo changes
@@ -240,11 +252,10 @@ yield* svc.reorder({ sessionID, ids: ["todo-3", "todo-1", "todo-2"] })
 ```ts
 import { Bus } from "@/bus"
 
-yield* bus.subscribe(Todo.Event.Updated).pipe(
-  Stream.runForEach((ev) =>
-    Effect.sync(() => console.log("todos updated:", ev.properties.todos.length))
-  ),
-)
+yield *
+  bus
+    .subscribe(Todo.Event.Updated)
+    .pipe(Stream.runForEach((ev) => Effect.sync(() => console.log("todos updated:", ev.properties.todos.length))))
 ```
 
 ## Testing
@@ -281,5 +292,5 @@ Do not mock `Database.use` directly. The FK constraint on `session_id` will reje
 - `src/session/session.sql.ts` — Drizzle table definition
 - `src/session/auto-progress.ts` — Auto-progress engine
 - `src/tool/todo.ts` — Tool definition for the `todo` agent tool
-- `src/linear/sync-push.ts` — Push todos to Linear
-- `src/linear/sync-pull.ts` — Pull Linear issues into todos
+- `src/issue/sync-push.ts` — Push todos to Linear
+- `src/issue/sync-pull.ts` — Pull Linear issues into todos

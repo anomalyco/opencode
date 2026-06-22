@@ -35,48 +35,50 @@ The sync model is git-push style: you create todos locally, then push them to Li
 The `LinearMcpClient` uses `StreamableHTTPClientTransport` to connect to `https://mcp.linear.app/mcp`. Authentication is via an `Authorization: Bearer ${LINEAR_API_KEY}` header.
 
 ```ts
-const client = yield* LinearMcpClient.create({
-  url: "https://mcp.linear.app/mcp",
-  key: process.env.LINEAR_API_KEY,
-})
+const client =
+  yield *
+  LinearMcpClient.create({
+    url: "https://mcp.linear.app/mcp",
+    key: process.env.LINEAR_API_KEY,
+  })
 ```
 
 Note: `mcp-remote` was unavailable during development, so the integration uses direct transport. The client connects on `create()`, fails on disconnect, and cleans up on `close()`.
 
 ## Tool Naming
 
-**CRITICAL**: Linear MCP tools are NOT prefixed with `linear_`. Use the exact names from `src/linear/tool-names.ts`:
+**CRITICAL**: Linear MCP tools are NOT prefixed with `linear_`. Use the exact names from `src/issue/tool-names.ts`:
 
-| Tool | Name |
-|------|------|
-| Save issue | `save_issue` |
-| List issues | `list_issues` |
-| Get issue | `get_issue` |
-| Save comment | `save_comment` |
+| Tool          | Name            |
+| ------------- | --------------- |
+| Save issue    | `save_issue`    |
+| List issues   | `list_issues`   |
+| Get issue     | `get_issue`     |
+| Save comment  | `save_comment`  |
 | List comments | `list_comments` |
 
-For the full list, import `ISSUE`, `COMMENT`, `USER`, `TEAM`, `PROJECT`, etc. from `src/linear/tool-names.ts`.
+For the full list, import `ISSUE`, `COMMENT`, `USER`, `TEAM`, `PROJECT`, etc. from `src/issue/tool-names.ts`.
 
 ## Tool Categories
 
 The Linear MCP server exposes tools across 12 categories:
 
-| Category | Count | Key Tools |
-|----------|-------|-----------|
-| `ISSUE` | 7 | `get_issue`, `list_issues`, `save_issue`, `list_issue_statuses` |
-| `COMMENT` | 3 | `list_comments`, `save_comment`, `delete_comment` |
-| `USER` | 2 | `get_user`, `list_users` |
-| `TEAM` | 2 | `get_team`, `list_teams` |
-| `PROJECT` | 4 | `get_project`, `list_projects`, `save_project` |
-| `CYCLE` | 1 | `list_cycles` |
-| `DOCUMENT` | 3 | `get_document`, `list_documents`, `save_document` |
-| `ATTACHMENT` | 5 | `get_attachment`, `create_attachment`, `prepare_attachment_upload` |
-| `MILESTONE` | 3 | `get_milestone`, `list_milestones`, `save_milestone` |
-| `DIFF` | 3 | `get_diff`, `list_diffs`, `get_diff_threads` |
-| `STATUS_UPDATE` | 3 | `get_status_updates`, `save_status_update`, `delete_status_update` |
-| `IMAGE` | 1 | `extract_images` |
+| Category        | Count | Key Tools                                                          |
+| --------------- | ----- | ------------------------------------------------------------------ |
+| `ISSUE`         | 7     | `get_issue`, `list_issues`, `save_issue`, `list_issue_statuses`    |
+| `COMMENT`       | 3     | `list_comments`, `save_comment`, `delete_comment`                  |
+| `USER`          | 2     | `get_user`, `list_users`                                           |
+| `TEAM`          | 2     | `get_team`, `list_teams`                                           |
+| `PROJECT`       | 4     | `get_project`, `list_projects`, `save_project`                     |
+| `CYCLE`         | 1     | `list_cycles`                                                      |
+| `DOCUMENT`      | 3     | `get_document`, `list_documents`, `save_document`                  |
+| `ATTACHMENT`    | 5     | `get_attachment`, `create_attachment`, `prepare_attachment_upload` |
+| `MILESTONE`     | 3     | `get_milestone`, `list_milestones`, `save_milestone`               |
+| `DIFF`          | 3     | `get_diff`, `list_diffs`, `get_diff_threads`                       |
+| `STATUS_UPDATE` | 3     | `get_status_updates`, `save_status_update`, `delete_status_update` |
+| `IMAGE`         | 1     | `extract_images`                                                   |
 
-Total: 39 tools. See `src/linear/tool-names.ts` for the complete flat record.
+Total: 39 tools. See `src/issue/tool-names.ts` for the complete flat record.
 
 ## Linear Schema
 
@@ -106,8 +108,8 @@ The MCP response contains JSON-encoded GraphQL data inside `content[].text`:
   content: [
     {
       type: "text",
-      text: '{"data":{"saveIssue":{"id":"abc-123",...}}}'
-    }
+      text: '{"data":{"saveIssue":{"id":"abc-123",...}}}',
+    },
   ]
 }
 ```
@@ -116,13 +118,13 @@ Both `SyncPush` and `SyncPull` use defensive parsing to extract fields from this
 
 ## Priority Mapping
 
-| Todo Priority | Linear Priority |
-|--------------|-----------------|
-| `urgent` | `1` (Urgent) |
-| `high` | `2` (High) |
-| `medium` | `3` (Medium) |
-| `low` | `4` (Low) |
-| `none` | `0` (No priority) |
+| Todo Priority | Linear Priority   |
+| ------------- | ----------------- |
+| `urgent`      | `1` (Urgent)      |
+| `high`        | `2` (High)        |
+| `medium`      | `3` (Medium)      |
+| `low`         | `4` (Low)         |
+| `none`        | `0` (No priority) |
 
 Linear uses `0` for no priority and `1` for urgent. This is the reverse of typical numeric priority ordering.
 
@@ -271,27 +273,27 @@ Pull skips by `linear_issue_id`. After a successful push, the todo is updated wi
 cd opencode/packages/opencode
 
 # Run unit tests (mocked MCP)
-bun test src/linear/
+bun test src/issue/
 
 # Run integration tests
-bun test src/linear/integration.test.ts
+bun test src/issue/sync-pull.test.ts
 
 # Run with real MCP (requires LINEAR_API_KEY)
-LINEAR_API_KEY=... bun test src/linear/integration.test.ts
+LINEAR_API_KEY=... bun test src/issue/sync-pull.test.ts
 ```
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `src/linear/mcp-client.ts` | MCP client (connect, listTools, callTool, close) |
-| `src/linear/sync-push.ts` | Push todos to Linear issues |
-| `src/linear/sync-pull.ts` | Pull Linear issues into todos |
-| `src/linear/tool-names.ts` | All 39 Linear MCP tool name constants |
-| `src/linear/integration.test.ts` | Round-trip integration tests |
-| `src/session/todo.ts` | Kernel todo service |
-| `src/session/auto-progress.ts` | Auto-progress engine |
-| `src/cli/cmd/tui/command/linear.ts` | Slash commands |
+| File                                | Purpose                                          |
+| ----------------------------------- | ------------------------------------------------ |
+| `src/issue/mcp-client.ts`          | MCP client (connect, listTools, callTool, close) |
+| `src/issue/sync-push.ts`           | Push todos to Linear issues                      |
+| `src/issue/sync-pull.ts`           | Pull Linear issues into todos                    |
+| `src/issue/tool-names.ts`          | All 39 Linear MCP tool name constants            |
+| `src/issue/mcp-client.test.ts`     | Round-trip integration tests                     |
+| `src/issue/issue.ts`               | Kernel issue service                             |
+| `src/session/auto-progress.ts`      | Auto-progress engine                             |
+| `src/cli/cmd/tui/command/linear.ts` | Slash commands                                   |
 
 ## References
 
