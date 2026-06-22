@@ -35,10 +35,7 @@ export const make = <Key, E>(options: {
     const start = (key: Key, entry: Entry<E>, force: boolean, successor = false) => {
       const ready = Deferred.makeUnsafe<void>()
       const owner = fork(
-        (successor
-          ? Effect.yieldNow
-          : Deferred.await(ready)
-        ).pipe(
+        (successor ? Effect.yieldNow : Deferred.await(ready)).pipe(
           Effect.andThen(Effect.suspend(() => options.drain(key, force))),
           Effect.onExit((exit) => Effect.sync(() => settle(key, entry, exit))),
           Effect.exit,
