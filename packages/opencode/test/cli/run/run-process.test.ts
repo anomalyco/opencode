@@ -130,7 +130,12 @@ describe("opencode run (non-interactive subprocess)", () => {
           { type: "step_finish", part: expect.objectContaining({ type: "step-finish" }) },
         ])
         expect(result.stdout.endsWith("\n")).toBe(true)
-        expect(result.stdout.split("\n").slice(0, -1).every((line) => line.length > 0)).toBe(true)
+        expect(
+          result.stdout
+            .split("\n")
+            .slice(0, -1)
+            .every((line) => line.length > 0),
+        ).toBe(true)
       }),
     60_000,
   )
@@ -191,9 +196,18 @@ describe("opencode run (non-interactive subprocess)", () => {
           expect.objectContaining({ type: "reasoning", text: "reasoning" }),
         )
         expect(events.find((event) => event.type === "tool_use")?.part).toEqual(
-          expect.objectContaining({ type: "tool", tool: "bash", state: expect.objectContaining({ status: "completed" }) }),
+          expect.objectContaining({
+            type: "tool",
+            tool: "bash",
+            state: expect.objectContaining({ status: "completed" }),
+          }),
         )
-        expect(result.stdout.split("\n").slice(0, -1).every((line) => line.startsWith("{"))).toBe(true)
+        expect(
+          result.stdout
+            .split("\n")
+            .slice(0, -1)
+            .every((line) => line.startsWith("{")),
+        ).toBe(true)
       }),
     60_000,
   )

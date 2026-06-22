@@ -270,10 +270,7 @@ export function withCliFixture<A, E>(
     }
 
     const run = (message: string, opts?: RunOpts): Effect.Effect<RunResult> => {
-      return spawn(
-        runArgs(message, opts),
-        runOpts(opts),
-      )
+      return spawn(runArgs(message, opts), runOpts(opts))
     }
 
     const startRun = Effect.fn("opencode.startRun")(function* (message: string, opts?: RunOpts) {
