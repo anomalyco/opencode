@@ -47,6 +47,11 @@ function mergeConfigConcatArrays(target: Info, source: Info): Info {
   if (target.instructions && source.instructions) {
     merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
   }
+  if (target.local_instruction_filenames && source.local_instruction_filenames) {
+    merged.local_instruction_filenames = Array.from(
+      new Set([...target.local_instruction_filenames, ...source.local_instruction_filenames]),
+    )
+  }
   return merged
 }
 

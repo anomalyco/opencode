@@ -1,6 +1,7 @@
 export * as SystemContextBuiltIns from "./builtins"
 
 import { DateTime, Effect, Layer, Schema } from "effect"
+import { Config } from "../config"
 import { Location } from "../location"
 import { SystemContext } from "./index"
 import { InstructionContext } from "../instruction-context"
@@ -42,6 +43,7 @@ const builtIns = Layer.effectDiscard(
 
 export const layer = Layer.mergeAll(builtIns, InstructionContext.layer).pipe(
   Layer.provideMerge(SystemContextRegistry.layer),
+  Layer.provide(Config.locationLayer),
 )
 
 export const locationLayer = layer

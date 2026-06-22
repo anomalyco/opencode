@@ -2006,6 +2006,7 @@ export type Config = {
             }
       }
   instructions?: Array<string>
+  local_instruction_filenames?: Array<string>
   layout?: LayoutConfig
   permission?: PermissionConfig
   tools?: {

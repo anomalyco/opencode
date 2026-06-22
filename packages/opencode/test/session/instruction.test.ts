@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import fs from "fs/promises"
 import path from "path"
 import { Effect, FileSystem, Layer } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
@@ -8,7 +9,6 @@ import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 
 import { Instruction } from "../../src/session/instruction"
-import type { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { Global } from "@opencode-ai/core/global"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
@@ -17,14 +17,17 @@ import { testEffect } from "../lib/effect"
 import { TestConfig } from "../fixture/config"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 
 const it = testEffect(Layer.mergeAll(CrossSpawnSpawner.defaultLayer, NodeFileSystem.layer, testInstanceStoreLayer))
 
-const configLayer = TestConfig.layer()
-
-const instructionLayer = (global: Partial<Global.Interface>, flags: Partial<RuntimeFlags.Info> = {}) =>
+const instructionLayer = (
+  global: Partial<Global.Interface>,
+  flags: Partial<RuntimeFlags.Info> = {},
+  config: ConfigV1.Info = {},
+) =>
   Instruction.layer.pipe(
-    Layer.provide(configLayer),
+    Layer.provide(TestConfig.layer({ get: () => Effect.succeed(config) })),
     Layer.provide(FSUtil.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(Global.layerWith(global)),
@@ -32,9 +35,9 @@ const instructionLayer = (global: Partial<Global.Interface>, flags: Partial<Runt
   )
 
 const provideInstruction =
-  (global: Partial<Global.Interface>, flags?: Partial<RuntimeFlags.Info>) =>
+  (global: Partial<Global.Interface>, flags?: Partial<RuntimeFlags.Info>, config?: ConfigV1.Info) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
-    self.pipe(Effect.provide(instructionLayer(global, flags)))
+    self.pipe(Effect.provide(instructionLayer(global, flags, config)))
 
 const write = (filepath: string, content: string) =>
   Effect.gen(function* () {
@@ -43,17 +46,29 @@ const write = (filepath: string, content: string) =>
     yield* fs.writeFileString(filepath, content)
   })
 
+const alias = (target: string, filepath: string) =>
+  Effect.promise(() =>
+    fs
+      .stat(filepath)
+      .then(() => undefined)
+      .catch(() => fs.symlink(target, filepath)),
+  )
+
 const writeFiles = (dir: string, files: Record<string, string>) =>
   Effect.all(
     Object.entries(files).map(([file, content]) => write(path.join(dir, file), content)),
     { discard: true },
   )
 
-const withFiles = <A, E, R>(files: Record<string, string>, self: (dir: string) => Effect.Effect<A, E, R>) =>
+const withFiles = <A, E, R>(
+  files: Record<string, string>,
+  self: (dir: string) => Effect.Effect<A, E, R>,
+  config?: ConfigV1.Info,
+) =>
   provideTmpdirInstance((dir) =>
     Effect.gen(function* () {
       yield* writeFiles(dir, files)
-      return yield* self(dir).pipe(provideInstruction({ home: dir, config: dir }))
+      return yield* self(dir).pipe(provideInstruction({ home: dir, config: dir }, {}, config))
     }),
   )
 
@@ -131,6 +146,76 @@ describe("Instruction.resolve", () => {
         )
         expect(results.length).toBe(1)
         expect(results[0].filepath).toBe(path.join(dir, "subdir", "AGENTS.md"))
+      }),
+    ),
+  )
+
+  it.live("returns a configured instruction filename from a subdirectory", () =>
+    withFiles(
+      {
+        "subdir/AGENTS.md": "# General Instructions",
+        "subdir/REVIEW.md": "# Review Instructions",
+        "subdir/nested/file.ts": "const x = 1",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const agents = path.join(dir, "subdir", "AGENTS.md")
+          const review = path.join(dir, "subdir", "REVIEW.md")
+          const results = yield* svc.resolve(
+            [],
+            path.join(dir, "subdir", "nested", "file.ts"),
+            MessageID.make("msg_message-custom-1"),
+          )
+
+          expect(results).toEqual([
+            { filepath: agents, content: `Instructions from: ${agents}\n# General Instructions` },
+            { filepath: review, content: `Instructions from: ${review}\n# Review Instructions` },
+          ])
+        }),
+      { local_instruction_filenames: ["REVIEW.md"] },
+    ),
+  )
+
+  it.live("deduplicates standard aliases and preserves the Claude prompt opt-out", () =>
+    provideTmpdirInstance((dir) =>
+      Effect.gen(function* () {
+        yield* writeFiles(dir, {
+          "AGENTS.md": "# Root Instructions",
+          "CLAUDE.md": "# Root Claude",
+          "subdir/AGENTS.md": "# Subdir Instructions",
+          "subdir/CLAUDE.md": "# Subdir Claude",
+          "subdir/nested/file.ts": "const x = 1",
+        })
+        yield* Effect.all(
+          [
+            [path.join(dir, "AGENTS.md"), path.join(dir, "agents.md")],
+            [path.join(dir, "CLAUDE.md"), path.join(dir, "claude.md")],
+            [path.join(dir, "subdir", "AGENTS.md"), path.join(dir, "subdir", "agents.md")],
+            [path.join(dir, "subdir", "CLAUDE.md"), path.join(dir, "subdir", "claude.md")],
+          ].map(([target, filepath]) => alias(target, filepath)),
+          { discard: true },
+        )
+
+        return yield* Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          expect(yield* svc.systemPaths()).toEqual(new Set([FSUtil.resolve(path.join(dir, "AGENTS.md"))]))
+
+          const agents = FSUtil.resolve(path.join(dir, "subdir", "AGENTS.md"))
+          expect(
+            yield* svc.resolve(
+              [],
+              path.join(dir, "subdir", "nested", "file.ts"),
+              MessageID.make("msg_message-alias-1"),
+            ),
+          ).toEqual([{ filepath: agents, content: `Instructions from: ${agents}\n# Subdir Instructions` }])
+        }).pipe(
+          provideInstruction(
+            { home: dir, config: path.join(dir, "global") },
+            { disableClaudeCodePrompt: true },
+            { local_instruction_filenames: ["agents.md", "claude.md"] },
+          ),
+        )
       }),
     ),
   )

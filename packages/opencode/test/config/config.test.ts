@@ -1072,6 +1072,18 @@ it.effect("deduplicates duplicate instructions from global and local configs", (
   ),
 )
 
+it.effect("merges local instruction filenames from global and local configs", () =>
+  withConfigTree(
+    {
+      global: { local_instruction_filenames: ["GLOBAL.md", "SHARED.md"] },
+      local: { local_instruction_filenames: ["SHARED.md", "LOCAL.md"] },
+    },
+    Effect.gen(function* () {
+      expect((yield* Config.use.get()).local_instruction_filenames).toEqual(["GLOBAL.md", "SHARED.md", "LOCAL.md"])
+    }),
+  ),
+)
+
 it.effect("deduplicates duplicate plugins from global and local configs", () =>
   withConfigTree(
     {

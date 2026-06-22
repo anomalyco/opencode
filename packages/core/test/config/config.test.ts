@@ -144,6 +144,14 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("migrates v1 local instruction filenames", () =>
+    Effect.sync(() => {
+      expect(
+        ConfigMigrateV1.migrate({ local_instruction_filenames: ["REVIEW.md"] }).local_instruction_filenames,
+      ).toEqual(["REVIEW.md"])
+    }),
+  )
+
   it.live("returns an empty configuration when directory files do not exist", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -325,6 +333,7 @@ describe("Config", () => {
                 },
                 skills: ["./skills", "~/shared-skills", "https://example.com/.well-known/skills/"],
                 instructions: ["CONTRIBUTING.md", ".cursor/rules/*.md", "https://example.com/shared-rules.md"],
+                local_instruction_filenames: ["REVIEW.md", "SECURITY.md"],
                 references: {
                   local: { path: "../library" },
                   sdk: { repository: "github.com/example/sdk", branch: "main" },
@@ -418,6 +427,7 @@ describe("Config", () => {
               ".cursor/rules/*.md",
               "https://example.com/shared-rules.md",
             ])
+            expect(documents[0]?.info.local_instruction_filenames).toEqual(["REVIEW.md", "SECURITY.md"])
             expect(documents[0]?.info.references).toEqual({
               local: { path: "../library" },
               sdk: { repository: "github.com/example/sdk", branch: "main" },

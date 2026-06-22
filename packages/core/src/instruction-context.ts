@@ -2,6 +2,7 @@ export * as InstructionContext from "./instruction-context"
 
 import { Array, Effect, Layer, Schema } from "effect"
 import { isAbsolute, join, relative, sep } from "path"
+import { Config } from "./config"
 import { FSUtil } from "./fs-util"
 import { Flag } from "./flag/flag"
 import { Global } from "./global"
@@ -21,6 +22,7 @@ const key = SystemContext.Key.make("core/instructions")
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
+    const config = yield* Config.Service
     const global = yield* Global.Service
     const location = yield* Location.Service
     const registry = yield* SystemContextRegistry.Service
@@ -42,11 +44,17 @@ export const layer = Layer.effectDiscard(
       const fromProject = relative(stop, start)
       const insideProject =
         fromProject === "" || (fromProject !== ".." && !fromProject.startsWith(`..${sep}`) && !isAbsolute(fromProject))
+      const targets = Array.dedupe([
+        "AGENTS.md",
+        ...(yield* config.entries()).flatMap((entry) =>
+          entry.type === "document" ? (entry.info.local_instruction_filenames ?? []) : [],
+        ),
+      ])
       const discovered = new Set(
         (Flag.OPENCODE_DISABLE_PROJECT_CONFIG || !insideProject
           ? []
           : yield* fs.up({
-              targets: ["AGENTS.md"],
+              targets,
               start,
               stop,
             })

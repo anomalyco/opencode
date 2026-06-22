@@ -11,8 +11,22 @@ import { Flag } from "@opencode-ai/core/flag/flag"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { withTransientReadRetry } from "@/util/effect-http-client"
 import { Global } from "@opencode-ai/core/global"
-import type { MessageV2 } from "./message-v2"
 import type { MessageID } from "./schema"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+
+function allInstructions(config: ConfigV1.Info, disableClaudeCodePrompt: boolean) {
+  const standard = [
+    { filename: "AGENTS.md", standard: true, enabled: true },
+    { filename: "CLAUDE.md", standard: true, enabled: !disableClaudeCodePrompt },
+    { filename: "CONTEXT.md", standard: true, enabled: true }, // deprecated
+  ]
+  return [
+    ...standard,
+    ...Array.from(new Set(config.local_instruction_filenames ?? []))
+      .filter((filename) => !standard.some((item) => item.filename === filename))
+      .map((filename) => ({ filename, standard: false, enabled: true })),
+  ]
+}
 
 function extract(messages: SessionV1.WithParts[]) {
   const paths = new Set<string>()
@@ -61,12 +75,6 @@ export const layer: Layer.Layer<
       path.join(global.config, "AGENTS.md"),
       ...(!flags.disableClaudeCodePrompt ? [path.join(global.home, ".claude", "CLAUDE.md")] : []),
     ]
-    const instructionFiles = [
-      "AGENTS.md",
-      ...(!flags.disableClaudeCodePrompt ? ["CLAUDE.md"] : []),
-      "CONTEXT.md", // deprecated
-    ]
-
     const state = yield* InstanceState.make(
       Effect.fn("Instruction.state")(() =>
         Effect.succeed({
@@ -114,21 +122,28 @@ export const layer: Layer.Layer<
 
       for (const file of globalFiles) {
         if (yield* fs.existsSafe(file)) {
-          paths.add(path.resolve(file))
+          paths.add(FSUtil.resolve(file))
           break
         }
       }
 
       // The first project-level match wins so we don't stack AGENTS.md/CLAUDE.md from every ancestor.
       if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
-        for (const file of instructionFiles) {
+        const reservedBuiltins = new Set<string>()
+        let foundStandard = false
+        for (const instruction of allInstructions(config, flags.disableClaudeCodePrompt)) {
           const matches = yield* fs
-            .findUp(file, ctx.directory, ctx.worktree)
+            .findUp(instruction.filename, ctx.directory, ctx.worktree)
             .pipe(Effect.catch(() => Effect.succeed([])))
-          if (matches.length > 0) {
-            matches.forEach((item) => paths.add(path.resolve(item)))
-            break
+          const resolved = matches.map(FSUtil.resolve)
+          if (instruction.standard) {
+            resolved.forEach((item) => reservedBuiltins.add(item))
+            if (!instruction.enabled || foundStandard || resolved.length === 0) continue
+            resolved.forEach((item) => paths.add(item))
+            foundStandard = true
+            continue
           }
+          resolved.filter((item) => !reservedBuiltins.has(item)).forEach((item) => paths.add(item))
         }
       }
 
@@ -145,7 +160,7 @@ export const layer: Layer.Layer<
                 })
               : relative(instruction)
           ).pipe(Effect.catch(() => Effect.succeed([] as string[])))
-          matches.forEach((item) => paths.add(path.resolve(item)))
+          matches.forEach((item) => paths.add(FSUtil.resolve(item)))
         }
       }
 
@@ -168,12 +183,28 @@ export const layer: Layer.Layer<
       ]
     })
 
-    const find = Effect.fn("Instruction.find")(function* (dir: string) {
-      for (const file of instructionFiles) {
-        const filepath = path.resolve(path.join(dir, file))
-        if (yield* fs.existsSafe(filepath)) return filepath
+    const findFiles = Effect.fnUntraced(function* (dir: string, config: ConfigV1.Info) {
+      const files = new Set<string>()
+      const reservedBuiltins = new Set<string>()
+      let foundStandard = false
+      for (const instruction of allInstructions(config, flags.disableClaudeCodePrompt)) {
+        const filepath = path.resolve(path.join(dir, instruction.filename))
+        if (!(yield* fs.existsSafe(filepath))) continue
+        const resolved = FSUtil.resolve(filepath)
+        if (instruction.standard) {
+          reservedBuiltins.add(resolved)
+          if (!instruction.enabled || foundStandard) continue
+          files.add(resolved)
+          foundStandard = true
+          continue
+        }
+        if (!reservedBuiltins.has(resolved)) files.add(resolved)
       }
-      return undefined
+      return Array.from(files)
+    })
+
+    const find = Effect.fn("Instruction.find")(function* (dir: string) {
+      return (yield* findFiles(dir, yield* cfg.get()))[0]
     })
 
     const resolve = Effect.fn("Instruction.resolve")(function* (
@@ -182,36 +213,32 @@ export const layer: Layer.Layer<
       messageID: MessageID,
     ) {
       const sys = yield* systemPaths()
-      const already = extract(messages)
+      const already = new Set(Array.from(extract(messages), FSUtil.resolve))
       const results: { filepath: string; content: string }[] = []
       const s = yield* InstanceState.get(state)
-      const root = path.resolve(yield* InstanceState.directory)
+      const root = FSUtil.resolve(yield* InstanceState.directory)
+      const config = yield* cfg.get()
 
-      const target = path.resolve(filepath)
+      const target = FSUtil.resolve(filepath)
       let current = path.dirname(target)
 
       // Walk upward from the file being read and attach nearby instruction files once per message.
       while (current.startsWith(root) && current !== root) {
-        const found = yield* find(current)
-        if (!found || found === target || sys.has(found) || already.has(found)) {
-          current = path.dirname(current)
-          continue
-        }
+        for (const found of yield* findFiles(current, config)) {
+          if (found === target || sys.has(found) || already.has(found)) continue
 
-        let set = s.claims.get(messageID)
-        if (!set) {
-          set = new Set()
-          s.claims.set(messageID, set)
-        }
-        if (set.has(found)) {
-          current = path.dirname(current)
-          continue
-        }
+          let set = s.claims.get(messageID)
+          if (!set) {
+            set = new Set()
+            s.claims.set(messageID, set)
+          }
+          if (set.has(found)) continue
 
-        set.add(found)
-        const content = yield* read(found)
-        if (content) {
-          results.push({ filepath: found, content: `Instructions from: ${found}\n${content}` })
+          set.add(found)
+          const content = yield* read(found)
+          if (content) {
+            results.push({ filepath: found, content: `Instructions from: ${found}\n${content}` })
+          }
         }
 
         current = path.dirname(current)
