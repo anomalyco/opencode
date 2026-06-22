@@ -39,7 +39,7 @@ function show(out: string) {
     process.stderr.write(text + EOL)
     return
   }
-  process.stderr.write(out)
+  process.stderr.write(out.endsWith(EOL) ? out : out + EOL)
 }
 
 const cli = yargs(args)
