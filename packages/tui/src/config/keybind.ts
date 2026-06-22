@@ -78,7 +78,7 @@ export const Definitions = {
   theme_switch_mode: keybind("none", "Switch between light and dark theme mode"),
   theme_mode_lock: keybind("none", "Lock or unlock theme mode"),
   sidebar_toggle: keybind("<leader>b", "Toggle sidebar"),
-  scrollbar_toggle: keybind("none", "Toggle session scrollbar"),
+  scrollbar_toggle: keybind("ctrl+alt+s", "Toggle session scrollbar"),
   status_view: keybind("<leader>s", "View status"),
 
   session_export: keybind("<leader>x", "Export session to editor"),
