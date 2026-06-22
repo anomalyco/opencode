@@ -21,10 +21,12 @@ function request(route: string, directory: string, init: RequestInit = {}) {
 const Event = Schema.Struct({
   id: Schema.String,
   type: Schema.String,
-  location: Schema.Struct({
-    directory: Schema.String,
-    project: Schema.Struct({ id: Schema.String, directory: Schema.String }),
-  }),
+  location: Schema.optional(
+    Schema.Struct({
+      directory: Schema.String,
+      project: Schema.Struct({ id: Schema.String, directory: Schema.String }),
+    }),
+  ),
   data: Schema.Unknown,
 })
 
@@ -64,17 +66,20 @@ describe("v2 location HttpApi", () => {
     }
   })
 
-  test("streams native EventV2 payloads with resolved locations", async () => {
-    await using tmp = await tmpdir({ git: true })
-    const response = await request("/api/event", tmp.path)
+  test("streams native EventV2 payloads across locations", async () => {
+    await using subscriber = await tmpdir({ git: true })
+    await using publisher = await tmpdir({ git: true })
+    const response = await request("/api/event", subscriber.path)
     const reader = response.body!.getReader()
-    expect((await readEvent(reader)).type).toBe("server.connected")
+    const connected = await readEvent(reader)
+    expect(connected.type).toBe("server.connected")
+    expect(connected.location).toBeUndefined()
 
-    const created = await request("/session", tmp.path, { method: "POST" })
+    const created = await request("/session", publisher.path, { method: "POST" })
     expect(created.status).toBe(200)
     expect(await readEventType(reader, "session.created")).toMatchObject({
       type: "session.created",
-      location: { directory: tmp.path, project: { directory: tmp.path } },
+      location: { directory: publisher.path, project: { directory: publisher.path } },
       data: { sessionID: expect.any(String) },
     })
     await reader.cancel()

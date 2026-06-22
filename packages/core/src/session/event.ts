@@ -27,13 +27,13 @@ const Base = {
 }
 
 const options = {
-  sync: {
+  durable: {
     aggregate: "sessionID",
     version: 1,
   },
 } as const
 const stepSettlementOptions = {
-  sync: {
+  durable: {
     aggregate: "sessionID",
     version: 2,
   },
@@ -456,7 +456,7 @@ export namespace Compaction {
 
   export const Ended = EventV2.define({
     type: "session.next.compaction.ended",
-    sync: { aggregate: "sessionID", version: 2 },
+    durable: { aggregate: "sessionID", version: 2 },
     schema: {
       ...Base,
       messageID: SessionMessageID.ID,

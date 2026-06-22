@@ -1,15 +1,14 @@
-import { Npm } from "../../npm"
-import { Effect, Option } from "effect"
+import { Effect } from "effect"
 import { pathToFileURL } from "url"
-import { PluginV2 } from "../../plugin"
+import { define } from "@opencode-ai/plugin/v2/effect"
 import { ProviderV2 } from "../../provider"
 
-export const SapAICorePlugin = PluginV2.define({
-  id: PluginV2.ID.make("sap-ai-core"),
-  effect: Effect.gen(function* () {
-    const npm = yield* Npm.Service
-    return {
-      "aisdk.sdk": Effect.fn(function* (evt) {
+export const SapAICorePlugin = define({
+  id: "sap-ai-core",
+  effect: Effect.fn(function* (ctx) {
+    yield* ctx.aisdk.hook(
+      "sdk",
+      Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("sap-ai-core")) return
         const serviceKey =
           process.env.AICORE_SERVICE_KEY ??
@@ -18,7 +17,7 @@ export const SapAICorePlugin = PluginV2.define({
 
         const installedPath = evt.package.startsWith("file://")
           ? evt.package
-          : Option.getOrUndefined((yield* npm.add(evt.package).pipe(Effect.orDie)).entrypoint)
+          : (yield* ctx.npm.add(evt.package).pipe(Effect.orDie)).entrypoint
         if (!installedPath) throw new Error(`Package ${evt.package} has no import entrypoint`)
 
         const mod = yield* Effect.promise(async () => {
@@ -35,10 +34,13 @@ export const SapAICorePlugin = PluginV2.define({
             : {},
         )
       }),
-      "aisdk.language": Effect.fn(function* (evt) {
+    )
+    yield* ctx.aisdk.hook(
+      "language",
+      Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("sap-ai-core")) return
         evt.language = evt.sdk(evt.model.api.id)
       }),
-    }
+    )
   }),
 })

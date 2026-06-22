@@ -1,8 +1,7 @@
 export * as SkillV2 from "./skill"
 
 import path from "path"
-import { Context, Effect, Layer, Schema } from "effect"
-import { castDraft } from "immer"
+import { Context, Effect, Layer, Schema, Types } from "effect"
 import { AgentV2 } from "./agent"
 import { ConfigMarkdown } from "./config/markdown"
 import { FSUtil } from "./fs-util"
@@ -65,16 +64,15 @@ const Frontmatter = Schema.Struct({
 const decodeFrontmatter = Schema.decodeUnknownOption(Frontmatter)
 
 export type Data = {
-  sources: Source[]
+  sources: Types.DeepMutable<Source>[]
 }
 
-export type Editor = {
+export type Draft = {
   source: (source: Source) => void
   list: () => readonly Source[]
 }
 
-export interface Interface {
-  readonly transform: State.Interface<Data, Editor>["transform"]
+export interface Interface extends State.Transformable<Draft> {
   readonly sources: () => Effect.Effect<Source[]>
   readonly list: () => Effect.Effect<Info[]>
 }
@@ -87,12 +85,12 @@ export const layer = Layer.effect(
     const discovery = yield* SkillDiscovery.Service
     const fs = yield* FSUtil.Service
 
-    const state = State.create<Data, Editor>({
+    const state = State.create<Data, Draft>({
       initial: () => ({ sources: [] }),
-      editor: (draft) => ({
+      draft: (draft) => ({
         source: (source) => {
           if (draft.sources.some((item) => Source.equals(item, source))) return
-          draft.sources.push(castDraft(source))
+          draft.sources.push(source as Types.DeepMutable<Source>)
         },
         list: () => draft.sources as Source[],
       }),
@@ -150,6 +148,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       transform: state.transform,
+      rebuild: state.rebuild,
       sources: Effect.fn("SkillV2.sources")(function* () {
         return state.get().sources
       }),

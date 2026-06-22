@@ -36,7 +36,7 @@ const model = (api: Api, variants: ModelV2.Info["variants"] = []) =>
       options: { store: false, serviceTier: "priority" },
     },
     variants,
-    time: { released: DateTime.makeUnsafe(0) },
+    time: { released: 0 },
     cost: [],
     status: "active",
     enabled: true,
@@ -268,7 +268,7 @@ describe("SessionRunnerModel", () => {
 
   it.effect("prefers stored credentials over configured auth", () =>
     Effect.gen(function* () {
-      const credential = new Credential.Stored({
+      const credential = new Credential.Info({
         id: Credential.ID.create(),
         integrationID: Integration.ID.make("test-provider"),
         label: "Work",

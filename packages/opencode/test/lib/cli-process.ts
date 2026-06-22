@@ -82,6 +82,11 @@ export type RunResult = {
   readonly durationMs: number
 }
 
+export type RunHandle = {
+  readonly interrupt: () => void
+  readonly result: Effect.Effect<RunResult>
+}
+
 export type SpawnOpts = { readonly timeoutMs?: number; readonly env?: Record<string, string> }
 
 // Typed equivalent of constructing argv for `opencode run`. New flags should
@@ -92,6 +97,7 @@ export type RunOpts = SpawnOpts & {
   readonly format?: "default" | "json"
   readonly command?: string
   readonly printLogs?: boolean
+  readonly permission?: Record<string, "ask" | "allow" | "deny">
   readonly extraArgs?: string[]
 }
 
@@ -147,6 +153,7 @@ export type AcpHandle = {
 export type OpencodeCli = {
   // High-level: run a single prompt against the test model. Short-lived.
   readonly run: (message: string, opts?: RunOpts) => Effect.Effect<RunResult>
+  readonly startRun: (message: string, opts?: RunOpts) => Effect.Effect<RunHandle, never, Scope.Scope>
   // Spawn `opencode serve` and wait until it's listening. Long-lived: the
   // returned handle is killed when the caller's Scope closes. Fails if the
   // listening line doesn't appear within `readyTimeoutMs`.
@@ -236,7 +243,7 @@ export function withCliFixture<A, E>(
       }
     })
 
-    const run = (message: string, opts?: RunOpts): Effect.Effect<RunResult> => {
+    const runArgs = (message: string, opts?: RunOpts) => {
       const argv: string[] = ["run"]
       if (opts?.printLogs) argv.push("--print-logs")
       argv.push("--model", opts?.model ?? testModelID)
@@ -245,8 +252,59 @@ export function withCliFixture<A, E>(
       if (opts?.command) argv.push("--command", opts.command)
       if (opts?.extraArgs) argv.push(...opts.extraArgs)
       argv.push(message)
-      return spawn(argv, opts)
+      return argv
     }
+
+    const runOpts = (opts?: RunOpts): SpawnOpts | undefined => {
+      if (!opts?.permission) return opts
+      return {
+        ...opts,
+        env: {
+          ...opts.env,
+          OPENCODE_CONFIG_CONTENT: JSON.stringify({
+            ...testProviderConfig(llm.url),
+            permission: opts.permission,
+          }),
+        },
+      }
+    }
+
+    const run = (message: string, opts?: RunOpts): Effect.Effect<RunResult> => {
+      return spawn(runArgs(message, opts), runOpts(opts))
+    }
+
+    const startRun = Effect.fn("opencode.startRun")(function* (message: string, opts?: RunOpts) {
+      const start = Date.now()
+      const options = runOpts(opts)
+      const proc = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.spawn(["bun", "run", "--conditions=browser", cliEntry, ...runArgs(message, opts)], {
+            cwd: home,
+            env: { ...process.env, ...env, ...options?.env },
+            stdin: "ignore",
+            stdout: "pipe",
+            stderr: "pipe",
+          }),
+        ),
+        (child) =>
+          Effect.promise(() => {
+            child.kill()
+            return child.exited
+          }).pipe(Effect.ignore),
+      )
+      const stdout = new Response(proc.stdout).text()
+      const stderr = new Response(proc.stderr).text()
+
+      return {
+        interrupt: () => proc.kill("SIGINT"),
+        result: Effect.promise(async () => ({
+          exitCode: await proc.exited,
+          stdout: await stdout,
+          stderr: await stderr,
+          durationMs: Date.now() - start,
+        })),
+      } satisfies RunHandle
+    })
 
     const serve = Effect.fn("opencode.serve")(function* (opts?: ServeOpts) {
       const argv = ["serve"]
@@ -401,7 +459,7 @@ export function withCliFixture<A, E>(
       } satisfies AcpHandle
     })
 
-    const opencode: OpencodeCli = { run, serve, acp, spawn, expectExit, parseJsonEvents }
+    const opencode: OpencodeCli = { run, startRun, serve, acp, spawn, expectExit, parseJsonEvents }
 
     return yield* fn({ llm, home, opencode })
     // FetchHttpClient is provided so test bodies can `yield* HttpClient.HttpClient`
