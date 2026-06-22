@@ -555,7 +555,7 @@ function HomeServerRow(props: {
         <Show when={props.healthy}>
           <span
             data-action="home-server-collapse"
-            class="inline-flex -ml-0.5 -mr-1 size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
+            class="inline-flex -ml-0.5 -mr-1.5 size-5 shrink-0 items-center justify-center rounded-[4px] text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
             aria-label={
               props.collapsed ? props.language.t("home.server.expand") : props.language.t("home.server.collapse")
             }
