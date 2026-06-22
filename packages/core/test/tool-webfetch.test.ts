@@ -147,7 +147,35 @@ describe("WebFetchTool registration", () => {
 
       expect(yield* executeTool(registry, call({ url: "file:///etc/passwd", format: "text" }))).toEqual({
         type: "error",
-        value: "Unable to fetch file:///etc/passwd",
+        value: "Invalid URL file:///etc/passwd: URL must use http:// or https://",
+      })
+      expect(assertions).toEqual([])
+      expect(requests).toEqual([])
+    }),
+  )
+
+  it.effect("rejects malformed URLs at schema decode without permission or transport", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* ToolRegistry.Service
+
+      expect(yield* executeTool(registry, call({ url: "not-a-url", format: "text" }))).toEqual({
+        type: "error",
+        value: 'Invalid tool input: Invalid URL\n  at ["url"]',
+      })
+      expect(assertions).toEqual([])
+      expect(requests).toEqual([])
+    }),
+  )
+
+  it.effect("rejects non-HTTP schemes with a typed error before permission or transport", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* ToolRegistry.Service
+
+      expect(yield* executeTool(registry, call({ url: "ftp://example.com", format: "text" }))).toEqual({
+        type: "error",
+        value: "Invalid URL ftp://example.com: URL must use http:// or https://",
       })
       expect(assertions).toEqual([])
       expect(requests).toEqual([])

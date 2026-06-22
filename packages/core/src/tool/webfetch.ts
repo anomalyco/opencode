@@ -1,7 +1,7 @@
 export * as WebFetchTool from "./webfetch"
 
 import { ToolFailure } from "@opencode-ai/llm"
-import { Duration, Effect, Layer, Schema } from "effect"
+import { Data, Duration, Effect, Layer, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Parser } from "htmlparser2"
 import TurndownService from "turndown"
@@ -9,6 +9,11 @@ import { PermissionV2 } from "../permission"
 import { collectBoundedResponseBody } from "./http-body"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
+
+export class InvalidUrlError extends Data.TaggedError("WebFetch.InvalidUrl")<{
+  readonly url: string
+  readonly reason: string
+}> {}
 
 export const name = "webfetch"
 export const MAX_RESPONSE_BYTES = 5 * 1024 * 1024
@@ -22,7 +27,16 @@ Use a more targeted tool when one is available. This tool is read-only. Large te
 const Timeout = Schema.Number.check(Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(MAX_TIMEOUT_SECONDS))
 
 export const Input = Schema.Struct({
-  url: Schema.String.annotate({ description: "The HTTP or HTTPS URL to fetch content from" }),
+  url: Schema.String.check(
+    Schema.makeFilter((s) => {
+      try {
+        new URL(s)
+        return true
+      } catch {
+        return "Invalid URL"
+      }
+    }),
+  ).annotate({ description: "The HTTP or HTTPS URL to fetch content from" }),
   format: Schema.Literals(["text", "markdown", "html"])
     .annotate({ description: "The format to return the content in. Defaults to markdown." })
     .pipe(Schema.withDecodingDefault(Effect.succeed("markdown" as const))),
@@ -79,10 +93,6 @@ const isCloudflareChallenge = (error: unknown) => {
 const request = (url: string, format: Format, userAgent = browserUserAgent) =>
   HttpClientRequest.get(url).pipe(HttpClientRequest.setHeaders(headers(format, userAgent)))
 
-const assertHttpUrl = (url: URL) => {
-  if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("URL must use http:// or https://")
-}
-
 const execute = (http: HttpClient.HttpClient, url: string, format: Format, userAgent = browserUserAgent) =>
   http.execute(request(url, format, userAgent)).pipe(Effect.flatMap(HttpClientResponse.filterStatusOk))
 
@@ -127,9 +137,16 @@ export const layer = Layer.effectDiscard(
           toModelOutput: ({ output }) => [{ type: "text", text: output.output }],
           execute: (input, context) =>
             Effect.gen(function* () {
-              yield* Effect.try({
-                try: () => assertHttpUrl(new URL(input.url)),
-                catch: (error) => error,
+              yield* Effect.gen(function* () {
+                const url = new URL(input.url)
+                if (url.protocol !== "http:" && url.protocol !== "https:") {
+                  return yield* Effect.fail(
+                    new InvalidUrlError({
+                      url: input.url,
+                      reason: "URL must use http:// or https://",
+                    }),
+                  )
+                }
               })
 
               yield* permission.assert({
@@ -170,7 +187,13 @@ export const layer = Layer.effectDiscard(
                 format: input.format,
                 output,
               }
-            }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to fetch ${input.url}` }))),
+            }).pipe(
+              Effect.mapError((error) =>
+                error instanceof InvalidUrlError
+                  ? new ToolFailure({ message: `Invalid URL ${error.url}: ${error.reason}` })
+                  : new ToolFailure({ message: `Unable to fetch ${input.url}` }),
+              ),
+            ),
         }),
       })
       .pipe(Effect.orDie)
