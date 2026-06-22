@@ -71,7 +71,7 @@
   }
 
   .error-card {
-    color: var(--text-on-critical-base);
+    color: var(--v2-text-text-base);
     max-height: 240px;
     white-space: pre-wrap;
     overflow-wrap: anywhere;

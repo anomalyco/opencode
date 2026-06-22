@@ -13,7 +13,7 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     text-align: right;
-    color: var(--text-diff-add-base);
+    color: var(--v2-state-fg-success);
   }
 
   [data-slot="diff-changes-deletions"] {
@@ -25,7 +25,7 @@
     line-height: var(--line-height-large);
     letter-spacing: var(--letter-spacing-normal);
     text-align: right;
-    color: var(--text-diff-delete-base);
+    color: var(--v2-state-fg-danger);
   }
 }
 
