@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { PluginV2 } from "../../plugin"
+import { define } from "@opencode-ai/plugin/v2/effect"
 import { ProviderV2 } from "../../provider"
 
 function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
@@ -10,11 +10,11 @@ function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
   return sdk.languageModel(modelID)
 }
 
-export const AzurePlugin = PluginV2.define({
-  id: PluginV2.ID.make("azure"),
-  effect: Effect.gen(function* () {
-    return {
-      "catalog.transform": Effect.fn(function* (evt) {
+export const AzurePlugin = define({
+  id: "azure",
+  effect: Effect.fn(function* (ctx) {
+    yield* ctx.catalog.transform(
+      Effect.fn(function* (evt) {
         for (const item of evt.provider.list()) {
           if (item.provider.api.type !== "aisdk") continue
           if (item.provider.api.package !== "@ai-sdk/azure") continue
@@ -27,7 +27,10 @@ export const AzurePlugin = PluginV2.define({
           })
         }
       }),
-      "aisdk.sdk": Effect.fn(function* (evt) {
+    )
+    yield* ctx.aisdk.hook(
+      "sdk",
+      Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/azure") return
         if (evt.model.providerID === ProviderV2.ID.azure) {
           if (
@@ -43,19 +46,22 @@ export const AzurePlugin = PluginV2.define({
         const mod = yield* Effect.promise(() => import("@ai-sdk/azure"))
         evt.sdk = mod.createAzure(evt.options)
       }),
-      "aisdk.language": Effect.fn(function* (evt) {
+    )
+    yield* ctx.aisdk.hook(
+      "language",
+      Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.azure) return
         evt.language = selectLanguage(evt.sdk, evt.model.api.id, Boolean(evt.options.useCompletionUrls))
       }),
-    }
+    )
   }),
 })
 
-export const AzureCognitiveServicesPlugin = PluginV2.define({
-  id: PluginV2.ID.make("azure-cognitive-services"),
-  effect: Effect.gen(function* () {
-    return {
-      "catalog.transform": Effect.fn(function* (evt) {
+export const AzureCognitiveServicesPlugin = define({
+  id: "azure-cognitive-services",
+  effect: Effect.fn(function* (ctx) {
+    yield* ctx.catalog.transform(
+      Effect.fn(function* (evt) {
         const resourceName = process.env.AZURE_COGNITIVE_SERVICES_RESOURCE_NAME
         if (!resourceName) return
         for (const item of evt.provider.list()) {
@@ -67,10 +73,13 @@ export const AzureCognitiveServicesPlugin = PluginV2.define({
           })
         }
       }),
-      "aisdk.language": Effect.fn(function* (evt) {
+    )
+    yield* ctx.aisdk.hook(
+      "language",
+      Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("azure-cognitive-services")) return
         evt.language = selectLanguage(evt.sdk, evt.model.api.id, Boolean(evt.options.useCompletionUrls))
       }),
-    }
+    )
   }),
 })

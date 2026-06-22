@@ -1,26 +1,33 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
-import { AISDK } from "@opencode-ai/core/aisdk"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Effect } from "effect"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { GooglePlugin } from "@opencode-ai/core/plugin/provider/google"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
-import { it, model } from "./provider-helper"
+import { PluginTestLayer } from "./fixture"
 
-const itWithAISDK = testEffect(
-  AISDK.layer.pipe(Layer.provideMerge(PluginV2.locationLayer.pipe(Layer.provide(EventV2.defaultLayer)))),
-)
+const it = testEffect(PluginTestLayer)
+
+const addPlugin = Effect.fn(function* () {
+  const plugin = yield* PluginV2.Service
+  const host = yield* PluginHost.make()
+  yield* plugin.add({ id: GooglePlugin.id, effect: GooglePlugin.effect(host) })
+})
 
 describe("GooglePlugin", () => {
   it.effect("creates a Google Generative AI SDK for @ai-sdk/google using the provider ID as SDK name", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(GooglePlugin)
+      yield* addPlugin()
       const result = yield* plugin.trigger(
         "aisdk.sdk",
         {
-          model: model("custom-google", "gemini"),
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("custom-google"), ModelV2.ID.make("gemini")),
+            api: { id: ModelV2.ID.make("gemini"), type: "aisdk", package: "@ai-sdk/google" },
+          }),
           package: "@ai-sdk/google",
           options: { name: "custom-google", apiKey: "test" },
         },
@@ -34,34 +41,49 @@ describe("GooglePlugin", () => {
   it.effect("ignores non-Google SDK packages", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(GooglePlugin)
+      yield* addPlugin()
       const result = yield* plugin.trigger(
         "aisdk.sdk",
-        { model: model("google", "gemini"), package: "@ai-sdk/google-vertex", options: { name: "google" } },
+        {
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("google"), ModelV2.ID.make("gemini")),
+            api: { id: ModelV2.ID.make("gemini"), type: "aisdk", package: "@ai-sdk/google" },
+          }),
+          package: "@ai-sdk/google-vertex",
+          options: { name: "google" },
+        },
         {},
       )
       expect(result.sdk).toBeUndefined()
     }),
   )
 
-  itWithAISDK.effect("uses default languageModel loading with provider ID parity", () =>
+  it.effect("uses default languageModel loading with provider ID parity", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      const aisdk = yield* AISDK.Service
-      yield* plugin.add(GooglePlugin)
-      const language = yield* aisdk.language(
-        model("custom-google", "alias", {
-          api: {
-            id: ModelV2.ID.make("gemini-api"),
-            type: "aisdk",
-            package: "@ai-sdk/google",
-          },
-          request: {
-            headers: {},
-            body: { apiKey: "test" },
-          },
-        }),
+      yield* addPlugin()
+      const sdkEvent = yield* plugin.trigger(
+        "aisdk.sdk",
+        {
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("custom-google"), ModelV2.ID.make("alias")),
+            api: { id: ModelV2.ID.make("gemini-api"), type: "aisdk", package: "@ai-sdk/google" },
+          }),
+          package: "@ai-sdk/google",
+          options: { name: "custom-google", apiKey: "test" },
+        },
+        {},
       )
+      const result = yield* plugin.trigger(
+        "aisdk.language",
+        {
+          model: sdkEvent.model,
+          sdk: sdkEvent.sdk,
+          options: sdkEvent.options,
+        },
+        {},
+      )
+      const language = result.language ?? result.sdk.languageModel(result.model.api.id)
       expect(language.modelId).toBe("gemini-api")
       expect(language.provider).toBe("custom-google")
     }),

@@ -1,57 +1,52 @@
 export * as ConfigReferencePlugin from "./reference"
 
+import { define } from "@opencode-ai/plugin/v2/effect"
 import path from "path"
 import { Effect } from "effect"
 import { Config } from "../../config"
 import { ConfigReference } from "../reference"
-import { Global } from "../../global"
-import { Location } from "../../location"
-import { PluginV2 } from "../../plugin"
 import { Reference } from "../../reference"
 import { AbsolutePath } from "../../schema"
 
-export const Plugin = {
-  id: PluginV2.ID.make("core/config-reference"),
-  effect: Effect.gen(function* () {
+export const Plugin = define({
+  id: "core/config-reference",
+  effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
-    const global = yield* Global.Service
-    const location = yield* Location.Service
-    const references = yield* Reference.Service
-    const update = yield* references.transform()
-    const entries = new Map<string, Reference.Source>()
-    for (const doc of (yield* config.entries()).filter(
-      (entry): entry is Config.Document => entry.type === "document",
-    )) {
-      const directory = doc.path ? path.dirname(doc.path) : location.directory
-      for (const [name, entry] of Object.entries(doc.info.references ?? {})) {
-        if (!validAlias(name)) continue
-        entries.set(
-          name,
-          local(entry)
-            ? new Reference.LocalSource({
-                type: "local",
-                path: AbsolutePath.make(
-                  localPath(directory, global.home, typeof entry === "string" ? entry : entry.path),
-                ),
-                description: typeof entry === "string" ? undefined : entry.description,
-                hidden: typeof entry === "string" ? undefined : entry.hidden,
-              })
-            : new Reference.GitSource({
-                type: "git",
-                repository: typeof entry === "string" ? entry : entry.repository,
-                branch: typeof entry === "string" ? undefined : entry.branch,
-                description: typeof entry === "string" ? undefined : entry.description,
-                hidden: typeof entry === "string" ? undefined : entry.hidden,
-              }),
-        )
-      }
-    }
-
-    yield* update((editor) => {
-      for (const [name, source] of entries) editor.add(name, source)
-    })
+    yield* ctx.reference.transform(
+      Effect.fn(function* (draft) {
+        const entries = new Map<string, Reference.Source>()
+        for (const doc of (yield* config.entries()).filter(
+          (entry): entry is Config.Document => entry.type === "document",
+        )) {
+          const directory = doc.path ? path.dirname(doc.path) : ctx.location.directory
+          for (const [name, entry] of Object.entries(doc.info.references ?? {})) {
+            if (!validAlias(name)) continue
+            entries.set(
+              name,
+              local(entry)
+                ? new Reference.LocalSource({
+                    type: "local",
+                    path: AbsolutePath.make(
+                      localPath(directory, ctx.path.home, typeof entry === "string" ? entry : entry.path),
+                    ),
+                    description: typeof entry === "string" ? undefined : entry.description,
+                    hidden: typeof entry === "string" ? undefined : entry.hidden,
+                  })
+                : new Reference.GitSource({
+                    type: "git",
+                    repository: typeof entry === "string" ? entry : entry.repository,
+                    branch: typeof entry === "string" ? undefined : entry.branch,
+                    description: typeof entry === "string" ? undefined : entry.description,
+                    hidden: typeof entry === "string" ? undefined : entry.hidden,
+                  }),
+            )
+          }
+        }
+        for (const [name, source] of entries) draft.add(name, source)
+      }),
+    )
   }),
-}
+})
 
 function validAlias(name: string) {
   return name.length > 0 && !/[\/\s`,]/.test(name)

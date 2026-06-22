@@ -141,6 +141,38 @@ export const SessionGroup = HttpApiGroup.make("server.session")
       ),
   )
   .add(
+    HttpApiEndpoint.post("session.switchAgent", "/api/session/:sessionID/agent", {
+      params: { sessionID: SessionV2.ID },
+      payload: Schema.Struct({ agent: AgentV2.ID }),
+      success: HttpApiSchema.NoContent,
+      error: SessionNotFoundError,
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.switchAgent",
+          summary: "Switch session agent",
+          description: "Switch the agent used by subsequent session activity.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.post("session.switchModel", "/api/session/:sessionID/model", {
+      params: { sessionID: SessionV2.ID },
+      payload: Schema.Struct({ model: ModelV2.Ref }),
+      success: HttpApiSchema.NoContent,
+      error: SessionNotFoundError,
+    })
+      .middleware(SessionLocationMiddleware)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "v2.session.switchModel",
+          summary: "Switch session model",
+          description: "Switch the model used by subsequent session activity.",
+        }),
+      ),
+  )
+  .add(
     HttpApiEndpoint.post("session.prompt", "/api/session/:sessionID/prompt", {
       params: { sessionID: SessionV2.ID },
       payload: Schema.Struct({
