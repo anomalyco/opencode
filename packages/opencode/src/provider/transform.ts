@@ -1380,6 +1380,10 @@ function sanitizeOpenAISchema(value: unknown): unknown {
     )
   }
 
+  // Always preserve type - it's needed for property values where type would otherwise be lost
+  // and for top-level schemas the inference logic below will override if needed
+  if (typeof value.type === "string") result.type = value.type
+
   if (Array.isArray(value.required)) {
     result.required = value.required.filter((item) => typeof item === "string")
   }
