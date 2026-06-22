@@ -359,7 +359,7 @@ it.instance(
           command: ["echo", "test"],
         })
 
-        expect(Object.keys(yield* mcp.tools())).toEqual(["paged-server_tool-one", "paged-server_tool-two"])
+        expect(Object.keys(yield* mcp.tools())).toEqual(["paged-server:tool-one", "paged-server:tool-two"])
         expect(Object.keys(yield* mcp.prompts())).toEqual(["paged-server:prompt-one", "paged-server:prompt-two"])
         expect(Object.keys(yield* mcp.resources())).toEqual(["paged-server:resource-one", "paged-server:resource-two"])
         expect(serverState.listToolsCalls).toBe(2)
@@ -913,7 +913,7 @@ it.instance(
 
         expect(statusName(result.status, "tools-only-server")).toBe("connected")
         expect(serverState.listToolsCalls).toBe(1)
-        expect(Object.keys(yield* mcp.tools())).toEqual(["tools-only-server_test_tool"])
+        expect(Object.keys(yield* mcp.tools())).toEqual(["tools-only-server:test_tool"])
         expect(yield* mcp.prompts()).toEqual({})
         expect(yield* mcp.resources()).toEqual({})
         expect(serverState.listPromptsCalls).toBe(0)
@@ -1105,8 +1105,8 @@ it.instance(
         const tools = yield* mcp.tools()
         const keys = Object.keys(tools)
 
-        // Server name dots should be replaced with underscores
-        expect(keys.some((k) => k.startsWith("my_special-server_"))).toBe(true)
+        // Server name dots should be replaced with underscores, separator is ":"
+        expect(keys.some((k) => k.startsWith("my_special-server:"))).toBe(true)
         // Tool name dots should be replaced with underscores
         expect(keys.some((k) => k.endsWith("tool_b"))).toBe(true)
         expect(keys.length).toBe(2)
