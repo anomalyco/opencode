@@ -36,19 +36,11 @@ const model = (api: Api, variants: ModelV2.Info["variants"] = []) =>
       options: { store: false, serviceTier: "priority" },
     },
     variants,
-    time: { released: DateTime.makeUnsafe(0) },
+    time: { released: 0 },
     cost: [],
     status: "active",
     enabled: true,
     limit: { context: 100, output: 20 },
-  })
-
-const provider = (api: ProviderV2.Info["api"]) =>
-  new ProviderV2.Info({
-    id: ProviderV2.ID.make("test-provider"),
-    name: "Test provider",
-    api,
-    request: { headers: {}, body: {} },
   })
 
 describe("SessionRunnerModel", () => {
@@ -194,6 +186,35 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
+  it.effect("rejects an explicit unavailable Session variant during model resolution", () =>
+    Effect.gen(function* () {
+      const catalog = model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" })
+      const session = SessionV2.Info.make({
+        id: SessionV2.ID.make("ses_model_variant_unavailable"),
+        projectID: ProjectV2.ID.global,
+        title: "test",
+        model: {
+          id: catalog.id,
+          providerID: catalog.providerID,
+          variant: ModelV2.VariantID.make("unknown"),
+        },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+        location: { directory: AbsolutePath.make("/project") },
+      })
+
+      const failure = yield* SessionRunnerModel.resolve(session, catalog).pipe(Effect.flip)
+
+      expect(failure).toMatchObject({
+        _tag: "SessionRunnerModel.VariantUnavailableError",
+        providerID: "test-provider",
+        modelID: "test-model",
+        variant: "unknown",
+      })
+    }),
+  )
+
   it.effect("lowers selected Anthropic Session variants into Messages options", () =>
     Effect.gen(function* () {
       const catalog = model({ type: "aisdk", package: "@ai-sdk/anthropic", url: "https://anthropic.example/v1" }, [
@@ -268,7 +289,7 @@ describe("SessionRunnerModel", () => {
 
   it.effect("prefers stored credentials over configured auth", () =>
     Effect.gen(function* () {
-      const credential = new Credential.Stored({
+      const credential = new Credential.Info({
         id: Credential.ID.create(),
         integrationID: Integration.ID.make("test-provider"),
         label: "Work",

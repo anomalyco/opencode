@@ -33,7 +33,7 @@ export type Request = typeof Request.Type
 interface MutableRequest {
   headers: Record<string, string>
   body: Record<string, unknown>
-  generation?: Generation
+  generation?: Record<string, unknown>
   options?: Record<string, unknown>
 }
 

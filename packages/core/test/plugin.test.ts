@@ -18,7 +18,7 @@ const plugins = PluginV2.layer.pipe(Layer.provide(events))
 function state() {
   return State.create({
     initial: () => ({ values: [] as string[] }),
-    editor: (draft) => ({
+    draft: (draft) => ({
       add: (value: string) => draft.values.push(value),
     }),
   })
@@ -34,14 +34,49 @@ describe("PluginV2", () => {
       yield* plugin.add({
         id: PluginV2.ID.make("scoped"),
         effect: Effect.gen(function* () {
-          const transform = yield* values.transform()
-          yield* transform((editor) => editor.add("scoped"))
+          yield* values.transform((editor) => {
+            editor.add("scoped")
+          })
         }),
       })
       expect(values.get().values).toEqual(["scoped"])
 
       yield* Scope.close(layerScope, Exit.void)
       expect(values.get().values).toEqual([])
+    }),
+  )
+
+  it.effect("batches plugin state rebuilds when the registry layer finalizes", () =>
+    Effect.gen(function* () {
+      let finalized = 0
+      const values = State.create({
+        initial: () => ({ values: [] as string[] }),
+        draft: (draft) => ({ add: (value: string) => draft.values.push(value) }),
+        finalize: () => Effect.sync(() => finalized++),
+      })
+      const layerScope = yield* Scope.fork(yield* Scope.Scope)
+      const plugin = Context.get(yield* Layer.buildWithScope(Layer.fresh(plugins), layerScope), PluginV2.Service)
+
+      yield* State.batch(
+        Effect.forEach(
+          ["first", "second"],
+          (id) =>
+            plugin.add({
+              id: PluginV2.ID.make(id),
+              effect: values
+                .transform((editor) => {
+                  editor.add(id)
+                })
+                .pipe(Effect.asVoid),
+            }),
+          { discard: true },
+        ),
+      )
+      finalized = 0
+
+      yield* Scope.close(layerScope, Exit.void)
+      expect(values.get().values).toEqual([])
+      expect(finalized).toBe(1)
     }),
   )
 
@@ -58,8 +93,9 @@ describe("PluginV2", () => {
         .add({
           id,
           effect: Effect.gen(function* () {
-            const transform = yield* values.transform()
-            yield* transform((editor) => editor.add("first"))
+            yield* values.transform((editor) => {
+              editor.add("first")
+            })
             yield* Deferred.succeed(firstStarted, undefined)
             yield* Deferred.await(releaseFirst)
           }),
@@ -71,8 +107,9 @@ describe("PluginV2", () => {
         .add({
           id,
           effect: Effect.gen(function* () {
-            const transform = yield* values.transform()
-            yield* transform((editor) => editor.add("second"))
+            yield* values.transform((editor) => {
+              editor.add("second")
+            })
           }),
         })
         .pipe(Effect.forkChild({ startImmediately: true }))

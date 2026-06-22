@@ -1,7 +1,7 @@
 export * as ProviderV2 from "./provider"
 
 import { withStatics } from "./schema"
-import { Schema } from "effect"
+import { Schema, Types } from "effect"
 
 export const ID = Schema.String.pipe(
   Schema.brand("ProviderV2.ID"),
@@ -37,6 +37,9 @@ export const Native = Schema.Struct({
 
 export const Api = Schema.Union([AISDK, Native]).pipe(Schema.toTaggedUnion("type"))
 export type Api = typeof Api.Type
+export type MutableApi<T extends Api = Api> = T extends Api
+  ? Omit<Types.DeepMutable<T>, "settings"> & (undefined extends T["settings"] ? { settings?: any } : { settings: any })
+  : never
 
 export const Request = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String),
@@ -66,3 +69,5 @@ export class Info extends Schema.Class<Info>("ProviderV2.Info")({
     })
   }
 }
+
+export type MutableInfo = Omit<Types.DeepMutable<Info>, "api"> & { api: MutableApi }
