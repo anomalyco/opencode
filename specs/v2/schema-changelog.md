@@ -1,5 +1,11 @@
 # V2 Schema Changelog
 
+## 2026-06-22: Remove Unpublished Compaction Event Compatibility
+
+- Remove the unpublished `session.next.compaction.ended.1` decoder and support only the current `.2` checkpoint payload.
+- Reset incompatible experimental V2 events, sequences, Session inputs, projected Session messages, Context Epochs, synchronized workspace rows, and Session workspace links.
+- Preserve canonical V1 `session`, `message`, and `part` rows.
+
 ## 2026-06-22: Make Session Interruption Process-Local
 
 - Remove the unprojected `session.next.interrupt.requested.1` event from the experimental durable Session event union and generated SDK.

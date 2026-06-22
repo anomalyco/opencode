@@ -14,6 +14,7 @@ import sessionMessageProjectionOrderMigration from "@opencode-ai/core/database/m
 import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migration/20260604172448_event_sourced_session_input"
 import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
+import resetV2SessionStateMigration from "@opencode-ai/core/database/migration/20260622170816_reset_v2_session_state"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -222,6 +223,44 @@ describe("DatabaseMigration", () => {
           expect.objectContaining({ name: "session_input_session_promoted_seq_idx", unique: 1 }),
           expect.objectContaining({ name: "session_input_session_admitted_seq_idx", unique: 1 }),
         ])
+      }),
+    )
+  })
+
+  test("resets incompatible V2 Session state without deleting canonical history", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session (id text PRIMARY KEY, workspace_id text)`)
+        yield* db.run(sql`CREATE TABLE workspace (id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE message (id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE part (id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE event_sequence (aggregate_id text PRIMARY KEY, seq integer NOT NULL)`)
+        yield* db.run(sql`CREATE TABLE event (id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE session_message (id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE session_input (id text PRIMARY KEY)`)
+        yield* db.run(sql`CREATE TABLE session_context_epoch (session_id text PRIMARY KEY)`)
+        yield* db.run(sql`INSERT INTO session VALUES ('session', 'workspace')`)
+        yield* db.run(sql`INSERT INTO workspace VALUES ('workspace')`)
+        yield* db.run(sql`INSERT INTO message VALUES ('message')`)
+        yield* db.run(sql`INSERT INTO part VALUES ('part')`)
+        yield* db.run(sql`INSERT INTO event_sequence VALUES ('session', 0)`)
+        yield* db.run(sql`INSERT INTO event VALUES ('event')`)
+        yield* db.run(sql`INSERT INTO session_message VALUES ('projected')`)
+        yield* db.run(sql`INSERT INTO session_input VALUES ('input')`)
+        yield* db.run(sql`INSERT INTO session_context_epoch VALUES ('session')`)
+
+        yield* DatabaseMigration.applyOnly(db, [resetV2SessionStateMigration])
+
+        expect(yield* db.all(sql`SELECT * FROM session`)).toEqual([{ id: "session", workspace_id: null }])
+        expect(yield* db.all(sql`SELECT * FROM message`)).toEqual([{ id: "message" }])
+        expect(yield* db.all(sql`SELECT * FROM part`)).toEqual([{ id: "part" }])
+        expect(yield* db.all(sql`SELECT * FROM workspace`)).toEqual([])
+        expect(yield* db.all(sql`SELECT * FROM event_sequence`)).toEqual([])
+        expect(yield* db.all(sql`SELECT * FROM event`)).toEqual([])
+        expect(yield* db.all(sql`SELECT * FROM session_message`)).toEqual([])
+        expect(yield* db.all(sql`SELECT * FROM session_input`)).toEqual([])
+        expect(yield* db.all(sql`SELECT * FROM session_context_epoch`)).toEqual([])
       }),
     )
   })
