@@ -80,7 +80,7 @@ export type LayoutRoute =
   | { type: "home" }
   | { type: "draft"; draftID: string; server?: ServerConnection.Key }
   | { type: "dir-new-sesssion"; dir: string; dirBase64: string; server?: ServerConnection.Key }
-  | { type: "session"; dir: string; dirBase64: string; sessionId: string; server?: ServerConnection.Key }
+  | { type: "session"; sessionId: string; server?: ServerConnection.Key }
 
 function nextSessionTabsForOpen(current: SessionTabs | undefined, tab: string): SessionTabs {
   const all = current?.all ?? []
@@ -135,8 +135,6 @@ const currentRoute = (pathname: string, search: string): LayoutRoute => {
   if (parts[0] === "server" && parts[2] === "session" && parts[3]) {
     return {
       type: "session",
-      dir: "",
-      dirBase64: "",
       sessionId: parts[3],
       server: requireServerKey(parts[1]),
     }
@@ -149,7 +147,7 @@ const currentRoute = (pathname: string, search: string): LayoutRoute => {
   if (parts[1] !== "session") return { type: "home" }
 
   const id = parts[2]
-  if (id) return { type: "session", dir, dirBase64, sessionId: id }
+  if (id) return { type: "session", sessionId: id }
   return { type: "dir-new-sesssion", dir, dirBase64 }
 }
 

@@ -27,7 +27,6 @@ import { useLanguage } from "@/context/language"
 import { useSettings } from "@/context/settings"
 import { WindowsAppMenu } from "./windows-app-menu"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
-import { useServerSync } from "@/context/server-sync"
 import { base64Encode } from "@opencode-ai/core/util/encode"
 import { ProjectAvatar } from "@opencode-ai/ui/v2/project-avatar-v2"
 import { displayName, getProjectAvatarSource, projectForSession } from "@/pages/layout/helpers"
@@ -36,10 +35,11 @@ import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/components/titlebar-session-events"
 import { useGlobal } from "@/context/global"
-import { decode64 } from "@/utils/base64"
 import { ServerConnection, useServer } from "@/context/server"
 import { tabHref, useTabs, type Tab } from "@/context/tabs"
 import "./titlebar.css"
+import { useServerSDK } from "@/context/server-sdk"
+import { Session } from "@opencode-ai/sdk/v2"
 
 type TauriDesktopWindow = {
   startDragging?: () => Promise<void>
@@ -250,7 +250,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
       <Switch>
         <Match when={useV2Titlebar()}>
           {(_) => {
-            const serverSync = useServerSync()
+            const serverSdk = useServerSDK()
             const navigate = useNavigate()
             const homeMatch = useMatch(() => "/")
             const layout = useLayout()
@@ -271,6 +271,18 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               navigate(tabHref(tab))
             }
 
+            const [session] = createResource(
+              () => {
+                const route = layout.route()
+                return route.type === "session" ? route : undefined
+              },
+              (route) =>
+                serverSdk()
+                  .client.session.get({ sessionID: route.sessionId })
+                  .then((x) => x.data)
+                  .catch(() => {}),
+            )
+
             const matchRoute = (route: LayoutRoute) => {
               if (route.type === "home") return
               if (route.type === "draft") {
@@ -282,10 +294,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     item.type === "session" && item.server === route.server && item.sessionId === route.sessionId,
                 )
                 if (main) return main
-                const sync = serverSync().createDirSyncContext(route.dir)
-                const session = sync.session.get(route.sessionId)
-                if (session?.parentID) {
-                  const parentID = session.parentID
+                const s = session()
+                if (s?.parentID) {
+                  const parentID = s.parentID
                   const parent = tabsStore.find(
                     (item) => item.type === "session" && item.server === route.server && item.sessionId === parentID,
                   )
@@ -303,15 +314,10 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
               if (tab) return
 
               if (route.type === "session") {
-                const sync = serverSync().createDirSyncContext(route.dir)
-                const session = sync.session.get(route.sessionId)
-                if (!session) return
-                const sessionId = session.parentID ?? session.id
-                const next = {
-                  server: route.server ?? server.key,
-                  dirBase64: route.dirBase64,
-                  sessionId,
-                }
+                const s = session()
+                if (!s) return
+                const sessionId = s.parentID ?? s.id
+                const next = { server: route.server ?? server.key, sessionId }
                 tabsStoreActions.addSessionTab(next)
               }
             })
@@ -469,25 +475,38 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                             )
                           }
 
+                          const [session] = createResource(
+                            () => tab.sessionId,
+                            (sessionID) =>
+                              serverSdk()
+                                .client.session.get({ sessionID })
+                                .then((x) => x.data)
+                                .catch(() => undefined),
+                          )
+
                           return (
                             <>
                               {divider()}
-                              <TabNavItem
-                                ref={ref}
-                                href={tabHref(tab)}
-                                server={tab.server}
-                                directory={decode64(tab.dirBase64)!}
-                                sessionId={tab.sessionId}
-                                onNavigate={() => {
-                                  navigateTab(tab)
+                              <Show when={session()}>
+                                {(session) => (
+                                  <TabNavItem
+                                    ref={ref}
+                                    href={tabHref(tab)}
+                                    server={tab.server}
+                                    sessionId={tab.sessionId}
+                                    session={session()}
+                                    onNavigate={() => {
+                                      navigateTab(tab)
 
-                                  ref.scrollIntoView({ behavior: "instant" })
-                                }}
-                                onClose={() => tabsStoreActions.removeTab(i())}
-                                active={currentTab() === tab}
-                                activeServer={tab.server === server.key}
-                                forceTruncate={tabsAreOverflowing()}
-                              />
+                                      ref.scrollIntoView({ behavior: "instant" })
+                                    }}
+                                    onClose={() => tabsStoreActions.removeTab(i())}
+                                    active={currentTab() === tab}
+                                    activeServer={tab.server === server.key}
+                                    forceTruncate={tabsAreOverflowing()}
+                                  />
+                                )}
+                              </Show>
                             </>
                           )
                         }}
@@ -767,7 +786,6 @@ function TabNavItem(props: {
   ref?: HTMLDivElement
   href: string
   server: ServerConnection.Key
-  directory: string
   sessionId?: string
   hideClose?: boolean
   onClose: () => void
@@ -775,31 +793,19 @@ function TabNavItem(props: {
   active?: boolean
   activeServer: boolean
   forceTruncate?: boolean
+  session: Session
 }) {
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
     props.onClose()
   }
+
   const global = useGlobal()
   const serverCtx = createMemo(() => {
     const conn = global.servers.list().find((item) => ServerConnection.key(item) === props.server)
     if (conn) return global.createServerCtx(conn)
   })
-  const dirSyncCtx = createMemo(() => serverCtx()?.sync.createDirSyncContext(props.directory))
-
-  const [session] = createResource(
-    () => {
-      const ctx = dirSyncCtx()
-      if (!ctx || !props.sessionId) return
-      return [props.sessionId, ctx] as const
-    },
-    async ([sessionId, dirSyncCtx]) => {
-      await dirSyncCtx.session.sync(sessionId).catch(() => {})
-      return dirSyncCtx.session.get(sessionId)
-    },
-    { initialValue: props.sessionId ? dirSyncCtx()?.session.get(props.sessionId) : undefined },
-  )
 
   return (
     <div
@@ -811,7 +817,7 @@ function TabNavItem(props: {
         closeTab(event)
       }}
     >
-      <Show when={session.latest}>
+      <Show when={props.session}>
         {(session) => {
           const project = createMemo(() => projectForSession(session(), serverCtx()?.projects.list() ?? []))
 
@@ -827,7 +833,7 @@ function TabNavItem(props: {
               <span data-slot="project-avatar-slot">
                 <ProjectTabAvatar
                   project={project()}
-                  directory={props.directory}
+                  directory={session().directory}
                   sessionId={session().id}
                   activeServer={props.activeServer}
                 />

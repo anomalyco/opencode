@@ -388,12 +388,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
         local.session.promote(sessionDirectory, session.id)
         layout.handoff.setTabs(base64Encode(sessionDirectory), session.id)
         const draftID = search.draftId
-        if (draftID)
-          tabs.promoteDraft(draftID, {
-            server: server.key,
-            dirBase64: base64Encode(sessionDirectory),
-            sessionId: session.id,
-          })
+        if (draftID) tabs.promoteDraft(draftID, { server: server.key, sessionId: session.id })
         else navigate(`/${base64Encode(sessionDirectory)}/session/${session.id}`)
       }
     }

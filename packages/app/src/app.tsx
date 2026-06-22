@@ -12,7 +12,6 @@ import { MetaProvider } from "@solidjs/meta"
 import { type BaseRouterProps, Navigate, Route, Router, useParams, useSearchParams } from "@solidjs/router"
 import { keepPreviousData, QueryClient, QueryClientProvider, useQuery } from "@tanstack/solid-query"
 import { Effect } from "effect"
-import { base64Encode } from "@opencode-ai/core/util/encode"
 import {
   type Component,
   createEffect,
@@ -166,6 +165,7 @@ function TargetDirectoryLayout(props: ParentProps) {
     if (!search.draftId) return undefined
     return tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)?.server
   })
+
   const resolved = useQuery(() => ({
     queryKey: [serverSDK().scope, "session-route", params.id] as const,
     enabled: !!params.serverKey && !!params.id,
@@ -200,7 +200,6 @@ function TargetDirectoryLayout(props: ParentProps) {
     if (!current || !key) return
     tabs.addSessionTab({
       server: key,
-      dirBase64: base64Encode(current.session.directory),
       sessionId: current.rootID,
     })
   })
@@ -581,7 +580,24 @@ function Routes() {
         </Route>
       </Route>
       <Route component={TargetServerLayout}>
-        <Show when={settings.general.newLayoutDesigns()}>{<Route path="/" component={NewHome} />}</Show>
+        <Show when={settings.general.newLayoutDesigns()}>
+          {
+            <>
+              <Route path="/" component={NewHome} />
+              <Route path="/:dir" component={DirectoryLayout}>
+                <Route
+                  path="/session/:id"
+                  component={() => {
+                    const server = useServer()
+                    const { id } = useParams()
+
+                    return <Navigate href={`/server/${server.key}/session/${id}`} />
+                  }}
+                />
+              </Route>
+            </>
+          }
+        </Show>
         <Route path="/new-session" component={DraftRoute} />
         <Route path="/server/:serverKey/session/:id" component={TargetSessionRoute} />
       </Route>
