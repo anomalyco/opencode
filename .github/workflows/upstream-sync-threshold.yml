@@ -242,13 +242,20 @@ jobs:
 
           existing="$(gh pr list --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --state open --json number --jq '.[0].number')"
           if [ -n "$existing" ]; then
-            gh pr edit "$existing" --title "$title" --body-file /tmp/pr-body.md --add-label "$BLOCK_LABEL"
+            gh pr edit "$existing" --title "$title" --body-file /tmp/pr-body.md
+            pr_number="$existing"
             echo "Updated existing resolution PR #$existing"
           else
             gh pr create --draft --base "$TARGET_BRANCH" --head "$SYNC_BRANCH" \
-              --title "$title" --body-file /tmp/pr-body.md --label "$BLOCK_LABEL"
-            echo "Opened resolution PR"
+              --title "$title" --body-file /tmp/pr-body.md
+            pr_number="$(gh pr list --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --state open --json number --jq '.[0].number')"
+            echo "Opened resolution PR #$pr_number"
           fi
+
+          # Apply the pause label best-effort. The PR must exist regardless, so a
+          # labeling failure only warns instead of failing the step.
+          gh pr edit "$pr_number" --add-label "$BLOCK_LABEL" \
+            || echo "::warning::Could not apply '$BLOCK_LABEL' label to PR #$pr_number; automated syncs will not auto-pause until it is added."
 
       - name: Fail when conflicts need resolution
         if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge != 'true'
@@ -281,9 +288,18 @@ jobs:
         if: steps.threshold.outputs.should_sync == 'true' && steps.sync_changes.outputs.has_changes == 'true'
         uses: oven-sh/setup-bun@v2
 
-      - name: Install dependencies
+      - name: Install dependencies and reconcile lockfile
         if: steps.threshold.outputs.should_sync == 'true' && steps.sync_changes.outputs.has_changes == 'true'
-        run: bun install --frozen-lockfile
+        run: |
+          # We keep our bun.lock during the merge (conflict-rules: bun.lock:ours),
+          # but upstream's package.json dependency changes arrive via the merge, so
+          # the lockfile no longer matches. Regenerate it (not --frozen) and commit
+          # the result so the sync branch carries a valid, in-sync lockfile.
+          bun install
+          if ! git diff --quiet -- bun.lock; then
+            git add bun.lock
+            git commit -m "chore(sync): reconcile bun.lock with merged package.json"
+          fi
 
       - name: Run typecheck after sync
         if: steps.threshold.outputs.should_sync == 'true' && steps.sync_changes.outputs.has_changes == 'true'
@@ -371,10 +387,17 @@ jobs:
 
           existing="$(gh pr list --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --state open --json number --jq '.[0].number')"
           if [ -n "$existing" ]; then
-            gh pr edit "$existing" --title "$title" --body-file /tmp/pr-body.md --add-label "$BLOCK_LABEL"
+            gh pr edit "$existing" --title "$title" --body-file /tmp/pr-body.md
+            pr_number="$existing"
             echo "Updated existing resolution PR #$existing"
           else
             gh pr create --draft --base "$TARGET_BRANCH" --head "$SYNC_BRANCH" \
-              --title "$title" --body-file /tmp/pr-body.md --label "$BLOCK_LABEL"
-            echo "Opened resolution PR for validation failure"
+              --title "$title" --body-file /tmp/pr-body.md
+            pr_number="$(gh pr list --head "$SYNC_BRANCH" --base "$TARGET_BRANCH" --state open --json number --jq '.[0].number')"
+            echo "Opened resolution PR #$pr_number for validation failure"
           fi
+
+          # Apply the pause label best-effort. The PR must exist regardless, so a
+          # labeling failure only warns instead of failing the step.
+          gh pr edit "$pr_number" --add-label "$BLOCK_LABEL" \
+            || echo "::warning::Could not apply '$BLOCK_LABEL' label to PR #$pr_number; automated syncs will not auto-pause until it is added."
