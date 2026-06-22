@@ -1085,8 +1085,8 @@ async function load(input: {
       }).pipe(Effect.provide(RuntimeFlags.defaultLayer)),
     )
     const pluginOrigins = config.plugin_origins ?? (await TuiConfig.pluginOrigins())
-    const records = Flag.OPENCODE_PURE ? [] : pluginOrigins
-    if (Flag.OPENCODE_PURE && pluginOrigins.length) {
+    const records = Flag.APEX_PURE ? [] : pluginOrigins
+    if (Flag.APEX_PURE && pluginOrigins.length) {
     }
 
     for (const item of internalTuiPlugins(flags)) {

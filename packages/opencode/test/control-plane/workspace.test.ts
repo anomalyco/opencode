@@ -36,8 +36,8 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 
 const originalEnv = {
-  OPENCODE_AUTH_CONTENT: process.env.OPENCODE_AUTH_CONTENT,
-  OPENCODE_EXPERIMENTAL_WORKSPACES: process.env.OPENCODE_EXPERIMENTAL_WORKSPACES,
+  OPENCODE_AUTH_CONTENT: process.env.APEX_AUTH_CONTENT,
+  OPENCODE_EXPERIMENTAL_WORKSPACES: process.env.APEX_EXPERIMENTAL_WORKSPACES,
   OTEL_EXPORTER_OTLP_HEADERS: process.env.OTEL_EXPORTER_OTLP_HEADERS,
   OTEL_EXPORTER_OTLP_ENDPOINT: process.env.OTEL_EXPORTER_OTLP_ENDPOINT,
   OTEL_RESOURCE_ATTRIBUTES: process.env.OTEL_RESOURCE_ATTRIBUTES,
@@ -108,7 +108,7 @@ function restoreEnv() {
 
 beforeEach(() => {
   restoreEnv()
-  process.env.OPENCODE_EXPERIMENTAL_WORKSPACES = "true"
+  process.env.APEX_EXPERIMENTAL_WORKSPACES = "true"
 })
 
 afterEach(async () => {
@@ -425,7 +425,7 @@ describe("workspace CRUD", () => {
       Effect.gen(function* () {
         const instance = yield* requireInstance
         const workspace = yield* Workspace.Service
-        process.env.OPENCODE_AUTH_CONTENT = JSON.stringify({ test: { type: "api", key: "secret" } })
+        process.env.APEX_AUTH_CONTENT = JSON.stringify({ test: { type: "api", key: "secret" } })
         process.env.OTEL_EXPORTER_OTLP_HEADERS = "authorization=otel"
         process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "https://otel.test"
         process.env.OTEL_RESOURCE_ATTRIBUTES = "service.name=opencode-test"

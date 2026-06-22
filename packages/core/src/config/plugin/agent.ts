@@ -2,6 +2,7 @@ export * as ConfigAgentPlugin from "./agent"
 
 import { define } from "@opencode-ai/plugin/v2/effect"
 import path from "path"
+import { fileURLToPath } from "url"
 import { Effect, Option, Schema } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
@@ -56,9 +57,31 @@ export const Plugin = define({
             )
           })
         }).pipe(Effect.map((documents) => documents.flat()))
+
+        const isBun = path.basename(process.execPath).toLowerCase().startsWith("bun")
+        const builtinAgentsDir = isBun
+          ? path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../../opencode/assets/agents")
+          : path.join(path.dirname(process.execPath), "../assets/agents")
+        const builtinFiles = yield* discover(fs, builtinAgentsDir)
+        const builtinDocuments = yield* Effect.forEach(builtinFiles, (file) =>
+          fs.readFileStringSafe(file.filepath).pipe(
+            Effect.map((content) => content && decode(file, content)),
+            Effect.catch(() => Effect.succeed(undefined)),
+          ),
+        ).pipe(
+          Effect.map((documents) =>
+            documents.filter((document): document is Config.Document => document !== undefined),
+          ),
+        )
+        documents.push(...builtinDocuments)
+
         const global = documents.flatMap((document) => document.info.permissions ?? [])
         const configuredDefault = Config.latest(documents, "default_agent")
-        if (configuredDefault !== undefined) draft.default(AgentV2.ID.make(configuredDefault))
+        if (configuredDefault !== undefined) {
+          draft.default(AgentV2.ID.make(configuredDefault))
+        } else if (draft.get(AgentV2.ID.make("apex-revenant"))) {
+          draft.default(AgentV2.ID.make("apex-revenant"))
+        }
         for (const current of draft.list()) {
           draft.update(current.id, (agent) => agent.permissions.push(...global))
         }

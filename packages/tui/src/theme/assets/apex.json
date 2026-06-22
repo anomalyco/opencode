@@ -1,5 +1,5 @@
 {
-  "$schema": "https://opencode.ai/theme.json",
+  "$schema": "https://apex.ai/theme.json",
   "defs": {
     "darkStep1": "#0a0a0a",
     "darkStep2": "#141414",
@@ -9,13 +9,13 @@
     "darkStep6": "#3c3c3c",
     "darkStep7": "#484848",
     "darkStep8": "#606060",
-    "darkStep9": "#fab283",
+    "darkStep9": "#E50914",
     "darkStep10": "#ffc09f",
     "darkStep11": "#808080",
     "darkStep12": "#eeeeee",
     "darkSecondary": "#5c9cf5",
     "darkAccent": "#9d7cd8",
-    "darkRed": "#e06c75",
+    "darkRed": "#E50914",
     "darkOrange": "#f5a742",
     "darkGreen": "#7fd88f",
     "darkCyan": "#56b6c2",

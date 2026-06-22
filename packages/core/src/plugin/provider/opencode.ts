@@ -12,7 +12,7 @@ export const OpencodePlugin = define({
         if (!item) return
         const integration = yield* ctx.integration.get(item.provider.id)
         hasKey = Boolean(
-          process.env.OPENCODE_API_KEY || integration?.connections.length || item.provider.request.body.apiKey,
+          process.env.APEX_API_KEY || integration?.connections.length || item.provider.request.body.apiKey,
         )
         evt.provider.update(item.provider.id, (provider) => {
           if (!hasKey) provider.request.body.apiKey = "public"

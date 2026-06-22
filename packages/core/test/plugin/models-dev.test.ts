@@ -44,11 +44,11 @@ describe("ModelsDevPlugin", () => {
     Effect.acquireUseRelease(
       Effect.sync(() => {
         const previous = {
-          path: Flag.OPENCODE_MODELS_PATH,
-          disabled: Flag.OPENCODE_DISABLE_MODELS_FETCH,
+          path: Flag.APEX_MODELS_PATH,
+          disabled: Flag.APEX_DISABLE_MODELS_FETCH,
         }
-        Flag.OPENCODE_MODELS_PATH = path.join(import.meta.dir, "fixtures", "models-dev.json")
-        Flag.OPENCODE_DISABLE_MODELS_FETCH = true
+        Flag.APEX_MODELS_PATH = path.join(import.meta.dir, "fixtures", "models-dev.json")
+        Flag.APEX_DISABLE_MODELS_FETCH = true
         return previous
       }),
       () =>
@@ -79,8 +79,8 @@ describe("ModelsDevPlugin", () => {
         }).pipe(Effect.provide(ModelsDev.defaultLayer)),
       (previous) =>
         Effect.sync(() => {
-          Flag.OPENCODE_MODELS_PATH = previous.path
-          Flag.OPENCODE_DISABLE_MODELS_FETCH = previous.disabled
+          Flag.APEX_MODELS_PATH = previous.path
+          Flag.APEX_DISABLE_MODELS_FETCH = previous.disabled
         }),
     ),
   )

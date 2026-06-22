@@ -20,8 +20,8 @@ const globalConfigFiles = ["opencode.json", "opencode.jsonc", "tui.json", "tui.j
 
 const cleanState = Effect.gen(function* () {
   const fs = yield* FSUtil.Service
-  delete process.env.OPENCODE_CONFIG
-  delete process.env.OPENCODE_TUI_CONFIG
+  delete process.env.APEX_CONFIG
+  delete process.env.APEX_TUI_CONFIG
   yield* Effect.forEach(globalConfigFiles, (file) => fs.remove(file, { force: true }).pipe(Effect.ignore), {
     discard: true,
   })

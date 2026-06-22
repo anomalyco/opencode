@@ -1,1 +1,1 @@
-process.env.OPENCODE_DB = ":memory:"
+process.env.APEX_DB = ":memory:"

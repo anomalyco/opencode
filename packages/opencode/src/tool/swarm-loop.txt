@@ -1,0 +1,15 @@
+Run a continuous swarm loop that keeps spawning parallel subagents until a goal is complete.
+
+Use this tool for large creation or refactoring tasks that need multiple iterations of parallel work plus review.
+
+Parameters:
+- task: the goal
+- max_iterations: loop cap (default 10)
+- workers: workers per loop (default 10)
+- agent: worker subagent type (default: apex-forge)
+
+Each iteration:
+1. Spawns `workers` agents in parallel on distinct slices of the current plan.
+2. Sends results to `apex-arbiter` for review.
+3. Arbiter decides if done or updates the plan.
+4. Loop repeats until done or max_iterations reached.

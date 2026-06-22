@@ -40,7 +40,7 @@ export function resource(): { serviceName: string; serviceVersion: string; attri
     attributes: {
       ...resourceAttributes(),
       "deployment.environment.name": InstallationChannel,
-      "opencode.client": Flag.OPENCODE_CLIENT,
+      "opencode.client": Flag.APEX_CLIENT,
       "opencode.run": runID,
       "service.instance.id": runID,
     },

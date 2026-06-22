@@ -11,6 +11,34 @@ import { EventV2 } from "@opencode-ai/core/event"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
 import PROMPT_REVIEW from "./template/review.txt"
 
+const PROMPT_SWARM = [
+  "You are the Apex Swarm conductor. The user invoked /swarm.",
+  "",
+  "User arguments: $ARGUMENTS",
+  "",
+  "Your job: immediately invoke the `swarm` tool with the following parameters:",
+  "- task: the user's overall goal (infer from $ARGUMENTS)",
+  "- count: number of workers, default 20",
+  "- agent: which subagent to use, default apex-specter for exploration/research or apex-forge for implementation",
+  "- instructions: any constraints the user gave",
+  "",
+  "Do not do the work yourself. Delegate entirely to the swarm.",
+].join("\n")
+
+const PROMPT_SWARM_LOOP = [
+  "You are the Apex SwarmLoop conductor. The user invoked /swarm-loop.",
+  "",
+  "User arguments: $ARGUMENTS",
+  "",
+  "Your job: immediately invoke the `swarm_loop` tool with the following parameters:",
+  "- task: the user's overall goal (infer from $ARGUMENTS)",
+  "- workers: workers per loop, default 10",
+  "- max_iterations: default 10",
+  "- agent: which subagent to use, default apex-forge",
+  "",
+  "Do not do the work yourself. Delegate entirely to the swarm loop.",
+].join("\n")
+
 type State = {
   commands: Record<string, Info>
 }
@@ -93,6 +121,24 @@ export const layer = Layer.effect(
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),
+      }
+
+      commands["swarm"] = {
+        name: "swarm",
+        description: "spawn a swarm of subagents to tackle a large task in parallel",
+        source: "command",
+        template: PROMPT_SWARM,
+        subtask: true,
+        hints: hints(PROMPT_SWARM),
+      }
+
+      commands["swarm-loop"] = {
+        name: "swarm-loop",
+        description: "continuous swarm loop until task completion",
+        source: "command",
+        template: PROMPT_SWARM_LOOP,
+        subtask: true,
+        hints: hints(PROMPT_SWARM_LOOP),
       }
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {

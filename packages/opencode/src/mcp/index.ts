@@ -25,6 +25,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { McpOAuthProvider, OAUTH_CALLBACK_PATH } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
+import { DEFAULT_MCPS } from "./defaults"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventV2 } from "@opencode-ai/core/event"
 import { TuiEvent } from "@/server/tui-event"
@@ -474,7 +475,7 @@ export const layer = Layer.effect(
       Effect.fn("MCP.state")(function* () {
         const cfg = yield* cfgSvc.get()
         const bridge = yield* EffectBridge.make()
-        const config = cfg.mcp ?? {}
+        const config = { ...DEFAULT_MCPS, ...(cfg.mcp ?? {}) }
         const s: State = {
           config: {},
           status: {},

@@ -10,7 +10,7 @@ let lock = false
 let armed = true
 
 export function start() {
-  if (!Flag.OPENCODE_AUTO_HEAP_SNAPSHOT) return
+  if (!Flag.APEX_AUTO_HEAP_SNAPSHOT) return
   if (timer) return
 
   const run = async () => {

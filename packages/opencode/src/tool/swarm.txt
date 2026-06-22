@@ -1,0 +1,11 @@
+Spawn a swarm of subagents to tackle a large task in parallel.
+
+Use this tool when the task is too big for one agent and can be split into independent slices (e.g., audit many files, write tests for many modules, explore multiple areas).
+
+Parameters:
+- task: the overall goal
+- count: number of workers (default 20, max 50)
+- agent: which subagent type each worker should use (default: apex-specter)
+- instructions: extra shared instructions for every worker
+
+Each worker gets a distinct slice and runs concurrently. The tool returns a combined summary of all worker outputs.

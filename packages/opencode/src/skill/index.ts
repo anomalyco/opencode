@@ -21,7 +21,7 @@ import { isRecord } from "@/util/record"
 const CLAUDE_EXTERNAL_DIR = ".claude"
 const AGENTS_EXTERNAL_DIR = ".agents"
 const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
-const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
+const APEX_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
 const SKILL_PATTERN = "**/SKILL.md"
 
 // Built-in skill that ships with opencode. The model's intuition for what an
@@ -29,10 +29,10 @@ const SKILL_PATTERN = "**/SKILL.md"
 // invalid config, so users hit cryptic startup errors. Loading this skill
 // when the model is asked to touch opencode's own config files gives it the
 // actual schemas instead of guesses.
-const CUSTOMIZE_OPENCODE_SKILL_NAME = "customize-opencode"
-const CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION =
-  "Use ONLY when the user is editing or creating opencode's own configuration: opencode.json, opencode.jsonc, files under .opencode/, or files under ~/.config/opencode/. Also use when creating or fixing opencode agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring opencode itself."
-const CUSTOMIZE_OPENCODE_SKILL_BODY = SkillPlugin.CustomizeOpencodeContent
+const CUSTOMIZE_APEX_SKILL_NAME = "customize-apex"
+const CUSTOMIZE_APEX_SKILL_DESCRIPTION =
+  "Use ONLY when the user is editing or creating apex's own configuration: apex.json, apex.jsonc, files under .apex/, or files under ~/.config/apex/. Also use when creating or fixing apex agents, subagents, skills, plugins, MCP servers, or permission rules. Do not use for the user's own application code, or for any project that is not configuring apex itself."
+const CUSTOMIZE_APEX_SKILL_BODY = SkillPlugin.CustomizeApexContent
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -204,7 +204,7 @@ const discoverSkills = Effect.fnUntraced(function* (
 
   const configDirs = yield* config.directories()
   for (const dir of configDirs) {
-    yield* scan(state, dir, OPENCODE_SKILL_PATTERN)
+    yield* scan(state, dir, APEX_SKILL_PATTERN)
   }
 
   const cfg = yield* config.get()
@@ -275,12 +275,12 @@ export const layer = Layer.effect(
         const s: State = { skills: {}, dirs: new Set() }
         // Register the built-in skill BEFORE disk discovery so a user-disk
         // skill with the same name can override it.
-        s.skills[CUSTOMIZE_OPENCODE_SKILL_NAME] = {
-          name: CUSTOMIZE_OPENCODE_SKILL_NAME,
-          description: CUSTOMIZE_OPENCODE_SKILL_DESCRIPTION,
-          location: "<built-in>",
-          content: CUSTOMIZE_OPENCODE_SKILL_BODY,
-        }
+      s.skills[CUSTOMIZE_APEX_SKILL_NAME] = {
+        name: CUSTOMIZE_APEX_SKILL_NAME,
+        description: CUSTOMIZE_APEX_SKILL_DESCRIPTION,
+        location: "<built-in>",
+        content: CUSTOMIZE_APEX_SKILL_BODY,
+      }
         yield* loadSkills(s, yield* InstanceState.get(discovered), events)
         return s
       }),
