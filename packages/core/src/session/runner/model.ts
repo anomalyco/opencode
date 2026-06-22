@@ -146,6 +146,20 @@ export const fromCatalogModel = (
         .model({ id: resolved.api.id }),
     )
   }
+  if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/togetherai" && resolved.api.url) {
+    return Effect.succeed(
+      withDefaults(resolved, OpenAICompatibleChat.route)
+        .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
+        .model({ id: resolved.api.id }),
+    )
+  }
+  if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/mistral" && resolved.api.url) {
+    return Effect.succeed(
+      withDefaults(resolved, OpenAICompatibleChat.route)
+        .with({ auth: key === undefined ? Auth.none : Auth.bearer(key) })
+        .model({ id: resolved.api.id }),
+    )
+  }
   return Effect.fail(
     new UnsupportedApiError({
       providerID: resolved.providerID,
@@ -169,6 +183,8 @@ export const supported = (model: ModelV2.Info) =>
   model.api.type === "aisdk" &&
   (model.api.package === "@ai-sdk/openai" ||
     model.api.package === "@ai-sdk/anthropic" ||
+    model.api.package === "@ai-sdk/togetherai" ||
+    model.api.package === "@ai-sdk/mistral" ||
     (model.api.package === "@ai-sdk/openai-compatible" && model.api.url !== undefined))
 
 /** Resolves models from the catalog belonging to the current Location runtime. */
