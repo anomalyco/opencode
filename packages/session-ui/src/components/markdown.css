@@ -1,9 +1,11 @@
 [data-component="markdown"] {
+  --markdown-inline-code-color: var(--v2-blue-800);
+
   /* Reset & Base Typography */
   min-width: 0;
   max-width: 100%;
   overflow-wrap: break-word;
-  color: var(--text-strong);
+  color: var(--v2-text-text-base);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base); /* 14px */
   line-height: 160%;
@@ -30,7 +32,7 @@
   h5,
   h6 {
     font-size: 14px;
-    color: var(--text-strong);
+    color: var(--v2-text-text-accent);
     font-weight: var(--font-weight-medium);
     margin-top: 0px;
     margin-bottom: 24px;
@@ -40,7 +42,7 @@
   /* Emphasis & Strong: Neutral strong color */
   strong,
   b {
-    color: var(--text-strong);
+    color: var(--v2-text-text-base);
     font-weight: var(--font-weight-medium);
   }
 
@@ -95,7 +97,7 @@
   }
 
   li::marker {
-    color: var(--text-weak);
+    color: var(--v2-text-text-muted);
   }
 
   /* Nested lists spacing */
@@ -112,10 +114,10 @@
 
   /* Blockquotes */
   blockquote {
-    border-left: 2px solid var(--border-weak-base);
+    border-left: 2px solid var(--v2-border-border-base);
     margin: 1.5rem 0;
     padding-left: 0.5rem;
-    color: var(--text-weak);
+    color: var(--v2-text-text-muted);
     font-style: normal;
   }
 
@@ -132,7 +134,7 @@
     font-size: 13px;
     padding: 12px;
     border-radius: 6px;
-    border: 0.5px solid var(--border-weak-base);
+    border: 0.5px solid var(--v2-border-border-base);
   }
 
   [data-component="markdown-code"] {
@@ -160,7 +162,7 @@
       background: var(--surface-float-base);
       color: var(--text-invert-strong);
       padding: 2px 8px;
-      border: 1px solid var(--border-weak-base, rgba(0, 0, 0, 0.07));
+      border: 1px solid var(--v2-border-border-base, rgba(0, 0, 0, 0.07));
       box-shadow: var(--shadow-md);
 
       pointer-events: none;
@@ -185,11 +187,11 @@
 
   [data-slot="markdown-copy-button"][data-variant="secondary"] {
     box-shadow: none;
-    border: 1px solid var(--border-weak-base);
+    border: 1px solid var(--v2-border-border-base);
   }
 
   [data-slot="markdown-copy-button"][data-variant="secondary"] [data-slot="icon-svg"] {
-    color: var(--icon-base);
+    color: var(--v2-icon-icon-base);
   }
 
   [data-component="markdown-code"]:hover [data-slot="markdown-copy-button"] {
@@ -219,18 +221,17 @@
     }
   }
 
-  :not(pre) > code {
+  :where(p, li, blockquote, a) > code {
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
-    color: var(--syntax-string);
+    color: var(--markdown-inline-code-color);
     font-weight: var(--font-weight-medium);
-    /* font-size: 13px; */
+  }
 
-    /* padding: 2px 2px; */
-    /* margin: 0 1.5px; */
-    /* border-radius: 2px; */
-    /* background: var(--surface-base); */
-    /* box-shadow: 0 0 0 0.5px var(--border-weak-base); */
+  :where(p, li, blockquote, a) > code:not([data-inline-code-kind="path"]) {
+    padding: 2px 4px;
+    border-radius: 6px;
+    background: color-mix(in oklch, var(--markdown-inline-code-color) 5%, transparent);
   }
 
   /* Tables */
@@ -246,16 +247,16 @@
   th,
   td {
     /* Minimal borders for structure, matching TUI "lines" roughly but keeping it web-clean */
-    border-bottom: 1px solid var(--border-weaker-base);
+    border-bottom: 1px solid var(--v2-border-border-muted);
     padding: 12px;
     text-align: left;
     vertical-align: top;
   }
 
   th {
-    color: var(--text-strong);
+    color: var(--v2-text-text-base);
     font-weight: var(--font-weight-medium);
-    border-bottom: 1px solid var(--border-weak-base);
+    border-bottom: 1px solid var(--v2-border-border-base);
   }
 
   /* Images */
@@ -266,6 +267,10 @@
     margin: 1.5rem 0;
     display: block;
   }
+}
+
+:root[data-color-scheme="dark"] [data-component="markdown"] {
+  --markdown-inline-code-color: var(--v2-blue-400);
 }
 
 [data-component="markdown"] a.external-link:hover > code {
