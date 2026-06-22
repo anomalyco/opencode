@@ -11,7 +11,7 @@ IMPORTANT: This tool is for terminal operations like git, npm, docker, etc. DO N
 ${commandSection}
 
 # Git and GitHub
-- Only commit, amend, push, or create PRs when explicitly requested.
+- Agents may create local commits freely for atomic changes and partial-progress saves — no need to ask first. This user uses git primarily for agent work.
 - Before committing, inspect `git status`, `git diff`, and `git log --oneline -10`; stage only intended files and never commit secrets.
 - Write a concise commit message that matches the repo style.
 - Do not update git config, skip hooks, use interactive `-i`, force-push, or create empty commits unless explicitly requested.
