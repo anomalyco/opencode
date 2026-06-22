@@ -1,16 +1,20 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Equal, Hash, Layer, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Equal, Hash, Layer, Schema, Stream } from "effect"
 import { Tool } from "@opencode-ai/core/public"
 import { define } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { Location } from "@opencode-ai/core/location"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginBoot } from "@opencode-ai/core/plugin/boot"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionRunnerModel } from "@opencode-ai/core/session/runner/model"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 import { toolDefinitions } from "./lib/tool"
@@ -131,6 +135,56 @@ describe("LocationServiceMap", () => {
             "websearch",
             "write",
           ])
+        }),
+      ),
+    ),
+  )
+
+  it.live("rejects an unavailable selected model during location model resolution", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          yield* Effect.promise(() =>
+            fs.writeFile(
+              path.join(dir.path, "opencode.json"),
+              JSON.stringify({
+                providers: {
+                  unavailable: {
+                    name: "Unavailable",
+                    api: { type: "native", settings: {} },
+                    models: { chat: { disabled: true } },
+                  },
+                },
+              }),
+            ),
+          )
+          const failure = yield* SessionRunnerModel.Service.use((models) =>
+            models.resolve(
+              SessionV2.Info.make({
+                id: SessionV2.ID.make("ses_unavailable_model"),
+                projectID: ProjectV2.ID.global,
+                title: "test",
+                model: {
+                  id: ModelV2.ID.make("chat"),
+                  providerID: ProviderV2.ID.make("unavailable"),
+                },
+                cost: 0,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+                location,
+              }),
+            ),
+          ).pipe(Effect.provide(LocationServiceMap.get(location)), Effect.flip)
+
+          expect(failure).toMatchObject({
+            _tag: "SessionRunnerModel.ModelUnavailableError",
+            providerID: "unavailable",
+            modelID: "chat",
+          })
         }),
       ),
     ),
