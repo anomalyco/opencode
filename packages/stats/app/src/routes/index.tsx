@@ -744,10 +744,14 @@ function TopModelsChart(props: {
                     data-placement={dayIndex() > props.data.length * 0.62 ? "left" : "right"}
                   >
                     <strong>{point().date}</strong>
-                    <span>
-                      {formatUsageChartValue(usageTotal(point()), metric())} {usageChartTotalLabel(metric())}
-                    </span>
-                    <div data-slot="tooltip-divider" />
+                    <Show when={metric() === "tokens"}>
+                      <span>
+                        {formatUsageChartValue(usageTotal(point()), metric())} {usageChartTotalLabel(metric())}
+                      </span>
+                    </Show>
+                    <Show when={metric() === "tokens"}>
+                      <div data-slot="tooltip-divider" />
+                    </Show>
                     <For each={visibleTopModelsSegments(point())}>
                       {(item) => (
                         <p
@@ -1450,9 +1454,7 @@ function formatCountryName(country: string) {
 }
 
 function formatGeoTokens(value: number) {
-  if (value >= 1) return formatTrillions(value)
-  if (value >= 0.001) return `${Number((value * 1000).toFixed(value >= 0.01 ? 0 : 1))}B`
-  return `${Math.round(value * 1_000_000)}M`
+  return formatTrillions(value)
 }
 
 function formatGeoShare(value: number) {
@@ -1508,6 +1510,9 @@ function formatMarketMobileDate(label: string) {
 }
 
 function formatTrillions(value: number) {
+  if (value === 0) return "0"
+  if (value < 0.001) return `${Number((value * 1_000_000).toFixed(value >= 0.00001 ? 0 : 1))}M`
+  if (value < 1) return `${Number((value * 1_000).toFixed(value >= 0.01 ? 0 : 1))}B`
   return `${value.toFixed(value >= 10 ? 0 : 1)}T`
 }
 

@@ -13,20 +13,7 @@ import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
-const databaseLayer = Database.layerFromPath(":memory:")
-const directoriesLayer = ProjectDirectories.layer.pipe(Layer.provide(databaseLayer))
-const it = testEffect(
-  Layer.mergeAll(
-    ProjectV2.layer.pipe(
-      Layer.provide(FSUtil.defaultLayer),
-      Layer.provide(Git.defaultLayer),
-      Layer.provide(directoriesLayer),
-      Layer.provide(databaseLayer),
-    ),
-    databaseLayer,
-    directoriesLayer,
-  ),
-)
+const it = testEffect(Layer.mergeAll(ProjectV2.defaultLayer, Database.defaultLayer, ProjectDirectories.defaultLayer))
 
 function remoteID(remote: string) {
   return ProjectV2.ID.make(Hash.fast(`git-remote:${remote}`))

@@ -3,36 +3,28 @@ import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Integration } from "@opencode-ai/core/integration"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
 import { LLMGatewayPlugin } from "@opencode-ai/core/plugin/provider/llmgateway"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { expectPluginRegistered, it, provider, required } from "./provider-helper"
-import { catalogHost, host, integrationHost } from "./host"
+import { testEffect } from "../lib/effect"
+import { PluginTestLayer } from "./fixture"
+
+const it = testEffect(PluginTestLayer)
+
+const addPlugin = Effect.fn(function* () {
+  const plugin = yield* PluginV2.Service
+  const host = yield* PluginHost.make()
+  yield* plugin.add({ id: LLMGatewayPlugin.id, effect: LLMGatewayPlugin.effect(host) })
+})
 
 describe("LLMGatewayPlugin", () => {
-  const add = Effect.fnUntraced(function* (plugin: PluginV2.Interface) {
-    const integrations = yield* Integration.Service
-    const catalog = yield* Catalog.Service
-    yield* plugin.add({
-      ...LLMGatewayPlugin,
-      effect: LLMGatewayPlugin.effect(
-        host({ catalog: catalogHost(catalog), integration: integrationHost(integrations) }),
-      ),
-    })
-  })
-
   it.effect("is registered so legacy referer headers can be applied", () =>
-    Effect.sync(() =>
-      expectPluginRegistered(
-        ProviderPlugins.map((item) => item.id),
-        "llmgateway",
-      ),
-    ),
+    Effect.sync(() => expect(ProviderPlugins.map((item) => item.id)).toContain(PluginV2.ID.make("llmgateway"))),
   )
 
   it.effect("applies legacy referer headers only to enabled llmgateway", () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
       const integrations = yield* Integration.Service
       yield* integrations.transform((editor) => {
@@ -40,43 +32,48 @@ describe("LLMGatewayPlugin", () => {
         editor.update(Integration.ID.make("openrouter"), () => {})
       })
       yield* catalog.transform((catalog) => {
-        const llmgateway = provider("llmgateway", {
-          api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.llmgateway.io/v1" },
-          request: { headers: { Existing: "value" }, body: {} },
-        })
-        catalog.provider.update(llmgateway.id, (draft) => {
-          draft.api = llmgateway.api
-          draft.request = llmgateway.request
+        catalog.provider.update(ProviderV2.ID.make("llmgateway"), (provider) => {
+          provider.api = {
+            type: "aisdk",
+            package: "@ai-sdk/openai-compatible",
+            url: "https://api.llmgateway.io/v1",
+          }
+          provider.request = { headers: { Existing: "value" }, body: {} }
         })
         catalog.provider.update(ProviderV2.ID.openrouter, () => {})
       })
-      yield* add(plugin)
-      expect(required(yield* catalog.provider.get(ProviderV2.ID.make("llmgateway"))).request.headers).toEqual({
+      yield* addPlugin()
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("llmgateway")))?.request.headers).toEqual({
         Existing: "value",
         "HTTP-Referer": "https://opencode.ai/",
         "X-Title": "opencode",
         "X-Source": "opencode",
       })
-      expect(required(yield* catalog.provider.get(ProviderV2.ID.openrouter)).request.headers).toEqual({})
+      expect((yield* catalog.provider.get(ProviderV2.ID.openrouter))?.request.headers).toEqual({})
     }),
   )
 
   it.effect("does not apply legacy headers to a disabled llmgateway provider", () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
-      yield* add(plugin)
+      const integrations = yield* Integration.Service
+      yield* integrations.transform((editor) => {
+        editor.update(Integration.ID.make("llmgateway"), () => {})
+      })
       yield* catalog.transform((catalog) => {
-        const item = provider("llmgateway", {
-          api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.llmgateway.io/v1" },
-        })
-        catalog.provider.update(item.id, (draft) => {
-          draft.api = item.api
+        catalog.provider.update(ProviderV2.ID.make("llmgateway"), (provider) => {
+          provider.disabled = true
+          provider.api = {
+            type: "aisdk",
+            package: "@ai-sdk/openai-compatible",
+            url: "https://api.llmgateway.io/v1",
+          }
         })
       })
+      yield* addPlugin()
 
-      expect(required(yield* catalog.provider.get(ProviderV2.ID.make("llmgateway"))).disabled).toBeUndefined()
-      expect(required(yield* catalog.provider.get(ProviderV2.ID.make("llmgateway"))).request.headers).toEqual({})
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("llmgateway")))?.disabled).toBe(true)
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("llmgateway")))?.request.headers).toEqual({})
     }),
   )
 })

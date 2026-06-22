@@ -420,13 +420,12 @@ describe("EventV2", () => {
       const readStarted = yield* Deferred.make<void>()
       const continueRead = yield* Deferred.make<void>()
       let pause = true
-      const database = Database.layerFromPath(":memory:")
       const eventLayer = EventV2.layerWith({
         beforeAggregateRead: () =>
           pause
             ? Deferred.succeed(readStarted, undefined).pipe(Effect.andThen(Deferred.await(continueRead)))
             : Effect.void,
-      }).pipe(Layer.provide(database))
+      }).pipe(Layer.provide(Database.defaultLayer))
 
       yield* Effect.gen(function* () {
         const events = yield* EventV2.Service
@@ -441,7 +440,7 @@ describe("EventV2", () => {
         expect(Array.from(yield* Fiber.join(fiber)).map((event) => [event.durable?.seq, event.data])).toEqual([
           [0, { id: aggregateID, text: "during handoff" }],
         ])
-      }).pipe(Effect.provide(Layer.mergeAll(database, eventLayer)))
+      }).pipe(Effect.provide(Layer.mergeAll(Database.defaultLayer, eventLayer)))
     }),
   )
 

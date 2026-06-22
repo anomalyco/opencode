@@ -21,10 +21,7 @@ import { SessionStore } from "@opencode-ai/core/session/store"
 import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 
-const database = Database.layerFromPath(":memory:")
-const events = EventV2.layer.pipe(Layer.provide(database))
-const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
-const it = testEffect(Layer.mergeAll(database, events, projector))
+const it = testEffect(Layer.mergeAll(Database.defaultLayer, EventV2.defaultLayer, SessionProjector.defaultLayer))
 const sessionID = SessionV2.ID.make("ses_projector_test")
 const created = DateTime.makeUnsafe(0)
 const model = { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") }
@@ -113,17 +110,17 @@ describe("SessionProjector", () => {
     }).pipe(
       Effect.provide(
         SessionV2.layer.pipe(
-          Layer.provide(events),
-          Layer.provide(database),
+          Layer.provide(EventV2.defaultLayer),
+          Layer.provide(Database.defaultLayer),
           Layer.provide(Project.defaultLayer),
-          Layer.provide(SessionStore.layer.pipe(Layer.provide(database))),
+          Layer.provide(SessionStore.defaultLayer),
           Layer.provide(SessionExecution.noopLayer),
         ),
       ),
     ),
   )
 
-  it.effect("marks an admitted lifecycle row promoted with the PromptPromoted event sequence", () =>
+  it.effect("marks an inbox row promoted with the Prompted event sequence", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
       yield* db
@@ -145,19 +142,20 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       const events = yield* EventV2.Service
       const id = SessionMessage.ID.make("msg_admitted")
-      yield* SessionInput.admit(db, events, {
+      const admitted = yield* SessionInput.admit(db, events, {
         id,
         sessionID,
         prompt: new Prompt({ text: "promote me" }),
         delivery: "steer",
       })
+      if (!admitted) return yield* Effect.die("Prompt admission failed")
 
-      const event = yield* events.publish(SessionEvent.PromptLifecycle.Promoted, {
+      const event = yield* events.publish(SessionEvent.Prompted, {
         sessionID,
-        timestamp: created,
+        timestamp: admitted.timeCreated,
         messageID: id,
         prompt: new Prompt({ text: "promote me" }),
-        timeCreated: created,
+        delivery: "steer",
       })
 
       expect(

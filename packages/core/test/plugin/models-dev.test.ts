@@ -24,11 +24,7 @@ const locationLayer = Layer.succeed(
 )
 const plugins = PluginV2.layer.pipe(Layer.provide(events))
 const policy = Policy.layer.pipe(Layer.provide(locationLayer))
-const connections = Credential.layer.pipe(
-  Layer.fresh,
-  Layer.provide(Database.layerFromPath(":memory:").pipe(Layer.fresh)),
-  Layer.provide(events),
-)
+const connections = Credential.defaultLayer.pipe(Layer.fresh)
 const integrations = Integration.locationLayer.pipe(Layer.provide(events), Layer.provide(connections))
 const catalog = Catalog.layer.pipe(
   Layer.provide(Layer.mergeAll(events, locationLayer, plugins, policy, connections, integrations)),
