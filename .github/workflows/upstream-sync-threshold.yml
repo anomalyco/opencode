@@ -53,10 +53,18 @@ jobs:
           ref: ${{ env.TARGET_BRANCH }}
           fetch-depth: 0
 
-      - name: Configure git
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
+      # Mint a GitHub App token (from OPENCODE_APP_ID / OPENCODE_APP_SECRET) and use it
+      # for git push and all gh commands. The default GITHUB_TOKEN is blocked from
+      # creating PRs by the "Allow GitHub Actions to create and approve pull requests"
+      # org setting; a GitHub App installation token is not. This action also sets the
+      # committer identity and points origin at the app token, and falls back to
+      # GITHUB_TOKEN if the app credentials are unset.
+      - name: Setup git committer
+        id: committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
 
       - name: Add upstream remote
         run: |
@@ -67,7 +75,7 @@ jobs:
       - name: Check upstream threshold
         id: threshold
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
         run: |
           behind_count="$(git rev-list --count "origin/${TARGET_BRANCH}..upstream/${UPSTREAM_REF}")"
           upstream_sha="$(git rev-parse --short "upstream/${UPSTREAM_REF}")"
@@ -216,7 +224,7 @@ jobs:
       - name: Hand off unresolved conflicts to a resolution PR
         if: always() && steps.threshold.outputs.should_sync == 'true' && steps.merge.outputs.result == 'conflict' && steps.resolution.outputs.can_complete_merge != 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
         run: |
           git add -A
           git commit -m "chore(sync): upstream merge with unresolved conflicts (needs resolution)" || true
@@ -321,7 +329,7 @@ jobs:
       - name: Create or update upstream sync PR
         if: steps.threshold.outputs.should_sync == 'true' && steps.sync_changes.outputs.has_changes == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
         run: |
           existing_pr="$(gh pr list \
             --head "$SYNC_BRANCH" \
@@ -366,7 +374,7 @@ jobs:
       - name: Hand off validation failure to a resolution PR
         if: failure() && steps.threshold.outputs.should_sync == 'true' && steps.sync_changes.outputs.has_changes == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.committer.outputs.token }}
         run: |
           git push --force-with-lease origin "$SYNC_BRANCH" || true
 
