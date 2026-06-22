@@ -1120,7 +1120,7 @@ export const layer = Layer.effect(
       }
 
       if (input.noReply === true) return message
-      return yield* loop({ sessionID: input.sessionID })
+      return yield* loop({ sessionID: input.sessionID, isSteer: input.isSteer, followupMode: input.followupMode })
     })
 
     const lastAssistant = Effect.fnUntraced(function* (sessionID: SessionID) {
@@ -1139,7 +1139,10 @@ export const layer = Layer.effect(
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
-          yield* status.set(sessionID, { type: "busy" })
+          const currentStatus = yield* status.get(sessionID)
+          if (currentStatus?.type !== "haltingSteer" && currentStatus?.type !== "waitingSteer") {
+            yield* status.set(sessionID, { type: "busy" })
+          }
           yield* Effect.logInfo("loop", { "session.id": sessionID, step })
 
           let msgs = yield* MessageV2.filterCompactedEffect(sessionID).pipe(
@@ -1362,7 +1365,20 @@ export const layer = Layer.effect(
               }
             }
 
+            const interrupt = yield* state.getInterrupt(sessionID)
+            if (interrupt === "waitingSteer") {
+              yield* state.clearInterrupt(sessionID)
+              yield* status.set(sessionID, { type: "busy" })
+              return "continue" as const
+            }
+            if (interrupt === "haltingSteer") {
+              yield* state.clearInterrupt(sessionID)
+              yield* status.set(sessionID, { type: "busy" })
+              return "continue" as const
+            }
+
             if (result === "stop") return "break" as const
+
             if (result === "compact") {
               yield* compaction.create({
                 sessionID,
@@ -1389,14 +1405,15 @@ export const layer = Layer.effect(
     const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
       input: LoopInput,
     ) {
-      return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
+      const type = input.followupMode === "haltingSteer" || input.followupMode === "waitingSteer" ? input.followupMode : "busy"
+      return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID), { type })
     })
 
     const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError> = Effect.fn(
       "SessionPrompt.shell",
     )(function* (input: ShellInput) {
       const ready = yield* Latch.make()
-      return yield* state.startShell(input.sessionID, lastAssistant(input.sessionID), shellImpl(input, ready), ready)
+      return yield* state.startShell(input.sessionID, lastAssistant(input.sessionID), shellImpl(input, ready), undefined, ready)
     })
 
     const command = Effect.fn("SessionPrompt.command")(function* (input: CommandInput) {
@@ -1582,6 +1599,8 @@ export const PromptInput = Schema.Struct({
   model: Schema.optional(ModelRef),
   agent: Schema.optional(Schema.String),
   noReply: Schema.optional(Schema.Boolean),
+  isSteer: Schema.optional(Schema.Boolean),
+  followupMode: Schema.optional(Schema.Union([Schema.Literal("haltingSteer"), Schema.Literal("waitingSteer"), Schema.Literal("queue")])),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)).annotate({
     description:
       "@deprecated tools and permissions have been merged, you can set permissions on the session itself now",
@@ -1602,6 +1621,8 @@ export type PromptInput = Schema.Schema.Type<typeof PromptInput>
 
 export class LoopInput extends Schema.Class<LoopInput>("SessionPrompt.LoopInput")({
   sessionID: SessionID,
+  isSteer: Schema.optional(Schema.Boolean),
+  followupMode: Schema.optional(Schema.Union([Schema.Literal("haltingSteer"), Schema.Literal("waitingSteer"), Schema.Literal("queue")])),
 }) {}
 
 export const ShellInput = Schema.Struct({

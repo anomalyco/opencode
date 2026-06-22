@@ -392,6 +392,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       onSelect: undo,
     }),
     sessionCommand({
+      id: "session.toggle-queue-mode",
+      title: "Toggle Queue Mode",
+      keybind: "mod+shift+q",
+      onSelect: () => {
+        const current = settings.general.followup()
+        if (current === "haltingSteer") settings.general.setFollowup("waitingSteer")
+        else if (current === "waitingSteer") settings.general.setFollowup("queue")
+        else settings.general.setFollowup("haltingSteer")
+      },
+    }),
+    sessionCommand({
       id: "session.redo",
       title: language.t("command.session.redo"),
       description: language.t("command.session.redo.description"),

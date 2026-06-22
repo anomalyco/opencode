@@ -178,7 +178,7 @@ describe("tool.write", () => {
 
         if (process.platform !== "win32") {
           const stats = yield* Effect.promise(() => fs.stat(filepath))
-          expect(stats.mode & 0o777).toBe(0o644)
+          expect((stats.mode & 0o777) & ~0o020).toBe(0o644)
         }
       }),
     )

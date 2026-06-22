@@ -254,6 +254,7 @@ describe("prompt submit worktree selection", () => {
       resetHistoryNavigation: () => undefined,
       setMode: () => undefined,
       setPopover: () => undefined,
+      clearEditID: () => undefined,
       newSessionWorktree: () => selected,
       onNewSessionWorktreeReset: () => undefined,
       onSubmit: () => undefined,
@@ -292,6 +293,7 @@ describe("prompt submit worktree selection", () => {
       resetHistoryNavigation: () => undefined,
       setMode: () => undefined,
       setPopover: () => undefined,
+      clearEditID: () => undefined,
       newSessionWorktree: () => selected,
       onNewSessionWorktreeReset: () => undefined,
       onSubmit: () => undefined,
@@ -323,6 +325,7 @@ describe("prompt submit worktree selection", () => {
       resetHistoryNavigation: () => undefined,
       setMode: () => undefined,
       setPopover: () => undefined,
+      clearEditID: () => undefined,
       onSubmit: () => undefined,
     })
 
@@ -355,6 +358,7 @@ describe("prompt submit worktree selection", () => {
       resetHistoryNavigation: () => undefined,
       setMode: () => undefined,
       setPopover: () => undefined,
+      clearEditID: () => undefined,
       newSessionWorktree: () => selected,
       onNewSessionWorktreeReset: () => undefined,
       onSubmit: () => undefined,
@@ -366,5 +370,104 @@ describe("prompt submit worktree selection", () => {
 
     expect(storedSessions["/repo/worktree-a"]).toEqual([{ id: "session-1", title: "New session 1" }])
     expect(optimisticSeeded).toEqual([true])
+  })
+
+  test("queues followup and clears edit id when in normal mode and shouldQueue is true", async () => {
+    params = { id: "session-1" }
+    
+    let queuedDraft: any = undefined
+    let queuedEditID: any = undefined
+    let cleared = false
+    
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      editID: () => "test-edit-id",
+      clearEditID: () => { cleared = true },
+      shouldQueue: () => true,
+      onQueue: (draft, editID) => {
+        queuedDraft = draft
+        queuedEditID = editID
+      },
+      onSubmit: () => undefined,
+    })
+
+    const event = { preventDefault: () => undefined } as unknown as Event
+
+    await submit.handleSubmit(event)
+
+    expect(queuedDraft).toBeDefined()
+    expect(queuedEditID).toBe("test-edit-id")
+    expect(cleared).toBe(true)
+  })
+
+  test("sendFollowupDraft sets session_status accurately for followupModes", async () => {
+    const { sendFollowupDraft } = await import("./submit")
+    let syncData: any = undefined
+    
+    const client = clientFor("/repo/worktree-a")
+    const sync = {
+      set: (key: string, id: string, data: any) => {
+        if (key === "session_status") {
+          syncData = data
+        }
+      },
+      session: {
+        optimistic: { remove: () => {}, add: () => {} }
+      }
+    } as any
+    const globalSync = {
+      child: () => [undefined, sync.set]
+    } as any
+
+    await sendFollowupDraft({
+      client: client as any,
+      serverSync: globalSync,
+      sync,
+      draft: {
+        sessionID: "session-1",
+        sessionDirectory: "/repo/worktree-a",
+        prompt: [{ type: "text", content: "test", start: 0, end: 4 }],
+        context: [],
+        agent: "build",
+        model: { providerID: "provider", modelID: "model" },
+        isSteer: true,
+      },
+      optimisticBusy: true,
+      before: () => true,
+    })
+
+    expect(syncData).toEqual({ type: "haltingSteer" })
+    
+    await sendFollowupDraft({
+      client: client as any,
+      serverSync: globalSync,
+      sync,
+      draft: {
+        sessionID: "session-1",
+        sessionDirectory: "/repo/worktree-a",
+        prompt: [{ type: "text", content: "test", start: 0, end: 4 }],
+        context: [],
+        agent: "build",
+        model: { providerID: "provider", modelID: "model" },
+        followupMode: "waitingSteer",
+      },
+      optimisticBusy: true,
+      before: () => true,
+    })
+
+    expect(syncData).toEqual({ type: "waitingSteer" })
   })
 })

@@ -41,15 +41,17 @@ export function SessionComposerRegion(props: {
   onSubmit: () => void
   onResponseSubmit: () => void
   followup?: {
-    queue: () => boolean
+    queue: (editID?: string) => boolean
     items: { id: string; text: string }[]
     sending?: string
     edit?: { id: string; prompt: FollowupDraft["prompt"]; context: FollowupDraft["context"] }
-    onQueue: (draft: FollowupDraft) => void
+    onQueue: (draft: FollowupDraft, editID?: string) => void
     onAbort: () => void
     onSend: (id: string) => void
     onEdit: (id: string) => void
+    onCancel: (id: string) => void
     onEditLoaded: () => void
+    onEditLastQueued: () => boolean
   }
   revert?: {
     items: { id: string; text: string }[]
@@ -251,6 +253,18 @@ export function SessionComposerRegion(props: {
           )}
         </Show>
 
+        <Show when={props.followup?.items.length}>
+          <div class="relative z-10">
+            <SessionFollowupDock
+              items={props.followup!.items}
+              sending={props.followup!.sending}
+              onSend={props.followup!.onSend}
+              onEdit={props.followup!.onEdit}
+              onCancel={props.followup!.onCancel}
+            />
+          </div>
+        </Show>
+
         <Show when={showComposer()}>
           <Show
             when={prompt.ready()}
@@ -321,14 +335,6 @@ export function SessionComposerRegion(props: {
                 "margin-top": `${-lift()}px`,
               }}
             >
-              <Show when={props.followup?.items.length}>
-                <SessionFollowupDock
-                  items={props.followup!.items}
-                  sending={props.followup!.sending}
-                  onSend={props.followup!.onSend}
-                  onEdit={props.followup!.onEdit}
-                />
-              </Show>
               <Show
                 when={child()}
                 fallback={
@@ -341,6 +347,7 @@ export function SessionComposerRegion(props: {
                       onNewSessionWorktreeReset={props.onNewSessionWorktreeReset}
                       edit={props.followup?.edit}
                       onEditLoaded={props.followup?.onEditLoaded}
+                      onEditLastQueued={props.followup?.onEditLastQueued}
                       shouldQueue={props.followup?.queue}
                       onQueue={props.followup?.onQueue}
                       onAbort={props.followup?.onAbort}

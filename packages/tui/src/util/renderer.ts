@@ -5,3 +5,4 @@ export function destroyRenderer(renderer: Pick<CliRenderer, "isDestroyed" | "set
   if (renderer.isDestroyed) return
   renderer.destroy()
 }
+

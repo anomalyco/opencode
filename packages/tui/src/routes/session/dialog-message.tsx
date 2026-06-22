@@ -26,11 +26,11 @@ export function DialogMessage(props: {
           title: "Revert",
           value: "session.revert",
           description: "undo messages and file changes",
-          onSelect: (dialog) => {
+          onSelect: async (dialog) => {
             const msg = message()
             if (!msg) return
 
-            void sdk.client.session.revert({
+            await sdk.client.session.revert({
               sessionID: props.sessionID,
               messageID: msg.id,
             })

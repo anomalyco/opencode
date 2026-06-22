@@ -6,10 +6,11 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useLanguage } from "@/context/language"
 
 export function SessionFollowupDock(props: {
-  items: { id: string; text: string }[]
+  items: { id: string; text: string; followupMode?: string }[]
   sending?: string
   onSend: (id: string) => void
   onEdit: (id: string) => void
+  onCancel: (id: string) => void
 }) {
   const language = useLanguage()
   const [store, setStore] = createStore({
@@ -18,11 +19,18 @@ export function SessionFollowupDock(props: {
 
   const toggle = () => setStore("collapsed", (value) => !value)
   const total = createMemo(() => props.items.length)
-  const label = createMemo(() =>
-    language.t(total() === 1 ? "session.followupDock.summary.one" : "session.followupDock.summary.other", {
+  const label = createMemo(() => {
+    const mode = props.items[0]?.followupMode ?? "queue"
+    if (mode === "haltingSteer") {
+      return total() === 1 ? "Halting and steering" : `${total()} messages halting and steering`
+    }
+    if (mode === "waitingSteer") {
+      return total() === 1 ? "Waiting and steering" : `${total()} messages waiting and steering`
+    }
+    return language.t(total() === 1 ? "session.followupDock.summary.one" : "session.followupDock.summary.other", {
       count: total(),
-    }),
-  )
+    })
+  })
   const preview = createMemo(() => props.items[0]?.text ?? "")
 
   return (
@@ -99,6 +107,14 @@ export function SessionFollowupDock(props: {
                 >
                   {language.t("session.followupDock.edit")}
                 </Button>
+                <IconButton
+                  icon="close"
+                  size="small"
+                  variant="ghost"
+                  disabled={!!props.sending}
+                  onClick={() => props.onCancel(item.id)}
+                  aria-label="Cancel"
+                />
               </div>
             )}
           </For>

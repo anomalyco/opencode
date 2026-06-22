@@ -688,6 +688,12 @@ export type SessionStatus =
   | {
       type: "busy"
     }
+  | {
+      type: "haltingSteer"
+    }
+  | {
+      type: "waitingSteer"
+    }
 
 export type QuestionOption = {
   /**
@@ -9660,6 +9666,8 @@ export type SessionPromptData = {
     }
     agent?: string
     noReply?: boolean
+    isSteer?: boolean
+    followupMode?: "haltingSteer" | "waitingSteer" | "queue"
     tools?: {
       [key: string]: boolean
     }
@@ -9846,6 +9854,42 @@ export type SessionAbortResponses = {
 
 export type SessionAbortResponse = SessionAbortResponses[keyof SessionAbortResponses]
 
+export type SessionInterruptData = {
+  body?: {
+    type: "haltingSteer" | "waitingSteer" | "clear"
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/interrupt"
+}
+
+export type SessionInterruptErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionInterruptError = SessionInterruptErrors[keyof SessionInterruptErrors]
+
+export type SessionInterruptResponses = {
+  /**
+   * Interrupted session
+   */
+  200: boolean
+}
+
+export type SessionInterruptResponse = SessionInterruptResponses[keyof SessionInterruptResponses]
+
 export type SessionInitData = {
   body?: {
     modelID: string
@@ -10007,6 +10051,8 @@ export type SessionPromptAsyncData = {
     }
     agent?: string
     noReply?: boolean
+    isSteer?: boolean
+    followupMode?: "haltingSteer" | "waitingSteer" | "queue"
     tools?: {
       [key: string]: boolean
     }

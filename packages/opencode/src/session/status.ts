@@ -29,7 +29,14 @@ export const Info = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("busy"),
   }),
-]).annotate({ identifier: "SessionStatus" })
+  Schema.Struct({
+    type: Schema.Literal("haltingSteer"),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("waitingSteer"),
+  }),
+])
+  .annotate({ identifier: "SessionStatus" })
 export type Info = Schema.Schema.Type<typeof Info>
 
 export const Event = {

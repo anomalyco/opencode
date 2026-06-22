@@ -9,7 +9,7 @@ import {
   type Renderable,
 } from "@opentui/core"
 import type { CommandContext } from "@opentui/keymap"
-import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match } from "solid-js"
+import { createEffect, createMemo, onMount, createSignal, onCleanup, on, Show, Switch, Match, For } from "solid-js"
 import "opentui-spinner/solid"
 import path from "path"
 import { fileURLToPath } from "url"
@@ -29,13 +29,14 @@ import { editorSelectionKey, useEditorContext, type EditorSelection } from "../.
 import { normalizePromptContent, openEditor } from "../../editor"
 import { useExit } from "../../context/exit"
 import { promptOffsetWidth } from "../../prompt/display"
-import { createStore, produce, unwrap } from "solid-js/store"
+import { createStore, produce, unwrap, reconcile } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
-import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
+import { expandPastedTextPlaceholders, expandTrackedPastedText, stripPromptPartIDs, assign } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
+import { CommandMap } from "../../config/keybind"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
@@ -51,6 +52,22 @@ import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "../../context/args"
+import fs from "fs"
+const Log = {
+  Default: {
+    info: (...args: any[]) => {
+      try {
+        fs.appendFileSync("/tmp/opencode-tui.log", args.map(x => typeof x === "object" ? JSON.stringify(x) : String(x)).join(" ") + "\n")
+      } catch {}
+    },
+    error: (...args: any[]) => {
+      try {
+        fs.appendFileSync("/tmp/opencode-tui.log", "[ERROR] " + args.map(x => typeof x === "object" ? JSON.stringify(x) : String(x)).join(" ") + "\n")
+      } catch {}
+    },
+  },
+}
+import { ascending } from "@opencode-ai/core/id/id"
 import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
 import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
@@ -282,6 +299,7 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: Map<number, number>
     interrupt: number
     placeholder: number
+    editingDraftIndex: number | null
   }>({
     placeholder: randomIndex(list().length),
     prompt: {
@@ -291,6 +309,54 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    editingDraftIndex: null,
+  })
+
+  const queuedDrafts = createMemo(() => {
+    const sessionID = props.sessionID ?? ""
+    const list = sync.data.queuedDrafts[sessionID] ?? []
+    Log.Default.info(`[queuedDraftsMemo] sessionID="${sessionID}" list=${JSON.stringify(list.map(x => x.messageID))}`)
+    return list
+  })
+
+  function setQueuedDrafts(drafts: any[]) {
+    const sessionID = props.sessionID ?? ""
+    Log.Default.info(`[setQueuedDrafts] sessionID="${sessionID}" drafts=${JSON.stringify(drafts.map(x => x.messageID))}`)
+    sync.setStore("queuedDrafts", sessionID, reconcile(drafts))
+    Log.Default.info(`[setQueuedDrafts] after set: ${JSON.stringify((sync.data.queuedDrafts[sessionID] ?? []).map(x => x.messageID))}`)
+  }
+
+  const session = createMemo(() => props.sessionID ? sync.session.get(props.sessionID) : undefined)
+  const children = createMemo(() => {
+    const s = session()
+    if (!s) return []
+    const parentID = s.parentID ?? s.id
+    return sync.data.session.filter((x) => x.parentID === parentID || x.id === parentID)
+  })
+  const hasPendingRequests = createMemo(() => {
+    if (session()?.parentID) return false
+    const list = children()
+    const permissions = list.flatMap((x) => sync.data.permission[x.id] ?? [])
+    const questions = list.flatMap((x) => sync.data.question[x.id] ?? [])
+    return permissions.length > 0 || questions.length > 0
+  })
+
+  const [sendingPrompt, setSendingPrompt] = createSignal(false)
+
+  createEffect(() => {
+    if (status().type === "idle" && !hasPendingRequests() && !sendingPrompt() && queuedDrafts().length > 0) {
+      const draft = queuedDrafts()[0]
+      setSendingPrompt(true)
+      setQueuedDrafts(queuedDrafts().slice(1))
+      const { followupMode, ...payload } = draft
+      sdk.client.session.prompt(payload)
+        .catch((err) => {
+          Log.Default.error(`[Queue Debug] prompt failed: ${err}`)
+        })
+        .finally(() => {
+          setSendingPrompt(false)
+        })
+    }
   })
 
   createEffect(
@@ -871,6 +937,75 @@ export function Prompt(props: PromptProps) {
               return false
             }
 
+            if (input.plainText === "") {
+              if (queuedDrafts().length > 0) {
+                const editIndex = queuedDrafts().length - 1
+                const draft = queuedDrafts()[editIndex]
+                const newDrafts = queuedDrafts().slice(0, -1)
+                Log.Default.info(`[prompt.history.previous] Editing draft at index ${editIndex}. Remaining queue length: ${newDrafts.length}`)
+                setQueuedDrafts(newDrafts)
+                setStore("editingDraftIndex", editIndex)
+
+                const promptInfo = {
+                  input: draft.parts.filter((p: any) => p.type === "text" && !p.synthetic).map((p: any) => p.text).join("\n"),
+                  parts: draft.parts.filter((p: any) => p.type !== "text")
+                }
+                input.setText(promptInfo.input)
+                setStore("prompt", promptInfo)
+                restoreExtmarksFromParts(promptInfo.parts)
+                input.cursorOffset = promptInfo.input.length
+                return
+              }
+
+              const messages = sync.data.message[props.sessionID ?? ""] ?? []
+              const lastMsg = messages[messages.length - 1]
+
+              Log.Default.info(`[prompt.history.previous] Empty text. status=${status().type}, lastMsg=${lastMsg?.role} id=${lastMsg?.id}`)
+
+              if (status().type !== "idle" && lastMsg?.role === "user") {
+                const hasStarted = messages.some((m) => m.role === "assistant" && m.parentID >= lastMsg.id)
+                Log.Default.info(`[prompt.history.previous] hasStarted=${hasStarted}`)
+                if (!hasStarted) {
+                  const earlierRunning = messages.some(
+                    (m) => m.role === "user" && m.id < lastMsg.id && !messages.some((am) => am.role === "assistant" && am.parentID >= m.id)
+                  )
+                  Log.Default.info(`[prompt.history.previous] earlierRunning=${earlierRunning}`)
+                  void (async () => {
+                    if (!earlierRunning) {
+                      Log.Default.info(`[prompt.history.previous] aborting session`)
+                      await sdk.client.session.abort({ sessionID: props.sessionID! }).catch(() => {})
+                    }
+                    Log.Default.info(`[prompt.history.previous] reverting message ${lastMsg.id}`)
+                    await sdk.client.session
+                      .revert({
+                        sessionID: props.sessionID!,
+                        messageID: lastMsg.id,
+                      })
+                      .then(() => {
+                        Log.Default.info(`[prompt.history.previous] reverted successfully`)
+                        const parts = sync.data.part[lastMsg.id] ?? []
+                        const promptInfo = parts.reduce(
+                          (agg, part) => {
+                            if (part.type === "text" && !part.synthetic) agg.input += part.text
+                            if (part.type === "file") agg.parts.push(stripPromptPartIDs(part))
+                            return agg
+                          },
+                          { input: "", parts: [] as PromptInfo["parts"] },
+                        )
+                        input.setText(promptInfo.input)
+                        setStore("prompt", promptInfo)
+                        restoreExtmarksFromParts(promptInfo.parts)
+                        input.cursorOffset = promptInfo.input.length
+                      })
+                      .catch((err) => {
+                        Log.Default.error(`[prompt.history.previous] revert failed: ${err}`)
+                      })
+                  })()
+                  return
+                }
+              }
+            }
+
             const item = history.move(-1, input.plainText)
             if (!item) return false
             input.setText(item.input)
@@ -1085,32 +1220,94 @@ export function Prompt(props: PromptProps) {
       })
     } else {
       move.startSubmit()
-      sdk.client.session
-        .prompt(
-          {
-            sessionID,
-            ...selectedModel,
-            agent: agent.name,
-            model: selectedModel,
-            variant,
-            parts: [
-              ...editorParts,
-              {
-                type: "text",
-                text: inputText,
-              },
-              ...nonTextParts,
-            ],
-          },
-          { throwOnError: true },
-        )
-        .catch((error) => {
-          toast.show({
-            title: "Failed to send prompt",
-            message: errorMessage(error),
-            variant: "error",
-          })
+      const followupMode = kv.get("followup", "haltingSteer")
+      const isBusy = status().type !== "idle"
+      const isEditingDraft = store.editingDraftIndex !== null
+
+      const isSteer = isBusy && followupMode === "haltingSteer"
+
+      if (!isEditingDraft && isBusy && followupMode !== "queue" && queuedDrafts().length >= 1) {
+        toast.show({
+          message: `Only one message can be queued in ${followupMode} mode`,
+          variant: "warning",
+          duration: 2000,
         })
+        return false
+      }
+
+      if (!isEditingDraft && isBusy && followupMode === "haltingSteer") {
+        void sdk.client.session.interrupt({ sessionID, type: "haltingSteer" })
+      } else if (!isEditingDraft && isBusy && followupMode === "waitingSteer") {
+        void sdk.client.session.interrupt({ sessionID, type: "waitingSteer" })
+      }
+
+      const messageID = ascending("message")
+
+      const payload = {
+        sessionID,
+        ...selectedModel,
+        messageID,
+        agent: agent.name,
+        model: selectedModel,
+        variant,
+        isSteer,
+        followupMode,
+        parts: [
+          ...editorParts,
+          {
+            id: ascending("part"),
+            type: "text" as const,
+            text: inputText,
+          },
+          ...nonTextParts.map(assign),
+        ],
+      }
+
+      if (isEditingDraft) {
+        // Replace the draft at the original position in the queue
+        const editIndex = store.editingDraftIndex!
+        const current = queuedDrafts()
+        const updated = [...current]
+        updated.splice(editIndex, 0, payload)
+        Log.Default.info(`[submitInner] Replacing edited draft at index ${editIndex}`)
+        setQueuedDrafts(updated)
+        setStore("editingDraftIndex", null)
+      } else if (isBusy && followupMode === "queue") {
+        Log.Default.info(`[submitInner] Queueing payload with messageID: ${payload.messageID}`)
+        setQueuedDrafts([...queuedDrafts(), payload])
+        toast.show({
+          message: "Queued",
+          variant: "info",
+          duration: 2000,
+        })
+      } else if (isBusy) {
+        const { followupMode: _, ...cleanPayload } = payload
+        sdk.client.session
+          .promptAsync(cleanPayload, { throwOnError: true })
+          .catch((error) => {
+            toast.show({
+              title: "Failed to steer prompt",
+              message: errorMessage(error),
+              variant: "error",
+            })
+          })
+        toast.show({
+          message: "Steering...",
+          variant: "info",
+          duration: 2000,
+        })
+      } else {
+        const { followupMode: _, ...cleanPayload } = payload
+        sdk.client.session
+          .prompt(cleanPayload, { throwOnError: true })
+          .catch((error) => {
+            toast.show({
+              title: "Failed to send prompt",
+              message: errorMessage(error),
+              variant: "error",
+            })
+          })
+      }
       if (editorParts.length > 0) editor.markSelectionSent()
     }
     history.append({
@@ -1123,6 +1320,7 @@ export function Prompt(props: PromptProps) {
       parts: [],
     })
     setStore("extmarkToPartIndex", new Map())
+    setStore("editingDraftIndex", null)
     props.onSubmit?.()
 
     // temporary hack to make sure the message is sent
@@ -1360,6 +1558,27 @@ export function Prompt(props: PromptProps) {
             flexGrow={1}
             width="100%"
           >
+            <Show when={queuedDrafts().length > 0}>
+              <box flexDirection="column" paddingBottom={1} gap={1}>
+                <For each={queuedDrafts()}>
+                  {(draft, i) => {
+                    const text = (draft.parts as Array<{ type: string; text?: string; synthetic?: boolean }>)
+                      .filter((p) => p.type === "text" && !p.synthetic)
+                      .map((p) => p.text ?? "")
+                      .join("\n")
+                    const preview = text.length > 60 ? text.slice(0, 60).replace(/\n/g, " ") + "..." : text.replace(/\n/g, " ")
+                    const mode = draft.followupMode ?? "queue"
+                    const prefix = mode === "haltingSteer" ? "Halt and steer:" : mode === "waitingSteer" ? "Wait and steer:" : `[${i() + 1}] Queued:`
+                    return (
+                      <box flexDirection="row" gap={1}>
+                        <text fg={theme.textMuted}>{prefix}</text>
+                        <text fg={theme.text}>{preview}</text>
+                      </box>
+                    )
+                  }}
+                </For>
+              </box>
+            </Show>
             <textarea
               width="100%"
               placeholder={placeholderText()}
@@ -1376,10 +1595,73 @@ export function Prompt(props: PromptProps) {
                 setCursorVersion((value) => value + 1)
               }}
               onCursorChange={() => setCursorVersion((value) => value + 1)}
-              onKeyDown={(e: { preventDefault(): void }) => {
+              onKeyDown={async (e: KeyEvent & { preventDefault(): void }) => {
+                Log.Default.info(`[onKeyDown] key="${e.name}" ctrl=${e.ctrl} shift=${e.shift} cursorOffset=${input.cursorOffset} plainText="${input.plainText}" plainTextLength=${input.plainText.length}`)
                 if (props.disabled) {
                   e.preventDefault()
                   return
+                }
+
+                const matchesKeybind = (keybindName: keyof typeof CommandMap, event: KeyEvent) => {
+                  const commandName = CommandMap[keybindName]
+                  const bindings = tuiConfig.keybinds.get(commandName)
+                  return bindings.some((binding) => {
+                    const matcher = keymap.createKeyMatcher(binding.key)
+                    return matcher(event)
+                  })
+                }
+
+                // Check clipboard for images before terminal-handled paste runs.
+                // This helps terminals that forward Ctrl+V to the app; Windows
+                // Terminal 1.25+ usually handles Ctrl+V before this path.
+                if (matchesKeybind("input_paste", e)) {
+                  const content = await clipboard.read?.()
+                  if (content?.mime.startsWith("image/")) {
+                    e.preventDefault()
+                    await pasteAttachment({
+                      filename: "clipboard",
+                      mime: content.mime,
+                      content: content.data,
+                    })
+                    return
+                  }
+                  // If no image, let the default paste behavior continue
+                }
+                if (matchesKeybind("input_clear", e) && store.prompt.input !== "") {
+                  input.clear()
+                  input.extmarks.clear()
+                  setStore("prompt", {
+                    input: "",
+                    parts: [],
+                  })
+                  setStore("extmarkToPartIndex", new Map())
+                  return
+                }
+                if (matchesKeybind("app_exit", e)) {
+                  if (store.prompt.input === "") {
+                    await exit()
+                    // Don't preventDefault - let textarea potentially handle the event
+                    e.preventDefault()
+                    return
+                  }
+                }
+                if (e.name === "!" && input.visualCursor.offset === 0) {
+                  setStore("placeholder", randomIndex(shell().length))
+                  setStore("mode", "shell")
+                  e.preventDefault()
+                  return
+                }
+                if (store.mode === "shell") {
+                  if ((e.name === "backspace" && input.visualCursor.offset === 0) || e.name === "escape") {
+                    setStore("mode", "normal")
+                    e.preventDefault()
+                    return
+                  }
+                }
+                if (!auto()?.visible) {
+                  if (matchesKeybind("history_previous", e) && input.visualCursor.visualRow === 0) input.cursorOffset = 0
+                  if (matchesKeybind("history_next", e) && input.visualCursor.visualRow === input.height - 1)
+                    input.cursorOffset = input.plainText.length
                 }
               }}
               onSubmit={() => {
@@ -1459,6 +1741,16 @@ export function Prompt(props: PromptProps) {
                               </span>
                             </text>
                           </Show>
+                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>·</text>
+                          <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>
+                            {(() => {
+                              const mode = kv.get("followup", "haltingSteer")
+                              if (mode === "haltingSteer") return "Halt and Steer"
+                              if (mode === "waitingSteer") return "Wait and Steer"
+                              if (mode === "queue") return "Queue"
+                              return "Halt and Steer"
+                            })()}
+                          </text>
                         </box>
                       </Show>
                     </>
@@ -1521,6 +1813,11 @@ export function Prompt(props: PromptProps) {
                         if (s.type !== "retry") return
                         return s
                       })
+                    const steerMsg = createMemo(() => {
+                      const s = status()
+                      if (s.type === "haltingSteer" || s.type === "waitingSteer") return "Steering"
+                      return null
+                    })
                       const message = createMemo(() => {
                         const r = retry()
                         if (!r) return
@@ -1564,11 +1861,16 @@ export function Prompt(props: PromptProps) {
                       }
 
                       return (
-                        <Show when={retry()}>
-                          <box onMouseUp={handleMessageClick}>
-                            <text fg={theme.error}>{retryText()}</text>
-                          </box>
-                        </Show>
+                        <Switch>
+                        <Match when={retry()}>
+                            <box onMouseUp={handleMessageClick}>
+                              <text fg={theme.error}>{retryText()}</text>
+                            </box>
+                        </Match>
+                        <Match when={steerMsg()}>
+                          <text fg={theme.textMuted}>{steerMsg()}</text>
+                        </Match>
+                        </Switch>
                       )
                     })()}
                   </box>

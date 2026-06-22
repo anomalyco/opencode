@@ -36,9 +36,29 @@ export const layer = Layer.effect(
     const state = yield* SessionRunState.Service
 
     const revert = Effect.fn("SessionRevert.revert")(function* (input: RevertInput) {
-      yield* state.assertNotBusy(input.sessionID)
       const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
-      let lastUser: SessionV1.User | undefined
+      
+      const busyError = yield* state.assertNotBusy(input.sessionID).pipe(
+        Effect.match({
+          onFailure: (e) => e,
+          onSuccess: () => undefined
+        })
+      )
+
+      if (busyError) {
+        // Find if the requested message is safe to revert (it's a queued user message)
+        const targetMsg = all.find(m => m.info.id === input.messageID)
+        if (!targetMsg || targetMsg.info.role !== "user") {
+          yield* state.assertNotBusy(input.sessionID) // will fail with the error
+        }
+        // Check if any assistant message has a parentID >= this message
+        const hasStarted = all.some(m => m.info.role === "assistant" && m.info.parentID >= input.messageID)
+        if (hasStarted) {
+          yield* state.assertNotBusy(input.sessionID) // will fail with the error
+        }
+      }
+
+      let lastUser: MessageV2.User | undefined
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
 
       let rev: Session.Info["revert"]

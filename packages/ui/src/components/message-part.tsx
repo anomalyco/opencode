@@ -29,6 +29,7 @@ import {
   Todo,
   QuestionAnswer,
   QuestionInfo,
+  SessionStatus,
 } from "@opencode-ai/sdk/v2"
 import { useData } from "../context"
 import { useFileComponent } from "../context/file"
@@ -641,6 +642,7 @@ export function AssistantParts(props: {
   showAssistantCopyPartID?: string | null
   turnDurationMs?: number
   working?: boolean
+  status?: SessionStatus
   showReasoningSummaries?: boolean
   shellToolDefaultOpen?: boolean
   editToolDefaultOpen?: boolean

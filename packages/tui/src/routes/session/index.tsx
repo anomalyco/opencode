@@ -572,6 +572,7 @@ export function Session() {
         dialog.clear()
       },
     },
+
     {
       title: "Unshare session",
       value: "session.unshare",

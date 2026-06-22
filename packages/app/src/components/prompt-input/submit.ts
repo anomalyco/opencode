@@ -37,6 +37,8 @@ export type FollowupDraft = {
   agent: string
   model: { providerID: string; modelID: string }
   variant?: string
+  isSteer?: boolean
+  followupMode?: string
 }
 
 type FollowupSendInput = {
@@ -60,7 +62,8 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 
   const setBusy = () => {
     if (!input.optimisticBusy) return
-    setStore("session_status", input.draft.sessionID, { type: "busy" })
+    const type = input.draft.isSteer ? "haltingSteer" : input.draft.followupMode === "waitingSteer" ? "waitingSteer" : "busy"
+    setStore("session_status", input.draft.sessionID, { type })
   }
 
   const setIdle = () => {
@@ -162,6 +165,8 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
       messageID,
       parts: requestParts,
       variant: input.draft.variant,
+      isSteer: input.draft.isSteer,
+      followupMode: input.draft.followupMode as any,
     })
     return true
   } catch (err) {
@@ -188,10 +193,12 @@ type PromptSubmitInput = {
   resetHistoryNavigation: () => void
   setMode: (mode: "normal" | "shell") => void
   setPopover: (popover: "at" | "slash" | null) => void
+  editID?: Accessor<string | null>
+  clearEditID: () => void
   newSessionWorktree?: Accessor<string | undefined>
   onNewSessionWorktreeReset?: () => void
-  shouldQueue?: Accessor<boolean>
-  onQueue?: (draft: FollowupDraft) => void
+  shouldQueue?: (editID?: string) => boolean
+  onQueue?: (draft: FollowupDraft, editID?: string) => void
   onAbort?: () => void
   onSubmit?: () => void
 }
@@ -425,6 +432,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       prompt.reset()
       input.setMode("normal")
       input.setPopover(null)
+      input.clearEditID()
     }
 
     const restoreInput = () => {
@@ -440,11 +448,22 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       })
     }
 
-    if (!isNewSession && mode === "normal" && input.shouldQueue?.()) {
-      input.onQueue?.(draft)
-      clearContext()
-      clearInput()
-      return
+    if (!isNewSession && mode === "normal") {
+      if (input.shouldQueue?.(input.editID?.() ?? undefined)) {
+        input.onQueue?.(draft, input.editID?.() ?? undefined)
+        clearContext()
+        clearInput()
+        return
+      }
+      
+      // If we shouldn't queue but the agent is busy, we cannot submit.
+      // This happens if the queue is full (e.g. max 1 message in steer/wrap mode).
+      // We must block the submission entirely.
+      const status = sync().data.session_status?.[session.id]?.type ?? "idle"
+      const isBusy = status !== "idle"
+      if (isBusy) {
+        return
+      }
     }
 
     input.onSubmit?.()

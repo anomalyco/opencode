@@ -19,6 +19,23 @@ import {
   type ToolPart,
 } from "@opencode-ai/core/v1/session"
 
+export type {
+  APIError,
+  AbortedError,
+  Assistant,
+  AuthError,
+  CompactionPart,
+  ContextOverflowError,
+  Info,
+  OutputLengthError,
+  Part,
+  StructuredOutputError,
+  SubtaskPart,
+  User,
+  WithParts,
+  ToolPart,
+}
+
 import { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
 import { Database } from "@opencode-ai/core/database/database"

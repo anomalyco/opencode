@@ -89,6 +89,7 @@ export const SessionPaths = {
   update: `${root}/:sessionID`,
   fork: `${root}/:sessionID/fork`,
   abort: `${root}/:sessionID/abort`,
+  interrupt: `${root}/:sessionID/interrupt`,
   share: `${root}/:sessionID/share`,
   init: `${root}/:sessionID/init`,
   summarize: `${root}/:sessionID/summarize`,
@@ -260,6 +261,21 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.abort",
             summary: "Abort session",
             description: "Abort an active session and stop any ongoing AI processing or command execution.",
+          }),
+        ),
+        HttpApiEndpoint.post("interrupt", SessionPaths.interrupt, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: Schema.Struct({
+            type: Schema.Union([Schema.Literal("haltingSteer"), Schema.Literal("waitingSteer"), Schema.Literal("clear")]),
+          }),
+          success: described(Schema.Boolean, "Interrupted session"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.interrupt",
+            summary: "Interrupt session",
+            description: "Interrupt a running session with a specific behavior type.",
           }),
         ),
         HttpApiEndpoint.post("init", SessionPaths.init, {

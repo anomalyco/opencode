@@ -129,6 +129,7 @@ const appBindingCommands = [
   "app.toggle.diffwrap",
   "app.toggle.paste_summary",
   "app.toggle.session_directory_filter",
+  "session.toggle-queue-mode",
 ] as const
 
 export type TuiInput = {
@@ -575,6 +576,30 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           route.navigate({
             type: "home",
           })
+          dialog.clear()
+        },
+      },
+      {
+        name: "session.toggle-queue-mode",
+        title: "Toggle queueing mode",
+        category: "Session",
+        slashName: "followup",
+        slashAliases: ["queue", "follow-up"],
+        run: () => {
+          const current = kv.get("followup", "haltingSteer")
+          let next: "haltingSteer" | "waitingSteer" | "queue" = "haltingSteer"
+          if (current === "haltingSteer") next = "waitingSteer"
+          else if (current === "waitingSteer") next = "queue"
+
+          kv.set("followup", next)
+
+          const nextName = next === "haltingSteer" ? "Halt and Steer" : next === "waitingSteer" ? "Wait and Steer" : "Queue"
+          toast.show({
+            message: `Follow-Up mode: ${nextName}`,
+            variant: "info",
+            duration: 2000,
+          })
+
           dialog.clear()
         },
       },

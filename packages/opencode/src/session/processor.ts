@@ -17,6 +17,7 @@ import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
+import { SessionRunState } from "./run-state"
 import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
@@ -102,6 +103,7 @@ export const layer = Layer.effect(
     const summary = yield* SessionSummary.Service
     const scope = yield* Scope.Scope
     const status = yield* SessionStatus.Service
+    const runState = yield* SessionRunState.Service
     const image = yield* Image.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
@@ -370,6 +372,7 @@ export const layer = Layer.effect(
 
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
         switch (value.type) {
+
           case "reasoning-start":
             if (value.id in ctx.reasoningMap) return
             // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
@@ -673,7 +676,11 @@ export const layer = Layer.effect(
           case "provider-error":
             throw new Error(value.message)
 
-          case "step-start":
+          case "step-start": {
+            const currentStatus = yield* status.get(ctx.sessionID)
+            if (currentStatus?.type !== "haltingSteer" && currentStatus?.type !== "waitingSteer") {
+              yield* status.set(ctx.sessionID, { type: "busy" })
+            }
             if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
             if (!ctx.assistantMessage.summary) {
               // TODO(v2): Temporary dual-write while migrating session messages to v2 events.
@@ -689,6 +696,7 @@ export const layer = Layer.effect(
               type: "step-start",
             })
             return
+          }
 
           case "step-finish": {
             const completedSnapshot = yield* snapshot.track()
@@ -973,17 +981,34 @@ export const layer = Layer.effect(
             yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
 
-            yield* stream.pipe(
-              Stream.tap((event) => handleEvent(event)),
-              Stream.takeUntil(() => ctx.needsCompaction),
-              Stream.runDrain,
+            yield* Effect.raceFirst(
+              stream.pipe(
+                Stream.tap((event) => handleEvent(event)),
+                Stream.takeUntil(() => ctx.needsCompaction),
+                Stream.runDrain,
+              ),
+              Effect.gen(function* () {
+                while (true) {
+                  yield* Effect.sleep("50 millis")
+                  if ((yield* runState.getInterrupt(ctx.sessionID)) === "haltingSteer") {
+                    return
+                  }
+                }
+              })
             )
           }).pipe(
             Effect.onInterrupt(() =>
               Effect.gen(function* () {
                 aborted = true
                 if (!ctx.assistantMessage.error) {
-                  yield* halt(new DOMException("Aborted", "AbortError"))
+                  // Wait, if it's a steer interrupt, we DO NOT want to set the error!
+                  // Setting the error will cause the loop to break.
+                  const currentInterrupt = yield* runState.getInterrupt(ctx.sessionID)
+                  if (currentInterrupt === "haltingSteer") {
+                    // Do nothing, just let it cleanly abort
+                  } else {
+                    yield* halt(new DOMException("Aborted", "AbortError"))
+                  }
                 }
               }),
             ),
@@ -1057,6 +1082,7 @@ export const defaultLayer = Layer.suspend(() =>
     Layer.provide(Plugin.defaultLayer),
     Layer.provide(SessionSummary.defaultLayer),
     Layer.provide(SessionStatus.defaultLayer),
+    Layer.provide(SessionRunState.defaultLayer),
     Layer.provide(Image.defaultLayer),
     Layer.provide(Config.defaultLayer),
     Layer.provide(RuntimeFlags.defaultLayer),
@@ -1075,6 +1101,7 @@ export const node = LayerNode.make(layer, [
   Plugin.node,
   SessionSummary.node,
   SessionStatus.node,
+  SessionRunState.node,
   Image.node,
   EventV2Bridge.node,
   RuntimeFlags.node,

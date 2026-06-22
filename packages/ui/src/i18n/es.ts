@@ -64,6 +64,8 @@ export const dict = {
   "ui.sessionTurn.status.makingEdits": "Realizando ediciones",
   "ui.sessionTurn.status.runningCommands": "Ejecutando comandos",
   "ui.sessionTurn.status.thinking": "Pensando",
+  "ui.sessionTurn.status.steering": "Steering",
+  "ui.sessionTurn.status.wrappingUp": "Wrapping up",
   "ui.sessionTurn.status.thinkingWithTopic": "Pensando - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "Recopilando pensamientos",
   "ui.sessionTurn.status.consideringNextSteps": "Considerando siguientes pasos",

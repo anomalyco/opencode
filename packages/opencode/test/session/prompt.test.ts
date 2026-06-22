@@ -182,6 +182,7 @@ function makePrompt(input?: { processor?: "blocking" }) {
     status,
     Database.defaultLayer,
     EventV2Bridge.defaultLayer,
+    SessionRunState.defaultLayer,
   ).pipe(Layer.provideMerge(infra))
   const question = Question.layer.pipe(Layer.provideMerge(deps))
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
@@ -1352,6 +1353,124 @@ it.instance(
     }),
   3_000,
 )
+
+it.instance(
+  "continues loop on haltingSteer interrupt and runs the steer prompt",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const gate = yield* Deferred.make<void>()
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const runState = yield* SessionRunState.Service
+      const chat = yield* sessions.create({ title: "Steer Halt Test" })
+
+      yield* llm.hold("first reply", deferredAsPromise(gate))
+      yield* llm.text("second reply")
+
+      const first = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "first prompt" }],
+        })
+        .pipe(Effect.forkChild)
+
+      yield* llm.wait(1)
+
+      yield* runState.requestInterrupt(chat.id, "haltingSteer")
+
+      const steerId = MessageID.ascending()
+      const second = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          messageID: steerId,
+          agent: "build",
+          model: ref,
+          isSteer: true,
+          followupMode: "haltingSteer",
+          parts: [{ type: "text", text: "steer prompt" }],
+        })
+        .pipe(Effect.forkChild)
+
+      yield* Deferred.succeed(gate, void 0)
+
+      const [ea, eb] = yield* Effect.all([Fiber.await(first), Fiber.await(second)])
+      expect(Exit.isSuccess(ea)).toBe(true)
+      expect(Exit.isSuccess(eb)).toBe(true)
+
+      const msgs = yield* sessions.messages({ sessionID: chat.id })
+      const assistants = msgs.filter((msg) => msg.info.role === "assistant")
+      expect(assistants).toHaveLength(2)
+
+      const last = assistants.at(-1)
+      if (!last || last.info.role !== "assistant") throw new Error("expected second assistant")
+      expect(last.info.parentID).toBe(steerId)
+      expect(last.parts.some((part) => part.type === "text" && part.text === "second reply")).toBe(true)
+    }),
+  3_000,
+)
+
+it.instance(
+  "continues loop on waitingSteer interrupt and runs the steer prompt",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const gate = yield* Deferred.make<void>()
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const runState = yield* SessionRunState.Service
+      const chat = yield* sessions.create({ title: "Steer Wait Test" })
+
+      yield* llm.hold("first reply", deferredAsPromise(gate))
+      yield* llm.text("second reply")
+
+      const first = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "first prompt" }],
+        })
+        .pipe(Effect.forkChild)
+
+      yield* llm.wait(1)
+
+      yield* runState.requestInterrupt(chat.id, "waitingSteer")
+
+      const steerId = MessageID.ascending()
+      const second = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          messageID: steerId,
+          agent: "build",
+          model: ref,
+          isSteer: true,
+          followupMode: "waitingSteer",
+          parts: [{ type: "text", text: "steer prompt" }],
+        })
+        .pipe(Effect.forkChild)
+
+      yield* Deferred.succeed(gate, void 0)
+
+      const [ea, eb] = yield* Effect.all([Fiber.await(first), Fiber.await(second)])
+      expect(Exit.isSuccess(ea)).toBe(true)
+      expect(Exit.isSuccess(eb)).toBe(true)
+
+      const msgs = yield* sessions.messages({ sessionID: chat.id })
+      const assistants = msgs.filter((msg) => msg.info.role === "assistant")
+      expect(assistants).toHaveLength(2)
+
+      const last = assistants.at(-1)
+      if (!last || last.info.role !== "assistant") throw new Error("expected second assistant")
+      expect(last.info.parentID).toBe(steerId)
+      expect(last.parts.some((part) => part.type === "text" && part.text === "second reply")).toBe(true)
+    }),
+  3_000,
+)
+
+
 
 it.instance(
   "assertNotBusy fails with BusyError when loop running",

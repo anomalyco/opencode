@@ -191,6 +191,8 @@ import type {
   SessionGetResponses,
   SessionInitErrors,
   SessionInitResponses,
+  SessionInterruptErrors,
+  SessionInterruptResponses,
   SessionListErrors,
   SessionListResponses,
   SessionMessageErrors,
@@ -3736,6 +3738,8 @@ export class Session2 extends HeyApiClient {
       }
       agent?: string
       noReply?: boolean
+      isSteer?: boolean
+      followupMode?: "haltingSteer" | "waitingSteer" | "queue"
       tools?: {
         [key: string]: boolean
       }
@@ -3758,6 +3762,8 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "model" },
             { in: "body", key: "agent" },
             { in: "body", key: "noReply" },
+            { in: "body", key: "isSteer" },
+            { in: "body", key: "followupMode" },
             { in: "body", key: "tools" },
             { in: "body", key: "format" },
             { in: "body", key: "system" },
@@ -3919,6 +3925,45 @@ export class Session2 extends HeyApiClient {
       url: "/session/{sessionID}/abort",
       ...options,
       ...params,
+    })
+  }
+
+  /**
+   * Interrupt session
+   *
+   * Interrupt a running session with a specific behavior type.
+   */
+  public interrupt<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      type?: "haltingSteer" | "waitingSteer" | "clear"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "type" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionInterruptResponses, SessionInterruptErrors, ThrowOnError>({
+      url: "/session/{sessionID}/interrupt",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
     })
   }
 
@@ -4089,6 +4134,8 @@ export class Session2 extends HeyApiClient {
       }
       agent?: string
       noReply?: boolean
+      isSteer?: boolean
+      followupMode?: "haltingSteer" | "waitingSteer" | "queue"
       tools?: {
         [key: string]: boolean
       }
@@ -4111,6 +4158,8 @@ export class Session2 extends HeyApiClient {
             { in: "body", key: "model" },
             { in: "body", key: "agent" },
             { in: "body", key: "noReply" },
+            { in: "body", key: "isSteer" },
+            { in: "body", key: "followupMode" },
             { in: "body", key: "tools" },
             { in: "body", key: "format" },
             { in: "body", key: "system" },

@@ -7,21 +7,27 @@ import { Effect, Latch, Layer, Scope, Context } from "effect"
 import { Session } from "./session"
 import { SessionID } from "./schema"
 import { SessionStatus } from "./status"
+import { MessageV2 } from "./message-v2"
 
 export interface Interface {
   readonly assertNotBusy: (sessionID: SessionID) => Effect.Effect<void, Session.BusyError>
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
+  readonly requestInterrupt: (sessionID: SessionID, type: "haltingSteer" | "waitingSteer") => Effect.Effect<void>
+  readonly clearInterrupt: (sessionID: SessionID) => Effect.Effect<void>
+  readonly getInterrupt: (sessionID: SessionID) => Effect.Effect<"haltingSteer" | "waitingSteer" | undefined>
   readonly ensureRunning: (
     sessionID: SessionID,
-    onInterrupt: Effect.Effect<SessionV1.WithParts>,
-    work: Effect.Effect<SessionV1.WithParts>,
-  ) => Effect.Effect<SessionV1.WithParts>
+    onInterrupt: Effect.Effect<MessageV2.WithParts>,
+    work: Effect.Effect<MessageV2.WithParts>,
+    initialStatus?: SessionStatus.Info
+  ) => Effect.Effect<MessageV2.WithParts>
   readonly startShell: (
     sessionID: SessionID,
-    onInterrupt: Effect.Effect<SessionV1.WithParts>,
-    work: Effect.Effect<SessionV1.WithParts>,
+    onInterrupt: Effect.Effect<MessageV2.WithParts>,
+    work: Effect.Effect<MessageV2.WithParts>,
+    initialStatus?: SessionStatus.Info,
     ready?: Latch.Latch,
-  ) => Effect.Effect<SessionV1.WithParts, Session.BusyError>
+  ) => Effect.Effect<MessageV2.WithParts, Session.BusyError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRunState") {}
@@ -35,7 +41,8 @@ export const layer = Layer.effect(
     const state = yield* InstanceState.make(
       Effect.fn("SessionRunState.state")(function* () {
         const scope = yield* Scope.Scope
-        const runners = new Map<SessionID, Runner.Runner<SessionV1.WithParts>>()
+        const runners = new Map<SessionID, Runner.Runner<MessageV2.WithParts>>()
+        const interrupts = new Map<SessionID, "haltingSteer" | "waitingSteer">()
         yield* Effect.addFinalizer(
           Effect.fnUntraced(function* () {
             yield* Effect.forEach(runners.values(), (runner) => runner.cancel, {
@@ -43,25 +50,27 @@ export const layer = Layer.effect(
               discard: true,
             })
             runners.clear()
+            interrupts.clear()
           }),
         )
-        return { runners, scope }
+        return { runners, interrupts, scope }
       }),
     )
 
     const runner = Effect.fn("SessionRunState.runner")(function* (
       sessionID: SessionID,
-      onInterrupt: Effect.Effect<SessionV1.WithParts>,
+      onInterrupt: Effect.Effect<MessageV2.WithParts>,
+      initialStatus: SessionStatus.Info = { type: "busy" }
     ) {
       const data = yield* InstanceState.get(state)
       const existing = data.runners.get(sessionID)
       if (existing) return existing
-      const next = Runner.make<SessionV1.WithParts>(data.scope, {
+      const next = Runner.make<MessageV2.WithParts>(data.scope, {
         onIdle: Effect.gen(function* () {
           data.runners.delete(sessionID)
           yield* status.set(sessionID, { type: "idle" })
         }),
-        onBusy: status.set(sessionID, { type: "busy" }),
+        onBusy: status.set(sessionID, initialStatus),
         onInterrupt,
       })
       data.runners.set(sessionID, next)
@@ -85,26 +94,50 @@ export const layer = Layer.effect(
       yield* existing.cancel
     })
 
+    const requestInterrupt = Effect.fn("SessionRunState.requestInterrupt")(function* (
+      sessionID: SessionID,
+      type: "haltingSteer" | "waitingSteer",
+    ) {
+      const data = yield* InstanceState.get(state)
+      data.interrupts.set(sessionID, type)
+      yield* status.set(sessionID, { type })
+      // We no longer call cancel(sessionID) for "haltingSteer" here.
+      // The stream processor will detect the "haltingSteer" interrupt, abort the stream,
+      // and let the existing runner gracefully read the new message on the next loop iteration.
+    })
+
+    const clearInterrupt = Effect.fn("SessionRunState.clearInterrupt")(function* (sessionID: SessionID) {
+      const data = yield* InstanceState.get(state)
+      data.interrupts.delete(sessionID)
+    })
+
+    const getInterrupt = Effect.fn("SessionRunState.getInterrupt")(function* (sessionID: SessionID) {
+      const data = yield* InstanceState.get(state)
+      return data.interrupts.get(sessionID)
+    })
+
     const ensureRunning = Effect.fn("SessionRunState.ensureRunning")(function* (
       sessionID: SessionID,
-      onInterrupt: Effect.Effect<SessionV1.WithParts>,
-      work: Effect.Effect<SessionV1.WithParts>,
+      onInterrupt: Effect.Effect<MessageV2.WithParts>,
+      work: Effect.Effect<MessageV2.WithParts>,
+      initialStatus?: SessionStatus.Info
     ) {
-      return yield* (yield* runner(sessionID, onInterrupt)).ensureRunning(work)
+      return yield* (yield* runner(sessionID, onInterrupt, initialStatus)).ensureRunning(work)
     })
 
     const startShell = Effect.fn("SessionRunState.startShell")(function* (
       sessionID: SessionID,
-      onInterrupt: Effect.Effect<SessionV1.WithParts>,
-      work: Effect.Effect<SessionV1.WithParts>,
+      onInterrupt: Effect.Effect<MessageV2.WithParts>,
+      work: Effect.Effect<MessageV2.WithParts>,
+      initialStatus?: SessionStatus.Info,
       ready?: Latch.Latch,
     ) {
-      return yield* (yield* runner(sessionID, onInterrupt))
+      return yield* (yield* runner(sessionID, onInterrupt, initialStatus))
         .startShell(work, ready)
         .pipe(Effect.catchTag("RunnerBusy", () => Effect.fail(busyError(sessionID))))
     })
 
-    return Service.of({ assertNotBusy, cancel, ensureRunning, startShell })
+    return Service.of({ assertNotBusy, cancel, requestInterrupt, clearInterrupt, getInterrupt, ensureRunning, startShell })
   }),
 )
 

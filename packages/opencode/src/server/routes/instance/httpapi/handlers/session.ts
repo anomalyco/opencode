@@ -232,6 +232,19 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       return true
     })
 
+    const interrupt = Effect.fn("SessionHttpApi.interrupt")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: { type: "haltingSteer" | "waitingSteer" | "clear" }
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      if (ctx.payload.type === "clear") {
+        yield* runState.clearInterrupt(ctx.params.sessionID)
+      } else {
+        yield* runState.requestInterrupt(ctx.params.sessionID, ctx.payload.type)
+      }
+      return true
+    })
+
     const init = Effect.fn("SessionHttpApi.init")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof InitPayload.Type
@@ -422,6 +435,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("update", update)
       .handleRaw("fork", forkRaw)
       .handle("abort", abort)
+      .handle("interrupt", interrupt)
       .handle("init", init)
       .handle("share", share)
       .handle("unshare", unshare)

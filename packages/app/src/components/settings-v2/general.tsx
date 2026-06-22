@@ -251,6 +251,31 @@ export const SettingsGeneralV2: Component = () => {
         </SettingsRowV2>
 
         <SettingsRowV2
+          title={language.t("settings.general.row.followup.title")}
+          description={language.t("settings.general.row.followup.description")}
+        >
+          <SelectV2
+            appearance="inline"
+            data-action="settings-followup"
+            options={[
+              { value: "queue", label: language.t("settings.general.row.followup.option.queue") },
+              { value: "haltingSteer", label: language.t("settings.general.row.followup.option.steer") },
+              { value: "waitingSteer", label: language.t("settings.general.row.followup.option.wrap") },
+            ]}
+            current={[
+              { value: "queue", label: language.t("settings.general.row.followup.option.queue") },
+              { value: "haltingSteer", label: language.t("settings.general.row.followup.option.steer") },
+              { value: "waitingSteer", label: language.t("settings.general.row.followup.option.wrap") },
+            ].find((o) => o.value === (settings.general.followup() ?? "haltingSteer"))}
+            placement="bottom-end"
+            gutter={6}
+            value={(o) => o.value}
+            label={(o) => o.label}
+            onSelect={(option) => option && settings.general.setFollowup(option.value as "queue" | "haltingSteer" | "waitingSteer")}
+          />
+        </SettingsRowV2>
+
+        <SettingsRowV2
           title={language.t("command.permissions.autoaccept.enable")}
           description={language.t("toast.permissions.autoaccept.on.description")}
         >

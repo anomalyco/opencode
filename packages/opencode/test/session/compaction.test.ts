@@ -4,7 +4,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { APICallError } from "ai"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, ManagedRuntime, Schema } from "effect"
 import * as Stream from "effect/Stream"
 import { Config } from "@/config/config"
 import { Image } from "@/image/image"
@@ -19,6 +19,7 @@ import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
+import { SessionRunState } from "../../src/session/run-state"
 import { SessionSummary } from "../../src/session/summary"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -242,6 +243,7 @@ const env = Layer.mergeAll(
   Database.defaultLayer,
   EventV2Bridge.defaultLayer,
   CrossSpawnSpawner.defaultLayer,
+  SessionRunState.defaultLayer,
   SessionCompaction.layer.pipe(Layer.provide(SessionNs.defaultLayer), Layer.provideMerge(deps)),
 )
 
@@ -252,6 +254,7 @@ const compactionEnv = Layer.mergeAll(
   Database.defaultLayer,
   EventV2Bridge.defaultLayer,
   CrossSpawnSpawner.defaultLayer,
+  SessionRunState.defaultLayer,
 )
 const itCompaction = testEffect(compactionEnv)
 
@@ -329,6 +332,8 @@ function llm() {
     ),
   }
 }
+
+
 
 function reply(
   text: string,

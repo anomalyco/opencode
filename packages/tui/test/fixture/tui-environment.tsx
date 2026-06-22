@@ -5,6 +5,7 @@ import {
   TuiTerminalEnvironmentProvider,
   type TuiPaths,
 } from "../../src/context/runtime"
+import { ExitProvider, type Exit } from "../../src/context/exit"
 import type { ParentProps } from "solid-js"
 
 export function TestTuiContexts(
@@ -12,6 +13,7 @@ export function TestTuiContexts(
     cwd?: string
     directory?: string
     paths?: Partial<TuiPaths>
+    exit?: Exit
   }>,
 ) {
   return (
@@ -25,7 +27,9 @@ export function TestTuiContexts(
       }}
     >
       <TuiTerminalEnvironmentProvider value={{ platform: "linux" }}>
-        <TuiStartupProvider value={{ skipInitialLoading: false }}>{props.children}</TuiStartupProvider>
+        <TuiStartupProvider value={{ skipInitialLoading: false }}>
+          <ExitProvider exit={props.exit ?? (() => {})}>{props.children}</ExitProvider>
+        </TuiStartupProvider>
       </TuiTerminalEnvironmentProvider>
     </TuiPathsProvider>
   )
