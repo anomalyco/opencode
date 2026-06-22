@@ -130,7 +130,7 @@ const settings = (documents: readonly Config.Entry[]) => {
   )
 }
 
-const select = (
+export const select = (
   entries: readonly Entry[],
   tokens: number,
 ): { readonly head: string; readonly recent: string } | undefined => {
@@ -140,7 +140,12 @@ const select = (
     .filter(Boolean)
   if (conversation.length === 0) return
   let total = 0
-  let split = conversation.length
+  // head ends at headEnd (exclusive); recent starts at recentStart. They differ
+  // only when the budget boundary lands mid-message: that message is split into
+  // splitPrefix (head) and splitSuffix (recent), so the full message must NOT
+  // also appear in head's slice — head ends at `index`, recent starts at `index + 1`.
+  let headEnd = conversation.length
+  let recentStart = conversation.length
   let splitPrefix = ""
   let splitSuffix = ""
   for (let index = conversation.length - 1; index >= 0; index--) {
@@ -150,16 +155,22 @@ const select = (
       if (remaining > 0) {
         splitPrefix = conversation[index].slice(0, -remaining)
         splitSuffix = conversation[index].slice(-remaining)
-        split = index + 1
+        headEnd = index
+        recentStart = index + 1
+      } else {
+        // No room even for a suffix: the boundary message goes entirely to head.
+        headEnd = index + 1
+        recentStart = index + 1
       }
       break
     }
     total = next
-    split = index
+    headEnd = index
+    recentStart = index
   }
   return {
-    head: [...conversation.slice(0, split), splitPrefix].filter(Boolean).join("\n\n"),
-    recent: [splitSuffix, ...conversation.slice(split)].filter(Boolean).join("\n\n"),
+    head: [...conversation.slice(0, headEnd), splitPrefix].filter(Boolean).join("\n\n"),
+    recent: [splitSuffix, ...conversation.slice(recentStart)].filter(Boolean).join("\n\n"),
   }
 }
 
