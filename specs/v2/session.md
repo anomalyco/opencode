@@ -46,7 +46,7 @@ Projected hosted tools preserve call-side and settlement-side provider metadata 
 
 ## Context Epochs
 
-V2 Sessions persist the exact privileged System Context shown to the model. A Context Epoch owns one effective agent, one immutable baseline, and a model-hidden structured snapshot used to compare independently observed Context Sources. Environment facts, the host-local date, ambient global/upward-project `AGENTS.md` files, and selected-agent available-skill guidance are the initial sources. Location-wide sources come from the System Context Registry; selected-agent guidance composes with them immediately before Context Epoch admission.
+V2 Sessions persist the exact privileged System Context shown to the model. A Context Epoch stores one immutable provider-cache baseline and a model-hidden structured snapshot used to compare independently observed Context Sources. Environment facts, the host-local date, ambient global/upward-project `AGENTS.md` files, and selected-agent available-skill guidance are the initial sources. Location-wide sources come from the System Context Registry; selected-agent guidance composes with them immediately before Context Epoch admission.
 
 The first complete observation initializes the epoch before any pending prompt becomes model-visible. If initial context is temporarily unavailable, execution stops while the prompt remains pending and retryable. On later provider turns, the runner promotes eligible input first, then reconciles current sources at the safe boundary. Changed context becomes one durable chronological System message, and its event commit advances the epoch snapshot atomically.
 
@@ -72,7 +72,7 @@ Client            Runner                         System Context Registry       C
    │                 ├─ Baseline + chronological history ─────────────────────────────────────────────────────────────────────────▶
 ```
 
-Agent switches, model switches, and completed compactions request lazy baseline replacement. A switch admitted after the current safe provider-turn boundary applies to the next provider turn while leaving the already-prepared baseline durable. Before another cross-agent provider turn, the replacement must complete; unavailable admitted context blocks instead of exposing the prior agent's privileged baseline. A Session move clears the epoch so the destination Location must initialize a complete baseline before another provider turn. Epoch creation and replacement are fenced against the authoritative Session Location/effective agent and the epoch revision, preventing stale or ABA-observed context from becoming durable.
+Agent and model selection are provider-turn scoped. A switch admitted after the current safe provider-turn boundary applies to the next provider turn without restarting the current turn or replacing the baseline. Agent-specific skill guidance remains a Context Source, so changed guidance is admitted as a chronological System message. A completed compaction causes the next provider attempt to render a fresh baseline directly from current complete context. A Session move clears the epoch so the destination Location initializes a complete baseline on its next run.
 
 ```text
 Session                            Epoch
@@ -83,11 +83,8 @@ Session                            Epoch
    │                                 │ reconcile chronological update  │
    │                                 ◀─────────────────────────────────╯
    │                                 │
-   ├─ request replacement ───────────▶
-   │                                 │
-   │                                 ├─────────────────────────────────────╮
-   │                                 │ replace after complete observation  │
-   │                                 ◀─────────────────────────────────────╯
+   ├─ completed compaction ──────────▶
+   │                                 ├─ render fresh baseline
    │                                 │
    ├─ clear after Location move ─────▶
 ```
@@ -110,7 +107,7 @@ Before each provider turn, the runner estimates the complete model-visible reque
 
 Compaction keeps the full transcript durable while replacing its active model representation with one hidden checkpoint containing a structured rolling summary and token-bounded serialized recent context. Provider-native assistant, reasoning, and tool messages never survive across the boundary, avoiding signature and encrypted-reasoning failures when the earlier prefix changes.
 
-`session.next.compaction.started.1` durably identifies the attempt. Compaction deltas are live-only progress. `session.next.compaction.ended.2` durably stores the final summary and serialized recent context; only this completed event projects a model-visible compaction message and requests Context Epoch replacement. A failed or interrupted attempt therefore leaves the previous history boundary active.
+`session.next.compaction.started.1` durably identifies the attempt. Compaction deltas are live-only progress. `session.next.compaction.ended.2` durably stores the final summary and serialized recent context; only this completed event projects a model-visible compaction message. On the next provider attempt, the runner observes that completed compaction and directly renders a fresh Context Epoch baseline. A failed or interrupted attempt therefore leaves the previous history boundary active.
 
 Repeated compactions update the previous structured summary with newly compacted messages. The runner then reloads projected history and executes the original pending turn.
 
@@ -138,7 +135,7 @@ Status: `complete` is usable in the native V2 path, `partial` covers only part o
 | Per-turn request assembly  | Plugin message, system, parameter, and header transforms                 | missing  | Design V2 plugin hooks and lifecycle semantics.                                                                                        |
 | Per-turn request assembly  | Model variants and request settings                                      | partial  | Apply effective agent options and future plugin-mutated request settings.                                                              |
 | Per-turn request assembly  | Structured-output policy                                                 | missing  | Add prompt format, generated tool, tool choice, and model-visible policy together.                                                     |
-| Per-turn request assembly  | Automatic/context-pressure compaction                                    | partial  | V2 replays completed compactions and replaces epochs but cannot initiate compaction.                                                   |
+| Per-turn request assembly  | Automatic/context-pressure compaction                                    | complete | V2 initiates automatic and overflow-triggered compaction, then rebuilds the baseline from the completed checkpoint.                    |
 | Prompt/reference expansion | Durable typed prompt attachments                                         | complete | None.                                                                                                                                  |
 | Prompt/reference expansion | Native template and `@` mention expansion                                | missing  | Parse and resolve native V2 prompt input before durable admission.                                                                     |
 | Prompt/reference expansion | File, directory, media, and MCP-resource materialization                 | partial  | Materialize and normalize sources instead of lowering unresolved attachment metadata.                                                  |
