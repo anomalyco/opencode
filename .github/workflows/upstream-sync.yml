@@ -1,8 +1,16 @@
-name: upstream-sync
+name: upstream-sync (deprecated)
 
+# DEPRECATED — superseded by upstream-sync-threshold.yml.
+#
+# The threshold workflow now owns automated upstream sync: it merges on a commit
+# threshold, auto-resolves known conflict patterns, runs typecheck + tests, and
+# pauses (fail-stop) behind a single resolution PR so conflicts don't pile up.
+# Running this nightly job in parallel re-introduces the duplicate PRs/issues and
+# defeats that fail-stop, so its automatic schedule is disabled.
+#
+# It is kept as manual-dispatch-only during validation of the threshold workflow.
+# Once that's confirmed in production, delete this file.
 on:
-  schedule:
-    - cron: "0 2 * * *" # nightly at 02:00 UTC
   workflow_dispatch:
     inputs:
       upstream_ref:
