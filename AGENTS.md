@@ -25,6 +25,19 @@ Examples: `fix(tui): simplify thinking toggle styling`, `docs: update contributi
 - Prefer functional array methods (flatMap, filter, map) over for loops; use type guards on filter to maintain type inference downstream
 - In `src/config`, follow the existing self-export pattern at the top of the file (for example `export * as ConfigAgent from "./agent"`) when adding a new config module.
 
+### Functional Programming
+
+- Prefer values over state and objects.
+- Prefer functions and namespaces over methods.
+- Prefer managed references over mutable variables.
+- Prefer selective, opt-in polymorphism over inheritance, switch statements, and pattern matching.
+- Prefer data over syntax-heavy abstractions.
+- Prefer set-based operations and functions over imperative loops and folds.
+- Prefer queues over actors.
+- Prefer declarative data manipulation over ORMs.
+- Prefer rules over conditionals.
+- Prefer consistency over inconsistency.
+
 Reduce total variable count by inlining when a value is only used once.
 
 ```ts
