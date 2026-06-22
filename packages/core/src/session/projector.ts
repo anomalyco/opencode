@@ -329,19 +329,14 @@ export const layer = Layer.effectDiscard(
         if (next) yield* applyUsage(db, sessionID, next)
       }),
     )
-    yield* events.project(SessionEvent.AgentSwitched, (event) => {
-      if (event.durable === undefined) return Effect.die("Durable Session event is missing aggregate sequence")
-      return db
+    yield* events.project(SessionEvent.AgentSwitched, (event) =>
+      db
         .update(SessionTable)
         .set({ agent: event.data.agent, time_updated: DateTime.toEpochMillis(event.data.timestamp) })
         .where(eq(SessionTable.id, event.data.sessionID))
         .run()
-        .pipe(
-          Effect.orDie,
-          Effect.andThen(run(db, event)),
-          Effect.andThen(SessionContextEpoch.requestReplacement(db, event.data.sessionID, event.durable.seq)),
-        )
-    })
+        .pipe(Effect.orDie, Effect.andThen(run(db, event))),
+    )
     yield* events.project(SessionEvent.ModelSwitched, (event) =>
       Effect.gen(function* () {
         yield* db
@@ -351,8 +346,6 @@ export const layer = Layer.effectDiscard(
           .run()
           .pipe(Effect.orDie)
         yield* run(db, event)
-        if (event.durable === undefined) return yield* Effect.die("Durable Session event is missing aggregate sequence")
-        yield* SessionContextEpoch.requestReplacement(db, event.data.sessionID, event.durable.seq)
       }),
     )
     yield* events.project(SessionEvent.Prompted, (event) =>
@@ -407,7 +400,6 @@ export const layer = Layer.effectDiscard(
       }),
     )
     yield* events.project(SessionEvent.InterruptRequested, () => Effect.void)
-    // TODO: Reconstruct context epoch replacement state during replay without adding replay state to every EventV2 payload.
     yield* events.project(SessionEvent.ContextUpdated, (event) => run(db, event))
     yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
     yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))
@@ -426,15 +418,9 @@ export const layer = Layer.effectDiscard(
     yield* events.project(SessionEvent.Reasoning.Started, (event) => run(db, event))
     yield* events.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
     // yield* events.project(SessionEvent.Retried, (event) => run(db, event))
-    yield* events.project(SessionEvent.Compaction.Ended, (event) => {
-      if (event.durable === undefined) return Effect.die("Durable Session event is missing aggregate sequence")
-      if (event.durable.version === 1) return Effect.void
-      const seq = event.durable.seq
-      return Effect.gen(function* () {
-        yield* run(db, event)
-        yield* SessionContextEpoch.requestReplacement(db, event.data.sessionID, seq)
-      })
-    })
+    yield* events.project(SessionEvent.Compaction.Ended, (event) =>
+      event.durable?.version === 1 ? Effect.void : run(db, event),
+    )
   }),
 )
 

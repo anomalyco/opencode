@@ -8,7 +8,7 @@ import {
   isContextOverflowFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
-import { Cause, DateTime, Effect, FiberSet, Layer, Option, Schema, Semaphore, Stream } from "effect"
+import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
 import { Database } from "../../database/database"
@@ -141,8 +141,8 @@ export const layer = Layer.effect(
       cause.reasons.some((reason) => Cause.isDieReason(reason) && reason.defect instanceof QuestionV2.RejectedError)
 
     type TurnTransition =
-      // Request preparation observed a concurrent Session change and must restart from durable state.
-      | { readonly _tag: "RebuildPreparedTurn"; readonly promotion?: SessionInput.Delivery }
+      // Automatic compaction completed; rebuild the request from compacted history.
+      | { readonly _tag: "ContinueAfterCompaction" }
       // Overflow compaction completed; rebuild once through the path without overflow recovery.
       | { readonly _tag: "ContinueAfterOverflowCompaction" }
 
@@ -152,20 +152,11 @@ export const layer = Layer.effect(
       }
     }
 
-    const rebuildPreparedTurn = (promotion?: SessionInput.Delivery) =>
-      new TurnTransitionError({ _tag: "RebuildPreparedTurn", promotion })
+    const continueAfterCompaction = new TurnTransitionError({ _tag: "ContinueAfterCompaction" })
     const continueAfterOverflowCompaction = new TurnTransitionError({
       _tag: "ContinueAfterOverflowCompaction",
     })
 
-    const retryAgentMismatch = (promotion: SessionInput.Delivery | undefined) =>
-      Effect.catchDefect((defect) =>
-        defect instanceof SessionContextEpoch.AgentMismatch
-          ? Effect.die(rebuildPreparedTurn(promotion))
-          : Effect.die(defect),
-      )
-
-    const sameModel = Schema.toEquivalence(Schema.UndefinedOr(ModelV2.Ref))
     const loadSystemContext = (agent: AgentV2.Selection) =>
       Effect.all([systemContext.load(), skillGuidance.load(agent), referenceGuidance.load()], {
         concurrency: "unbounded",
@@ -181,13 +172,7 @@ export const layer = Layer.effect(
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
         return yield* Effect.interrupt
       const agent = yield* agents.select(session.agent)
-      const initialized = yield* SessionContextEpoch.initialize(
-        db,
-        loadSystemContext(agent),
-        session.id,
-        session.location,
-        agent.id,
-      ).pipe(retryAgentMismatch(promotion))
+      const initialized = yield* SessionContextEpoch.initialize(db, loadSystemContext(agent), session.id)
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
       let needsContinuation = false
       if (promotion) {
@@ -199,18 +184,7 @@ export const layer = Layer.effect(
         }
       }
       const system =
-        initialized ??
-        (yield* SessionContextEpoch.prepare(
-          db,
-          events,
-          loadSystemContext(agent),
-          session.id,
-          session.location,
-          agent.id,
-        ).pipe(retryAgentMismatch(undefined)))
-      const current = yield* getSession(sessionID)
-      if ((yield* agents.select(current.agent)).id !== agent.id || !sameModel(current.model, session.model))
-        return yield* Effect.die(rebuildPreparedTurn())
+        initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
       const model = yield* models.resolve(session)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
@@ -228,7 +202,7 @@ export const layer = Layer.effect(
         toolChoice: isLastStep ? "none" : undefined,
       })
       if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
-        return yield* Effect.die(rebuildPreparedTurn())
+        return yield* Effect.die(continueAfterCompaction)
       const publisher = createLLMEventPublisher(events, {
         sessionID: session.id,
         agent: agent.id,
@@ -242,8 +216,6 @@ export const layer = Layer.effect(
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
-      if (!(yield* SessionContextEpoch.current(db, session.id, agent.id, system.revision)))
-        return yield* Effect.die(rebuildPreparedTurn())
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
@@ -352,7 +324,7 @@ export const layer = Layer.effect(
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
               return yield* Effect.die("Post-compaction provider attempt cannot recover another overflow")
             yield* Effect.yieldNow
-            return yield* runAfterOverflowCompaction(sessionID, defect.transition.promotion, step)
+            return yield* runAfterOverflowCompaction(sessionID, undefined, step)
           }),
         ),
       )
@@ -366,7 +338,7 @@ export const layer = Layer.effect(
             yield* Effect.yieldNow
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
               return yield* runAfterOverflowCompaction(sessionID, undefined, step)
-            return yield* runTurn(sessionID, defect.transition.promotion, step)
+            return yield* runTurn(sessionID, undefined, step)
           }),
         ),
       )
