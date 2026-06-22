@@ -16,7 +16,7 @@ import { Effect } from "effect"
 export const Plugin = define({
   id: "example",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.hook.catalog.transform((catalog) => {
+    yield* ctx.catalog.transform((catalog) => {
       catalog.provider.update("example", (provider) => {
         provider.name = "Example"
       })
@@ -37,7 +37,7 @@ Transform hooks contribute to stateful domains:
 
 ```ts
 yield *
-  ctx.hook.agent.transform((agent) => {
+  ctx.agent.transform((agent) => {
     agent.update("reviewer", (item) => {
       item.description = "Reviews code for regressions"
       item.mode = "subagent"
@@ -50,12 +50,12 @@ OpenCode rebuilds the domain when a transform is registered or disposed. A rebui
 Available transform hooks are namespaced by domain:
 
 ```ts
-ctx.hook.agent.transform
-ctx.hook.catalog.transform
-ctx.hook.command.transform
-ctx.hook.integration.transform
-ctx.hook.reference.transform
-ctx.hook.skill.transform
+ctx.agent.transform
+ctx.catalog.transform
+ctx.command.transform
+ctx.integration.transform
+ctx.reference.transform
+ctx.skill.transform
 ```
 
 ## Runtime Hooks
@@ -64,7 +64,7 @@ Runtime hooks intercept live operations rather than rebuilding domain state:
 
 ```ts
 yield *
-  ctx.hook.aisdk.sdk(
+  ctx.aisdk.sdk(
     Effect.fn(function* (event) {
       if (event.package !== "@ai-sdk/xai") return
       const mod = yield* Effect.promise(() => import("@ai-sdk/xai"))
@@ -73,7 +73,7 @@ yield *
   )
 
 yield *
-  ctx.hook.aisdk.language((event) => {
+  ctx.aisdk.language((event) => {
     if (event.model.providerID !== "xai") return
     event.language = event.sdk.responses(event.model.api.id)
   })
@@ -89,23 +89,23 @@ When data captured by a transform changes, reload the affected domain:
 let data = yield * loadCatalog()
 
 yield *
-  ctx.hook.catalog.transform((catalog) => {
+  ctx.catalog.transform((catalog) => {
     applyCatalog(data, catalog)
   })
 
 data = yield * loadCatalog()
-yield * ctx.reload.catalog()
+yield * ctx.catalog.reload()
 ```
 
-Reload belongs to the domain, not an individual registration. `ctx.reload.catalog()` reruns every active catalog transform and publishes the rebuilt catalog.
+Reload belongs to the domain, not an individual registration. `ctx.catalog.reload()` reruns every active catalog transform and publishes the rebuilt catalog.
 
 Available reload operations are:
 
 ```ts
-ctx.reload.agent()
-ctx.reload.catalog()
-ctx.reload.command()
-ctx.reload.integration()
-ctx.reload.reference()
-ctx.reload.skill()
+ctx.agent.reload()
+ctx.catalog.reload()
+ctx.command.reload()
+ctx.integration.reload()
+ctx.reference.reload()
+ctx.skill.reload()
 ```

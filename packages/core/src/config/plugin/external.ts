@@ -38,7 +38,7 @@ export const Plugin = define({
     const npm = yield* Npm.Service
     const loaded: EffectPlugin[] = []
 
-    yield* ctx.hook.plugin.transform((plugins) => {
+    yield* ctx.plugin.transform((plugins) => {
       for (const plugin of loaded) plugins.add(plugin)
     })
 
@@ -93,7 +93,7 @@ export const Plugin = define({
         }).pipe(Effect.ignoreCause)
       }
 
-      yield* ctx.reload.plugin()
+      yield* ctx.plugin.reload()
     }).pipe(Effect.forkScoped({ startImmediately: true }))
   }),
 })

@@ -148,7 +148,7 @@ describe("LocationServiceMap", () => {
               define({
                 id: "reviewer",
                 effect: (ctx) =>
-                  ctx.hook.agent
+                  ctx.agent
                     .transform((agent) => {
                       agent.update("reviewer", (item) => {
                         item.description = "Reviews code"

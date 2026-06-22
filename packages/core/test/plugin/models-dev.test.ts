@@ -47,10 +47,8 @@ describe("ModelsDevPlugin", () => {
           const catalog = yield* Catalog.Service
           yield* ModelsDevPlugin.effect(
             host({
-              hook: {
-                catalog: catalogHost(catalog),
-                integration: integrationHost(integrations),
-              },
+              catalog: catalogHost(catalog),
+              integration: integrationHost(integrations),
             }),
           )
           expect(yield* integrations.list()).toEqual([

@@ -17,7 +17,7 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
     const fs = yield* FSUtil.Service
-    yield* ctx.hook.command.transform(
+    yield* ctx.command.transform(
       Effect.fn(function* (draft) {
         const documents = yield* Effect.forEach(yield* config.entries(), (entry) => {
           if (entry.type === "document") return Effect.succeed([{ commands: entry.info.commands }])

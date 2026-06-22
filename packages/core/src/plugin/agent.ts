@@ -121,7 +121,7 @@ export const Plugin = define({
       { action: "read", resource: "*.env.example", effect: "allow" },
     ]
 
-    yield* ctx.hook.agent.transform((draft) => {
+    yield* ctx.agent.transform((draft) => {
       draft.update(AgentV2.defaultID, (item) => {
         item.description = "The default agent. Executes tools based on configured permissions."
         item.system ??= BUILD_SYSTEM

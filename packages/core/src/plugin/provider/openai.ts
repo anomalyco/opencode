@@ -13,7 +13,7 @@ export const OpenAIPlugin = define({
       draft.method.update(browser)
       draft.method.update(headless)
     })
-    yield* ctx.hook.catalog.transform(
+    yield* ctx.catalog.transform(
       Effect.fn(function* (evt) {
         for (const item of evt.provider.list()) {
           if (item.provider.api.type !== "aisdk") continue
@@ -27,14 +27,14 @@ export const OpenAIPlugin = define({
         }
       }),
     )
-    yield* ctx.hook.aisdk.sdk(
+    yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/openai") return
         const mod = yield* Effect.promise(() => import("@ai-sdk/openai"))
         evt.sdk = mod.createOpenAI(evt.options)
       }),
     )
-    yield* ctx.hook.aisdk.language(
+    yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.openai) return
         evt.language = evt.sdk.responses(evt.model.api.id)

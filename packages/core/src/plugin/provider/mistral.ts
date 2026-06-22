@@ -4,7 +4,7 @@ import { define } from "../internal"
 export const MistralPlugin = define({
   id: "mistral",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.hook.aisdk.sdk(
+    yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/mistral") return
         const mod = yield* Effect.promise(() => import("@ai-sdk/mistral"))

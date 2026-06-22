@@ -4,7 +4,7 @@ import { define } from "../internal"
 export const AnthropicPlugin = define({
   id: "anthropic",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.hook.catalog.transform(
+    yield* ctx.catalog.transform(
       Effect.fn(function* (evt) {
         for (const item of evt.provider.list()) {
           if (item.provider.api.type !== "aisdk") continue
@@ -16,7 +16,7 @@ export const AnthropicPlugin = define({
         }
       }),
     )
-    yield* ctx.hook.aisdk.sdk(
+    yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/anthropic") return
         const mod = yield* Effect.promise(() => import("@ai-sdk/anthropic"))

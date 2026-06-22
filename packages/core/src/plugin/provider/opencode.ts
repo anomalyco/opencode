@@ -8,7 +8,7 @@ export const OpencodePlugin = define({
   effect: Effect.fn(function* (ctx) {
     const integrations = yield* Integration.Service
     let hasKey = false
-    yield* ctx.hook.catalog.transform(
+    yield* ctx.catalog.transform(
       Effect.fn(function* (evt) {
         const item = evt.provider.get(ProviderV2.ID.opencode)
         if (!item) return

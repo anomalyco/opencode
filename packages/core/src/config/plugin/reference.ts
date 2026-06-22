@@ -16,7 +16,7 @@ export const Plugin = define({
     const config = yield* Config.Service
     const location = yield* Location.Service
     const global = yield* Global.Service
-    yield* ctx.hook.reference.transform(
+    yield* ctx.reference.transform(
       Effect.fn(function* (draft) {
         const entries = new Map<string, Reference.Source>()
         for (const doc of (yield* config.entries()).filter(

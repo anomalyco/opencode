@@ -10,23 +10,12 @@ import type { SkillHooks } from "./skill.js"
 
 export interface PluginContext {
   readonly options: PluginOptions
-  readonly hook: {
-    readonly agent: AgentHooks
-    readonly aisdk: AISDKHooks
-    readonly catalog: CatalogHooks
-    readonly command: CommandHooks
-    readonly integration: IntegrationHooks
-    readonly plugin: PluginHooks
-    readonly reference: ReferenceHooks
-    readonly skill: SkillHooks
-  }
-  readonly reload: {
-    readonly agent: () => Promise<void>
-    readonly catalog: () => Promise<void>
-    readonly command: () => Promise<void>
-    readonly integration: () => Promise<void>
-    readonly plugin: () => Promise<void>
-    readonly reference: () => Promise<void>
-    readonly skill: () => Promise<void>
-  }
+  readonly agent: AgentHooks & { readonly reload: () => Promise<void> }
+  readonly aisdk: AISDKHooks
+  readonly catalog: CatalogHooks & { readonly reload: () => Promise<void> }
+  readonly command: CommandHooks & { readonly reload: () => Promise<void> }
+  readonly integration: IntegrationHooks & { readonly reload: () => Promise<void> }
+  readonly plugin: PluginHooks & { readonly reload: () => Promise<void> }
+  readonly reference: ReferenceHooks & { readonly reload: () => Promise<void> }
+  readonly skill: SkillHooks & { readonly reload: () => Promise<void> }
 }

@@ -7,7 +7,7 @@ import { ProviderV2 } from "../../provider"
 export const GitLabPlugin = define({
   id: "gitlab",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.hook.aisdk.sdk(
+    yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (evt.package !== "gitlab-ai-provider") return
         const mod = yield* Effect.promise(() => import("gitlab-ai-provider"))
@@ -31,7 +31,7 @@ export const GitLabPlugin = define({
         })
       }),
     )
-    yield* ctx.hook.aisdk.language(
+    yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.gitlab) return
         const featureFlags =

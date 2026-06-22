@@ -7,7 +7,7 @@ export const DynamicProviderPlugin = define({
   id: "dynamic-provider",
   effect: Effect.fn(function* (ctx) {
     const npm = yield* Npm.Service
-    yield* ctx.hook.aisdk.sdk(
+    yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (evt.sdk) return
 

@@ -6,7 +6,7 @@ export const LLMGatewayPlugin = define({
   id: "llmgateway",
   effect: Effect.fn(function* (ctx) {
     const integrations = yield* Integration.Service
-    yield* ctx.hook.catalog.transform(
+    yield* ctx.catalog.transform(
       Effect.fn(function* (evt) {
         for (const item of evt.provider.list()) {
           if (item.provider.disabled) continue

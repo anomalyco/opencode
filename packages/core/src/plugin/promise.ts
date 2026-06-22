@@ -44,29 +44,39 @@ export function fromPromise(plugin: Plugin) {
 
         const context2: PluginContext = {
           options: host.options,
-          hook: {
-            agent: { transform: transform(host.hook.agent) },
-            aisdk: {
-              sdk: (callback) =>
-                register(host.hook.aisdk.sdk((event) => Effect.promise(() => Promise.resolve(callback(event))))),
-              language: (callback) =>
-                register(host.hook.aisdk.language((event) => Effect.promise(() => Promise.resolve(callback(event))))),
-            },
-            catalog: { transform: transform(host.hook.catalog) },
-            command: { transform: transform(host.hook.command) },
-            integration: { transform: transform(host.hook.integration) },
-            plugin: { transform: transform(host.hook.plugin) },
-            reference: { transform: transform(host.hook.reference) },
-            skill: { transform: transform(host.hook.skill) },
+          agent: {
+            transform: transform(host.agent),
+            reload: () => run(host.agent.reload()),
           },
-          reload: {
-            agent: () => run(host.reload.agent()),
-            catalog: () => run(host.reload.catalog()),
-            command: () => run(host.reload.command()),
-            integration: () => run(host.reload.integration()),
-            plugin: () => run(host.reload.plugin()),
-            reference: () => run(host.reload.reference()),
-            skill: () => run(host.reload.skill()),
+          aisdk: {
+            sdk: (callback) =>
+              register(host.aisdk.sdk((event) => Effect.promise(() => Promise.resolve(callback(event))))),
+            language: (callback) =>
+              register(host.aisdk.language((event) => Effect.promise(() => Promise.resolve(callback(event))))),
+          },
+          catalog: {
+            transform: transform(host.catalog),
+            reload: () => run(host.catalog.reload()),
+          },
+          command: {
+            transform: transform(host.command),
+            reload: () => run(host.command.reload()),
+          },
+          integration: {
+            transform: transform(host.integration),
+            reload: () => run(host.integration.reload()),
+          },
+          plugin: {
+            transform: transform(host.plugin),
+            reload: () => run(host.plugin.reload()),
+          },
+          reference: {
+            transform: transform(host.reference),
+            reload: () => run(host.reference.reload()),
+          },
+          skill: {
+            transform: transform(host.skill),
+            reload: () => run(host.skill.reload()),
           },
         }
 

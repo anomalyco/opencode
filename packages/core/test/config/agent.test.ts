@@ -67,7 +67,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
           ]),
       })
 
-      yield* ConfigAgentPlugin.Plugin.effect(host({ hook: { agent: agentHost(agents) } })).pipe(
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
         Effect.provideService(Config.Service, config),
       )
 
@@ -148,7 +148,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
           ]),
       })
 
-      yield* ConfigAgentPlugin.Plugin.effect(host({ hook: { agent: agentHost(agents) } })).pipe(
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
         Effect.provideService(Config.Service, config),
       )
 
@@ -186,7 +186,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
           ]),
       })
 
-      yield* ConfigAgentPlugin.Plugin.effect(host({ hook: { agent: agentHost(agents) } })).pipe(
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
         Effect.provideService(Config.Service, config),
       )
 
@@ -246,7 +246,7 @@ Use native v2 fields.`,
               ]),
           })
 
-          yield* ConfigAgentPlugin.Plugin.effect(host({ hook: { agent: agentHost(agents) } })).pipe(
+          yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
             Effect.provideService(Config.Service, config),
           )
 

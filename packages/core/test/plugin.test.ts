@@ -20,7 +20,7 @@ describe("PluginV2", () => {
           define({
             id: "managed",
             effect: (ctx) =>
-              ctx.hook.agent
+              ctx.agent
                 .transform((agents) =>
                   agents.update("configured", (agent) => {
                     agent.description = description

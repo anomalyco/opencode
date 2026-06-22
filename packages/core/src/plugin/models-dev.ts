@@ -54,7 +54,7 @@ export const ModelsDevPlugin = define({
   effect: Effect.fn(function* (ctx) {
     const modelsDev = yield* ModelsDev.Service
     const events = yield* EventV2.Service
-    yield* ctx.hook.integration.transform(
+    yield* ctx.integration.transform(
       Effect.fn(function* (integrations) {
         const data = yield* modelsDev.get()
         for (const item of Object.values(data)) {
@@ -72,7 +72,7 @@ export const ModelsDevPlugin = define({
         }
       }),
     )
-    yield* ctx.hook.catalog.transform(
+    yield* ctx.catalog.transform(
       Effect.fn(function* (catalog) {
         const data = yield* modelsDev.get()
         for (const item of Object.values(data)) {
@@ -131,7 +131,7 @@ export const ModelsDevPlugin = define({
       }),
     )
     yield* events.subscribe(ModelsDev.Event.Refreshed).pipe(
-      Stream.runForEach(() => ctx.reload.integration().pipe(Effect.andThen(ctx.reload.catalog()))),
+      Stream.runForEach(() => ctx.integration.reload().pipe(Effect.andThen(ctx.catalog.reload()))),
       Effect.forkScoped({ startImmediately: true }),
     )
   }),

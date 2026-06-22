@@ -4,7 +4,7 @@ import { define } from "../internal"
 export const NvidiaPlugin = define({
   id: "nvidia",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.hook.catalog.transform(
+    yield* ctx.catalog.transform(
       Effect.fn(function* (evt) {
         for (const item of evt.provider.list()) {
           if (item.provider.api.type !== "aisdk") continue

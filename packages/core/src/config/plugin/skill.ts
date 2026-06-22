@@ -15,7 +15,7 @@ export const Plugin = define({
     const config = yield* Config.Service
     const global = yield* Global.Service
     const location = yield* Location.Service
-    yield* ctx.hook.skill.transform(
+    yield* ctx.skill.transform(
       Effect.fn(function* (draft) {
         const entries = yield* config.entries()
         const directories = entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))

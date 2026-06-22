@@ -4,7 +4,7 @@ import { Effect } from "effect"
 export default define({
   id: "config-effect-plugin",
   effect: (ctx) =>
-    ctx.hook.agent
+    ctx.agent
       .transform((agents) => {
         agents.update("effect-configured", (agent) => {
           agent.description = ctx.options.description

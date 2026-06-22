@@ -103,7 +103,7 @@ describe("AgentV2", () => {
       const agent = yield* AgentV2.Service
       yield* AgentPlugin.Plugin.effect(
         host({
-          hook: { agent: agentHost(agent) },
+          agent: agentHost(agent),
         }),
       ).pipe(
         Effect.provideService(

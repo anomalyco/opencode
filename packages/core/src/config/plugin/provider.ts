@@ -11,7 +11,7 @@ export const Plugin = define({
   id: "config-provider",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
-    yield* ctx.hook.integration.transform(
+    yield* ctx.integration.transform(
       Effect.fn(function* (integrations) {
         const files = (yield* config.entries()).filter((entry): entry is Config.Document => entry.type === "document")
         const configuredIntegrations = new Set(
@@ -39,7 +39,7 @@ export const Plugin = define({
       }),
     )
 
-    yield* ctx.hook.catalog.transform(
+    yield* ctx.catalog.transform(
       Effect.fn(function* (catalog) {
         const entries = yield* config.entries()
         const files = entries.filter((entry): entry is Config.Document => entry.type === "document")

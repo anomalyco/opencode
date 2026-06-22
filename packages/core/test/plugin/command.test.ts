@@ -24,7 +24,7 @@ describe("CommandPlugin.Plugin", () => {
       const command = yield* CommandV2.Service
       yield* CommandPlugin.Plugin.effect(
         host({
-          hook: { command: { transform: command.transform } },
+          command: { transform: command.transform, reload: command.rebuild },
         }),
       ).pipe(
         Effect.provideService(

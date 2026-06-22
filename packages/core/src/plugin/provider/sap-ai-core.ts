@@ -8,7 +8,7 @@ export const SapAICorePlugin = define({
   id: "sap-ai-core",
   effect: Effect.fn(function* (ctx) {
     const npm = yield* Npm.Service
-    yield* ctx.hook.aisdk.sdk(
+    yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("sap-ai-core")) return
         const serviceKey =
@@ -36,7 +36,7 @@ export const SapAICorePlugin = define({
         )
       }),
     )
-    yield* ctx.hook.aisdk.language(
+    yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.make("sap-ai-core")) return
         evt.language = evt.sdk(evt.model.api.id)

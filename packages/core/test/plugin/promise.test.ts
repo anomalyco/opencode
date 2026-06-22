@@ -21,7 +21,7 @@ describe("fromPromise", () => {
         id: "promise-example",
         setup: async (ctx) => {
           expect(ctx.options.mode).toBe("strict")
-          await ctx.hook.agent.transform((draft) => {
+          await ctx.agent.transform((draft) => {
             draft.update("reviewer", (item) => {
               item.description = "Reviews code"
               item.mode = "subagent"
@@ -49,7 +49,7 @@ describe("fromPromise", () => {
       const promisePlugin = define({
         id: "promise-dispose",
         setup: async (ctx) => {
-          const registration = await ctx.hook.agent.transform((draft) => {
+          const registration = await ctx.agent.transform((draft) => {
             draft.update("temp", (item) => {
               item.description = "temporary"
             })

@@ -7,50 +7,49 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import type { IntegrationEnvMethod, IntegrationKeyMethod, IntegrationOAuthMethod } from "@opencode-ai/sdk/v2/types"
 import { Effect } from "effect"
 
-type Overrides = {
-  readonly hook?: {
-    readonly agent?: PluginContext["hook"]["agent"]
-    readonly aisdk?: PluginContext["hook"]["aisdk"]
-    readonly catalog?: PluginContext["hook"]["catalog"]
-    readonly command?: PluginContext["hook"]["command"]
-    readonly integration?: PluginContext["hook"]["integration"]
-    readonly plugin?: PluginContext["hook"]["plugin"]
-    readonly reference?: PluginContext["hook"]["reference"]
-    readonly skill?: PluginContext["hook"]["skill"]
-  }
-  readonly reload?: Partial<PluginContext["reload"]>
-}
+type Overrides = Partial<Omit<PluginContext, "options">>
 
 export function host(overrides: Overrides = {}): PluginContext {
   return {
     options: {},
-    hook: {
-      agent: overrides.hook?.agent ?? { transform: () => Effect.die("unused hook.agent.transform") },
-      aisdk: overrides.hook?.aisdk ?? {
-        sdk: () => Effect.die("unused hook.aisdk.sdk"),
-        language: () => Effect.die("unused hook.aisdk.language"),
-      },
-      catalog: overrides.hook?.catalog ?? { transform: () => Effect.die("unused hook.catalog.transform") },
-      command: overrides.hook?.command ?? { transform: () => Effect.die("unused hook.command.transform") },
-      integration: overrides.hook?.integration ?? { transform: () => Effect.die("unused hook.integration.transform") },
-      plugin: overrides.hook?.plugin ?? { transform: () => Effect.die("unused hook.plugin.transform") },
-      reference: overrides.hook?.reference ?? { transform: () => Effect.die("unused hook.reference.transform") },
-      skill: overrides.hook?.skill ?? { transform: () => Effect.die("unused hook.skill.transform") },
+    agent: overrides.agent ?? {
+      transform: () => Effect.die("unused agent.transform"),
+      reload: () => Effect.die("unused agent.reload"),
     },
-    reload: {
-      agent: overrides.reload?.agent ?? (() => Effect.die("unused reload.agent")),
-      catalog: overrides.reload?.catalog ?? (() => Effect.die("unused reload.catalog")),
-      command: overrides.reload?.command ?? (() => Effect.die("unused reload.command")),
-      integration: overrides.reload?.integration ?? (() => Effect.die("unused reload.integration")),
-      plugin: overrides.reload?.plugin ?? (() => Effect.die("unused reload.plugin")),
-      reference: overrides.reload?.reference ?? (() => Effect.die("unused reload.reference")),
-      skill: overrides.reload?.skill ?? (() => Effect.die("unused reload.skill")),
+    aisdk: overrides.aisdk ?? {
+      sdk: () => Effect.die("unused aisdk.sdk"),
+      language: () => Effect.die("unused aisdk.language"),
+    },
+    catalog: overrides.catalog ?? {
+      transform: () => Effect.die("unused catalog.transform"),
+      reload: () => Effect.die("unused catalog.reload"),
+    },
+    command: overrides.command ?? {
+      transform: () => Effect.die("unused command.transform"),
+      reload: () => Effect.die("unused command.reload"),
+    },
+    integration: overrides.integration ?? {
+      transform: () => Effect.die("unused integration.transform"),
+      reload: () => Effect.die("unused integration.reload"),
+    },
+    plugin: overrides.plugin ?? {
+      transform: () => Effect.die("unused plugin.transform"),
+      reload: () => Effect.die("unused plugin.reload"),
+    },
+    reference: overrides.reference ?? {
+      transform: () => Effect.die("unused reference.transform"),
+      reload: () => Effect.die("unused reference.reload"),
+    },
+    skill: overrides.skill ?? {
+      transform: () => Effect.die("unused skill.transform"),
+      reload: () => Effect.die("unused skill.reload"),
     },
   }
 }
 
-export function agentHost(agent: AgentV2.Interface): PluginContext["hook"]["agent"] {
+export function agentHost(agent: AgentV2.Interface): PluginContext["agent"] {
   return {
+    reload: agent.rebuild,
     transform: (callback) =>
       agent.transform((draft) =>
         callback({
@@ -72,8 +71,9 @@ export function agentHost(agent: AgentV2.Interface): PluginContext["hook"]["agen
   }
 }
 
-export function catalogHost(catalog: Catalog.Interface): PluginContext["hook"]["catalog"] {
+export function catalogHost(catalog: Catalog.Interface): PluginContext["catalog"] {
   return {
+    reload: catalog.rebuild,
     transform: (callback) =>
       catalog.transform((draft) =>
         callback({
@@ -135,8 +135,9 @@ export function catalogHost(catalog: Catalog.Interface): PluginContext["hook"]["
   }
 }
 
-export function integrationHost(integration: Integration.Interface): PluginContext["hook"]["integration"] {
+export function integrationHost(integration: Integration.Interface): PluginContext["integration"] {
   return {
+    reload: integration.rebuild,
     transform: (callback) =>
       integration.transform((draft) =>
         callback({

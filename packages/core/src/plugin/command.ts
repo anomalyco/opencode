@@ -10,7 +10,7 @@ export const Plugin = define({
   id: "command",
   effect: Effect.fn(function* (ctx) {
     const location = yield* Location.Service
-    yield* ctx.hook.command.transform((draft) => {
+    yield* ctx.command.transform((draft) => {
       draft.update("init", (command) => {
         command.template = PROMPT_INITIALIZE.replace("${path}", location.project.directory)
         command.description = "guided AGENTS.md setup"

@@ -6,7 +6,7 @@ import { define } from "../internal"
 export const CloudflareAIGatewayPlugin = define({
   id: "cloudflare-ai-gateway",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.hook.aisdk.sdk(
+    yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (evt.package !== "ai-gateway-provider") return
         if (evt.options.baseURL) return

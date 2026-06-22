@@ -4,7 +4,7 @@ import { define } from "../internal"
 export const GroqPlugin = define({
   id: "groq",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.hook.aisdk.sdk(
+    yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/groq") return
         const mod = yield* Effect.promise(() => import("@ai-sdk/groq"))

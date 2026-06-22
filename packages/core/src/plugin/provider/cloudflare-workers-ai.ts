@@ -9,7 +9,7 @@ const providerID = ProviderV2.ID.make("cloudflare-workers-ai")
 export const CloudflareWorkersAIPlugin = define({
   id: "cloudflare-workers-ai",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.hook.catalog.transform(
+    yield* ctx.catalog.transform(
       Effect.fn(function* (evt) {
         const item = evt.provider.get(providerID)
         if (!item) return
@@ -21,7 +21,7 @@ export const CloudflareWorkersAIPlugin = define({
         })
       }),
     )
-    yield* ctx.hook.aisdk.sdk(
+    yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== providerID) return
         if (evt.package !== "@ai-sdk/openai-compatible") return
@@ -37,7 +37,7 @@ export const CloudflareWorkersAIPlugin = define({
         )
       }),
     )
-    yield* ctx.hook.aisdk.language(
+    yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== providerID) return
         evt.language = evt.sdk.languageModel(evt.model.api.id)
