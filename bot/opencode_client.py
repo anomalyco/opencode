@@ -142,7 +142,7 @@ class OpenCodeClient:
         self, session_id: str, question_id: str, answer: str
     ) -> bool:
         """Отправляет ответ на вопрос."""
-        url = f"{self.base_url}/session/{session_id}/question/{question_id}/reply"
+        url = f"{self.base_url}/question/{question_id}/reply"
         data = {"answers": [[answer]]}
         async with self.session.post(url, json=data) as resp:
             if resp.status in (200, 204):
