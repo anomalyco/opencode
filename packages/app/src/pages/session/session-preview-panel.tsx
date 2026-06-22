@@ -10,6 +10,7 @@ import { useLanguage } from "@/context/language"
 import { useCommand } from "@/context/command"
 import { SessionPreviewFallback } from "./session-preview-fallback"
 import { createPreviewBridge, type PreviewBridge } from "./preview-bridge"
+import { formatBaseHost, formatEditablePath, resolveNavigatePath } from "./session-preview-address"
 
 export function createSessionPreview() {
   const sdk = useSDK()
@@ -125,22 +126,19 @@ export function createSessionPreview() {
     setCanGoForward(cursor < stack.length - 1)
   })
 
-  // 주소창 표시용 host(고정) + path(편집 가능). 자식 location 이 오면 그것을, 없으면 previewUrl 기준.
+  // 주소창 표시용 베이스(host/) + path suffix(편집). 자식 location 이 오면 그것을, 없으면 previewUrl 기준.
   const host = createMemo(() => {
     const loc = bridge.location()
     const src = loc?.href ?? previewUrl()
     if (!src) return undefined
-    try {
-      return new URL(src).host
-    } catch {
-      return src
-    }
+    return formatBaseHost(src)
   })
   const path = createMemo(() => {
     const loc = bridge.location()
-    if (!loc) return "/"
-    return (loc.pathname || "/") + loc.search + loc.hash
+    if (!loc) return ""
+    return formatEditablePath(loc)
   })
+  const currentUrl = createMemo(() => bridge.location()?.href ?? previewUrl())
 
   const goBack = () => void bridge.child()?.back()
   const goForward = () => void bridge.child()?.forward()
@@ -161,7 +159,7 @@ export function createSessionPreview() {
     const base = previewUrl()
     if (!base) return
     try {
-      void bridge.child()?.navigate(new URL(p, base).toString())
+      void bridge.child()?.navigate(resolveNavigatePath(base, p))
     } catch {
       /* 잘못된 경로 입력 무시 */
     }
@@ -169,6 +167,7 @@ export function createSessionPreview() {
 
   return {
     previewUrl,
+    previewReady,
     previewSrc,
     reload,
     goHome,
@@ -176,6 +175,7 @@ export function createSessionPreview() {
     bridge,
     host,
     path,
+    currentUrl,
     canGoBack,
     canGoForward,
     goBack,
@@ -220,6 +220,7 @@ export function SessionBrowserChrome(props: {
   onHome?: () => void
   onCapture?: () => void
   capturing?: boolean
+  previewReady?: boolean
 }) {
   const layout = useLayout()
   const language = useLanguage()
@@ -228,23 +229,32 @@ export function SessionBrowserChrome(props: {
   let copyTimer: ReturnType<typeof setTimeout> | undefined
   onCleanup(() => copyTimer && clearTimeout(copyTimer))
 
+  const previewBlocked = () => props.previewReady === false
+
   // 주소 입력 — 편집 중에는 draft 를, 아니면 항상 props.path 를 표시(자식 라우팅 따라 갱신).
   let inputEl: HTMLInputElement | undefined
   const [editing, setEditing] = createSignal(false)
   const [draft, setDraft] = createSignal("")
   const displayValue = () => (editing() ? draft() : (props.path ?? ""))
   const commit = () => {
-    if (!editing()) return
+    if (!editing() || previewBlocked()) return
     setEditing(false)
-    const value = draft().trim()
-    if (value) props.onNavigatePath?.(value)
+    props.onNavigatePath?.(draft().trim())
   }
 
+  // 편집 불가 상태로 바뀌면(파일 탭 활성으로 editablePath=false, 또는 미리보기 차단) editing 을 강제로 내린다.
+  // 안 그러면 input 이 포커스를 유지한 채 editing 만 남아 displayValue 가 draft 에 고정 → 외부 경로 갱신이
+  // 안 보이고 타이핑·삭제가 먹지 않는 것처럼 보인다.
+  createEffect(() => {
+    if ((!props.editablePath || previewBlocked()) && editing()) setEditing(false)
+  })
+
   const openInNewTab = () => {
-    if (props.url) window.open(props.url, "_blank", "noopener")
+    if (previewBlocked() || !props.url) return
+    window.open(props.url, "_blank", "noopener")
   }
   const copyAddress = () => {
-    if (!props.url) return
+    if (previewBlocked() || !props.url) return
     void navigator.clipboard?.writeText(props.url)
     setCopied(true)
     if (copyTimer) clearTimeout(copyTimer)
@@ -297,7 +307,7 @@ export function SessionBrowserChrome(props: {
             type="button"
             class={ghostBtn}
             aria-label={language.t("common.back")}
-            disabled={!props.canGoBack}
+            disabled={previewBlocked() || !props.canGoBack}
             onClick={() => props.onBack?.()}
           >
             <Icon name="chevron-left" size="small" />
@@ -306,7 +316,7 @@ export function SessionBrowserChrome(props: {
             type="button"
             class={ghostBtn}
             aria-label={language.t("common.forward")}
-            disabled={!props.canGoForward}
+            disabled={previewBlocked() || !props.canGoForward}
             onClick={() => props.onForward?.()}
           >
             <Icon name="chevron-right" size="small" />
@@ -314,82 +324,79 @@ export function SessionBrowserChrome(props: {
         </div>
       </div>
 
-      {/* 중앙 — 주소 pill (홈 · 주소 · 새로고침) */}
-      <div class="flex flex-1 min-w-0">
-        <div class="flex w-full h-6 items-center gap-1 px-1 rounded-md border border-border-weak-base bg-background-base">
+      {/* 중앙 — 주소 pill (홈 · 주소 · 새로고침), 360px 고정·좁은 크롬에서는 max-w-full 로 축소 */}
+      <div class="flex flex-1 min-w-0 items-center justify-center">
+        <div class="flex h-6 w-[360px] max-w-full min-w-0 items-center gap-1 px-1 rounded-md border border-border-weak-base bg-background-base">
           <button
             type="button"
             class={ghostBtn + " !size-5"}
             aria-label={language.t("session.tab.preview")}
+            disabled={previewBlocked()}
             onClick={() => props.onHome?.()}
           >
             <Icon name="home" size="small" />
           </button>
-          {/* 호스트(고정) + 경로(입력)를 한 덩어리로 가운데 정렬. 두 요소가 폰트·크기·높이·색이 같아
-              경계가 안 보이고 하나의 주소 문자열처럼 읽힌다. 입력 폭은 내용에 맞춰 그룹이 중앙에 온다.
-              인풋은 내용폭만큼만 차지하므로, 빈 영역·호스트를 눌러도 인풋에 포커스가 가도록 위임한다. */}
+          {/* 베이스(host/) + path suffix — 한 덩어리로 pill 가운데 정렬 */}
           <div
             class="flex flex-1 min-w-0 items-center justify-center overflow-hidden"
-            classList={{ "cursor-text": !!props.editablePath }}
+            classList={{ "cursor-text": !!props.editablePath && !previewBlocked() }}
             onMouseDown={(e) => {
-              if (!props.editablePath) return
-              if (e.target === inputEl) return // 인풋 직접 클릭은 네이티브 캐럿 배치에 맡김
-              e.preventDefault() // 빈 영역 클릭 시 포커스가 그쪽으로 새지 않게
+              if (!props.editablePath || previewBlocked()) return
+              if (e.target === inputEl) return
+              e.preventDefault()
               inputEl?.focus()
             }}
           >
-            <Show when={props.host}>
-              <span class="shrink min-w-0 max-w-[60%] truncate" style={addressTextStyle}>
-                {props.host}
-              </span>
-            </Show>
-            <input
-              ref={(el) => {
-                inputEl = el
-                // 폼 요소 기본 flex·고정폭을 무시하고 내용폭에 딱 맞춘다(Chromium 지원). 그래야 host+path
-                // 그룹이 내용 폭만큼만 차지해 justify-center 로 가운데 정렬된다. 미지원 시 아래 width(ch) 폴백.
-                el.style.setProperty("field-sizing", "content")
-              }}
-              type="text"
-              spellcheck={false}
-              class="min-w-0 max-w-full p-0 bg-transparent outline-none"
-              classList={{ "cursor-text": !!props.editablePath }}
-              style={{
-                ...addressTextStyle,
-                // 전역 input 리셋이 flex:1 1 0% 를 먹여 인풋이 늘어나므로(가운데 정렬 깨짐) 인라인으로 눌러
-                // 내용폭만 차지하게 한다. 폭은 field-sizing:content(ref) 가 글자 폭에 딱 맞춰 호스트와
-                // 경로 사이 빈틈이 안 생긴다. 빈 값일 때 캐럿 보이도록 최소폭만 준다.
-                flex: "0 0 auto",
-                "min-width": "1ch",
-              }}
-              value={displayValue()}
-              readOnly={!props.editablePath}
-              aria-label={language.t("common.address")}
-              onFocus={(e) => {
-                if (!props.editablePath) return
-                setDraft(props.path ?? "")
-                setEditing(true)
-                e.currentTarget.select()
-              }}
-              onInput={(e) => setDraft(e.currentTarget.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault()
-                  commit()
-                  inputEl?.blur()
-                } else if (e.key === "Escape") {
-                  e.preventDefault()
-                  setEditing(false)
-                  inputEl?.blur()
-                }
-              }}
-              onBlur={() => setEditing(false)}
-            />
+            <div class="flex min-w-0 max-w-full items-center overflow-hidden">
+              <Show when={props.host}>
+                <span class="shrink-0 truncate" style={addressTextStyle}>
+                  {props.host}
+                </span>
+              </Show>
+              <input
+                ref={(el) => {
+                  inputEl = el
+                  el.style.setProperty("field-sizing", "content")
+                }}
+                type="text"
+                spellcheck={false}
+                class="min-w-0 max-w-full p-0 bg-transparent outline-none"
+                classList={{ "cursor-text": !!props.editablePath && !previewBlocked() }}
+                style={{
+                  ...addressTextStyle,
+                  flex: "0 0 auto",
+                  "min-width": "1ch",
+                }}
+                value={displayValue()}
+                readOnly={!props.editablePath || previewBlocked()}
+                aria-label={language.t("common.address")}
+                onFocus={(e) => {
+                  if (!props.editablePath || previewBlocked()) return
+                  setDraft(props.path ?? "")
+                  setEditing(true)
+                  e.currentTarget.select()
+                }}
+                onInput={(e) => setDraft(e.currentTarget.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    commit()
+                    inputEl?.blur()
+                  } else if (e.key === "Escape") {
+                    e.preventDefault()
+                    setEditing(false)
+                    inputEl?.blur()
+                  }
+                }}
+                onBlur={() => setEditing(false)}
+              />
+            </div>
           </div>
           <button
             type="button"
             class={ghostBtn + " !size-5"}
             aria-label={language.t("common.refresh")}
+            disabled={previewBlocked()}
             onClick={() => props.onReload()}
           >
             <Icon name="refresh" size="small" />
@@ -403,22 +410,29 @@ export function SessionBrowserChrome(props: {
           <button
             type="button"
             class={ghostBtn}
+            disabled={previewBlocked() || props.capturing}
             onClick={() => props.onCapture!()}
-            aria-disabled={props.capturing}
             aria-label={language.t("prompt.action.captureTab")}
           >
-            <Show when={props.capturing} fallback={<Icon name="photo" size="small" />}>
+            <Show when={props.capturing} fallback={<Icon name="pencil-line" size="small" />}>
               <Spinner class="size-4" />
             </Show>
           </button>
         </Show>
-        <button type="button" class={ghostBtn} aria-label={language.t("common.openInNewTab")} onClick={openInNewTab}>
+        <button
+          type="button"
+          class={ghostBtn}
+          disabled={previewBlocked()}
+          aria-label={language.t("common.openInNewTab")}
+          onClick={openInNewTab}
+        >
           <Icon name="external-link" size="small" />
         </button>
         <button
           type="button"
           class={ghostBtn}
           classList={{ "text-icon-success-base": copied() }}
+          disabled={previewBlocked()}
           aria-label={language.t("common.copy")}
           onClick={copyAddress}
         >

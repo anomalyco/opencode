@@ -271,6 +271,7 @@ export function SessionSidePanel(props: {
         <div class="size-full flex flex-col border-l border-border-weaker-base">
           {/* 브라우저 chrome 바 — 시안처럼 상단 전체 폭을 차지(탐색기·미리보기 위). */}
           <SessionBrowserChrome
+            previewReady={preview.previewReady()}
             host={browserAddress().host}
             path={browserAddress().path}
             editablePath={browserAddress().editablePath}
@@ -279,7 +280,7 @@ export function SessionSidePanel(props: {
             canGoForward={preview.canGoForward()}
             onBack={preview.goBack}
             onForward={preview.goForward}
-            url={preview.previewUrl()}
+            url={preview.currentUrl()}
             onReload={preview.hardReload}
             onHome={() => {
               tabs().setActive("preview")
