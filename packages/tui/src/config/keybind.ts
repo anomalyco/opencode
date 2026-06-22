@@ -149,7 +149,7 @@ export const Definitions = {
 
   prompt_submit: keybind("none", "Submit prompt"),
   prompt_editor_context_clear: keybind("none", "Clear editor context"),
-  prompt_skills: keybind("none", "Open skill selector"),
+  prompt_skills: keybind("ctrl+alt+s", "Open skill selector"),
   prompt_stash: keybind("none", "Stash prompt"),
   prompt_stash_pop: keybind("none", "Pop stashed prompt"),
   prompt_stash_list: keybind("none", "List stashed prompts"),
