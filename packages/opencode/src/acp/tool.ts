@@ -1,3 +1,4 @@
+import { isAbsolute, resolve } from "path"
 import type { ToolCall, ToolCallContent, ToolCallLocation, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk"
 
 export type ToolInput = Record<string, unknown>
@@ -69,10 +70,16 @@ export function toToolKind(toolName: string): ToolKind {
   }
 }
 
-export function toLocations(toolName: string, input: ToolInput): ToolCallLocation[] {
+export function toLocations(toolName: string, input: ToolInput, cwd?: string): ToolCallLocation[] {
   const tool = toolName.toLocaleLowerCase()
 
   switch (tool) {
+    case "bash":
+    case "shell": {
+      const workdir = shellWorkdir(input, cwd)
+      return workdir ? [{ path: workdir }] : []
+    }
+
     case "read":
     case "edit":
     case "write":
@@ -87,10 +94,6 @@ export function toLocations(toolName: string, input: ToolInput): ToolCallLocatio
     case "context7_resolve_library_id":
     case "context7_get_library_docs":
       return locationFrom(input.path)
-
-    case "bash":
-    case "shell":
-      return []
 
     default:
       return []
@@ -122,14 +125,15 @@ export function pendingToolCall(input: {
   readonly toolCallId: string
   readonly toolName: string
   readonly state: { readonly input: ToolInput; readonly title?: string }
+  readonly cwd?: string
 }): ToolCall {
   return {
     toolCallId: input.toolCallId,
-    title: input.state.title || input.toolName,
+    title: toolTitle(input.toolName, input.state.input, input.state.title),
     kind: toToolKind(input.toolName),
     status: "pending",
-    locations: toLocations(input.toolName, input.state.input),
-    rawInput: input.state.input,
+    locations: toLocations(input.toolName, input.state.input, input.cwd),
+    rawInput: rawInput(input.toolName, input.state.input, input.cwd),
   }
 }
 
@@ -138,6 +142,7 @@ export function runningToolUpdate(input: {
   readonly toolName: string
   readonly state: RunningToolState
   readonly output?: string
+  readonly cwd?: string
 }): ToolCallUpdate {
   const content = input.output
     ? [
@@ -155,9 +160,9 @@ export function runningToolUpdate(input: {
     toolCallId: input.toolCallId,
     status: "in_progress",
     kind: toToolKind(input.toolName),
-    title: input.state.title ?? input.toolName,
-    locations: toLocations(input.toolName, input.state.input),
-    rawInput: input.state.input,
+    title: toolTitle(input.toolName, input.state.input, input.state.title),
+    locations: toLocations(input.toolName, input.state.input, input.cwd),
+    rawInput: rawInput(input.toolName, input.state.input, input.cwd),
     ...(content ? { content } : {}),
   }
 }
@@ -166,29 +171,32 @@ export function duplicateRunningToolUpdate(input: {
   readonly toolCallId: string
   readonly toolName: string
   readonly state: RunningToolState
+  readonly cwd?: string
 }): ToolCallUpdate {
   return {
     toolCallId: input.toolCallId,
     status: "in_progress",
     kind: toToolKind(input.toolName),
-    title: input.state.title ?? input.toolName,
-    locations: toLocations(input.toolName, input.state.input),
-    rawInput: input.state.input,
+    title: toolTitle(input.toolName, input.state.input, input.state.title),
+    locations: toLocations(input.toolName, input.state.input, input.cwd),
+    rawInput: rawInput(input.toolName, input.state.input, input.cwd),
   }
 }
 
 export function completedToolUpdate(input: {
   readonly toolCallId: string
   readonly toolName: string
-  readonly state: CompletedToolState & { readonly title: string }
+  readonly state: CompletedToolState & { readonly title?: string }
+  readonly cwd?: string
 }): ToolCallUpdate {
   return {
     toolCallId: input.toolCallId,
     status: "completed",
     kind: toToolKind(input.toolName),
-    title: input.state.title,
+    title: toolTitle(input.toolName, input.state.input, input.state.title),
+    locations: toLocations(input.toolName, input.state.input, input.cwd),
     content: completedToolContent(input.toolName, input.state),
-    rawInput: input.state.input,
+    rawInput: rawInput(input.toolName, input.state.input, input.cwd),
     rawOutput: completedToolRawOutput(input.state),
   }
 }
@@ -197,13 +205,15 @@ export function errorToolUpdate(input: {
   readonly toolCallId: string
   readonly toolName: string
   readonly state: ErrorToolState
+  readonly cwd?: string
 }): ToolCallUpdate {
   return {
     toolCallId: input.toolCallId,
     status: "failed",
     kind: toToolKind(input.toolName),
-    title: input.toolName,
-    rawInput: input.state.input,
+    title: toolTitle(input.toolName, input.state.input, undefined),
+    locations: toLocations(input.toolName, input.state.input, input.cwd),
+    rawInput: rawInput(input.toolName, input.state.input, input.cwd),
     content: [
       {
         type: "content",
@@ -251,6 +261,42 @@ export function extractImageAttachments(attachments: ReadonlyArray<ToolAttachmen
 export function shellOutputSnapshot(state: { readonly metadata?: unknown }) {
   if (!state.metadata || typeof state.metadata !== "object") return undefined
   return stringValue((state.metadata as Record<string, unknown>).output)
+}
+
+// For shell tools, surface the actual command as the title so it stays visible
+// before output lands; non-shell tools keep their model-provided title.
+function toolTitle(toolName: string, input: ToolInput, fallback: string | undefined) {
+  if (isShell(toolName)) return shellCommand(input) ?? stringValue(input.description) ?? fallback ?? toolName
+  return fallback || toolName
+}
+
+// Enrich shell rawInput with the resolved working directory so clients can show
+// where the command runs, unless the model already specified one.
+function rawInput(toolName: string, input: ToolInput, cwd?: string): ToolInput {
+  if (!isShell(toolName)) return input
+  if (input.cwd || input.workdir) return input
+  const workdir = shellWorkdir(input, cwd)
+  return workdir ? { ...input, cwd: workdir } : input
+}
+
+function shellWorkdir(input: ToolInput, cwd?: string) {
+  const explicit = stringValue(input.workdir) ?? stringValue(input.cwd)
+  return resolvePath(explicit, cwd) ?? cwd
+}
+
+function resolvePath(value: string | undefined, cwd?: string) {
+  if (!value) return undefined
+  if (isAbsolute(value)) return value
+  return resolve(cwd ?? process.cwd(), value)
+}
+
+function shellCommand(input: ToolInput) {
+  return stringValue(input.command) ?? stringValue(input.cmd)
+}
+
+function isShell(toolName: string) {
+  const tool = toolName.toLocaleLowerCase()
+  return tool === "bash" || tool === "shell"
 }
 
 export const mapToolKind = toToolKind

@@ -208,7 +208,7 @@ export const { use: useComments, provider: CommentsProvider } = createSimpleCont
         const decoded = decodeSessionKey(key)
         return createRoot((dispose) => ({
           value: createCommentSession(
-            serverSDK.scope,
+            serverSDK().scope,
             decoded.dir,
             decoded.id === WORKSPACE_KEY ? undefined : decoded.id,
           ),

@@ -1,8 +1,8 @@
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
-import { Connector } from "@opencode-ai/core/connector"
+import { Integration } from "@opencode-ai/core/integration"
 import { Credential } from "@opencode-ai/core/credential"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -15,6 +15,7 @@ import { Policy } from "@opencode-ai/core/policy"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
+import { catalogHost, host, integrationHost } from "./host"
 
 const events = EventV2.defaultLayer
 const locationLayer = Layer.succeed(
@@ -23,14 +24,23 @@ const locationLayer = Layer.succeed(
 )
 const plugins = PluginV2.layer.pipe(Layer.provide(events))
 const policy = Policy.layer.pipe(Layer.provide(locationLayer))
-const credentials = Credential.layer.pipe(Layer.provide(Database.layerFromPath(":memory:")), Layer.provide(events))
-const catalog = Catalog.layer.pipe(Layer.provide(Layer.mergeAll(events, locationLayer, plugins, policy, credentials)))
-const connectors = Connector.locationLayer.pipe(Layer.provide(credentials), Layer.provide(events))
-const layer = Layer.mergeAll(catalog, connectors, credentials, events, locationLayer, plugins)
+const connections = Credential.defaultLayer.pipe(Layer.fresh)
+const integrations = Integration.locationLayer.pipe(Layer.provide(events), Layer.provide(connections))
+const catalog = Catalog.layer.pipe(
+  Layer.provide(Layer.mergeAll(events, locationLayer, plugins, policy, connections, integrations)),
+)
+const layer = Layer.mergeAll(
+  catalog.pipe(Layer.provide(connections)),
+  integrations,
+  connections,
+  events,
+  locationLayer,
+  plugins,
+)
 const it = testEffect(layer)
 
 describe("ModelsDevPlugin", () => {
-  it.effect("registers key connectors for providers with environment variables", () =>
+  it.effect("registers key methods for providers with environment variables", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
         const previous = {
@@ -43,15 +53,27 @@ describe("ModelsDevPlugin", () => {
       }),
       () =>
         Effect.gen(function* () {
-          yield* ModelsDevPlugin.effect
-          const connectors = yield* Connector.Service
-          expect(yield* connectors.list()).toEqual([
-            new Connector.Info({
-              id: Connector.ID.make("acme"),
+          const integrations = yield* Integration.Service
+          const catalog = yield* Catalog.Service
+          yield* ModelsDevPlugin.effect(
+            host({
+              catalog: catalogHost(catalog),
+              event: { subscribe: () => Stream.never },
+              integration: integrationHost(integrations),
+            }),
+          )
+          expect(yield* integrations.list()).toEqual([
+            new Integration.Info({
+              id: Integration.ID.make("acme"),
               name: "Acme",
               methods: [
-                new Connector.KeyMethod({ id: Connector.MethodID.make("api-key"), type: "key", label: "API Key" }),
+                { type: "key" },
+                {
+                  type: "env",
+                  names: ["ACME_API_KEY"],
+                },
               ],
+              connections: [],
             }),
           ])
         }).pipe(Effect.provide(ModelsDev.defaultLayer)),

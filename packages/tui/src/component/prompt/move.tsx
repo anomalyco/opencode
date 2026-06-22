@@ -9,6 +9,7 @@ import { useToast } from "../../ui/toast"
 import { DialogMoveSession, type MoveSessionSelection } from "../dialog-move-session"
 import { DialogWorkspaceFileChanges } from "../dialog-workspace-file-changes"
 import { useHomeSessionDestination } from "../../routes/home/session-destination"
+import { useProject } from "../../context/project"
 
 function moveReminderText(directory: string) {
   return `<system-reminder>The user has changed the current working directory to "${directory}". This is still the same project but at a possibly new location; take this into account when working with any files from now on.</system-reminder>`
@@ -20,6 +21,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
   const sync = useSync()
   const toast = useToast()
   const homeDestination = useHomeSessionDestination()
+  const project = useProject()
   const paths = useTuiPaths()
   const [creating, setCreating] = createSignal(false)
   const [creatingDots, setCreatingDots] = createSignal(3)
@@ -31,12 +33,17 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
     setCreating(true)
     setProgress("Creating copy")
     try {
-      const result = await sdk.client.experimental.projectCopy.create(
+      const generated = await sdk.client.experimental.projectCopy.generateName(
+        { projectID, context },
+        { throwOnError: true },
+      )
+      const result = await sdk.client.v2.projectCopy.create(
         {
           projectID,
+          location: { directory: sdk.directory },
           strategy: "git_worktree",
           directory: path.join(paths.worktree, projectID.slice(0, 6)),
-          context,
+          name: generated.data.name,
         },
         { throwOnError: true },
       )
@@ -74,8 +81,13 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
                 directory: session.directory,
                 subdirectory: !!session.path,
               }
-            : undefined)
+            : {
+                type: "directory",
+                directory: project.instance.directory(),
+                subdirectory: project.instance.directory() !== project.instance.path().worktree,
+              })
         }
+        onCurrentChange={(selection) => homeDestination?.setDestination(selection)}
         onSelect={(selection) => {
           const sessionID = input.sessionID()
           if (!sessionID) {

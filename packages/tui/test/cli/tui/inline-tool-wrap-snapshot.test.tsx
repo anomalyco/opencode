@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
 import { createSignal, For, Show } from "solid-js"
-import type { ScrollBoxRenderable } from "@opentui/core"
+import type { BoxRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { testRender, type JSX } from "@opentui/solid"
 import {
   formatCompletedSubagentDetail,
@@ -13,6 +13,7 @@ import {
   parseQuestionAnswers,
   parseQuestions,
   parseTodos,
+  alwaysSeparate,
   toolDisplay,
 } from "../../../src/routes/session"
 
@@ -53,7 +54,14 @@ const tools: readonly ToolFixture[] = [
 
 function ShellOutput() {
   return (
-    <box id="tool-block-shell" marginTop={1} paddingTop={1} paddingBottom={1} paddingLeft={2} gap={1}>
+    <box
+      ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+      marginTop={1}
+      paddingTop={1}
+      paddingBottom={1}
+      paddingLeft={2}
+      gap={1}
+    >
       <text paddingLeft={3}># List files</text>
       <box gap={1}>
         <text>$ ls</text>
@@ -65,7 +73,7 @@ function ShellOutput() {
 
 function UserMessage() {
   return (
-    <box id="message-user">
+    <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)}>
       <box paddingTop={1} paddingBottom={1} paddingLeft={2}>
         <text>Check whether the next tool remains separated.</text>
       </box>
@@ -88,7 +96,6 @@ function Fixture(props: { errorExpanded?: boolean; before?: "shell" | "user" }) 
               failed={Boolean(item.error)}
               error={item.error}
               errorExpanded={props.errorExpanded}
-              separateAfter={(id) => id === "message-user"}
             >
               {item.label}
             </InlineToolRow>
@@ -99,36 +106,68 @@ function Fixture(props: { errorExpanded?: boolean; before?: "shell" | "user" }) 
   )
 }
 
-function SubagentGroupFixture() {
+function TaskRowsFixture() {
   return (
     <box flexDirection="column" width={72}>
-      <InlineToolRow id="tool-inline-before" icon="✱" complete={true} pending="">
+      <InlineToolRow icon="✱" complete={true} pending="">
         Grep "Task" (2 matches)
       </InlineToolRow>
-      <InlineToolRow id="tool-inline-subagent-one" icon="⠙" complete={true} pending="" subagent={true}>
+      <InlineToolRow icon="⠙" complete={true} pending="" separate={true}>
         Explore Task — Inspect active task spacing
       </InlineToolRow>
-      <InlineToolRow id="tool-inline-subagent-two" icon="✓" complete={true} pending="" subagent={true}>
+      <InlineToolRow icon="✓" complete={true} pending="" separate={true}>
         {"General Task — Confirm completed task spacing\n↳ 1 toolcall · 501ms"}
       </InlineToolRow>
-      <InlineToolRow id="tool-inline-after" icon="→" complete={true} pending="">
+      <InlineToolRow icon="→" complete={true} pending="">
         Read src/cli/cmd/tui/routes/session/index.tsx
       </InlineToolRow>
     </box>
   )
 }
 
-function LoadedReadBeforeSubagentFixture() {
+function LoadedReadBeforeTaskFixture() {
   return (
     <box flexDirection="column" width={72}>
-      <InlineToolRow id="tool-inline-read" icon="→" complete={true} pending="">
+      <InlineToolRow icon="→" complete={true} pending="">
         Read src/cli/cmd/tui/routes/session/index.tsx
       </InlineToolRow>
-      <box id="tool-inline-loaded-read-child" paddingLeft={3}>
+      <box paddingLeft={3}>
         <text paddingLeft={3}>↳ Loaded src/cli/cmd/tui/routes/session/tools.tsx</text>
       </box>
-      <InlineToolRow id="tool-inline-subagent-after-read" icon="✓" complete={true} pending="" subagent={true}>
+      <InlineToolRow icon="✓" complete={true} pending="" separate={true}>
         {"Explore Task — Inspect active task spacing\n↳ 1 toolcall · 501ms"}
+      </InlineToolRow>
+    </box>
+  )
+}
+
+function AssistantSummaryBeforeInlineFixture() {
+  return (
+    <box flexDirection="column" width={72}>
+      <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3}>
+        <text>▣ Build · Little Frank · 53.1s</text>
+      </box>
+      <InlineToolRow icon="✓" complete={true} pending="">
+        {"Build Task — Review changes\n↳ 48 toolcalls · 1m 40s"}
+      </InlineToolRow>
+    </box>
+  )
+}
+
+function AssistantErrorBeforeInlineFixture() {
+  return (
+    <box flexDirection="column" width={72}>
+      <box
+        ref={(el: BoxRenderable) => alwaysSeparate.add(el)}
+        border={["left"]}
+        paddingTop={1}
+        paddingBottom={1}
+        paddingLeft={2}
+      >
+        <text>Managed inference requires an active Member plan</text>
+      </box>
+      <InlineToolRow icon="✓" complete={true} pending="">
+        {"Build Task — Review changes\n↳ 48 toolcalls · 1m 40s"}
       </InlineToolRow>
     </box>
   )
@@ -144,7 +183,7 @@ function StickyScrollFixture(props: { separated: boolean; scroll: (scroll: Scrol
         <text>Second row</text>
       </box>
       <Show when={props.separated}>
-        <box id="text-before-tool">
+        <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)}>
           <text>Assistant text</text>
         </box>
       </Show>
@@ -155,8 +194,25 @@ function StickyScrollFixture(props: { separated: boolean; scroll: (scroll: Scrol
   )
 }
 
+function FailedPendingToolFixture() {
+  return (
+    <InlineToolRow icon="%" complete={false} pending="Preparing patch..." failed={true} failure="Patch failed">
+      Patch
+    </InlineToolRow>
+  )
+}
+
+function FailedCompleteToolFixture() {
+  return (
+    <InlineToolRow icon="→" complete={true} pending="Reading file..." failed={true} failure="Read failed">
+      Read src/index.ts
+    </InlineToolRow>
+  )
+}
+
 async function renderFrame(component: () => JSX.Element, options: { width: number; height: number }) {
   testSetup = await testRender(component, options)
+  await testSetup.renderOnce()
   await testSetup.renderOnce()
 
   return testSetup
@@ -171,6 +227,18 @@ describe("TUI inline tool wrapping", () => {
   test("falls back for unknown tool names", () => {
     expect(toolDisplay("bash")).toBe("bash")
     expect(toolDisplay("plugin_tool")).toBe("generic")
+  })
+
+  test("replaces pending copy when a tool fails before completion", async () => {
+    const frame = await renderFrame(() => <FailedPendingToolFixture />, { width: 72, height: 3 })
+    expect(frame).toContain("Patch failed")
+    expect(frame).not.toContain("Preparing patch")
+  })
+
+  test("preserves useful completed copy when a tool fails", async () => {
+    const frame = await renderFrame(() => <FailedCompleteToolFixture />, { width: 72, height: 3 })
+    expect(frame).toContain("Read src/index.ts")
+    expect(frame).not.toContain("Read failed")
   })
 
   test("filters malformed nested tool wire data", () => {
@@ -240,12 +308,20 @@ describe("TUI inline tool wrapping", () => {
     expect(await renderFrame(() => <Fixture before="user" />, { width: 72, height: 14 })).toMatchSnapshot()
   })
 
-  test("separates a contiguous subagent group from inline tools", async () => {
-    expect(await renderFrame(() => <SubagentGroupFixture />, { width: 72, height: 10 })).toMatchSnapshot()
+  test("separates after a multi-line task row", async () => {
+    expect(await renderFrame(() => <TaskRowsFixture />, { width: 72, height: 10 })).toMatchSnapshot()
   })
 
-  test("separates a subagent group after an expanded read", async () => {
-    expect(await renderFrame(() => <LoadedReadBeforeSubagentFixture />, { width: 72, height: 8 })).toMatchSnapshot()
+  test("separates a task row from a preceding inline detail", async () => {
+    expect(await renderFrame(() => <LoadedReadBeforeTaskFixture />, { width: 72, height: 8 })).toMatchSnapshot()
+  })
+
+  test("separates an inline row from the previous assistant summary", async () => {
+    expect(await renderFrame(() => <AssistantSummaryBeforeInlineFixture />, { width: 72, height: 5 })).toMatchSnapshot()
+  })
+
+  test("separates an inline row from the previous assistant error", async () => {
+    expect(await renderFrame(() => <AssistantErrorBeforeInlineFixture />, { width: 72, height: 7 })).toMatchSnapshot()
   })
 
   test("updates sticky-bottom geometry when a text separator mounts and unmounts", async () => {

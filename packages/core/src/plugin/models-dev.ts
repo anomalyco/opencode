@@ -1,17 +1,13 @@
-import { DateTime, Effect, Scope, Stream } from "effect"
-import { Catalog } from "../catalog"
-import { Connector } from "../connector"
-import { Credential } from "../credential"
-import { EventV2 } from "../event"
+import { define } from "@opencode-ai/plugin/v2/effect"
+import { Effect, Stream } from "effect"
 import { ModelV2 } from "../model"
 import { ModelRequest } from "../model-request"
 import { ModelsDev } from "../models-dev"
-import { PluginV2 } from "../plugin"
 import { ProviderV2 } from "../provider"
 
 function released(date: string) {
   const time = Date.parse(date)
-  return DateTime.makeUnsafe(Number.isFinite(time) ? time : 0)
+  return Number.isFinite(time) ? time : 0
 }
 
 function cost(input: ModelsDev.Model["cost"]) {
@@ -52,40 +48,35 @@ function variants(model: ModelsDev.Model, packageName?: string) {
   })
 }
 
-export const ModelsDevPlugin = PluginV2.define({
-  id: PluginV2.ID.make("models-dev"),
-  effect: Effect.gen(function* () {
-    const catalog = yield* Catalog.Service
-    const connectors = yield* Connector.Service
+export const ModelsDevPlugin = define({
+  id: "models-dev",
+  effect: Effect.fn(function* (ctx) {
     const modelsDev = yield* ModelsDev.Service
-    const events = yield* EventV2.Service
-    const scope = yield* Scope.Scope
-    const transform = yield* catalog.transform()
-    const connectorTransform = yield* connectors.transform()
-    const refresh = Effect.fn("ModelsDevPlugin.refresh")(function* () {
-      const data = yield* modelsDev.get()
-      yield* connectorTransform((connectors) => {
+    yield* ctx.integration.transform(
+      Effect.fn(function* (integrations) {
+        const data = yield* modelsDev.get()
         for (const item of Object.values(data)) {
           if (item.env.length === 0) continue
-          const connectorID = Connector.ID.make(item.id)
-          connectors.update(connectorID, (connector) => (connector.name = item.name))
-          connectors.method.update({
-            connectorID,
-            method: new Connector.KeyMethod({
-              id: Connector.MethodID.make("api-key"),
-              type: "key",
-              label: "API Key",
-            }),
-            authorize: (key: string) => Effect.succeed(new Credential.Key({ type: "key", key })),
+          const integrationID = item.id
+          integrations.update(integrationID, (integration) => (integration.name = item.name))
+          integrations.method.update({
+            integrationID,
+            method: { type: "key" },
+          })
+          integrations.method.update({
+            integrationID,
+            method: { type: "env", names: [...item.env] },
           })
         }
-      })
-      yield* transform((catalog) => {
+      }),
+    )
+    yield* ctx.catalog.transform(
+      Effect.fn(function* (catalog) {
+        const data = yield* modelsDev.get()
         for (const item of Object.values(data)) {
           const providerID = ProviderV2.ID.make(item.id)
           catalog.provider.update(providerID, (provider) => {
             provider.name = item.name
-            provider.env = [...item.env]
             provider.api = item.npm
               ? {
                   type: "aisdk",
@@ -135,11 +126,10 @@ export const ModelsDevPlugin = PluginV2.define({
             })
           }
         }
-      })
-    })
-    yield* refresh()
-    yield* events.subscribe(ModelsDev.Event.Refreshed).pipe(
-      Stream.runForEach(() => refresh()),
+      }),
+    )
+    yield* ctx.event.subscribe("models-dev.refreshed").pipe(
+      Stream.runForEach(() => ctx.integration.rebuild().pipe(Effect.andThen(ctx.catalog.rebuild()))),
       Effect.forkScoped({ startImmediately: true }),
     )
   }),
