@@ -137,7 +137,7 @@ const table = sqliteTable("session", {
 
 ## Testing
 
-- Avoid mocks as much as possible
+- Avoid mocks as much as possible, you shouldn't be using globalThis.\* at all unless it's the only option.
 - Test actual implementation, do not duplicate logic into tests
 - Tests cannot run from repo root (guard: `do-not-run-tests-from-root`); run from package dirs like `packages/opencode`.
 
