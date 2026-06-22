@@ -185,12 +185,7 @@ function TargetDirectoryLayout(props: ParentProps) {
     if (!search.draftId) return undefined
     return tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)?.directory
   })
-  const [previousDirectory, setPreviousDirectory] = createSignal<string>()
-  createEffect(() => {
-    const directory = resolvedDirectory()
-    if (directory) setPreviousDirectory(directory)
-  })
-  const directory = () => resolvedDirectory() ?? previousDirectory()
+  const directory = createMemo<string | undefined>((prev) => prev ?? resolvedDirectory())
   const home = () => !params.serverKey && !search.draftId
   const targetDirectory = () => directory()!
 
