@@ -1,7 +1,7 @@
 export * as SessionV2 from "./session"
 export * from "./session/schema"
 
-import { Cause, DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
+import { DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
 import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
@@ -25,7 +25,6 @@ import { fromRow } from "./session/info"
 import { SessionRunner } from "./session/runner/index"
 import { SessionStore } from "./session/store"
 import { SessionExecution } from "./session/execution"
-import { logFailure } from "./session/logging"
 import { MessageDecodeError } from "./session/error"
 import { SessionEvent } from "./session/event"
 import { SessionInput } from "./session/input"
@@ -168,20 +167,6 @@ export const layer = Layer.effect(
     const store = yield* SessionStore.Service
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
-    const scope = yield* Effect.scope
-
-    const enqueueWake = (admitted: SessionInput.Admitted) =>
-      execution.wake(admitted.sessionID, admitted.admittedSeq).pipe(
-        Effect.tapCause((cause) =>
-          Cause.hasInterruptsOnly(cause)
-            ? Effect.void
-            : logFailure("Failed to wake Session", admitted.sessionID, cause),
-        ),
-        Effect.ignore,
-        Effect.forkIn(scope, { startImmediately: true }),
-        Effect.asVoid,
-      )
-
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
         Effect.mapError(
@@ -342,10 +327,6 @@ export const layer = Layer.effect(
         Effect.uninterruptible(
           Effect.gen(function* () {
             yield* result.get(input.sessionID)
-            const returnPrompt = Effect.fnUntraced(function* (admitted: SessionInput.Admitted) {
-              if (input.resume !== false) yield* enqueueWake(admitted)
-              return admitted
-            }, Effect.uninterruptible)
             const messageID = input.id ?? SessionMessage.ID.create()
             const delivery = input.delivery ?? "steer"
             const expected = { sessionID: input.sessionID, messageID, prompt: input.prompt, delivery }
@@ -363,7 +344,8 @@ export const layer = Layer.effect(
             )
             if (!SessionInput.equivalent(admitted, expected))
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
-            return yield* returnPrompt(admitted)
+            if (input.resume !== false) yield* execution.wake(admitted.sessionID)
+            return admitted
           }),
         ),
       ),
@@ -404,19 +386,7 @@ export const layer = Layer.effect(
         yield* execution.resume(sessionID)
       }),
       interrupt: Effect.fn("V2Session.interrupt")((sessionID) =>
-        Effect.uninterruptible(
-          Effect.gen(function* () {
-            const session = yield* store.get(sessionID)
-            if (!session) return yield* execution.interrupt(sessionID)
-            const event = yield* events.publish(SessionEvent.InterruptRequested, {
-              sessionID,
-              timestamp: yield* DateTime.now,
-            })
-            if (event.durable === undefined)
-              return yield* Effect.die("Interrupt request event is missing aggregate sequence")
-            yield* execution.interrupt(sessionID, event.durable.seq)
-          }),
-        ),
+        Effect.uninterruptible(execution.interrupt(sessionID)),
       ),
     })
 
