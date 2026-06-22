@@ -94,7 +94,7 @@ export function createSessionComposerState(options?: { closeMs?: number | (() =>
     if (test.on && test.todos !== undefined) return test.todos
     const id = params.id
     if (!id) return []
-    return globalSync.data.session_todo[id] ?? []
+    return sync.data.todo[id] ?? []
   })
 
   const done = createMemo(

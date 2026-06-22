@@ -1,11 +1,11 @@
 import type {
   Config,
+  Issue,
   OpencodeClient,
   Path,
   Project,
   ProviderAuthResponse,
   ProviderListResponse,
-  Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
@@ -32,8 +32,8 @@ type GlobalStore = {
   error?: InitError
   path: Path
   project: Project[]
-  session_todo: {
-    [sessionID: string]: Todo[]
+  workspace_todo: {
+    [directory: string]: Issue[]
   }
   provider: ProviderListResponse
   provider_auth: ProviderAuthResponse
@@ -61,7 +61,7 @@ function createGlobalSync() {
     ready: false,
     path: { state: "", config: "", worktree: "", directory: "", home: "" },
     project: projectCache.value,
-    session_todo: {},
+    workspace_todo: {},
     provider: { all: [], connected: [], default: {} },
     provider_auth: {},
     config: {},
@@ -127,18 +127,18 @@ function createGlobalSync() {
     })
   }
 
-  const setSessionTodo = (sessionID: string, todos: Todo[] | undefined) => {
-    if (!sessionID) return
+  const setWorkspaceTodo = (directory: string, todos: Issue[] | undefined) => {
+    if (!directory) return
     if (!todos) {
       setGlobalStore(
-        "session_todo",
+        "workspace_todo",
         produce((draft) => {
-          delete draft[sessionID]
+          delete draft[directory]
         }),
       )
       return
     }
-    setGlobalStore("session_todo", sessionID, reconcile(todos, { key: "id" }))
+    setGlobalStore("workspace_todo", directory, reconcile(todos, { key: "id" }))
   }
 
   const paused = () => untrack(() => globalStore.reload) !== undefined
@@ -177,6 +177,17 @@ function createGlobalSync() {
     return sdk
   }
 
+  const refreshIssues = (directory: string) => {
+    sdkFor(directory)
+      .issue.list({ directory })
+      .then((x) => {
+        setWorkspaceTodo(directory, x.data ?? [])
+      })
+      .catch((err: unknown) => {
+        console.error("Failed to refresh issues for", directory, err)
+      })
+  }
+
   async function loadSessions(directory: string) {
     const pending = sessionLoads.get(directory)
     if (pending) return pending
@@ -191,7 +202,7 @@ function createGlobalSync() {
       })
       if (next.length !== store.session.length) {
         setStore("session", reconcile(next, { key: "id" }))
-        cleanupDroppedSessionCaches(store, setStore, next, setSessionTodo)
+        cleanupDroppedSessionCaches(store, setStore, next)
       }
       children.unpin(directory)
       return
@@ -223,7 +234,7 @@ function createGlobalSync() {
           }),
         )
         setStore("session", reconcile(sessions, { key: "id" }))
-        cleanupDroppedSessionCaches(store, setStore, sessions, setSessionTodo)
+        cleanupDroppedSessionCaches(store, setStore, sessions)
         sessionMeta.set(directory, { limit })
       })
       .catch((err) => {
@@ -269,6 +280,7 @@ function createGlobalSync() {
         vcsCache: cache,
         loadSessions,
         translate: language.t,
+        setWorkspaceTodo,
       })
     })()
 
@@ -314,7 +326,6 @@ function createGlobalSync() {
       store,
       setStore,
       push: queue.push,
-      setSessionTodo,
       vcsCache: children.vcsCache.get(directory),
       loadLsp: () => {
         sdkFor(directory)
@@ -324,6 +335,8 @@ function createGlobalSync() {
             setStore("lsp_ready", true)
           })
       },
+      setWorkspaceTodo,
+      refreshIssues,
     })
   })
 
@@ -412,7 +425,7 @@ function createGlobalSync() {
     updateConfig,
     project: projectApi,
     todo: {
-      set: setSessionTodo,
+      set: setWorkspaceTodo,
     },
   }
 }

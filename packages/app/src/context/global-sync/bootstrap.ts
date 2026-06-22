@@ -1,5 +1,6 @@
 import type {
   Config,
+  Issue,
   OpencodeClient,
   Path,
   PermissionRequest,
@@ -8,7 +9,6 @@ import type {
   ProviderListResponse,
   QuestionRequest,
   Session,
-  Todo,
 } from "@opencode-ai/sdk/v2/client"
 import { showToast } from "@opencode-ai/ui/toast"
 import { getFilename } from "@opencode-ai/util/path"
@@ -23,8 +23,8 @@ type GlobalStore = {
   ready: boolean
   path: Path
   project: Project[]
-  session_todo: {
-    [sessionID: string]: Todo[]
+  workspace_todo: {
+    [directory: string]: Issue[]
   }
   provider: ProviderListResponse
   provider_auth: ProviderAuthResponse
@@ -195,6 +195,7 @@ export async function bootstrapDirectory(input: {
   vcsCache: VcsCache
   loadSessions: (directory: string) => Promise<void> | void
   translate: (key: string, vars?: Record<string, string | number>) => string
+  setWorkspaceTodo: (directory: string, todos: Issue[] | undefined) => void
   global: {
     config: Config
     path: Path
@@ -310,6 +311,12 @@ export async function bootstrapDirectory(input: {
         input.sdk.mcp.status().then((x) => {
           input.setStore("mcp", x.data!)
           input.setStore("mcp_ready", true)
+        }),
+      ),
+    () =>
+      retry(() =>
+        input.sdk.issue.list({ directory: input.directory }).then((x) => {
+          input.setWorkspaceTodo(input.directory, x.data ?? [])
         }),
       ),
   ]

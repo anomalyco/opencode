@@ -520,16 +520,8 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
           const [store, setStore] = globalSync.child(directory)
           touch(directory, setStore, sessionID)
           const existing = store.todo[sessionID]
-          const cached = globalSync.data.session_todo[sessionID]
           if (existing !== undefined) {
-            if (cached === undefined) {
-              globalSync.todo.set(sessionID, existing)
-            }
             if (!opts?.force) return
-          }
-
-          if (cached !== undefined) {
-            setStore("todo", sessionID, reconcile(cached, { key: "id" }))
           }
 
           const key = keyFor(directory, sessionID)
@@ -538,7 +530,6 @@ export const { use: useSync, provider: SyncProvider } = createSimpleContext({
               if (!tracked(directory, sessionID)) return
               const list = todo.data ?? []
               setStore("todo", sessionID, reconcile(list, { key: "id" }))
-              globalSync.todo.set(sessionID, list)
             }),
           )
         },

@@ -1,6 +1,7 @@
 import { Binary } from "@opencode-ai/util/binary"
 import { produce, reconcile, type SetStoreFunction, type Store } from "solid-js/store"
 import type {
+  Issue,
   Message,
   Part,
   PermissionRequest,
@@ -95,6 +96,8 @@ export function applyDirectoryEvent(input: {
   loadLsp: () => void
   vcsCache?: VcsCache
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
+  setWorkspaceTodo?: (directory: string, todos: Issue[] | undefined) => void
+  refreshIssues?: (directory: string) => void
 }) {
   const event = input.event
   switch (event.type) {
@@ -182,13 +185,25 @@ export function applyDirectoryEvent(input: {
       const props = event.properties as { sessionID: string; id: string }
       const existing = input.store.todo[props.sessionID]
       if (existing) {
-        input.setStore("todo", props.sessionID, existing.filter((t: Todo) => t.id !== props.id))
+        input.setStore(
+          "todo",
+          props.sessionID,
+          existing.filter((t: Todo) => t.id !== props.id),
+        )
       }
       break
     }
     case "todo.progressed": {
       const props = event.properties as { sessionID: string }
       input.setSessionTodo?.(props.sessionID, undefined)
+      break
+    }
+    case "issue.created":
+    case "issue.updated":
+    case "issue.deleted":
+    case "issue.progressed": {
+      if (input.refreshIssues) input.refreshIssues(input.directory)
+      else if (input.setWorkspaceTodo) input.setWorkspaceTodo(input.directory, undefined)
       break
     }
     case "session.status": {
