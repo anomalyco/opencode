@@ -24,7 +24,7 @@ A durable chronological instruction that tells the model the newly effective sta
 _Avoid_: System update, system notification, raw text diff
 
 **Context Epoch**:
-The span during which one effective agent's initially rendered **System Context** remains immutable, ending at compaction or another baseline-replacing transition.
+The span during which one initially rendered **System Context** remains the immutable provider-cache baseline, ending at completed compaction, Session movement, or an incompatible context transition that requires a fresh baseline.
 
 **Baseline System Context**:
 The full **System Context** rendered at the start of a **Context Epoch**.
@@ -75,31 +75,28 @@ The host-supplied environment overlay applied by the server when creating a PTY,
 - Each **Context Source** loader returns one coherent typed value. `SystemContext.make(...)` hides that value type so differently typed sources compose uniformly. Its codec compares and stores that value; its pure renderers produce model-visible baseline, update, and removal text only when needed.
 - `SystemContext.initialize(...)` observes a composed **System Context** once and produces a fresh **Baseline System Context** with its **Context Snapshot**.
 - `SystemContext.reconcile(...)` observes a composed **System Context** once and returns exactly one next action: unchanged, updated, replacement ready, or replacement blocked.
-- `SystemContext.replace(...)` represents an explicit baseline-replacing transition such as compaction or model/provider switch; it either produces a fresh generation or reports that replacement is blocked by unavailable admitted context.
-- Context Epoch preparation retries until stable after optimistic revision mismatches so concurrent replacement requests cannot terminate an otherwise valid safe-boundary run.
+- `SystemContext.replace(...)` renders a fresh generation after completed compaction or another baseline-replacing transition; it reports replacement blocked while previously admitted context is unavailable.
 - **Unavailable Context** uses stale-while-revalidate semantics and is distinct from a successfully loaded absence, which may emit removal text.
 - Ordinary **Context Source** loaders return values directly; loaders that intentionally use stale-while-revalidate may explicitly return **Unavailable Context**.
 - Nested project instruction discovery after successful reads remains a follow-up; when implemented, discovered instructions must be admitted durably at the next **Safe Provider-Turn Boundary**.
 - Location-scoped services naturally re-resolve effective context when a moved session next runs in its destination location.
 - Moving a Session clears its active **Context Epoch**, so the destination must initialize a complete baseline before another prompt can promote.
-- Context Epoch initialization is fenced against the authoritative Session Location, so an old-Location runner cannot recreate source context after a concurrent move.
 - Instruction discovery, source identity, persistence, and file loading belong to the instruction service; the **System Context** abstraction only composes effectful producers and renders loaded values.
 - The first instruction-service slice observes global and upward project `AGENTS.md` files as one ordered aggregate **Context Source** at each **Safe Provider-Turn Boundary**.
 - Built-in and instruction context producers register through the **System Context Registry** with stable contribution keys. Plugin-defined context registration and hot-reload lifecycle remain a follow-up built on the same scoped registry seam.
 - Selected-agent available-skill guidance is a **Context Source** composed with Location-wide registry sources immediately before Context Epoch admission. It lists only names and descriptions permitted for that agent; skill bodies and locations are exposed only through the permission-checked `skill` tool.
-- Switching the selected agent requests **Context Epoch** replacement. A switch admitted after the current **Safe Provider-Turn Boundary** applies to the next provider turn while leaving the already-prepared baseline durable. Epoch creation is fenced against the authoritative effective agent, and retries re-observe the current agent.
-- A cross-agent replacement must complete before another provider turn; unavailable admitted context blocks that replacement instead of exposing the previous agent's privileged baseline.
+- The selected agent and model are sampled when a provider turn starts. Changes admitted after that boundary apply to the next provider turn and do not restart the current turn.
+- Selected-agent available-skill guidance remains a **Context Source**. An agent switch that changes that guidance produces a **Mid-Conversation System Message** while preserving the current baseline.
 - Local tool authorization and pending permission requests retain the effective agent of the provider turn that issued the call; a later agent switch cannot change that call's policy.
 - Context source changes never wake idle sessions; the next naturally scheduled **Safe Provider-Turn Boundary** loads and compares current values lazily.
 - Once admitted, a **Mid-Conversation System Message** remains durable even if the following provider attempt fails and is replayed unchanged on retry.
 - **Mid-Conversation System Messages** remain durable Session-message history; normal user-facing transcript surfaces may hide them.
 - The date **Context Source** initially preserves host-local calendar-date behavior; a configured user timezone may replace that default later.
 - A **Context Epoch** begins with one immutable **Baseline System Context**.
-- A **Context Epoch** durably records the effective agent that owns its **Baseline System Context**.
 - A **Baseline System Context** is stored durably and reused verbatim across process restarts within its **Context Epoch**.
 - A **Baseline System Context** durably preserves the exact joined text used for the active provider-cache prefix.
-- Compaction or a model/provider switch starts a new **Context Epoch** because the baseline can be replaced without preserving the prior provider cache.
-- A model/provider switch always starts a new **Context Epoch** while preserving chronological conversation history.
+- Completed compaction starts a new **Context Epoch** on the next provider attempt, folding the current complete **System Context** into a fresh baseline and removing earlier **Mid-Conversation System Messages** from active model history.
+- A model/provider switch preserves the current **Context Epoch** and chronological conversation history; the new selection applies to the next provider turn.
 - **Model Request Options** remain provider-semantic through Catalog resolution. The Session runner maps them into the LLM package's provider-option namespace; the selected protocol adapter alone owns provider wire encoding.
 - **Generation Controls**, protocol-semantic **Model Request Options**, and compatibility request body fields are separate Catalog domains. A shared ingestion adapter partitions legacy and models.dev AI-SDK-shaped options before routing.
 - The **PTY Environment** is a server concern rather than a Core PTY concern. PTY creation merges caller values, then the host overlay, then Core-forced terminal invariants such as `TERM` and `OPENCODE_TERMINAL`.

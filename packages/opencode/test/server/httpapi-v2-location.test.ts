@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { EventV2 } from "@opencode-ai/core/event"
+import { Location } from "@opencode-ai/core/location"
 import { Context, Schema } from "effect"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { resetDatabase } from "../fixture/db"
@@ -19,14 +21,9 @@ function request(route: string, directory: string, init: RequestInit = {}) {
 }
 
 const Event = Schema.Struct({
-  id: Schema.String,
+  id: EventV2.ID,
   type: Schema.String,
-  location: Schema.optional(
-    Schema.Struct({
-      directory: Schema.String,
-      project: Schema.Struct({ id: Schema.String, directory: Schema.String }),
-    }),
-  ),
+  location: Schema.optional(Location.Ref),
   data: Schema.Unknown,
 })
 
@@ -50,6 +47,17 @@ afterEach(async () => {
 })
 
 describe("v2 location HttpApi", () => {
+  test("decodes EventV2 location refs without resolved project metadata", () => {
+    expect(
+      Schema.decodeUnknownSync(Event)({
+        id: "evt_test",
+        type: "file.watcher.updated",
+        location: { directory: "/tmp/project" },
+        data: {},
+      }),
+    ).toMatchObject({ location: { directory: "/tmp/project" } })
+  })
+
   test("returns command and skill snapshots with resolved locations", async () => {
     await using tmp = await tmpdir({ git: true })
 
@@ -79,7 +87,7 @@ describe("v2 location HttpApi", () => {
     expect(created.status).toBe(200)
     expect(await readEventType(reader, "session.created")).toMatchObject({
       type: "session.created",
-      location: { directory: publisher.path, project: { directory: publisher.path } },
+      location: { directory: publisher.path },
       data: { sessionID: expect.any(String) },
     })
     await reader.cancel()

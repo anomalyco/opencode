@@ -55,8 +55,8 @@ Next reviewed slices:
 - integrate the new BackgroundJob service with V2 tool execution: support background
   bash jobs and background agent dispatch with durable status observation,
   completion delivery, and explicit cancellation / continuation semantics
-- add compaction, durable/clustered interruption, retries, and stale-owner fencing
-  only as their slices become concrete
+- add durable/clustered interruption, retries, and stale-owner fencing only as
+  their slices become concrete
 
 ### Deferred durable activity recovery
 
@@ -74,10 +74,6 @@ Design post-crash activity recovery as one explicit slice. It should model:
 - bounded automatic retry only where provider and tool idempotency make it safe
 - retry budget, backoff, visible recovery status, startup discovery, and future
   clustered ownership fencing
-
-## Rework compaction - Aiden?
-
-The new agent loop needs to trigger compaction properly
 
 ## Plugin API design - James?
 
