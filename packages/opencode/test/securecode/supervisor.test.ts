@@ -8,15 +8,34 @@ import {
   buildSandboxConfig,
   loadUserConfig,
   mergeUserConfigs,
-  normalizeUserConfig,
   resolveInnerCommand,
   shellQuote,
-  type UserConfigInput,
+  type UserConfig,
 } from "../../../../script/securecode-supervisor"
 
-// テストでは UserConfigInput (部分指定 OK) を書き、normalizeUserConfig で正規化済みの
-// UserConfig に変換してから buildSandboxConfig に渡す。本番 loadUserConfig と同じ経路。
-const cfgFor = (input: UserConfigInput = {}) => buildSandboxConfig(normalizeUserConfig(input))
+// 部分指定の object から正規化済み `UserConfig` を作るテスト fixture helper。
+// 本番フローでは loadUserConfig が同等の normalize を行うが、ファイル経由を毎テストで
+// 行うのは重いので、ここで inline で `[]` 埋めしている (= loadUserConfig 内のロジックの
+// テスト用ミラー)。
+type PartialConfig = {
+  network?: { allowedDomains?: string[]; deniedDomains?: string[] }
+  filesystem?: { allowRead?: string[]; allowWrite?: string[]; denyRead?: string[]; denyWrite?: string[] }
+}
+function makeConfig(partial: PartialConfig = {}): UserConfig {
+  return {
+    network: {
+      allowedDomains: partial.network?.allowedDomains ?? [],
+      deniedDomains: partial.network?.deniedDomains ?? [],
+    },
+    filesystem: {
+      allowRead: partial.filesystem?.allowRead ?? [],
+      allowWrite: partial.filesystem?.allowWrite ?? [],
+      denyRead: partial.filesystem?.denyRead ?? [],
+      denyWrite: partial.filesystem?.denyWrite ?? [],
+    },
+  }
+}
+const cfgFor = (partial: PartialConfig = {}) => buildSandboxConfig(makeConfig(partial))
 
 describe("buildSandboxConfig", () => {
   test("デフォルト allowlist に CIA endpoint だけ入る", () => {
@@ -152,11 +171,11 @@ describe("mergeUserConfigs", () => {
   })
 
   test("複数 config の allow / deny を concat する (入力順を維持)", () => {
-    const a = normalizeUserConfig({
+    const a = makeConfig({
       network: { allowedDomains: ["a.com"], deniedDomains: ["evil.com"] },
       filesystem: { denyRead: ["/asecret"] },
     })
-    const b = normalizeUserConfig({
+    const b = makeConfig({
       network: { allowedDomains: ["b.com"], deniedDomains: ["bad.org"] },
       filesystem: { denyRead: ["/bsecret"] },
     })
@@ -167,14 +186,14 @@ describe("mergeUserConfigs", () => {
   })
 
   test("重複は除去しない (sandbox-runtime に重複は無害)", () => {
-    const a = normalizeUserConfig({ network: { allowedDomains: ["dup.com"] } })
-    const b = normalizeUserConfig({ network: { allowedDomains: ["dup.com"] } })
+    const a = makeConfig({ network: { allowedDomains: ["dup.com"] } })
+    const b = makeConfig({ network: { allowedDomains: ["dup.com"] } })
     expect(mergeUserConfigs(a, b).network.allowedDomains).toEqual(["dup.com", "dup.com"])
   })
 
   test("片方だけ値があれば反映される (per-directory で許可を追加できる)", () => {
-    const a = normalizeUserConfig({})
-    const b = normalizeUserConfig({ network: { allowedDomains: ["only.com"] } })
+    const a = makeConfig({})
+    const b = makeConfig({ network: { allowedDomains: ["only.com"] } })
     expect(mergeUserConfigs(a, b).network.allowedDomains).toEqual(["only.com"])
   })
 })
@@ -183,16 +202,15 @@ describe("buildSandboxConfig with project config", () => {
   test("configPaths を渡すと全パスが denyRead / denyWrite の先頭に入る", () => {
     const globalPath = "/home/user/.config/securecode/sandbox.json"
     const projectPath = "/work/repo/.securecode/sandbox.json"
-    const cfg = buildSandboxConfig(
-      normalizeUserConfig({ filesystem: { denyRead: ["/extra"], denyWrite: ["/extra"] } }),
-      { configPaths: [globalPath, projectPath] },
-    )
+    const cfg = buildSandboxConfig(makeConfig({ filesystem: { denyRead: ["/extra"], denyWrite: ["/extra"] } }), {
+      configPaths: [globalPath, projectPath],
+    })
     expect(cfg.filesystem.denyRead).toEqual([globalPath, projectPath, "/extra"])
     expect(cfg.filesystem.denyWrite).toEqual([globalPath, projectPath, "/extra"])
   })
 
   test("configPaths 未指定なら CONFIG_PATH のみが deny に入る", () => {
-    const cfg = buildSandboxConfig(normalizeUserConfig({}))
+    const cfg = buildSandboxConfig(makeConfig())
     expect(cfg.filesystem.denyRead).toEqual([CONFIG_PATH])
     expect(cfg.filesystem.denyWrite).toEqual([CONFIG_PATH])
   })

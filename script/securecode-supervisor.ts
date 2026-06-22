@@ -22,25 +22,12 @@ export const CONFIG_PATH = join(CONFIG_DIR, "sandbox.json")
 export const DEFAULT_ALLOWED_DOMAINS = ["conf-ai.acompany-az.com"]
 
 /**
- * sandbox.json (JSON) から直接 parse される生の入力型。フィールドはすべて optional で、
- * 「ユーザが書かなかったキーは undefined」がそのまま反映される。`normalizeUserConfig` を
- * 通すと欠落キーが `[]` 埋めされた `UserConfig` (= 内部用) に変換され、それ以降の
- * コードでは `?? []` のような undefined ガードが要らなくなる。
+ * 全フィールドが `string[]` 必須に揃った正規化済み config。
+ *
+ * `loadUserConfig` を通れば必ずこの形になるため、`mergeUserConfigs` や
+ * `buildSandboxConfig` のような後段では `?? []` のような undefined ガードを
+ * 書かなくて済む (= 条件分岐が消える)。
  */
-export type UserConfigInput = {
-  network?: {
-    allowedDomains?: string[]
-    deniedDomains?: string[]
-  }
-  filesystem?: {
-    denyRead?: string[]
-    allowRead?: string[]
-    allowWrite?: string[]
-    denyWrite?: string[]
-  }
-}
-
-/** 正規化済み (= 欠落キーが `[]` 埋めされた) 内部用 type。 */
 export type UserConfig = {
   network: {
     allowedDomains: string[]
@@ -54,19 +41,19 @@ export type UserConfig = {
   }
 }
 
-/** 生の `UserConfigInput` を欠落キー `[]` 埋めの `UserConfig` に変換する境界 helper。 */
-export function normalizeUserConfig(raw: UserConfigInput): UserConfig {
-  return {
-    network: {
-      allowedDomains: raw.network?.allowedDomains ?? [],
-      deniedDomains: raw.network?.deniedDomains ?? [],
-    },
-    filesystem: {
-      allowRead: raw.filesystem?.allowRead ?? [],
-      allowWrite: raw.filesystem?.allowWrite ?? [],
-      denyRead: raw.filesystem?.denyRead ?? [],
-      denyWrite: raw.filesystem?.denyWrite ?? [],
-    },
+// sandbox.json の JSON parse 結果を受ける internal な型 (export しない)。
+// 「ユーザがキーを書き忘れる」を吸収するため、全て optional。境界変換は
+// 直下の `loadUserConfig` 内でのみ起きる。
+type RawUserConfig = {
+  network?: {
+    allowedDomains?: string[]
+    deniedDomains?: string[]
+  }
+  filesystem?: {
+    denyRead?: string[]
+    allowRead?: string[]
+    allowWrite?: string[]
+    denyWrite?: string[]
   }
 }
 
@@ -90,15 +77,28 @@ function die(msg: string, code = 1): never {
  * @throws `die()` 経由で `process.exit(1)`。読み込み or JSON parse 失敗時のみ。
  */
 export function loadUserConfig(path: string = CONFIG_PATH): UserConfig {
+  let raw: RawUserConfig = {}
   if (!existsSync(path)) {
     log(`no user config at ${path}, using defaults`)
-    return normalizeUserConfig({})
+  } else {
+    try {
+      raw = JSON.parse(readFileSync(path, "utf8")) as RawUserConfig
+    } catch (err) {
+      die(`failed to read/parse ${path}: ${(err as Error).message}`)
+    }
   }
-  try {
-    const raw = readFileSync(path, "utf8")
-    return normalizeUserConfig(JSON.parse(raw) as UserConfigInput)
-  } catch (err) {
-    die(`failed to read/parse ${path}: ${(err as Error).message}`)
+  // 境界変換: 欠落キーをすべて `[]` 埋めして以降のコードから undefined ガードを消す。
+  return {
+    network: {
+      allowedDomains: raw.network?.allowedDomains ?? [],
+      deniedDomains: raw.network?.deniedDomains ?? [],
+    },
+    filesystem: {
+      allowRead: raw.filesystem?.allowRead ?? [],
+      allowWrite: raw.filesystem?.allowWrite ?? [],
+      denyRead: raw.filesystem?.denyRead ?? [],
+      denyWrite: raw.filesystem?.denyWrite ?? [],
+    },
   }
 }
 
