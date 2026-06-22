@@ -14777,7 +14777,7 @@
             "$ref": "#/components/schemas/EventFileEdited"
           },
           {
-            "$ref": "#/components/schemas/EventPluginAdded"
+            "$ref": "#/components/schemas/EventReferenceUpdated"
           },
           {
             "$ref": "#/components/schemas/EventPermissionV2Asked"
@@ -14786,7 +14786,7 @@
             "$ref": "#/components/schemas/EventPermissionV2Replied"
           },
           {
-            "$ref": "#/components/schemas/EventReferenceUpdated"
+            "$ref": "#/components/schemas/EventPluginAdded"
           },
           {
             "$ref": "#/components/schemas/EventProjectDirectoriesUpdated"
@@ -18526,17 +18526,11 @@
                   },
                   "type": {
                     "type": "string",
-                    "enum": ["plugin.added"]
+                    "enum": ["reference.updated"]
                   },
                   "properties": {
                     "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      }
-                    },
-                    "required": ["id"],
-                    "additionalProperties": false
+                    "properties": {}
                   }
                 },
                 "required": ["id", "type", "properties"],
@@ -18635,11 +18629,17 @@
                   },
                   "type": {
                     "type": "string",
-                    "enum": ["reference.updated"]
+                    "enum": ["plugin.added"]
                   },
                   "properties": {
                     "type": "object",
-                    "properties": {}
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      }
+                    },
+                    "required": ["id"],
+                    "additionalProperties": false
                   }
                 },
                 "required": ["id", "type", "properties"],
@@ -23119,7 +23119,7 @@
             "$ref": "#/components/schemas/V2EventFileEdited"
           },
           {
-            "$ref": "#/components/schemas/V2EventPluginAdded"
+            "$ref": "#/components/schemas/V2EventReferenceUpdated"
           },
           {
             "$ref": "#/components/schemas/V2EventPermissionV2Asked"
@@ -23128,7 +23128,7 @@
             "$ref": "#/components/schemas/V2EventPermissionV2Replied"
           },
           {
-            "$ref": "#/components/schemas/V2EventReferenceUpdated"
+            "$ref": "#/components/schemas/V2EventPluginAdded"
           },
           {
             "$ref": "#/components/schemas/V2EventProjectDirectoriesUpdated"
@@ -30431,7 +30431,7 @@
         "required": ["id", "type", "data"],
         "additionalProperties": false
       },
-      "V2EventPluginAdded": {
+      "V2EventReferenceUpdated": {
         "type": "object",
         "properties": {
           "id": {
@@ -30462,17 +30462,11 @@
           },
           "type": {
             "type": "string",
-            "enum": ["plugin.added"]
+            "enum": ["reference.updated"]
           },
           "data": {
             "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              }
-            },
-            "required": ["id"],
-            "additionalProperties": false
+            "properties": {}
           }
         },
         "required": ["id", "type", "data"],
@@ -30606,7 +30600,7 @@
         "required": ["id", "type", "data"],
         "additionalProperties": false
       },
-      "V2EventReferenceUpdated": {
+      "V2EventPluginAdded": {
         "type": "object",
         "properties": {
           "id": {
@@ -30637,11 +30631,17 @@
           },
           "type": {
             "type": "string",
-            "enum": ["reference.updated"]
+            "enum": ["plugin.added"]
           },
           "data": {
             "type": "object",
-            "properties": {}
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": ["id"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "type", "data"],
@@ -34370,7 +34370,7 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
-      "EventPluginAdded": {
+      "EventReferenceUpdated": {
         "type": "object",
         "properties": {
           "id": {
@@ -34379,17 +34379,11 @@
           },
           "type": {
             "type": "string",
-            "enum": ["plugin.added"]
+            "enum": ["reference.updated"]
           },
           "properties": {
             "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              }
-            },
-            "required": ["id"],
-            "additionalProperties": false
+            "properties": {}
           }
         },
         "required": ["id", "type", "properties"],
@@ -34479,7 +34473,7 @@
         "required": ["id", "type", "properties"],
         "additionalProperties": false
       },
-      "EventReferenceUpdated": {
+      "EventPluginAdded": {
         "type": "object",
         "properties": {
           "id": {
@@ -34488,11 +34482,17 @@
           },
           "type": {
             "type": "string",
-            "enum": ["reference.updated"]
+            "enum": ["plugin.added"]
           },
           "properties": {
             "type": "object",
-            "properties": {}
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": ["id"],
+            "additionalProperties": false
           }
         },
         "required": ["id", "type", "properties"],
