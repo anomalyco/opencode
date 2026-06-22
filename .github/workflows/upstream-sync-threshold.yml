@@ -24,6 +24,7 @@ permissions:
   contents: write
   pull-requests: write
   issues: write # required by gh to create/manage labels
+  workflows: write
 
 jobs:
   upstream-sync-threshold:
