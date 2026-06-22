@@ -44,7 +44,7 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
     ...(mcpTool.inputSchema as JSONSchema7),
     type: "object",
     properties: (mcpTool.inputSchema.properties ?? {}) as JSONSchema7["properties"],
-    additionalProperties: false,
+    additionalProperties: (mcpTool.inputSchema as JSONSchema7).additionalProperties ?? false,
   }
 
   return dynamicTool({
