@@ -1,6 +1,6 @@
 export * as ConfigCommandPlugin from "./command"
 
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "../../plugin/internal"
 import path from "path"
 import { Effect, Option, Schema } from "effect"
 import { CommandV2 } from "../../command"
@@ -17,7 +17,7 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
     const fs = yield* FSUtil.Service
-    yield* ctx.command.transform(
+    yield* ctx.hook.command.transform(
       Effect.fn(function* (draft) {
         const documents = yield* Effect.forEach(yield* config.entries(), (entry) => {
           if (entry.type === "document") return Effect.succeed([{ commands: entry.info.commands }])

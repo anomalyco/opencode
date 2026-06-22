@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "../internal"
 import { ProviderV2 } from "../../provider"
 
 type MantleSDK = {
@@ -62,7 +62,7 @@ function selectMantleModel(sdk: MantleSDK, modelID: string) {
 export const AmazonBedrockPlugin = define({
   id: "amazon-bedrock",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.catalog.transform(
+    yield* ctx.hook.catalog.transform(
       Effect.fn(function* (evt) {
         for (const item of evt.provider.list()) {
           if (item.provider.api.type !== "aisdk") continue
@@ -78,8 +78,7 @@ export const AmazonBedrockPlugin = define({
         }
       }),
     )
-    yield* ctx.aisdk.hook(
-      "sdk",
+    yield* ctx.hook.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (!["@ai-sdk/amazon-bedrock", "@ai-sdk/amazon-bedrock/mantle"].includes(evt.package)) return
         const options = { ...evt.options }
@@ -112,8 +111,7 @@ export const AmazonBedrockPlugin = define({
         evt.sdk = mod.createAmazonBedrock(options)
       }),
     )
-    yield* ctx.aisdk.hook(
-      "language",
+    yield* ctx.hook.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.amazonBedrock) return
         if (evt.model.api.type === "aisdk" && evt.model.api.package === "@ai-sdk/amazon-bedrock/mantle") {

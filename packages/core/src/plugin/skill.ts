@@ -2,7 +2,7 @@
 
 export * as SkillPlugin from "./skill"
 
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "./internal"
 import { Effect } from "effect"
 import { AbsolutePath } from "../schema"
 import { SkillV2 } from "../skill"
@@ -13,7 +13,7 @@ export const CustomizeOpencodeContent = customizeOpencodeContent
 export const Plugin = define({
   id: "skill",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.skill.transform((draft) => {
+    yield* ctx.hook.skill.transform((draft) => {
       draft.source(
         new SkillV2.EmbeddedSource({
           type: "embedded",

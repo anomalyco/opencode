@@ -1,6 +1,5 @@
 import type { SkillV2Info } from "@opencode-ai/sdk/v2/types"
-import type { Effect } from "effect"
-import type { Transformable } from "./registration.js"
+import type { Hooks } from "./registration.js"
 
 export type SkillSource =
   | { readonly type: "directory"; readonly path: string }
@@ -12,7 +11,6 @@ export interface SkillDraft {
   list(): readonly SkillSource[]
 }
 
-export interface Skill extends Transformable<SkillDraft> {
-  sources(): Effect.Effect<SkillSource[]>
-  list(): Effect.Effect<SkillV2Info[]>
-}
+export type SkillHooks = Hooks<{
+  transform: SkillDraft
+}>

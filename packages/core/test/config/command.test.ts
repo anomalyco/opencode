@@ -42,7 +42,7 @@ Review files`,
           })
 
           const command = yield* CommandV2.Service
-          yield* ConfigCommandPlugin.Plugin.effect(host({ command })).pipe(
+          yield* ConfigCommandPlugin.Plugin.effect(host({ hook: { command } })).pipe(
             Effect.provideService(
               Config.Service,
               Config.Service.of({

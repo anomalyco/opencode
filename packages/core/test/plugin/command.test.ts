@@ -24,9 +24,13 @@ describe("CommandPlugin.Plugin", () => {
       const command = yield* CommandV2.Service
       yield* CommandPlugin.Plugin.effect(
         host({
-          command,
-          location: location({ directory }, { projectDirectory: project }),
+          hook: { command: { transform: command.transform } },
         }),
+      ).pipe(
+        Effect.provideService(
+          Location.Service,
+          Location.Service.of(location({ directory }, { projectDirectory: project })),
+        ),
       )
 
       expect(yield* command.get("init")).toMatchObject({

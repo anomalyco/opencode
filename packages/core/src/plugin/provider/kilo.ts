@@ -1,10 +1,10 @@
 import { Effect } from "effect"
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "../internal"
 
 export const KiloPlugin = define({
   id: "kilo",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.catalog.transform(
+    yield* ctx.hook.catalog.transform(
       Effect.fn(function* (evt) {
         for (const item of evt.provider.list()) {
           if (item.provider.api.type !== "aisdk") continue

@@ -1,6 +1,6 @@
 export * as ConfigProviderPlugin from "./provider"
 
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "../../plugin/internal"
 import { Effect } from "effect"
 import { Config } from "../../config"
 import { ModelV2 } from "../../model"
@@ -11,7 +11,7 @@ export const Plugin = define({
   id: "config-provider",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
-    yield* ctx.integration.transform(
+    yield* ctx.hook.integration.transform(
       Effect.fn(function* (integrations) {
         const files = (yield* config.entries()).filter((entry): entry is Config.Document => entry.type === "document")
         const configuredIntegrations = new Set(
@@ -39,7 +39,7 @@ export const Plugin = define({
       }),
     )
 
-    yield* ctx.catalog.transform(
+    yield* ctx.hook.catalog.transform(
       Effect.fn(function* (catalog) {
         const entries = yield* config.entries()
         const files = entries.filter((entry): entry is Config.Document => entry.type === "document")

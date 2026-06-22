@@ -103,9 +103,13 @@ describe("AgentV2", () => {
       const agent = yield* AgentV2.Service
       yield* AgentPlugin.Plugin.effect(
         host({
-          agent: agentHost(agent),
-          location: location({ directory: AbsolutePath.make("/project") }),
+          hook: { agent: agentHost(agent) },
         }),
+      ).pipe(
+        Effect.provideService(
+          Location.Service,
+          Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
+        ),
       )
 
       const agents = yield* agent.all()

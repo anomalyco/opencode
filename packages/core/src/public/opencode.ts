@@ -5,7 +5,6 @@ import { Catalog } from "../catalog"
 import { Database } from "../database/database"
 import { EventV2 } from "../event"
 import { LocationServiceMap } from "../location-layer"
-import { PluginBoot } from "../plugin/boot"
 import { ProjectV2 } from "../project"
 import { SessionV2 } from "../session"
 import * as SessionExecutionLocal from "../session/execution/local"
@@ -41,7 +40,6 @@ const SessionModelValidationLayer = Layer.effect(
     return SessionModelValidation.of({
       validate: Effect.fn("OpenCode.sessions.validateModel")(function* (input) {
         yield* Effect.gen(function* () {
-          yield* (yield* PluginBoot.Service).wait()
           const catalog = yield* Catalog.Service
           const model = (yield* catalog.model.available()).find(
             (model) => model.providerID === input.model.providerID && model.id === input.model.id,

@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { ModelV2 } from "../../model"
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "../internal"
 import { ProviderV2 } from "../../provider"
 
 function shouldUseResponses(modelID: string) {
@@ -14,7 +14,7 @@ function shouldUseResponses(modelID: string) {
 export const GithubCopilotPlugin = define({
   id: "github-copilot",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.catalog.transform(
+    yield* ctx.hook.catalog.transform(
       Effect.fn(function* (evt) {
         const item = evt.provider.get(ProviderV2.ID.githubCopilot)
         if (!item || !item.models.has(ModelV2.ID.make("gpt-5-chat-latest"))) return
@@ -25,16 +25,14 @@ export const GithubCopilotPlugin = define({
         })
       }),
     )
-    yield* ctx.aisdk.hook(
-      "sdk",
+    yield* ctx.hook.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/github-copilot") return
         const mod = yield* Effect.promise(() => import("../../github-copilot/copilot-provider"))
         evt.sdk = mod.createOpenaiCompatible(evt.options)
       }),
     )
-    yield* ctx.aisdk.hook(
-      "language",
+    yield* ctx.hook.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.githubCopilot) return
         if (evt.sdk.responses === undefined && evt.sdk.chat === undefined) {

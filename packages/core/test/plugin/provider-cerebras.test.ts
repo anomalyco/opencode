@@ -1,3 +1,4 @@
+import { AISDK } from "@opencode-ai/core/aisdk"
 import { describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
@@ -14,8 +15,9 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* PluginV2.Service
-  const host = yield* PluginHost.make()
-  yield* plugin.add({ id: CerebrasPlugin.id, effect: CerebrasPlugin.effect(host) })
+  const aisdk = yield* AISDK.Service
+  const host = yield* PluginHost.make(plugin)
+  yield* CerebrasPlugin.effect(host)
 })
 
 void mock.module("@ai-sdk/cerebras", () => ({
@@ -59,26 +61,23 @@ describe("CerebrasPlugin", () => {
     Effect.gen(function* () {
       cerebrasOptions.length = 0
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       yield* addPlugin()
-      const result = yield* plugin.trigger(
-        "aisdk.sdk",
-        {
-          model: new ModelV2.Info({
-            ...ModelV2.Info.empty(
-              ProviderV2.ID.make("custom-cerebras"),
-              ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
-            ),
-            api: {
-              id: ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
-              type: "aisdk",
-              package: "test-provider",
-            },
-          }),
-          package: "@ai-sdk/cerebras",
-          options: { name: "custom-cerebras", apiKey: "test" },
-        },
-        {},
-      )
+      const result = yield* aisdk.runSDK({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(
+            ProviderV2.ID.make("custom-cerebras"),
+            ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
+          ),
+          api: {
+            id: ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
+            type: "aisdk",
+            package: "test-provider",
+          },
+        }),
+        package: "@ai-sdk/cerebras",
+        options: { name: "custom-cerebras", apiKey: "test" },
+      })
       expect(cerebrasOptions).toEqual([{ name: "custom-cerebras", apiKey: "test" }])
       expect(result.sdk.languageModel("llama-4-scout-17b-16e-instruct").provider).toBe("custom-cerebras")
     }),
@@ -88,26 +87,23 @@ describe("CerebrasPlugin", () => {
     Effect.gen(function* () {
       cerebrasOptions.length = 0
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       yield* addPlugin()
-      yield* plugin.trigger(
-        "aisdk.sdk",
-        {
-          model: new ModelV2.Info({
-            ...ModelV2.Info.empty(
-              ProviderV2.ID.make("custom-cerebras"),
-              ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
-            ),
-            api: {
-              id: ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
-              type: "aisdk",
-              package: "test-provider",
-            },
-          }),
-          package: "@ai-sdk/cerebras",
-          options: { name: "configured-cerebras", apiKey: "test" },
-        },
-        {},
-      )
+      yield* aisdk.runSDK({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(
+            ProviderV2.ID.make("custom-cerebras"),
+            ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
+          ),
+          api: {
+            id: ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
+            type: "aisdk",
+            package: "test-provider",
+          },
+        }),
+        package: "@ai-sdk/cerebras",
+        options: { name: "configured-cerebras", apiKey: "test" },
+      })
       expect(cerebrasOptions).toEqual([{ name: "configured-cerebras", apiKey: "test" }])
     }),
   )
@@ -116,26 +112,23 @@ describe("CerebrasPlugin", () => {
     Effect.gen(function* () {
       cerebrasOptions.length = 0
       const plugin = yield* PluginV2.Service
+      const aisdk = yield* AISDK.Service
       yield* addPlugin()
-      const result = yield* plugin.trigger(
-        "aisdk.sdk",
-        {
-          model: new ModelV2.Info({
-            ...ModelV2.Info.empty(
-              ProviderV2.ID.make("custom-cerebras"),
-              ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
-            ),
-            api: {
-              id: ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
-              type: "aisdk",
-              package: "test-provider",
-            },
-          }),
-          package: "@ai-sdk/groq",
-          options: { name: "custom-cerebras", apiKey: "test" },
-        },
-        {},
-      )
+      const result = yield* aisdk.runSDK({
+        model: new ModelV2.Info({
+          ...ModelV2.Info.empty(
+            ProviderV2.ID.make("custom-cerebras"),
+            ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
+          ),
+          api: {
+            id: ModelV2.ID.make("llama-4-scout-17b-16e-instruct"),
+            type: "aisdk",
+            package: "test-provider",
+          },
+        }),
+        package: "@ai-sdk/groq",
+        options: { name: "custom-cerebras", apiKey: "test" },
+      })
       expect(cerebrasOptions).toEqual([])
       expect(result.sdk).toBeUndefined()
     }),
