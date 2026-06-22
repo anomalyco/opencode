@@ -9,6 +9,20 @@
  * ====================================================================== */
 
 @theme {
+  /* セキュアコード LP (/lp) のブランド色。Claude Design の SecureCode.dc.html の
+   * トークン (--accent:#0d68a0 ほか) に合わせる。/lp 専用で既存サイトには影響しない。 */
+  --color-brand-50: #eaf6fc; /* accent-soft */
+  --color-brand-100: #cbe6f4; /* accent-border */
+  --color-brand-200: #a9d6ec;
+  --color-brand-400: #41c5f9; /* cyan */
+  --color-brand-500: #1f7fb8;
+  --color-brand-600: #0d68a0; /* accent */
+  --color-brand-700: #0a517f; /* accent-strong */
+
+  --color-brand-navy: #153658;
+  --color-brand-cyan: #41c5f9;
+  --color-brand-mint: #b4f5e9;
+
   --color-sc-bg: #131010;
   --color-sc-bg-soft: #1b1818;
   --color-sc-bg-elev: #252121;
