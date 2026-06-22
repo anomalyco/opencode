@@ -1,5 +1,6 @@
 import { Duration, Effect, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { collectBoundedResponseBody } from "@opencode-ai/core/tool/http-body"
 
 export const EXA_URL = process.env.EXA_API_KEY
   ? `https://mcp.exa.ai/mcp?exaApiKey=${encodeURIComponent(process.env.EXA_API_KEY)}`
@@ -66,6 +67,8 @@ const McpRequest = <F extends Schema.Struct.Fields>(args: Schema.Struct<F>) =>
     }),
   })
 
+const MAX_RESPONSE_BYTES = 256 * 1024
+
 export const call = <F extends Schema.Struct.Fields>(
   http: HttpClient.HttpClient,
   url: string,
@@ -91,6 +94,11 @@ export const call = <F extends Schema.Struct.Fields>(
       .pipe(
         Effect.timeoutOrElse({ duration: timeout, orElse: () => Effect.die(new Error(`${tool} request timed out`)) }),
       )
-    const body = yield* response.text
-    return yield* parseResponse(body)
+
+    const body = yield* collectBoundedResponseBody(
+      response,
+      MAX_RESPONSE_BYTES,
+      () => new Error(`${tool} response exceeded ${MAX_RESPONSE_BYTES} bytes`),
+    )
+    return yield* parseResponse(body.toString("utf8"))
   })
