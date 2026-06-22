@@ -377,22 +377,21 @@ export function NewHome() {
             onSelect={selectSearchSession}
           />
           <ScrollView class="mt-3 min-h-0 flex-1">
-            <div class="pt-3 flex flex-col gap-6">
+            <Show
+              when={!sessionLoad.isLoading}
+              fallback={
+                <div class="pt-3">
+                  <HomeSessionSkeleton label={language.t("common.loading")} />
+                </div>
+              }
+            >
               <Show
-                when={!sessionLoad.isLoading}
-                fallback={<HomeSessionSkeleton label={language.t("common.loading")} />}
+                when={groups().length > 0}
+                fallback={
+                  <HomeSessionsEmpty onNewSession={newSessionProject() ? openNewSession : undefined} />
+                }
               >
-                <Show
-                  when={groups().length > 0}
-                  fallback={
-                    <div class="flex min-w-0 flex-col gap-4">
-                      <HomeSessionGroupHeader
-                        title={language.t("home.sessions.empty")}
-                        onNewSession={newSessionProject() ? openNewSession : undefined}
-                      />
-                    </div>
-                  }
-                >
+                <div class="pt-3 flex flex-col gap-6">
                   <For each={groups()}>
                     {(group, index) => (
                       <div class="flex min-w-0 flex-col gap-4">
@@ -415,9 +414,9 @@ export function NewHome() {
                       </div>
                     )}
                   </For>
-                </Show>
+                </div>
               </Show>
-            </div>
+            </Show>
           </ScrollView>
         </section>
         <HomeUtilityNav
@@ -1090,6 +1089,33 @@ function HomeSessionRow(props: {
         </span>
       </Show>
     </button>
+  )
+}
+
+function HomeSessionsEmpty(props: { onNewSession?: () => void }) {
+  const language = useLanguage()
+  return (
+    <div class="flex min-h-full flex-col items-center gap-4 px-6 pt-[52px] text-center">
+      <div class="shrink-0 text-[13px] leading-[13px] tracking-[-0.04px] text-v2-text-text-base [font-weight:530]">
+        {language.t("home.sessions.empty")}
+      </div>
+      <p class="mb-1 text-center text-[13px] leading-5 tracking-[-0.04px] text-v2-text-text-muted [font-weight:440]">
+        {language.t("home.sessions.empty.description")}
+      </p>
+      <Show when={props.onNewSession}>
+        {(onNewSession) => (
+          <ButtonV2
+            data-action="home-new-session"
+            variant="neutral"
+            size="normal"
+            icon="edit"
+            onClick={onNewSession()}
+          >
+            {language.t("command.session.new")}
+          </ButtonV2>
+        )}
+      </Show>
+    </div>
   )
 }
 
