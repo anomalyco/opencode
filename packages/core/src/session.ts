@@ -129,7 +129,7 @@ export interface Interface {
   readonly switchAgent: (input: {
     sessionID: SessionSchema.ID
     agent: string
-  }) => Effect.Effect<void, OperationUnavailableError>
+  }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
     model: ModelV2.Ref
@@ -376,8 +376,14 @@ export const layer = Layer.effect(
       skill: Effect.fn("V2Session.skill")(function* () {
         return yield* new OperationUnavailableError({ operation: "skill" })
       }),
-      switchAgent: Effect.fn("V2Session.switchAgent")(function* () {
-        return yield* new OperationUnavailableError({ operation: "switchAgent" })
+      switchAgent: Effect.fn("V2Session.switchAgent")(function* (input) {
+        yield* result.get(input.sessionID)
+        yield* events.publish(SessionEvent.AgentSwitched, {
+          sessionID: input.sessionID,
+          messageID: SessionMessage.ID.create(),
+          timestamp: yield* DateTime.now,
+          agent: input.agent,
+        })
       }),
       switchModel: Effect.fn("V2Session.switchModel")(function* (input) {
         yield* result.get(input.sessionID)

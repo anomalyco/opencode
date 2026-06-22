@@ -336,7 +336,34 @@ describe("SessionV2.create", () => {
 
       expect(yield* unavailable(session.shell({ sessionID: created.id, command: "pwd" }))).toBe("shell")
       expect(yield* unavailable(session.skill({ sessionID: created.id, skill: "review" }))).toBe("skill")
-      expect(yield* unavailable(session.switchAgent({ sessionID: created.id, agent: "build" }))).toBe("switchAgent")
+    }),
+  )
+
+  it.effect("switches the selected agent through the durable Session event", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const created = yield* session.create({ location })
+
+      yield* session.switchAgent({ sessionID: created.id, agent: "plan" })
+
+      expect(yield* session.get(created.id)).toMatchObject({ agent: "plan" })
+      expect(
+        Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(1), Stream.runCollect)),
+      ).toMatchObject([{ type: "session.next.agent.switched", data: { agent: "plan" } }])
+    }),
+  )
+
+  it.effect("rejects an agent switch for a missing Session", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const missing = SessionV2.ID.make("ses_missing_agent_switch")
+
+      expect(
+        yield* session.switchAgent({ sessionID: missing, agent: "plan" }).pipe(
+          Effect.flip,
+          Effect.map((error) => error._tag),
+        ),
+      ).toBe("Session.NotFoundError")
     }),
   )
 
