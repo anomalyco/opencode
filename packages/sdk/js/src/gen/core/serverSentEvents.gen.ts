@@ -77,12 +77,29 @@ export const createSseClient = <TData = unknown>({
 }: ServerSentEventsOptions): ServerSentEventsResult<TData> => {
   let lastEventId: string | undefined
 
-  const sleep = sseSleepFn ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)))
-
   const createStream = async function* () {
     let retryDelay: number = sseDefaultRetryDelay ?? 3000
     let attempt = 0
     const signal = options.signal ?? new AbortController().signal
+
+    const sleep = sseSleepFn
+      ? sseSleepFn
+      : (ms: number) =>
+          new Promise<void>((resolve, reject) => {
+            if (signal.aborted) {
+              reject(new DOMException("Aborted", "AbortError"))
+              return
+            }
+            const timer = setTimeout(() => {
+              signal.removeEventListener("abort", onAbort)
+              resolve()
+            }, ms)
+            const onAbort = () => {
+              clearTimeout(timer)
+              reject(new DOMException("Aborted", "AbortError"))
+            }
+            signal.addEventListener("abort", onAbort, { once: true })
+          })
 
     while (true) {
       if (signal.aborted) break
@@ -192,6 +209,8 @@ export const createSseClient = <TData = unknown>({
       } catch (error) {
         // connection failed or aborted; retry after delay
         onSseError?.(error)
+
+        if (signal.aborted) break
 
         if (sseMaxRetryAttempts !== undefined && attempt >= sseMaxRetryAttempts) {
           break // stop after firing error
