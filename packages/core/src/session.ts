@@ -327,10 +327,6 @@ export const layer = Layer.effect(
         Effect.uninterruptible(
           Effect.gen(function* () {
             yield* result.get(input.sessionID)
-            const returnPrompt = Effect.fnUntraced(function* (admitted: SessionInput.Admitted) {
-              if (input.resume !== false) yield* execution.wake(admitted.sessionID)
-              return admitted
-            }, Effect.uninterruptible)
             const messageID = input.id ?? SessionMessage.ID.create()
             const delivery = input.delivery ?? "steer"
             const expected = { sessionID: input.sessionID, messageID, prompt: input.prompt, delivery }
@@ -348,7 +344,8 @@ export const layer = Layer.effect(
             )
             if (!SessionInput.equivalent(admitted, expected))
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
-            return yield* returnPrompt(admitted)
+            if (input.resume !== false) yield* execution.wake(admitted.sessionID)
+            return admitted
           }),
         ),
       ),

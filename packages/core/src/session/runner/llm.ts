@@ -346,14 +346,14 @@ export const layer = Layer.effect(
 
     const run = Effect.fn("SessionRunner.run")(function* (input: {
       readonly sessionID: SessionSchema.ID
-      readonly force?: boolean
+      readonly force: boolean
     }) {
       const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
       const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
-      if (input.force !== true && !hasSteer && !hasQueue) return
+      if (!input.force && !hasSteer && !hasQueue) return
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
-      let openActivity = input.force === true || hasSteer || hasQueue
+      let openActivity = input.force || hasSteer || hasQueue
       while (openActivity) {
         let needsContinuation = true
         for (let step = 1; needsContinuation; step++) {

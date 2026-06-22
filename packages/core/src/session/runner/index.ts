@@ -21,7 +21,7 @@ export interface Interface {
   /** Drains eligible durable work. Explicit runs perform one provider attempt even when no work is eligible. */
   readonly run: (input: {
     readonly sessionID: SessionSchema.ID
-    readonly force?: boolean
+    readonly force: boolean
   }) => Effect.Effect<void, RunError>
 }
 

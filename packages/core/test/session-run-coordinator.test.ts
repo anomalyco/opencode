@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import { SessionRunCoordinator } from "@opencode-ai/core/session/run-coordinator"
 import { testEffect } from "./lib/effect"
 
@@ -34,9 +34,9 @@ describe("SessionRunCoordinator", () => {
         const started = yield* Deferred.make<void>()
         const gate = yield* Deferred.make<void>()
         const forces: boolean[] = []
-        const coordinator = yield* SessionRunCoordinator.make<string, void, never>({
-          drain: (_key, options) =>
-            Effect.sync(() => forces.push(options.force)).pipe(
+        const coordinator = yield* SessionRunCoordinator.make<string, never>({
+          drain: (_key, force) =>
+            Effect.sync(() => forces.push(force)).pipe(
               Effect.andThen(Deferred.succeed(started, undefined)),
               Effect.andThen(Deferred.await(gate)),
             ),
@@ -217,9 +217,9 @@ describe("SessionRunCoordinator", () => {
         const cleanupGate = yield* Deferred.make<void>()
         const secondStarted = yield* Deferred.make<void>()
         const forces: boolean[] = []
-        const coordinator = yield* SessionRunCoordinator.make<string, void, never>({
-          drain: (_key, options) => {
-            forces.push(options.force)
+        const coordinator = yield* SessionRunCoordinator.make<string, never>({
+          drain: (_key, force) => {
+            forces.push(force)
             return forces.length === 1
               ? Deferred.succeed(firstStarted, undefined).pipe(
                   Effect.andThen(Effect.never),
@@ -296,24 +296,6 @@ describe("SessionRunCoordinator", () => {
     ),
   )
 
-  it.effect("settles active execution when its scope closes", () =>
-    Effect.gen(function* () {
-      const scope = yield* Scope.make()
-      const started = yield* Deferred.make<void>()
-      const coordinator = yield* SessionRunCoordinator.make({
-        drain: () => Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
-      }).pipe(Scope.provide(scope))
-
-      const resumed = yield* coordinator.run("session").pipe(Effect.forkChild)
-      yield* Deferred.await(started)
-      yield* coordinator.wake("session")
-      yield* Scope.close(scope, Exit.void)
-
-      const exit = yield* Fiber.await(resumed)
-      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBeTrue()
-    }),
-  )
-
   it.effect("runs different keys concurrently", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -344,7 +326,7 @@ describe("SessionRunCoordinator", () => {
         const completed = yield* Deferred.make<void>()
         let runs = 0
         let wake: (key: string) => Effect.Effect<void> = () => Effect.void
-        const coordinator = yield* SessionRunCoordinator.make<string, void, never>({
+        const coordinator = yield* SessionRunCoordinator.make<string, never>({
           drain: (key) =>
             Effect.sync(() => ++runs).pipe(
               Effect.tap((run) => (run < limit ? wake(key) : Deferred.succeed(completed, undefined))),
