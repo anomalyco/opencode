@@ -33,12 +33,7 @@ through legacy `SessionPrompt.loop(...)`:
 Prompt admission now uses a durable `session_input` inbox rather than immediate
 transcript projection. `steer` inputs coalesce into the active activity at the
 next safe provider-turn boundary. `queue` inputs form a FIFO of future activities
-that open one at a time. A process-global `SessionRunCoordinator` coalesces process-local wakeups
-around settlement races. Explicit `run` resumes perform at least one provider
-attempt; advisory `wake` notifications call the provider only for eligible inbox
-work. Steers coalesce into the active activity at
-safe provider boundaries; queued inputs open later activities one at a time in
-FIFO order.
+that open one at a time.
 
 Next reviewed slices:
 

@@ -1,5 +1,10 @@
 # V2 Schema Changelog
 
+## 2026-06-22: Make Session Interruption Process-Local
+
+- Remove the unprojected `session.next.interrupt.requested.1` event from the experimental durable Session event union and generated SDK.
+- No canonical V1 data requires migration; experimental V2 event history containing the retired event is disposable.
+
 ## 2026-06-05: Execute Automatic Session Compaction
 
 - Trigger automatic compaction before provider turns using the complete estimated request and absolute model-aware headroom.

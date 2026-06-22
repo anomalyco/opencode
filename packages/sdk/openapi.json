@@ -14690,9 +14690,6 @@
             "$ref": "#/components/schemas/EventSessionNextPromptPromoted"
           },
           {
-            "$ref": "#/components/schemas/EventSessionNextInterruptRequested"
-          },
-          {
             "$ref": "#/components/schemas/EventSessionNextContextUpdated"
           },
           {
@@ -17306,35 +17303,6 @@
                   },
                   "type": {
                     "type": "string",
-                    "enum": ["session.next.interrupt.requested"]
-                  },
-                  "properties": {
-                    "type": "object",
-                    "properties": {
-                      "timestamp": {
-                        "type": "number"
-                      },
-                      "sessionID": {
-                        "type": "string",
-                        "pattern": "^ses"
-                      }
-                    },
-                    "required": ["timestamp", "sessionID"],
-                    "additionalProperties": false
-                  }
-                },
-                "required": ["id", "type", "properties"],
-                "additionalProperties": false
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "id": {
-                    "type": "string",
-                    "pattern": "^evt_"
-                  },
-                  "type": {
-                    "type": "string",
                     "enum": ["session.next.context.updated"]
                   },
                   "properties": {
@@ -19866,9 +19834,6 @@
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextPromptPromoted"
-              },
-              {
-                "$ref": "#/components/schemas/SyncEventSessionNextInterruptRequested"
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextContextUpdated"
@@ -23112,9 +23077,6 @@
             "$ref": "#/components/schemas/V2EventSessionNextPromptPromoted"
           },
           {
-            "$ref": "#/components/schemas/V2EventSessionNextInterruptRequested"
-          },
-          {
             "$ref": "#/components/schemas/V2EventSessionNextContextUpdated"
           },
           {
@@ -24488,56 +24450,6 @@
                   }
                 },
                 "required": ["timestamp", "sessionID", "messageID", "prompt", "timeCreated"],
-                "additionalProperties": false
-              }
-            },
-            "required": ["type", "id", "seq", "aggregateID", "data"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["type", "id", "syncEvent"],
-        "additionalProperties": false
-      },
-      "SyncEventSessionNextInterruptRequested": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": ["sync"]
-          },
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "syncEvent": {
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": ["session.next.interrupt.requested.1"]
-              },
-              "id": {
-                "type": "string",
-                "pattern": "^evt_"
-              },
-              "seq": {
-                "type": "number"
-              },
-              "aggregateID": {
-                "type": "string"
-              },
-              "data": {
-                "type": "object",
-                "properties": {
-                  "timestamp": {
-                    "type": "number"
-                  },
-                  "sessionID": {
-                    "type": "string",
-                    "pattern": "^ses"
-                  }
-                },
-                "required": ["timestamp", "sessionID"],
                 "additionalProperties": false
               }
             },
@@ -28765,57 +28677,6 @@
               }
             },
             "required": ["timestamp", "sessionID", "messageID", "prompt", "timeCreated"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "data"],
-        "additionalProperties": false
-      },
-      "V2EventSessionNextInterruptRequested": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "durable": {
-            "type": "object",
-            "properties": {
-              "aggregateID": {
-                "type": "string"
-              },
-              "seq": {
-                "type": "integer"
-              },
-              "version": {
-                "type": "integer"
-              }
-            },
-            "required": ["aggregateID", "seq", "version"],
-            "additionalProperties": false
-          },
-          "location": {
-            "$ref": "#/components/schemas/LocationRef"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.next.interrupt.requested"]
-          },
-          "data": {
-            "type": "object",
-            "properties": {
-              "timestamp": {
-                "type": "number"
-              },
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              }
-            },
-            "required": ["timestamp", "sessionID"],
             "additionalProperties": false
           }
         },
@@ -33454,35 +33315,6 @@
               }
             },
             "required": ["timestamp", "sessionID", "messageID", "prompt", "timeCreated"],
-            "additionalProperties": false
-          }
-        },
-        "required": ["id", "type", "properties"],
-        "additionalProperties": false
-      },
-      "EventSessionNextInterruptRequested": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^evt_"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["session.next.interrupt.requested"]
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "timestamp": {
-                "type": "number"
-              },
-              "sessionID": {
-                "type": "string",
-                "pattern": "^ses"
-              }
-            },
-            "required": ["timestamp", "sessionID"],
             "additionalProperties": false
           }
         },

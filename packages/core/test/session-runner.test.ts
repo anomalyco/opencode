@@ -244,19 +244,20 @@ const runner = SessionRunnerLLM.layer.pipe(
   Layer.provide(referenceGuidance),
   Layer.provide(config),
 )
-const coordinator = SessionRunCoordinator.layer.pipe(Layer.provide(runner))
 const execution = Layer.effect(
   SessionExecution.Service,
-  SessionRunCoordinator.Service.pipe(
-    Effect.map((coordinator) =>
-      SessionExecution.Service.of({
-        resume: coordinator.run,
-        wake: coordinator.wake,
-        interrupt: coordinator.interrupt,
-      }),
-    ),
-  ),
-).pipe(Layer.provide(coordinator))
+  Effect.gen(function* () {
+    const sessionRunner = yield* SessionRunner.Service
+    const coordinator = yield* SessionRunCoordinator.make<SessionV2.ID, SessionRunner.RunError>({
+      drain: (sessionID, force) => sessionRunner.run({ sessionID, force }),
+    })
+    return SessionExecution.Service.of({
+      resume: coordinator.run,
+      wake: coordinator.wake,
+      interrupt: coordinator.interrupt,
+    })
+  }),
+).pipe(Layer.provide(runner))
 const sessions = SessionV2.layer.pipe(
   Layer.provide(EventV2.defaultLayer),
   Layer.provide(Database.defaultLayer),
@@ -283,7 +284,6 @@ const it = testEffect(
     skillGuidance,
     config,
     runner,
-    coordinator,
     execution,
     sessions,
   ),
@@ -681,7 +681,6 @@ describe("SessionRunnerLLM", () => {
 
       systemUnavailable = false
       yield* session.prompt({ id: messageID, sessionID, prompt: new Prompt({ text: "First" }) })
-      yield* (yield* SessionRunCoordinator.Service).awaitIdle(sessionID)
 
       expect(requests).toHaveLength(1)
       expect(requests[0]?.messages.map((message) => message.role)).toEqual(["user"])
@@ -2161,7 +2160,7 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests).toHaveLength(2)
       expect(userTexts(requests[1]!)).toEqual(["Start working", "First steer", "Second steer"])
-      yield* (yield* SessionRunCoordinator.Service).wake(sessionID)
+      yield* (yield* SessionExecution.Service).wake(sessionID)
       yield* Effect.yieldNow
       expect(requests).toHaveLength(2)
     }),
@@ -2367,7 +2366,7 @@ describe("SessionRunnerLLM", () => {
       })
 
       requests.length = 0
-      yield* (yield* SessionRunCoordinator.Service).wake(sessionID)
+      yield* (yield* SessionExecution.Service).wake(sessionID)
       yield* Effect.yieldNow
 
       expect(requests).toHaveLength(1)
@@ -2417,7 +2416,7 @@ describe("SessionRunnerLLM", () => {
         LLMEvent.finish({ reason: "stop" }),
       ]
 
-      yield* (yield* SessionRunCoordinator.Service).wake(sessionID)
+      yield* (yield* SessionExecution.Service).wake(sessionID)
       while (requests.length === 0) yield* Effect.yieldNow
 
       expect(userTexts(requests[0]!)).toEqual(["Recover promoted input"])
