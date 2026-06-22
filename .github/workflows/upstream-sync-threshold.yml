@@ -31,6 +31,10 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
+      # Disable husky git hooks in CI. Otherwise the pre-push hook runs a full
+      # `bun turbo typecheck` (including packages this workflow does not validate,
+      # e.g. the Tauri desktop package) and can block the workflow's own pushes.
+      HUSKY: "0"
       UPSTREAM_REPO: https://github.com/sst/opencode.git
       UPSTREAM_REF: ${{ github.event.inputs.upstream_ref || 'dev' }}
       TARGET_BRANCH: dev
