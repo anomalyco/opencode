@@ -193,9 +193,7 @@ describe("LinearMcpClient", () => {
   })
 
   test("create() fails without API key", async () => {
-    const exit = await Effect.runPromiseExit(
-      LinearMcpClient.create({ url: base(), key: "" }),
-    )
+    const exit = await Effect.runPromiseExit(LinearMcpClient.create({ url: base(), key: "" }))
     expect(Exit.isFailure(exit)).toBe(true)
   })
 })

@@ -94,18 +94,13 @@ export namespace SyncPush {
    * (those are local-only) and skips issues whose `time_updated <= last_pushed_at`
    * (those have not changed since the last successful push).
    */
-  export const push = Effect.fn("SyncPush.push")(function* (input: {
-    directory: string
-    issueIds?: string[] | "all"
-  }) {
+  export const push = Effect.fn("SyncPush.push")(function* (input: { directory: string; issueIds?: string[] | "all" }) {
     const cfgSvc = yield* Config.Service
     const info = yield* cfgSvc.get()
     const cfg = info.linear ?? Config.linear()
 
     if (!cfg.projectId || !cfg.teamId) {
-      return yield* Effect.fail(
-        new Error({ message: "Linear config missing projectId or teamId" }),
-      )
+      return yield* Effect.fail(new Error({ message: "Linear config missing projectId or teamId" }))
     }
 
     const issueSvc = yield* Issue.Service
@@ -151,11 +146,9 @@ export namespace SyncPush {
             ...(issue.due_date ? { dueDate: issue.due_date } : {}),
           }
 
-          const raw = yield* client.callTool(ISSUE.SAVE, { input: inputBody }).pipe(
-            Effect.catch((e: unknown) =>
-              Effect.succeed({ _error: true, message: String(e) }),
-            ),
-          )
+          const raw = yield* client
+            .callTool(ISSUE.SAVE, { input: inputBody })
+            .pipe(Effect.catch((e: unknown) => Effect.succeed({ _error: true, message: String(e) })))
 
           if (typeof raw === "object" && raw !== null && "_error" in raw) {
             const msg = String((raw as Record<string, unknown>).message ?? "unknown MCP error")
@@ -168,12 +161,7 @@ export namespace SyncPush {
               const stamp = Date.now()
               db.update(IssueTable)
                 .set({ last_pushed_at: stamp, time_updated: stamp })
-                .where(
-                  and(
-                    eq(IssueTable.directory, input.directory),
-                    eq(IssueTable.id, issue.id),
-                  ),
-                )
+                .where(and(eq(IssueTable.directory, input.directory), eq(IssueTable.id, issue.id)))
                 .run()
             }),
           )

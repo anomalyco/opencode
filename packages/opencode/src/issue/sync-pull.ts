@@ -170,9 +170,7 @@ export namespace SyncPull {
     const cfg = info.linear ?? Config.linear()
 
     if (!cfg.projectId || !cfg.teamId) {
-      return yield* Effect.fail(
-        new Error({ message: "Linear config missing projectId or teamId" }),
-      )
+      return yield* Effect.fail(new Error({ message: "Linear config missing projectId or teamId" }))
     }
 
     const client = yield* Client
@@ -199,7 +197,11 @@ export namespace SyncPull {
 
       const raw = yield* client.callTool(ISSUE.LIST, args).pipe(
         Effect.catch((e: unknown) => {
-          const msg = LinearMcpError.isInstance(e) ? String(e.data.message ?? "") : e instanceof Error ? e.message : String(e)
+          const msg = LinearMcpError.isInstance(e)
+            ? String(e.data.message ?? "")
+            : e instanceof Error
+              ? e.message
+              : String(e)
           return Effect.succeed({ _error: true, message: msg })
         }),
       )
@@ -224,9 +226,9 @@ export namespace SyncPull {
 
     for (const issue of allIssues) {
       const i = issue as Record<string, unknown>
-      const rawState = (typeof i.state === "object" && i.state !== null
-        ? (i.state as Record<string, unknown>).type
-        : undefined) as string | undefined
+      const rawState = (
+        typeof i.state === "object" && i.state !== null ? (i.state as Record<string, unknown>).type : undefined
+      ) as string | undefined
 
       if (!rawState || !ACTIVE_STATES.has(rawState)) continue
 

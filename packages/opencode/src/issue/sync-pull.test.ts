@@ -105,10 +105,7 @@ describe("SyncPull.pull", () => {
       const client = new FakeMcpClient()
       client.setResponse(
         ISSUE.LIST,
-        listRes([
-          issueNode("lin-1", "unstarted", "Remote title"),
-          issueNode("lin-2", "started", "Second"),
-        ]),
+        listRes([issueNode("lin-1", "unstarted", "Remote title"), issueNode("lin-2", "started", "Second")]),
       )
       const dir = freshDir()
       await AppRuntime.runPromise(
@@ -194,9 +191,7 @@ describe("SyncPush.push", () => {
       )
       expect(result2.pushed).toBe(0)
       await AppRuntime.runPromise(
-        Issue.Service.use((svc) =>
-          svc.update({ directory: dir, id: created.id, patch: { status: "done" } }),
-        ),
+        Issue.Service.use((svc) => svc.update({ directory: dir, id: created.id, patch: { status: "done" } })),
       )
       const result3 = await AppRuntime.runPromise(
         SyncPush.push({ directory: dir }).pipe(

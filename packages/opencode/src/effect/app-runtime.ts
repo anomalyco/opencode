@@ -24,6 +24,7 @@ import { Question } from "@/question"
 import { Permission } from "@/permission"
 import { Todo } from "@/session/todo"
 import { Issue } from "@/issue/issue"
+import { AutoProgress as IssueAutoProgress } from "@/issue/auto-progress"
 import { Session } from "@/session"
 import { SessionStatus } from "@/session/status"
 import { SessionRunState } from "@/session/run-state"
@@ -73,6 +74,9 @@ export const AppLayer = Layer.mergeAll(
   Permission.defaultLayer,
   Todo.defaultLayer,
   Issue.defaultLayer,
+  // AutoProgress pulls Issue + Bus transitively through its own chain.
+  // All consumers share one bus instance via Effect's layer dedup.
+  IssueAutoProgress.defaultLayer,
   Session.defaultLayer,
   SessionStatus.defaultLayer,
   SessionRunState.defaultLayer,

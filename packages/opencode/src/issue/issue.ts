@@ -44,7 +44,8 @@ export namespace Issue {
     .meta({ ref: "Issue" })
   export type Info = z.infer<typeof Info>
 
-  export type IssueNode = Info & { children: Info[] }
+  export const IssueNode = Info.extend({ children: Info.array() })
+  export type IssueNode = z.infer<typeof IssueNode>
 
   export const Event = {
     Created: BusEvent.define(
@@ -86,11 +87,7 @@ export namespace Issue {
     readonly update: (input: { directory: string; id: string; patch: Partial<Info> }) => Effect.Effect<Info>
     readonly delete: (input: { directory: string; id: string }) => Effect.Effect<void>
     readonly patchStatus: (input: { directory: string; id: string; status: Status }) => Effect.Effect<Info>
-    readonly patchAssignee: (input: {
-      directory: string
-      id: string
-      assigneeId: string
-    }) => Effect.Effect<Info>
+    readonly patchAssignee: (input: { directory: string; id: string; assigneeId: string }) => Effect.Effect<Info>
     readonly reorder: (input: { directory: string; ids: string[] }) => Effect.Effect<void>
     readonly getTree: (input: { directory: string }) => Effect.Effect<IssueNode[]>
   }
@@ -172,10 +169,7 @@ export namespace Issue {
         return yield* load(input.directory)
       })
 
-      const create = Effect.fn("Issue.create")(function* (input: {
-        directory: string
-        issue: Partial<Info>
-      }) {
+      const create = Effect.fn("Issue.create")(function* (input: { directory: string; issue: Partial<Info> }) {
         const id = input.issue.id ?? crypto.randomUUID()
         const next = toRow({ directory: input.directory, issue: { ...input.issue, id } })
         yield* Effect.sync(() =>
@@ -187,7 +181,9 @@ export namespace Issue {
               .orderBy(asc(IssueTable.position))
               .all()
             const pos = max.length > 0 ? max[max.length - 1].pos + 1 : 0
-            db.insert(IssueTable).values({ ...next, position: pos }).run()
+            db.insert(IssueTable)
+              .values({ ...next, position: pos })
+              .run()
           }),
         )
         const issues = yield* publish(input.directory)
