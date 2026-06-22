@@ -428,10 +428,9 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                 <IconButtonV2
                   variant="ghost-muted"
                   size="large"
-                  as="a"
-                  href="/"
                   class="!w-9 shrink-0"
                   icon={<IconV2 name="grid-plus" />}
+                  onClick={() => navigate("/")}
                   state={!!homeMatch() ? "pressed" : undefined}
                 />
 
@@ -510,6 +509,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                               ref={ref}
                               href={`/${params.dir}/session`}
                               title={language.t("command.session.new")}
+                              onNavigate={() => navigate(`/${params.dir}/session`)}
                               onClose={() => {
                                 const tab = tabsStore.at(-1)
                                 if (tab) navigateTab(tab)
@@ -529,8 +529,7 @@ export function Titlebar(props: { update?: TitlebarUpdate }) {
                     size="large"
                     class="shrink-0"
                     icon={<IconV2 name="plus" />}
-                    as="a"
-                    href={newSessionHref()}
+                    onClick={() => navigate(newSessionHref())}
                     aria-label={language.t("command.session.new")}
                   />
                 </Show>
@@ -926,7 +925,13 @@ function DraftTabItem(props: {
   )
 }
 
-function NewSessionTabItem(props: { ref?: HTMLDivElement; href: string; title: string; onClose: () => void }) {
+function NewSessionTabItem(props: {
+  ref?: HTMLDivElement
+  href: string
+  title: string
+  onNavigate: () => void
+  onClose: () => void
+}) {
   const closeTab = (event: MouseEvent) => {
     event.preventDefault()
     event.stopPropagation()
@@ -943,6 +948,10 @@ function NewSessionTabItem(props: { ref?: HTMLDivElement; href: string; title: s
     >
       <a
         href={props.href}
+        onClick={(event) => {
+          event.preventDefault()
+          props.onNavigate()
+        }}
         aria-current="page"
         class="flex h-full min-w-0 flex-1 flex-row items-center gap-1.5 overflow-hidden text-[13px] font-medium leading-5 text-[var(--v2-text-text-base)]"
       >
