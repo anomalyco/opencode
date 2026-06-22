@@ -12,6 +12,12 @@ import { TodoAddTool } from "./todo_add"
 import { TodoUpdateTool } from "./todo_update"
 import { TodoDeleteTool } from "./todo_delete"
 import { TodoAssignTool } from "./todo_assign"
+import { IssueListTool } from "./issue_list"
+import { IssueAddTool } from "./issue_add"
+import { IssueUpdateTool } from "./issue_update"
+import { IssueDeleteTool } from "./issue_delete"
+import { IssueStatusTool } from "./issue_status"
+import { IssueReorderTool } from "./issue_reorder"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
@@ -44,6 +50,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { Env } from "../env"
 import { Question } from "../question"
 import { Todo } from "../session/todo"
+import { Issue } from "../issue/issue"
 import { LSP } from "../lsp"
 import { FileTime } from "../file/time"
 import { Instruction } from "../session/instruction"
@@ -97,6 +104,7 @@ export namespace ToolRegistry {
     | AppFileSystem.Service
     | AutoProgress.Service
     | Bus.Service
+    | Issue.Service
     | HttpClient.HttpClient
     | ChildProcessSpawner
     | Ripgrep.Service
@@ -133,6 +141,12 @@ export namespace ToolRegistry {
       const patchtool = yield* ApplyPatchTool
       const skilltool = yield* SkillTool
       const autoprogress = yield* AutoProgressTool
+      const issuelist = yield* IssueListTool
+      const issueadd = yield* IssueAddTool
+      const issueupdate = yield* IssueUpdateTool
+      const issuedelete = yield* IssueDeleteTool
+      const issuestatus = yield* IssueStatusTool
+      const issuereorder = yield* IssueReorderTool
 
       const state = yield* InstanceState.make<State>(
         Effect.fn("ToolRegistry.state")(function* (ctx) {
@@ -211,6 +225,12 @@ export namespace ToolRegistry {
             code: Tool.init(codesearch),
             skill: Tool.init(skilltool),
             autoprogress: Tool.init(autoprogress),
+            issuelist: Tool.init(issuelist),
+            issueadd: Tool.init(issueadd),
+            issueupdate: Tool.init(issueupdate),
+            issuedelete: Tool.init(issuedelete),
+            issuestatus: Tool.init(issuestatus),
+            issuereorder: Tool.init(issuereorder),
             patch: Tool.init(patchtool),
             question: Tool.init(question),
             lsp: Tool.init(lsptool),
@@ -236,6 +256,12 @@ export namespace ToolRegistry {
               tool.tododelete,
               tool.todoassign,
               tool.autoprogress,
+              tool.issuelist,
+              tool.issueadd,
+              tool.issueupdate,
+              tool.issuedelete,
+              tool.issuestatus,
+              tool.issuereorder,
               tool.search,
               tool.code,
               tool.skill,
@@ -359,6 +385,7 @@ export namespace ToolRegistry {
       Layer.provide(AppFileSystem.defaultLayer),
       Layer.provide(AutoProgress.defaultLayer),
       Layer.provide(Bus.layer),
+      Layer.provide(Issue.defaultLayer),
       Layer.provide(FetchHttpClient.layer),
       Layer.provide(Format.defaultLayer),
       Layer.provide(CrossSpawnSpawner.defaultLayer),

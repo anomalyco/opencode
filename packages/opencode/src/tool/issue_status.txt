@@ -1,0 +1,1 @@
+Change the status of a single workspace-scoped issue (todo) by id. Allowed values: backlog, todo, in_progress, in_review, done, canceled. Emits an `issue.progressed` bus event so the auto-progress engine and any other subscribers can react.

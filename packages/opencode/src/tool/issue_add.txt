@@ -1,0 +1,1 @@
+Create a new workspace-scoped issue (todo) in the current project directory. Supports L1 issues (level=0) and L2 children (level=1, parent_id=...). Status and priority follow Linear's enum. A title is required; everything else is optional. To track rich markdown body content (file references, skill references), reuse the chat composer rather than this tool.

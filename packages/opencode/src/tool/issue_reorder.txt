@@ -1,0 +1,1 @@
+Reorder workspace-scoped issues (todos) within the current project. Pass the full list of issue ids in the desired order; their position is updated to match the array index. Omit ids to leave their order unchanged. This does not move issues between parents — use `issue_update` to set `parent_id`.

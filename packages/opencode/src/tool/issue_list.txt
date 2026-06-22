@@ -1,0 +1,1 @@
+List workspace-scoped issues (todos) for the current project directory. Each issue has an L1/L2 hierarchy and a Linear-aligned status (backlog, todo, in_progress, in_review, done, canceled) and priority (none, urgent, high, medium, low). Use the `tree` flag to get the L1/L2 hierarchy in a single nested response.

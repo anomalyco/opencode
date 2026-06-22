@@ -1,0 +1,1 @@
+Update an existing workspace-scoped issue (todo) by id. Only the fields you provide are changed. Omit a field to leave it untouched. To change only the status, prefer `issue_status` (which is more efficient and emits a `Progressed` event).

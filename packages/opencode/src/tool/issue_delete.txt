@@ -1,0 +1,1 @@
+Delete a workspace-scoped issue (todo) by id. Returns a confirmation with the remaining issue count for the project.
