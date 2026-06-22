@@ -166,11 +166,7 @@ function nativeSchema(value: unknown): JsonSchema {
   return asSchema(value as Parameters<typeof asSchema>[0]).jsonSchema as JsonSchema
 }
 
-export function nativeTools(
-  tools: Record<string, Tool>,
-  input: Pick<StreamInput, "messages" | "abort" | "model">,
-) {
-  const strict = input.model.api.npm === "@ai-sdk/openai" ? false : undefined
+export function nativeTools(tools: Record<string, Tool>, input: Pick<StreamInput, "messages" | "abort">) {
   return Object.fromEntries(
     Object.entries(tools).map(([name, item]) => [
       name,
@@ -179,7 +175,6 @@ export function nativeTools(
       NativeTool.make({
         description: item.description ?? "",
         jsonSchema: nativeSchema(item.inputSchema),
-        ...(strict !== undefined && { strict }),
         execute: (args: unknown, ctx) =>
           Effect.tryPromise({
             try: () => {

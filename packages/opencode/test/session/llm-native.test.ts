@@ -511,7 +511,7 @@ describe("session.llm-native.request", () => {
             },
           } satisfies Tool,
         },
-        { messages: [] as ModelMessage[], abort: new AbortController().signal, model: baseModel },
+        { messages: [] as ModelMessage[], abort: new AbortController().signal },
       )
 
       const failure = yield* Effect.flip(wrapped.explode.execute({}, { id: "call-1", name: "explode" }))
@@ -527,7 +527,7 @@ describe("session.llm-native.request", () => {
       // wiring is wrong; we want a typed failure, not a silent skip or unhandled exception.
       const wrapped = LLMNativeRuntime.nativeTools(
         { incomplete: { description: "no execute", inputSchema: jsonSchema({ type: "object" }) } satisfies Tool },
-        { messages: [] as ModelMessage[], abort: new AbortController().signal, model: baseModel },
+        { messages: [] as ModelMessage[], abort: new AbortController().signal },
       )
 
       const failure = yield* Effect.flip(wrapped.incomplete.execute({}, { id: "call-1", name: "incomplete" }))

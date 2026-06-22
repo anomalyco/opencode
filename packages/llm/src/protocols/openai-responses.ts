@@ -258,7 +258,6 @@ const lowerTool = (tool: ToolDefinition): OpenAIResponsesTool => ({
   name: tool.name,
   description: tool.description,
   parameters: ProviderShared.openAiToolInputSchema(tool.inputSchema),
-  ...(tool.strict != null ? { strict: tool.strict } : {}),
 })
 
 const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
