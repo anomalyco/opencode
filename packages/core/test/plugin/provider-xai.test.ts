@@ -1,37 +1,66 @@
+import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Effect } from "effect"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { XAIPlugin } from "@opencode-ai/core/plugin/provider/xai"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
-import { fakeSelectorSdk } from "./provider-helper"
+import { PluginTestLayer } from "./fixture"
 
-const it = testEffect(PluginV2.locationLayer.pipe(Layer.provide(EventV2.defaultLayer)))
+const it = testEffect(PluginTestLayer)
 
-const model = new ModelV2.Info({
-  ...ModelV2.Info.empty(ProviderV2.ID.make("xai"), ModelV2.ID.make("grok-4")),
-  api: {
-    id: ModelV2.ID.make("grok-4"),
-    type: "aisdk",
-    package: "@ai-sdk/xai",
-  },
+const addPlugin = Effect.fn(function* () {
+  const plugin = yield* PluginV2.Service
+  const host = yield* PluginHost.make()
+  yield* plugin.add({ id: XAIPlugin.id, effect: XAIPlugin.effect(host) })
 })
+
+function fakeSelectorSdk(calls: string[]) {
+  const make = (method: string) => (id: string) => {
+    calls.push(`${method}:${id}`)
+    return { modelId: id, provider: method, specificationVersion: "v3" } as unknown as LanguageModelV3
+  }
+  return {
+    responses: make("responses"),
+    messages: make("messages"),
+    chat: make("chat"),
+    languageModel: make("languageModel"),
+  }
+}
 
 describe("XAIPlugin", () => {
   it.effect("creates an xAI SDK only for @ai-sdk/xai", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(XAIPlugin)
+      yield* addPlugin()
 
       const ignored = yield* plugin.trigger(
         "aisdk.sdk",
-        { model, package: "@ai-sdk/openai-compatible", options: {} },
+        {
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("xai"), ModelV2.ID.make("grok-4")),
+            api: { id: ModelV2.ID.make("grok-4"), type: "aisdk", package: "@ai-sdk/xai" },
+          }),
+          package: "@ai-sdk/openai-compatible",
+          options: {},
+        },
         {},
       )
 
-      const result = yield* plugin.trigger("aisdk.sdk", { model, package: "@ai-sdk/xai", options: {} }, {})
+      const result = yield* plugin.trigger(
+        "aisdk.sdk",
+        {
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("xai"), ModelV2.ID.make("grok-4")),
+            api: { id: ModelV2.ID.make("grok-4"), type: "aisdk", package: "@ai-sdk/xai" },
+          }),
+          package: "@ai-sdk/xai",
+          options: {},
+        },
+        {},
+      )
 
       expect(ignored.sdk).toBeUndefined()
       expect(typeof result.sdk?.responses).toBe("function")
@@ -41,34 +70,22 @@ describe("XAIPlugin", () => {
   it.effect("creates xAI SDKs for custom provider IDs", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      const providers: string[] = []
+      yield* addPlugin()
 
-      yield* plugin.add(XAIPlugin)
-      yield* plugin.add(
-        PluginV2.define({
-          id: PluginV2.ID.make("xai-sdk-name-observer"),
-          effect: Effect.gen(function* () {
-            return {
-              "aisdk.sdk": Effect.fn(function* (evt) {
-                if (!evt.sdk) return
-                providers.push(evt.sdk.responses("grok-4").provider)
-              }),
-            }
-          }),
-        }),
-      )
-
-      yield* plugin.trigger(
+      const result = yield* plugin.trigger(
         "aisdk.sdk",
         {
-          model: new ModelV2.Info({ ...model, providerID: ProviderV2.ID.make("custom-xai") }),
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("custom-xai"), ModelV2.ID.make("grok-4")),
+            api: { id: ModelV2.ID.make("grok-4"), type: "aisdk", package: "@ai-sdk/xai" },
+          }),
           package: "@ai-sdk/xai",
           options: {},
         },
         {},
       )
 
-      expect(providers).toEqual(["xai.responses"])
+      expect(result.sdk.responses("grok-4").provider).toBe("xai.responses")
     }),
   )
 
@@ -77,11 +94,14 @@ describe("XAIPlugin", () => {
       const plugin = yield* PluginV2.Service
       const calls: string[] = []
 
-      yield* plugin.add(XAIPlugin)
+      yield* addPlugin()
       const result = yield* plugin.trigger(
         "aisdk.language",
         {
-          model: new ModelV2.Info({ ...model, id: ModelV2.ID.make("alias") }),
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("xai"), ModelV2.ID.make("alias")),
+            api: { id: ModelV2.ID.make("grok-4"), type: "aisdk", package: "@ai-sdk/xai" },
+          }),
           sdk: fakeSelectorSdk(calls),
           options: {},
         },
@@ -98,11 +118,14 @@ describe("XAIPlugin", () => {
       const plugin = yield* PluginV2.Service
       const calls: string[] = []
 
-      yield* plugin.add(XAIPlugin)
+      yield* addPlugin()
       const result = yield* plugin.trigger(
         "aisdk.language",
         {
-          model: new ModelV2.Info({ ...model, providerID: ProviderV2.ID.openai }),
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.openai, ModelV2.ID.make("grok-4")),
+            api: { id: ModelV2.ID.make("grok-4"), type: "aisdk", package: "@ai-sdk/xai" },
+          }),
           sdk: fakeSelectorSdk(calls),
           options: {},
         },

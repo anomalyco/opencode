@@ -109,7 +109,7 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
 
 export class InitError extends Schema.TaggedErrorClass<InitError>()("AISDK.InitError", {
   providerID: ProviderV2.ID,
-  cause: Schema.Defect,
+  cause: Schema.Defect(),
 }) {}
 
 function initError(providerID: ProviderV2.ID) {

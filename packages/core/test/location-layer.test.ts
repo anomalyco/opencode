@@ -1,8 +1,10 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Equal, Hash, Layer, Schema } from "effect"
+import { Deferred, Effect, Equal, Hash, Layer, Schema, Stream } from "effect"
 import { Tool } from "@opencode-ai/core/public"
+import { define } from "@opencode-ai/plugin/v2/effect"
+import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { Location } from "@opencode-ai/core/location"
@@ -34,8 +36,7 @@ const it = testEffect(
         Layer.mergeAll(
           Project.defaultLayer,
           EventV2.defaultLayer,
-          Credential.defaultLayer,
-          Credential.layer.pipe(Layer.provide(Database.layerFromPath(":memory:").pipe(Layer.fresh))),
+          Credential.defaultLayer.pipe(Layer.fresh),
           Npm.defaultLayer,
           ModelsDev.defaultLayer,
           FSUtil.defaultLayer,
@@ -86,8 +87,7 @@ describe("LocationServiceMap", () => {
               yield* PluginBoot.Service.use((boot) => boot.wait())
               yield* Reference.Service
               const catalog = yield* Catalog.Service
-              const transform = yield* catalog.transform()
-              yield* transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
+              yield* catalog.transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
               return {
                 providers: yield* catalog.provider.all(),
                 tools: yield* toolDefinitions(yield* ToolRegistry.Service),
@@ -132,6 +132,55 @@ describe("LocationServiceMap", () => {
             "write",
           ])
         }),
+      ),
+    ),
+  )
+
+  it.live("installs public plugins into a location", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const boot = yield* PluginBoot.Service
+          const catalogUpdated = yield* Deferred.make<void>()
+          const seen: string[] = []
+          yield* boot.add(
+            define({
+              id: "reviewer",
+              effect: (ctx) =>
+                Effect.gen(function* () {
+                  yield* ctx.event.subscribe("catalog.updated").pipe(
+                    Stream.runForEach(() => Deferred.succeed(catalogUpdated, undefined).pipe(Effect.asVoid)),
+                    Effect.forkScoped({ startImmediately: true }),
+                  )
+                  yield* ctx.agent.transform((agent) => {
+                    agent.update("reviewer", (item) => {
+                      item.description = "Reviews code"
+                      item.mode = "subagent"
+                    })
+                  })
+                  seen.push((yield* ctx.agent.get("reviewer"))?.description ?? "")
+                  yield* ctx.catalog.transform((catalog) => {
+                    catalog.provider.update("public", (provider) => {
+                      provider.name = "Public provider"
+                    })
+                  })
+                }),
+            }),
+          )
+
+          yield* Deferred.await(catalogUpdated)
+          expect(seen).toEqual(["Reviews code"])
+          expect(yield* (yield* AgentV2.Service).get(AgentV2.ID.make("reviewer"))).toMatchObject({
+            description: "Reviews code",
+            mode: "subagent",
+          })
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(LocationServiceMap.get(Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))),
+        ),
       ),
     ),
   )
