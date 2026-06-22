@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
 import type { Database } from "../database/database"
 import { EventV2 } from "../event"
+import { EventSequenceTable } from "../event/sql"
 import { SystemContext } from "../system-context/index"
 import { ContextSnapshotDecodeError } from "./error"
 import { SessionEvent } from "./event"
@@ -14,6 +15,16 @@ import { SessionSchema } from "./schema"
 import { SessionContextEpochTable } from "./sql"
 
 type DatabaseService = Database.Interface["db"]
+
+const latestEventSeq = Effect.fnUntraced(function* (db: DatabaseService, sessionID: SessionSchema.ID) {
+  const row = yield* db
+    .select({ seq: EventSequenceTable.seq })
+    .from(EventSequenceTable)
+    .where(eq(EventSequenceTable.aggregate_id, sessionID))
+    .get()
+    .pipe(Effect.orDie)
+  return row?.seq ?? -1
+})
 
 interface Prepared {
   readonly baseline: string
@@ -64,7 +75,7 @@ const prepareOnce = Effect.fnUntraced(function* (
     return { baseline: stored.baseline, baselineSeq: stored.baseline_seq }
   }
   if (result._tag === "ReplacementReady") {
-    const baselineSeq = replacementSeq ?? (yield* SessionInput.latestSeq(db, sessionID))
+    const baselineSeq = replacementSeq ?? (yield* latestEventSeq(db, sessionID))
     yield* replace(db, sessionID, baselineSeq, result.generation)
     return { baseline: result.generation.baseline, baselineSeq }
   }
@@ -124,7 +135,7 @@ const insert = Effect.fnUntraced(function* (
   sessionID: SessionSchema.ID,
   generation: SystemContext.Generation,
 ) {
-  const baselineSeq = yield* SessionInput.latestSeq(db, sessionID)
+  const baselineSeq = yield* latestEventSeq(db, sessionID)
   yield* db
     .insert(SessionContextEpochTable)
     .values({

@@ -222,11 +222,8 @@ describe("SessionV2.create", () => {
       yield* SessionInput.promoteSteers(db, events, created.id, Number.MAX_SAFE_INTEGER)
 
       expect(
-        Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(2), Stream.runCollect)),
-      ).toMatchObject([
-        { durable: { seq: 1 }, type: "session.next.prompt.admitted", data: { prompt: { text: "Hello" } } },
-        { durable: { seq: 2 }, type: "session.next.prompt.promoted" },
-      ])
+        Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(1), Stream.runCollect)),
+      ).toMatchObject([{ durable: { seq: 1 }, type: "session.next.prompted", data: { prompt: { text: "Hello" } } }])
     }),
   )
 
@@ -276,24 +273,18 @@ describe("SessionV2.create", () => {
           .pipe(Effect.orDie)
 
         expect(yield* store.get(created.id)).toBeUndefined()
-        expect(yield* events.replayAll(serialized.slice(0, 2))).toBe(created.id)
-        expect(yield* SessionInput.find(db, admitted.id)).toMatchObject({
-          id: admitted.id,
-          sessionID: created.id,
-          prompt: { text: "Replay lifecycle" },
-          delivery: "steer",
-          admittedSeq: 1,
-        })
+        expect(yield* events.replayAll(serialized.slice(0, 1))).toBe(created.id)
+        expect(yield* SessionInput.find(db, admitted.id)).toBeUndefined()
         expect(yield* store.context(created.id)).toEqual([])
 
-        expect(yield* events.replayAll(serialized.slice(2))).toBe(created.id)
+        expect(yield* events.replayAll(serialized.slice(1))).toBe(created.id)
         expect(yield* SessionInput.find(db, admitted.id)).toMatchObject({
           id: admitted.id,
           sessionID: created.id,
           prompt: { text: "Replay lifecycle" },
           delivery: "steer",
-          admittedSeq: 1,
-          promotedSeq: 2,
+          admittedSeq: 0,
+          promotedSeq: 1,
         })
         expect(yield* store.context(created.id)).toMatchObject([
           { id: admitted.id, type: "user", text: "Replay lifecycle" },
@@ -308,8 +299,7 @@ describe("SessionV2.create", () => {
             .pipe(Effect.orDie)).map((event) => [event.seq, event.type]),
         ).toEqual([
           [0, EventV2.versionedType(SessionV1.Event.Created.type, 1)],
-          [1, EventV2.versionedType(SessionEvent.PromptLifecycle.Admitted.type, 1)],
-          [2, EventV2.versionedType(SessionEvent.PromptLifecycle.Promoted.type, 1)],
+          [1, EventV2.versionedType(SessionEvent.Prompted.type, 1)],
         ])
       }).pipe(Effect.provide(Layer.fresh(Layer.mergeAll(targetDatabase, targetEvents, targetProjector, targetStore))))
     }),

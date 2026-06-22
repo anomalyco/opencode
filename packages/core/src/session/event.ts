@@ -92,32 +92,6 @@ export const Prompted = EventV2.define({
 })
 export type Prompted = typeof Prompted.Type
 
-export namespace PromptLifecycle {
-  export const Admitted = EventV2.define({
-    type: "session.next.prompt.admitted",
-    ...options,
-    schema: {
-      ...Base,
-      messageID: SessionMessageID.ID,
-      prompt: Prompt,
-      delivery: Schema.Literals(["steer", "queue"]),
-    },
-  })
-  export type Admitted = typeof Admitted.Type
-
-  export const Promoted = EventV2.define({
-    type: "session.next.prompt.promoted",
-    ...options,
-    schema: {
-      ...Base,
-      messageID: SessionMessageID.ID,
-      prompt: Prompt,
-      timeCreated: V2Schema.DateTimeUtcFromMillis,
-    },
-  })
-  export type Promoted = typeof Promoted.Type
-}
-
 export const ContextUpdated = EventV2.define({
   type: "session.next.context.updated",
   ...options,
@@ -455,8 +429,6 @@ const DurableDefinitions = [
   ModelSwitched,
   Moved,
   Prompted,
-  PromptLifecycle.Admitted,
-  PromptLifecycle.Promoted,
   ContextUpdated,
   Synthetic,
   Shell.Started,

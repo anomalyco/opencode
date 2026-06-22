@@ -14,7 +14,7 @@ import sessionMessageProjectionOrderMigration from "@opencode-ai/core/database/m
 import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migration/20260604172448_event_sourced_session_input"
 import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
-import resetV2SessionStateMigration from "@opencode-ai/core/database/migration/20260622170816_reset_v2_session_state"
+import simplifySessionInputMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
 import { EventV2 } from "@opencode-ai/core/event"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
@@ -264,8 +264,8 @@ describe("DatabaseMigration", () => {
         yield* db.run(
           sql`INSERT INTO session_context_epoch (session_id, baseline, snapshot, baseline_seq) VALUES ('session', 'baseline', '{}', 9)`,
         )
-        yield* db.run(sql`DELETE FROM migration WHERE id = ${resetV2SessionStateMigration.id}`)
-        yield* DatabaseMigration.applyOnly(db, [resetV2SessionStateMigration])
+        yield* db.run(sql`DELETE FROM migration WHERE id = ${simplifySessionInputMigration.id}`)
+        yield* DatabaseMigration.applyOnly(db, [simplifySessionInputMigration])
 
         const database = Layer.succeed(Database.Service, { db })
         const events = EventV2.layer.pipe(Layer.provide(database))
