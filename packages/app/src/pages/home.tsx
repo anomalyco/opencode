@@ -47,6 +47,7 @@ import { useSettings } from "@/context/settings"
 import { ServerRowMenu } from "@/components/server/server-row-menu"
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { type ServerHealth } from "@/utils/server-health"
+import { Persist, persisted } from "@/utils/persist"
 
 const HOME_SESSION_LIMIT = 64
 const HOME_ROW_LAYOUT =
@@ -452,7 +453,10 @@ function HomeProjectColumn(props: {
   const global = useGlobal()
   const dialog = useDialog()
   const controller = useServerManagementController({ navigateOnAdd: false })
-  const [state, setState] = createStore({ collapsed: {} as Record<string, boolean> })
+  const [state, setState] = persisted(
+    Persist.global("home.servers", ["home.servers.v1"]),
+    createStore({ collapsed: {} as Record<string, boolean> }),
+  )
   return (
     <aside class="flex min-w-0 flex-col lg:pt-[52px] mt-14 gap-4" aria-label={props.language.t("home.projects")}>
       <div class="flex h-7 min-w-0 items-center justify-between pl-1.5">
