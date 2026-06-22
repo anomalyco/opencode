@@ -15,9 +15,9 @@
       "type": "remote",
       "url": "https://mcp.linear.app/mcp",
       "headers": {
-        "Authorization": "Bearer ${env:LINEAR_API_KEY}"
-      }
-    }
+        "Authorization": "Bearer ${env:LINEAR_API_KEY}",
+      },
+    },
   },
   "tools": {
     "github-triage": false,

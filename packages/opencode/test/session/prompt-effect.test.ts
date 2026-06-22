@@ -19,6 +19,7 @@ import { ModelID, ProviderID } from "../../src/provider/schema"
 import { Question } from "../../src/question"
 import { Todo } from "../../src/session/todo"
 import { AutoProgress } from "../../src/session/auto-progress"
+import { Issue } from "../../src/issue/issue"
 
 import { Session } from "../../src/session"
 import { LLM } from "../../src/session/llm"
@@ -175,6 +176,7 @@ function makeHttp() {
   const todo = Todo.layer.pipe(Layer.provideMerge(deps))
   const registry = ToolRegistry.layer.pipe(
     Layer.provide(AutoProgress.defaultLayer),
+    Layer.provide(Issue.defaultLayer),
     Layer.provide(Skill.defaultLayer),
     Layer.provide(FetchHttpClient.layer),
     Layer.provide(CrossSpawnSpawner.defaultLayer),

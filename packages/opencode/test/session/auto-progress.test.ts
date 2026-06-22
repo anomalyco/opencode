@@ -12,15 +12,9 @@ const root = path.join(import.meta.dirname, "../..")
 // Runtime with AutoProgress merged into AppLayer.
 // Layer.provideMerge resolves AutoProgress.layer's Bus|Todo dependencies from AppLayer.
 type TestR = AutoProgress.Service | Session.Service | Todo.Service
-const rt = ManagedRuntime.make(
-  Layer.provideMerge(AutoProgress.layer, AppLayer) as Layer.Layer<TestR, never, never>,
-)
+const rt = ManagedRuntime.make(Layer.provideMerge(AutoProgress.layer, AppLayer) as Layer.Layer<TestR, never, never>)
 
-const run = <A>(fn: (s: {
-  sessionID: string
-  todo: Todo.Interface
-  ap: AutoProgress.Interface
-}) => Effect.Effect<A>) =>
+const run = <A>(fn: (s: { sessionID: string; todo: Todo.Interface; ap: AutoProgress.Interface }) => Effect.Effect<A>) =>
   Instance.provide({
     directory: root,
     fn: () =>
@@ -54,10 +48,19 @@ describe("AutoProgress", () => {
     await run(({ sessionID, todo, ap }) =>
       Effect.gen(function* () {
         const a = yield* todo.create({ sessionID: sessionID as any, todo: fixture({ content: "A", level: 0 }) })
-        const a1 = yield* todo.create({ sessionID: sessionID as any, todo: fixture({ content: "A1", level: 1, parent_id: a.id }) })
-        const a2 = yield* todo.create({ sessionID: sessionID as any, todo: fixture({ content: "A2", level: 1, parent_id: a.id }) })
+        const a1 = yield* todo.create({
+          sessionID: sessionID as any,
+          todo: fixture({ content: "A1", level: 1, parent_id: a.id }),
+        })
+        const a2 = yield* todo.create({
+          sessionID: sessionID as any,
+          todo: fixture({ content: "A2", level: 1, parent_id: a.id }),
+        })
         const b = yield* todo.create({ sessionID: sessionID as any, todo: fixture({ content: "B", level: 0 }) })
-        const b1 = yield* todo.create({ sessionID: sessionID as any, todo: fixture({ content: "B1", level: 1, parent_id: b.id }) })
+        const b1 = yield* todo.create({
+          sessionID: sessionID as any,
+          todo: fixture({ content: "B1", level: 1, parent_id: b.id }),
+        })
 
         yield* ap.start(sessionID as any)
         yield* Effect.sleep(100)
@@ -91,9 +94,18 @@ describe("AutoProgress", () => {
     await run(({ sessionID, todo, ap }) =>
       Effect.gen(function* () {
         const p = yield* todo.create({ sessionID: sessionID as any, todo: fixture({ content: "P", level: 0 }) })
-        const c1 = yield* todo.create({ sessionID: sessionID as any, todo: fixture({ content: "C1", level: 1, parent_id: p.id }) })
-        const c2 = yield* todo.create({ sessionID: sessionID as any, todo: fixture({ content: "C2", level: 1, parent_id: p.id }) })
-        const c3 = yield* todo.create({ sessionID: sessionID as any, todo: fixture({ content: "C3", level: 1, parent_id: p.id }) })
+        const c1 = yield* todo.create({
+          sessionID: sessionID as any,
+          todo: fixture({ content: "C1", level: 1, parent_id: p.id }),
+        })
+        const c2 = yield* todo.create({
+          sessionID: sessionID as any,
+          todo: fixture({ content: "C2", level: 1, parent_id: p.id }),
+        })
+        const c3 = yield* todo.create({
+          sessionID: sessionID as any,
+          todo: fixture({ content: "C3", level: 1, parent_id: p.id }),
+        })
 
         yield* ap.start(sessionID as any)
         yield* Effect.sleep(100)
@@ -113,8 +125,14 @@ describe("AutoProgress", () => {
     await run(({ sessionID, todo, ap }) =>
       Effect.gen(function* () {
         const p = yield* todo.create({ sessionID: sessionID as any, todo: fixture({ content: "X", level: 0 }) })
-        const x1 = yield* todo.create({ sessionID: sessionID as any, todo: fixture({ content: "X1", level: 1, parent_id: p.id }) })
-        const x2 = yield* todo.create({ sessionID: sessionID as any, todo: fixture({ content: "X2", level: 1, parent_id: p.id }) })
+        const x1 = yield* todo.create({
+          sessionID: sessionID as any,
+          todo: fixture({ content: "X1", level: 1, parent_id: p.id }),
+        })
+        const x2 = yield* todo.create({
+          sessionID: sessionID as any,
+          todo: fixture({ content: "X2", level: 1, parent_id: p.id }),
+        })
 
         yield* ap.start(sessionID as any)
         yield* Effect.sleep(100)

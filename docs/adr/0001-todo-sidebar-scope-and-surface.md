@@ -69,7 +69,7 @@ The Todos section supports the full lifecycle on its own:
 - **Status change**: manual override always wins over auto-progress.
 - **Auto-progress on/off**: a single toggle in the section header. When on, the engine watches `Issue.Updated` and advances L1 items as their L2 children complete. The engine lives in the new `Issue` domain, not in `Session/AutoProgress`.
 
-When Linear is configured, the section **additionally** exposes **Sync ↑ (push)** and **Pull ↓ (pull)** that call the real kernel routes (not animated fakes). These are *additive* — the section does not require them to be useful.
+When Linear is configured, the section **additionally** exposes **Sync ↑ (push)** and **Pull ↓ (pull)** that call the real kernel routes (not animated fakes). These are _additive_ — the section does not require them to be useful.
 
 ### D4 — Sync architecture (deferred to round 2 ADR)
 

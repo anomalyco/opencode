@@ -7,7 +7,7 @@
 
 ## Context
 
-ADR-0001 placed the new feature at workspace scope (`IssueTable` keyed by `directory`). It also stipulated that Linear is an *add-on*: a sub-panel inside the new `Todos` sidebar section. Round 2 of the grilling surfaced three problems in the existing sync code that fall out of that decision:
+ADR-0001 placed the new feature at workspace scope (`IssueTable` keyed by `directory`). It also stipulated that Linear is an _add-on_: a sub-panel inside the new `Todos` sidebar section. Round 2 of the grilling surfaced three problems in the existing sync code that fall out of that decision:
 
 1. **The UI handler is a simulation.** `sidebar-linear.tsx:53-72` and `32-51` — `handleSync` and `handlePull` animate a 3-second `requestAnimationFrame` and then call `record({ count: 1, status: "success" })`. The "1" is a hardcoded literal. The user reported "Pull from Linear" returning "Already up to date (1 already synced)" — that string is the user's reading of the fake success toast, not a kernel response.
 2. **The kernel API is the wrong shape.** `sync-pull.ts:191` declares `pull({ sessionID })` and writes to `TodoTable` via `todoSvc.create({ sessionID, todo })`. After ADR-0001, the table and the scope are both wrong.
@@ -37,7 +37,7 @@ Priority mapping (Linear number → local): `1` → `Urgent`, `2` → `High`, `3
 
 ### D6 — Pull always runs; no "already up to date" skip
 
-There is no watermark and no set-equality shortcut. The pull is a *fetch + insert-if-new*, not a *diff*. Reasons:
+There is no watermark and no set-equality shortcut. The pull is a _fetch + insert-if-new_, not a _diff_. Reasons:
 
 - Linear does not expose a "since" cursor cheaply; the `updatedAt` filter exists but is per-issue, not per-project.
 - A "nothing to do" optimisation would hide real changes (a Linear issue that was completed since the last pull, a Linear issue that was deleted). Both should be visible — completion by reading the row, deletion by an explicit "remove from local" action that lands in a follow-up ADR.
@@ -61,7 +61,7 @@ Auto-progress is fully decoupled from any session. It runs in the workspace laye
 
 The push walks the local `IssueTable` rows where `linear_issue_id IS NOT NULL`, and for each one that has been updated locally since the last push (a `last_pushed_at` per row, or a single `directory.last_pushed_at` watermark — pending a follow-up ADR), writes the changed fields to Linear via `update_issue`. It does not create new Linear issues; new issues are created explicitly by the user via a "Publish to Linear" action on a single row. (Bulk-publish on first push is allowed; see D10.)
 
-The push never reads from Linear. If the local row says `status = Done` but Linear's `state.type = started`, the push will set Linear to `Done`. The pull will not undo this (per D5). The user's local truth wins for *pushed* fields, until a future "reconcile from Linear" operation.
+The push never reads from Linear. If the local row says `status = Done` but Linear's `state.type = started`, the push will set Linear to `Done`. The pull will not undo this (per D5). The user's local truth wins for _pushed_ fields, until a future "reconcile from Linear" operation.
 
 ### D9 — The fake handlers are deleted, not fixed
 

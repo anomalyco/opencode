@@ -37,14 +37,15 @@ Find the project and team IDs by running `/linear-status` in the TUI, or check y
 In the TUI or via agent tool:
 
 ```ts
-yield* todo.create({
-  sessionID,
-  todo: {
-    content: "Fix login bug",
-    status: "pending",
-    priority: "high",
-  },
-})
+yield *
+  todo.create({
+    sessionID,
+    todo: {
+      content: "Fix login bug",
+      status: "pending",
+      priority: "high",
+    },
+  })
 ```
 
 ### 5. Push to Linear

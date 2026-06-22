@@ -70,7 +70,7 @@ Living document. Add a term the first time it's used in an ADR or design doc; ex
 
 ## T
 
-**Todo (`TodoTable`, in-session)** — The pre-existing per-session todo system in `packages/opencode/src/session/todo.ts` and `session.sql.ts`. Used by the agent loop for in-session plans (the things the agent will do *right now* in this session). **Not the new feature.** The two systems coexist: a session can have a `TodoTable` plan AND the workspace can have `IssueTable` items. The UI is responsible for not confusing the user about which is which.
+**Todo (`TodoTable`, in-session)** — The pre-existing per-session todo system in `packages/opencode/src/session/todo.ts` and `session.sql.ts`. Used by the agent loop for in-session plans (the things the agent will do _right now_ in this session). **Not the new feature.** The two systems coexist: a session can have a `TodoTable` plan AND the workspace can have `IssueTable` items. The UI is responsible for not confusing the user about which is which.
 
 **Todos (sidebar section)** — The new sidebar section (per ADR-0001 D2). Lists `IssueTable` rows for the current workspace. Always renders. Contains the Linear sub-panel when configured.
 

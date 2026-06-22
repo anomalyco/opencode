@@ -1,3 +1,10 @@
+## Project Context
+
+- Goal: add a Linear-style todo panel to OpenCode, backed by Linear MCP (https://linear.app/docs/mcp).
+- Active dev branch: `feature/todo-sidebar-linear`. Worktree at `.worktrees/feature/todo-sidebar-linear/`. Default base is `origin/dev`.
+- Primary surfaces for the panel: web app (`packages/app/`), TUI (`packages/tui/`), data model (`packages/core/`).
+- Workflow tools: `/understand` for code reading, `/diagnose` for bugs, `/to-prd` for product docs, `/ui-ux-pro-max` for UI/UX direction.
+
 - To regenerate the JavaScript SDK, run `./packages/sdk/js/script/build.ts`.
 - ALWAYS USE PARALLEL TOOLS WHEN APPLICABLE.
 - The default branch in this repo is `dev`.
