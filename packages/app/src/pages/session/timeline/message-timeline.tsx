@@ -1174,17 +1174,19 @@ export function MessageTimeline(props: {
 
   function VirtualTimelineRow(props: { rowKey: string }) {
     let element: HTMLDivElement
-    const initialItem = virtualItemByKey().get(props.rowKey)!
-    const initialRow = timelineRowByKey().get(props.rowKey)!
+    const initialItem = virtualItemByKey().get(props.rowKey)
+    const initialRow = timelineRowByKey().get(props.rowKey)
     const item = createMemo(() => virtualItemByKey().get(props.rowKey) ?? initialItem)
     const row = createMemo(() => timelineRowByKey().get(props.rowKey) ?? initialRow)
     const asyncFile = () => {
       const value = row()
-      if (value._tag !== "AssistantPart" || value.group.type !== "part") return false
+      if (!value || value._tag !== "AssistantPart" || value.group.type !== "part") return false
       const part = getMsgPart(value.group.ref.messageID, value.group.ref.partID)
       return part?.type === "tool" && ["edit", "write", "apply_patch"].includes(part.tool)
     }
-    const [ready, setReady] = createSignal(initialItem.size <= timelineFallbackItemSize || !asyncFile())
+    const [ready, setReady] = createSignal(
+      initialItem ? initialItem.size <= timelineFallbackItemSize : true || !asyncFile(),
+    )
     let contentMeasureFrame: number | undefined
 
     onMount(() => virtualizer.measureElement(element))
