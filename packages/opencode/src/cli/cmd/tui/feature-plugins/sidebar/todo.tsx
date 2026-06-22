@@ -41,9 +41,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const theme = () => props.api.theme.current
   const raw = createMemo(() => props.api.state.session.todo(props.session_id) as Todo[])
   const tree = createMemo(() => buildTree(raw()))
-  const show = createMemo(
-    () => raw().length > 0 && raw().some((item) => item.status !== "completed"),
-  )
+  const show = createMemo(() => raw().length > 0 && raw().some((item) => item.status !== "completed"))
 
   const toggle = (id: string) => {
     setCollapsed((prev) => {

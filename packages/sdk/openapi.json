@@ -6796,6 +6796,1162 @@
         ]
       }
     },
+    "/issue": {
+      "get": {
+        "operationId": "issue.list",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "List issues",
+        "description": "List all issues (workspace-scoped todos) for the current project directory.",
+        "responses": {
+          "200": {
+            "description": "Issue list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Issue"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.issue.list({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "operationId": "issue.create",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Create issue",
+        "description": "Create a new issue (todo) in the workspace.",
+        "responses": {
+          "200": {
+            "description": "Created issue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Issue"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "directory": {
+                    "type": "string"
+                  },
+                  "issue": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "description": "Unique identifier for the issue",
+                        "type": "string"
+                      },
+                      "directory": {
+                        "description": "Workspace directory this issue belongs to",
+                        "type": "string"
+                      },
+                      "parent_id": {
+                        "description": "Parent issue ID for L1/L2 hierarchy; null for L1 root items",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "level": {
+                        "description": "Hierarchy depth: 0=L1, 1=L2",
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "title": {
+                        "description": "Short label; falls back to content if empty",
+                        "type": "string"
+                      },
+                      "content": {
+                        "description": "Brief description shown in list rows",
+                        "type": "string"
+                      },
+                      "description": {
+                        "description": "Rich-text markdown body with @file and /skill references (reuses the chat composer)",
+                        "default": "",
+                        "type": "string"
+                      },
+                      "status": {
+                        "default": "backlog",
+                        "description": "Linear-aligned status: backlog, todo, in_progress, in_review, done, canceled",
+                        "type": "string",
+                        "enum": ["backlog", "todo", "in_progress", "in_review", "done", "canceled"]
+                      },
+                      "priority": {
+                        "default": "none",
+                        "description": "Linear-aligned priority: none, urgent, high, medium, low",
+                        "type": "string",
+                        "enum": ["none", "urgent", "high", "medium", "low"]
+                      },
+                      "labels": {
+                        "description": "Tags for categorization",
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "due_date": {
+                        "description": "Due date in ISO 8601 format",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "assignee_id": {
+                        "description": "Assignee user ID",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "linear_issue_id": {
+                        "description": "Linear issue ID for bidirectional sync",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "linear_team_id": {
+                        "description": "Linear team ID; set on pull",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "linear_project_id": {
+                        "description": "Linear project ID; set on pull",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "position": {
+                        "description": "Sort order within the same parent level",
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "last_pushed_at": {
+                        "description": "Unix ms of last successful push to Linear",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "time_created": {
+                        "description": "Unix ms",
+                        "type": "number"
+                      },
+                      "time_updated": {
+                        "description": "Unix ms",
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": ["directory", "issue"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.issue.create({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/issue/tree": {
+      "get": {
+        "operationId": "issue.tree",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Get issue tree",
+        "description": "Get the L1/L2 issue hierarchy as a tree.",
+        "responses": {
+          "200": {
+            "description": "Issue tree",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "description": "Unique identifier for the issue",
+                        "type": "string"
+                      },
+                      "directory": {
+                        "description": "Workspace directory this issue belongs to",
+                        "type": "string"
+                      },
+                      "parent_id": {
+                        "description": "Parent issue ID for L1/L2 hierarchy; null for L1 root items",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "level": {
+                        "description": "Hierarchy depth: 0=L1, 1=L2",
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "title": {
+                        "description": "Short label; falls back to content if empty",
+                        "type": "string"
+                      },
+                      "content": {
+                        "description": "Brief description shown in list rows",
+                        "type": "string"
+                      },
+                      "description": {
+                        "description": "Rich-text markdown body with @file and /skill references (reuses the chat composer)",
+                        "default": "",
+                        "type": "string"
+                      },
+                      "status": {
+                        "default": "backlog",
+                        "description": "Linear-aligned status: backlog, todo, in_progress, in_review, done, canceled",
+                        "type": "string",
+                        "enum": ["backlog", "todo", "in_progress", "in_review", "done", "canceled"]
+                      },
+                      "priority": {
+                        "default": "none",
+                        "description": "Linear-aligned priority: none, urgent, high, medium, low",
+                        "type": "string",
+                        "enum": ["none", "urgent", "high", "medium", "low"]
+                      },
+                      "labels": {
+                        "description": "Tags for categorization",
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "due_date": {
+                        "description": "Due date in ISO 8601 format",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "assignee_id": {
+                        "description": "Assignee user ID",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "linear_issue_id": {
+                        "description": "Linear issue ID for bidirectional sync",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "linear_team_id": {
+                        "description": "Linear team ID; set on pull",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "linear_project_id": {
+                        "description": "Linear project ID; set on pull",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "position": {
+                        "description": "Sort order within the same parent level",
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "last_pushed_at": {
+                        "description": "Unix ms of last successful push to Linear",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "time_created": {
+                        "description": "Unix ms",
+                        "type": "number"
+                      },
+                      "time_updated": {
+                        "description": "Unix ms",
+                        "type": "number"
+                      },
+                      "children": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/Issue"
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "directory",
+                      "parent_id",
+                      "level",
+                      "title",
+                      "content",
+                      "position",
+                      "time_created",
+                      "time_updated",
+                      "children"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.issue.tree({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/issue/{id}": {
+      "patch": {
+        "operationId": "issue.update",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Update issue",
+        "description": "Update fields on an existing issue.",
+        "responses": {
+          "200": {
+            "description": "Updated issue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Issue"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "directory": {
+                    "type": "string"
+                  },
+                  "patch": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "description": "Unique identifier for the issue",
+                        "type": "string"
+                      },
+                      "directory": {
+                        "description": "Workspace directory this issue belongs to",
+                        "type": "string"
+                      },
+                      "parent_id": {
+                        "description": "Parent issue ID for L1/L2 hierarchy; null for L1 root items",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "level": {
+                        "description": "Hierarchy depth: 0=L1, 1=L2",
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
+                      },
+                      "title": {
+                        "description": "Short label; falls back to content if empty",
+                        "type": "string"
+                      },
+                      "content": {
+                        "description": "Brief description shown in list rows",
+                        "type": "string"
+                      },
+                      "description": {
+                        "description": "Rich-text markdown body with @file and /skill references (reuses the chat composer)",
+                        "default": "",
+                        "type": "string"
+                      },
+                      "status": {
+                        "default": "backlog",
+                        "description": "Linear-aligned status: backlog, todo, in_progress, in_review, done, canceled",
+                        "type": "string",
+                        "enum": ["backlog", "todo", "in_progress", "in_review", "done", "canceled"]
+                      },
+                      "priority": {
+                        "default": "none",
+                        "description": "Linear-aligned priority: none, urgent, high, medium, low",
+                        "type": "string",
+                        "enum": ["none", "urgent", "high", "medium", "low"]
+                      },
+                      "labels": {
+                        "description": "Tags for categorization",
+                        "default": [],
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "due_date": {
+                        "description": "Due date in ISO 8601 format",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "assignee_id": {
+                        "description": "Assignee user ID",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "linear_issue_id": {
+                        "description": "Linear issue ID for bidirectional sync",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "linear_team_id": {
+                        "description": "Linear team ID; set on pull",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "linear_project_id": {
+                        "description": "Linear project ID; set on pull",
+                        "anyOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "position": {
+                        "description": "Sort order within the same parent level",
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
+                      },
+                      "last_pushed_at": {
+                        "description": "Unix ms of last successful push to Linear",
+                        "anyOf": [
+                          {
+                            "type": "number"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
+                      "time_created": {
+                        "description": "Unix ms",
+                        "type": "number"
+                      },
+                      "time_updated": {
+                        "description": "Unix ms",
+                        "type": "number"
+                      }
+                    }
+                  }
+                },
+                "required": ["directory", "patch"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.issue.update({\n  ...\n})"
+          }
+        ]
+      },
+      "delete": {
+        "operationId": "issue.delete",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Delete issue",
+        "description": "Delete an issue from the workspace.",
+        "responses": {
+          "200": {
+            "description": "Deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.issue.delete({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/issue/{id}/status": {
+      "post": {
+        "operationId": "issue.patchStatus",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Patch issue status",
+        "description": "Change the status of an issue (backlog/todo/in_progress/in_review/done/canceled).",
+        "responses": {
+          "200": {
+            "description": "Updated issue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Issue"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "directory": {
+                    "type": "string"
+                  },
+                  "status": {
+                    "description": "Linear-aligned status: backlog, todo, in_progress, in_review, done, canceled",
+                    "type": "string",
+                    "enum": ["backlog", "todo", "in_progress", "in_review", "done", "canceled"]
+                  }
+                },
+                "required": ["directory", "status"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.issue.patchStatus({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/issue/{id}/assignee": {
+      "post": {
+        "operationId": "issue.patchAssignee",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "id",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "summary": "Patch issue assignee",
+        "description": "Assign or unassign an issue.",
+        "responses": {
+          "200": {
+            "description": "Updated issue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Issue"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/NotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "directory": {
+                    "type": "string"
+                  },
+                  "assigneeId": {
+                    "type": "string"
+                  }
+                },
+                "required": ["directory", "assigneeId"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.issue.patchAssignee({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/issue/reorder": {
+      "post": {
+        "operationId": "issue.reorder",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Reorder issues",
+        "description": "Reorder issues by providing a list of issue IDs in the new order.",
+        "responses": {
+          "200": {
+            "description": "Reordered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "directory": {
+                    "type": "string"
+                  },
+                  "ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": ["directory", "ids"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.issue.reorder({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/issue/auto-progress/start": {
+      "post": {
+        "operationId": "issue.autoProgressStart",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Start auto-progress",
+        "description": "Start the L1/L2 auto-progress engine for a workspace directory.",
+        "responses": {
+          "200": {
+            "description": "Started",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "directory": {
+                    "type": "string"
+                  }
+                },
+                "required": ["directory"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.issue.autoProgressStart({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/issue/auto-progress/stop": {
+      "post": {
+        "operationId": "issue.autoProgressStop",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Stop auto-progress",
+        "description": "Stop the L1/L2 auto-progress engine for a workspace directory.",
+        "responses": {
+          "200": {
+            "description": "Stopped",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "directory": {
+                    "type": "string"
+                  }
+                },
+                "required": ["directory"]
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.issue.autoProgressStop({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/issue/auto-progress/status": {
+      "get": {
+        "operationId": "issue.autoProgressStatus",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "directory",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "workspace",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "summary": "Auto-progress status",
+        "description": "Whether the L1/L2 auto-progress engine is currently running for a workspace directory.",
+        "responses": {
+          "200": {
+            "description": "Status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": ["idle", "running"]
+                    }
+                  },
+                  "required": ["status"]
+                }
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.issue.autoProgressStatus({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/instance/dispose": {
       "post": {
         "operationId": "instance.dispose",
@@ -7210,6 +8366,149 @@
   },
   "components": {
     "schemas": {
+      "Event.server.connected": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "server.connected"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.global.disposed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "global.disposed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {}
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.tui.prompt.append": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.prompt.append"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": ["text"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.tui.command.execute": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.command.execute"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "session.list",
+                      "session.new",
+                      "session.share",
+                      "session.interrupt",
+                      "session.compact",
+                      "session.page.up",
+                      "session.page.down",
+                      "session.line.up",
+                      "session.line.down",
+                      "session.half.page.up",
+                      "session.half.page.down",
+                      "session.first",
+                      "session.last",
+                      "prompt.clear",
+                      "prompt.submit",
+                      "agent.cycle"
+                    ]
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            },
+            "required": ["command"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.tui.toast.show": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.toast.show"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "title": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "variant": {
+                "type": "string",
+                "enum": ["info", "success", "warning", "error"]
+              },
+              "duration": {
+                "description": "Duration in milliseconds",
+                "default": 5000,
+                "type": "number"
+              }
+            },
+            "required": ["message", "variant"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.tui.session.select": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "tui.session.select"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "description": "Session ID to navigate to",
+                "type": "string",
+                "pattern": "^ses.*"
+              }
+            },
+            "required": ["sessionID"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
       "Project": {
         "type": "object",
         "properties": {
@@ -7339,34 +8638,6 @@
               }
             },
             "required": ["version"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.server.connected": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "server.connected"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {}
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.global.disposed": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "global.disposed"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {}
           }
         },
         "required": ["type", "properties"]
@@ -7994,8 +9265,39 @@
       "Todo": {
         "type": "object",
         "properties": {
+          "id": {
+            "description": "Unique identifier for the todo item",
+            "type": "string"
+          },
+          "parent_id": {
+            "description": "Parent todo ID for hierarchy; null for root-level items",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "level": {
+            "description": "Hierarchy depth: 0=root, 1=child, 2=grandchild",
+            "default": 0,
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "title": {
+            "description": "Short label for the task; falls back to content if not set",
+            "type": "string"
+          },
           "content": {
             "description": "Brief description of the task",
+            "type": "string"
+          },
+          "description": {
+            "description": "Detailed markdown description with @file and /skill references",
+            "default": "",
             "type": "string"
           },
           "status": {
@@ -8005,6 +9307,69 @@
           "priority": {
             "description": "Priority level of the task: high, medium, low",
             "type": "string"
+          },
+          "labels": {
+            "description": "Tags/labels for categorization",
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "due_date": {
+            "description": "Due date in ISO 8601 format",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "team_id": {
+            "description": "Team ID for issue sync",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "project_id": {
+            "description": "Project ID for issue sync",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assignee_id": {
+            "description": "Assignee user ID for issue sync",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "linear_issue_id": {
+            "description": "Linear issue ID for bidirectional sync",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": ["content", "status", "priority"]
@@ -8031,6 +9396,355 @@
               }
             },
             "required": ["sessionID", "todos"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.todo.created": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "todo.created"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "todo": {
+                "$ref": "#/components/schemas/Todo"
+              }
+            },
+            "required": ["sessionID", "todo"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.todo.deleted": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "todo.deleted"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": ["sessionID", "id"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.todo.progressed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "todo.progressed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses.*"
+              },
+              "from": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "to": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string",
+                "enum": ["auto", "manual"]
+              }
+            },
+            "required": ["sessionID", "from", "to", "reason"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Issue": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "description": "Unique identifier for the issue",
+            "type": "string"
+          },
+          "directory": {
+            "description": "Workspace directory this issue belongs to",
+            "type": "string"
+          },
+          "parent_id": {
+            "description": "Parent issue ID for L1/L2 hierarchy; null for L1 root items",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "level": {
+            "description": "Hierarchy depth: 0=L1, 1=L2",
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "title": {
+            "description": "Short label; falls back to content if empty",
+            "type": "string"
+          },
+          "content": {
+            "description": "Brief description shown in list rows",
+            "type": "string"
+          },
+          "description": {
+            "description": "Rich-text markdown body with @file and /skill references (reuses the chat composer)",
+            "default": "",
+            "type": "string"
+          },
+          "status": {
+            "default": "backlog",
+            "description": "Linear-aligned status: backlog, todo, in_progress, in_review, done, canceled",
+            "type": "string",
+            "enum": ["backlog", "todo", "in_progress", "in_review", "done", "canceled"]
+          },
+          "priority": {
+            "default": "none",
+            "description": "Linear-aligned priority: none, urgent, high, medium, low",
+            "type": "string",
+            "enum": ["none", "urgent", "high", "medium", "low"]
+          },
+          "labels": {
+            "description": "Tags for categorization",
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "due_date": {
+            "description": "Due date in ISO 8601 format",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "assignee_id": {
+            "description": "Assignee user ID",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "linear_issue_id": {
+            "description": "Linear issue ID for bidirectional sync",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "linear_team_id": {
+            "description": "Linear team ID; set on pull",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "linear_project_id": {
+            "description": "Linear project ID; set on pull",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "position": {
+            "description": "Sort order within the same parent level",
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "last_pushed_at": {
+            "description": "Unix ms of last successful push to Linear",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "time_created": {
+            "description": "Unix ms",
+            "type": "number"
+          },
+          "time_updated": {
+            "description": "Unix ms",
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "directory",
+          "parent_id",
+          "level",
+          "title",
+          "content",
+          "position",
+          "time_created",
+          "time_updated"
+        ]
+      },
+      "Event.issue.created": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "issue.created"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "directory": {
+                "type": "string"
+              },
+              "issue": {
+                "$ref": "#/components/schemas/Issue"
+              }
+            },
+            "required": ["directory", "issue"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.issue.updated": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "issue.updated"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "directory": {
+                "type": "string"
+              },
+              "issues": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Issue"
+                }
+              }
+            },
+            "required": ["directory", "issues"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.issue.deleted": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "issue.deleted"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "directory": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": ["directory", "id"]
+          }
+        },
+        "required": ["type", "properties"]
+      },
+      "Event.issue.progressed": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "issue.progressed"
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "directory": {
+                "type": "string"
+              },
+              "from": {
+                "anyOf": [
+                  {
+                    "description": "Linear-aligned status: backlog, todo, in_progress, in_review, done, canceled",
+                    "type": "string",
+                    "enum": ["backlog", "todo", "in_progress", "in_review", "done", "canceled"]
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "to": {
+                "description": "Linear-aligned status: backlog, todo, in_progress, in_review, done, canceled",
+                "type": "string",
+                "enum": ["backlog", "todo", "in_progress", "in_review", "done", "canceled"]
+              },
+              "reason": {
+                "type": "string",
+                "enum": ["auto", "manual"]
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": ["directory", "from", "to", "reason", "id"]
           }
         },
         "required": ["type", "properties"]
@@ -8132,121 +9846,6 @@
             "type": "object",
             "properties": {
               "sessionID": {
-                "type": "string",
-                "pattern": "^ses.*"
-              }
-            },
-            "required": ["sessionID"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.prompt.append": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.prompt.append"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "text": {
-                "type": "string"
-              }
-            },
-            "required": ["text"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.command.execute": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.command.execute"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "command": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "enum": [
-                      "session.list",
-                      "session.new",
-                      "session.share",
-                      "session.interrupt",
-                      "session.compact",
-                      "session.page.up",
-                      "session.page.down",
-                      "session.line.up",
-                      "session.line.down",
-                      "session.half.page.up",
-                      "session.half.page.down",
-                      "session.first",
-                      "session.last",
-                      "prompt.clear",
-                      "prompt.submit",
-                      "agent.cycle"
-                    ]
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            },
-            "required": ["command"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.toast.show": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.toast.show"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "title": {
-                "type": "string"
-              },
-              "message": {
-                "type": "string"
-              },
-              "variant": {
-                "type": "string",
-                "enum": ["info", "success", "warning", "error"]
-              },
-              "duration": {
-                "description": "Duration in milliseconds",
-                "default": 5000,
-                "type": "number"
-              }
-            },
-            "required": ["message", "variant"]
-          }
-        },
-        "required": ["type", "properties"]
-      },
-      "Event.tui.session.select": {
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "const": "tui.session.select"
-          },
-          "properties": {
-            "type": "object",
-            "properties": {
-              "sessionID": {
-                "description": "Session ID to navigate to",
                 "type": "string",
                 "pattern": "^ses.*"
               }
@@ -9928,6 +11527,24 @@
       "Event": {
         "anyOf": [
           {
+            "$ref": "#/components/schemas/Event.server.connected"
+          },
+          {
+            "$ref": "#/components/schemas/Event.global.disposed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.prompt.append"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.command.execute"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.toast.show"
+          },
+          {
+            "$ref": "#/components/schemas/Event.tui.session.select"
+          },
+          {
             "$ref": "#/components/schemas/Event.project.updated"
           },
           {
@@ -9938,12 +11555,6 @@
           },
           {
             "$ref": "#/components/schemas/Event.installation.update-available"
-          },
-          {
-            "$ref": "#/components/schemas/Event.server.connected"
-          },
-          {
-            "$ref": "#/components/schemas/Event.global.disposed"
           },
           {
             "$ref": "#/components/schemas/Event.file.edited"
@@ -9985,6 +11596,27 @@
             "$ref": "#/components/schemas/Event.todo.updated"
           },
           {
+            "$ref": "#/components/schemas/Event.todo.created"
+          },
+          {
+            "$ref": "#/components/schemas/Event.todo.deleted"
+          },
+          {
+            "$ref": "#/components/schemas/Event.todo.progressed"
+          },
+          {
+            "$ref": "#/components/schemas/Event.issue.created"
+          },
+          {
+            "$ref": "#/components/schemas/Event.issue.updated"
+          },
+          {
+            "$ref": "#/components/schemas/Event.issue.deleted"
+          },
+          {
+            "$ref": "#/components/schemas/Event.issue.progressed"
+          },
+          {
             "$ref": "#/components/schemas/Event.session.status"
           },
           {
@@ -9992,18 +11624,6 @@
           },
           {
             "$ref": "#/components/schemas/Event.session.compacted"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.prompt.append"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.command.execute"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.toast.show"
-          },
-          {
-            "$ref": "#/components/schemas/Event.tui.session.select"
           },
           {
             "$ref": "#/components/schemas/Event.mcp.tools.changed"
@@ -11096,6 +12716,32 @@
         "type": "string",
         "enum": ["auto", "stretch"]
       },
+      "LinearConfig": {
+        "description": "Linear integration settings for issue tracking and sync",
+        "type": "object",
+        "properties": {
+          "projectId": {
+            "description": "Linear project ID for issue mapping",
+            "type": "string"
+          },
+          "teamId": {
+            "description": "Linear team ID for issue creation",
+            "type": "string"
+          },
+          "syncMode": {
+            "description": "Issue sync strategy with Linear",
+            "default": "manual",
+            "type": "string",
+            "enum": ["manual", "auto-push", "auto-pull", "bidirectional"]
+          },
+          "autoPush": {
+            "description": "Automatically push issues to Linear",
+            "default": false,
+            "type": "boolean"
+          }
+        },
+        "additionalProperties": false
+      },
       "Config": {
         "type": "object",
         "properties": {
@@ -11524,6 +13170,9 @@
                 "maximum": 9007199254740991
               }
             }
+          },
+          "linear": {
+            "$ref": "#/components/schemas/LinearConfig"
           }
         },
         "additionalProperties": false

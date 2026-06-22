@@ -448,6 +448,123 @@ export type EventTodoProgressed = {
   }
 }
 
+export type Issue = {
+  /**
+   * Unique identifier for the issue
+   */
+  id: string
+  /**
+   * Workspace directory this issue belongs to
+   */
+  directory: string
+  /**
+   * Parent issue ID for L1/L2 hierarchy; null for L1 root items
+   */
+  parent_id: string | null
+  /**
+   * Hierarchy depth: 0=L1, 1=L2
+   */
+  level: number
+  /**
+   * Short label; falls back to content if empty
+   */
+  title: string
+  /**
+   * Brief description shown in list rows
+   */
+  content: string
+  /**
+   * Rich-text markdown body with @file and /skill references (reuses the chat composer)
+   */
+  description?: string
+  /**
+   * Linear-aligned status: backlog, todo, in_progress, in_review, done, canceled
+   */
+  status?: "backlog" | "todo" | "in_progress" | "in_review" | "done" | "canceled"
+  /**
+   * Linear-aligned priority: none, urgent, high, medium, low
+   */
+  priority?: "none" | "urgent" | "high" | "medium" | "low"
+  /**
+   * Tags for categorization
+   */
+  labels?: Array<string>
+  /**
+   * Due date in ISO 8601 format
+   */
+  due_date?: string | null
+  /**
+   * Assignee user ID
+   */
+  assignee_id?: string | null
+  /**
+   * Linear issue ID for bidirectional sync
+   */
+  linear_issue_id?: string | null
+  /**
+   * Linear team ID; set on pull
+   */
+  linear_team_id?: string | null
+  /**
+   * Linear project ID; set on pull
+   */
+  linear_project_id?: string | null
+  /**
+   * Sort order within the same parent level
+   */
+  position: number
+  /**
+   * Unix ms of last successful push to Linear
+   */
+  last_pushed_at?: number | null
+  /**
+   * Unix ms
+   */
+  time_created: number
+  /**
+   * Unix ms
+   */
+  time_updated: number
+}
+
+export type EventIssueCreated = {
+  type: "issue.created"
+  properties: {
+    directory: string
+    issue: Issue
+  }
+}
+
+export type EventIssueUpdated = {
+  type: "issue.updated"
+  properties: {
+    directory: string
+    issues: Array<Issue>
+  }
+}
+
+export type EventIssueDeleted = {
+  type: "issue.deleted"
+  properties: {
+    directory: string
+    id: string
+  }
+}
+
+export type EventIssueProgressed = {
+  type: "issue.progressed"
+  properties: {
+    directory: string
+    from: "backlog" | "todo" | "in_progress" | "in_review" | "done" | "canceled" | null
+    /**
+     * Linear-aligned status: backlog, todo, in_progress, in_review, done, canceled
+     */
+    to: "backlog" | "todo" | "in_progress" | "in_review" | "done" | "canceled"
+    reason: "auto" | "manual"
+    id: string
+  }
+}
+
 export type SessionStatus =
   | {
       type: "idle"
@@ -1068,6 +1185,10 @@ export type Event =
   | EventTodoCreated
   | EventTodoDeleted
   | EventTodoProgressed
+  | EventIssueCreated
+  | EventIssueUpdated
+  | EventIssueDeleted
+  | EventIssueProgressed
   | EventSessionStatus
   | EventSessionIdle
   | EventSessionCompacted
@@ -5196,6 +5317,549 @@ export type TuiControlResponseResponses = {
 }
 
 export type TuiControlResponseResponse = TuiControlResponseResponses[keyof TuiControlResponseResponses]
+
+export type IssueListData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue"
+}
+
+export type IssueListResponses = {
+  /**
+   * Issue list
+   */
+  200: Array<Issue>
+}
+
+export type IssueListResponse = IssueListResponses[keyof IssueListResponses]
+
+export type IssueCreateData = {
+  body?: {
+    directory: string
+    issue: {
+      /**
+       * Unique identifier for the issue
+       */
+      id?: string
+      /**
+       * Workspace directory this issue belongs to
+       */
+      directory?: string
+      /**
+       * Parent issue ID for L1/L2 hierarchy; null for L1 root items
+       */
+      parent_id?: string | null
+      /**
+       * Hierarchy depth: 0=L1, 1=L2
+       */
+      level?: number
+      /**
+       * Short label; falls back to content if empty
+       */
+      title?: string
+      /**
+       * Brief description shown in list rows
+       */
+      content?: string
+      /**
+       * Rich-text markdown body with @file and /skill references (reuses the chat composer)
+       */
+      description?: string
+      /**
+       * Linear-aligned status: backlog, todo, in_progress, in_review, done, canceled
+       */
+      status?: "backlog" | "todo" | "in_progress" | "in_review" | "done" | "canceled"
+      /**
+       * Linear-aligned priority: none, urgent, high, medium, low
+       */
+      priority?: "none" | "urgent" | "high" | "medium" | "low"
+      /**
+       * Tags for categorization
+       */
+      labels?: Array<string>
+      /**
+       * Due date in ISO 8601 format
+       */
+      due_date?: string | null
+      /**
+       * Assignee user ID
+       */
+      assignee_id?: string | null
+      /**
+       * Linear issue ID for bidirectional sync
+       */
+      linear_issue_id?: string | null
+      /**
+       * Linear team ID; set on pull
+       */
+      linear_team_id?: string | null
+      /**
+       * Linear project ID; set on pull
+       */
+      linear_project_id?: string | null
+      /**
+       * Sort order within the same parent level
+       */
+      position?: number
+      /**
+       * Unix ms of last successful push to Linear
+       */
+      last_pushed_at?: number | null
+      /**
+       * Unix ms
+       */
+      time_created?: number
+      /**
+       * Unix ms
+       */
+      time_updated?: number
+    }
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue"
+}
+
+export type IssueCreateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type IssueCreateError = IssueCreateErrors[keyof IssueCreateErrors]
+
+export type IssueCreateResponses = {
+  /**
+   * Created issue
+   */
+  200: Issue
+}
+
+export type IssueCreateResponse = IssueCreateResponses[keyof IssueCreateResponses]
+
+export type IssueTreeData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/tree"
+}
+
+export type IssueTreeResponses = {
+  /**
+   * Issue tree
+   */
+  200: Array<{
+    /**
+     * Unique identifier for the issue
+     */
+    id: string
+    /**
+     * Workspace directory this issue belongs to
+     */
+    directory: string
+    /**
+     * Parent issue ID for L1/L2 hierarchy; null for L1 root items
+     */
+    parent_id: string | null
+    /**
+     * Hierarchy depth: 0=L1, 1=L2
+     */
+    level: number
+    /**
+     * Short label; falls back to content if empty
+     */
+    title: string
+    /**
+     * Brief description shown in list rows
+     */
+    content: string
+    /**
+     * Rich-text markdown body with @file and /skill references (reuses the chat composer)
+     */
+    description?: string
+    /**
+     * Linear-aligned status: backlog, todo, in_progress, in_review, done, canceled
+     */
+    status?: "backlog" | "todo" | "in_progress" | "in_review" | "done" | "canceled"
+    /**
+     * Linear-aligned priority: none, urgent, high, medium, low
+     */
+    priority?: "none" | "urgent" | "high" | "medium" | "low"
+    /**
+     * Tags for categorization
+     */
+    labels?: Array<string>
+    /**
+     * Due date in ISO 8601 format
+     */
+    due_date?: string | null
+    /**
+     * Assignee user ID
+     */
+    assignee_id?: string | null
+    /**
+     * Linear issue ID for bidirectional sync
+     */
+    linear_issue_id?: string | null
+    /**
+     * Linear team ID; set on pull
+     */
+    linear_team_id?: string | null
+    /**
+     * Linear project ID; set on pull
+     */
+    linear_project_id?: string | null
+    /**
+     * Sort order within the same parent level
+     */
+    position: number
+    /**
+     * Unix ms of last successful push to Linear
+     */
+    last_pushed_at?: number | null
+    /**
+     * Unix ms
+     */
+    time_created: number
+    /**
+     * Unix ms
+     */
+    time_updated: number
+    children: Array<Issue>
+  }>
+}
+
+export type IssueTreeResponse = IssueTreeResponses[keyof IssueTreeResponses]
+
+export type IssueDeleteData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query: {
+    directory: string
+    workspace?: string
+  }
+  url: "/issue/{id}"
+}
+
+export type IssueDeleteErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type IssueDeleteError = IssueDeleteErrors[keyof IssueDeleteErrors]
+
+export type IssueDeleteResponses = {
+  /**
+   * Deleted
+   */
+  200: boolean
+}
+
+export type IssueDeleteResponse = IssueDeleteResponses[keyof IssueDeleteResponses]
+
+export type IssueUpdateData = {
+  body?: {
+    directory: string
+    patch: {
+      /**
+       * Unique identifier for the issue
+       */
+      id?: string
+      /**
+       * Workspace directory this issue belongs to
+       */
+      directory?: string
+      /**
+       * Parent issue ID for L1/L2 hierarchy; null for L1 root items
+       */
+      parent_id?: string | null
+      /**
+       * Hierarchy depth: 0=L1, 1=L2
+       */
+      level?: number
+      /**
+       * Short label; falls back to content if empty
+       */
+      title?: string
+      /**
+       * Brief description shown in list rows
+       */
+      content?: string
+      /**
+       * Rich-text markdown body with @file and /skill references (reuses the chat composer)
+       */
+      description?: string
+      /**
+       * Linear-aligned status: backlog, todo, in_progress, in_review, done, canceled
+       */
+      status?: "backlog" | "todo" | "in_progress" | "in_review" | "done" | "canceled"
+      /**
+       * Linear-aligned priority: none, urgent, high, medium, low
+       */
+      priority?: "none" | "urgent" | "high" | "medium" | "low"
+      /**
+       * Tags for categorization
+       */
+      labels?: Array<string>
+      /**
+       * Due date in ISO 8601 format
+       */
+      due_date?: string | null
+      /**
+       * Assignee user ID
+       */
+      assignee_id?: string | null
+      /**
+       * Linear issue ID for bidirectional sync
+       */
+      linear_issue_id?: string | null
+      /**
+       * Linear team ID; set on pull
+       */
+      linear_team_id?: string | null
+      /**
+       * Linear project ID; set on pull
+       */
+      linear_project_id?: string | null
+      /**
+       * Sort order within the same parent level
+       */
+      position?: number
+      /**
+       * Unix ms of last successful push to Linear
+       */
+      last_pushed_at?: number | null
+      /**
+       * Unix ms
+       */
+      time_created?: number
+      /**
+       * Unix ms
+       */
+      time_updated?: number
+    }
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/{id}"
+}
+
+export type IssueUpdateErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type IssueUpdateError = IssueUpdateErrors[keyof IssueUpdateErrors]
+
+export type IssueUpdateResponses = {
+  /**
+   * Updated issue
+   */
+  200: Issue
+}
+
+export type IssueUpdateResponse = IssueUpdateResponses[keyof IssueUpdateResponses]
+
+export type IssuePatchStatusData = {
+  body?: {
+    directory: string
+    /**
+     * Linear-aligned status: backlog, todo, in_progress, in_review, done, canceled
+     */
+    status: "backlog" | "todo" | "in_progress" | "in_review" | "done" | "canceled"
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/{id}/status"
+}
+
+export type IssuePatchStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type IssuePatchStatusError = IssuePatchStatusErrors[keyof IssuePatchStatusErrors]
+
+export type IssuePatchStatusResponses = {
+  /**
+   * Updated issue
+   */
+  200: Issue
+}
+
+export type IssuePatchStatusResponse = IssuePatchStatusResponses[keyof IssuePatchStatusResponses]
+
+export type IssuePatchAssigneeData = {
+  body?: {
+    directory: string
+    assigneeId: string
+  }
+  path: {
+    id: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/{id}/assignee"
+}
+
+export type IssuePatchAssigneeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type IssuePatchAssigneeError = IssuePatchAssigneeErrors[keyof IssuePatchAssigneeErrors]
+
+export type IssuePatchAssigneeResponses = {
+  /**
+   * Updated issue
+   */
+  200: Issue
+}
+
+export type IssuePatchAssigneeResponse = IssuePatchAssigneeResponses[keyof IssuePatchAssigneeResponses]
+
+export type IssueReorderData = {
+  body?: {
+    directory: string
+    ids: Array<string>
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/reorder"
+}
+
+export type IssueReorderErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type IssueReorderError = IssueReorderErrors[keyof IssueReorderErrors]
+
+export type IssueReorderResponses = {
+  /**
+   * Reordered
+   */
+  200: boolean
+}
+
+export type IssueReorderResponse = IssueReorderResponses[keyof IssueReorderResponses]
+
+export type IssueAutoProgressStartData = {
+  body?: {
+    directory: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/auto-progress/start"
+}
+
+export type IssueAutoProgressStartResponses = {
+  /**
+   * Started
+   */
+  200: boolean
+}
+
+export type IssueAutoProgressStartResponse = IssueAutoProgressStartResponses[keyof IssueAutoProgressStartResponses]
+
+export type IssueAutoProgressStopData = {
+  body?: {
+    directory: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/auto-progress/stop"
+}
+
+export type IssueAutoProgressStopResponses = {
+  /**
+   * Stopped
+   */
+  200: boolean
+}
+
+export type IssueAutoProgressStopResponse = IssueAutoProgressStopResponses[keyof IssueAutoProgressStopResponses]
+
+export type IssueAutoProgressStatusData = {
+  body?: never
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/issue/auto-progress/status"
+}
+
+export type IssueAutoProgressStatusResponses = {
+  /**
+   * Status
+   */
+  200: {
+    status: "idle" | "running"
+  }
+}
+
+export type IssueAutoProgressStatusResponse = IssueAutoProgressStatusResponses[keyof IssueAutoProgressStatusResponses]
 
 export type InstanceDisposeData = {
   body?: never

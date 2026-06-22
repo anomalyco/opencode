@@ -58,14 +58,14 @@ Transitions are triggered by `start()`, `stop()`, and internal `advance()` logic
 
 ### Consumed
 
-| Event | Source | Handler |
-|-------|--------|---------|
-| `Todo.Event.Updated` | `Bus` | Triggers `advance()` for the affected session |
+| Event                | Source | Handler                                       |
+| -------------------- | ------ | --------------------------------------------- |
+| `Todo.Event.Updated` | `Bus`  | Triggers `advance()` for the affected session |
 
 ### Emitted
 
-| Event | Payload | When |
-|-------|---------|------|
+| Event                   | Payload                                   | When                                  |
+| ----------------------- | ----------------------------------------- | ------------------------------------- |
 | `Todo.Event.Progressed` | `{ sessionID, from, to, reason: "auto" }` | When the engine changes a todo status |
 
 The engine never emits `Todo.Event.Updated` directly. It calls `todo.patchStatus()` which publishes `Updated` internally.
@@ -74,30 +74,31 @@ The engine never emits `Todo.Event.Updated` directly. It calls `todo.patchStatus
 
 `AutoProgress.Service` is an Effect context service with 4 methods:
 
-| Method | Signature | Returns | Description |
-|--------|-----------|---------|-------------|
-| `start` | `sessionID` | `Effect<void>` | Activate the engine for a session. Idempotent. |
-| `stop` | `sessionID` | `Effect<void>` | Deactivate the engine for a session. |
-| `status` | `sessionID` | `Effect<"idle" \| "running">` | Current engine state for the session. |
-| `isActive` | `sessionID` | `Effect<boolean>` | Whether the session is in the active set. |
+| Method     | Signature   | Returns                       | Description                                    |
+| ---------- | ----------- | ----------------------------- | ---------------------------------------------- |
+| `start`    | `sessionID` | `Effect<void>`                | Activate the engine for a session. Idempotent. |
+| `stop`     | `sessionID` | `Effect<void>`                | Deactivate the engine for a session.           |
+| `status`   | `sessionID` | `Effect<"idle" \| "running">` | Current engine state for the session.          |
+| `isActive` | `sessionID` | `Effect<boolean>`             | Whether the session is in the active set.      |
 
 ## Effect.forkScoped Pattern
 
 The engine uses `Effect.forkScoped` to run a background stream consumer:
 
 ```ts
-yield* bus.subscribe(Todo.Event.Updated).pipe(
-  Stream.tap((ev) =>
-    Effect.gen(function* () {
-      const sid = ev.properties.sessionID
-      const set = yield* Ref.get(ref)
-      if (!HashSet.has(set, sid)) return
-      yield* advance(todo, bus, sid as SessionID)
-    }),
-  ),
-  Stream.runDrain,
-  Effect.forkScoped,
-)
+yield *
+  bus.subscribe(Todo.Event.Updated).pipe(
+    Stream.tap((ev) =>
+      Effect.gen(function* () {
+        const sid = ev.properties.sessionID
+        const set = yield* Ref.get(ref)
+        if (!HashSet.has(set, sid)) return
+        yield* advance(todo, bus, sid as SessionID)
+      }),
+    ),
+    Stream.runDrain,
+    Effect.forkScoped,
+  )
 ```
 
 This pattern means:
@@ -204,9 +205,18 @@ const test = Effect.gen(function* () {
   yield* ap.start(sessionID)
 
   // Create L1 with two L2 children
-  const l1 = yield* todo.create({ sessionID, todo: { content: "L1", status: "in_progress", priority: "medium", level: 0 } })
-  yield* todo.create({ sessionID, todo: { content: "L2a", status: "in_progress", priority: "medium", level: 1, parent_id: l1.id } })
-  const l2b = yield* todo.create({ sessionID, todo: { content: "L2b", status: "pending", priority: "medium", level: 1, parent_id: l1.id } })
+  const l1 = yield* todo.create({
+    sessionID,
+    todo: { content: "L1", status: "in_progress", priority: "medium", level: 0 },
+  })
+  yield* todo.create({
+    sessionID,
+    todo: { content: "L2a", status: "in_progress", priority: "medium", level: 1, parent_id: l1.id },
+  })
+  const l2b = yield* todo.create({
+    sessionID,
+    todo: { content: "L2b", status: "pending", priority: "medium", level: 1, parent_id: l1.id },
+  })
 
   // Complete L2a
   yield* todo.patchStatus({ sessionID, id: l2b.id!, status: "completed" })

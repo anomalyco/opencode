@@ -177,7 +177,9 @@ export namespace Todo {
               .orderBy(asc(TodoTable.position))
               .all()
             const pos = max.length > 0 ? max[max.length - 1].pos + 1 : 0
-            db.insert(TodoTable).values(toRow({ sessionID: input.sessionID, todo, position: pos })).run()
+            db.insert(TodoTable)
+              .values(toRow({ sessionID: input.sessionID, todo, position: pos }))
+              .run()
           }),
         )
         const todos = yield* publish(input.sessionID)

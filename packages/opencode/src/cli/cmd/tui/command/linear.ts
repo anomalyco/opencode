@@ -54,9 +54,7 @@ export function register(api: TuiPluginApi) {
       category: "Linear",
       slash: { name: "linear-status" },
       onSelect: () => {
-        const cfg = (api.state.config as Record<string, unknown>).linear as
-          | Record<string, unknown>
-          | undefined
+        const cfg = (api.state.config as Record<string, unknown>).linear as Record<string, unknown> | undefined
         const projectId = cfg?.projectId ?? "Not configured"
         const teamId = cfg?.teamId ?? "Not configured"
         const syncMode = cfg?.syncMode ?? "manual"

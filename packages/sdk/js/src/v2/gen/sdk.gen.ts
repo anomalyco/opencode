@@ -55,6 +55,23 @@ import type {
   GlobalUpgradeErrors,
   GlobalUpgradeResponses,
   InstanceDisposeResponses,
+  IssueAutoProgressStartResponses,
+  IssueAutoProgressStatusResponses,
+  IssueAutoProgressStopResponses,
+  IssueCreateErrors,
+  IssueCreateResponses,
+  IssueDeleteErrors,
+  IssueDeleteResponses,
+  IssueListResponses,
+  IssuePatchAssigneeErrors,
+  IssuePatchAssigneeResponses,
+  IssuePatchStatusErrors,
+  IssuePatchStatusResponses,
+  IssueReorderErrors,
+  IssueReorderResponses,
+  IssueTreeResponses,
+  IssueUpdateErrors,
+  IssueUpdateResponses,
   LspStatusResponses,
   McpAddErrors,
   McpAddResponses,
@@ -3935,6 +3952,615 @@ export class Tui extends HeyApiClient {
   }
 }
 
+export class Issue extends HeyApiClient {
+  /**
+   * List issues
+   *
+   * List all issues (workspace-scoped todos) for the current project directory.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<IssueListResponses, unknown, ThrowOnError>({
+      url: "/issue",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create issue
+   *
+   * Create a new issue (todo) in the workspace.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      query_directory?: string
+      workspace?: string
+      body_directory?: string
+      issue?: {
+        /**
+         * Unique identifier for the issue
+         */
+        id?: string
+        /**
+         * Workspace directory this issue belongs to
+         */
+        directory?: string
+        /**
+         * Parent issue ID for L1/L2 hierarchy; null for L1 root items
+         */
+        parent_id?: string | null
+        /**
+         * Hierarchy depth: 0=L1, 1=L2
+         */
+        level?: number
+        /**
+         * Short label; falls back to content if empty
+         */
+        title?: string
+        /**
+         * Brief description shown in list rows
+         */
+        content?: string
+        /**
+         * Rich-text markdown body with @file and /skill references (reuses the chat composer)
+         */
+        description?: string
+        /**
+         * Linear-aligned status: backlog, todo, in_progress, in_review, done, canceled
+         */
+        status?: "backlog" | "todo" | "in_progress" | "in_review" | "done" | "canceled"
+        /**
+         * Linear-aligned priority: none, urgent, high, medium, low
+         */
+        priority?: "none" | "urgent" | "high" | "medium" | "low"
+        /**
+         * Tags for categorization
+         */
+        labels?: Array<string>
+        /**
+         * Due date in ISO 8601 format
+         */
+        due_date?: string | null
+        /**
+         * Assignee user ID
+         */
+        assignee_id?: string | null
+        /**
+         * Linear issue ID for bidirectional sync
+         */
+        linear_issue_id?: string | null
+        /**
+         * Linear team ID; set on pull
+         */
+        linear_team_id?: string | null
+        /**
+         * Linear project ID; set on pull
+         */
+        linear_project_id?: string | null
+        /**
+         * Sort order within the same parent level
+         */
+        position?: number
+        /**
+         * Unix ms of last successful push to Linear
+         */
+        last_pushed_at?: number | null
+        /**
+         * Unix ms
+         */
+        time_created?: number
+        /**
+         * Unix ms
+         */
+        time_updated?: number
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+            { in: "body", key: "issue" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<IssueCreateResponses, IssueCreateErrors, ThrowOnError>({
+      url: "/issue",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get issue tree
+   *
+   * Get the L1/L2 issue hierarchy as a tree.
+   */
+  public tree<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<IssueTreeResponses, unknown, ThrowOnError>({
+      url: "/issue/tree",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Delete issue
+   *
+   * Delete an issue from the workspace.
+   */
+  public delete<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      directory: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<IssueDeleteResponses, IssueDeleteErrors, ThrowOnError>({
+      url: "/issue/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update issue
+   *
+   * Update fields on an existing issue.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      query_directory?: string
+      workspace?: string
+      body_directory?: string
+      patch?: {
+        /**
+         * Unique identifier for the issue
+         */
+        id?: string
+        /**
+         * Workspace directory this issue belongs to
+         */
+        directory?: string
+        /**
+         * Parent issue ID for L1/L2 hierarchy; null for L1 root items
+         */
+        parent_id?: string | null
+        /**
+         * Hierarchy depth: 0=L1, 1=L2
+         */
+        level?: number
+        /**
+         * Short label; falls back to content if empty
+         */
+        title?: string
+        /**
+         * Brief description shown in list rows
+         */
+        content?: string
+        /**
+         * Rich-text markdown body with @file and /skill references (reuses the chat composer)
+         */
+        description?: string
+        /**
+         * Linear-aligned status: backlog, todo, in_progress, in_review, done, canceled
+         */
+        status?: "backlog" | "todo" | "in_progress" | "in_review" | "done" | "canceled"
+        /**
+         * Linear-aligned priority: none, urgent, high, medium, low
+         */
+        priority?: "none" | "urgent" | "high" | "medium" | "low"
+        /**
+         * Tags for categorization
+         */
+        labels?: Array<string>
+        /**
+         * Due date in ISO 8601 format
+         */
+        due_date?: string | null
+        /**
+         * Assignee user ID
+         */
+        assignee_id?: string | null
+        /**
+         * Linear issue ID for bidirectional sync
+         */
+        linear_issue_id?: string | null
+        /**
+         * Linear team ID; set on pull
+         */
+        linear_team_id?: string | null
+        /**
+         * Linear project ID; set on pull
+         */
+        linear_project_id?: string | null
+        /**
+         * Sort order within the same parent level
+         */
+        position?: number
+        /**
+         * Unix ms of last successful push to Linear
+         */
+        last_pushed_at?: number | null
+        /**
+         * Unix ms
+         */
+        time_created?: number
+        /**
+         * Unix ms
+         */
+        time_updated?: number
+      }
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+            { in: "body", key: "patch" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<IssueUpdateResponses, IssueUpdateErrors, ThrowOnError>({
+      url: "/issue/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Patch issue status
+   *
+   * Change the status of an issue (backlog/todo/in_progress/in_review/done/canceled).
+   */
+  public patchStatus<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      query_directory?: string
+      workspace?: string
+      body_directory?: string
+      status?: "backlog" | "todo" | "in_progress" | "in_review" | "done" | "canceled"
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+            { in: "body", key: "status" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<IssuePatchStatusResponses, IssuePatchStatusErrors, ThrowOnError>({
+      url: "/issue/{id}/status",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Patch issue assignee
+   *
+   * Assign or unassign an issue.
+   */
+  public patchAssignee<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      query_directory?: string
+      workspace?: string
+      body_directory?: string
+      assigneeId?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+            { in: "body", key: "assigneeId" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<IssuePatchAssigneeResponses, IssuePatchAssigneeErrors, ThrowOnError>({
+      url: "/issue/{id}/assignee",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Reorder issues
+   *
+   * Reorder issues by providing a list of issue IDs in the new order.
+   */
+  public reorder<ThrowOnError extends boolean = false>(
+    parameters?: {
+      query_directory?: string
+      workspace?: string
+      body_directory?: string
+      ids?: Array<string>
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+            { in: "body", key: "ids" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<IssueReorderResponses, IssueReorderErrors, ThrowOnError>({
+      url: "/issue/reorder",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Start auto-progress
+   *
+   * Start the L1/L2 auto-progress engine for a workspace directory.
+   */
+  public autoProgressStart<ThrowOnError extends boolean = false>(
+    parameters?: {
+      query_directory?: string
+      workspace?: string
+      body_directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<IssueAutoProgressStartResponses, unknown, ThrowOnError>({
+      url: "/issue/auto-progress/start",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Stop auto-progress
+   *
+   * Stop the L1/L2 auto-progress engine for a workspace directory.
+   */
+  public autoProgressStop<ThrowOnError extends boolean = false>(
+    parameters?: {
+      query_directory?: string
+      workspace?: string
+      body_directory?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<IssueAutoProgressStopResponses, unknown, ThrowOnError>({
+      url: "/issue/auto-progress/stop",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Auto-progress status
+   *
+   * Whether the L1/L2 auto-progress engine is currently running for a workspace directory.
+   */
+  public autoProgressStatus<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<IssueAutoProgressStatusResponses, unknown, ThrowOnError>({
+      url: "/issue/auto-progress/status",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Instance extends HeyApiClient {
   /**
    * Dispose instance
@@ -4260,6 +4886,11 @@ export class OpencodeClient extends HeyApiClient {
   private _tui?: Tui
   get tui(): Tui {
     return (this._tui ??= new Tui({ client: this.client }))
+  }
+
+  private _issue?: Issue
+  get issue(): Issue {
+    return (this._issue ??= new Issue({ client: this.client }))
   }
 
   private _instance?: Instance
