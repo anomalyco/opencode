@@ -8,10 +8,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { testEffect } from "./lib/effect"
 
-const database = Database.layerFromPath(":memory:")
-const events = EventV2.layer.pipe(Layer.provide(database))
-const directories = ProjectDirectories.layer.pipe(Layer.provide(database), Layer.provide(events))
-const it = testEffect(Layer.mergeAll(database, events, directories))
+const it = testEffect(Layer.mergeAll(Database.defaultLayer, EventV2.defaultLayer, ProjectDirectories.defaultLayer))
 
 const projectID = Project.ID.make("project-directories")
 const directory = AbsolutePath.make("/tmp/project-directories")

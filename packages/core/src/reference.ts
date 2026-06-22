@@ -1,7 +1,6 @@
 export * as Reference from "./reference"
 
-import { Context, Effect, Layer, Schema, Scope } from "effect"
-import { castDraft } from "immer"
+import { Context, Effect, Layer, Schema, Scope, Types } from "effect"
 import { Global } from "./global"
 import { EventV2 } from "./event"
 import { Repository } from "./repository"
@@ -40,17 +39,16 @@ export class Info extends Schema.Class<Info>("Reference.Info")({
 }) {}
 
 type Data = {
-  sources: Map<string, Source>
+  sources: Map<string, Types.DeepMutable<Source>>
 }
 
-type Editor = {
+type Draft = {
   add(name: string, source: Source): void
   remove(name: string): void
   list(): readonly [string, Source][]
 }
 
-export interface Interface {
-  readonly transform: State.Interface<Data, Editor>["transform"]
+export interface Interface extends State.Transformable<Draft> {
   readonly list: () => Effect.Effect<Info[]>
 }
 
@@ -64,18 +62,18 @@ export const layer = Layer.effect(
     const cache = yield* RepositoryCache.Service
     const scope = yield* Scope.Scope
     const materialized = new Map<string, Info>()
-    const state = State.create<Data, Editor>({
+    const state = State.create<Data, Draft>({
       initial: () => ({ sources: new Map() }),
-      editor: (draft) => ({
-        add: (name, source) => draft.sources.set(name, castDraft(source)),
+      draft: (draft) => ({
+        add: (name, source) => draft.sources.set(name, source as Types.DeepMutable<Source>),
         remove: (name) => draft.sources.delete(name),
         list: () => Array.from(draft.sources.entries()) as [string, Source][],
       }),
-      finalize: (editor) =>
+      finalize: (draft) =>
         Effect.gen(function* () {
           materialized.clear()
           const seen = new Map<string, string | undefined>()
-          for (const [name, source] of editor.list()) {
+          for (const [name, source] of draft.list()) {
             if (source.type === "local") {
               materialized.set(
                 name,
@@ -128,6 +126,7 @@ export const layer = Layer.effect(
 
     return Service.of({
       transform: state.transform,
+      rebuild: state.rebuild,
       list: Effect.fn("Reference.list")(function* () {
         return Array.from(materialized.values())
       }),

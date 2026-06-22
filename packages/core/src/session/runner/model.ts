@@ -33,11 +33,7 @@ export class UnsupportedApiError extends Schema.TaggedErrorClass<UnsupportedApiE
   },
 ) {}
 
-export type Error =
-  | Catalog.ProviderNotFoundError
-  | Catalog.ModelNotFoundError
-  | ModelNotSelectedError
-  | UnsupportedApiError
+export type Error = ModelNotSelectedError | UnsupportedApiError
 
 export interface Interface {
   readonly resolve: (session: SessionSchema.Info) => Effect.Effect<Model, Error>
@@ -48,7 +44,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 /** Test or embedding seam for supplying a model resolver directly. */
 export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Service, Service.of({ resolve }))
 
-const apiKey = (model: ModelV2.Info, connection?: IntegrationConnection.Info, credential?: Credential.Stored) => {
+const apiKey = (model: ModelV2.Info, connection?: IntegrationConnection.Info, credential?: Credential.Info) => {
   if (credential?.value.type === "key") return Auth.value(credential.value.key)
   if (credential?.value.type === "oauth") return Auth.value(credential.value.access)
   const value = model.request.body.apiKey ?? model.api.settings?.apiKey
@@ -89,7 +85,7 @@ const apiName = (model: ModelV2.Info) =>
 export const fromCatalogModel = (
   model: ModelV2.Info,
   connection?: IntegrationConnection.Info,
-  credential?: Credential.Stored,
+  credential?: Credential.Info,
 ): Effect.Effect<Model, UnsupportedApiError> => {
   const resolved =
     credential?.value.metadata === undefined
@@ -149,10 +145,12 @@ export const locationLayer = Layer.effect(
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session) {
         // Location plugins populate and filter the catalog asynchronously during layer startup.
         yield* boot.wait()
+        const defaultModel = session.model ? undefined : yield* catalog.model.default()
         const selected = session.model
           ? yield* catalog.model.get(session.model.providerID, session.model.id)
-          : (Option.getOrUndefined((yield* catalog.model.default()).pipe(Option.filter(supported))) ??
-            (yield* catalog.model.available()).find(supported))
+          : defaultModel && supported(defaultModel)
+            ? defaultModel
+            : (yield* catalog.model.available()).find(supported)
         if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
         const connection = yield* integrations.connection.forIntegration(Integration.ID.make(selected.providerID))
         return yield* fromCatalogModel(

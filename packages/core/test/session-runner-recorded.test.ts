@@ -32,10 +32,6 @@ import { Effect, Layer } from "effect"
 import path from "node:path"
 import { testEffect } from "./lib/effect"
 
-const database = Database.layerFromPath(":memory:")
-const events = EventV2.layer.pipe(Layer.provide(database))
-const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
-const store = SessionStore.layer.pipe(Layer.provide(database))
 const cassette =
   process.env.RECORD === "true"
     ? HttpRecorderInternal.cassetteLayer("session-runner/openai-chat-streams-text", {
@@ -74,9 +70,9 @@ const skillGuidance = Layer.mock(SkillGuidance.Service, { load: () => Effect.suc
 const referenceGuidance = Layer.mock(ReferenceGuidance.Service, { load: () => Effect.succeed(SystemContext.empty) })
 const config = Layer.succeed(Config.Service, Config.Service.of({ entries: () => Effect.succeed([]) }))
 const runner = SessionRunnerLLM.defaultLayer.pipe(
-  Layer.provide(database),
-  Layer.provide(store),
-  Layer.provide(events),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(SessionStore.defaultLayer),
+  Layer.provide(EventV2.defaultLayer),
   Layer.provide(client),
   Layer.provide(registry),
   Layer.provide(models),
@@ -101,18 +97,18 @@ const execution = Layer.effect(
   ),
 ).pipe(Layer.provide(coordinator))
 const sessions = SessionV2.layer.pipe(
-  Layer.provide(events),
-  Layer.provide(database),
-  Layer.provide(store),
+  Layer.provide(EventV2.defaultLayer),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(SessionStore.defaultLayer),
   Layer.provide(Project.defaultLayer),
   Layer.provide(execution),
 )
 const it = testEffect(
   Layer.mergeAll(
-    database,
-    events,
-    projector,
-    store,
+    Database.defaultLayer,
+    EventV2.defaultLayer,
+    SessionProjector.defaultLayer,
+    SessionStore.defaultLayer,
     executor,
     client,
     permission,

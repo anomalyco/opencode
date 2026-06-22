@@ -16,6 +16,7 @@ const cache = new WeakMap<Document | HTMLElement, Entry>()
 export const virtualMetrics: Partial<VirtualFileMetrics> = {
   lineHeight: 24,
   hunkSeparatorHeight: 24,
+  spacing: 0,
 }
 
 function scrollable(value: string) {
