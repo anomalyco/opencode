@@ -101,6 +101,9 @@ const GeminiGenerationConfig = Schema.Struct({
   temperature: Schema.optional(Schema.Number),
   topP: Schema.optional(Schema.Number),
   topK: Schema.optional(Schema.Number),
+  frequencyPenalty: Schema.optional(Schema.Number),
+  presencePenalty: Schema.optional(Schema.Number),
+  seed: Schema.optional(Schema.Number),
   stopSequences: optionalArray(Schema.String),
   thinkingConfig: Schema.optional(GeminiThinkingConfig),
 })
@@ -308,6 +311,9 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     temperature: generation?.temperature,
     topP: generation?.topP,
     topK: generation?.topK,
+    frequencyPenalty: generation?.frequencyPenalty,
+    presencePenalty: generation?.presencePenalty,
+    seed: generation?.seed,
     stopSequences: generation?.stop,
     thinkingConfig: thinkingConfig(request),
   }

@@ -36,6 +36,24 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("forwards frequencyPenalty, presencePenalty, and seed to generationConfig", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
+        LLM.request({
+          model,
+          prompt: "Say hello.",
+          generation: { frequencyPenalty: 0.5, presencePenalty: 0.25, seed: 7 },
+        }),
+      )
+
+      expect(prepared.body.generationConfig).toMatchObject({
+        frequencyPenalty: 0.5,
+        presencePenalty: 0.25,
+        seed: 7,
+      })
+    }),
+  )
+
   it.effect("lowers chronological system updates to wrapped user text in order", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<Gemini.GeminiBody>(
