@@ -41,7 +41,7 @@ export function DialogModel(props: { providerID?: string }) {
             description: provider.name,
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
-            footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer: modelFooter(model, provider.id),
             onSelect: () => {
               onSelect(provider.id, model.id)
             },
@@ -79,7 +79,7 @@ export function DialogModel(props: { providerID?: string }) {
               : undefined,
             category: connected() ? provider.name : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
-            footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer: modelFooter(info, provider.id),
             onSelect() {
               onSelect(provider.id, model)
             },
@@ -187,7 +187,27 @@ export function sortModelOptions<T extends { footer?: string; releaseDate: strin
   if (newestFirst) return sortBy(options, [(option) => option.releaseDate, "desc"], (option) => option.title)
   return sortBy(
     options,
-    (option) => option.footer !== "Free",
+    (option) => !option.footer?.includes("Free"),
     (option) => option.title,
   )
+}
+
+export function modelFooter(
+  model: { cost?: { input?: number }; limit?: { context?: number; input?: number } },
+  providerID: string,
+) {
+  const parts = [formatContext(model.limit?.input ?? model.limit?.context)]
+  if (model.cost?.input === 0 && providerID === "opencode") parts.push("Free")
+  return parts.filter((part): part is string => part !== undefined).join(" · ") || undefined
+}
+
+export function formatContext(tokens?: number) {
+  if (!tokens) return undefined
+  if (tokens >= 1_000_000) return `${formatNumber(tokens / 1_000_000)}M ctx`
+  if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}K ctx`
+  return `${tokens} ctx`
+}
+
+function formatNumber(value: number) {
+  return Number.isInteger(value) ? value.toString() : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")
 }

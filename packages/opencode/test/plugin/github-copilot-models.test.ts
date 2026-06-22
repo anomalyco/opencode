@@ -187,6 +187,175 @@ test("converts Copilot AIC token prices to USD per million tokens", async () => 
   expect(models["ignored-non-chat-record"]).toBeUndefined()
 })
 
+test("uses Copilot API limits for each model", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: true,
+              id: "gpt-4o",
+              name: "GPT-4o",
+              version: "gpt-4o-2024-05-13",
+              capabilities: {
+                family: "gpt",
+                limits: {
+                  max_context_window_tokens: 64000,
+                  max_output_tokens: 16384,
+                  max_prompt_tokens: 64000,
+                },
+                supports: {
+                  streaming: true,
+                  tool_calls: true,
+                },
+              },
+            },
+            {
+              model_picker_enabled: true,
+              id: "claude-sonnet-4.6",
+              name: "Claude Sonnet 4.6",
+              version: "claude-sonnet-4.6-2026-02-24",
+              capabilities: {
+                family: "claude-sonnet",
+                limits: {
+                  max_context_window_tokens: 200000,
+                  max_output_tokens: 32000,
+                  max_prompt_tokens: 160000,
+                },
+                supports: {
+                  streaming: true,
+                  tool_calls: true,
+                },
+              },
+            },
+            {
+              model_picker_enabled: true,
+              id: "gpt-5.4-extended",
+              name: "GPT-5.4 Extended",
+              version: "gpt-5.4-extended-2026-04-01",
+              capabilities: {
+                family: "gpt",
+                limits: {
+                  max_context_window_tokens: 1000000,
+                  max_output_tokens: 128000,
+                  max_prompt_tokens: 872000,
+                },
+                supports: {
+                  streaming: true,
+                  tool_calls: true,
+                },
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as unknown as typeof fetch
+
+  const models = (await CopilotModels.get("https://api.githubcopilot.com")).models
+
+  expect(models["gpt-4o"].limit).toEqual({
+    context: 64000,
+    input: 64000,
+    output: 16384,
+  })
+  expect(models["claude-sonnet-4.6"].limit).toEqual({
+    context: 200000,
+    input: 160000,
+    output: 32000,
+  })
+  expect(models["gpt-5.4-extended"].limit).toEqual({
+    context: 1000000,
+    input: 872000,
+    output: 128000,
+  })
+})
+
+test("adds long context choices for Copilot tiered-context models", async () => {
+  globalThis.fetch = mock(() =>
+    Promise.resolve(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              model_picker_enabled: true,
+              id: "gpt-5.4",
+              name: "GPT-5.4",
+              version: "gpt-5.4-2026-03-05",
+              billing: {
+                token_prices: {
+                  batch_size: 1000000,
+                  default: {
+                    cache_price: 25,
+                    cache_write_price: 0,
+                    context_max: 272000,
+                    input_price: 250,
+                    output_price: 1500,
+                  },
+                  long_context: {
+                    cache_price: 50,
+                    cache_write_price: 0,
+                    context_max: 922000,
+                    input_price: 500,
+                    output_price: 2250,
+                  },
+                },
+              },
+              capabilities: {
+                family: "gpt",
+                limits: {
+                  max_context_window_tokens: 1050000,
+                  max_output_tokens: 128000,
+                  max_prompt_tokens: 922000,
+                },
+                supports: {
+                  streaming: true,
+                  tool_calls: true,
+                },
+              },
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    ),
+  ) as unknown as typeof fetch
+
+  const models = (await CopilotModels.get("https://api.githubcopilot.com")).models
+
+  expect(models["gpt-5.4"].api.id).toBe("gpt-5.4")
+  expect(models["gpt-5.4"].limit).toEqual({
+    context: 272000,
+    input: 272000,
+    output: 128000,
+  })
+  expect(models["gpt-5.4"].cost).toEqual({
+    input: 2.5,
+    output: 15,
+    cache: {
+      read: 0.25,
+      write: 0,
+    },
+  })
+  expect(models["gpt-5.4-long-context"].api.id).toBe("gpt-5.4")
+  expect(models["gpt-5.4-long-context"].name).toBe("GPT-5.4 Long")
+  expect(models["gpt-5.4-long-context"].limit).toEqual({
+    context: 1050000,
+    input: 922000,
+    output: 128000,
+  })
+  expect(models["gpt-5.4-long-context"].cost).toEqual({
+    input: 5,
+    output: 22.5,
+    cache: {
+      read: 0.5,
+      write: 0,
+    },
+  })
+})
+
 test("clears existing variants so refreshed models calculate provider-specific variants", async () => {
   globalThis.fetch = mock(() =>
     Promise.resolve(

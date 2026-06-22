@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { sortModelOptions } from "../../../../src/component/dialog-model"
+import { formatContext, modelFooter, sortModelOptions } from "../../../../src/component/dialog-model"
 
 describe("sortModelOptions", () => {
   test("orders provider-scoped model choices by newest release first", () => {
@@ -19,12 +19,23 @@ describe("sortModelOptions", () => {
     const sorted = sortModelOptions(
       [
         { title: "Beta", releaseDate: "2026-01-01" },
-        { title: "Alpha", releaseDate: "2025-01-01", footer: "Free" },
-        { title: "Gamma", releaseDate: "2024-01-01", footer: "Free" },
+        { title: "Alpha", releaseDate: "2025-01-01", footer: "4K ctx · Free" },
+        { title: "Gamma", releaseDate: "2024-01-01", footer: "8K ctx · Free" },
       ],
       false,
     )
 
     expect(sorted.map((model) => model.title)).toEqual(["Alpha", "Gamma", "Beta"])
+  })
+
+  test("formats model context footer", () => {
+    expect(formatContext(272000)).toBe("272K ctx")
+    expect(formatContext(936000)).toBe("936K ctx")
+    expect(formatContext(1000000)).toBe("1M ctx")
+    expect(formatContext(1050000)).toBe("1.05M ctx")
+    expect(modelFooter({ limit: { input: 272000, context: 1050000 }, cost: { input: 2.5 } }, "github-copilot")).toBe(
+      "272K ctx",
+    )
+    expect(modelFooter({ limit: { context: 4000 }, cost: { input: 0 } }, "opencode")).toBe("4K ctx · Free")
   })
 })

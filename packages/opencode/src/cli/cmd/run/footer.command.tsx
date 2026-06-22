@@ -958,13 +958,14 @@ export function RunModelSelectBody(props: {
           .map(([modelID, model]) => {
             const title = model.name ?? modelID
             const current = props.current()?.providerID === provider.id && props.current()?.modelID === modelID
+            const context = formatContext(model.limit?.input ?? model.limit?.context)
             const footer = current
               ? "current"
               : model.cost?.input === 0 && provider.id === "opencode"
-                ? "Free"
+                ? [context, "Free"].filter((part): part is string => part !== undefined).join(" · ")
                 : title !== modelID
-                  ? modelID
-                  : undefined
+                  ? [context, modelID].filter((part): part is string => part !== undefined).join(" · ")
+                  : context
             return {
               providerID: provider.id,
               modelID,
@@ -1061,4 +1062,15 @@ export function RunModelSelectBody(props: {
       />
     </PanelShell>
   )
+}
+
+function formatContext(tokens?: number) {
+  if (!tokens) return undefined
+  if (tokens >= 1_000_000) return `${formatNumber(tokens / 1_000_000)}M ctx`
+  if (tokens >= 1_000) return `${Math.round(tokens / 1_000)}K ctx`
+  return `${tokens} ctx`
+}
+
+function formatNumber(value: number) {
+  return Number.isInteger(value) ? value.toString() : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "")
 }

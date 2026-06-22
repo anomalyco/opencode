@@ -20,9 +20,20 @@ const item = Schema.Struct({
           batch_size: Schema.Number,
           default: Schema.Struct({
             cache_price: Schema.Number,
+            cache_write_price: Schema.optional(Schema.Number),
+            context_max: Schema.optional(Schema.Number),
             input_price: Schema.Number,
             output_price: Schema.Number,
           }),
+          long_context: Schema.optional(
+            Schema.Struct({
+              cache_price: Schema.Number,
+              cache_write_price: Schema.optional(Schema.Number),
+              context_max: Schema.Number,
+              input_price: Schema.Number,
+              output_price: Schema.Number,
+            }),
+          ),
         }),
       ),
     }),
@@ -75,7 +86,13 @@ type SelectableItem = Item & {
 const decodeModels = Schema.decodeUnknownSync(schema)
 const decodeItem = Schema.decodeUnknownOption(item)
 
-function build(key: string, remote: SelectableItem, url: string, prev?: Model): Model {
+function build(
+  key: string,
+  remote: SelectableItem,
+  url: string,
+  prev?: Model,
+  context?: "default" | "long",
+): Model {
   const reasoning =
     !!remote.capabilities.supports.adaptive_thinking ||
     !!remote.capabilities.supports.reasoning_effort?.length ||
@@ -87,8 +104,13 @@ function build(key: string, remote: SelectableItem, url: string, prev?: Model): 
 
   const isMsgApi = remote.supported_endpoints?.includes("/v1/messages")
   const prices = remote.billing?.token_prices
+  const price = context === "long" ? (prices?.long_context ?? prices?.default) : prices?.default
   // Copilot prices are AIC per billing batch; OpenCode stores USD per million tokens.
   const usdPerMillion = prices ? 10_000 / prices.batch_size : 0
+  const inputLimit =
+    context === "default" && prices?.long_context
+      ? (price?.context_max ?? remote.capabilities.limits.max_prompt_tokens)
+      : remote.capabilities.limits.max_prompt_tokens
 
   const model: Model = {
     id: key,
@@ -101,8 +123,11 @@ function build(key: string, remote: SelectableItem, url: string, prev?: Model): 
     // API response wins
     status: "active",
     limit: {
-      context: remote.capabilities.limits.max_context_window_tokens ?? remote.capabilities.limits.max_prompt_tokens,
-      input: remote.capabilities.limits.max_prompt_tokens,
+      context:
+        context === "default" && prices?.long_context
+          ? inputLimit
+          : remote.capabilities.limits.max_context_window_tokens ?? remote.capabilities.limits.max_prompt_tokens,
+      input: inputLimit,
       output: remote.capabilities.limits.max_output_tokens,
     },
     capabilities: {
@@ -128,14 +153,14 @@ function build(key: string, remote: SelectableItem, url: string, prev?: Model): 
     },
     // existing wins
     family: prev?.family ?? remote.capabilities.family,
-    name: prev?.name ?? remote.name,
+    name: prev?.name ?? (context === "long" ? `${remote.name} Long` : remote.name),
     cost: {
-      input: (prices?.default.input_price ?? 0) * usdPerMillion,
-      output: (prices?.default.output_price ?? 0) * usdPerMillion,
+      input: (price?.input_price ?? 0) * usdPerMillion,
+      output: (price?.output_price ?? 0) * usdPerMillion,
       cache: {
-        read: (prices?.default.cache_price ?? 0) * usdPerMillion,
+        read: (price?.cache_price ?? 0) * usdPerMillion,
         // `/models` exposes cached-input reads only; per-request billing accounts for cache writes.
-        write: 0,
+        write: (price?.cache_write_price ?? 0) * usdPerMillion,
       },
     },
     options: prev?.options ?? {},
@@ -228,13 +253,23 @@ export async function get(
       delete result[key]
       continue
     }
-    result[key] = build(key, m, baseURL, model)
+    result[key] = build(
+      key,
+      m,
+      baseURL,
+      model,
+      key.endsWith("-long-context") ? "long" : "default",
+    )
   }
 
   // add new endpoint models not already keyed in result
   for (const [id, m] of remote) {
+    if (m.billing?.token_prices?.long_context && m.billing.token_prices.default.context_max) {
+      const longID = `${id}-long-context`
+      if (!(longID in result)) result[longID] = build(longID, m, baseURL, undefined, "long")
+    }
     if (id in result) continue
-    result[id] = build(id, m, baseURL)
+    result[id] = build(id, m, baseURL, undefined, "default")
   }
 
   return {
