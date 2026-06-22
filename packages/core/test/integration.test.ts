@@ -51,7 +51,7 @@ describe("Integration", () => {
       const openai = Integration.ID.make("openai")
 
       yield* integrations
-        .update((editor) => editor.update(openai, (integration) => (integration.name = "OpenAI")))
+        .transform((editor) => editor.update(openai, (integration) => (integration.name = "OpenAI")))
         .pipe(Scope.provide(scope))
       expect(yield* integrations.get(openai)).toEqual(
         new Integration.Info({ id: openai, name: "OpenAI", methods: [], connections: [] }),
@@ -70,10 +70,10 @@ describe("Integration", () => {
       const second = yield* Scope.fork(yield* Scope.Scope)
 
       yield* integrations
-        .update((editor) => editor.update(id, (integration) => (integration.name = "OpenAI")))
+        .transform((editor) => editor.update(id, (integration) => (integration.name = "OpenAI")))
         .pipe(Scope.provide(first))
       yield* integrations
-        .update((editor) => editor.update(id, (integration) => (integration.name = "OpenAI Override")))
+        .transform((editor) => editor.update(id, (integration) => (integration.name = "OpenAI Override")))
         .pipe(Scope.provide(second))
       expect((yield* integrations.get(id))?.name).toBe("OpenAI Override")
 
@@ -99,7 +99,7 @@ describe("Integration", () => {
         })
 
       yield* integrations
-        .update((editor) =>
+        .transform((editor) =>
           editor.method.update({
             integrationID,
             method: { id: methodID, type: "oauth", label: "ChatGPT" },
@@ -108,7 +108,7 @@ describe("Integration", () => {
         )
         .pipe(Scope.provide(first))
       yield* integrations
-        .update((editor) => {
+        .transform((editor) => {
           expect(editor.get(integrationID)).toEqual({ id: integrationID, name: "openai" })
           expect(editor.list()).toEqual([{ id: integrationID, name: "openai" }])
           expect(editor.method.list(integrationID)).toEqual([
@@ -141,7 +141,7 @@ describe("Integration", () => {
       const integrations = yield* Integration.Service
       const events = yield* EventV2.Service
       const integrationID = Integration.ID.make("openai")
-      yield* integrations.update((editor) =>
+      yield* integrations.transform((editor) =>
         editor.method.update({
           integrationID,
           method: { type: "key", label: "API key" },
@@ -179,7 +179,7 @@ describe("Integration", () => {
       const integrations = yield* Integration.Service
       const integrationID = Integration.ID.make("openai")
       const methodID = Integration.MethodID.make("chatgpt")
-      yield* integrations.update((editor) =>
+      yield* integrations.transform((editor) =>
         editor.method.update({
           integrationID,
           method: { id: methodID, type: "oauth", label: "ChatGPT" },
@@ -238,7 +238,7 @@ describe("Integration", () => {
       const integrationID = Integration.ID.make("openai")
       const methodID = Integration.MethodID.make("chatgpt")
       let closed = false
-      yield* integrations.update((editor) =>
+      yield* integrations.transform((editor) =>
         editor.method.update({
           integrationID,
           method: { id: methodID, type: "oauth", label: "ChatGPT" },
@@ -275,7 +275,7 @@ describe("Integration", () => {
       const integrations = yield* Integration.Service
       const integrationID = Integration.ID.make("openai")
       const methodID = Integration.MethodID.make("browser")
-      yield* integrations.update((editor) =>
+      yield* integrations.transform((editor) =>
         editor.method.update({
           integrationID,
           method: { id: methodID, type: "oauth", label: "Browser" },
@@ -312,7 +312,7 @@ describe("Integration", () => {
       const integrationID = Integration.ID.make("openai")
       const methodID = Integration.MethodID.make("browser")
       let closed = false
-      yield* integrations.update((editor) =>
+      yield* integrations.transform((editor) =>
         editor.method.update({
           integrationID,
           method: { id: methodID, type: "oauth", label: "Browser" },
@@ -375,7 +375,7 @@ describe("Integration", () => {
       () =>
         Effect.gen(function* () {
           const integrations = yield* Integration.Service
-          yield* integrations.update((editor) =>
+          yield* integrations.transform((editor) =>
             editor.method.update({
               integrationID,
               method: {
