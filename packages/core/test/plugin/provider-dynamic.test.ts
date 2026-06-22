@@ -1,37 +1,40 @@
 import { Npm } from "@opencode-ai/core/npm"
 import { describe, expect } from "bun:test"
-import { Cause, Effect, Layer, Option } from "effect"
+import { Cause, Effect, Layer } from "effect"
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { fileURLToPath } from "url"
 import { AISDK } from "@opencode-ai/core/aisdk"
-import { EventV2 } from "@opencode-ai/core/event"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { DynamicProviderPlugin } from "@opencode-ai/core/plugin/provider/dynamic"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { testEffect } from "../lib/effect"
-import { fixtureProvider, it, model, npmLayer } from "./provider-helper"
+import { PluginTestLayer } from "./fixture"
 
+const fixtureProvider = new URL("./fixtures/provider-factory.ts", import.meta.url).href
 const fixtureProviderPath = fileURLToPath(fixtureProvider)
-const itWithAISDK = testEffect(
-  AISDK.layer.pipe(Layer.provideMerge(PluginV2.locationLayer.pipe(Layer.provide(EventV2.defaultLayer)))),
-)
+const it = testEffect(PluginTestLayer)
+const itWithAISDK = testEffect(AISDK.layer.pipe(Layer.provideMerge(PluginTestLayer)))
 
-function npmEntrypointLayer(entrypoint: Option.Option<string>) {
-  return Layer.succeed(
-    Npm.Service,
-    Npm.Service.of({
-      add: () => Effect.succeed({ directory: "", entrypoint }),
-      install: () => Effect.void,
-      which: () => Effect.succeed(Option.none<string>()),
-    }),
-  )
+function npmEntrypoint(entrypoint?: string) {
+  return Npm.Service.of({
+    add: () => Effect.succeed({ directory: "", entrypoint }),
+    install: () => Effect.void,
+    which: () => Effect.succeed(undefined),
+  })
 }
 
-function dynamicPlugin(layer = npmLayer) {
-  return { id: DynamicProviderPlugin.id, effect: DynamicProviderPlugin.effect.pipe(Effect.provide(layer)) }
-}
+const addPlugin = Effect.fn(function* (npm?: Npm.Interface) {
+  const plugin = yield* PluginV2.Service
+  const host = yield* PluginHost.make()
+  yield* plugin.add({
+    id: DynamicProviderPlugin.id,
+    effect: DynamicProviderPlugin.effect(npm ? { ...host, npm } : host),
+  })
+})
 
 function tempEntrypoint(source: string) {
   return Effect.acquireRelease(
@@ -49,11 +52,14 @@ describe("DynamicProviderPlugin", () => {
   it.effect("creates an SDK from a provider factory export", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(dynamicPlugin())
+      yield* addPlugin()
       const result = yield* plugin.trigger(
         "aisdk.sdk",
         {
-          model: model("custom", "test-model"),
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("custom"), ModelV2.ID.make("test-model")),
+            api: { id: ModelV2.ID.make("test-model"), type: "aisdk", package: fixtureProvider },
+          }),
           package: fixtureProvider,
           options: { name: "custom", marker: "dynamic" },
         },
@@ -68,11 +74,14 @@ describe("DynamicProviderPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const sdk = { marker: "existing" }
-      yield* plugin.add(dynamicPlugin())
+      yield* addPlugin()
       const result = yield* plugin.trigger(
         "aisdk.sdk",
         {
-          model: model("custom", "test-model"),
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("custom"), ModelV2.ID.make("test-model")),
+            api: { id: ModelV2.ID.make("test-model"), type: "aisdk", package: fixtureProvider },
+          }),
           package: fixtureProvider,
           options: { name: "custom", marker: "dynamic" },
         },
@@ -85,11 +94,14 @@ describe("DynamicProviderPlugin", () => {
   it.effect("injects the provider ID as the SDK factory name", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(dynamicPlugin())
+      yield* addPlugin()
       const result = yield* plugin.trigger(
         "aisdk.sdk",
         {
-          model: model("custom-provider", "test-model"),
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("custom-provider"), ModelV2.ID.make("test-model")),
+            api: { id: ModelV2.ID.make("test-model"), type: "aisdk", package: fixtureProvider },
+          }),
           package: fixtureProvider,
           options: { name: "custom-provider", marker: "dynamic" },
         },
@@ -102,11 +114,14 @@ describe("DynamicProviderPlugin", () => {
   it.effect("loads npm packages through their resolved import entrypoint", () =>
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
-      yield* plugin.add(dynamicPlugin(npmEntrypointLayer(Option.some(fixtureProviderPath))))
+      yield* addPlugin(npmEntrypoint(fixtureProviderPath))
       const result = yield* plugin.trigger(
         "aisdk.sdk",
         {
-          model: model("npm-provider", "test-model"),
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("npm-provider"), ModelV2.ID.make("test-model")),
+            api: { id: ModelV2.ID.make("test-model"), type: "aisdk", package: "fixture-provider" },
+          }),
           package: "fixture-provider",
           options: { name: "npm-provider", marker: "npm" },
         },
@@ -120,9 +135,14 @@ describe("DynamicProviderPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const aisdk = yield* AISDK.Service
-      yield* plugin.add(dynamicPlugin(npmEntrypointLayer(Option.none<string>())))
+      yield* addPlugin(npmEntrypoint())
       const exit = yield* aisdk
-        .language(model("missing-entrypoint", "alias", { api: { type: "aisdk", package: "fixture-provider" } }))
+        .language(
+          new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("missing-entrypoint"), ModelV2.ID.make("alias")),
+            api: { id: ModelV2.ID.make("alias"), type: "aisdk", package: "fixture-provider" },
+          }),
+        )
         .pipe(Effect.exit)
       expect(exit._tag).toBe("Failure")
       if (exit._tag === "Failure") expect(Cause.prettyErrors(exit.cause).join("\n")).toContain("AISDK.InitError")
@@ -133,10 +153,13 @@ describe("DynamicProviderPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const aisdk = yield* AISDK.Service
-      yield* plugin.add(dynamicPlugin())
+      yield* addPlugin()
       const exit = yield* aisdk
         .language(
-          model("bad-import", "alias", { api: { type: "aisdk", package: "file:///missing/provider-factory.js" } }),
+          new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("bad-import"), ModelV2.ID.make("alias")),
+            api: { id: ModelV2.ID.make("alias"), type: "aisdk", package: "file:///missing/provider-factory.js" },
+          }),
         )
         .pipe(Effect.exit)
       expect(exit._tag).toBe("Failure")
@@ -149,9 +172,14 @@ describe("DynamicProviderPlugin", () => {
       const plugin = yield* PluginV2.Service
       const aisdk = yield* AISDK.Service
       const tmp = yield* tempEntrypoint("export const notAProviderFactory = true\n")
-      yield* plugin.add(dynamicPlugin(npmEntrypointLayer(Option.some(tmp.entrypoint))))
+      yield* addPlugin(npmEntrypoint(tmp.entrypoint))
       const exit = yield* aisdk
-        .language(model("missing-factory", "alias", { api: { type: "aisdk", package: "fixture-provider" } }))
+        .language(
+          new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("missing-factory"), ModelV2.ID.make("alias")),
+            api: { id: ModelV2.ID.make("alias"), type: "aisdk", package: "fixture-provider" },
+          }),
+        )
         .pipe(Effect.exit)
       expect(exit._tag).toBe("Failure")
       if (exit._tag === "Failure") expect(Cause.prettyErrors(exit.cause).join("\n")).toContain("AISDK.InitError")
@@ -162,9 +190,10 @@ describe("DynamicProviderPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const aisdk = yield* AISDK.Service
-      yield* plugin.add(dynamicPlugin())
+      yield* addPlugin()
       const language = yield* aisdk.language(
-        model("custom", "alias", {
+        new ModelV2.Info({
+          ...ModelV2.Info.empty(ProviderV2.ID.make("custom"), ModelV2.ID.make("alias")),
           api: { id: ModelV2.ID.make("test-model-api"), type: "aisdk", package: fixtureProvider },
         }),
       )

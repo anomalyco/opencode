@@ -25,8 +25,6 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
 import { tmpdir } from "./fixture/tmpdir"
 
-const database = Database.layerFromPath(":memory:")
-const events = EventV2.layer.pipe(Layer.provide(database))
 const projects = Layer.succeed(
   ProjectV2.Service,
   ProjectV2.Service.of({
@@ -35,17 +33,23 @@ const projects = Layer.succeed(
     commit: () => Effect.void,
   }),
 )
-const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
-const store = SessionStore.layer.pipe(Layer.provide(database))
 const sessions = SessionV2.layer.pipe(
-  Layer.provide(events),
-  Layer.provide(database),
-  Layer.provide(store),
+  Layer.provide(EventV2.defaultLayer),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(SessionStore.defaultLayer),
   Layer.provide(projects),
   Layer.provide(SessionExecution.noopLayer),
 )
 const it = testEffect(
-  Layer.mergeAll(database, events, projects, projector, store, SessionExecution.noopLayer, sessions),
+  Layer.mergeAll(
+    Database.defaultLayer,
+    EventV2.defaultLayer,
+    projects,
+    SessionProjector.defaultLayer,
+    SessionStore.defaultLayer,
+    SessionExecution.noopLayer,
+    sessions,
+  ),
 )
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = SessionV2.ID.create()
@@ -220,8 +224,8 @@ describe("SessionV2.create", () => {
       expect(
         Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(2), Stream.runCollect)),
       ).toMatchObject([
-        { cursor: 1, event: { type: "session.next.prompt.admitted", data: { prompt: { text: "Hello" } } } },
-        { cursor: 2, event: { type: "session.next.prompt.promoted" } },
+        { durable: { seq: 1 }, type: "session.next.prompt.admitted", data: { prompt: { text: "Hello" } } },
+        { durable: { seq: 2 }, type: "session.next.prompt.promoted" },
       ])
     }),
   )
@@ -336,7 +340,34 @@ describe("SessionV2.create", () => {
 
       expect(yield* unavailable(session.shell({ sessionID: created.id, command: "pwd" }))).toBe("shell")
       expect(yield* unavailable(session.skill({ sessionID: created.id, skill: "review" }))).toBe("skill")
-      expect(yield* unavailable(session.switchAgent({ sessionID: created.id, agent: "build" }))).toBe("switchAgent")
+    }),
+  )
+
+  it.effect("switches the selected agent through the durable Session event", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const created = yield* session.create({ location })
+
+      yield* session.switchAgent({ sessionID: created.id, agent: "plan" })
+
+      expect(yield* session.get(created.id)).toMatchObject({ agent: "plan" })
+      expect(
+        Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(1), Stream.runCollect)),
+      ).toMatchObject([{ type: "session.next.agent.switched", data: { agent: "plan" } }])
+    }),
+  )
+
+  it.effect("rejects an agent switch for a missing Session", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionV2.Service
+      const missing = SessionV2.ID.make("ses_missing_agent_switch")
+
+      expect(
+        yield* session.switchAgent({ sessionID: missing, agent: "plan" }).pipe(
+          Effect.flip,
+          Effect.map((error) => error._tag),
+        ),
+      ).toBe("Session.NotFoundError")
     }),
   )
 
@@ -355,7 +386,7 @@ describe("SessionV2.create", () => {
       expect(yield* session.get(created.id)).toMatchObject({ model })
       expect(
         Array.from(yield* session.events({ sessionID: created.id }).pipe(Stream.take(1), Stream.runCollect)),
-      ).toMatchObject([{ event: { type: "session.next.model.switched", data: { model } } }])
+      ).toMatchObject([{ type: "session.next.model.switched", data: { model } }])
     }),
   )
 
