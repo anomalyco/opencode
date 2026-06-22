@@ -1,12 +1,43 @@
 import { describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { GitLabPlugin } from "@opencode-ai/core/plugin/provider/gitlab"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { addPlugin, it, model, required, withEnv } from "./provider-helper"
+import { testEffect } from "../lib/effect"
+import { PluginTestLayer } from "./fixture"
 
 const gitlabSDKOptions: Record<string, unknown>[] = []
+const it = testEffect(PluginTestLayer)
+
+const addPlugin = Effect.fn(function* () {
+  const plugin = yield* PluginV2.Service
+  const host = yield* PluginHost.make()
+  yield* plugin.add({ id: GitLabPlugin.id, effect: GitLabPlugin.effect(host) })
+})
+
+function withEnv<A, E, R>(vars: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]))
+      Object.entries(vars).forEach(([key, value]) => {
+        if (value === undefined) delete process.env[key]
+        else process.env[key] = value
+      })
+      return previous
+    }),
+    effect,
+    (previous) =>
+      Effect.sync(() =>
+        Object.entries(previous).forEach(([key, value]) => {
+          if (value === undefined) delete process.env[key]
+          else process.env[key] = value
+        }),
+      ),
+  )
+}
 
 void mock.module("gitlab-ai-provider", () => ({
   VERSION: "test-version",
@@ -32,10 +63,17 @@ describe("GitLabPlugin", () => {
         Effect.gen(function* () {
           gitlabSDKOptions.length = 0
           const plugin = yield* PluginV2.Service
-          yield* addPlugin(plugin, GitLabPlugin)
+          yield* addPlugin()
           yield* plugin.trigger(
             "aisdk.sdk",
-            { model: model("gitlab", "claude"), package: "gitlab-ai-provider", options: { name: "gitlab" } },
+            {
+              model: new ModelV2.Info({
+                ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
+                api: { id: ModelV2.ID.make("claude"), type: "aisdk", package: "test-provider" },
+              }),
+              package: "gitlab-ai-provider",
+              options: { name: "gitlab" },
+            },
             {},
           )
           expect(gitlabSDKOptions).toHaveLength(1)
@@ -65,10 +103,17 @@ describe("GitLabPlugin", () => {
         Effect.gen(function* () {
           gitlabSDKOptions.length = 0
           const plugin = yield* PluginV2.Service
-          yield* addPlugin(plugin, GitLabPlugin)
+          yield* addPlugin()
           yield* plugin.trigger(
             "aisdk.sdk",
-            { model: model("gitlab", "claude"), package: "gitlab-ai-provider", options: { name: "gitlab" } },
+            {
+              model: new ModelV2.Info({
+                ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
+                api: { id: ModelV2.ID.make("claude"), type: "aisdk", package: "test-provider" },
+              }),
+              package: "gitlab-ai-provider",
+              options: { name: "gitlab" },
+            },
             {},
           )
           expect(gitlabSDKOptions[0].instanceUrl).toBe("https://env.gitlab.example")
@@ -86,11 +131,14 @@ describe("GitLabPlugin", () => {
         Effect.gen(function* () {
           gitlabSDKOptions.length = 0
           const plugin = yield* PluginV2.Service
-          yield* addPlugin(plugin, GitLabPlugin)
+          yield* addPlugin()
           yield* plugin.trigger(
             "aisdk.sdk",
             {
-              model: model("gitlab", "claude"),
+              model: new ModelV2.Info({
+                ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
+                api: { id: ModelV2.ID.make("claude"), type: "aisdk", package: "test-provider" },
+              }),
               package: "gitlab-ai-provider",
               options: {
                 name: "gitlab",
@@ -127,10 +175,17 @@ describe("GitLabPlugin", () => {
     Effect.gen(function* () {
       gitlabSDKOptions.length = 0
       const plugin = yield* PluginV2.Service
-      yield* addPlugin(plugin, GitLabPlugin)
+      yield* addPlugin()
       const result = yield* plugin.trigger(
         "aisdk.sdk",
-        { model: model("gitlab", "claude"), package: "@ai-sdk/openai", options: { name: "gitlab" } },
+        {
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
+            api: { id: ModelV2.ID.make("claude"), type: "aisdk", package: "test-provider" },
+          }),
+          package: "@ai-sdk/openai",
+          options: { name: "gitlab" },
+        },
         {},
       )
       expect(result.sdk).toBeUndefined()
@@ -142,11 +197,13 @@ describe("GitLabPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const calls: [string, unknown][] = []
-      yield* addPlugin(plugin, GitLabPlugin)
+      yield* addPlugin()
       const result = yield* plugin.trigger(
         "aisdk.language",
         {
-          model: model("gitlab", "duo-workflow-custom", {
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("duo-workflow-custom")),
+            api: { id: ModelV2.ID.make("duo-workflow-custom"), type: "aisdk", package: "test-provider" },
             request: {
               headers: {},
               body: { workflowRef: "ref", workflowDefinition: "definition" },
@@ -178,11 +235,14 @@ describe("GitLabPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const calls: [string, unknown][] = []
-      yield* addPlugin(plugin, GitLabPlugin)
+      yield* addPlugin()
       const result = yield* plugin.trigger(
         "aisdk.language",
         {
-          model: model("gitlab", "duo-workflow-exact"),
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("duo-workflow-exact")),
+            api: { id: ModelV2.ID.make("duo-workflow-exact"), type: "aisdk", package: "test-provider" },
+          }),
           sdk: {
             workflowChat: (id: string, options: unknown) => {
               calls.push([id, options])
@@ -205,11 +265,13 @@ describe("GitLabPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const calls: [string, unknown][] = []
-      yield* addPlugin(plugin, GitLabPlugin)
+      yield* addPlugin()
       yield* plugin.trigger(
         "aisdk.language",
         {
-          model: model("gitlab", "duo-workflow-custom", {
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("duo-workflow-custom")),
+            api: { id: ModelV2.ID.make("duo-workflow-custom"), type: "aisdk", package: "test-provider" },
             request: {
               headers: {},
               body: { featureFlags: { request_flag: true } },
@@ -234,11 +296,13 @@ describe("GitLabPlugin", () => {
     Effect.gen(function* () {
       const plugin = yield* PluginV2.Service
       const calls: [string, unknown][] = []
-      yield* addPlugin(plugin, GitLabPlugin)
+      yield* addPlugin()
       yield* plugin.trigger(
         "aisdk.language",
         {
-          model: model("gitlab", "claude", {
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("gitlab"), ModelV2.ID.make("claude")),
+            api: { id: ModelV2.ID.make("claude"), type: "aisdk", package: "test-provider" },
             request: { headers: { h: "v" }, body: {} },
           }),
           sdk: {

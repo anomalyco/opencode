@@ -268,7 +268,7 @@ describe("SessionRunnerModel", () => {
 
   it.effect("prefers stored credentials over configured auth", () =>
     Effect.gen(function* () {
-      const credential = new Credential.Stored({
+      const credential = new Credential.Info({
         id: Credential.ID.create(),
         integrationID: Integration.ID.make("test-provider"),
         label: "Work",

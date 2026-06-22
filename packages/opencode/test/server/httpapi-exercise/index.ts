@@ -956,6 +956,24 @@ const scenarios: Scenario[] = [
     }))
     .json(200, data(object)),
   http.protected
+    .post("/api/session/{sessionID}/agent", "v2.session.switchAgent")
+    .seeded((ctx) => ctx.session({ title: "Switch agent" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/agent", { sessionID: ctx.state.id }),
+      headers: { ...ctx.headers(), "content-type": "application/json" },
+      body: { agent: "plan" },
+    }))
+    .status(204, undefined, "none"),
+  http.protected
+    .post("/api/session/{sessionID}/model", "v2.session.switchModel")
+    .seeded((ctx) => ctx.session({ title: "Switch model" }))
+    .at((ctx) => ({
+      path: route("/api/session/{sessionID}/model", { sessionID: ctx.state.id }),
+      headers: { ...ctx.headers(), "content-type": "application/json" },
+      body: { model: { providerID: "opencode", id: "big-pickle" } },
+    }))
+    .status(204, undefined, "none"),
+  http.protected
     .get("/api/session/{sessionID}/context", "v2.session.context")
     .at((ctx) => ({
       path: route("/api/session/{sessionID}/context", { sessionID: "ses_httpapi_missing" }),

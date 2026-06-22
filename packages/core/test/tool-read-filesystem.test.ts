@@ -6,7 +6,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { ReadToolFileSystem } from "@opencode-ai/core/tool/read-filesystem"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(FSUtil.layer.pipe(Layer.provideMerge(NodeFileSystem.layer)))
+const it = testEffect(Layer.merge(FSUtil.defaultLayer, NodeFileSystem.layer))
 const fixture = Effect.gen(function* () {
   const fs = yield* FSUtil.Service
   const files = yield* FileSystem.FileSystem

@@ -18,10 +18,6 @@ import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-
 import { SessionStore } from "@opencode-ai/core/session/store"
 import { testEffect } from "./lib/effect"
 
-const database = Database.layerFromPath(":memory:")
-const events = EventV2.layer.pipe(Layer.provide(database))
-const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
-const store = SessionStore.layer.pipe(Layer.provide(database))
 const executionCalls: SessionV2.ID[] = []
 const interruptCalls: SessionV2.ID[] = []
 const interruptSeqs: Array<number | undefined> = []
@@ -47,13 +43,22 @@ const execution = Layer.succeed(
   }),
 )
 const sessions = SessionV2.layer.pipe(
-  Layer.provide(events),
-  Layer.provide(database),
-  Layer.provide(store),
+  Layer.provide(EventV2.defaultLayer),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(SessionStore.defaultLayer),
   Layer.provide(Project.defaultLayer),
   Layer.provide(execution),
 )
-const it = testEffect(Layer.mergeAll(database, events, projector, store, execution, sessions))
+const it = testEffect(
+  Layer.mergeAll(
+    Database.defaultLayer,
+    EventV2.defaultLayer,
+    SessionProjector.defaultLayer,
+    SessionStore.defaultLayer,
+    execution,
+    sessions,
+  ),
+)
 const sessionID = SessionV2.ID.make("ses_prompt_test")
 const messageID = SessionMessage.ID.create()
 
