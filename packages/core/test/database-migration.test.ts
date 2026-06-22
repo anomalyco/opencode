@@ -241,12 +241,6 @@ describe("DatabaseMigration", () => {
         yield* db.run(
           sql`INSERT INTO session (id, project_id, workspace_id, slug, directory, title, version, time_created, time_updated) VALUES ('session', 'project', 'workspace', 'session', '/tmp/project', 'Session', 'test', 1, 1)`,
         )
-        yield* db.run(
-          sql`INSERT INTO message (id, session_id, time_created, time_updated, data) VALUES ('message', 'session', 1, 1, '{}')`,
-        )
-        yield* db.run(
-          sql`INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES ('part', 'message', 'session', 1, 1, '{}')`,
-        )
         yield* db.run(sql`INSERT INTO event_sequence (aggregate_id, seq) VALUES ('session', 0)`)
         yield* db.run(
           sql`INSERT INTO event (id, aggregate_id, seq, type, data) VALUES ('event', 'session', 0, 'session.next.compaction.ended.1', '{}')`,
@@ -269,8 +263,6 @@ describe("DatabaseMigration", () => {
             SELECT
               (SELECT workspace_id FROM session WHERE id = 'session') AS workspaceID,
               (SELECT COUNT(*) FROM session) AS sessions,
-              (SELECT COUNT(*) FROM message) AS messages,
-              (SELECT COUNT(*) FROM part) AS parts,
               (SELECT COUNT(*) FROM workspace) AS workspaces,
               (SELECT COUNT(*) FROM event_sequence) AS eventSequences,
               (SELECT COUNT(*) FROM event) AS events,
@@ -281,8 +273,6 @@ describe("DatabaseMigration", () => {
         ).toEqual({
           workspaceID: null,
           sessions: 1,
-          messages: 1,
-          parts: 1,
           workspaces: 0,
           eventSequences: 0,
           events: 0,
