@@ -69,10 +69,10 @@ export const layer = Layer.effect(
     const policy = yield* Policy.Service
     const integrations = yield* Integration.Service
 
-    const available = (provider: ProviderV2.Info, integration: Integration.Info | undefined, connected: boolean) => {
+    const available = (provider: ProviderV2.Info, integration: Integration.Info | undefined) => {
       if (provider.disabled) return false
       if (typeof provider.request.body.apiKey === "string") return true
-      if (connected) return true
+      if (integration?.connections.length) return true
       return !integration
     }
 
@@ -183,13 +183,8 @@ export const layer = Layer.effect(
 
         available: Effect.fn("CatalogV2.provider.available")(function* () {
           const active = new Map((yield* integrations.list()).map((integration) => [integration.id, integration]))
-          const connections = yield* integrations.connection.list()
           return (yield* result.provider.all()).filter((provider) =>
-            available(
-              provider,
-              active.get(Integration.ID.make(provider.id)),
-              connections.has(Integration.ID.make(provider.id)),
-            ),
+            available(provider, active.get(Integration.ID.make(provider.id))),
           )
         }),
       },

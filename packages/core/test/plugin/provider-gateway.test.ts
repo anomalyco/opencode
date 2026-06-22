@@ -1,11 +1,22 @@
 import { describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { GatewayPlugin } from "@opencode-ai/core/plugin/provider/gateway"
-import { addPlugin, it, model } from "./provider-helper"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { testEffect } from "../lib/effect"
+import { PluginTestLayer } from "./fixture"
 
 const gatewayCalls: Record<string, unknown>[] = []
 const vercelGatewayModels = ["anthropic/claude-sonnet-4", "openai/gpt-5", "google/gemini-2.5-pro"]
+const it = testEffect(PluginTestLayer)
+
+const addPlugin = Effect.fn(function* () {
+  const plugin = yield* PluginV2.Service
+  const host = yield* PluginHost.make()
+  yield* plugin.add({ id: GatewayPlugin.id, effect: GatewayPlugin.effect(host) })
+})
 
 mock.module("@ai-sdk/gateway", () => ({
   createGateway(options: Record<string, unknown>) {
@@ -27,10 +38,17 @@ describe("GatewayPlugin", () => {
     Effect.gen(function* () {
       gatewayCalls.length = 0
       const plugin = yield* PluginV2.Service
-      yield* addPlugin(plugin, GatewayPlugin)
+      yield* addPlugin()
       const result = yield* plugin.trigger(
         "aisdk.sdk",
-        { model: model("gateway", "model"), package: "@ai-sdk/gateway", options: { name: "gateway" } },
+        {
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(ProviderV2.ID.make("gateway"), ModelV2.ID.make("model")),
+            api: { id: ModelV2.ID.make("model"), type: "aisdk", package: "test-provider" },
+          }),
+          package: "@ai-sdk/gateway",
+          options: { name: "gateway" },
+        },
         {},
       )
       expect(result.sdk).toBeDefined()
@@ -42,12 +60,22 @@ describe("GatewayPlugin", () => {
     Effect.gen(function* () {
       gatewayCalls.length = 0
       const plugin = yield* PluginV2.Service
-      yield* addPlugin(plugin, GatewayPlugin)
+      yield* addPlugin()
 
       const result = yield* plugin.trigger(
         "aisdk.sdk",
         {
-          model: model("vercel", "anthropic/claude-sonnet-4"),
+          model: new ModelV2.Info({
+            ...ModelV2.Info.empty(
+              ProviderV2.ID.make("vercel"),
+              ModelV2.ID.make("anthropic/claude-sonnet-4"),
+            ),
+            api: {
+              id: ModelV2.ID.make("anthropic/claude-sonnet-4"),
+              type: "aisdk",
+              package: "test-provider",
+            },
+          }),
           package: "@ai-sdk/gateway",
           options: { name: "vercel", apiKey: "test-key" },
         },
@@ -63,19 +91,33 @@ describe("GatewayPlugin", () => {
     Effect.gen(function* () {
       gatewayCalls.length = 0
       const plugin = yield* PluginV2.Service
-      yield* addPlugin(plugin, GatewayPlugin)
+      yield* addPlugin()
 
       for (const modelID of vercelGatewayModels) {
         const ignored = yield* plugin.trigger(
           "aisdk.sdk",
-          { model: model("vercel", modelID), package: "@ai-sdk/vercel", options: { name: "vercel" } },
+          {
+            model: new ModelV2.Info({
+              ...ModelV2.Info.empty(ProviderV2.ID.make("vercel"), ModelV2.ID.make(modelID)),
+              api: { id: ModelV2.ID.make(modelID), type: "aisdk", package: "test-provider" },
+            }),
+            package: "@ai-sdk/vercel",
+            options: { name: "vercel" },
+          },
           {},
         )
         expect(ignored.sdk).toBeUndefined()
 
         const result = yield* plugin.trigger(
           "aisdk.sdk",
-          { model: model("vercel", modelID), package: "@ai-sdk/gateway", options: { name: "vercel" } },
+          {
+            model: new ModelV2.Info({
+              ...ModelV2.Info.empty(ProviderV2.ID.make("vercel"), ModelV2.ID.make(modelID)),
+              api: { id: ModelV2.ID.make(modelID), type: "aisdk", package: "test-provider" },
+            }),
+            package: "@ai-sdk/gateway",
+            options: { name: "vercel" },
+          },
           {},
         )
         expect(result.sdk).toBeDefined()

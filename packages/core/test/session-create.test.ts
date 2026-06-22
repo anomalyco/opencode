@@ -25,8 +25,6 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { testEffect } from "./lib/effect"
 import { tmpdir } from "./fixture/tmpdir"
 
-const database = Database.layerFromPath(":memory:")
-const events = EventV2.layer.pipe(Layer.provide(database))
 const projects = Layer.succeed(
   ProjectV2.Service,
   ProjectV2.Service.of({
@@ -35,17 +33,23 @@ const projects = Layer.succeed(
     commit: () => Effect.void,
   }),
 )
-const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
-const store = SessionStore.layer.pipe(Layer.provide(database))
 const sessions = SessionV2.layer.pipe(
-  Layer.provide(events),
-  Layer.provide(database),
-  Layer.provide(store),
+  Layer.provide(EventV2.defaultLayer),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(SessionStore.defaultLayer),
   Layer.provide(projects),
   Layer.provide(SessionExecution.noopLayer),
 )
 const it = testEffect(
-  Layer.mergeAll(database, events, projects, projector, store, SessionExecution.noopLayer, sessions),
+  Layer.mergeAll(
+    Database.defaultLayer,
+    EventV2.defaultLayer,
+    projects,
+    SessionProjector.defaultLayer,
+    SessionStore.defaultLayer,
+    SessionExecution.noopLayer,
+    sessions,
+  ),
 )
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const id = SessionV2.ID.create()

@@ -56,11 +56,7 @@ import { Cause, DateTime, Deferred, Effect, Exit, Fiber, Layer, Schema, Stream }
 import { asc, eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
-const database = Database.layerFromPath(":memory:")
-const events = EventV2.layer.pipe(Layer.provide(database))
-const questions = QuestionV2.layer.pipe(Layer.provide(events))
-const projector = SessionProjector.layer.pipe(Layer.provide(events), Layer.provide(database))
-const store = SessionStore.layer.pipe(Layer.provide(database))
+const questions = QuestionV2.layer.pipe(Layer.provide(EventV2.defaultLayer))
 const requests: LLMRequest[] = []
 let response: LLMEvent[] = []
 let responses: LLMEvent[][] | undefined
@@ -235,9 +231,9 @@ const config = Layer.succeed(
   }),
 )
 const runner = SessionRunnerLLM.layer.pipe(
-  Layer.provide(database),
-  Layer.provide(store),
-  Layer.provide(events),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(SessionStore.defaultLayer),
+  Layer.provide(EventV2.defaultLayer),
   Layer.provide(client),
   Layer.provide(registry),
   Layer.provide(models),
@@ -262,19 +258,19 @@ const execution = Layer.effect(
   ),
 ).pipe(Layer.provide(coordinator))
 const sessions = SessionV2.layer.pipe(
-  Layer.provide(events),
-  Layer.provide(database),
-  Layer.provide(store),
+  Layer.provide(EventV2.defaultLayer),
+  Layer.provide(Database.defaultLayer),
+  Layer.provide(SessionStore.defaultLayer),
   Layer.provide(Project.defaultLayer),
   Layer.provide(execution),
 )
 const it = testEffect(
   Layer.mergeAll(
-    database,
-    events,
+    Database.defaultLayer,
+    EventV2.defaultLayer,
     questions,
-    projector,
-    store,
+    SessionProjector.defaultLayer,
+    SessionStore.defaultLayer,
     client,
     permission,
     applications,

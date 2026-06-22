@@ -2,96 +2,98 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { PluginHost } from "@opencode-ai/core/plugin/host"
 import { ProviderPlugins } from "@opencode-ai/core/plugin/provider"
 import { KiloPlugin } from "@opencode-ai/core/plugin/provider/kilo"
 import { ProviderV2 } from "@opencode-ai/core/provider"
-import { addPlugin, expectPluginRegistered, it, provider, required } from "./provider-helper"
+import { testEffect } from "../lib/effect"
+import { PluginTestLayer } from "./fixture"
+
+const it = testEffect(PluginTestLayer)
+
+const addPlugin = Effect.fn(function* () {
+  const plugin = yield* PluginV2.Service
+  const host = yield* PluginHost.make()
+  yield* plugin.add({ id: KiloPlugin.id, effect: KiloPlugin.effect(host) })
+})
 
 describe("KiloPlugin", () => {
   it.effect("is registered so legacy referer headers can be applied", () =>
-    Effect.sync(() =>
-      expectPluginRegistered(
-        ProviderPlugins.map((item) => item.id),
-        "kilo",
-      ),
-    ),
+    Effect.sync(() => expect(ProviderPlugins.map((item) => item.id)).toContain(PluginV2.ID.make("kilo"))),
   )
 
   it.effect("applies legacy referer headers only to kilo", () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
-      yield* addPlugin(plugin, KiloPlugin)
       yield* catalog.transform((catalog) => {
-        const kilo = provider("kilo", {
-          api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.kilo.ai/api/gateway" },
-          request: { headers: { Existing: "value" }, body: {} },
+        catalog.provider.update(ProviderV2.ID.make("kilo"), (provider) => {
+          provider.api = {
+            type: "aisdk",
+            package: "@ai-sdk/openai-compatible",
+            url: "https://api.kilo.ai/api/gateway",
+          }
+          provider.request = { headers: { Existing: "value" }, body: {} }
         })
-        catalog.provider.update(kilo.id, (draft) => {
-          draft.api = kilo.api
-          draft.request = kilo.request
-        })
-        catalog.provider.update(provider("openrouter").id, () => {})
+        catalog.provider.update(ProviderV2.ID.openrouter, () => {})
       })
-      expect(required(yield* catalog.provider.get(ProviderV2.ID.make("kilo"))).request.headers).toEqual({
+      yield* addPlugin()
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("kilo")))?.request.headers).toEqual({
         Existing: "value",
         "HTTP-Referer": "https://opencode.ai/",
         "X-Title": "opencode",
       })
-      expect(required(yield* catalog.provider.get(ProviderV2.ID.openrouter)).request.headers).toEqual({})
+      expect((yield* catalog.provider.get(ProviderV2.ID.openrouter))?.request.headers).toEqual({})
     }),
   )
 
   it.effect("uses the exact legacy Kilo header casing and set", () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
-      yield* addPlugin(plugin, KiloPlugin)
       yield* catalog.transform((catalog) => {
-        const item = provider("kilo", {
-          api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.kilo.ai/api/gateway" },
-        })
-        catalog.provider.update(item.id, (draft) => {
-          draft.api = item.api
+        catalog.provider.update(ProviderV2.ID.make("kilo"), (provider) => {
+          provider.api = {
+            type: "aisdk",
+            package: "@ai-sdk/openai-compatible",
+            url: "https://api.kilo.ai/api/gateway",
+          }
         })
       })
+      yield* addPlugin()
 
-      const result = required(yield* catalog.provider.get(ProviderV2.ID.make("kilo")))
-      expect(result.request.headers).toEqual({
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("kilo")))?.request.headers).toEqual({
         "HTTP-Referer": "https://opencode.ai/",
         "X-Title": "opencode",
       })
-      expect(result.request.headers).not.toHaveProperty("http-referer")
-      expect(result.request.headers).not.toHaveProperty("x-title")
-      expect(result.request.headers).not.toHaveProperty("X-Source")
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("kilo")))?.request.headers).not.toHaveProperty(
+        "http-referer",
+      )
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("kilo")))?.request.headers).not.toHaveProperty("x-title")
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("kilo")))?.request.headers).not.toHaveProperty("X-Source")
     }),
   )
 
   it.effect("uses the legacy provider-id guard instead of endpoint package matching", () =>
     Effect.gen(function* () {
-      const plugin = yield* PluginV2.Service
       const catalog = yield* Catalog.Service
-      yield* addPlugin(plugin, KiloPlugin)
       yield* catalog.transform((catalog) => {
-        const kilo = provider("kilo", {
-          api: { type: "aisdk", package: "@ai-sdk/openai-compatible", url: "https://api.kilo.ai/api/gateway" },
+        catalog.provider.update(ProviderV2.ID.make("kilo"), (provider) => {
+          provider.api = {
+            type: "aisdk",
+            package: "@ai-sdk/openai-compatible",
+            url: "https://api.kilo.ai/api/gateway",
+          }
         })
-        catalog.provider.update(kilo.id, (draft) => {
-          draft.api = kilo.api
-        })
-        const custom = provider("custom-kilo", {
-          api: { type: "aisdk", package: "kilo" },
-        })
-        catalog.provider.update(custom.id, (draft) => {
-          draft.api = custom.api
+        catalog.provider.update(ProviderV2.ID.make("custom-kilo"), (provider) => {
+          provider.api = { type: "aisdk", package: "kilo" }
         })
       })
+      yield* addPlugin()
 
-      expect(required(yield* catalog.provider.get(ProviderV2.ID.make("kilo"))).request.headers).toEqual({
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("kilo")))?.request.headers).toEqual({
         "HTTP-Referer": "https://opencode.ai/",
         "X-Title": "opencode",
       })
-      expect(required(yield* catalog.provider.get(ProviderV2.ID.make("custom-kilo"))).request.headers).toEqual({})
+      expect((yield* catalog.provider.get(ProviderV2.ID.make("custom-kilo")))?.request.headers).toEqual({})
     }),
   )
 })

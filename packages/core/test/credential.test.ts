@@ -1,26 +1,14 @@
-import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { Credential } from "@opencode-ai/core/credential"
-import { Database } from "@opencode-ai/core/database/database"
 import { Integration } from "@opencode-ai/core/integration"
-import { tmpdir } from "./fixture/tmpdir"
-import { it } from "./lib/effect"
+import { testEffect } from "./lib/effect"
 
-function layer(directory: string) {
-  return Credential.layer.pipe(
-    Layer.provide(Database.layerFromPath(path.join(directory, "credential.db")).pipe(Layer.fresh)),
-  )
-}
+const it = testEffect(Credential.defaultLayer)
 
 describe("Credential", () => {
-  it.live("stores, updates, lists, and removes credentials", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((tmp) =>
-        Effect.gen(function* () {
+  it.effect("stores, updates, lists, and removes credentials", () =>
+    Effect.gen(function* () {
           const credentials = yield* Credential.Service
           const integrationID = Integration.ID.make("openai")
           const created = yield* credentials.create({
@@ -42,8 +30,6 @@ describe("Credential", () => {
 
           yield* credentials.remove(replacement.id)
           expect(yield* credentials.list(integrationID)).toEqual([])
-        }).pipe(Effect.provide(layer(tmp.path))),
-      ),
-    ),
+    }),
   )
 })

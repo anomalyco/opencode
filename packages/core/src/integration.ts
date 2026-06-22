@@ -108,11 +108,11 @@ export type OAuthAuthorization = {
 } & (
   | {
       readonly mode: "auto"
-      readonly callback: Effect.Effect<Credential.Info, unknown>
+      readonly callback: Effect.Effect<Credential.Value, unknown>
     }
   | {
       readonly mode: "code"
-      readonly callback: (code: string) => Effect.Effect<Credential.Info, unknown>
+      readonly callback: (code: string) => Effect.Effect<Credential.Value, unknown>
     }
 )
 
@@ -214,8 +214,6 @@ export interface Interface extends State.Transformable<Draft> {
   /** Returns all integrations with their methods and current connections. */
   readonly list: () => Effect.Effect<Info[]>
   readonly connection: {
-    /** Returns active connections for every registered or credential-backed integration. */
-    readonly list: () => Effect.Effect<Map<ID, IntegrationConnection.Info>>
     /** Returns the active connection for one integration. */
     readonly forIntegration: (id: ID) => Effect.Effect<IntegrationConnection.Info | undefined>
     /** Runs a key method and stores the resulting credential. */
@@ -241,7 +239,7 @@ export interface Interface extends State.Transformable<Draft> {
     /** Updates a stored credential exposed as a connection. */
     readonly update: (
       credentialID: Credential.ID,
-      updates: Partial<Pick<Credential.Stored, "label">>,
+      updates: Partial<Pick<Credential.Info, "label">>,
     ) => Effect.Effect<void>
     /** Removes a stored credential connection. */
     readonly remove: (credentialID: Credential.ID) => Effect.Effect<void>
@@ -353,39 +351,25 @@ export const locationLayer = Layer.effect(
       finalize: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
     })
 
-    const connections = (entry: Entry, saved: readonly Credential.Stored[]): IntegrationConnection.Info[] => {
-      const connected = saved.map((credential) => ({
+    const resolveConnections = (entry: Entry | undefined, saved: readonly Credential.Info[]) => {
+      const credentials = saved.map((credential) => ({
         type: "credential" as const,
         id: credential.id,
         label: credential.label,
-      }))
-      const detected = entry.methods
+      })).toReversed()
+      const env = (entry?.methods ?? [])
         .filter((method) => method.type === "env")
         .flatMap((method) => method.names.filter((name) => process.env[name]))
         .map((name) => ({ type: "env" as const, name }))
-      return [...connected, ...detected]
+      return [...credentials, ...env]
     }
 
-    const activeConnection = (
-      entry: Entry | undefined,
-      saved: readonly Credential.Stored[],
-    ): IntegrationConnection.Info | undefined => {
-      const credential = saved.at(-1)
-      if (credential) return { type: "credential", id: credential.id, label: credential.label }
-      if (!entry) return
-      const name = entry.methods
-        .filter((method) => method.type === "env")
-        .flatMap((method) => method.names)
-        .find((name) => process.env[name])
-      if (name) return { type: "env", name }
-    }
-
-    const project = (entry: Entry, saved: readonly Credential.Stored[]) =>
+    const project = (entry: Entry, connections: IntegrationConnection.Info[]) =>
       new Info({
         id: entry.ref.id,
         name: entry.ref.name,
         methods: entry.methods,
-        connections: connections(entry, saved),
+        connections,
       })
 
     const authorize = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -399,7 +383,7 @@ export const locationLayer = Layer.effect(
       return error instanceof Error ? error.message : String(error)
     }
 
-    const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.Info, unknown>) {
+    const settle = Effect.fnUntraced(function* (attemptID: AttemptID, exit: Exit.Exit<Credential.Value, unknown>) {
       const now = yield* Clock.currentTimeMillis
       const result = yield* SynchronizedRef.modify(attempts, (current) => {
         const attempt = current.get(attemptID)
@@ -450,28 +434,18 @@ export const locationLayer = Layer.effect(
       get: Effect.fn("Integration.get")(function* (id) {
         const entry = state.get().integrations.get(id)
         if (!entry) return undefined
-        return project(entry, yield* credentials.list(id))
+        return project(entry, resolveConnections(entry, yield* credentials.list(id)))
       }),
       list: Effect.fn("Integration.list")(function* () {
-        return (yield* Effect.forEach(state.get().integrations.values(), (entry) =>
-          Effect.gen(function* () {
-            return project(entry, yield* credentials.list(entry.ref.id))
-          }),
-        )).toSorted((a, b) => a.name.localeCompare(b.name))
+        const saved = Map.groupBy(yield* credentials.all(), (credential) => credential.integrationID)
+        return Array.from(state.get().integrations.values(), (entry) =>
+          project(entry, resolveConnections(entry, saved.get(entry.ref.id) ?? [])),
+        ).toSorted((a, b) => a.name.localeCompare(b.name))
       }),
       connection: {
-        list: Effect.fn("Integration.connection.list")(function* () {
-          const saved = Map.groupBy(yield* credentials.all(), (credential) => credential.integrationID)
-          return new Map(
-            new Set([...state.get().integrations.keys(), ...saved.keys()]).values().flatMap((id) => {
-              const connection = activeConnection(state.get().integrations.get(id), saved.get(id) ?? [])
-              return connection ? [[id, connection] as const] : []
-            }),
-          )
-        }),
         forIntegration: Effect.fn("Integration.connection.forIntegration")(function* (id) {
           const entry = state.get().integrations.get(id)
-          return activeConnection(entry, yield* credentials.list(id))
+          return resolveConnections(entry, yield* credentials.list(id))[0]
         }),
         key: Effect.fn("Integration.connection.key")(function* (input) {
           const method = state

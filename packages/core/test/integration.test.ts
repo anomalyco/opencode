@@ -4,44 +4,14 @@ import * as TestClock from "effect/testing/TestClock"
 import { Integration } from "@opencode-ai/core/integration"
 import { Credential } from "@opencode-ai/core/credential"
 import { EventV2 } from "@opencode-ai/core/event"
-import { it } from "./lib/effect"
+import { testEffect } from "./lib/effect"
 
-const layer = Integration.locationLayer.pipe(
-  Layer.provide(EventV2.defaultLayer),
-  Layer.provide(
-    Layer.mock(Credential.Service)({
-      create: () => Effect.die("unexpected credential creation"),
-      list: () => Effect.succeed([]),
-    }),
+const it = testEffect(
+  Integration.locationLayer.pipe(
+    Layer.provideMerge(Credential.defaultLayer),
+    Layer.provideMerge(EventV2.defaultLayer),
   ),
 )
-
-function connectionLayer(
-  created: Array<{
-    integrationID: Integration.ID
-    label?: string
-    value: Credential.Info
-  }>,
-) {
-  return Integration.locationLayer.pipe(
-    Layer.provideMerge(EventV2.defaultLayer),
-    Layer.provide(
-      Layer.mock(Credential.Service)({
-        create: (input) =>
-          Effect.sync(() => {
-            created.push(input)
-            return new Credential.Stored({
-              id: Credential.ID.create(),
-              integrationID: input.integrationID,
-              label: input.label ?? "default",
-              value: input.value,
-            })
-          }),
-        list: () => Effect.succeed([]),
-      }),
-    ),
-  )
-}
 
 describe("Integration", () => {
   it.effect("registers integrations through the editor", () =>
@@ -59,7 +29,7 @@ describe("Integration", () => {
 
       yield* Scope.close(scope, Exit.void)
       expect(yield* integrations.get(openai)).toBeUndefined()
-    }).pipe(Effect.provide(layer)),
+    }),
   )
 
   it.effect("reveals the previous registration when an override closes", () =>
@@ -80,7 +50,7 @@ describe("Integration", () => {
       yield* Scope.close(second, Exit.void)
       expect((yield* integrations.get(id))?.name).toBe("OpenAI")
       expect((yield* integrations.list()).map((integration) => integration.id)).toEqual([id])
-    }).pipe(Effect.provide(layer)),
+    }),
   )
 
   it.effect("registers and overrides methods independently", () =>
@@ -128,17 +98,13 @@ describe("Integration", () => {
       yield* Scope.close(second, Exit.void)
       expect((yield* integrations.get(integrationID))?.methods[0]).toMatchObject({ label: "ChatGPT" })
       expect((yield* integrations.get(integrationID))?.methods).toEqual([expect.objectContaining({ id: methodID })])
-    }).pipe(Effect.provide(layer)),
+    }),
   )
 
-  it.effect("connects with a key and stores the credential", () => {
-    const created: Array<{
-      integrationID: Integration.ID
-      label?: string
-      value: Credential.Info
-    }> = []
-    return Effect.gen(function* () {
+  it.effect("connects with a key and stores the credential", () =>
+    Effect.gen(function* () {
       const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
       const events = yield* EventV2.Service
       const integrationID = Integration.ID.make("openai")
       yield* integrations.transform((editor) =>
@@ -158,25 +124,21 @@ describe("Integration", () => {
         label: "Work",
       })
 
-      expect(created).toEqual([
-        {
+      expect(yield* credentials.list(integrationID)).toEqual([
+        expect.objectContaining({
           integrationID,
           label: "Work",
           value: new Credential.Key({ type: "key", key: "secret" }),
-        },
+        }),
       ])
       expect((yield* Fiber.join(updated)).length).toBe(1)
-    }).pipe(Effect.provide(connectionLayer(created)))
-  })
+    }),
+  )
 
-  it.effect("completes code OAuth once and stores the credential", () => {
-    const created: Array<{
-      integrationID: Integration.ID
-      label?: string
-      value: Credential.Info
-    }> = []
-    return Effect.gen(function* () {
+  it.effect("completes code OAuth once and stores the credential", () =>
+    Effect.gen(function* () {
       const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
       const integrationID = Integration.ID.make("openai")
       const methodID = Integration.MethodID.make("chatgpt")
       yield* integrations.transform((editor) =>
@@ -212,29 +174,27 @@ describe("Integration", () => {
       expect(attempt.mode).toBe("code")
       yield* integrations.attempt.complete({ attemptID: attempt.attemptID, code: "1234" })
 
-      expect(created[0]).toEqual({
-        integrationID,
-        label: "Personal",
-        value: new Credential.OAuth({
-          type: "oauth",
-          methodID,
-          access: "access",
-          refresh: "refresh",
-          expires: 1,
-          metadata: { code: "1234" },
+      expect((yield* credentials.list(integrationID))[0]).toEqual(
+        expect.objectContaining({
+          integrationID,
+          label: "Personal",
+          value: new Credential.OAuth({
+            type: "oauth",
+            methodID,
+            access: "access",
+            refresh: "refresh",
+            expires: 1,
+            metadata: { code: "1234" },
+          }),
         }),
-      })
-    }).pipe(Effect.provide(connectionLayer(created)))
-  })
+      )
+    }),
+  )
 
-  it.effect("keeps code attempts open when the code is missing and closes them on cancel", () => {
-    const created: Array<{
-      integrationID: Integration.ID
-      label?: string
-      value: Credential.Info
-    }> = []
-    return Effect.gen(function* () {
+  it.effect("keeps code attempts open when the code is missing and closes them on cancel", () =>
+    Effect.gen(function* () {
       const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
       const integrationID = Integration.ID.make("openai")
       const methodID = Integration.MethodID.make("chatgpt")
       let closed = false
@@ -261,18 +221,14 @@ describe("Integration", () => {
       expect(closed).toBe(false)
       yield* integrations.attempt.cancel(attempt.attemptID)
       expect(closed).toBe(true)
-      expect(created).toEqual([])
-    }).pipe(Effect.provide(connectionLayer(created)))
-  })
+      expect(yield* credentials.list(integrationID)).toEqual([])
+    }),
+  )
 
-  it.effect("completes auto OAuth in the background", () => {
-    const created: Array<{
-      integrationID: Integration.ID
-      label?: string
-      value: Credential.Info
-    }> = []
-    return Effect.gen(function* () {
+  it.effect("completes auto OAuth in the background", () =>
+    Effect.gen(function* () {
       const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
       const integrationID = Integration.ID.make("openai")
       const methodID = Integration.MethodID.make("browser")
       yield* integrations.transform((editor) =>
@@ -297,18 +253,14 @@ describe("Integration", () => {
         status: "complete",
         time: attempt.time,
       })
-      expect(created).toHaveLength(1)
-    }).pipe(Effect.provide(connectionLayer(created)))
-  })
+      expect(yield* credentials.list(integrationID)).toHaveLength(1)
+    }),
+  )
 
-  it.effect("expires abandoned OAuth attempts", () => {
-    const created: Array<{
-      integrationID: Integration.ID
-      label?: string
-      value: Credential.Info
-    }> = []
-    return Effect.gen(function* () {
+  it.effect("expires abandoned OAuth attempts", () =>
+    Effect.gen(function* () {
       const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
       const integrationID = Integration.ID.make("openai")
       const methodID = Integration.MethodID.make("browser")
       let closed = false
@@ -337,34 +289,12 @@ describe("Integration", () => {
         time: attempt.time,
       })
       expect(closed).toBe(true)
-      expect(created).toEqual([])
-    }).pipe(Effect.provide(connectionLayer(created)))
-  })
+      expect(yield* credentials.list(integrationID)).toEqual([])
+    }),
+  )
 
   it.effect("projects credential and env connections", () => {
     const integrationID = Integration.ID.make("acme")
-    const rows = [
-      {
-        id: Credential.ID.create(),
-        integrationID,
-        label: "Work",
-        value: new Credential.Key({ type: "key", key: "a" }),
-      },
-      {
-        id: Credential.ID.create(),
-        integrationID,
-        label: "Personal",
-        value: new Credential.Key({ type: "key", key: "b" }),
-      },
-    ]
-    const projectionLayer = Integration.locationLayer.pipe(
-      Layer.provide(EventV2.defaultLayer),
-      Layer.provide(
-        Layer.mock(Credential.Service)({
-          list: () => Effect.succeed(rows.map((row) => new Credential.Stored(row))),
-        }),
-      ),
-    )
     return Effect.acquireUseRelease(
       Effect.sync(() => {
         const previous = process.env.INTEGRATION_TEST_ACME_KEY
@@ -375,6 +305,7 @@ describe("Integration", () => {
       () =>
         Effect.gen(function* () {
           const integrations = yield* Integration.Service
+          const credentials = yield* Credential.Service
           yield* integrations.transform((editor) =>
             editor.method.update({
               integrationID,
@@ -384,23 +315,33 @@ describe("Integration", () => {
               },
             }),
           )
+          const work = yield* credentials.create({
+            integrationID,
+            label: "Work",
+            value: new Credential.Key({ type: "key", key: "a" }),
+          })
+          const personal = yield* credentials.create({
+            integrationID,
+            label: "Personal",
+            value: new Credential.Key({ type: "key", key: "b" }),
+          })
 
           // Stored credentials and detected env vars appear as connections.
           expect((yield* integrations.get(integrationID))?.connections).toEqual([
-            { type: "credential", id: rows[0]!.id, label: "Work" },
             {
               type: "credential",
-              id: rows[1]!.id,
+              id: personal.id,
               label: "Personal",
             },
             { type: "env", name: "INTEGRATION_TEST_ACME_KEY" },
           ])
           expect(yield* integrations.connection.forIntegration(integrationID)).toEqual({
             type: "credential",
-            id: rows[1]!.id,
+            id: personal.id,
             label: "Personal",
           })
-        }).pipe(Effect.provide(projectionLayer)),
+          expect(work.id).not.toBe(personal.id)
+        }),
       (previous) =>
         Effect.sync(() => {
           if (previous === undefined) delete process.env.INTEGRATION_TEST_ACME_KEY
