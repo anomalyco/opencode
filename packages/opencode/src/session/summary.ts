@@ -130,7 +130,10 @@ export const layer = Layer.effect(
       // Each touched file appears once (last turn wins).
       const byFile = new Map<string, Snapshot.FileDiff>()
       for (const msg of all) {
-        for (const d of msg.info.summary?.diffs ?? []) {
+        if (msg.info.role !== "user") continue
+        const diffs = msg.info.summary?.diffs
+        if (!diffs) continue
+        for (const d of diffs) {
           byFile.set(d.file ?? `__nofile_${byFile.size}`, d)
         }
       }
