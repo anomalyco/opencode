@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { ModelV2 } from "../../model"
-import { define } from "@opencode-ai/plugin/v2/effect"
+import { define } from "../internal"
 import { ProviderV2 } from "../../provider"
 import { Integration } from "../../integration"
 import { browser, headless } from "./openai-auth"
@@ -27,16 +27,14 @@ export const OpenAIPlugin = define({
         }
       }),
     )
-    yield* ctx.aisdk.hook(
-      "sdk",
+    yield* ctx.aisdk.sdk(
       Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/openai") return
         const mod = yield* Effect.promise(() => import("@ai-sdk/openai"))
         evt.sdk = mod.createOpenAI(evt.options)
       }),
     )
-    yield* ctx.aisdk.hook(
-      "language",
+    yield* ctx.aisdk.language(
       Effect.fn(function* (evt) {
         if (evt.model.providerID !== ProviderV2.ID.openai) return
         evt.language = evt.sdk.responses(evt.model.api.id)

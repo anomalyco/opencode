@@ -1,127 +1,44 @@
 import { describe, expect } from "bun:test"
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
-import { EventV2 } from "@opencode-ai/core/event"
+import { Effect } from "effect"
+import { define } from "@opencode-ai/plugin/v2/effect"
+import { AgentV2 } from "@opencode-ai/core/agent"
 import { PluginV2 } from "@opencode-ai/core/plugin"
-import { State } from "@opencode-ai/core/state"
-import { it } from "./lib/effect"
+import { testEffect } from "./lib/effect"
+import { PluginTestLayer } from "./plugin/fixture"
 
-const events = Layer.mock(EventV2.Service)({
-  publish: (definition, data) =>
-    Effect.succeed({
-      id: EventV2.ID.make("evt_plugin_test"),
-      type: definition.type,
-      data,
-    }),
-})
-const plugins = PluginV2.layer.pipe(Layer.provide(events))
-
-function state() {
-  return State.create({
-    initial: () => ({ values: [] as string[] }),
-    draft: (draft) => ({
-      add: (value: string) => draft.values.push(value),
-    }),
-  })
-}
+const it = testEffect(PluginTestLayer)
 
 describe("PluginV2", () => {
-  it.effect("closes plugin-owned scopes when the registry layer finalizes", () =>
+  it.effect("reconciles transformed plugins", () =>
     Effect.gen(function* () {
-      const values = state()
-      const layerScope = yield* Scope.fork(yield* Scope.Scope)
-      const plugin = Context.get(yield* Layer.buildWithScope(Layer.fresh(plugins), layerScope), PluginV2.Service)
+      const plugins = yield* PluginV2.Service
+      const agents = yield* AgentV2.Service
+      let description = "first"
 
-      yield* plugin.add({
-        id: PluginV2.ID.make("scoped"),
-        effect: Effect.gen(function* () {
-          yield* values.transform((editor) => {
-            editor.add("scoped")
-          })
-        }),
-      })
-      expect(values.get().values).toEqual(["scoped"])
-
-      yield* Scope.close(layerScope, Exit.void)
-      expect(values.get().values).toEqual([])
-    }),
-  )
-
-  it.effect("batches plugin state rebuilds when the registry layer finalizes", () =>
-    Effect.gen(function* () {
-      let finalized = 0
-      const values = State.create({
-        initial: () => ({ values: [] as string[] }),
-        draft: (draft) => ({ add: (value: string) => draft.values.push(value) }),
-        finalize: () => Effect.sync(() => finalized++),
-      })
-      const layerScope = yield* Scope.fork(yield* Scope.Scope)
-      const plugin = Context.get(yield* Layer.buildWithScope(Layer.fresh(plugins), layerScope), PluginV2.Service)
-
-      yield* State.batch(
-        Effect.forEach(
-          ["first", "second"],
-          (id) =>
-            plugin.add({
-              id: PluginV2.ID.make(id),
-              effect: values
-                .transform((editor) => {
-                  editor.add(id)
-                })
+      const registration = yield* plugins.transform((draft) => {
+        draft.add(
+          define({
+            id: "managed",
+            effect: (ctx) =>
+              ctx.agent
+                .transform((agents) =>
+                  agents.update("configured", (agent) => {
+                    agent.description = description
+                  }),
+                )
                 .pipe(Effect.asVoid),
-            }),
-          { discard: true },
-        ),
-      )
-      finalized = 0
-
-      yield* Scope.close(layerScope, Exit.void)
-      expect(values.get().values).toEqual([])
-      expect(finalized).toBe(1)
-    }),
-  )
-
-  it.effect("serializes same-ID additions and leaves one removable attachment", () =>
-    Effect.gen(function* () {
-      const values = state()
-      const layerScope = yield* Scope.fork(yield* Scope.Scope)
-      const plugin = Context.get(yield* Layer.buildWithScope(Layer.fresh(plugins), layerScope), PluginV2.Service)
-      const id = PluginV2.ID.make("shared")
-      const firstStarted = yield* Deferred.make<void>()
-      const releaseFirst = yield* Deferred.make<void>()
-
-      const first = yield* plugin
-        .add({
-          id,
-          effect: Effect.gen(function* () {
-            yield* values.transform((editor) => {
-              editor.add("first")
-            })
-            yield* Deferred.succeed(firstStarted, undefined)
-            yield* Deferred.await(releaseFirst)
           }),
-        })
-        .pipe(Effect.forkChild)
-      yield* Deferred.await(firstStarted)
+        )
+      })
 
-      const second = yield* plugin
-        .add({
-          id,
-          effect: Effect.gen(function* () {
-            yield* values.transform((editor) => {
-              editor.add("second")
-            })
-          }),
-        })
-        .pipe(Effect.forkChild({ startImmediately: true }))
-      expect(values.get().values).toEqual(["first"])
+      expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("first")
 
-      yield* Deferred.succeed(releaseFirst, undefined)
-      yield* Fiber.join(first)
-      yield* Fiber.join(second)
-      expect(values.get().values).toEqual(["second"])
+      description = "second"
+      yield* plugins.reload()
+      expect((yield* agents.get(AgentV2.ID.make("configured")))?.description).toBe("second")
 
-      yield* plugin.remove(id)
-      expect(values.get().values).toEqual([])
+      yield* registration.dispose
+      expect(yield* agents.get(AgentV2.ID.make("configured"))).toBeUndefined()
     }),
   )
 })

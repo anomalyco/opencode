@@ -1,15 +1,15 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { DateTime, Deferred, Effect, Equal, Hash, Layer, Schema, Stream } from "effect"
+import { DateTime, Effect, Equal, Hash, Layer, Schema } from "effect"
 import { Tool } from "@opencode-ai/core/public"
 import { define } from "@opencode-ai/plugin/v2/effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { LocationServiceMap } from "@opencode-ai/core/location-layer"
 import { Location } from "@opencode-ai/core/location"
+import { PluginV2 } from "@opencode-ai/core/plugin"
 import { ModelV2 } from "@opencode-ai/core/model"
-import { PluginBoot } from "@opencode-ai/core/plugin/boot"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
@@ -88,7 +88,6 @@ describe("LocationServiceMap", () => {
 
           const update = (directory: string) =>
             Effect.gen(function* () {
-              yield* PluginBoot.Service.use((boot) => boot.wait())
               yield* Reference.Service
               const catalog = yield* Catalog.Service
               yield* catalog.transform((editor) => editor.provider.update(ProviderV2.ID.make("test"), () => {}))
@@ -197,36 +196,24 @@ describe("LocationServiceMap", () => {
     ).pipe(
       Effect.flatMap((dir) =>
         Effect.gen(function* () {
-          const boot = yield* PluginBoot.Service
-          const catalogUpdated = yield* Deferred.make<void>()
-          const seen: string[] = []
-          yield* boot.add(
-            define({
-              id: "reviewer",
-              effect: (ctx) =>
-                Effect.gen(function* () {
-                  yield* ctx.event.subscribe("catalog.updated").pipe(
-                    Stream.runForEach(() => Deferred.succeed(catalogUpdated, undefined).pipe(Effect.asVoid)),
-                    Effect.forkScoped({ startImmediately: true }),
-                  )
-                  yield* ctx.agent.transform((agent) => {
-                    agent.update("reviewer", (item) => {
-                      item.description = "Reviews code"
-                      item.mode = "subagent"
+          const plugins = yield* PluginV2.Service
+          yield* plugins.transform((draft) =>
+            draft.add(
+              define({
+                id: "reviewer",
+                effect: (ctx) =>
+                  ctx.agent
+                    .transform((agent) => {
+                      agent.update("reviewer", (item) => {
+                        item.description = "Reviews code"
+                        item.mode = "subagent"
+                      })
                     })
-                  })
-                  seen.push((yield* ctx.agent.get("reviewer"))?.description ?? "")
-                  yield* ctx.catalog.transform((catalog) => {
-                    catalog.provider.update("public", (provider) => {
-                      provider.name = "Public provider"
-                    })
-                  })
-                }),
-            }),
+                    .pipe(Effect.asVoid),
+              }),
+            ),
           )
 
-          yield* Deferred.await(catalogUpdated)
-          expect(seen).toEqual(["Reviews code"])
           expect(yield* (yield* AgentV2.Service).get(AgentV2.ID.make("reviewer"))).toMatchObject({
             description: "Reviews code",
             mode: "subagent",
