@@ -436,20 +436,9 @@ export namespace Compaction {
   })
   export type Delta = typeof Delta.Type
 
-  // Retain the unpublished v1 decoder so stored beta events remain replayable.
-  export const EndedV1 = EventV2.define({
-    type: "session.next.compaction.ended",
-    ...options,
-    schema: {
-      ...Base,
-      text: Schema.String,
-      include: Schema.String.pipe(Schema.optional),
-    },
-  })
-
   export const Ended = EventV2.define({
     type: "session.next.compaction.ended",
-    durable: { aggregate: "sessionID", version: 2 },
+    ...options,
     schema: {
       ...Base,
       messageID: SessionMessageID.ID,

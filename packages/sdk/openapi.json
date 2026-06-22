@@ -25744,7 +25744,7 @@
             "properties": {
               "type": {
                 "type": "string",
-                "enum": ["session.next.compaction.ended.2"]
+                "enum": ["session.next.compaction.ended.1"]
               },
               "id": {
                 "type": "string",
