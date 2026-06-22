@@ -24,7 +24,6 @@ permissions:
   contents: write
   pull-requests: write
   issues: write # required by gh to create/manage labels
-  workflows: write
 
 jobs:
   upstream-sync-threshold:
@@ -157,6 +156,24 @@ jobs:
           echo "result=failed" >> "$GITHUB_OUTPUT"
           echo "Merge failed for a reason other than conflicts."
           exit "$merge_status"
+
+      # The default GITHUB_TOKEN is a GitHub App token, and GitHub refuses to let it
+      # push changes to anything under .github/workflows/. We keep our own CI
+      # workflows anyway (see .github/conflict-rules.conf: ".github/workflows/*:ours"),
+      # so drop every upstream workflow change here — modified, newly-added, and
+      # conflicted files alike — restoring our version exactly. This keeps the pushed
+      # merge free of workflow-file changes so the push is allowed.
+      - name: Keep fork CI workflows (drop upstream workflow changes)
+        if: steps.threshold.outputs.should_sync == 'true' && (steps.merge.outputs.result == 'success' || steps.merge.outputs.result == 'conflict')
+        run: |
+          rm -rf .github/workflows
+          git checkout "origin/${TARGET_BRANCH}" -- .github/workflows
+          git add -A .github/workflows
+          # A clean merge already created the merge commit, so fold the revert into
+          # it. A conflicted merge is still uncommitted; a later step commits it.
+          if [ "${{ steps.merge.outputs.result }}" = "success" ]; then
+            git commit --amend --no-edit
+          fi
 
       # Auto-resolve the known, safe conflict patterns. This clears the bulk of the
       # churn so only the genuinely ambiguous conflicts are left over.
