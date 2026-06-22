@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "1.17.8",
+  "version": "1.17.9",
   "name": "@opencode-ai/core",
   "type": "module",
   "license": "MIT",
@@ -91,6 +91,7 @@
     "@opencode-ai/effect-drizzle-sqlite": "workspace:*",
     "@opencode-ai/effect-sqlite-node": "workspace:*",
     "@opencode-ai/llm": "workspace:*",
+    "@opencode-ai/plugin": "workspace:*",
     "@opentelemetry/api": "1.9.0",
     "@opentelemetry/context-async-hooks": "2.6.1",
     "@opentelemetry/exporter-trace-otlp-http": "0.214.0",

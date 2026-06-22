@@ -29,33 +29,33 @@ export class Key extends Schema.Class<Key>("Credential.Key")({
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 }) {}
 
-export const Info = Schema.Union([OAuth, Key])
+export const Value = Schema.Union([OAuth, Key])
   .pipe(Schema.toTaggedUnion("type"))
-  .annotate({ identifier: "Credential.Info" })
-export type Info = Schema.Schema.Type<typeof Info>
+  .annotate({ identifier: "Credential.Value" })
+export type Value = Schema.Schema.Type<typeof Value>
 
-export class Stored extends Schema.Class<Stored>("Credential.Stored")({
+export class Info extends Schema.Class<Info>("Credential.Info")({
   id: ID,
   integrationID: IntegrationSchema.ID,
   label: Schema.String,
-  value: Info,
+  value: Value,
 }) {}
 
 export interface Interface {
   /** Returns every stored credential. */
-  readonly all: () => Effect.Effect<Stored[]>
+  readonly all: () => Effect.Effect<Info[]>
   /** Returns stored credentials belonging to one integration. */
-  readonly list: (integrationID: IntegrationSchema.ID) => Effect.Effect<Stored[]>
+  readonly list: (integrationID: IntegrationSchema.ID) => Effect.Effect<Info[]>
   /** Returns one stored credential by ID. */
-  readonly get: (id: ID) => Effect.Effect<Stored | undefined>
+  readonly get: (id: ID) => Effect.Effect<Info | undefined>
   /** Replaces any credential for an integration and returns the new record. */
   readonly create: (input: {
     readonly integrationID: IntegrationSchema.ID
-    readonly value: Info
+    readonly value: Value
     readonly label?: string
-  }) => Effect.Effect<Stored>
+  }) => Effect.Effect<Info>
   /** Updates the label or secret value of a stored credential. */
-  readonly update: (id: ID, updates: Partial<Pick<Stored, "label" | "value">>) => Effect.Effect<void>
+  readonly update: (id: ID, updates: Partial<Pick<Info, "label" | "value">>) => Effect.Effect<void>
   /** Removes a stored credential. */
   readonly remove: (id: ID) => Effect.Effect<void>
 }
@@ -66,10 +66,10 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const { db } = yield* Database.Service
-    const decode = Schema.decodeUnknownSync(Info)
+    const decode = Schema.decodeUnknownSync(Value)
     const stored = (row: typeof CredentialTable.$inferSelect) => {
       if (!row.integration_id) return
-      return new Stored({
+      return new Info({
         id: row.id,
         integrationID: row.integration_id,
         label: row.label,
@@ -106,7 +106,7 @@ export const layer = Layer.effect(
         return row ? stored(row) : undefined
       }),
       create: Effect.fn("Credential.create")(function* (input) {
-        const credential = new Stored({
+        const credential = new Info({
           id: ID.create(),
           integrationID: input.integrationID,
           label: input.label ?? "default",

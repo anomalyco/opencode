@@ -1,15 +1,16 @@
 import { Effect } from "effect"
-import { PluginV2 } from "../../plugin"
+import { define } from "@opencode-ai/plugin/v2/effect"
 
-export const TogetherAIPlugin = PluginV2.define({
-  id: PluginV2.ID.make("togetherai"),
-  effect: Effect.gen(function* () {
-    return {
-      "aisdk.sdk": Effect.fn(function* (evt) {
+export const TogetherAIPlugin = define({
+  id: "togetherai",
+  effect: Effect.fn(function* (ctx) {
+    yield* ctx.aisdk.hook(
+      "sdk",
+      Effect.fn(function* (evt) {
         if (evt.package !== "@ai-sdk/togetherai") return
         const mod = yield* Effect.promise(() => import("@ai-sdk/togetherai"))
         evt.sdk = mod.createTogetherAI(evt.options)
       }),
-    }
+    )
   }),
 })

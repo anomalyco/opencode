@@ -196,6 +196,13 @@ export async function handler(
           Object.entries(providerInfo.headerMappings ?? {}).forEach(([k, v]) => {
             headers.set(k, headers.get(v)!)
           })
+          Object.entries(providerInfo.headerModifier ?? {}).forEach(([k, v]) => {
+            if (v === "$ip") return headers.set(k, ip)
+            if (v === "$session") return headers.set(k, sessionId)
+            if (v === "$model") return headers.set(k, model)
+            if (v === "$request") return headers.set(k, requestId)
+            headers.set(k, v)
+          })
           headers.delete("host")
           headers.delete("content-length")
           headers.delete("x-opencode-request")

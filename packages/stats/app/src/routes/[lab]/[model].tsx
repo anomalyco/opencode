@@ -14,7 +14,6 @@ import {
   type StatsModelData,
   type UsageRange,
 } from "@opencode-ai/stats-core/domain/home"
-import { runtime } from "@opencode-ai/stats-core/runtime"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
@@ -27,6 +26,7 @@ import {
   type ModelCatalogCost,
   type ModelCatalogEntry,
 } from "../model-catalog"
+import { runStatsEffect } from "../../stats-runtime"
 import {
   applyThemePreference,
   Footer,
@@ -45,6 +45,7 @@ const statsUnfurlUrl = new URL(statsUnfurlPath, statsCanonicalBaseUrl).toString(
 const modelHeaderLinks: readonly HeaderLink[] = [
   { href: "#overview", label: "Overview" },
   { href: "#usage", label: "Usage" },
+  { href: "#users", label: "Users" },
   { href: "#efficiency", label: "Efficiency" },
   { href: "#geo-breakdown", label: "Geo Breakdown" },
   { href: "#peers", label: "Peers" },
@@ -95,7 +96,7 @@ const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a
 
 const getModelData = query(async (lab: string, model: string) => {
   "use server"
-  return runtime.runPromise(getStatsModelData(model, lab))
+  return runStatsEffect(getStatsModelData(model, lab))
 }, "getStatsModelData")
 
 export default function StatsModel() {
@@ -120,11 +121,10 @@ export default function StatsModel() {
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const modelName = createMemo(() => catalogEntry()?.name ?? stats()?.model ?? modelParam() ?? "Model")
   const labName = createMemo(() => formatCatalogLabName(catalogEntry()?.lab ?? stats()?.provider ?? labParam()))
-  const modelTitle = createMemo(() => `${modelName()} Data`)
-  const modelDescription = createMemo(() =>
-    stats()
-      ? `${modelName()} usage, rank, token mix, cost, geo breakdown, and peer data across OpenCode Go.`
-      : `${modelName()} model facts, limits, and OpenCode Go usage availability.`,
+  const modelTitle = createMemo(() => `${modelName()} Usage, Cost & Rank | OpenCode Data`)
+  const modelDescription = createMemo(
+    () =>
+      `View ${modelName()} OpenCode Go usage data, including token volume, weekly rank, token mix, costs, cache ratio, sessions, geo breakdowns, and peer models.`,
   )
   const modelUrl = createMemo(() =>
     new URL(
@@ -176,6 +176,7 @@ export default function StatsModel() {
                 <ModelHero data={stats() ?? null} catalog={catalogEntry() ?? null} labName={labName()} />
                 <ModelOverview data={stats() ?? null} />
                 <ModelUsageSection data={stats()?.usage ?? []} />
+                <ModelUsersSection data={stats()?.usage ?? []} />
                 <ModelEfficiencySection data={stats() ?? null} catalog={catalogEntry() ?? null} />
                 <ModelGeoBreakdownSection data={stats()?.country ?? emptyCountryRecord()} />
                 <ModelPeersSection data={stats() ?? null} />
@@ -329,7 +330,7 @@ function CatalogDatum(props: { label: string; value: string }) {
 function ModelOverview(props: { data: StatsModelData | null }) {
   return (
     <section data-section="model-panel">
-      <SectionTitle title="Overview" description="Recent OpenCode Go tokens, sessions, and market position." />
+      <SectionTitle title="Overview" description="Recent OpenCode Go tokens, unique users, and market position." />
       <Show
         when={props.data}
         fallback={
@@ -339,6 +340,7 @@ function ModelOverview(props: { data: StatsModelData | null }) {
         {(data) => (
           <div data-component="model-metric-grid">
             <MetricCard label="Tokens" value={formatTokens(data().totals.tokens)} detail="last two months" />
+            <MetricCard label="Unique Users" value={formatUsers(data().totals.uniqueUsers)} detail="last two months" />
             <MetricCard label="Sessions" value={formatInteger(data().totals.sessions)} detail="completed sessions" />
             <MetricCard
               label="Token Share"
@@ -359,14 +361,6 @@ function ModelOverview(props: { data: StatsModelData | null }) {
 }
 
 function ModelUsageSection(props: { data: ModelUsagePoint[] }) {
-  const [activeIndex, setActiveIndex] = createSignal<number>()
-  const max = createMemo(() => Math.max(0, ...props.data.map((item) => item.tokens)) || 1)
-  const activePoint = createMemo(() => {
-    const index = activeIndex()
-    if (index === undefined) return undefined
-    return props.data[index]
-  })
-
   return (
     <section id="usage" data-section="model-panel">
       <SectionTitle title="Usage" description="Daily OpenCode Go token volume over the recent two-month window." />
@@ -374,90 +368,145 @@ function ModelUsageSection(props: { data: ModelUsagePoint[] }) {
         when={props.data.some((item) => item.tokens > 0)}
         fallback={<ModelEmptyState title="No usage" description="No usage landed in the current window." />}
       >
-        <div
-          data-component="model-usage-chart"
-          data-dense-labels={isModelUsageDense(props.data.length) ? "true" : undefined}
-          role="img"
-          aria-label="Daily token usage chart"
-          style={{ "--model-usage-count": props.data.length } as JSX.CSSProperties}
-          onPointerLeave={(event) => {
-            if (event.pointerType === "touch") return
-            setActiveIndex(undefined)
-          }}
-        >
-          <div data-slot="model-usage-axis" aria-hidden="true">
-            <For each={props.data}>
-              {(point, index) => (
-                <div
-                  data-active={activeIndex() === index() ? "true" : undefined}
-                  data-label-hidden={isModelUsageLabelHidden(index(), props.data.length) ? "true" : undefined}
-                >
-                  <span data-slot="model-usage-label">
-                    <span data-slot="model-usage-total">{formatTokens(point.tokens)}</span>
-                    <span data-slot="model-usage-date">{point.date}</span>
-                  </span>
-                </div>
-              )}
-            </For>
-          </div>
-          <div data-slot="model-usage-bars">
-            <For each={props.data}>
-              {(point, index) => (
-                <div
-                  data-slot="model-usage-column"
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`${point.date} ${formatTokens(point.tokens)} tokens`}
-                  data-active={activeIndex() === index() ? "true" : undefined}
-                  data-muted={activeIndex() !== undefined && activeIndex() !== index() ? "true" : undefined}
-                  onPointerDown={(event) => {
-                    if (event.pointerType !== "touch") return
-                    setActiveIndex(index())
-                  }}
-                  onPointerEnter={() => setActiveIndex(index())}
-                  onPointerMove={(event) => {
-                    if (event.pointerType === "touch") return
-                    setActiveIndex(index())
-                  }}
-                  onClick={() => setActiveIndex(index())}
-                  onFocus={() => setActiveIndex(index())}
-                  onBlur={() => setActiveIndex(undefined)}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") return
-                    event.preventDefault()
-                    setActiveIndex(index())
-                  }}
-                >
-                  <div
-                    data-slot="model-usage-bar"
-                    style={{ "--model-usage-fill": `${modelUsageHeight(point.tokens, max())}%` } as JSX.CSSProperties}
-                  />
-                  <Show when={activeIndex() === index() && activePoint()}>
-                    {(active) => (
-                      <div
-                        data-component="chart-tooltip"
-                        data-placement={index() > props.data.length * 0.62 ? "left" : "right"}
-                      >
-                        <strong>{active().date}</strong>
-                        <span>{formatTokens(active().tokens)} tokens</span>
-                        <div data-slot="tooltip-divider" />
-                        <p>
-                          <span data-slot="tooltip-label">
-                            <i /> Daily tokens
-                          </span>
-                          <b>{formatTokens(active().tokens)}</b>
-                        </p>
-                      </div>
-                    )}
-                  </Show>
-                </div>
-              )}
-            </For>
-          </div>
-        </div>
+        <ModelColumnChart data={props.data} metric="tokens" ariaLabel="Daily token usage chart" />
       </Show>
     </section>
   )
+}
+
+function ModelUsersSection(props: { data: ModelUsagePoint[] }) {
+  return (
+    <section id="users" data-section="model-panel">
+      <SectionTitle
+        title="Unique Users"
+        description="Daily unique OpenCode Go users over the recent two-month window."
+      />
+      <Show
+        when={props.data.some((item) => item.users > 0)}
+        fallback={
+          <ModelEmptyState title="No user data" description="No user-bearing rows landed in the current window." />
+        }
+      >
+        <ModelColumnChart data={props.data} metric="users" ariaLabel="Daily unique user chart" />
+      </Show>
+    </section>
+  )
+}
+
+function ModelColumnChart(props: { data: ModelUsagePoint[]; metric: "tokens" | "users"; ariaLabel: string }) {
+  const [activeIndex, setActiveIndex] = createSignal<number>()
+  const max = createMemo(() => Math.max(0, ...props.data.map((item) => modelUsageMetricValue(item, props.metric))) || 1)
+  const activePoint = createMemo(() => {
+    const index = activeIndex()
+    if (index === undefined) return undefined
+    return props.data[index]
+  })
+
+  return (
+    <div
+      data-component="model-usage-chart"
+      data-metric={props.metric}
+      data-dense-labels={isModelUsageDense(props.data.length) ? "true" : undefined}
+      role="img"
+      aria-label={props.ariaLabel}
+      style={{ "--model-usage-count": props.data.length } as JSX.CSSProperties}
+      onPointerLeave={(event) => {
+        if (event.pointerType === "touch") return
+        setActiveIndex(undefined)
+      }}
+    >
+      <div data-slot="model-usage-axis" aria-hidden="true">
+        <For each={props.data}>
+          {(point, index) => (
+            <div
+              data-active={activeIndex() === index() ? "true" : undefined}
+              data-label-hidden={isModelUsageLabelHidden(index(), props.data.length) ? "true" : undefined}
+            >
+              <span data-slot="model-usage-label">
+                <span data-slot="model-usage-total">{formatModelUsageValue(point, props.metric)}</span>
+                <span data-slot="model-usage-date">{point.date}</span>
+              </span>
+            </div>
+          )}
+        </For>
+      </div>
+      <div data-slot="model-usage-bars">
+        <For each={props.data}>
+          {(point, index) => (
+            <div
+              data-slot="model-usage-column"
+              role="button"
+              tabIndex={0}
+              aria-label={`${point.date} ${formatModelUsageValue(point, props.metric)} ${modelUsageLabel(props.metric)}`}
+              data-active={activeIndex() === index() ? "true" : undefined}
+              data-muted={activeIndex() !== undefined && activeIndex() !== index() ? "true" : undefined}
+              onPointerDown={(event) => {
+                if (event.pointerType !== "touch") return
+                setActiveIndex(index())
+              }}
+              onPointerEnter={() => setActiveIndex(index())}
+              onPointerMove={(event) => {
+                if (event.pointerType === "touch") return
+                setActiveIndex(index())
+              }}
+              onClick={() => setActiveIndex(index())}
+              onFocus={() => setActiveIndex(index())}
+              onBlur={() => setActiveIndex(undefined)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return
+                event.preventDefault()
+                setActiveIndex(index())
+              }}
+            >
+              <div
+                data-slot="model-usage-bar"
+                style={
+                  {
+                    "--model-usage-fill": `${modelUsageHeight(modelUsageMetricValue(point, props.metric), max())}%`,
+                  } as JSX.CSSProperties
+                }
+              />
+              <Show when={activeIndex() === index() && activePoint()}>
+                {(active) => (
+                  <div
+                    data-component="chart-tooltip"
+                    data-placement={index() > props.data.length * 0.62 ? "left" : "right"}
+                  >
+                    <strong>{active().date}</strong>
+                    <span>
+                      {formatModelUsageValue(active(), props.metric)} {modelUsageLabel(props.metric)}
+                    </span>
+                    <div data-slot="tooltip-divider" />
+                    <p>
+                      <span data-slot="tooltip-label">
+                        <i /> Daily {modelUsageLabel(props.metric)}
+                      </span>
+                      <b>{formatModelUsageValue(active(), props.metric)}</b>
+                    </p>
+                  </div>
+                )}
+              </Show>
+            </div>
+          )}
+        </For>
+      </div>
+    </div>
+  )
+}
+
+function modelUsageMetricValue(point: ModelUsagePoint, metric: "tokens" | "users") {
+  if (metric === "users") return point.users
+  return point.tokens
+}
+
+function formatModelUsageValue(point: ModelUsagePoint, metric: "tokens" | "users") {
+  if (metric === "users") return formatUsers(point.users)
+  return formatTokens(point.tokens)
+}
+
+function modelUsageLabel(metric: "tokens" | "users") {
+  if (metric === "users") return "users"
+  return "tokens"
 }
 
 function ModelEfficiencySection(props: { data: StatsModelData | null; catalog: ModelCatalogEntry | null }) {
@@ -833,6 +882,12 @@ function formatTokens(value: number) {
 
 function formatInteger(value: number) {
   return new Intl.NumberFormat("en").format(value)
+}
+
+function formatUsers(value: number) {
+  if (value >= 1_000_000) return `${trimNumber(value / 1_000_000, value >= 10_000_000 ? 0 : 1)}M`
+  if (value >= 1_000) return `${trimNumber(value / 1_000, value >= 10_000 ? 0 : 1)}K`
+  return formatInteger(Math.round(value))
 }
 
 function formatPercent(value: number) {
