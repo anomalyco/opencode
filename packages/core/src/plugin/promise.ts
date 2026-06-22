@@ -10,7 +10,7 @@ type HostRegistration = { readonly dispose: Effect.Effect<void> }
 
 /**
  * Adapts a Promise plugin into an Effect plugin so the existing Effect-only
- * loader (`PluginV2` / `PluginBoot`) can run it unchanged.
+ * loader (`PluginV2` / `PluginInternal`) can run it unchanged.
  *
  * Hook registrations created during the async `setup` attach to the plugin's
  * scope, so unloading the plugin disposes them. The captured fiber context
