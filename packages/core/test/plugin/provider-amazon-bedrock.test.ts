@@ -179,10 +179,7 @@ describe("AmazonBedrockPlugin", () => {
             "aisdk.sdk",
             {
               model: new ModelV2.Info({
-                ...ModelV2.Info.empty(
-                  ProviderV2.ID.amazonBedrock,
-                  ModelV2.ID.make("anthropic.claude-sonnet-4-5"),
-                ),
+                ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
                 api: {
                   id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"),
                   type: "aisdk",
@@ -389,10 +386,7 @@ describe("AmazonBedrockPlugin", () => {
         "aisdk.language",
         {
           model: new ModelV2.Info({
-            ...ModelV2.Info.empty(
-              ProviderV2.ID.amazonBedrock,
-              ModelV2.ID.make("openai.gpt-oss-safeguard-120b"),
-            ),
+            ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("openai.gpt-oss-safeguard-120b")),
             api: {
               id: ModelV2.ID.make("openai.gpt-oss-safeguard-120b"),
               type: "aisdk",
@@ -450,10 +444,7 @@ describe("AmazonBedrockPlugin", () => {
             "aisdk.sdk",
             {
               model: new ModelV2.Info({
-                ...ModelV2.Info.empty(
-                  ProviderV2.ID.amazonBedrock,
-                  ModelV2.ID.make("anthropic.claude-sonnet-4-5"),
-                ),
+                ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("anthropic.claude-sonnet-4-5")),
                 api: {
                   id: ModelV2.ID.make("anthropic.claude-sonnet-4-5"),
                   type: "aisdk",
@@ -515,10 +506,7 @@ describe("AmazonBedrockPlugin", () => {
         "aisdk.language",
         {
           model: new ModelV2.Info({
-            ...ModelV2.Info.empty(
-              ProviderV2.ID.amazonBedrock,
-              ModelV2.ID.make("global.anthropic.claude-sonnet-4-5"),
-            ),
+            ...ModelV2.Info.empty(ProviderV2.ID.amazonBedrock, ModelV2.ID.make("global.anthropic.claude-sonnet-4-5")),
             api: {
               id: ModelV2.ID.make("global.anthropic.claude-sonnet-4-5"),
               type: "aisdk",

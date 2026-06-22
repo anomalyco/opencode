@@ -120,10 +120,7 @@ describe("AzureCognitiveServicesPlugin", () => {
         "aisdk.language",
         {
           model: new ModelV2.Info({
-            ...ModelV2.Info.empty(
-              ProviderV2.ID.make("azure-cognitive-services"),
-              ModelV2.ID.make("deployment"),
-            ),
+            ...ModelV2.Info.empty(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("deployment")),
             api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
           }),
           sdk: fakeSelectorSdk(calls),
@@ -144,10 +141,7 @@ describe("AzureCognitiveServicesPlugin", () => {
         "aisdk.language",
         {
           model: new ModelV2.Info({
-            ...ModelV2.Info.empty(
-              ProviderV2.ID.make("azure-cognitive-services"),
-              ModelV2.ID.make("deployment"),
-            ),
+            ...ModelV2.Info.empty(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("deployment")),
             api: { id: ModelV2.ID.make("deployment"), type: "aisdk", package: "test-provider" },
           }),
           sdk: fakeSelectorSdk(calls),
@@ -197,10 +191,7 @@ describe("AzureCognitiveServicesPlugin", () => {
         "aisdk.language",
         {
           model: new ModelV2.Info({
-            ...ModelV2.Info.empty(
-              ProviderV2.ID.make("azure-cognitive-services"),
-              ModelV2.ID.make("chat-deployment"),
-            ),
+            ...ModelV2.Info.empty(ProviderV2.ID.make("azure-cognitive-services"), ModelV2.ID.make("chat-deployment")),
             api: { id: ModelV2.ID.make("chat-deployment"), type: "aisdk", package: "test-provider" },
           }),
           sdk: { chat: sdk.chat, languageModel: sdk.languageModel },

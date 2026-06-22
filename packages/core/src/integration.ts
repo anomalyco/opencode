@@ -352,11 +352,13 @@ export const locationLayer = Layer.effect(
     })
 
     const resolveConnections = (entry: Entry | undefined, saved: readonly Credential.Info[]) => {
-      const credentials = saved.map((credential) => ({
-        type: "credential" as const,
-        id: credential.id,
-        label: credential.label,
-      })).toReversed()
+      const credentials = saved
+        .map((credential) => ({
+          type: "credential" as const,
+          id: credential.id,
+          label: credential.label,
+        }))
+        .toReversed()
       const env = (entry?.methods ?? [])
         .filter((method) => method.type === "env")
         .flatMap((method) => method.names.filter((name) => process.env[name]))

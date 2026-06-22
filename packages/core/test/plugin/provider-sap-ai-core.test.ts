@@ -127,11 +127,7 @@ describe("SapAICorePlugin", () => {
           throw new Error("SAP AI Core should call the SDK directly")
         },
       })
-      const language = yield* plugin.trigger(
-        "aisdk.language",
-        { model: model("sap-ai-core"), sdk, options: {} },
-        {},
-      )
+      const language = yield* plugin.trigger("aisdk.language", { model: model("sap-ai-core"), sdk, options: {} }, {})
       expect(language.language as unknown).toEqual({ modelID: "sap-model", provider: "callable" })
     }),
   )

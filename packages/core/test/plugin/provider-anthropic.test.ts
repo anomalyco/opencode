@@ -64,10 +64,7 @@ describe("AnthropicPlugin", () => {
         "aisdk.sdk",
         {
           model: new ModelV2.Info({
-            ...ModelV2.Info.empty(
-              ProviderV2.ID.make("custom-anthropic"),
-              ModelV2.ID.make("claude-sonnet-4-5"),
-            ),
+            ...ModelV2.Info.empty(ProviderV2.ID.make("custom-anthropic"), ModelV2.ID.make("claude-sonnet-4-5")),
             api: { id: ModelV2.ID.make("claude-sonnet-4-5"), type: "aisdk", package: "@ai-sdk/anthropic" },
           }),
           package: "@ai-sdk/anthropic",

@@ -169,10 +169,7 @@ describe("GithubCopilotPlugin", () => {
         "aisdk.language",
         {
           model: new ModelV2.Info({
-            ...ModelV2.Info.empty(
-              ProviderV2.ID.make("github-copilot"),
-              ModelV2.ID.make("gpt-5-mini-2025-08-07"),
-            ),
+            ...ModelV2.Info.empty(ProviderV2.ID.make("github-copilot"), ModelV2.ID.make("gpt-5-mini-2025-08-07")),
             api: { id: ModelV2.ID.make("gpt-5-mini-2025-08-07"), type: "aisdk", package: "test-provider" },
           }),
           sdk: fakeSelectorSdk(calls),

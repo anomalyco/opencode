@@ -7,10 +7,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
-  Integration.locationLayer.pipe(
-    Layer.provideMerge(Credential.defaultLayer),
-    Layer.provideMerge(EventV2.defaultLayer),
-  ),
+  Integration.locationLayer.pipe(Layer.provideMerge(Credential.defaultLayer), Layer.provideMerge(EventV2.defaultLayer)),
 )
 
 describe("Integration", () => {

@@ -66,10 +66,7 @@ describe("GatewayPlugin", () => {
         "aisdk.sdk",
         {
           model: new ModelV2.Info({
-            ...ModelV2.Info.empty(
-              ProviderV2.ID.make("vercel"),
-              ModelV2.ID.make("anthropic/claude-sonnet-4"),
-            ),
+            ...ModelV2.Info.empty(ProviderV2.ID.make("vercel"), ModelV2.ID.make("anthropic/claude-sonnet-4")),
             api: {
               id: ModelV2.ID.make("anthropic/claude-sonnet-4"),
               type: "aisdk",
