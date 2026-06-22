@@ -20,7 +20,7 @@ export function DialogStatus() {
       const value = typeof item === "string" ? item : item[0]
       if (value.startsWith("file://")) {
         const path = fileURLToPath(value)
-        const parts = path.split("/")
+        const parts = path.replace(/\\/g, "/").split("/")
         const filename = parts.pop() || path
         if (!filename.includes(".")) return { name: filename }
         const basename = filename.split(".")[0]
