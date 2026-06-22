@@ -1,5 +1,6 @@
 [data-component="markdown"] {
-  --markdown-inline-code-color: var(--v2-blue-800);
+  --markdown-inline-code-path-color: var(--v2-blue-600);
+  --markdown-inline-code-bg-mix: 5%;
 
   /* Reset & Base Typography */
   min-width: 0;
@@ -114,7 +115,7 @@
 
   /* Blockquotes */
   blockquote {
-    border-left: 2px solid var(--v2-border-border-base);
+    border-left: 0.5px solid var(--v2-border-border-base);
     margin: 1.5rem 0;
     padding-left: 0.5rem;
     color: var(--v2-text-text-muted);
@@ -162,7 +163,7 @@
       background: var(--surface-float-base);
       color: var(--text-invert-strong);
       padding: 2px 8px;
-      border: 1px solid var(--v2-border-border-base, rgba(0, 0, 0, 0.07));
+      border: 0.5px solid var(--v2-border-border-base, rgba(0, 0, 0, 0.07));
       box-shadow: var(--shadow-md);
 
       pointer-events: none;
@@ -187,7 +188,7 @@
 
   [data-slot="markdown-copy-button"][data-variant="secondary"] {
     box-shadow: none;
-    border: 1px solid var(--v2-border-border-base);
+    border: 0.5px solid var(--v2-border-border-base);
   }
 
   [data-slot="markdown-copy-button"][data-variant="secondary"] [data-slot="icon-svg"] {
@@ -224,14 +225,18 @@
   :where(p, li, blockquote, a) > code {
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
-    color: var(--markdown-inline-code-color);
+    color: var(--v2-text-text-base);
     font-weight: var(--font-weight-medium);
   }
 
   :where(p, li, blockquote, a) > code:not([data-inline-code-kind="path"]) {
-    padding: 2px 4px;
-    border-radius: 6px;
-    background: color-mix(in oklch, var(--markdown-inline-code-color) 5%, transparent);
+    padding: 1px 4px;
+    border-radius: 4px;
+    background: color-mix(in oklch, var(--v2-text-text-base) var(--markdown-inline-code-bg-mix), transparent);
+  }
+
+  :where(p, li, blockquote, a) > code[data-inline-code-kind="path"] {
+    color: var(--markdown-inline-code-path-color);
   }
 
   /* Tables */
@@ -247,7 +252,7 @@
   th,
   td {
     /* Minimal borders for structure, matching TUI "lines" roughly but keeping it web-clean */
-    border-bottom: 1px solid var(--v2-border-border-muted);
+    border-bottom: 0.5px solid var(--v2-border-border-muted);
     padding: 12px;
     text-align: left;
     vertical-align: top;
@@ -256,7 +261,7 @@
   th {
     color: var(--v2-text-text-base);
     font-weight: var(--font-weight-medium);
-    border-bottom: 1px solid var(--v2-border-border-base);
+    border-bottom: 0.5px solid var(--v2-border-border-base);
   }
 
   /* Images */
@@ -270,7 +275,8 @@
 }
 
 :root[data-color-scheme="dark"] [data-component="markdown"] {
-  --markdown-inline-code-color: var(--v2-blue-400);
+  --markdown-inline-code-path-color: var(--v2-blue-400);
+  --markdown-inline-code-bg-mix: 10%;
 }
 
 [data-component="markdown"] a.external-link:hover > code {
