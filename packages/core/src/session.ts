@@ -330,13 +330,18 @@ export const layer = Layer.effect(
             const messageID = input.id ?? SessionMessage.ID.create()
             const delivery = input.delivery ?? "steer"
             const expected = { sessionID: input.sessionID, messageID, prompt: input.prompt, delivery }
-            const admitted = yield* SessionInput.admit(db, {
+            const admitted = yield* SessionInput.admit(db, events, {
               id: messageID,
               sessionID: input.sessionID,
               prompt: input.prompt,
               delivery,
-            })
-            if (admitted === undefined) return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
+            }).pipe(
+              Effect.catchDefect((defect) =>
+                defect instanceof SessionInput.LifecycleConflict
+                  ? new PromptConflictError({ sessionID: input.sessionID, messageID })
+                  : Effect.die(defect),
+              ),
+            )
             if (!SessionInput.equivalent(admitted, expected))
               return yield* new PromptConflictError({ sessionID: input.sessionID, messageID })
             if (input.resume !== false) yield* execution.wake(admitted.sessionID)

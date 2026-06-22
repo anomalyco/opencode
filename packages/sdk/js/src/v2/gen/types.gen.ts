@@ -19,6 +19,7 @@ export type Event =
   | EventSessionNextModelSwitched
   | EventSessionNextMoved
   | EventSessionNextPrompted
+  | EventSessionNextPromptAdmitted
   | EventSessionNextContextUpdated
   | EventSessionNextSynthetic
   | EventSessionNextShellStarted
@@ -853,6 +854,17 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.next.prompt.admitted"
+        properties: {
+          timestamp: number
+          sessionID: string
+          messageID: string
+          prompt: Prompt
+          delivery: "steer" | "queue"
+        }
+      }
+    | {
+        id: string
         type: "session.next.context.updated"
         properties: {
           timestamp: number
@@ -1603,6 +1615,7 @@ export type GlobalEvent = {
     | SyncEventSessionNextModelSwitched
     | SyncEventSessionNextMoved
     | SyncEventSessionNextPrompted
+    | SyncEventSessionNextPromptAdmitted
     | SyncEventSessionNextContextUpdated
     | SyncEventSessionNextSynthetic
     | SyncEventSessionNextShellStarted
@@ -2743,6 +2756,7 @@ export type V2Event =
   | V2EventSessionNextModelSwitched
   | V2EventSessionNextMoved
   | V2EventSessionNextPrompted
+  | V2EventSessionNextPromptAdmitted
   | V2EventSessionNextContextUpdated
   | V2EventSessionNextSynthetic
   | V2EventSessionNextShellStarted
@@ -3161,6 +3175,24 @@ export type SyncEventSessionNextPrompted = {
   id: string
   syncEvent: {
     type: "session.next.prompted.1"
+    id: string
+    seq: number
+    aggregateID: string
+    data: {
+      timestamp: number
+      sessionID: string
+      messageID: string
+      prompt: Prompt
+      delivery: "steer" | "queue"
+    }
+  }
+}
+
+export type SyncEventSessionNextPromptAdmitted = {
+  type: "sync"
+  id: string
+  syncEvent: {
+    type: "session.next.prompt.admitted.1"
     id: string
     seq: number
     aggregateID: string
@@ -3688,9 +3720,6 @@ export type SessionV2Info = {
 }
 
 export type SessionInputAdmitted = {
-  /**
-   * Session-local inbox order; not an Event cursor
-   */
   admittedSeq: number
   id: string
   sessionID: string
@@ -4432,6 +4461,27 @@ export type V2EventSessionNextPrompted = {
   }
   location?: LocationRef
   type: "session.next.prompted"
+  data: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    prompt: Prompt
+    delivery: "steer" | "queue"
+  }
+}
+
+export type V2EventSessionNextPromptAdmitted = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  type: "session.next.prompt.admitted"
   data: {
     timestamp: number
     sessionID: string
@@ -6044,6 +6094,18 @@ export type EventSessionNextMoved = {
 export type EventSessionNextPrompted = {
   id: string
   type: "session.next.prompted"
+  properties: {
+    timestamp: number
+    sessionID: string
+    messageID: string
+    prompt: Prompt
+    delivery: "steer" | "queue"
+  }
+}
+
+export type EventSessionNextPromptAdmitted = {
+  id: string
+  type: "session.next.prompt.admitted"
   properties: {
     timestamp: number
     sessionID: string

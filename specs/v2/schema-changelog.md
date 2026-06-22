@@ -1,9 +1,9 @@
 # V2 Schema Changelog
 
-## 2026-06-22: Simplify Session Input Admission
+## 2026-06-22: Simplify Session Input Promotion
 
-- Admit prompts directly into the durable `session_input` inbox without adding invisible work to the Session event stream.
-- Replace `session.next.prompt.admitted.1` and `session.next.prompt.promoted.1` with the existing `session.next.prompted.1` event when input becomes model-visible.
+- Keep `session.next.prompt.admitted.1` as the durable, client-visible record of pending Session input.
+- Replace `session.next.prompt.promoted.1` with the existing `session.next.prompted.1` event when input becomes model-visible.
 - Preserve the prompt endpoint, admission receipt, idempotency, steer/queue ordering, and atomic user-message projection.
 - Reset experimental V2 events, projections, inputs, Context Epochs, and synchronized workspace state while preserving canonical V1 `session`, `message`, and `part` rows.
 

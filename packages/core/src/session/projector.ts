@@ -364,6 +364,19 @@ export const layer = Layer.effectDiscard(
         )
       }),
     )
+    yield* events.project(SessionEvent.PromptAdmitted, (event) =>
+      Effect.gen(function* () {
+        if (event.durable === undefined) return yield* Effect.die("Durable Session event is missing aggregate sequence")
+        yield* SessionInput.projectAdmitted(db, {
+          admittedSeq: event.durable.seq,
+          id: event.data.messageID,
+          sessionID: event.data.sessionID,
+          prompt: event.data.prompt,
+          delivery: event.data.delivery,
+          timeCreated: event.data.timestamp,
+        })
+      }),
+    )
     yield* events.project(SessionEvent.ContextUpdated, (event) => run(db, event))
     yield* events.project(SessionEvent.Synthetic, (event) => run(db, event))
     yield* events.project(SessionEvent.Shell.Started, (event) => run(db, event))

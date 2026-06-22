@@ -168,7 +168,7 @@ describe("SessionV2.prompt", () => {
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
       const { db } = yield* Database.Service
-      const fiber = yield* session.events({ sessionID }).pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped)
+      const fiber = yield* session.events({ sessionID }).pipe(Stream.take(4), Stream.runCollect, Effect.forkScoped)
       yield* Effect.yieldNow
 
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
@@ -177,8 +177,10 @@ describe("SessionV2.prompt", () => {
       const streamed = Array.from(yield* Fiber.join(fiber))
 
       expect(streamed.map((event) => [event.durable?.seq, event.type])).toEqual([
-        [0, "session.next.prompted"],
-        [1, "session.next.prompted"],
+        [0, "session.next.prompt.admitted"],
+        [1, "session.next.prompt.admitted"],
+        [2, "session.next.prompted"],
+        [3, "session.next.prompted"],
       ])
       expect(
         Array.from(
@@ -186,7 +188,7 @@ describe("SessionV2.prompt", () => {
             .events({ sessionID, after: streamed[0]!.durable?.seq })
             .pipe(Stream.take(1), Stream.runCollect),
         ).map((event) => [event.durable?.seq, event.type]),
-      ).toEqual([[1, "session.next.prompted"]])
+      ).toEqual([[1, "session.next.prompt.admitted"]])
     }),
   )
 
@@ -332,7 +334,7 @@ describe("SessionV2.prompt", () => {
       expect(messages[1]).toEqual(messages[0])
       expect(yield* session.messages({ sessionID })).toEqual([])
       expect(yield* admittedCount).toBe(1)
-      expect(yield* eventCount(EventV2.versionedType(SessionEvent.Prompted.type, 1))).toBe(0)
+      expect(yield* eventCount(EventV2.versionedType(SessionEvent.PromptAdmitted.type, 1))).toBe(1)
     }),
   )
 
@@ -353,7 +355,7 @@ describe("SessionV2.prompt", () => {
       )
 
       expect(yield* eventCount(EventV2.versionedType(SessionEvent.Prompted.type, 1))).toBe(1)
-      expect(yield* admitted(messageID)).toMatchObject({ promotedSeq: 0 })
+      expect(yield* admitted(messageID)).toMatchObject({ promotedSeq: 1 })
       expect(yield* session.messages({ sessionID })).toMatchObject([
         { id: messageID, type: "user", text: "Promote once" },
       ])
@@ -367,7 +369,7 @@ describe("SessionV2.prompt", () => {
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
       const first = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Before cutoff" }), resume: false })
-      const cutoff = yield* SessionInput.latestAdmittedSeq(db, sessionID)
+      const cutoff = first.admittedSeq
       const second = yield* session.prompt({ sessionID, prompt: new Prompt({ text: "After cutoff" }), resume: false })
 
       yield* SessionInput.promoteSteers(db, events, sessionID, cutoff)
@@ -377,11 +379,12 @@ describe("SessionV2.prompt", () => {
     }),
   )
 
-  it.effect("keeps pending inbox input outside the replayable event stream", () =>
+  it.effect("reprojects pending inbox input without scheduling execution", () =>
     Effect.gen(function* () {
       yield* setup
       const { db } = yield* Database.Service
       const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
       wakeCalls.length = 0
       yield* session.prompt({ id: messageID, sessionID, prompt: new Prompt({ text: "Replay pending" }), resume: false })
       const recorded = yield* db
@@ -391,7 +394,23 @@ describe("SessionV2.prompt", () => {
         .all()
         .pipe(Effect.orDie)
 
-      expect(recorded).toEqual([])
+      yield* events.remove(sessionID)
+      yield* db.delete(SessionInputTable).where(eq(SessionInputTable.session_id, sessionID)).run().pipe(Effect.orDie)
+      yield* db
+        .delete(SessionMessageTable)
+        .where(eq(SessionMessageTable.session_id, sessionID))
+        .run()
+        .pipe(Effect.orDie)
+      yield* events.replayAll(
+        recorded.map((event) => ({
+          id: event.id,
+          aggregateID: event.aggregate_id,
+          seq: event.seq,
+          type: event.type,
+          data: event.data,
+        })),
+      )
+
       expect(yield* admitted(messageID)).toMatchObject({ id: messageID, prompt: { text: "Replay pending" } })
       expect(yield* session.messages({ sessionID })).toEqual([])
       expect(wakeCalls).toEqual([])
@@ -467,6 +486,27 @@ describe("SessionV2.prompt", () => {
         .pipe(Effect.flip)
 
       expect(failure).toMatchObject({ _tag: "Session.PromptConflictError", sessionID: other, messageID })
+    }),
+  )
+
+  it.effect("rejects a prompt ID already used by visible Session history", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      yield* events.publish(SessionEvent.Synthetic, {
+        sessionID,
+        messageID,
+        timestamp: yield* DateTime.now,
+        text: "Existing history",
+      })
+
+      const failure = yield* session
+        .prompt({ id: messageID, sessionID, prompt: new Prompt({ text: "Conflicting prompt" }), resume: false })
+        .pipe(Effect.flip)
+
+      expect(failure).toMatchObject({ _tag: "Session.PromptConflictError", sessionID, messageID })
+      expect(yield* admitted(messageID)).toBeUndefined()
     }),
   )
 

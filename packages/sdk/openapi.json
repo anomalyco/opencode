@@ -14684,6 +14684,9 @@
             "$ref": "#/components/schemas/EventSessionNextPrompted"
           },
           {
+            "$ref": "#/components/schemas/EventSessionNextPromptAdmitted"
+          },
+          {
             "$ref": "#/components/schemas/EventSessionNextContextUpdated"
           },
           {
@@ -17179,6 +17182,46 @@
                   "type": {
                     "type": "string",
                     "enum": ["session.next.prompted"]
+                  },
+                  "properties": {
+                    "type": "object",
+                    "properties": {
+                      "timestamp": {
+                        "type": "number"
+                      },
+                      "sessionID": {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      "messageID": {
+                        "type": "string",
+                        "pattern": "^msg_"
+                      },
+                      "prompt": {
+                        "$ref": "#/components/schemas/Prompt"
+                      },
+                      "delivery": {
+                        "type": "string",
+                        "enum": ["steer", "queue"]
+                      }
+                    },
+                    "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+                    "additionalProperties": false
+                  }
+                },
+                "required": ["id", "type", "properties"],
+                "additionalProperties": false
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "pattern": "^evt_"
+                  },
+                  "type": {
+                    "type": "string",
+                    "enum": ["session.next.prompt.admitted"]
                   },
                   "properties": {
                     "type": "object",
@@ -19743,6 +19786,9 @@
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextPrompted"
+              },
+              {
+                "$ref": "#/components/schemas/SyncEventSessionNextPromptAdmitted"
               },
               {
                 "$ref": "#/components/schemas/SyncEventSessionNextContextUpdated"
@@ -22980,6 +23026,9 @@
             "$ref": "#/components/schemas/V2EventSessionNextPrompted"
           },
           {
+            "$ref": "#/components/schemas/V2EventSessionNextPromptAdmitted"
+          },
+          {
             "$ref": "#/components/schemas/V2EventSessionNextContextUpdated"
           },
           {
@@ -24198,6 +24247,67 @@
               "type": {
                 "type": "string",
                 "enum": ["session.next.prompted.1"]
+              },
+              "id": {
+                "type": "string",
+                "pattern": "^evt_"
+              },
+              "seq": {
+                "type": "number"
+              },
+              "aggregateID": {
+                "type": "string"
+              },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "timestamp": {
+                    "type": "number"
+                  },
+                  "sessionID": {
+                    "type": "string",
+                    "pattern": "^ses"
+                  },
+                  "messageID": {
+                    "type": "string",
+                    "pattern": "^msg_"
+                  },
+                  "prompt": {
+                    "$ref": "#/components/schemas/Prompt"
+                  },
+                  "delivery": {
+                    "type": "string",
+                    "enum": ["steer", "queue"]
+                  }
+                },
+                "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+                "additionalProperties": false
+              }
+            },
+            "required": ["type", "id", "seq", "aggregateID", "data"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["type", "id", "syncEvent"],
+        "additionalProperties": false
+      },
+      "SyncEventSessionNextPromptAdmitted": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["sync"]
+          },
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "syncEvent": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session.next.prompt.admitted.1"]
               },
               "id": {
                 "type": "string",
@@ -25872,8 +25982,7 @@
         "properties": {
           "admittedSeq": {
             "type": "integer",
-            "minimum": 0,
-            "description": "Session-local inbox order; not an Event cursor"
+            "minimum": 0
           },
           "id": {
             "type": "string",
@@ -28313,6 +28422,68 @@
           "type": {
             "type": "string",
             "enum": ["session.next.prompted"]
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "prompt": {
+                "$ref": "#/components/schemas/Prompt"
+              },
+              "delivery": {
+                "type": "string",
+                "enum": ["steer", "queue"]
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "data"],
+        "additionalProperties": false
+      },
+      "V2EventSessionNextPromptAdmitted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "durable": {
+            "type": "object",
+            "properties": {
+              "aggregateID": {
+                "type": "string"
+              },
+              "seq": {
+                "type": "integer"
+              },
+              "version": {
+                "type": "integer"
+              }
+            },
+            "required": ["aggregateID", "seq", "version"],
+            "additionalProperties": false
+          },
+          "location": {
+            "$ref": "#/components/schemas/LocationRef"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.prompt.admitted"]
           },
           "data": {
             "type": "object",
@@ -32872,6 +33043,46 @@
           "type": {
             "type": "string",
             "enum": ["session.next.prompted"]
+          },
+          "properties": {
+            "type": "object",
+            "properties": {
+              "timestamp": {
+                "type": "number"
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              },
+              "messageID": {
+                "type": "string",
+                "pattern": "^msg_"
+              },
+              "prompt": {
+                "$ref": "#/components/schemas/Prompt"
+              },
+              "delivery": {
+                "type": "string",
+                "enum": ["steer", "queue"]
+              }
+            },
+            "required": ["timestamp", "sessionID", "messageID", "prompt", "delivery"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "type", "properties"],
+        "additionalProperties": false
+      },
+      "EventSessionNextPromptAdmitted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^evt_"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["session.next.prompt.admitted"]
           },
           "properties": {
             "type": "object",

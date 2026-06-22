@@ -162,6 +162,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
           })
           break
         }
+        case "session.next.prompt.admitted":
+          break
         case "session.next.context.updated":
           message.update(event.data.sessionID, (draft) => {
             message.prepend(draft, {

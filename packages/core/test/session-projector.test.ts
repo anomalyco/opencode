@@ -142,7 +142,7 @@ describe("SessionProjector", () => {
         .pipe(Effect.orDie)
       const events = yield* EventV2.Service
       const id = SessionMessage.ID.make("msg_admitted")
-      const admitted = yield* SessionInput.admit(db, {
+      const admitted = yield* SessionInput.admit(db, events, {
         id,
         sessionID,
         prompt: new Prompt({ text: "promote me" }),

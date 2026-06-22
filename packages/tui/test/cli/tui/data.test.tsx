@@ -370,7 +370,7 @@ test("settles pending tools when a live failure arrives", async () => {
   }
 })
 
-test("renders a prompted user message", async () => {
+test("renders admitted prompts only after they become model-visible", async () => {
   const events = createEventSource()
   const calls = createFetch(undefined, events)
   let sync!: ReturnType<typeof useData>
@@ -399,6 +399,19 @@ test("renders a prompted user message", async () => {
 
   try {
     await mounted
+    emitEvent(events, {
+      id: "evt_admitted_1",
+      type: "session.next.prompt.admitted",
+      properties: {
+        sessionID: "session-1",
+        messageID: "msg_user_1",
+        timestamp: 0,
+        prompt: { text: "hello" },
+        delivery: "steer",
+      },
+    })
+    expect(sync.session.message.list("session-1") ?? []).toEqual([])
+
     emitEvent(events, {
       id: "evt_prompted_1",
       type: "session.next.prompted",

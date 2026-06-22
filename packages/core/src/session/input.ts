@@ -1,6 +1,6 @@
 export * as SessionInput from "./input"
 
-import { and, asc, eq, isNull, lte, max } from "drizzle-orm"
+import { and, asc, eq, isNull, lte } from "drizzle-orm"
 import { DateTime, Effect, Schema } from "effect"
 import type { Database } from "../database/database"
 import type { EventV2 } from "../event"
@@ -18,7 +18,7 @@ export const Delivery = Schema.Literals(["steer", "queue"])
 export type Delivery = typeof Delivery.Type
 
 export class Admitted extends Schema.Class<Admitted>("SessionInput.Admitted")({
-  admittedSeq: NonNegativeInt.annotate({ description: "Session-local inbox order; not an Event cursor" }),
+  admittedSeq: NonNegativeInt,
   id: SessionMessage.ID,
   sessionID: SessionSchema.ID,
   prompt: Prompt,
@@ -52,6 +52,7 @@ export class LifecycleConflict extends Schema.TaggedErrorClass<LifecycleConflict
 
 export const admit = Effect.fn("SessionInput.admit")(function* (
   db: DatabaseService,
+  events: EventV2.Interface,
   input: {
     readonly id: SessionMessage.ID
     readonly sessionID: SessionSchema.ID
@@ -59,60 +60,71 @@ export const admit = Effect.fn("SessionInput.admit")(function* (
     readonly delivery: Delivery
   },
 ) {
-  return yield* db
-    .transaction(
-      (tx) =>
-        Effect.gen(function* () {
-          const existing = yield* tx
-            .select()
-            .from(SessionInputTable)
-            .where(eq(SessionInputTable.id, input.id))
-            .get()
-            .pipe(Effect.orDie)
-          if (existing !== undefined) return fromRow(existing)
-          const message = yield* tx
-            .select({ id: SessionMessageTable.id })
-            .from(SessionMessageTable)
-            .where(eq(SessionMessageTable.id, input.id))
-            .get()
-            .pipe(Effect.orDie)
-          if (message !== undefined) return undefined
-          const latest = yield* tx
-            .select({ seq: max(SessionInputTable.admitted_seq) })
-            .from(SessionInputTable)
-            .where(eq(SessionInputTable.session_id, input.sessionID))
-            .get()
-            .pipe(Effect.orDie)
-          const row = yield* tx
-            .insert(SessionInputTable)
-            .values({
-              id: input.id,
-              session_id: input.sessionID,
-              prompt: encodePrompt(input.prompt),
-              delivery: input.delivery,
-              admitted_seq: (latest?.seq ?? -1) + 1,
-            })
-            .returning()
-            .get()
-            .pipe(Effect.orDie)
-          return fromRow(row)
-        }),
-      { behavior: "immediate" },
+  const existing = yield* find(db, input.id)
+  if (existing !== undefined) return existing
+  const timestamp = yield* DateTime.now
+  return yield* events
+    .publish(SessionEvent.PromptAdmitted, {
+      messageID: input.id,
+      sessionID: input.sessionID,
+      timestamp,
+      prompt: input.prompt,
+      delivery: input.delivery,
+    })
+    .pipe(
+      Effect.flatMap((event) =>
+        event.durable === undefined
+          ? Effect.die("Prompt admission event is missing aggregate sequence")
+          : Effect.succeed(
+              new Admitted({
+                admittedSeq: event.durable.seq,
+                id: input.id,
+                sessionID: input.sessionID,
+                prompt: input.prompt,
+                delivery: input.delivery,
+                timeCreated: timestamp,
+              }),
+            ),
+      ),
+      Effect.catchDefect((defect) =>
+        find(db, input.id).pipe(Effect.flatMap((stored) => (stored ? Effect.succeed(stored) : Effect.die(defect)))),
+      ),
     )
-    .pipe(Effect.orDie)
 })
 
-export const latestAdmittedSeq = Effect.fn("SessionInput.latestAdmittedSeq")(function* (
+export const projectAdmitted = Effect.fn("SessionInput.projectAdmitted")(function* (
   db: DatabaseService,
-  sessionID: SessionSchema.ID,
+  input: {
+    readonly admittedSeq: number
+    readonly id: SessionMessage.ID
+    readonly sessionID: SessionSchema.ID
+    readonly prompt: Prompt
+    readonly delivery: Delivery
+    readonly timeCreated: DateTime.Utc
+  },
 ) {
-  const row = yield* db
-    .select({ seq: max(SessionInputTable.admitted_seq) })
-    .from(SessionInputTable)
-    .where(eq(SessionInputTable.session_id, sessionID))
+  const message = yield* db
+    .select({ id: SessionMessageTable.id })
+    .from(SessionMessageTable)
+    .where(eq(SessionMessageTable.id, input.id))
     .get()
     .pipe(Effect.orDie)
-  return row?.seq ?? -1
+  if (message !== undefined) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
+  const stored = yield* db
+    .insert(SessionInputTable)
+    .values({
+      id: input.id,
+      session_id: input.sessionID,
+      admitted_seq: input.admittedSeq,
+      prompt: encodePrompt(input.prompt),
+      delivery: input.delivery,
+      time_created: DateTime.toEpochMillis(input.timeCreated),
+    })
+    .onConflictDoNothing()
+    .returning({ id: SessionInputTable.id })
+    .get()
+    .pipe(Effect.orDie)
+  if (!stored) return yield* Effect.die(new LifecycleConflict({ id: input.id }))
 })
 
 export const projectPrompted = Effect.fn("SessionInput.projectPrompted")(function* (
@@ -152,7 +164,6 @@ export const projectPrompted = Effect.fn("SessionInput.projectPrompted")(functio
     return toMessage(stored)
   }
 
-  const admittedSeq = (yield* latestAdmittedSeq(db, input.sessionID)) + 1
   const inserted = yield* db
     .insert(SessionInputTable)
     .values({
@@ -160,7 +171,7 @@ export const projectPrompted = Effect.fn("SessionInput.projectPrompted")(functio
       session_id: input.sessionID,
       prompt: encodePrompt(input.prompt),
       delivery: input.delivery,
-      admitted_seq: admittedSeq,
+      admitted_seq: input.promotedSeq,
       promoted_seq: input.promotedSeq,
       time_created: DateTime.toEpochMillis(input.timeCreated),
     })

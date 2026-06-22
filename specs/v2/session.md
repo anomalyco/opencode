@@ -27,9 +27,9 @@ sessions.interrupt(sessionID)
   -> idle or missing Session is a no-op
 ```
 
-`session_input` is the durable admission inbox. Admission is a direct idempotent database transaction and does not create a transcript event. Admitted inputs remain outside model-visible Session history until the serialized runner publishes `Prompted`. Its projector atomically writes the visible user message and marks the inbox row promoted in the same event transaction. The V1-to-V2 shadow bridge publishes the same `Prompted` event for already-visible V1 prompts.
+`session_input` is the durable admission inbox. `PromptAdmitted` records and projects accepted input so pending queue state can be replayed, replicated, and observed by clients. Admitted inputs remain outside model-visible Session history until the serialized runner publishes `Prompted`. Its projector atomically writes the visible user message and marks the inbox row promoted in the same event transaction. The V1-to-V2 shadow bridge publishes the same `Prompted` event for already-visible V1 prompts.
 
-`admittedSeq` orders inputs within one Session inbox. It is not an EventV2 cursor and may be synthesized locally when replay reconstructs a visible prompt.
+`admittedSeq` is the durable Session event sequence of `PromptAdmitted`. Clients may use the admission event to represent queued input before `Prompted` makes it part of visible conversation history.
 
 Execution routing starts from only the Session ID:
 
