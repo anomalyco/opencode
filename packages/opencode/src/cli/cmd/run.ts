@@ -680,6 +680,9 @@ export const RunCommand = effectCmd({
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
           let error: string | undefined
+          // Track child session IDs spawned by the task tool so their events
+          // can be forwarded to the parent NDJSON stream.
+          const childSessionIDs = new Set<string>()
 
           for await (const event of events.stream) {
             if (
@@ -695,9 +698,33 @@ export const RunCommand = effectCmd({
               toggles.set("start", true)
             }
 
+            // Forward streaming token deltas from child sessions.
+            if (event.type === "message.part.delta") {
+              if (childSessionIDs.has(event.properties.sessionID)) {
+                emit("subtask_delta", {
+                  childSessionID: event.properties.sessionID,
+                  partID: event.properties.partID,
+                  delta: event.properties.delta,
+                })
+              }
+            }
+
             if (event.type === "message.part.updated") {
               const part = event.properties.part
-              if (part.sessionID !== sessionID) continue
+
+              // Register child session ID when a task tool starts running.
+              if (part.type === "tool" && part.tool === "task" && part.state.status === "running") {
+                const meta = (part.state as { metadata?: { sessionId?: string } }).metadata
+                if (meta?.sessionId) childSessionIDs.add(meta.sessionId)
+              }
+
+              // Forward completed/updated parts from child sessions.
+              if (part.sessionID !== sessionID) {
+                if (childSessionIDs.has(part.sessionID)) {
+                  emit("subtask_event", { childSessionID: part.sessionID, part })
+                }
+                continue
+              }
 
               if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
                 if (emit("tool_use", { part })) continue
