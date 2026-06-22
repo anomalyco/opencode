@@ -126,10 +126,7 @@ export interface Interface {
     sessionID: SessionSchema.ID
     after?: number
   }) => Stream.Stream<SessionEvent.DurableEvent, NotFoundError>
-  readonly switchAgent: (input: {
-    sessionID: SessionSchema.ID
-    agent: string
-  }) => Effect.Effect<void, NotFoundError>
+  readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: string }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: {
     sessionID: SessionSchema.ID
     model: ModelV2.Ref
