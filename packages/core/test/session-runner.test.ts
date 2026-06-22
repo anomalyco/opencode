@@ -890,7 +890,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("composes selected-agent skill guidance and replaces it after an agent switch", () =>
+  it.effect("updates selected-agent skill guidance after an agent switch", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -913,12 +913,19 @@ describe("SessionRunnerLLM", () => {
 
       expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
         ["Initial context\n\nBuild skills"],
-        ["Initial context\n\nReviewer skills"],
+        ["Initial context\n\nBuild skills"],
       ])
+      expect(
+        requests[1]?.messages.some(
+          (message) =>
+            message.role === "system" &&
+            message.content.some((part) => part.type === "text" && part.text.includes("Reviewer skills")),
+        ),
+      ).toBe(true)
     }),
   )
 
-  it.effect("retries first-epoch preparation when the selected agent changes during observation", () =>
+  it.effect("keeps the sampled agent when selection changes during observation", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -945,7 +952,7 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
-        ["Initial context\n\nReviewer skills"],
+        ["Initial context\n\nBuild skills"],
       ])
     }),
   )
@@ -986,12 +993,11 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("retries an agent switch before the final provider-dispatch boundary", () =>
+  it.effect("keeps the sampled agent when selection changes during model resolution", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
-      const { db } = yield* Database.Service
       skillBaselines.set(AgentV2.ID.make("build"), "Build skills")
       skillBaselines.set(AgentV2.ID.make("reviewer"), "Reviewer skills")
       let switched = false
@@ -1013,20 +1019,12 @@ describe("SessionRunnerLLM", () => {
       response = []
       yield* session.resume(sessionID)
       expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
-        ["Initial context\n\nReviewer skills"],
+        ["Initial context\n\nBuild skills"],
       ])
-      expect(
-        yield* db
-          .select({ replacementSeq: SessionContextEpochTable.replacement_seq })
-          .from(SessionContextEpochTable)
-          .where(eq(SessionContextEpochTable.session_id, sessionID))
-          .get()
-          .pipe(Effect.orDie),
-      ).toEqual({ replacementSeq: null })
     }),
   )
 
-  it.effect("retries a model switch before the final provider-dispatch boundary", () =>
+  it.effect("keeps the sampled model when selection changes during model resolution", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -1049,17 +1047,16 @@ describe("SessionRunnerLLM", () => {
       requests.length = 0
       response = []
       yield* session.resume(sessionID)
-      expect(requests.map((request) => request.model)).toEqual([replacementModel])
+      expect(requests.map((request) => request.model)).toEqual([model])
       expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([["Initial context"]])
     }),
   )
 
-  it.effect("fences an unchanged epoch read across an agent ABA replacement request", () =>
+  it.effect("keeps one turn across an agent ABA selection change", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
       const events = yield* EventV2.Service
-      const { db } = yield* Database.Service
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
       response = []
       yield* session.resume(sessionID)
@@ -1092,99 +1089,6 @@ describe("SessionRunnerLLM", () => {
       yield* session.resume(sessionID)
 
       expect(requests).toHaveLength(1)
-      expect(
-        yield* db
-          .select({ replacementSeq: SessionContextEpochTable.replacement_seq })
-          .from(SessionContextEpochTable)
-          .where(eq(SessionContextEpochTable.session_id, sessionID))
-          .get()
-          .pipe(Effect.orDie),
-      ).toEqual({ replacementSeq: null })
-    }),
-  )
-
-  it.effect("rejects stale agent guidance when committing an existing-epoch replacement", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
-      const { db } = yield* Database.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
-      response = []
-      yield* session.resume(sessionID)
-      yield* events.publish(SessionEvent.AgentSwitched, {
-        sessionID,
-        messageID: SessionMessage.ID.create(),
-        timestamp: DateTime.makeUnsafe(1),
-        agent: AgentV2.ID.make("reviewer"),
-      })
-      const context = (text: string) =>
-        Effect.succeed(
-          SystemContext.make({
-            key: systemContextKey,
-            codec: Schema.toCodecJson(Schema.String),
-            load: Effect.succeed(text),
-            baseline: String,
-            update: (_previous, current) => current,
-          }),
-        )
-      const location = (yield* session.get(sessionID)).location
-
-      expect(
-        yield* SessionContextEpoch.prepare(
-          db,
-          events,
-          context("Stale build context"),
-          sessionID,
-          location,
-          AgentV2.defaultID,
-        ).pipe(Effect.catchDefect(Effect.succeed)),
-      ).toBeInstanceOf(SessionContextEpoch.AgentMismatch)
-
-      expect(
-        yield* SessionContextEpoch.prepare(
-          db,
-          events,
-          context("Reviewer context"),
-          sessionID,
-          location,
-          AgentV2.ID.make("reviewer"),
-        ),
-      ).toMatchObject({ baseline: "Reviewer context" })
-    }),
-  )
-
-  it.effect("blocks a cross-agent provider turn while replacement context is unavailable", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
-      skillBaselines.set(AgentV2.defaultID, "Build skills")
-      skillBaselines.set(AgentV2.ID.make("reviewer"), "Reviewer skills")
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
-      response = []
-      yield* session.resume(sessionID)
-      yield* events.publish(SessionEvent.AgentSwitched, {
-        sessionID,
-        messageID: SessionMessage.ID.create(),
-        timestamp: DateTime.makeUnsafe(1),
-        agent: AgentV2.ID.make("reviewer"),
-      })
-      systemUnavailable = true
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
-
-      requests.length = 0
-      const blocked = yield* session.resume(sessionID).pipe(Effect.exit)
-      expect(Exit.isFailure(blocked)).toBe(true)
-      if (Exit.isFailure(blocked))
-        expect(Cause.squash(blocked.cause)).toBeInstanceOf(SessionContextEpoch.AgentReplacementBlocked)
-      expect(requests).toHaveLength(0)
-
-      systemUnavailable = false
-      yield* session.resume(sessionID)
-      expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
-        ["Initial context\n\nReviewer skills"],
-      ])
     }),
   )
 
@@ -1209,7 +1113,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("replaces the baseline lazily after a model switch and drops prior System updates", () =>
+  it.effect("keeps the baseline and chronological System updates after a model switch", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -1235,24 +1139,26 @@ describe("SessionRunnerLLM", () => {
       expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
         ["Initial context"],
         ["Initial context"],
-        ["Replacement context"],
+        ["Initial context"],
       ])
       expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "user", "system"])
-      expect(requests[2]?.messages.map((message) => message.role)).toEqual(["user", "user", "user"])
+      expect(requests[2]?.messages.filter((message) => message.role === "system")).toHaveLength(2)
       expect((yield* session.context(sessionID)).map((message) => message.type)).toEqual([
         "user",
         "user",
+        "system",
         "model-switched",
         "user",
+        "system",
       ])
       yield* replaySessionProjection(sessionID)
-      expect(yield* session.messages({ sessionID })).toHaveLength(5)
+      expect(yield* session.messages({ sessionID })).toHaveLength(6)
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Fourth" }), resume: false })
       yield* session.resume(sessionID)
     }),
   )
 
-  it.effect("defers replacement while admitted context is temporarily unavailable", () =>
+  it.effect("preserves the baseline while context is temporarily unavailable", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -1279,47 +1185,12 @@ describe("SessionRunnerLLM", () => {
       expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
         ["Initial context"],
         ["Initial context"],
-        ["Replacement context"],
+        ["Initial context"],
       ])
     }),
   )
 
-  it.effect("advances a pending replacement to the latest invalidation boundary", () =>
-    Effect.gen(function* () {
-      yield* setup
-      const session = yield* SessionV2.Service
-      const events = yield* EventV2.Service
-      const { db } = yield* Database.Service
-      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
-      response = []
-      yield* session.resume(sessionID)
-
-      yield* events.publish(SessionEvent.ModelSwitched, {
-        sessionID,
-        messageID: SessionMessage.ID.create(),
-        timestamp: DateTime.makeUnsafe(1),
-        model: { id: ModelV2.ID.make("replacement-1"), providerID: ProviderV2.ID.make("fake") },
-      })
-      yield* events.publish(SessionEvent.ModelSwitched, {
-        sessionID,
-        messageID: SessionMessage.ID.create(),
-        timestamp: DateTime.makeUnsafe(2),
-        model: { id: ModelV2.ID.make("replacement-2"), providerID: ProviderV2.ID.make("fake") },
-      })
-      const latest = yield* SessionInput.latestSeq(db, sessionID)
-
-      expect(
-        yield* db
-          .select({ replacementSeq: SessionContextEpochTable.replacement_seq })
-          .from(SessionContextEpochTable)
-          .where(eq(SessionContextEpochTable.session_id, sessionID))
-          .get()
-          .pipe(Effect.orDie),
-      ).toEqual({ replacementSeq: latest })
-    }),
-  )
-
-  it.effect("retries epoch preparation until observation-time invalidations settle", () =>
+  it.effect("does not restart context observation for model switches", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -1347,13 +1218,13 @@ describe("SessionRunnerLLM", () => {
 
       yield* session.resume(sessionID)
 
-      expect(invalidations).toBe(4)
+      expect(invalidations).toBe(1)
       expect(requests).toHaveLength(1)
-      expect(requests[0]?.system.map((part) => part.text)).toEqual(["Changed context"])
+      expect(requests[0]?.system.map((part) => part.text)).toEqual(["Initial context"])
     }),
   )
 
-  it.effect("replaces the baseline lazily after completed compaction without reopening replacement on replay", () =>
+  it.effect("rebuilds the baseline directly after completed compaction", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -1389,6 +1260,56 @@ describe("SessionRunnerLLM", () => {
       yield* replaySessionProjection(sessionID)
       yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Third" }), resume: false })
       yield* session.resume(sessionID)
+    }),
+  )
+
+  it.effect("retries context admission when compaction completes during observation", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      const events = yield* EventV2.Service
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "First" }), resume: false })
+      response = []
+      yield* session.resume(sessionID)
+
+      const compactionID = SessionMessage.ID.create()
+      let compacted = false
+      let contextLoads = 0
+      systemBaseline = "Context after compaction"
+      systemLoadHook = Effect.suspend(() => {
+        contextLoads++
+        if (compacted) return Effect.void
+        compacted = true
+        return Effect.yieldNow.pipe(
+          Effect.andThen(
+            events.publish(SessionEvent.Compaction.Started, {
+              sessionID,
+              messageID: compactionID,
+              timestamp: DateTime.makeUnsafe(1),
+              reason: "manual",
+            }),
+          ),
+          Effect.andThen(
+            events.publish(SessionEvent.Compaction.Ended, {
+              sessionID,
+              messageID: compactionID,
+              timestamp: DateTime.makeUnsafe(2),
+              reason: "manual",
+              text: "summary",
+              recent: "",
+            }),
+          ),
+          Effect.asVoid,
+        )
+      })
+      yield* session.prompt({ sessionID, prompt: new Prompt({ text: "Second" }), resume: false })
+
+      requests.length = 0
+      yield* session.resume(sessionID)
+
+      expect(contextLoads).toBe(2)
+      expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([["Context after compaction"]])
+      expect(requests[0]?.messages.filter((message) => message.role === "system")).toEqual([])
     }),
   )
 
@@ -1580,7 +1501,7 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
-  it.effect("preserves effective System updates while compaction replacement is blocked", () =>
+  it.effect("preserves effective System updates while compaction rebaseline is blocked", () =>
     Effect.gen(function* () {
       yield* setup
       const session = yield* SessionV2.Service
@@ -1821,8 +1742,15 @@ describe("SessionRunnerLLM", () => {
       expect(requests.map((request) => request.model)).toEqual([model, replacementModel])
       expect(requests.map((request) => request.system.map((part) => part.text))).toEqual([
         ["Initial context"],
-        ["Replacement context"],
+        ["Initial context"],
       ])
+      expect(
+        requests[1]?.messages.some(
+          (message) =>
+            message.role === "system" &&
+            message.content.some((part) => part.type === "text" && part.text === "Replacement context"),
+        ),
+      ).toBe(true)
     }),
   )
 

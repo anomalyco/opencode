@@ -800,3 +800,22 @@ Change:
 Compatibility:
 
 - Existing Context Epoch rows backfill the default `build` agent and reconcile to another selected agent at the next safe provider-turn boundary.
+
+## 2026-06-22: Simplify Session Context Rebaselining
+
+Affected schema:
+
+- Remove `session_context_epoch.agent` and `session_context_epoch.replacement_seq`.
+- No synchronized event, public HTTP API, or generated SDK schema changes.
+
+Change:
+
+- Sample the effective agent and model once for each provider turn; selection changes apply to the next turn.
+- Preserve the immutable baseline and admit ordinary System Context changes as chronological `ContextUpdated` messages.
+- Rebuild the baseline directly after completed compaction instead of maintaining pending replacement state.
+- Preserve the old baseline and its effective chronological updates while a post-compaction baseline cannot be rendered completely.
+
+Compatibility:
+
+- Existing Context Epoch rows migrate in place by dropping the obsolete selection and pending-replacement columns.
+- Model and agent switches no longer discard earlier chronological System Context updates by forcing a new baseline.
