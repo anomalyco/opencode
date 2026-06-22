@@ -1,5 +1,6 @@
 import { InstanceRef, WorkspaceRef } from "@/effect/instance-ref"
 import { InstanceStore } from "@/project/instance-store"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, Layer } from "effect"
 import { HttpServerResponse } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
@@ -26,7 +27,16 @@ function provideInstanceContext<E>(
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext> {
   return Effect.gen(function* () {
     const route = yield* WorkspaceRouteContext
-    const ctx = yield* store.load({ directory: decode(route.directory) })
+    const directory = decode(route.directory)
+    const fs = yield* FSUtil.Service
+    const exists = yield* fs.existsSafe(directory)
+    if (!exists) {
+      return HttpServerResponse.jsonUnsafe(
+        { error: { message: `Directory does not exist: ${directory}` } },
+        { status: 404 },
+      )
+    }
+    const ctx = yield* store.load({ directory })
     return yield* effect.pipe(
       Effect.provideService(InstanceRef, ctx),
       Effect.provideService(WorkspaceRef, route.workspaceID),

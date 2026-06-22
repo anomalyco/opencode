@@ -176,12 +176,27 @@ describe("HttpApi instance context middleware", () => {
     Effect.gen(function* () {
       yield* serveProbe()
 
+      // Malformed percent-encoding (the trailing %A is incomplete). The
+      // middleware's decode() catches the URIError and falls back to the raw
+      // string so the request reaches the existence guard instead of crashing.
+      // The resulting path doesn't exist on disk, so we expect 404 — previously
+      // this returned 200 with a phantom instance for `<cwd>/%E0%A4%A`.
       const response = yield* HttpClient.get("/probe?directory=%25E0%25A4%25A")
 
-      expect(response.status).toBe(200)
-      expect(yield* response.json).toMatchObject({
-        directory: path.join(process.cwd(), "%E0%A4%A"),
-      })
+      expect(response.status).toBe(404)
+    }),
+  )
+
+  it.live("rejects requests for directories that do not exist on disk", () =>
+    Effect.gen(function* () {
+      yield* serveProbe()
+
+      const stale = path.join(yield* tmpdirScoped(), "moved-away")
+      const response = yield* HttpClient.get(`/probe?directory=${encodeURIComponent(stale)}`)
+
+      expect(response.status).toBe(404)
+      const body = yield* response.json
+      expect(body).toMatchObject({ error: { message: expect.stringContaining(stale) } })
     }),
   )
 
