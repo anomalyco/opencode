@@ -65,6 +65,11 @@ export function fromPromise(plugin: Plugin) {
           integration: {
             transform: transform(host.integration),
             reload: () => run(host.integration.reload()),
+            connection: {
+              active: (id) => Effect.runPromiseWith(context)(host.integration.connection.active(id)),
+              resolve: (connection) =>
+                Effect.runPromiseWith(context)(host.integration.connection.resolve(connection)),
+            },
           },
           plugin: {
             add: (input) => {

@@ -20,13 +20,13 @@ export class OAuth extends Schema.Class<OAuth>("Credential.OAuth")({
   refresh: Schema.String,
   access: Schema.String,
   expires: NonNegativeInt,
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
 }) {}
 
 export class Key extends Schema.Class<Key>("Credential.Key")({
   type: Schema.Literal("key"),
   key: Schema.String,
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  metadata: Schema.optional(Schema.Record(Schema.String, Schema.Any)),
 }) {}
 
 export const Value = Schema.Union([OAuth, Key])

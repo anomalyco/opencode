@@ -1,15 +1,14 @@
 import { Effect } from "effect"
+import type { Scope } from "effect"
 import { ModelV2 } from "../../model"
-import { define } from "../internal"
 import { ProviderV2 } from "../../provider"
-import { Integration } from "../../integration"
 import { browser, headless } from "./openai-auth"
+import type { PluginInternal } from "../internal"
 
-export const OpenAIPlugin = define({
+export const OpenAIPlugin = {
   id: "openai",
   effect: Effect.fn(function* (ctx) {
-    const integrations = yield* Integration.Service
-    yield* integrations.transform((draft) => {
+    yield* ctx.integration.transform((draft) => {
       draft.method.update(browser)
       draft.method.update(headless)
     })
@@ -41,4 +40,4 @@ export const OpenAIPlugin = define({
       }),
     )
   }),
-})
+} satisfies PluginInternal.Plugin<PluginInternal.Requirements | Scope.Scope>

@@ -1,4 +1,5 @@
 import { createServer } from "node:http"
+import type { IntegrationOAuthCredential, IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/v2/effect"
 import { Deferred, Effect } from "effect"
 import { Integration } from "../../integration"
 import { Credential } from "../../credential"
@@ -84,8 +85,8 @@ export const browser = {
         ),
       }
     }),
-  refresh: (value) => refresh(value),
-} satisfies Integration.OAuthImplementation
+  refresh: (value) => refresh(browserMethodID, value),
+} satisfies IntegrationOAuthMethodRegistration
 
 export const headless = {
   integrationID: Integration.ID.make("openai"),
@@ -142,8 +143,8 @@ export const headless = {
         }),
       }
     }),
-  refresh: (value) => refresh(value),
-} satisfies Integration.OAuthImplementation
+  refresh: (value) => refresh(headlessMethodID, value),
+} satisfies IntegrationOAuthMethodRegistration
 
 function headers(contentType: string) {
   return { "Content-Type": contentType, "User-Agent": `opencode/${InstallationVersion}` }
@@ -163,7 +164,7 @@ function exchange(code: string, redirect: string, pkce: Pkce) {
   })
 }
 
-function refresh(value: Credential.OAuth) {
+function refresh(methodID: Integration.MethodID, value: IntegrationOAuthCredential) {
   return request<TokenResponse>(`${issuer}/oauth/token`, {
     method: "POST",
     headers: headers("application/x-www-form-urlencoded"),
@@ -174,7 +175,7 @@ function refresh(value: Credential.OAuth) {
     }).toString(),
   }).pipe(
     Effect.map((tokens) => {
-      const next = credential(value.methodID, tokens)
+      const next = credential(methodID, tokens)
       return new Credential.OAuth({
         ...next,
         metadata: next.metadata ?? value.metadata,
