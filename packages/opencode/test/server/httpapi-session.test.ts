@@ -838,6 +838,29 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "switchModel endpoint updates session model and returns 204",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const headers = { "x-opencode-directory": test.directory, "content-type": "application/json" }
+        const session = yield* createSession({ title: "model-switch" })
+
+        const response = yield* request(pathFor(SessionPaths.switchModel, { sessionID: session.id }), {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            id: ModelV2.ID.make("vision-model"),
+            providerID: ProviderV2.ID.make("vision-provider"),
+            variant: ModelV2.VariantID.make("default"),
+          }),
+        })
+
+        expect(response.status).toBe(204)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "uses project-scoped path and directory precedence",
     () =>
       Effect.gen(function* () {

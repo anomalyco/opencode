@@ -13,6 +13,7 @@ import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 import { SessionSummary } from "@/session/summary"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { Todo } from "@/session/todo"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -33,6 +34,7 @@ import {
   RevertPayload,
   ShellPayload,
   SummarizePayload,
+  SwitchModelPayload,
   UpdatePayload,
 } from "../groups/session"
 import { PermissionNotFoundError } from "../errors"
@@ -199,6 +201,15 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         yield* session.setArchived({ sessionID: ctx.params.sessionID, time: ctx.payload.time.archived })
       }
       return yield* requireSession(ctx.params.sessionID)
+    })
+
+    const switchModel = Effect.fn("SessionHttpApi.switchModel")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof SwitchModelPayload.Type
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      yield* session.switchModel({ sessionID: ctx.params.sessionID, model: ctx.payload })
+      return HttpApiSchema.NoContent.make()
     })
 
     const fork = Effect.fn("SessionHttpApi.fork")(function* (ctx: {
@@ -420,6 +431,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handleRaw("create", createRaw)
       .handle("remove", remove)
       .handle("update", update)
+      .handle("switchModel", switchModel)
       .handleRaw("fork", forkRaw)
       .handle("abort", abort)
       .handle("init", init)

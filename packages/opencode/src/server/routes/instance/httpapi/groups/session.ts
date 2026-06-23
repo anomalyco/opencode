@@ -67,6 +67,11 @@ export const SummarizePayload = Schema.Struct({
   modelID: ModelV2.ID,
   auto: Schema.optional(Schema.Boolean),
 })
+export const SwitchModelPayload = Schema.Struct({
+  id: ModelV2.ID,
+  providerID: ProviderV2.ID,
+  variant: Schema.optional(ModelV2.VariantID),
+})
 export const PromptPayload = Schema.Struct(Struct.omit(SessionPrompt.PromptInput.fields, ["sessionID"]))
 export const CommandPayload = Schema.Struct(Struct.omit(SessionPrompt.CommandInput.fields, ["sessionID"]))
 export const ShellPayload = Schema.Struct(Struct.omit(SessionPrompt.ShellInput.fields, ["sessionID"]))
@@ -87,6 +92,7 @@ export const SessionPaths = {
   create: root,
   remove: `${root}/:sessionID`,
   update: `${root}/:sessionID`,
+  switchModel: `${root}/:sessionID/model`,
   fork: `${root}/:sessionID/fork`,
   abort: `${root}/:sessionID/abort`,
   share: `${root}/:sessionID/share`,
@@ -235,6 +241,19 @@ export const SessionApi = HttpApi.make("session")
             identifier: "session.update",
             summary: "Update session",
             description: "Update properties of an existing session, such as title or other metadata.",
+          }),
+        ),
+        HttpApiEndpoint.post("switchModel", SessionPaths.switchModel, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: SwitchModelPayload,
+          success: described(HttpApiSchema.NoContent, "Model switched"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.switchModel",
+            summary: "Switch session model",
+            description: "Switch the model used by subsequent session activity.",
           }),
         ),
         HttpApiEndpoint.post("fork", SessionPaths.fork, {

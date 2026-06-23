@@ -307,6 +307,14 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (!options?.recent) return
           models.recent.push(item)
         })
+
+        const sessionID = id()
+        if (sessionID && item) {
+          ;(sdk().client.session as any).switchModel({
+            sessionID,
+            model: { providerID: item.providerID, id: item.modelID },
+          })
+        }
       },
       visible(item: ModelKey) {
         return models.visible(item)
